@@ -91,6 +91,12 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     kanbanColumn: 'WORKING',
     flowPhase: 'NO_PR',
     ciObservation: 'NOT_FETCHED',
+    statusReason: {
+      code: 'NO_SESSION_STARTED',
+      label: 'No session started',
+      tone: 'neutral',
+      needsUser: true,
+    },
     ratchetButtonAnimated: false,
     fieldTimestamps: {
       workspace: 1000,

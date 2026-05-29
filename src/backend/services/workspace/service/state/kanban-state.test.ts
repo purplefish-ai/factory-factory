@@ -67,7 +67,7 @@ describe('computeKanbanColumn', () => {
     ).toBe('WORKING');
   });
 
-  it('maps merged and closed PRs to DONE and hidden empty READY workspaces to null', () => {
+  it('maps merged and closed PRs to DONE and idle empty READY workspaces to WAITING', () => {
     expect(
       computeKanbanColumn({
         lifecycle: 'READY',
@@ -94,7 +94,7 @@ describe('computeKanbanColumn', () => {
         ratchetState: 'IDLE',
         hasHadSessions: false,
       })
-    ).toBeNull();
+    ).toBe('WAITING');
   });
 
   it('maps ratchet MERGED to DONE even if prState has not caught up yet', () => {

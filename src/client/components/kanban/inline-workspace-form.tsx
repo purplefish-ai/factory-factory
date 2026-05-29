@@ -152,6 +152,12 @@ function createOptimisticWorkingWorkspace(params: {
     ratchetButtonAnimated: false,
     flowPhase: 'NO_PR',
     ciObservation: 'NOT_FETCHED',
+    statusReason: {
+      code: 'SETTING_UP',
+      label: 'Setting up workspace',
+      tone: 'working',
+      needsUser: false,
+    },
     isArchived: false,
     pendingRequestType: null,
   };

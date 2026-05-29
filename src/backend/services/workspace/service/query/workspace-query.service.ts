@@ -170,6 +170,7 @@ class WorkspaceQueryService {
     return {
       workspaces: workspaces.map((w) => {
         const runtimeState = runtimeStateByWorkspace.get(w.id);
+        const pendingRequestType = pendingRequestByWorkspace.get(w.id) ?? null;
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: w.status ?? WorkspaceStatus.READY,
@@ -179,6 +180,8 @@ class WorkspaceQueryService {
             ratchetState: w.ratchetState ?? RatchetState.IDLE,
             hasHadSessions: w.hasHadSessions ?? true,
             sessionIsWorking: runtimeState?.isSessionWorking ?? false,
+            pendingRequestType,
+            runScriptStatus: w.runScriptStatus,
             flowState: runtimeState?.flowState ?? DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
           },
           {
@@ -219,11 +222,12 @@ class WorkspaceQueryService {
           ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
           flowPhase: derivedState.flowPhase,
           ciObservation: derivedState.ciObservation,
+          statusReason: derivedState.statusReason,
           runScriptStatus: w.runScriptStatus,
           cachedKanbanColumn: derivedState.kanbanColumn,
           // DB timestamp for last cached kanban-state recompute/change.
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
-          pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
+          pendingRequestType,
         };
       }),
       reviewCount,
@@ -252,6 +256,10 @@ class WorkspaceQueryService {
         const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
           this.session.isAnySessionWorking(sessionIds)
         );
+        const pendingRequestType = computePendingRequestType(
+          runtimeState.sessionIds,
+          allPendingRequests
+        );
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: workspace.status,
@@ -261,17 +269,14 @@ class WorkspaceQueryService {
             ratchetState: workspace.ratchetState,
             hasHadSessions: workspace.hasHadSessions,
             sessionIsWorking: runtimeState.isSessionWorking,
+            pendingRequestType,
+            runScriptStatus: workspace.runScriptStatus,
             flowState: runtimeState.flowState,
           },
           {
             computeKanbanColumn,
             deriveSidebarStatus: deriveWorkspaceSidebarStatus,
           }
-        );
-
-        const pendingRequestType = computePendingRequestType(
-          runtimeState.sessionIds,
-          allPendingRequests
         );
 
         return {
@@ -281,12 +286,13 @@ class WorkspaceQueryService {
           ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
           flowPhase: derivedState.flowPhase,
           ciObservation: derivedState.ciObservation,
+          statusReason: derivedState.statusReason,
           isArchived: false,
           pendingRequestType,
         };
       })
       .filter((workspace) => {
-        // Filter out workspaces with null kanbanColumn (hidden: READY + no sessions)
+        // Filter out workspaces with null kanbanColumn (archived/archiving)
         if (workspace.kanbanColumn === null) {
           return false;
         }

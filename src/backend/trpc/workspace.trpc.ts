@@ -14,11 +14,13 @@ import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
   sessionDataService,
+  sessionDomainService,
   sessionProviderResolverService,
   sessionService,
 } from '@/backend/services/session';
 import {
   computeKanbanColumn,
+  computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceDataService,
@@ -26,6 +28,7 @@ import {
 } from '@/backend/services/workspace';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
@@ -163,6 +166,11 @@ export const workspaceRouter = router({
     const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions ?? [], (id) =>
       sessionService.getRuntimeSnapshot(id)
     );
+    const sessionIds = workspace.agentSessions?.map((session) => session.id) ?? [];
+    const pendingRequestType = computePendingRequestType(
+      sessionIds,
+      sessionDomainService.getAllPendingRequests()
+    );
     const derivedState = assembleWorkspaceDerivedState(
       {
         lifecycle: workspace.status,
@@ -172,6 +180,9 @@ export const workspaceRouter = router({
         ratchetState: workspace.ratchetState,
         hasHadSessions: workspace.hasHadSessions,
         sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
+        pendingRequestType,
+        hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
+        runScriptStatus: workspace.runScriptStatus,
         flowState,
       },
       {
@@ -186,6 +197,8 @@ export const workspaceRouter = router({
       ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
       flowPhase: derivedState.flowPhase,
       ciObservation: derivedState.ciObservation,
+      statusReason: derivedState.statusReason,
+      pendingRequestType,
     };
   }),
 

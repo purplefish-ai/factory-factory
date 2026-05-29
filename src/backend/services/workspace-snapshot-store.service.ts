@@ -26,8 +26,10 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 import { createLogger } from './logger.service';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +102,7 @@ export interface WorkspaceSnapshotEntry {
   flowPhase: WorkspaceFlowPhase;
   ciObservation: WorkspaceCiObservation;
   ratchetButtonAnimated: boolean;
+  statusReason: WorkspaceStatusReason;
 
   // Field-level timestamps for concurrent update safety
   fieldTimestamps: Record<SnapshotFieldGroup, number>;
@@ -332,6 +335,12 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       flowPhase: 'NO_PR',
       ciObservation: 'NOT_FETCHED',
       ratchetButtonAnimated: false,
+      statusReason: {
+        code: 'NO_SESSION_STARTED',
+        label: 'No session started',
+        tone: 'neutral',
+        needsUser: true,
+      },
       fieldTimestamps: createDefaultFieldTimestamps(),
     };
   }
@@ -386,6 +395,9 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         ratchetState: entry.ratchetState,
         hasHadSessions: entry.hasHadSessions,
         sessionIsWorking,
+        pendingRequestType: entry.pendingRequestType,
+        hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
+        runScriptStatus: entry.runScriptStatus,
         flowState,
       },
       {
@@ -398,6 +410,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry.flowPhase = derivedState.flowPhase;
     entry.ciObservation = derivedState.ciObservation;
     entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
+    entry.statusReason = derivedState.statusReason;
     entry.kanbanColumn = derivedState.kanbanColumn;
     entry.sidebarStatus = derivedState.sidebarStatus;
   }

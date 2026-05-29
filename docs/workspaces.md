@@ -19,6 +19,8 @@ Goals:
   - `NOT_FETCHED`: PR exists but no CI snapshot has been fetched yet
   - `NO_CHECKS`: PR snapshot exists and reports no checks configured
   - `CHECKS_PENDING` / `CHECKS_FAILED` / `CHECKS_PASSED` / `CHECKS_UNKNOWN`
+- `statusReason`: derived visible reason shown to users, e.g. `Needs permission`,
+  `Waiting for CI`, `No session started`, or `Fixing review comments`
 
 ## Source Of Truth
 
@@ -39,6 +41,7 @@ Derived outputs:
 - `isWorking`
 - `shouldAnimateRatchetButton`
 - `flowPhase`
+- `statusReason`
 
 These are consumed by:
 - kanban derivation (`src/backend/services/kanban-state.service.ts`)
@@ -79,8 +82,8 @@ Immediate check on ratchet enable:
 Current behavior:
 - `WORKING`: provisioning states or derived working state
 - `DONE`: merged PR and not working
-- `WAITING`: idle ready workspace with prior sessions
-- `null`: hidden `READY` workspaces with no prior sessions
+- `WAITING`: idle ready workspace, including workspaces with no prior sessions
+- `null`: archived/archiving workspaces only
 
 Important: derived `isWorking` is:
 - `sessionService.isAnySessionWorking(...)`
@@ -137,7 +140,7 @@ Key tests:
 ## Hardening Checklist (Recommended Next Steps)
 
 1. Add integration tests around toggle-on/off races with mocked delayed GitHub responses.
-2. Add contract tests asserting `flowPhase`, `ciObservation`, and `ratchetButtonAnimated` on all TRPC workspace endpoints.
+2. Add contract tests asserting `flowPhase`, `ciObservation`, `statusReason`, and `ratchetButtonAnimated` on all TRPC workspace endpoints.
 3. Consider a future schema-level CI enum split (`NOT_FETCHED` / `NO_CHECKS`) if we want storage and derivation to match exactly.
 4. Add a metrics dashboard for ratchet outcomes:
 - state transition counts

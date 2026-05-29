@@ -28,6 +28,7 @@ const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
 const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
 const mockComputeKanbanColumn = vi.hoisted(() => vi.fn());
+const mockComputePendingRequestType = vi.hoisted(() => vi.fn());
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
@@ -41,6 +42,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceQueryService: mockWorkspaceQueryService,
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
   computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
+  computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
   WorkspaceCreationService: class {
     create = (...args: unknown[]) => mockWorkspaceCreationCreate(...args);
   },
@@ -49,6 +51,9 @@ vi.mock('@/backend/services/workspace', () => ({
 vi.mock('@/backend/services/session', () => ({
   sessionService: {
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
+  },
+  sessionDomainService: {
+    getAllPendingRequests: () => new Map(),
   },
   sessionDataService: {
     createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
@@ -169,6 +174,7 @@ describe('workspaceRouter', () => {
     mockHasWorkingSessionSummary.mockReturnValue(false);
     mockDeriveWorkspaceSidebarStatus.mockReturnValue({ activityState: 'IDLE', ciState: 'NONE' });
     mockComputeKanbanColumn.mockReturnValue('WAITING');
+    mockComputePendingRequestType.mockReturnValue(null);
     mockCreateAgentSession.mockResolvedValue({ id: 'session-1' });
   });
 
