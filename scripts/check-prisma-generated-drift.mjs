@@ -28,7 +28,7 @@ function runGit(args) {
 
 const unstagedFiles = runGit(['diff', '--name-only', '--', generatedPath]);
 const stagedFiles = runGit(['diff', '--cached', '--name-only', '--', generatedPath]);
-const untrackedFiles = runGit(['ls-files', '--others', '--exclude-standard']).filter(
+const untrackedFiles = runGit(['ls-files', '--others', '--', generatedPath]).filter(
   (file) => file === generatedPath || file.startsWith(generatedPathPrefix)
 );
 const driftedFiles = Array.from(new Set([...unstagedFiles, ...stagedFiles, ...untrackedFiles]));
