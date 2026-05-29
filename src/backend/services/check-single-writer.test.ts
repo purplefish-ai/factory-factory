@@ -24,21 +24,37 @@ describe('check-single-writer', () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'single-writer-'));
     tempDirs.push(tempRoot);
 
+    writeBackendFixtureFiles(tempRoot);
+    writeSourceFiles(tempRoot, sourceFiles);
+
+    return tempRoot;
+  }
+
+  function writeBackendFixtureFiles(
+    tempRoot: string,
+    options: { accessorContent?: string; schemaContent?: string } = {}
+  ): void {
     const accessorDir = path.join(tempRoot, 'src/backend/services/workspace/resources');
     mkdirSync(accessorDir, { recursive: true });
-    writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorSource);
+    writeFileSync(
+      path.join(accessorDir, 'workspace.accessor.ts'),
+      options.accessorContent ?? accessorSource
+    );
 
     const prismaDir = path.join(tempRoot, 'prisma');
     mkdirSync(prismaDir, { recursive: true });
-    writeFileSync(path.join(prismaDir, 'schema.prisma'), schemaSource);
+    writeFileSync(path.join(prismaDir, 'schema.prisma'), options.schemaContent ?? schemaSource);
+  }
 
+  function writeSourceFiles(
+    tempRoot: string,
+    sourceFiles: Array<{ relPath: string; content: string }>
+  ): void {
     for (const file of sourceFiles) {
       const fullPath = path.join(tempRoot, file.relPath);
       mkdirSync(path.dirname(fullPath), { recursive: true });
       writeFileSync(fullPath, file.content);
     }
-
-    return tempRoot;
   }
 
   function runChecker(rootDir: string): { status: number | null; output: string } {
@@ -141,9 +157,6 @@ describe('check-single-writer', () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'single-writer-'));
     tempDirs.push(tempRoot);
 
-    const accessorDir = path.join(tempRoot, 'src/backend/services/workspace/resources');
-    mkdirSync(accessorDir, { recursive: true });
-
     const accessorWithNewMutator = accessorSource.replace(
       '\n}\n\nexport const workspaceAccessor = new WorkspaceAccessor();\n',
       `
@@ -159,13 +172,13 @@ export const workspaceAccessor = new WorkspaceAccessor();
 `
     );
 
-    writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorWithNewMutator);
-    const prismaDir = path.join(tempRoot, 'prisma');
-    mkdirSync(prismaDir, { recursive: true });
-    writeFileSync(path.join(prismaDir, 'schema.prisma'), schemaSource);
-    const sessionDir = path.join(tempRoot, 'src/backend/services/session/service/lifecycle');
-    mkdirSync(sessionDir, { recursive: true });
-    writeFileSync(path.join(sessionDir, 'session.service.ts'), 'export const marker = "noop";\n');
+    writeBackendFixtureFiles(tempRoot, { accessorContent: accessorWithNewMutator });
+    writeSourceFiles(tempRoot, [
+      {
+        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
+        content: 'export const marker = "noop";\n',
+      },
+    ]);
 
     const result = runChecker(tempRoot);
 
