@@ -5,6 +5,49 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.20] - 2026-05-29
+
+### Added
+
+- Add default provider effort settings (#1651)
+
+### Changed
+
+- Emit rejected state for validation failures (#1637)
+- Track startup script PID during provisioning (#1640)
+- Refactor single writer test fixtures (#1649)
+- Scope untracked Prisma drift files (#1648)
+- Harden rejected chat recovery (#1656)
+
+### Fixed
+
+- Fix ACP permission bridge reuse (#1639)
+- Treat blank optional env vars as unset (#1638)
+- Respect empty initial session prompts (#1647)
+- Fix auto-iteration resume race (#1650)
+- Prevent rejected chat recovery session leak (#1641)
+- Preserve completed session status on stop (#1645)
+- Clean up failed session starts (#1644)
+- Reject malformed attachment dispatches (#1643)
+- Prevent stale lock cleanup from deleting valid locks (#1642)
+- Fix Electron server restart after stop failure (#1653)
+- Fix queued dispatch after init retry (#1655)
+- Fix signal-killed run script wait (#1654)
+- Fix ACP prompt timeout cleanup (#1657)
+- Validate websocket origins (#1658)
+- Fix duplicate linked issues in Todo (#1659)
+
+### Security
+
+- Fix Dependabot dependency alerts (#1652)
+- Fix CodeQL findings in websocket tests (#1646)
+
+### Documentation
+
+- Update Prisma workflow guidance for generated-output guardrail (#1621)
+- Add runScriptPostRunCommand to state-ownership-matrix (#1620)
+- Correct stale periodic task recovery notes (#1619)
+
 ## [0.3.19] - 2026-05-20
 
 ### Changed
