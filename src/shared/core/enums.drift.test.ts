@@ -5,8 +5,11 @@ import {
   PRState as PackagePRState,
   RatchetState as PackageRatchetState,
   RunScriptStatus as PackageRunScriptStatus,
+  SessionPermissionPreset as PackageSessionPermissionPreset,
+  SessionProvider as PackageSessionProvider,
   SessionStatus as PackageSessionStatus,
   WorkspaceCreationSource as PackageWorkspaceCreationSource,
+  WorkspaceProviderSelection as PackageWorkspaceProviderSelection,
   WorkspaceStatus as PackageWorkspaceStatus,
 } from '@factory-factory/core-types/enums';
 import { describe, expect, it } from 'vitest';
@@ -17,14 +20,20 @@ import {
   PRState,
   RatchetState,
   RunScriptStatus,
+  SessionPermissionPreset,
+  SessionProvider,
   SessionStatus,
   WorkspaceCreationSource,
+  WorkspaceProviderSelection,
   WorkspaceStatus,
 } from './enums';
 
 type SharedEnums = {
   WorkspaceStatus: Record<string, string>;
   SessionStatus: Record<string, string>;
+  SessionProvider: Record<string, string>;
+  SessionPermissionPreset: Record<string, string>;
+  WorkspaceProviderSelection: Record<string, string>;
   PRState: Record<string, string>;
   CIStatus: Record<string, string>;
   KanbanColumn: Record<string, string>;
@@ -37,6 +46,9 @@ type SharedEnums = {
 const appEnums: SharedEnums = {
   WorkspaceStatus,
   SessionStatus,
+  SessionProvider,
+  SessionPermissionPreset,
+  WorkspaceProviderSelection,
   PRState,
   CIStatus,
   KanbanColumn,
@@ -51,6 +63,9 @@ describe('core enum drift guard', () => {
     const packageEnums: SharedEnums = {
       WorkspaceStatus: PackageWorkspaceStatus,
       SessionStatus: PackageSessionStatus,
+      SessionProvider: PackageSessionProvider,
+      SessionPermissionPreset: PackageSessionPermissionPreset,
+      WorkspaceProviderSelection: PackageWorkspaceProviderSelection,
       PRState: PackagePRState,
       CIStatus: PackageCIStatus,
       KanbanColumn: PackageKanbanColumn,

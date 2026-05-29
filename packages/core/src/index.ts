@@ -27,7 +27,10 @@ export {
   PRState,
   RatchetState,
   RunScriptStatus,
+  SessionPermissionPreset,
+  SessionProvider,
   SessionStatus,
   WorkspaceCreationSource,
+  WorkspaceProviderSelection,
   WorkspaceStatus,
 } from './types/index.js';

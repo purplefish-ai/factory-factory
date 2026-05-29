@@ -16,9 +16,12 @@ export {
   PRState,
   RatchetState,
   RunScriptStatus,
+  SessionPermissionPreset,
+  SessionProvider,
   SessionStatus,
   WorkspaceCreationSource,
   WorkspaceMode,
+  WorkspaceProviderSelection,
   WorkspaceStatus,
 } from './enums.js';
 

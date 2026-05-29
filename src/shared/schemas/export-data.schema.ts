@@ -16,9 +16,12 @@ import {
   PRState as CorePRState,
   RatchetState as CoreRatchetState,
   RunScriptStatus as CoreRunScriptStatus,
+  SessionPermissionPreset as CoreSessionPermissionPreset,
+  SessionProvider as CoreSessionProvider,
   SessionStatus as CoreSessionStatus,
   WorkspaceCreationSource as CoreWorkspaceCreationSource,
   WorkspaceMode as CoreWorkspaceMode,
+  WorkspaceProviderSelection as CoreWorkspaceProviderSelection,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
@@ -38,9 +41,9 @@ const CIStatus = z.enum(enumValues(CoreCIStatus));
 const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
 const SessionStatus = z.enum(enumValues(CoreSessionStatus));
-const SessionProvider = z.enum(['CLAUDE', 'CODEX']);
-const SessionPermissionPreset = z.enum(['STRICT', 'RELAXED', 'YOLO']);
-const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX']);
+const SessionProvider = z.enum(enumValues(CoreSessionProvider));
+const SessionPermissionPreset = z.enum(enumValues(CoreSessionPermissionPreset));
+const WorkspaceProviderSelection = z.enum(enumValues(CoreWorkspaceProviderSelection));
 
 const exportedProjectSchema = z.object({
   id: z.string(),
