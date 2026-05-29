@@ -1163,6 +1163,7 @@ export const WorkspaceScalarFieldEnum = {
   initOutput: 'initOutput',
   initStartedAt: 'initStartedAt',
   initCompletedAt: 'initCompletedAt',
+  initScriptPid: 'initScriptPid',
   initRetryCount: 'initRetryCount',
   runScriptCommand: 'runScriptCommand',
   runScriptPostRunCommand: 'runScriptPostRunCommand',

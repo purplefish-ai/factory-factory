@@ -111,6 +111,7 @@ class StartupScriptService {
 
     try {
       const result = await this.executeScript(
+        workspace.id,
         worktreePath,
         project.startupScriptCommand,
         project.startupScriptPath,
@@ -187,6 +188,7 @@ class StartupScriptService {
    * @param onOutput - Optional callback for streaming output as it arrives
    */
   private async executeScript(
+    workspaceId: string,
     cwd: string,
     command: string | null,
     scriptPath: string | null,
@@ -229,16 +231,40 @@ class StartupScriptService {
     return new Promise((resolve) => {
       const spawnOptions = { cwd, env: { ...process.env, WORKSPACE_PATH: cwd } };
       const proc = spawn('bash', bashArgs.args, spawnOptions);
+      let recordPidPromise: Promise<void> = Promise.resolve();
+      if (proc.pid !== undefined) {
+        recordPidPromise = workspaceAccessor
+          .setInitScriptPid(workspaceId, proc.pid)
+          .catch((error) => {
+            logger.warn('Failed to record startup script PID', {
+              workspaceId,
+              pid: proc.pid,
+              error,
+            });
+          });
+      }
 
       let timedOut = false;
       let stdout = '';
       let stderr = '';
       let killTimeoutHandle: NodeJS.Timeout | undefined;
 
-      const cleanupTimeouts = (): void => {
+      const cleanupTimeouts = async (): Promise<void> => {
         clearTimeout(timeoutHandle);
         if (killTimeoutHandle) {
           clearTimeout(killTimeoutHandle);
+        }
+        if (proc.pid !== undefined) {
+          await recordPidPromise;
+          try {
+            await workspaceAccessor.clearInitScriptPid(workspaceId, proc.pid);
+          } catch (error) {
+            logger.warn('Failed to clear startup script PID', {
+              workspaceId,
+              pid: proc.pid,
+              error,
+            });
+          }
         }
       };
 
@@ -274,13 +300,13 @@ class StartupScriptService {
       proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
       proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
 
-      proc.on('close', (code) => {
-        cleanupTimeouts();
+      proc.on('close', async (code) => {
+        await cleanupTimeouts();
         resolve({ success: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
       });
 
-      proc.on('error', (error) => {
-        cleanupTimeouts();
+      proc.on('error', async (error) => {
+        await cleanupTimeouts();
         resolve({ success: false, exitCode: null, stdout, stderr: error.message, timedOut: false });
       });
     });

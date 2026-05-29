@@ -112,6 +112,7 @@ const mockWorkspace: Workspace = {
   initOutput: 'Init output',
   initStartedAt: new Date('2025-01-01T00:00:00.000Z'),
   initCompletedAt: new Date('2025-01-01T00:05:00.000Z'),
+  initScriptPid: null,
   initRetryCount: 0,
   runScriptCommand: 'npm run dev',
   runScriptPostRunCommand: null,

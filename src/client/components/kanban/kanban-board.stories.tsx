@@ -46,6 +46,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   initOutput: null,
   initStartedAt: null,
   initCompletedAt: null,
+  initScriptPid: null,
   initRetryCount: 0,
   githubIssueNumber: null,
   githubIssueUrl: null,

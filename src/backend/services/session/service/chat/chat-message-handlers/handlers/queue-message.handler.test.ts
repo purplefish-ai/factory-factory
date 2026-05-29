@@ -20,7 +20,7 @@ describe('createQueueMessageHandler', () => {
     vi.clearAllMocks();
   });
 
-  it('rejects empty queue messages', async () => {
+  it('emits rejected state for empty queue messages with an id', async () => {
     const ws = { send: vi.fn() };
     const handler = createQueueMessageHandler({
       getClientCreator: () => null,
@@ -35,9 +35,13 @@ describe('createQueueMessageHandler', () => {
       message: { type: 'queue_message', id: 'msg-1', text: '   ', attachments: [] } as never,
     });
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Empty message' })
-    );
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'message_state_changed',
+      id: 'msg-1',
+      newState: MessageState.REJECTED,
+      errorMessage: 'Empty message',
+    });
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
@@ -62,7 +66,7 @@ describe('createQueueMessageHandler', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it('rejects queue messages with invalid attachments', async () => {
+  it('emits rejected state for queue messages with invalid attachments', async () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
@@ -91,11 +95,14 @@ describe('createQueueMessageHandler', () => {
       } as never,
     });
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Attachment "broken.png" has invalid image data' })
-    );
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'message_state_changed',
+      id: 'msg-1',
+      newState: MessageState.REJECTED,
+      errorMessage: 'Attachment "broken.png" has invalid image data',
+    });
     expect(mocks.enqueue).not.toHaveBeenCalled();
-    expect(mocks.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
