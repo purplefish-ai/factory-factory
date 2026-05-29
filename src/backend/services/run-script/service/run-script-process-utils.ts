@@ -99,7 +99,7 @@ export async function waitForChildProcessExit(params: {
     return;
   }
 
-  if (childProcess.exitCode !== null) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     return;
   }
 
@@ -142,7 +142,7 @@ export async function waitForChildProcessExit(params: {
     childProcess.once('exit', onExit);
     childProcess.once('error', onError);
 
-    if (childProcess.exitCode !== null) {
+    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
       cleanup();
       resolve();
     }
