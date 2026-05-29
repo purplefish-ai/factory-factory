@@ -740,8 +740,12 @@ describe('URL change handling', () => {
     // Initial connect
     ws = connectIfUrl(url);
     if (ws) {
+      ws.onopen = () => {
+        connected = true;
+      };
       ws.simulateOpen();
     }
+    expect(connected).toBe(true);
 
     // Simulate URL becoming null (like sessionId being cleared)
     url = null;
