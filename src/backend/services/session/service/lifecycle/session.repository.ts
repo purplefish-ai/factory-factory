@@ -22,6 +22,21 @@ type SessionAccessor = {
       >
     >
   ): Promise<AgentSessionRecord>;
+  updateIfStatus(
+    id: string,
+    data: Partial<
+      Pick<
+        AgentSessionRecord,
+        | 'status'
+        | 'model'
+        | 'providerProcessPid'
+        | 'providerSessionId'
+        | 'providerProjectPath'
+        | 'providerMetadata'
+      >
+    >,
+    allowedStatuses: AgentSessionRecord['status'][]
+  ): Promise<number>;
   delete(id: string): Promise<AgentSessionRecord>;
   recoverStaleRunning(): Promise<number>;
 };
@@ -77,6 +92,24 @@ export class SessionRepository {
     >
   ): Promise<AgentSessionRecord> {
     return this.updateSessionWithGuards(sessionId, data);
+  }
+
+  updateSessionIfStatus(
+    sessionId: string,
+    data: Partial<
+      Pick<
+        AgentSessionRecord,
+        | 'status'
+        | 'model'
+        | 'providerProcessPid'
+        | 'providerSessionId'
+        | 'providerProjectPath'
+        | 'providerMetadata'
+      >
+    >,
+    allowedStatuses: AgentSessionRecord['status'][]
+  ): Promise<number> {
+    return this.sessions.updateIfStatus(sessionId, data, allowedStatuses);
   }
 
   private async updateSessionWithGuards(

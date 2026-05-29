@@ -630,9 +630,13 @@ export class SessionLifecycleService {
     try {
       await this.retryService.run(
         () =>
-          this.repository.updateSession(sessionId, {
-            status: SessionStatus.IDLE,
-          }),
+          this.repository.updateSessionIfStatus(
+            sessionId,
+            {
+              status: SessionStatus.IDLE,
+            },
+            [SessionStatus.RUNNING]
+          ),
         {
           attempts: 2,
           operationName: 'updateStoppedSessionState',

@@ -185,6 +185,40 @@ describe('agentSessionAccessor', () => {
     });
   });
 
+  it('updateIfStatus updates only sessions currently in allowed statuses', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      agentSessionAccessor.updateIfStatus(
+        'session-1',
+        {
+          status: SessionStatus.IDLE,
+          providerMetadata: null,
+        },
+        [SessionStatus.RUNNING]
+      )
+    ).resolves.toBe(1);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'session-1',
+        status: { in: [SessionStatus.RUNNING] },
+      },
+      data: expect.objectContaining({
+        status: SessionStatus.IDLE,
+        providerMetadata: Prisma.JsonNull,
+      }),
+    });
+  });
+
+  it('updateIfStatus skips Prisma when no allowed statuses are provided', async () => {
+    await expect(
+      agentSessionAccessor.updateIfStatus('session-1', { status: SessionStatus.IDLE }, [])
+    ).resolves.toBe(0);
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('delete removes session by id', async () => {
     mockDelete.mockResolvedValue({ id: 'session-1' });
 

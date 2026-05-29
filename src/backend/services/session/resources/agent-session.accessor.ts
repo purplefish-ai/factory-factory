@@ -63,6 +63,11 @@ export interface AgentSessionAccessor {
   ): Promise<AgentSessionRecord[]>;
   countActiveByWorkspaceId(workspaceId: string): Promise<number>;
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
+  updateIfStatus(
+    id: string,
+    data: UpdateAgentSessionInput,
+    allowedStatuses: SessionStatus[]
+  ): Promise<number>;
   delete(id: string): Promise<AgentSessionRecord>;
   findWithPid(): Promise<AgentSessionRecord[]>;
   recoverStaleRunning(): Promise<number>;
@@ -169,6 +174,43 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: { id },
       data: updateData,
     });
+  }
+
+  async updateIfStatus(
+    id: string,
+    data: UpdateAgentSessionInput,
+    allowedStatuses: SessionStatus[]
+  ): Promise<number> {
+    if (allowedStatuses.length === 0) {
+      return 0;
+    }
+
+    const updateData: Prisma.AgentSessionUpdateManyMutationInput = {
+      name: data.name,
+      workflow: data.workflow,
+      model: data.model,
+      status: data.status,
+      provider: data.provider,
+      providerMetadata:
+        data.providerMetadata === undefined
+          ? undefined
+          : data.providerMetadata === null
+            ? Prisma.JsonNull
+            : data.providerMetadata,
+      providerSessionId: data.providerSessionId,
+      providerProjectPath: data.providerProjectPath,
+      providerProcessPid: data.providerProcessPid,
+    };
+
+    const result = await prisma.agentSession.updateMany({
+      where: {
+        id,
+        status: { in: allowedStatuses },
+      },
+      data: updateData,
+    });
+
+    return result.count;
   }
 
   delete(id: string): Promise<AgentSessionRecord> {
