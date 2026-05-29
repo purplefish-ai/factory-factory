@@ -228,23 +228,32 @@ export class AutoIterationService {
 
     loop.pauseRequested = false;
 
-    // Set a sentinel promise synchronously to prevent concurrent resume() calls from
-    // both passing the swap-check guard — mirrors how start() uses a synchronous map insertion.
-    // A second concurrent resume() will see loopPromise changed and bail out at the swap-check.
-    const sentinel = Promise.resolve();
+    // Set a pending sentinel synchronously so concurrent resume() calls wait until
+    // this call has swapped in the real runLoop promise or reset after failure.
+    let releaseSentinel = (): void => undefined;
+    const sentinel = new Promise<void>((resolve) => {
+      releaseSentinel = resolve;
+    });
     loop.loopPromise = sentinel;
 
-    await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
+    try {
+      await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
-    const worktreePath = await this.workspace.getWorktreePath(workspaceId);
-    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
-      this.logger.error('Auto-iteration loop failed on resume', {
-        workspaceId,
-        error: String(err),
+      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+      loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
+        this.logger.error('Auto-iteration loop failed on resume', {
+          workspaceId,
+          error: String(err),
+        });
+        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+        this.loops.delete(workspaceId);
       });
-      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-      this.loops.delete(workspaceId);
-    });
+    } catch (err) {
+      loop.loopPromise = null;
+      throw err;
+    } finally {
+      releaseSentinel();
+    }
   }
 
   /**
