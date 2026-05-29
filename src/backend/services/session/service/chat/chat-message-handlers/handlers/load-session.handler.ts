@@ -346,8 +346,8 @@ function getCompleteHistoryToolUseIds(historyTranscript: ChatMessage[]): Set<str
 }
 
 function normalizeTranscriptOrder(messages: ChatMessage[]): ChatMessage[] {
-  return messages
-    .toSorted((left, right) => {
+  return [...messages]
+    .sort((left, right) => {
       const leftTime = Date.parse(left.timestamp);
       const rightTime = Date.parse(right.timestamp);
       const leftSortTime = Number.isNaN(leftTime) ? 0 : leftTime;
