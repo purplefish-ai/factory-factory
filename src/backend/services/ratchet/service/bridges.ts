@@ -27,9 +27,16 @@ export interface RatchetSessionBridge {
 export interface RatchetPRFullDetails {
   state: string;
   number: number;
+  url: string;
   reviewDecision: string | null;
   mergeStateStatus?: string;
-  reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
+  reviews: Array<{
+    submittedAt: string | null;
+    author: { login: string };
+    state?: string;
+    body?: string;
+    url?: string;
+  }>;
   comments: Array<{ updatedAt: string; author: { login: string } }>;
   statusCheckRollup: Array<{
     name?: string;
