@@ -640,6 +640,10 @@ export class CodexStreamEventHandler {
   ): Promise<void> {
     const recovered = this.deps.buildToolCallState(session, item, turnId);
     if (recovered) {
+      if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
+        this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
+      }
+
       await this.deps.emitSessionUpdate(session.sessionId, {
         sessionUpdate: 'tool_call',
         toolCallId: recovered.toolCallId,
@@ -650,6 +654,8 @@ export class CodexStreamEventHandler {
         rawInput: item,
         rawOutput: item,
       });
+
+      await this.deps.maybeRequestPlanApproval(session, item, turnId, recovered);
       return;
     }
 

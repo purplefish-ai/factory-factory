@@ -790,6 +790,145 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-no-dup', 'none');
   });
 
+  it('BUG: concurrent load_session calls can corrupt historyHydrationSource from jsonl to none', async () => {
+    const existingTranscript = [
+      {
+        id: 'existing-user',
+        source: 'user',
+        text: 'start',
+        timestamp: '2026-02-14T00:00:00.000Z',
+        order: 0,
+      },
+      {
+        id: 'existing-assistant-1',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'before tool' }] },
+        },
+        timestamp: '2026-02-14T00:00:01.000Z',
+        order: 1,
+      },
+      {
+        id: 'existing-assistant-2',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'after tool' }] },
+        },
+        timestamp: '2026-02-14T00:00:04.000Z',
+        order: 2,
+      },
+    ];
+    const loadedHistory = {
+      status: 'loaded' as const,
+      filePath:
+        '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+      history: [
+        {
+          type: 'assistant',
+          content: 'before tool',
+          timestamp: '2026-02-14T00:00:01.000Z',
+        },
+        {
+          type: 'tool_use',
+          content: '',
+          timestamp: '2026-02-14T00:00:02.000Z',
+          toolName: 'exec_command',
+          toolId: 'call-concurrent',
+          toolInput: { cmd: 'pwd', workdir: '/race' },
+        },
+        {
+          type: 'tool_result',
+          content: '/race',
+          timestamp: '2026-02-14T00:00:03.000Z',
+          toolId: 'call-concurrent',
+        },
+        {
+          type: 'assistant',
+          content: 'after tool',
+          timestamp: '2026-02-14T00:00:04.000Z',
+        },
+      ],
+    };
+
+    let historyHydrationSource: 'jsonl' | 'acp_fallback' | 'none' | undefined = 'none';
+    let latestTranscript = existingTranscript;
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockImplementation(() => historyHydrationSource !== undefined);
+    mocks.getHistoryHydrationSource.mockImplementation(() => historyHydrationSource);
+    mocks.getTranscriptSnapshot.mockImplementation(() => latestTranscript);
+    mocks.markHistoryHydrated.mockImplementation(
+      (_sessionId: string, source: 'jsonl' | 'acp_fallback' | 'none') => {
+        historyHydrationSource = source;
+      }
+    );
+    mocks.replaceTranscript.mockImplementation(
+      (_sessionId: string, transcript: typeof existingTranscript) => {
+        latestTranscript = transcript;
+        historyHydrationSource = 'jsonl';
+      }
+    );
+
+    let resolveFirstLoad:
+      | ((value: Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>) => void)
+      | undefined;
+    let resolveSecondLoad:
+      | ((value: Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>) => void)
+      | undefined;
+    const firstLoad = new Promise<Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>>(
+      (resolve) => {
+        resolveFirstLoad = resolve;
+      }
+    );
+    const secondLoad = new Promise<Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>>(
+      (resolve) => {
+        resolveSecondLoad = resolve;
+      }
+    );
+    mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad).mockReturnValueOnce(secondLoad);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    const firstHandle = handler({
+      ws: ws as never,
+      sessionId: 'session-codex-concurrent',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+    const secondHandle = handler({
+      ws: ws as never,
+      sessionId: 'session-codex-concurrent',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(2);
+    });
+
+    resolveFirstLoad?.(loadedHistory);
+    await firstHandle;
+    expect(historyHydrationSource).toBe('jsonl');
+
+    resolveSecondLoad?.(loadedHistory);
+    await secondHandle;
+
+    expect(mocks.replaceTranscript).toHaveBeenCalledTimes(1);
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalledWith('session-codex-concurrent', 'none');
+    expect(historyHydrationSource).toBe('jsonl');
+  });
+
   it('rechecks CODEX tool backfill after a no-op cooldown', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-14T00:00:10.000Z'));

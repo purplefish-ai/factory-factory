@@ -130,6 +130,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
                 event.preventDefault();
                 onWorkspaceFileLink(workspacePath);
               }}
+              onAuxClick={(event) => {
+                if (event.button !== 1) {
+                  return;
+                }
+
+                event.preventDefault();
+                onWorkspaceFileLink(workspacePath);
+              }}
               className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
             >
               {children}
