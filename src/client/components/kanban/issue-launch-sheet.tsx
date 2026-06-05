@@ -105,6 +105,12 @@ export function IssueLaunchSheet({
   const lastPromptPreviewRef = useRef(promptPreview);
   const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
   const issueProviderLabel = getIssueProviderLabel(issue);
+  const issueKey = `${issue.provider}:${issue.id}`;
+  const isPromptPreviewSyncPending =
+    open &&
+    initializedPromptIssueKeyRef.current === issueKey &&
+    lastPromptPreviewRef.current !== promptPreview &&
+    promptText === lastPromptPreviewRef.current;
 
   useEffect(() => {
     if (!open) {
@@ -114,7 +120,6 @@ export function IssueLaunchSheet({
       return;
     }
 
-    const issueKey = `${issue.provider}:${issue.id}`;
     const previousPromptPreview = lastPromptPreviewRef.current;
     if (initializedPromptIssueKeyRef.current !== issueKey) {
       setPromptText(promptPreview);
@@ -132,7 +137,7 @@ export function IssueLaunchSheet({
 
     setProvider(userSettings.defaultSessionProvider ?? 'CLAUDE');
     initializedProviderForOpenRef.current = true;
-  }, [open, promptPreview, userSettings, issue.id, issue.provider]);
+  }, [open, promptPreview, userSettings, issueKey]);
 
   useEffect(() => {
     if (!userSettings) {
@@ -181,7 +186,8 @@ export function IssueLaunchSheet({
   };
 
   const handleStart = () => {
-    const trimmedPrompt = promptText.trim();
+    const currentPromptText = isPromptPreviewSyncPending ? promptPreview : promptText;
+    const trimmedPrompt = currentPromptText.trim();
     if (issue.provider === 'linear' && issue.linearIssueId && issue.linearIssueIdentifier) {
       createWorkspaceMutation.mutate({
         type: 'LINEAR_ISSUE',
@@ -310,6 +316,7 @@ export function IssueLaunchSheet({
               createWorkspaceMutation.isPending ||
               isLoadingSettings ||
               isLoadingProject ||
+              isPromptPreviewSyncPending ||
               (issue.provider === 'github' && !promptText.trim())
             }
             className="w-full sm:w-auto"

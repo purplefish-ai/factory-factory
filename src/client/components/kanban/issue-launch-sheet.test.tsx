@@ -15,7 +15,8 @@ const mocks = vi.hoisted(() => ({
   project: {
     githubOwner: 'purplefish-ai',
     githubRepo: 'factory-factory',
-  },
+  } as { githubOwner: string; githubRepo: string } | null,
+  isLoadingProject: false,
   listWithKanbanStateInvalidateMock: vi.fn(),
   getProjectSummaryStateInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
@@ -64,7 +65,7 @@ vi.mock('@/client/lib/trpc', () => ({
       getById: {
         useQuery: () => ({
           data: mocks.project,
-          isLoading: false,
+          isLoading: mocks.isLoadingProject,
         }),
       },
     },
@@ -188,7 +189,7 @@ function renderSheet(sheetIssue: NormalizedIssue = issue): {
   return { container, root };
 }
 
-function clickButton(container: HTMLDivElement, label: string) {
+function findButton(container: HTMLDivElement, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find((candidate) =>
     candidate.textContent?.includes(label)
   );
@@ -196,6 +197,12 @@ function clickButton(container: HTMLDivElement, label: string) {
   if (!button) {
     throw new Error(`${label} button not found`);
   }
+
+  return button;
+}
+
+function clickButton(container: HTMLDivElement, label: string) {
+  const button = findButton(container, label);
 
   flushSync(() => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -232,6 +239,7 @@ beforeEach(() => {
     githubOwner: 'purplefish-ai',
     githubRepo: 'factory-factory',
   };
+  mocks.isLoadingProject = false;
 });
 
 afterEach(() => {
@@ -349,6 +357,66 @@ describe('IssueLaunchSheet', () => {
     expect(container.querySelector('textarea')?.value).toContain('Closes ENG-42');
     expect(container.querySelector('textarea')?.value).toContain(
       'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('starts with the project-enriched Linear prompt after project metadata loads', async () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+
+    mocks.project = null;
+    mocks.isLoadingProject = true;
+    const { container, root } = renderSheet(linearIssue);
+
+    expect(container.querySelector('textarea')?.value).not.toContain(
+      'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+    );
+
+    mocks.project = {
+      githubOwner: 'purplefish-ai',
+      githubRepo: 'factory-factory',
+    };
+    mocks.isLoadingProject = false;
+
+    flushSync(() => {
+      root.render(
+        createElement(IssueLaunchSheet, {
+          projectId: 'project-1',
+          issue: linearIssue,
+          open: true,
+          onOpenChange: vi.fn(),
+        })
+      );
+    });
+
+    expect(findButton(container, 'Start').disabled).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(findButton(container, 'Start').disabled).toBe(false);
+
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        initialPrompt: expect.stringContaining(
+          'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+        ),
+      })
     );
 
     root.unmount();
