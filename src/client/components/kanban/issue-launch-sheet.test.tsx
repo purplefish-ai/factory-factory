@@ -4,6 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
 const mocks = vi.hoisted(() => ({
@@ -141,7 +142,7 @@ vi.mock('@/components/workspace', () => ({
   RatchetToggleButton: () => null,
 }));
 
-const issue = {
+const issue: NormalizedIssue = {
   id: 'github-42',
   provider: 'github' as const,
   title: 'Fix login redirect',
@@ -153,7 +154,10 @@ const issue = {
   githubIssueNumber: 42,
 };
 
-function renderSheet(): { container: HTMLDivElement; root: Root } {
+function renderSheet(sheetIssue: NormalizedIssue = issue): {
+  container: HTMLDivElement;
+  root: Root;
+} {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -162,7 +166,7 @@ function renderSheet(): { container: HTMLDivElement; root: Root } {
     root.render(
       createElement(IssueLaunchSheet, {
         projectId: 'project-1',
-        issue,
+        issue: sheetIssue,
         open: true,
         onOpenChange: vi.fn(),
       })
@@ -231,6 +235,37 @@ describe('IssueLaunchSheet', () => {
         type: 'GITHUB_ISSUE',
         issueNumber: 42,
         initialPrompt: 'Please handle this issue with extra care.',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('sends edited Linear issue prompt when starting', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    changeTextarea(container, 'Use this custom Linear issue prompt.');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        issueId: 'linear-uuid-42',
+        issueIdentifier: 'ENG-42',
+        initialPrompt: 'Use this custom Linear issue prompt.',
       })
     );
 

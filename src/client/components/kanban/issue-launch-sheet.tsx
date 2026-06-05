@@ -177,6 +177,7 @@ export function IssueLaunchSheet({
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        initialPrompt: trimmedPrompt,
         startupModePreset,
         provider,
       });

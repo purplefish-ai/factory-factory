@@ -409,6 +409,27 @@ describe('workspaceRouter', () => {
     );
   });
 
+  it('passes initial prompt through Linear issue workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+    await caller.create({
+      type: 'LINEAR_ISSUE',
+      projectId: 'p1',
+      issueId: 'linear-42',
+      issueIdentifier: 'ENG-42',
+      issueUrl: 'https://linear.app/org/issue/ENG-42',
+      initialPrompt: 'Custom Linear issue prompt',
+    });
+
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        initialPrompt: 'Custom Linear issue prompt',
+      })
+    );
+  });
+
   it('passes provider through Linear issue workspace creation', async () => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
