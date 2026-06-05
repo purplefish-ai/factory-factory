@@ -201,6 +201,56 @@ describe('FileLockMutex', () => {
     }
   });
 
+  it('propagates unexpected claimed lock restore failures', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'restore-failure.lock');
+    const claimedPath = path.join(baseDir, '.restore-failure.lock.stale-test');
+    await fs.mkdir(claimedPath);
+
+    const mutex = new FileLockMutex();
+
+    try {
+      await expect(
+        (
+          mutex as unknown as {
+            restoreClaimedLock: (lockPath: string, claimedPath: string) => Promise<void>;
+          }
+        ).restoreClaimedLock(lockPath, claimedPath)
+      ).rejects.toThrow();
+
+      expect(await exists(lockPath)).toBe(false);
+      expect(await exists(claimedPath)).toBe(true);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('renames a claimed lock during restore fallback when the lock path is missing', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'rename-fallback.lock');
+    const claimedPath = path.join(baseDir, '.rename-fallback.lock.stale-test');
+    const claimedLockContent = lockMetadata('claimed-lock-id');
+    await fs.writeFile(claimedPath, claimedLockContent, 'utf-8');
+
+    const mutex = new FileLockMutex();
+
+    try {
+      await (
+        mutex as unknown as {
+          renameClaimedLockIfLockPathMissing: (
+            lockPath: string,
+            claimedPath: string
+          ) => Promise<void>;
+        }
+      ).renameClaimedLockIfLockPathMissing(lockPath, claimedPath);
+
+      expect(await fs.readFile(lockPath, 'utf-8')).toBe(claimedLockContent);
+      expect(await exists(claimedPath)).toBe(false);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not treat an active lock as stale while heartbeat is updating mtime', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
     const lockPath = path.join(baseDir, 'heartbeat.lock');
