@@ -47,6 +47,7 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+      initialPrompt?: string;
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
     }
@@ -59,6 +60,7 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+      initialPrompt?: string;
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
     };
@@ -91,6 +93,10 @@ type PreparedWorkspaceCreation = {
     useExistingBranch: boolean;
   };
 };
+
+function hasInitialPrompt(source: { initialPrompt?: string }): source is { initialPrompt: string } {
+  return typeof source.initialPrompt === 'string';
+}
 
 /**
  * Canonical workspace creation orchestrator.
@@ -177,7 +183,7 @@ export class WorkspaceCreationService {
     const autoIterationConfig = configParsed?.success ? configParsed.data : undefined;
 
     const metadata: Record<string, unknown> = {};
-    if (source.initialPrompt) {
+    if (hasInitialPrompt(source)) {
       metadata.initialPrompt = source.initialPrompt;
     }
     if (source.initialAttachments && source.initialAttachments.length > 0) {
@@ -251,6 +257,9 @@ export class WorkspaceCreationService {
     if (source.startupModePreset) {
       metadata.startupModePreset = source.startupModePreset;
     }
+    if (hasInitialPrompt(source)) {
+      metadata.initialPrompt = source.initialPrompt;
+    }
 
     return {
       preparedInput: {
@@ -276,6 +285,9 @@ export class WorkspaceCreationService {
     };
     if (source.startupModePreset) {
       metadata.startupModePreset = source.startupModePreset;
+    }
+    if (hasInitialPrompt(source)) {
+      metadata.initialPrompt = source.initialPrompt;
     }
 
     return {

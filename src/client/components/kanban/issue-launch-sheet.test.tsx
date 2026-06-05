@@ -4,6 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +12,11 @@ const mocks = vi.hoisted(() => ({
     defaultSessionProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX',
     ratchetEnabled: false,
   },
+  project: {
+    githubOwner: 'purplefish-ai',
+    githubRepo: 'factory-factory',
+  } as { githubOwner: string; githubRepo: string } | null,
+  isLoadingProject: false,
   listWithKanbanStateInvalidateMock: vi.fn(),
   getProjectSummaryStateInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
@@ -52,6 +58,14 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => ({
           data: mocks.userSettings,
           isLoading: false,
+        }),
+      },
+    },
+    project: {
+      getById: {
+        useQuery: () => ({
+          data: mocks.project,
+          isLoading: mocks.isLoadingProject,
         }),
       },
     },
@@ -132,11 +146,16 @@ vi.mock('@/components/ui/sheet', () => ({
     createElement('div', props, children),
 }));
 
+vi.mock('@/components/ui/textarea', () => ({
+  Textarea: (props: import('react').TextareaHTMLAttributes<HTMLTextAreaElement>) =>
+    createElement('textarea', props),
+}));
+
 vi.mock('@/components/workspace', () => ({
   RatchetToggleButton: () => null,
 }));
 
-const issue = {
+const issue: NormalizedIssue = {
   id: 'github-42',
   provider: 'github' as const,
   title: 'Fix login redirect',
@@ -148,7 +167,10 @@ const issue = {
   githubIssueNumber: 42,
 };
 
-function renderSheet(): { container: HTMLDivElement; root: Root } {
+function renderSheet(sheetIssue: NormalizedIssue = issue): {
+  container: HTMLDivElement;
+  root: Root;
+} {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -157,7 +179,7 @@ function renderSheet(): { container: HTMLDivElement; root: Root } {
     root.render(
       createElement(IssueLaunchSheet, {
         projectId: 'project-1',
-        issue,
+        issue: sheetIssue,
         open: true,
         onOpenChange: vi.fn(),
       })
@@ -167,7 +189,7 @@ function renderSheet(): { container: HTMLDivElement; root: Root } {
   return { container, root };
 }
 
-function clickButton(container: HTMLDivElement, label: string) {
+function findButton(container: HTMLDivElement, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find((candidate) =>
     candidate.textContent?.includes(label)
   );
@@ -176,8 +198,30 @@ function clickButton(container: HTMLDivElement, label: string) {
     throw new Error(`${label} button not found`);
   }
 
+  return button;
+}
+
+function clickButton(container: HTMLDivElement, label: string) {
+  const button = findButton(container, label);
+
   flushSync(() => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+}
+
+function changeTextarea(container: HTMLDivElement, value: string) {
+  const textarea = container.querySelector('textarea');
+  if (!textarea) {
+    throw new Error('textarea not found');
+  }
+
+  flushSync(() => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+    valueSetter?.call(textarea, value);
+    textarea.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
   });
 }
 
@@ -191,6 +235,11 @@ beforeEach(() => {
     defaultSessionProvider: 'CLAUDE',
     ratchetEnabled: false,
   };
+  mocks.project = {
+    githubOwner: 'purplefish-ai',
+    githubRepo: 'factory-factory',
+  };
+  mocks.isLoadingProject = false;
 });
 
 afterEach(() => {
@@ -199,6 +248,181 @@ afterEach(() => {
 });
 
 describe('IssueLaunchSheet', () => {
+  it('sends edited GitHub issue prompt when starting', () => {
+    const { container, root } = renderSheet();
+
+    changeTextarea(container, 'Please handle this issue with extra care.');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'GITHUB_ISSUE',
+        issueNumber: 42,
+        initialPrompt: 'Please handle this issue with extra care.',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('sends edited Linear issue prompt when starting', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    changeTextarea(container, 'Use this custom Linear issue prompt.');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        issueId: 'linear-uuid-42',
+        issueIdentifier: 'ENG-42',
+        initialPrompt: 'Use this custom Linear issue prompt.',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('sends an empty Linear issue prompt when the prompt is cleared', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    changeTextarea(container, '');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        issueId: 'linear-uuid-42',
+        issueIdentifier: 'ENG-42',
+        initialPrompt: '',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('seeds the editor with the full GitHub issue workflow prompt', () => {
+    const { container, root } = renderSheet();
+
+    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain('Closes #42');
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('seeds the editor with the full Linear issue workflow prompt', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain('Closes ENG-42');
+    expect(container.querySelector('textarea')?.value).toContain(
+      'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('starts with the project-enriched Linear prompt after project metadata loads', async () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+
+    mocks.project = null;
+    mocks.isLoadingProject = true;
+    const { container, root } = renderSheet(linearIssue);
+
+    expect(container.querySelector('textarea')?.value).not.toContain(
+      'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+    );
+
+    mocks.project = {
+      githubOwner: 'purplefish-ai',
+      githubRepo: 'factory-factory',
+    };
+    mocks.isLoadingProject = false;
+
+    flushSync(() => {
+      root.render(
+        createElement(IssueLaunchSheet, {
+          projectId: 'project-1',
+          issue: linearIssue,
+          open: true,
+          onOpenChange: vi.fn(),
+        })
+      );
+    });
+
+    expect(findButton(container, 'Start').disabled).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(findButton(container, 'Start').disabled).toBe(false);
+
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        initialPrompt: expect.stringContaining(
+          'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+        ),
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
   it('does not reset a user-selected provider after settings refetch', () => {
     const { container, root } = renderSheet();
 

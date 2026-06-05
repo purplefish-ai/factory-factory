@@ -55,6 +55,17 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
     },
+    project: {
+      getById: {
+        useQuery: () => ({
+          data: {
+            githubOwner: 'acme',
+            githubRepo: 'repo',
+          },
+          isLoading: false,
+        }),
+      },
+    },
     workspace: {
       create: {
         useMutation: (options: Record<string, unknown>) => {

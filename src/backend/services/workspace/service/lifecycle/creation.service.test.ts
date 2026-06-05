@@ -474,6 +474,50 @@ describe('WorkspaceCreationService', () => {
         );
       });
 
+      it('persists initial prompt in GitHub issue creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'GITHUB_ISSUE',
+          projectId: 'proj-1',
+          issueNumber: 42,
+          issueUrl: 'https://github.com/org/repo/issues/42',
+          initialPrompt: 'Custom issue prompt',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              issueNumber: 42,
+              issueUrl: 'https://github.com/org/repo/issues/42',
+              initialPrompt: 'Custom issue prompt',
+            },
+          })
+        );
+      });
+
+      it('persists empty initial prompt in GitHub issue creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'GITHUB_ISSUE',
+          projectId: 'proj-1',
+          issueNumber: 42,
+          issueUrl: 'https://github.com/org/repo/issues/42',
+          initialPrompt: '',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              issueNumber: 42,
+              issueUrl: 'https://github.com/org/repo/issues/42',
+              initialPrompt: '',
+            },
+          })
+        );
+      });
+
       it('persists selected provider for GitHub issue workspaces', async () => {
         const source: WorkspaceCreationSource = {
           type: 'GITHUB_ISSUE',
@@ -560,6 +604,54 @@ describe('WorkspaceCreationService', () => {
               issueIdentifier: 'ENG-42',
               issueUrl: 'https://linear.app/team/issue/ENG-42',
               startupModePreset: 'plan',
+            },
+          })
+        );
+      });
+
+      it('persists initial prompt in Linear issue creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'LINEAR_ISSUE',
+          projectId: 'proj-1',
+          issueId: 'linear-uuid-123',
+          issueIdentifier: 'ENG-42',
+          issueUrl: 'https://linear.app/team/issue/ENG-42',
+          initialPrompt: 'Custom Linear issue prompt',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              issueId: 'linear-uuid-123',
+              issueIdentifier: 'ENG-42',
+              issueUrl: 'https://linear.app/team/issue/ENG-42',
+              initialPrompt: 'Custom Linear issue prompt',
+            },
+          })
+        );
+      });
+
+      it('persists empty initial prompt in Linear issue creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'LINEAR_ISSUE',
+          projectId: 'proj-1',
+          issueId: 'linear-uuid-123',
+          issueIdentifier: 'ENG-42',
+          issueUrl: 'https://linear.app/team/issue/ENG-42',
+          initialPrompt: '',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              issueId: 'linear-uuid-123',
+              issueIdentifier: 'ENG-42',
+              issueUrl: 'https://linear.app/team/issue/ENG-42',
+              initialPrompt: '',
             },
           })
         );
