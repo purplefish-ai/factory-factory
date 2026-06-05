@@ -94,6 +94,10 @@ type PreparedWorkspaceCreation = {
   };
 };
 
+function hasInitialPrompt(source: { initialPrompt?: string }): source is { initialPrompt: string } {
+  return typeof source.initialPrompt === 'string';
+}
+
 /**
  * Canonical workspace creation orchestrator.
  *
@@ -179,7 +183,7 @@ export class WorkspaceCreationService {
     const autoIterationConfig = configParsed?.success ? configParsed.data : undefined;
 
     const metadata: Record<string, unknown> = {};
-    if (source.initialPrompt) {
+    if (hasInitialPrompt(source)) {
       metadata.initialPrompt = source.initialPrompt;
     }
     if (source.initialAttachments && source.initialAttachments.length > 0) {
@@ -253,7 +257,7 @@ export class WorkspaceCreationService {
     if (source.startupModePreset) {
       metadata.startupModePreset = source.startupModePreset;
     }
-    if (source.initialPrompt) {
+    if (hasInitialPrompt(source)) {
       metadata.initialPrompt = source.initialPrompt;
     }
 
@@ -282,7 +286,7 @@ export class WorkspaceCreationService {
     if (source.startupModePreset) {
       metadata.startupModePreset = source.startupModePreset;
     }
-    if (source.initialPrompt) {
+    if (hasInitialPrompt(source)) {
       metadata.initialPrompt = source.initialPrompt;
     }
 

@@ -289,6 +289,37 @@ describe('IssueLaunchSheet', () => {
     container.remove();
   });
 
+  it('sends an empty Linear issue prompt when the prompt is cleared', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    changeTextarea(container, '');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        issueId: 'linear-uuid-42',
+        issueIdentifier: 'ENG-42',
+        initialPrompt: '',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
   it('seeds the editor with the full GitHub issue workflow prompt', () => {
     const { container, root } = renderSheet();
 

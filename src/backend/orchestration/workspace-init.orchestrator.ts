@@ -298,19 +298,34 @@ function readStartupModePresetFromMetadata(
   return 'non_interactive';
 }
 
+function readInitialPromptFromMetadata(
+  metadata: Record<string, unknown> | null,
+  workspaceId: string
+): { provided: boolean; text: string } {
+  if (!(metadata && Object.hasOwn(metadata, 'initialPrompt'))) {
+    return { provided: false, text: '' };
+  }
+
+  if (typeof metadata.initialPrompt === 'string') {
+    return { provided: true, text: metadata.initialPrompt };
+  }
+
+  logger.warn('Invalid initial prompt in workspace creation metadata', {
+    workspaceId,
+  });
+  return { provided: false, text: '' };
+}
+
 async function resolveInitialAutoMessageContent(
   workspaceId: string,
   creationMetadata: Record<string, unknown> | null
 ): Promise<InitialAutoMessageContent | null> {
-  const metadataPromptText =
-    creationMetadata?.initialPrompt && typeof creationMetadata.initialPrompt === 'string'
-      ? creationMetadata.initialPrompt
-      : '';
+  const metadataPrompt = readInitialPromptFromMetadata(creationMetadata, workspaceId);
   const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
 
-  if (metadataPromptText || (metadataAttachments && metadataAttachments.length > 0)) {
+  if (metadataPrompt.provided || (metadataAttachments && metadataAttachments.length > 0)) {
     return {
-      text: metadataPromptText,
+      text: metadataPrompt.text,
       ...(metadataAttachments && metadataAttachments.length > 0
         ? { attachments: metadataAttachments }
         : {}),
