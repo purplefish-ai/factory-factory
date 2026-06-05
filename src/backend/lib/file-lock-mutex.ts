@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
@@ -305,22 +306,17 @@ export class FileLockMutex {
   }
 
   private async tryRemoveStaleLock(lockPath: string): Promise<boolean> {
+    let lockAge: number;
+    let expectedLockId: string | undefined;
+
     try {
       const stats = await fs.stat(lockPath);
-      const lockAge = Date.now() - stats.mtimeMs;
-      const expectedLockId = await this.readLockId(lockPath);
+      lockAge = Date.now() - stats.mtimeMs;
+      expectedLockId = await this.readLockId(lockPath);
 
       if (lockAge < this.options.staleThresholdMs) {
         return false;
       }
-
-      logger.warn('Attempting to remove stale lock file', {
-        lockPath,
-        lockAgeMs: lockAge,
-        lockId: expectedLockId,
-      });
-
-      return await this.claimAndRemoveStaleLock(lockPath, expectedLockId);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code === 'ENOENT') {
@@ -333,6 +329,14 @@ export class FileLockMutex {
       });
       return false;
     }
+
+    logger.warn('Attempting to remove stale lock file', {
+      lockPath,
+      lockAgeMs: lockAge,
+      lockId: expectedLockId,
+    });
+
+    return await this.claimAndRemoveStaleLock(lockPath, expectedLockId);
   }
 
   private async readLockId(lockPath: string): Promise<string | undefined> {
@@ -371,36 +375,12 @@ export class FileLockMutex {
       return false;
     }
 
+    let claimedStats: Stats;
+    let claimedLockId: string | undefined;
+
     try {
-      const claimedStats = await fs.stat(claimedPath);
-      const claimedLockId = await this.readLockId(claimedPath);
-
-      const lockIdentityChanged =
-        expectedLockId !== claimedLockId &&
-        (expectedLockId !== undefined || claimedLockId !== undefined);
-
-      if (lockIdentityChanged) {
-        logger.debug('Claimed lock identity changed, restoring lock file', {
-          lockPath,
-          expectedLockId,
-          claimedLockId,
-        });
-        await this.restoreClaimedLock(lockPath, claimedPath);
-        return false;
-      }
-
-      const claimedLockAge = Date.now() - claimedStats.mtimeMs;
-      if (claimedLockAge < this.options.staleThresholdMs) {
-        logger.debug('Claimed lock is no longer stale, restoring lock file', {
-          lockPath,
-          claimedPath,
-          lockAgeMs: claimedLockAge,
-        });
-        await this.restoreClaimedLock(lockPath, claimedPath);
-        return false;
-      }
-
-      return await this.unlinkStaleLock(claimedPath);
+      claimedStats = await fs.stat(claimedPath);
+      claimedLockId = await this.readLockId(claimedPath);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code === 'ENOENT') {
@@ -415,6 +395,33 @@ export class FileLockMutex {
       await this.restoreClaimedLock(lockPath, claimedPath);
       return false;
     }
+
+    const lockIdentityChanged =
+      expectedLockId !== claimedLockId &&
+      (expectedLockId !== undefined || claimedLockId !== undefined);
+
+    if (lockIdentityChanged) {
+      logger.debug('Claimed lock identity changed, restoring lock file', {
+        lockPath,
+        expectedLockId,
+        claimedLockId,
+      });
+      await this.restoreClaimedLock(lockPath, claimedPath);
+      return false;
+    }
+
+    const claimedLockAge = Date.now() - claimedStats.mtimeMs;
+    if (claimedLockAge < this.options.staleThresholdMs) {
+      logger.debug('Claimed lock is no longer stale, restoring lock file', {
+        lockPath,
+        claimedPath,
+        lockAgeMs: claimedLockAge,
+      });
+      await this.restoreClaimedLock(lockPath, claimedPath);
+      return false;
+    }
+
+    return await this.unlinkStaleLock(claimedPath);
   }
 
   private createStaleClaimPath(lockPath: string): string {
@@ -426,31 +433,14 @@ export class FileLockMutex {
   private async restoreClaimedLock(lockPath: string, claimedPath: string): Promise<void> {
     try {
       await fs.link(claimedPath, lockPath);
-      await fs.unlink(claimedPath);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
-      if (code === 'ENOENT') {
-        return;
-      }
-
       if (code === 'EEXIST') {
         logger.debug('Lock path already exists while restoring claimed lock', {
           lockPath,
           claimedPath,
         });
-        await fs.unlink(claimedPath).catch((unlinkError) => {
-          const unlinkCode = (unlinkError as NodeJS.ErrnoException | undefined)?.code;
-          if (unlinkCode === 'ENOENT') {
-            return;
-          }
-
-          logger.warn('Failed to clean up claimed lock after restore conflict', {
-            lockPath,
-            claimedPath,
-            error: unlinkError instanceof Error ? unlinkError.message : String(unlinkError),
-            code: unlinkCode,
-          });
-        });
+        await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
         return;
       }
 
@@ -460,7 +450,29 @@ export class FileLockMutex {
         error: error instanceof Error ? error.message : String(error),
         code,
       });
+      throw error;
     }
+
+    await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
+  }
+
+  private async unlinkClaimedLockAfterRestoreConflict(
+    lockPath: string,
+    claimedPath: string
+  ): Promise<void> {
+    await fs.unlink(claimedPath).catch((unlinkError) => {
+      const unlinkCode = (unlinkError as NodeJS.ErrnoException | undefined)?.code;
+      if (unlinkCode === 'ENOENT') {
+        return;
+      }
+
+      logger.warn('Failed to clean up claimed lock after restore conflict', {
+        lockPath,
+        claimedPath,
+        error: unlinkError instanceof Error ? unlinkError.message : String(unlinkError),
+        code: unlinkCode,
+      });
+    });
   }
 
   private async unlinkStaleLock(lockPath: string): Promise<boolean> {
