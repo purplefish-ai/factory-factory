@@ -225,26 +225,58 @@ describe('FileLockMutex', () => {
     }
   });
 
-  it('renames a claimed lock during restore fallback when the lock path is missing', async () => {
+  it('propagates restore failures from the stale lock acquisition path', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
-    const lockPath = path.join(baseDir, 'rename-fallback.lock');
-    const claimedPath = path.join(baseDir, '.rename-fallback.lock.stale-test');
-    const claimedLockContent = lockMetadata('claimed-lock-id');
-    await fs.writeFile(claimedPath, claimedLockContent, 'utf-8');
+    const lockPath = path.join(baseDir, 'stale-restore-failure.lock');
+    const restoreError = new Error('restore failed');
+    await fs.writeFile(lockPath, lockMetadata('stale-lock-id'), 'utf-8');
+
+    const staleTime = new Date(Date.now() - 60_000);
+    await fs.utimes(lockPath, staleTime, staleTime);
+
+    const mutex = new FileLockMutex({
+      staleThresholdMs: 20,
+    });
+
+    try {
+      (
+        mutex as unknown as {
+          claimAndRemoveStaleLock: (
+            lockPath: string,
+            expectedLockId: string | undefined
+          ) => Promise<boolean>;
+        }
+      ).claimAndRemoveStaleLock = () => Promise.reject(restoreError);
+
+      await expect(
+        (
+          mutex as unknown as {
+            tryRemoveStaleLock: (lockPath: string) => Promise<boolean>;
+          }
+        ).tryRemoveStaleLock(lockPath)
+      ).rejects.toBe(restoreError);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects restore when the claimed lock vanishes before restore', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'missing-claimed.lock');
+    const claimedPath = path.join(baseDir, '.missing-claimed.lock.stale-test');
 
     const mutex = new FileLockMutex();
 
     try {
-      await (
-        mutex as unknown as {
-          renameClaimedLockIfLockPathMissing: (
-            lockPath: string,
-            claimedPath: string
-          ) => Promise<void>;
-        }
-      ).renameClaimedLockIfLockPathMissing(lockPath, claimedPath);
+      await expect(
+        (
+          mutex as unknown as {
+            restoreClaimedLock: (lockPath: string, claimedPath: string) => Promise<void>;
+          }
+        ).restoreClaimedLock(lockPath, claimedPath)
+      ).rejects.toThrow();
 
-      expect(await fs.readFile(lockPath, 'utf-8')).toBe(claimedLockContent);
+      expect(await exists(lockPath)).toBe(false);
       expect(await exists(claimedPath)).toBe(false);
     } finally {
       await fs.rm(baseDir, { recursive: true, force: true });

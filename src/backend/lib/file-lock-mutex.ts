@@ -15,7 +15,6 @@ const MIN_LOCK_STALE_THRESHOLD_MS = 1000;
 const DEFAULT_LOCK_HEARTBEAT_INTERVAL_MS = 10_000;
 const MIN_LOCK_HEARTBEAT_INTERVAL_MS = 100;
 const LOCK_FILE_FORMAT_VERSION = 1;
-const RESTORE_RENAME_FALLBACK_ERROR_CODES = new Set(['EDQUOT', 'ENOSPC', 'EMLINK']);
 
 interface LockFileMetadata {
   version: number;
@@ -307,22 +306,17 @@ export class FileLockMutex {
   }
 
   private async tryRemoveStaleLock(lockPath: string): Promise<boolean> {
+    let lockAge: number;
+    let expectedLockId: string | undefined;
+
     try {
       const stats = await fs.stat(lockPath);
-      const lockAge = Date.now() - stats.mtimeMs;
-      const expectedLockId = await this.readLockId(lockPath);
+      lockAge = Date.now() - stats.mtimeMs;
+      expectedLockId = await this.readLockId(lockPath);
 
       if (lockAge < this.options.staleThresholdMs) {
         return false;
       }
-
-      logger.warn('Attempting to remove stale lock file', {
-        lockPath,
-        lockAgeMs: lockAge,
-        lockId: expectedLockId,
-      });
-
-      return await this.claimAndRemoveStaleLock(lockPath, expectedLockId);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code === 'ENOENT') {
@@ -335,6 +329,14 @@ export class FileLockMutex {
       });
       return false;
     }
+
+    logger.warn('Attempting to remove stale lock file', {
+      lockPath,
+      lockAgeMs: lockAge,
+      lockId: expectedLockId,
+    });
+
+    return await this.claimAndRemoveStaleLock(lockPath, expectedLockId);
   }
 
   private async readLockId(lockPath: string): Promise<string | undefined> {
@@ -431,30 +433,14 @@ export class FileLockMutex {
   private async restoreClaimedLock(lockPath: string, claimedPath: string): Promise<void> {
     try {
       await fs.link(claimedPath, lockPath);
-      await fs.unlink(claimedPath);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
-      if (code === 'ENOENT') {
-        return;
-      }
-
       if (code === 'EEXIST') {
         logger.debug('Lock path already exists while restoring claimed lock', {
           lockPath,
           claimedPath,
         });
         await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
-        return;
-      }
-
-      if (code !== undefined && RESTORE_RENAME_FALLBACK_ERROR_CODES.has(code)) {
-        logger.warn('Falling back to rename while restoring claimed lock file', {
-          lockPath,
-          claimedPath,
-          error: error instanceof Error ? error.message : String(error),
-          code,
-        });
-        await this.renameClaimedLockIfLockPathMissing(lockPath, claimedPath);
         return;
       }
 
@@ -466,42 +452,8 @@ export class FileLockMutex {
       });
       throw error;
     }
-  }
 
-  private async renameClaimedLockIfLockPathMissing(
-    lockPath: string,
-    claimedPath: string
-  ): Promise<void> {
-    try {
-      await fs.stat(lockPath);
-      logger.debug('Lock path already exists before rename restore fallback', {
-        lockPath,
-        claimedPath,
-      });
-      await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException | undefined)?.code;
-      if (code !== 'ENOENT') {
-        throw error;
-      }
-    }
-
-    try {
-      await fs.rename(claimedPath, lockPath);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException | undefined)?.code;
-      if (code === 'ENOENT') {
-        return;
-      }
-
-      if (code === 'EEXIST') {
-        await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
-        return;
-      }
-
-      throw error;
-    }
+    await this.unlinkClaimedLockAfterRestoreConflict(lockPath, claimedPath);
   }
 
   private async unlinkClaimedLockAfterRestoreConflict(
