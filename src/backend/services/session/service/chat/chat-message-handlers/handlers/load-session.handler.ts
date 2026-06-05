@@ -170,7 +170,10 @@ function handleLoadedProviderHistory({
   loadStart: number;
 }): void {
   sessionDomainService.clearHistoryRetryCooldown(sessionId);
-  if (sessionDomainService.isHistoryHydrated(sessionId) && !shouldAttemptCodexToolBackfill) {
+  if (
+    sessionDomainService.getHistoryHydrationSource(sessionId) === 'jsonl' ||
+    (sessionDomainService.isHistoryHydrated(sessionId) && !shouldAttemptCodexToolBackfill)
+  ) {
     return;
   }
 
