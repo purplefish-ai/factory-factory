@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
     defaultSessionProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX',
     ratchetEnabled: false,
   },
+  project: {
+    githubOwner: 'purplefish-ai',
+    githubRepo: 'factory-factory',
+  },
   listWithKanbanStateInvalidateMock: vi.fn(),
   getProjectSummaryStateInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
@@ -52,6 +56,14 @@ vi.mock('@/client/lib/trpc', () => ({
       get: {
         useQuery: () => ({
           data: mocks.userSettings,
+          isLoading: false,
+        }),
+      },
+    },
+    project: {
+      getById: {
+        useQuery: () => ({
+          data: mocks.project,
           isLoading: false,
         }),
       },
@@ -216,6 +228,10 @@ beforeEach(() => {
     defaultSessionProvider: 'CLAUDE',
     ratchetEnabled: false,
   };
+  mocks.project = {
+    githubOwner: 'purplefish-ai',
+    githubRepo: 'factory-factory',
+  };
 });
 
 afterEach(() => {
@@ -300,6 +316,9 @@ describe('IssueLaunchSheet', () => {
 
     expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
     expect(container.querySelector('textarea')?.value).toContain('Closes ENG-42');
+    expect(container.querySelector('textarea')?.value).toContain(
+      'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'
+    );
 
     root.unmount();
     container.remove();

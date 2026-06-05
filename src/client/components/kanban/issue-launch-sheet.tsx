@@ -35,13 +35,26 @@ interface IssueLaunchSheetProps {
 
 type LaunchMode = 'non_interactive' | 'plan';
 type AgentProvider = 'CLAUDE' | 'CODEX';
+type PromptProject = {
+  githubOwner?: string | null;
+  githubRepo?: string | null;
+};
 
 function getIssueProviderLabel(issue: NormalizedIssue) {
   return issue.provider === 'linear' ? 'Linear' : 'GitHub';
 }
 
-function buildPromptPreview(issue: NormalizedIssue) {
+function buildProjectRawScreenshotBaseUrl(project: PromptProject | null | undefined) {
+  if (project?.githubOwner && project.githubRepo) {
+    return `https://raw.githubusercontent.com/${project.githubOwner}/${project.githubRepo}/`;
+  }
+
+  return '';
+}
+
+function buildPromptPreview(issue: NormalizedIssue, project: PromptProject | null | undefined) {
   const providerLabel = issue.provider === 'linear' ? 'Linear Issue' : 'GitHub Issue';
+  const projectRawScreenshotBaseUrl = buildProjectRawScreenshotBaseUrl(project);
   return buildIssueStartPrompt({
     providerLabel,
     issueReference: issue.displayId,
@@ -51,7 +64,8 @@ function buildPromptPreview(issue: NormalizedIssue) {
     commitReference: issue.displayId,
     closeReference: issue.displayId,
     rawScreenshotBaseUrl:
-      issue.provider === 'github' ? deriveGitHubRawScreenshotBaseUrl(issue.url) : '',
+      projectRawScreenshotBaseUrl ||
+      (issue.provider === 'github' ? deriveGitHubRawScreenshotBaseUrl(issue.url) : ''),
   });
 }
 
@@ -78,13 +92,17 @@ export function IssueLaunchSheet({
 }: IssueLaunchSheetProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
-  const promptPreview = useMemo(() => buildPromptPreview(issue), [issue]);
+  const { data: project, isLoading: isLoadingProject } = trpc.project.getById.useQuery({
+    id: projectId,
+  });
+  const promptPreview = useMemo(() => buildPromptPreview(issue, project), [issue, project]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
   const [promptText, setPromptText] = useState(promptPreview);
   const initializedProviderForOpenRef = useRef(false);
   const initializedPromptIssueKeyRef = useRef<string | null>(null);
+  const lastPromptPreviewRef = useRef(promptPreview);
   const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
   const issueProviderLabel = getIssueProviderLabel(issue);
 
@@ -92,14 +110,21 @@ export function IssueLaunchSheet({
     if (!open) {
       initializedProviderForOpenRef.current = false;
       initializedPromptIssueKeyRef.current = null;
+      lastPromptPreviewRef.current = promptPreview;
       return;
     }
 
     const issueKey = `${issue.provider}:${issue.id}`;
+    const previousPromptPreview = lastPromptPreviewRef.current;
     if (initializedPromptIssueKeyRef.current !== issueKey) {
       setPromptText(promptPreview);
       initializedPromptIssueKeyRef.current = issueKey;
+    } else if (previousPromptPreview !== promptPreview) {
+      setPromptText((currentPromptText) =>
+        currentPromptText === previousPromptPreview ? promptPreview : currentPromptText
+      );
     }
+    lastPromptPreviewRef.current = promptPreview;
 
     if (!userSettings || initializedProviderForOpenRef.current) {
       return;
@@ -272,7 +297,7 @@ export function IssueLaunchSheet({
               id={`issue-prompt-${issue.id}`}
               value={promptText}
               onChange={(event) => setPromptText(event.target.value)}
-              disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+              disabled={createWorkspaceMutation.isPending || isLoadingSettings || isLoadingProject}
               className="min-h-64 resize-y whitespace-pre-wrap bg-muted/20 font-mono text-xs leading-relaxed text-muted-foreground"
             />
           </div>
@@ -284,6 +309,7 @@ export function IssueLaunchSheet({
             disabled={
               createWorkspaceMutation.isPending ||
               isLoadingSettings ||
+              isLoadingProject ||
               (issue.provider === 'github' && !promptText.trim())
             }
             className="w-full sm:w-auto"
