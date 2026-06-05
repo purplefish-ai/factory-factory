@@ -39,6 +39,66 @@ describe('MarkdownRenderer workspace file links', () => {
     root.unmount();
   });
 
+  it('intercepts middle-clicks on resolved workspace file links', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onWorkspaceFileLink = vi.fn();
+
+    flushSync(() => {
+      root.render(
+        createElement(MarkdownRenderer, {
+          content: '[Concerns](/Users/demo/workspace/.planning/CONCERNS.md:31)',
+          resolveWorkspaceFileLink: () => '.planning/CONCERNS.md',
+          onWorkspaceFileLink,
+        })
+      );
+    });
+
+    const link = container.querySelector('a');
+    const event = new MouseEvent('auxclick', {
+      bubbles: true,
+      button: 1,
+      cancelable: true,
+    });
+    const wasNotCanceled = link?.dispatchEvent(event);
+
+    expect(wasNotCanceled).toBe(false);
+    expect(onWorkspaceFileLink).toHaveBeenCalledWith('.planning/CONCERNS.md');
+
+    root.unmount();
+  });
+
+  it('ignores non-middle auxclicks on resolved workspace file links', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onWorkspaceFileLink = vi.fn();
+
+    flushSync(() => {
+      root.render(
+        createElement(MarkdownRenderer, {
+          content: '[Concerns](/Users/demo/workspace/.planning/CONCERNS.md:31)',
+          resolveWorkspaceFileLink: () => '.planning/CONCERNS.md',
+          onWorkspaceFileLink,
+        })
+      );
+    });
+
+    const link = container.querySelector('a');
+    const event = new MouseEvent('auxclick', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    });
+    const wasNotCanceled = link?.dispatchEvent(event);
+
+    expect(wasNotCanceled).toBe(true);
+    expect(onWorkspaceFileLink).not.toHaveBeenCalled();
+
+    root.unmount();
+  });
+
   it('keeps external links opening in a new tab', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
