@@ -474,6 +474,28 @@ describe('WorkspaceCreationService', () => {
         );
       });
 
+      it('persists initial prompt in GitHub issue creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'GITHUB_ISSUE',
+          projectId: 'proj-1',
+          issueNumber: 42,
+          issueUrl: 'https://github.com/org/repo/issues/42',
+          initialPrompt: 'Custom issue prompt',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              issueNumber: 42,
+              issueUrl: 'https://github.com/org/repo/issues/42',
+              initialPrompt: 'Custom issue prompt',
+            },
+          })
+        );
+      });
+
       it('persists selected provider for GitHub issue workspaces', async () => {
         const source: WorkspaceCreationSource = {
           type: 'GITHUB_ISSUE',

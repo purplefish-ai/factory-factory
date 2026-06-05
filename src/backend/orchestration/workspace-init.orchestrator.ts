@@ -302,6 +302,21 @@ async function resolveInitialAutoMessageContent(
   workspaceId: string,
   creationMetadata: Record<string, unknown> | null
 ): Promise<InitialAutoMessageContent | null> {
+  const metadataPromptText =
+    creationMetadata?.initialPrompt && typeof creationMetadata.initialPrompt === 'string'
+      ? creationMetadata.initialPrompt
+      : '';
+  const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
+
+  if (metadataPromptText || (metadataAttachments && metadataAttachments.length > 0)) {
+    return {
+      text: metadataPromptText,
+      ...(metadataAttachments && metadataAttachments.length > 0
+        ? { attachments: metadataAttachments }
+        : {}),
+    };
+  }
+
   const issuePromptText =
     (await buildInitialPromptFromGitHubIssue(workspaceId, logger)) ||
     (await buildInitialPromptFromLinearIssue(workspaceId, logger));
@@ -309,22 +324,7 @@ async function resolveInitialAutoMessageContent(
     return { text: issuePromptText };
   }
 
-  const metadataPromptText =
-    creationMetadata?.initialPrompt && typeof creationMetadata.initialPrompt === 'string'
-      ? creationMetadata.initialPrompt
-      : '';
-  const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
-
-  if (!metadataPromptText && (!metadataAttachments || metadataAttachments.length === 0)) {
-    return null;
-  }
-
-  return {
-    text: metadataPromptText,
-    ...(metadataAttachments && metadataAttachments.length > 0
-      ? { attachments: metadataAttachments }
-      : {}),
-  };
+  return null;
 }
 
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {

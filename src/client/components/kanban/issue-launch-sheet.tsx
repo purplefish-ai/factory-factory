@@ -21,7 +21,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Textarea } from '@/components/ui/textarea';
 import { RatchetToggleButton } from '@/components/workspace';
+import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 
 interface IssueLaunchSheetProps {
   issue: NormalizedIssue;
@@ -39,6 +41,19 @@ function getIssueProviderLabel(issue: NormalizedIssue) {
 }
 
 function buildPromptPreview(issue: NormalizedIssue) {
+  if (issue.provider === 'github') {
+    return buildIssueStartPrompt({
+      providerLabel: 'GitHub Issue',
+      issueReference: issue.displayId,
+      title: issue.title,
+      body: issue.body,
+      url: issue.url,
+      commitReference: issue.displayId,
+      closeReference: issue.displayId,
+      rawScreenshotBaseUrl: deriveGitHubRawScreenshotBaseUrl(issue.url),
+    });
+  }
+
   const providerLabel = issue.provider === 'linear' ? 'Linear Issue' : 'GitHub Issue';
   const body = issue.body?.trim() || '(No description provided)';
 
@@ -51,6 +66,20 @@ Issue URL: ${issue.url}
 Start with planning, then implement, test, review, and open a pull request.`;
 }
 
+function deriveGitHubRawScreenshotBaseUrl(issueUrl: string) {
+  try {
+    const url = new URL(issueUrl);
+    const [owner, repo] = url.pathname.split('/').filter(Boolean);
+    if (url.hostname === 'github.com' && owner && repo) {
+      return `https://raw.githubusercontent.com/${owner}/${repo}/`;
+    }
+  } catch {
+    // Fall through to an empty base URL for malformed issue links.
+  }
+
+  return '';
+}
+
 export function IssueLaunchSheet({
   issue,
   projectId,
@@ -60,18 +89,27 @@ export function IssueLaunchSheet({
 }: IssueLaunchSheetProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const promptPreview = useMemo(() => buildPromptPreview(issue), [issue]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
+  const [promptText, setPromptText] = useState(promptPreview);
   const initializedProviderForOpenRef = useRef(false);
+  const initializedPromptIssueKeyRef = useRef<string | null>(null);
   const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
-  const promptPreview = useMemo(() => buildPromptPreview(issue), [issue]);
   const issueProviderLabel = getIssueProviderLabel(issue);
 
   useEffect(() => {
     if (!open) {
       initializedProviderForOpenRef.current = false;
+      initializedPromptIssueKeyRef.current = null;
       return;
+    }
+
+    const issueKey = `${issue.provider}:${issue.id}`;
+    if (initializedPromptIssueKeyRef.current !== issueKey) {
+      setPromptText(promptPreview);
+      initializedPromptIssueKeyRef.current = issueKey;
     }
 
     if (!userSettings || initializedProviderForOpenRef.current) {
@@ -80,7 +118,7 @@ export function IssueLaunchSheet({
 
     setProvider(userSettings.defaultSessionProvider ?? 'CLAUDE');
     initializedProviderForOpenRef.current = true;
-  }, [open, userSettings]);
+  }, [open, promptPreview, userSettings, issue.id, issue.provider]);
 
   useEffect(() => {
     if (!userSettings) {
@@ -129,6 +167,7 @@ export function IssueLaunchSheet({
   };
 
   const handleStart = () => {
+    const trimmedPrompt = promptText.trim();
     if (issue.provider === 'linear' && issue.linearIssueId && issue.linearIssueIdentifier) {
       createWorkspaceMutation.mutate({
         type: 'LINEAR_ISSUE',
@@ -142,6 +181,11 @@ export function IssueLaunchSheet({
         provider,
       });
     } else if (issue.githubIssueNumber) {
+      if (!trimmedPrompt) {
+        toast.error('Prompt cannot be empty');
+        return;
+      }
+
       createWorkspaceMutation.mutate({
         type: 'GITHUB_ISSUE',
         projectId,
@@ -149,6 +193,7 @@ export function IssueLaunchSheet({
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        initialPrompt: trimmedPrompt,
         startupModePreset,
         provider,
       });
@@ -223,7 +268,9 @@ export function IssueLaunchSheet({
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Prompt Preview</Label>
+              <Label htmlFor={`issue-prompt-${issue.id}`} className="text-xs">
+                Prompt
+              </Label>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
                 <a href={issue.url} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -231,16 +278,24 @@ export function IssueLaunchSheet({
                 </a>
               </Button>
             </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-              {promptPreview}
-            </pre>
+            <Textarea
+              id={`issue-prompt-${issue.id}`}
+              value={promptText}
+              onChange={(event) => setPromptText(event.target.value)}
+              disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+              className="min-h-64 resize-y whitespace-pre-wrap bg-muted/20 font-mono text-xs leading-relaxed text-muted-foreground"
+            />
           </div>
         </div>
 
         <SheetFooter className="pt-2">
           <Button
             onClick={handleStart}
-            disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+            disabled={
+              createWorkspaceMutation.isPending ||
+              isLoadingSettings ||
+              (issue.provider === 'github' && !promptText.trim())
+            }
             className="w-full sm:w-auto"
           >
             <Play className="h-4 w-4 mr-2" />

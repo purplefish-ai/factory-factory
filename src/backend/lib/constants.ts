@@ -10,4 +10,4 @@ export const LIB_LIMITS = Object.freeze({
 /**
  * Factory Factory signature for PRs created by agents.
  */
-export const FACTORY_SIGNATURE = '🏭 Forged in [Factory Factory](https://factoryfactory.ai)';
+export { FACTORY_SIGNATURE } from '@/shared/issue-start-prompt';

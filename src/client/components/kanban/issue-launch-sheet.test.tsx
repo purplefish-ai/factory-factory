@@ -132,6 +132,11 @@ vi.mock('@/components/ui/sheet', () => ({
     createElement('div', props, children),
 }));
 
+vi.mock('@/components/ui/textarea', () => ({
+  Textarea: (props: import('react').TextareaHTMLAttributes<HTMLTextAreaElement>) =>
+    createElement('textarea', props),
+}));
+
 vi.mock('@/components/workspace', () => ({
   RatchetToggleButton: () => null,
 }));
@@ -181,6 +186,22 @@ function clickButton(container: HTMLDivElement, label: string) {
   });
 }
 
+function changeTextarea(container: HTMLDivElement, value: string) {
+  const textarea = container.querySelector('textarea');
+  if (!textarea) {
+    throw new Error('textarea not found');
+  }
+
+  flushSync(() => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+    valueSetter?.call(textarea, value);
+    textarea.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+  });
+}
+
 beforeEach(() => {
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -199,6 +220,34 @@ afterEach(() => {
 });
 
 describe('IssueLaunchSheet', () => {
+  it('sends edited GitHub issue prompt when starting', () => {
+    const { container, root } = renderSheet();
+
+    changeTextarea(container, 'Please handle this issue with extra care.');
+    clickButton(container, 'Start');
+
+    expect(mocks.createWorkspaceMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'GITHUB_ISSUE',
+        issueNumber: 42,
+        initialPrompt: 'Please handle this issue with extra care.',
+      })
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('seeds the editor with the full GitHub issue workflow prompt', () => {
+    const { container, root } = renderSheet();
+
+    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain('Closes #42');
+
+    root.unmount();
+    container.remove();
+  });
+
   it('does not reset a user-selected provider after settings refetch', () => {
     const { container, root } = renderSheet();
 

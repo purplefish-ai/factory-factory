@@ -915,6 +915,34 @@ describe('initializeWorkspaceWorktree', () => {
   });
 
   describe('GitHub issue prompt', () => {
+    it('enqueues saved initial prompt for GitHub issue workspace without refetching issue', async () => {
+      const workspace = makeWorkspaceWithProject({
+        githubIssueNumber: 42,
+        creationMetadata: {
+          issueNumber: 42,
+          issueUrl: 'https://github.com/owner/repo/issues/42',
+          initialPrompt: 'Custom edited prompt',
+        },
+      });
+      setupHappyPath();
+      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(githubCLIService.getIssue).not.toHaveBeenCalled();
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: 'Custom edited prompt',
+        })
+      );
+    });
+
     it('enqueues GitHub issue prompt when workspace has linked issue', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();

@@ -347,6 +347,26 @@ describe('workspaceRouter', () => {
     );
   });
 
+  it('passes initial prompt through GitHub issue workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+    await caller.create({
+      type: 'GITHUB_ISSUE',
+      projectId: 'p1',
+      issueNumber: 42,
+      issueUrl: 'https://github.com/org/repo/issues/42',
+      initialPrompt: 'Custom issue prompt',
+    });
+
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'GITHUB_ISSUE',
+        initialPrompt: 'Custom issue prompt',
+      })
+    );
+  });
+
   it('passes provider through GitHub issue workspace creation', async () => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });

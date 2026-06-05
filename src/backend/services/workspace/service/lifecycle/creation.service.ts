@@ -47,6 +47,7 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+      initialPrompt?: string;
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
     }
@@ -250,6 +251,9 @@ export class WorkspaceCreationService {
     };
     if (source.startupModePreset) {
       metadata.startupModePreset = source.startupModePreset;
+    }
+    if (source.initialPrompt) {
+      metadata.initialPrompt = source.initialPrompt;
     }
 
     return {
