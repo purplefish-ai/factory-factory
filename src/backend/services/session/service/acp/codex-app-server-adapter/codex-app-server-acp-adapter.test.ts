@@ -1320,6 +1320,94 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('requests ExitPlanMode approval after recovered completed plan item in plan mode', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: 'default' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_recovered_plan_approval', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/plan/delta', {
+      threadId: 'thread_recovered_plan_approval',
+      turnId: 'turn_recovered_plan_approval',
+      itemId: 'item_recovered_plan_approval',
+      delta: '## Recovered Plan\n1. Request approval after recovery',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_recovered_plan_approval',
+      turnId: 'turn_recovered_plan_approval',
+      item: {
+        type: 'plan',
+        id: 'item_recovered_plan_approval',
+        status: 'completed',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCall: expect.objectContaining({
+          title: 'ExitPlanMode',
+          kind: 'switch_mode',
+        }),
+      })
+    );
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: 'plan',
+              kind: 'think',
+              status: 'completed',
+            }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: 'ExitPlanMode',
+              kind: 'switch_mode',
+              status: 'pending',
+              rawInput: expect.objectContaining({
+                type: 'ExitPlanMode',
+                plan: expect.objectContaining({
+                  type: 'text',
+                  text: expect.stringContaining('## Recovered Plan'),
+                }),
+              }),
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
   it('switches to the selected non-plan mode id when plan approval is accepted', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
