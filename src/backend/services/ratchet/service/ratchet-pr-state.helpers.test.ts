@@ -263,6 +263,73 @@ describe('buildReviewSummariesForPrompt', () => {
 
     expect(summaries).toEqual([]);
   });
+
+  it('excludes stale changes-requested reviews after the same reviewer approves', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'CHANGES_REQUESTED',
+            body: 'A requests changes first',
+          },
+          {
+            author: { login: 'reviewer-b' },
+            state: 'CHANGES_REQUESTED',
+            body: 'B requests changes',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+        ],
+      },
+      null
+    );
+
+    expect(summaries).toEqual([
+      {
+        author: 'reviewer-b',
+        body: 'B requests changes',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
+
+  it('keeps changes-requested reviews when they are the reviewer latest state', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'CHANGES_REQUESTED',
+            body: 'A found a later issue',
+          },
+        ],
+      },
+      null
+    );
+
+    expect(summaries).toEqual([
+      {
+        author: 'reviewer-a',
+        body: 'A found a later issue',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
 });
 
 describe('buildFailedCheckDiagnostics', () => {
