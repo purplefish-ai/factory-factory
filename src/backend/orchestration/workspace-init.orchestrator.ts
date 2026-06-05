@@ -307,7 +307,7 @@ function readInitialPromptFromMetadata(
   }
 
   if (typeof metadata.initialPrompt === 'string') {
-    return { provided: true, text: metadata.initialPrompt };
+    return { provided: true, text: metadata.initialPrompt.replaceAll('</', '<\\/') };
   }
 
   logger.warn('Invalid initial prompt in workspace creation metadata', {
