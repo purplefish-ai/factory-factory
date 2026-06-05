@@ -166,14 +166,34 @@ export function buildReviewSummariesForPrompt(
   },
   authenticatedUsername: string | null
 ): PRStateInfo['reviewComments'] {
+  const latestStateByAuthor = new Map<string, string>();
+
+  for (const review of prDetails.reviews) {
+    const state = review.state?.toUpperCase();
+    if (state) {
+      latestStateByAuthor.set(review.author.login, state);
+    }
+  }
+
   return prDetails.reviews
     .filter((review) => {
       if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
         return false;
       }
-      if (!ACTIONABLE_REVIEW_STATES.has(review.state?.toUpperCase() ?? '')) {
+
+      const state = review.state?.toUpperCase() ?? '';
+
+      if (
+        state === 'CHANGES_REQUESTED' &&
+        latestStateByAuthor.get(review.author.login) === 'APPROVED'
+      ) {
         return false;
       }
+
+      if (!ACTIONABLE_REVIEW_STATES.has(state)) {
+        return false;
+      }
+
       return (review.body?.trim().length ?? 0) > 0;
     })
     .map((review) => ({
