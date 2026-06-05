@@ -283,6 +283,28 @@ describe('IssueLaunchSheet', () => {
     container.remove();
   });
 
+  it('seeds the editor with the full Linear issue workflow prompt', () => {
+    const linearIssue: NormalizedIssue = {
+      id: 'linear-42',
+      provider: 'linear' as const,
+      title: 'Fix Linear launch prompt',
+      body: 'Linear issue body',
+      url: 'https://linear.app/acme/issue/ENG-42/fix-linear-launch-prompt',
+      displayId: 'ENG-42',
+      author: 'linear-user',
+      createdAt: '2026-03-14T12:00:00.000Z',
+      linearIssueId: 'linear-uuid-42',
+      linearIssueIdentifier: 'ENG-42',
+    };
+    const { container, root } = renderSheet(linearIssue);
+
+    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain('Closes ENG-42');
+
+    root.unmount();
+    container.remove();
+  });
+
   it('does not reset a user-selected provider after settings refetch', () => {
     const { container, root } = renderSheet();
 

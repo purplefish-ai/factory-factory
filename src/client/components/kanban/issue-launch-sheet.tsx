@@ -41,29 +41,18 @@ function getIssueProviderLabel(issue: NormalizedIssue) {
 }
 
 function buildPromptPreview(issue: NormalizedIssue) {
-  if (issue.provider === 'github') {
-    return buildIssueStartPrompt({
-      providerLabel: 'GitHub Issue',
-      issueReference: issue.displayId,
-      title: issue.title,
-      body: issue.body,
-      url: issue.url,
-      commitReference: issue.displayId,
-      closeReference: issue.displayId,
-      rawScreenshotBaseUrl: deriveGitHubRawScreenshotBaseUrl(issue.url),
-    });
-  }
-
   const providerLabel = issue.provider === 'linear' ? 'Linear Issue' : 'GitHub Issue';
-  const body = issue.body?.trim() || '(No description provided)';
-
-  return `# ${providerLabel} ${issue.displayId}: ${issue.title}
-
-${body}
-
-Issue URL: ${issue.url}
-
-Start with planning, then implement, test, review, and open a pull request.`;
+  return buildIssueStartPrompt({
+    providerLabel,
+    issueReference: issue.displayId,
+    title: issue.title,
+    body: issue.body,
+    url: issue.url,
+    commitReference: issue.displayId,
+    closeReference: issue.displayId,
+    rawScreenshotBaseUrl:
+      issue.provider === 'github' ? deriveGitHubRawScreenshotBaseUrl(issue.url) : '',
+  });
 }
 
 function deriveGitHubRawScreenshotBaseUrl(issueUrl: string) {
