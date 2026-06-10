@@ -323,12 +323,17 @@ async function resolveInitialAutoMessageContent(
   const metadataPrompt = readInitialPromptFromMetadata(creationMetadata, workspaceId);
   const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
 
-  if (metadataPrompt.provided || (metadataAttachments && metadataAttachments.length > 0)) {
+  const hasAttachments = metadataAttachments !== undefined && metadataAttachments.length > 0;
+  if (metadataPrompt.provided || hasAttachments) {
+    // A provided-but-blank prompt means the user cleared it: send nothing rather
+    // than enqueueing an empty message the agent adapter would reject (#1689),
+    // and don't fall through to rebuilding the issue prompt.
+    if (!(metadataPrompt.text.trim() || hasAttachments)) {
+      return null;
+    }
     return {
       text: metadataPrompt.text,
-      ...(metadataAttachments && metadataAttachments.length > 0
-        ? { attachments: metadataAttachments }
-        : {}),
+      ...(hasAttachments ? { attachments: metadataAttachments } : {}),
     };
   }
 
