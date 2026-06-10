@@ -166,17 +166,18 @@ export function buildReviewSummariesForPrompt(
   },
   authenticatedUsername: string | null
 ): PRStateInfo['reviewComments'] {
-  const latestStateByAuthor = new Map<string, string>();
+  // A CHANGES_REQUESTED review is stale once the same reviewer approves later,
+  // even if they leave further COMMENTED reviews after the approval.
+  const lastApprovedIndexByAuthor = new Map<string, number>();
 
-  for (const review of prDetails.reviews) {
-    const state = review.state?.toUpperCase();
-    if (state) {
-      latestStateByAuthor.set(review.author.login, state);
+  prDetails.reviews.forEach((review, index) => {
+    if (review.state?.toUpperCase() === 'APPROVED') {
+      lastApprovedIndexByAuthor.set(review.author.login, index);
     }
-  }
+  });
 
   return prDetails.reviews
-    .filter((review) => {
+    .filter((review, index) => {
       if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
         return false;
       }
@@ -185,7 +186,7 @@ export function buildReviewSummariesForPrompt(
 
       if (
         state === 'CHANGES_REQUESTED' &&
-        latestStateByAuthor.get(review.author.login) === 'APPROVED'
+        (lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index
       ) {
         return false;
       }

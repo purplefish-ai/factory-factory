@@ -330,6 +330,78 @@ describe('buildReviewSummariesForPrompt', () => {
       },
     ]);
   });
+
+  it('excludes stale changes-requested reviews when the reviewer approves then comments', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'CHANGES_REQUESTED',
+            body: 'Please fix the null check',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'COMMENTED',
+            body: 'Thanks for the fix!',
+          },
+        ],
+      },
+      null
+    );
+
+    expect(summaries).toEqual([
+      {
+        author: 'reviewer-a',
+        body: 'Thanks for the fix!',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
+
+  it('keeps changes-requested reviews submitted after the reviewer last approved', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'CHANGES_REQUESTED',
+            body: 'First round of feedback',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'CHANGES_REQUESTED',
+            body: 'Found a new issue after approving',
+          },
+        ],
+      },
+      null
+    );
+
+    expect(summaries).toEqual([
+      {
+        author: 'reviewer-a',
+        body: 'Found a new issue after approving',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
 });
 
 describe('buildFailedCheckDiagnostics', () => {
