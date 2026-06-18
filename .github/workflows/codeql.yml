@@ -35,3 +35,6 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          # Do not upload SARIF on merge_group branches — Default Setup handles
+          # analysis results on PRs and push. Uploading here conflicts with it.
+          upload: ${{ github.event_name != 'merge_group' && 'always' || 'never' }}

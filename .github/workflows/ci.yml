@@ -162,3 +162,15 @@ jobs:
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'
         uses: davelosert/vitest-coverage-report-action@02f3c2e641286b7fa308cd3e430783103ce6103b
+
+  # GitHub Default Setup runs CodeQL on pull_request/push but not on merge_group
+  # branches. This job satisfies the "CodeQL" required check for the merge queue.
+  # The actual security analysis is still performed by Default Setup on PRs.
+  codeql:
+    name: CodeQL
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: echo "CodeQL analysis is performed by GitHub Default Setup on pull requests"
