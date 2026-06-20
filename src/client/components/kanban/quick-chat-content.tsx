@@ -105,6 +105,8 @@ export function QuickChatContent({
           settings={chatState.chatSettings}
           capabilities={chatState.chatCapabilities}
           onSettingsChange={chatState.updateSettings}
+          slashCommands={chatState.slashCommands}
+          slashCommandsLoaded={chatState.slashCommandsLoaded}
           value={chatState.inputDraft}
           onChange={chatState.setInputDraft}
           onHeightChange={handleHeightChange}
