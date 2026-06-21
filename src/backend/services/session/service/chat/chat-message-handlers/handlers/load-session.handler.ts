@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
@@ -491,7 +491,9 @@ function scanCommandsFromDir(
   seen: Set<string>
 ): { name: string; description: string }[] {
   let files: string[];
+  let rootReal: string;
   try {
+    rootReal = realpathSync(dir);
     files = readdirSync(dir).filter((f) => f.endsWith('.md'));
   } catch {
     return [];
@@ -499,12 +501,22 @@ function scanCommandsFromDir(
 
   const commands: { name: string; description: string }[] = [];
   for (const file of files) {
+    const filePath = join(dir, file);
+    let fileReal: string;
+    try {
+      fileReal = realpathSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!fileReal.startsWith(`${rootReal}/`) && fileReal !== rootReal) {
+      continue;
+    }
     const name = basename(file, '.md');
     if (seen.has(name)) {
       continue;
     }
     seen.add(name);
-    commands.push({ name, description: parseCommandDescription(join(dir, file)) });
+    commands.push({ name, description: parseCommandDescription(filePath) });
   }
   return commands;
 }
