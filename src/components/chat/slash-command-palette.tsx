@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -13,6 +13,30 @@ import {
   type PaletteKeyResult,
   usePaletteKeyboardNavigation,
 } from './palette-keyboard-navigation';
+
+// =============================================================================
+// Placement
+// =============================================================================
+
+function usePlacement(
+  anchorRef: React.RefObject<HTMLElement | null>,
+  isOpen: boolean
+): 'above' | 'below' {
+  const [placement, setPlacement] = useState<'above' | 'below'>('above');
+
+  useEffect(() => {
+    if (!(isOpen && anchorRef.current)) {
+      return;
+    }
+    const rect = anchorRef.current.getBoundingClientRect();
+    const paletteHeight = 230;
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setPlacement(spaceAbove >= paletteHeight || spaceAbove > spaceBelow ? 'above' : 'below');
+  }, [isOpen, anchorRef]);
+
+  return placement;
+}
 
 // =============================================================================
 // Types
@@ -90,6 +114,8 @@ export function SlashCommandPalette({
     [filteredCommands, onSelect]
   );
 
+  const placement = usePlacement(anchorRef, isOpen);
+
   const { containerRef, itemRefs, selectedIndex, setSelectedIndex } = usePaletteKeyboardNavigation({
     isOpen,
     itemCount: filteredCommands.length,
@@ -112,7 +138,8 @@ export function SlashCommandPalette({
     <div
       ref={containerRef}
       className={cn(
-        'absolute bottom-full left-0 mb-1 w-full max-w-md z-50',
+        'absolute left-0 w-full max-w-md z-50',
+        placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1',
         'rounded-md border bg-popover text-popover-foreground shadow-md'
       )}
     >
