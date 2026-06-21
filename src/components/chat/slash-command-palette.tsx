@@ -70,6 +70,8 @@ export interface SlashCommandPaletteProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Imperative handle ref for keyboard handling */
   paletteRef?: React.RefObject<SlashCommandPaletteHandle | null>;
+  /** Override auto-detected placement. 'above' opens upward, 'below' opens downward. */
+  placement?: 'above' | 'below';
 }
 
 // =============================================================================
@@ -95,6 +97,7 @@ export function SlashCommandPalette({
   filter,
   anchorRef,
   paletteRef,
+  placement: placementProp,
 }: SlashCommandPaletteProps) {
   // Filter commands based on the filter text (case-insensitive)
   const filteredCommands = useMemo(
@@ -114,7 +117,8 @@ export function SlashCommandPalette({
     [filteredCommands, onSelect]
   );
 
-  const placement = usePlacement(anchorRef, isOpen);
+  const autoPlacement = usePlacement(anchorRef, isOpen);
+  const placement = placementProp ?? autoPlacement;
 
   const { containerRef, itemRefs, selectedIndex, setSelectedIndex } = usePaletteKeyboardNavigation({
     isOpen,

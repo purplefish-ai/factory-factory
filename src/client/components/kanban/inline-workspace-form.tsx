@@ -660,6 +660,7 @@ export function InlineWorkspaceForm({
             filter={slashCommands.slashFilter}
             anchorRef={textareaRef as React.RefObject<HTMLElement | null>}
             paletteRef={slashCommands.paletteRef}
+            placement="below"
           />
           <FileMentionPalette
             files={fileMentions.files}
