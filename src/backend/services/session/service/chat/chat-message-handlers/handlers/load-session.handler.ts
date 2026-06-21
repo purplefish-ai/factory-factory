@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -486,6 +486,16 @@ function parseCommandDescription(filePath: string): string {
   }
 }
 
+function isContainedInRoot(rootReal: string, filePath: string): boolean {
+  try {
+    const fileReal = realpathSync(filePath);
+    const rel = relative(rootReal, fileReal);
+    return !(rel.startsWith('..') || isAbsolute(rel));
+  } catch {
+    return false;
+  }
+}
+
 function scanCommandsFromDir(
   dir: string,
   seen: Set<string>
@@ -502,13 +512,7 @@ function scanCommandsFromDir(
   const commands: { name: string; description: string }[] = [];
   for (const file of files) {
     const filePath = join(dir, file);
-    let fileReal: string;
-    try {
-      fileReal = realpathSync(filePath);
-    } catch {
-      continue;
-    }
-    if (!fileReal.startsWith(`${rootReal}/`) && fileReal !== rootReal) {
+    if (!isContainedInRoot(rootReal, filePath)) {
       continue;
     }
     const name = basename(file, '.md');
