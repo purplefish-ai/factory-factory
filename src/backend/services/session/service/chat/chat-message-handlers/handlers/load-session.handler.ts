@@ -455,13 +455,10 @@ async function sendCachedSlashCommandsIfNeeded(
   provider: 'CLAUDE' | 'CODEX'
 ): Promise<void> {
   const cached = await slashCommandCacheService.getCachedCommands(provider);
-  if (!cached || cached.length === 0) {
-    return;
-  }
 
   const slashCommandsMsg = {
     type: 'slash_commands',
-    slashCommands: cached,
+    slashCommands: cached ?? [],
   } as const;
   sessionDomainService.emitDelta(sessionId, slashCommandsMsg);
 }
