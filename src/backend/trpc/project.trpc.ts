@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
 import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
@@ -31,23 +31,39 @@ function parseCommandFileDescription(filePath: string): string {
   }
 }
 
+function isContainedInRoot(rootReal: string, filePath: string): boolean {
+  try {
+    const fileReal = realpathSync(filePath);
+    const rel = relative(rootReal, fileReal);
+    return !(rel.startsWith('..') || isAbsolute(rel));
+  } catch {
+    return false;
+  }
+}
+
 function scanSlashCommandDirs(dirs: string[]): { name: string; description: string }[] {
   const seen = new Set<string>();
   const commands: { name: string; description: string }[] = [];
   for (const dir of dirs) {
     let files: string[];
+    let rootReal: string;
     try {
+      rootReal = realpathSync(dir);
       files = readdirSync(dir).filter((f) => f.endsWith('.md'));
     } catch {
       continue;
     }
     for (const file of files) {
+      const filePath = join(dir, file);
+      if (!isContainedInRoot(rootReal, filePath)) {
+        continue;
+      }
       const name = basename(file, '.md');
       if (seen.has(name)) {
         continue;
       }
       seen.add(name);
-      commands.push({ name, description: parseCommandFileDescription(join(dir, file)) });
+      commands.push({ name, description: parseCommandFileDescription(filePath) });
     }
   }
   return commands;
