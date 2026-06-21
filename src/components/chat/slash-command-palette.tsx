@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -24,7 +24,7 @@ function usePlacement(
 ): 'above' | 'below' {
   const [placement, setPlacement] = useState<'above' | 'below'>('above');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!(isOpen && anchorRef.current)) {
       return;
     }
