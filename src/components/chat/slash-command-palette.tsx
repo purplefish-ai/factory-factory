@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -13,30 +13,6 @@ import {
   type PaletteKeyResult,
   usePaletteKeyboardNavigation,
 } from './palette-keyboard-navigation';
-
-// =============================================================================
-// Placement
-// =============================================================================
-
-function usePlacement(
-  anchorRef: React.RefObject<HTMLElement | null>,
-  isOpen: boolean
-): 'above' | 'below' {
-  const [placement, setPlacement] = useState<'above' | 'below'>('above');
-
-  useLayoutEffect(() => {
-    if (!(isOpen && anchorRef.current)) {
-      return;
-    }
-    const rect = anchorRef.current.getBoundingClientRect();
-    const paletteHeight = 230;
-    const spaceAbove = rect.top;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    setPlacement(spaceAbove >= paletteHeight || spaceAbove > spaceBelow ? 'above' : 'below');
-  }, [isOpen, anchorRef]);
-
-  return placement;
-}
 
 // =============================================================================
 // Types
@@ -70,7 +46,7 @@ export interface SlashCommandPaletteProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Imperative handle ref for keyboard handling */
   paletteRef?: React.RefObject<SlashCommandPaletteHandle | null>;
-  /** Override auto-detected placement. 'above' opens upward, 'below' opens downward. */
+  /** Whether to open above or below the anchor. Defaults to 'above'. */
   placement?: 'above' | 'below';
 }
 
@@ -97,7 +73,7 @@ export function SlashCommandPalette({
   filter,
   anchorRef,
   paletteRef,
-  placement: placementProp,
+  placement = 'above',
 }: SlashCommandPaletteProps) {
   // Filter commands based on the filter text (case-insensitive)
   const filteredCommands = useMemo(
@@ -116,9 +92,6 @@ export function SlashCommandPalette({
     },
     [filteredCommands, onSelect]
   );
-
-  const autoPlacement = usePlacement(anchorRef, isOpen);
-  const placement = placementProp ?? autoPlacement;
 
   const { containerRef, itemRefs, selectedIndex, setSelectedIndex } = usePaletteKeyboardNavigation({
     isOpen,
