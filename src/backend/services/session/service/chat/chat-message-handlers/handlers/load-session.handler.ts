@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -68,7 +71,11 @@ export function createLoadSessionHandler(
       });
     }
 
-    await sendCachedSlashCommandsIfNeeded(sessionId, dbSession.provider);
+    await sendCachedSlashCommandsIfNeeded(
+      sessionId,
+      dbSession.provider,
+      dbSession.workspace.worktreePath
+    );
 
     // Auto-enqueue initial message if one was stored during session creation
     await enqueueInitialMessageIfPresent(sessionId, deps);
@@ -452,13 +459,67 @@ async function enqueueInitialMessageIfPresent(
 
 async function sendCachedSlashCommandsIfNeeded(
   sessionId: string,
-  provider: 'CLAUDE' | 'CODEX'
+  provider: 'CLAUDE' | 'CODEX',
+  worktreePath: string | null
 ): Promise<void> {
   const cached = await slashCommandCacheService.getCachedCommands(provider);
+  const commands = cached ?? (provider === 'CLAUDE' ? scanCommandsFromDisk(worktreePath) : []);
 
   const slashCommandsMsg = {
     type: 'slash_commands',
-    slashCommands: cached ?? [],
+    slashCommands: commands,
   } as const;
   sessionDomainService.emitDelta(sessionId, slashCommandsMsg);
+}
+
+function parseCommandDescription(filePath: string): string {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!match) {
+      return '';
+    }
+    const descLine = match[1]?.split(/\r?\n/).find((l) => l.startsWith('description:'));
+    return descLine ? descLine.slice('description:'.length).trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function scanCommandsFromDir(
+  dir: string,
+  seen: Set<string>
+): { name: string; description: string }[] {
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+
+  const commands: { name: string; description: string }[] = [];
+  for (const file of files) {
+    const name = basename(file, '.md');
+    if (seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    commands.push({ name, description: parseCommandDescription(join(dir, file)) });
+  }
+  return commands;
+}
+
+/**
+ * Scan ~/.claude/commands/ and {worktreePath}/.claude/commands/ for markdown command files.
+ * Used as a cold-start fallback before the ACP process fires available_commands_update.
+ */
+function scanCommandsFromDisk(
+  worktreePath: string | null
+): { name: string; description: string }[] {
+  const dirs = [
+    join(homedir(), '.claude', 'commands'),
+    ...(worktreePath ? [join(worktreePath, '.claude', 'commands')] : []),
+  ];
+  const seen = new Set<string>();
+  return dirs.flatMap((dir) => scanCommandsFromDir(dir, seen));
 }
