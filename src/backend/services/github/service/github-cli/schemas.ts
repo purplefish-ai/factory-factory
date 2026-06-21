@@ -36,6 +36,7 @@ export const prStatusSchema = z.object({
   mergedAt: z.string().nullable(),
   updatedAt: z.string(),
   statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
+  headRefName: z.string().optional(),
 });
 
 const authorSchema = z.object({

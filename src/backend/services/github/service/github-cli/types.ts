@@ -23,6 +23,7 @@ export interface PRStatusFromGitHub {
     startedAt?: string;
     completedAt?: string;
   }> | null;
+  headRefName?: string;
 }
 
 export interface PRInfo {

@@ -263,7 +263,7 @@ class GitHubCLIService {
           '--repo',
           `${prInfo.owner}/${prInfo.repo}`,
           '--json',
-          'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup',
+          'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup,headRefName',
         ],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -298,6 +298,7 @@ class GitHubCLIService {
     prNumber: number;
     prReviewState: string | null;
     prCiStatus: CIStatus;
+    headRefName: string | null;
   } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {
@@ -309,6 +310,7 @@ class GitHubCLIService {
       prNumber: status.number,
       prReviewState: status.reviewDecision,
       prCiStatus: this.computeCIStatus(status.statusCheckRollup),
+      headRefName: status.headRefName ?? null,
     };
   }
 
