@@ -41,14 +41,16 @@ function isContainedInRoot(rootReal: string, filePath: string): boolean {
   }
 }
 
-function scanSlashCommandDirs(dirs: string[]): { name: string; description: string }[] {
+function scanSlashCommandDirs(
+  dirs: { dir: string; containmentRoot?: string }[]
+): { name: string; description: string }[] {
   const seen = new Set<string>();
   const commands: { name: string; description: string }[] = [];
-  for (const dir of dirs) {
+  for (const { dir, containmentRoot } of dirs) {
     let files: string[];
     let rootReal: string;
     try {
-      rootReal = realpathSync(dir);
+      rootReal = containmentRoot ? realpathSync(containmentRoot) : realpathSync(dir);
       files = readdirSync(dir).filter((f) => f.endsWith('.md'));
     } catch {
       continue;
@@ -263,8 +265,8 @@ export const projectRouter = router({
         throw new Error(`Project not found: ${input.projectId}`);
       }
       const dirs = [
-        join(homedir(), '.claude', 'commands'),
-        join(project.repoPath, '.claude', 'commands'),
+        { dir: join(homedir(), '.claude', 'commands') },
+        { dir: join(project.repoPath, '.claude', 'commands'), containmentRoot: project.repoPath },
       ];
       return { commands: scanSlashCommandDirs(dirs) };
     }),
