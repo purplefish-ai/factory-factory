@@ -1,5 +1,7 @@
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
 import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
@@ -14,6 +16,60 @@ import {
   sanitizeIssueTrackerConfig,
 } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';
+
+function parseCommandFileDescription(filePath: string): string {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!match) {
+      return '';
+    }
+    const descLine = match[1]?.split(/\r?\n/).find((l) => l.startsWith('description:'));
+    return descLine ? descLine.slice('description:'.length).trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function isContainedInRoot(rootReal: string, filePath: string): boolean {
+  try {
+    const fileReal = realpathSync(filePath);
+    const rel = relative(rootReal, fileReal);
+    return !(rel.startsWith('..') || isAbsolute(rel));
+  } catch {
+    return false;
+  }
+}
+
+function scanSlashCommandDirs(
+  dirs: { dir: string; containmentRoot?: string }[]
+): { name: string; description: string }[] {
+  const seen = new Set<string>();
+  const commands: { name: string; description: string }[] = [];
+  for (const { dir, containmentRoot } of dirs) {
+    let files: string[];
+    let rootReal: string;
+    try {
+      rootReal = containmentRoot ? realpathSync(containmentRoot) : realpathSync(dir);
+      files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      const filePath = join(dir, file);
+      if (!isContainedInRoot(rootReal, filePath)) {
+        continue;
+      }
+      const name = basename(file, '.md');
+      if (seen.has(name)) {
+        continue;
+      }
+      seen.add(name);
+      commands.push({ name, description: parseCommandFileDescription(filePath) });
+    }
+  }
+  return commands;
+}
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
   const result = await gitCommandC(repoPath, [
@@ -198,6 +254,21 @@ export const projectRouter = router({
       files = files.slice(0, input.limit);
 
       return { files };
+    }),
+
+  // List slash commands available for a project (for autocomplete in new workspace form)
+  listSlashCommands: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input }) => {
+      const project = await projectManagementService.findById(input.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${input.projectId}`);
+      }
+      const dirs = [
+        { dir: join(homedir(), '.claude', 'commands') },
+        { dir: join(project.repoPath, '.claude', 'commands'), containmentRoot: project.repoPath },
+      ];
+      return { commands: scanSlashCommandDirs(dirs) };
     }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
