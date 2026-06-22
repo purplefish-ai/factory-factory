@@ -684,32 +684,55 @@ class GitHubCLIService {
     }>
   > {
     try {
-      // When a baseline timestamp is available, fetch only comments since then (incremental).
-      // Without a baseline, cap at per_page=50 to bound the initial load.
-      const path = since
-        ? `repos/${repo}/pulls/${prNumber}/comments?since=${since.toISOString()}&per_page=100`
-        : `repos/${repo}/pulls/${prNumber}/comments?per_page=50`;
+      // Paginate through all pages (100 per page) to avoid silently dropping comments beyond
+      // the first page. The `since` filter bounds incremental fetches; pagination ensures
+      // correctness for large PRs. Cap at MAX_PAGES to prevent unbounded API usage.
+      const PAGE_SIZE = 100;
+      const MAX_PAGES = 20;
+      const allComments: Array<{
+        id: number;
+        author: { login: string };
+        body: string;
+        path: string;
+        line: number | null;
+        createdAt: string;
+        updatedAt: string;
+        url: string;
+      }> = [];
 
-      const { stdout } = await this.exec(['api', path], {
-        timeout: GH_TIMEOUT_MS.default,
-        maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
-      });
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const sinceParam = since ? `&since=${since.toISOString()}` : '';
+        const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}`;
 
-      if (!stdout.trim()) {
-        return [];
+        const { stdout } = await this.exec(['api', path], {
+          timeout: GH_TIMEOUT_MS.default,
+          maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+        });
+
+        if (!stdout.trim()) {
+          break;
+        }
+
+        const pageComments = parseGhJson(reviewCommentSchema.array(), stdout, 'getReviewComments');
+        for (const comment of pageComments) {
+          allComments.push({
+            id: comment.id,
+            author: { login: comment.user.login },
+            body: comment.body,
+            path: comment.path,
+            line: comment.line,
+            createdAt: comment.created_at,
+            updatedAt: comment.updated_at,
+            url: comment.html_url,
+          });
+        }
+
+        if (pageComments.length < PAGE_SIZE) {
+          break;
+        }
       }
 
-      const comments = parseGhJson(reviewCommentSchema.array(), stdout, 'getReviewComments');
-      return comments.map((comment) => ({
-        id: comment.id,
-        author: { login: comment.user.login },
-        body: comment.body,
-        path: comment.path,
-        line: comment.line,
-        createdAt: comment.created_at,
-        updatedAt: comment.updated_at,
-        url: comment.html_url,
-      }));
+      return allComments;
     } catch (error) {
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
