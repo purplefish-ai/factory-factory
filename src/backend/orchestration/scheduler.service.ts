@@ -220,10 +220,14 @@ class SchedulerService {
       return { success: true, reason: 'skipped_recent' };
     }
 
+    // Claim the workspace synchronously before yielding to the event loop so that
+    // concurrent callers see it as in-flight and skip their own redundant fetches.
+    prFetchRegistry.startFetch(workspaceId);
     try {
       const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
       if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
+        prFetchRegistry.cancelFetch(workspaceId);
         return { success: false, reason: 'fetch_failed' };
       }
 
@@ -238,6 +242,7 @@ class SchedulerService {
 
       return { success: true };
     } catch (error) {
+      prFetchRegistry.cancelFetch(workspaceId);
       logger.error('PR sync failed for workspace', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }

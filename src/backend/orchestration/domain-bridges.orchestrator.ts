@@ -17,7 +17,7 @@ import {
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
@@ -146,6 +146,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       ),
     getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
+    registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {

@@ -801,7 +801,7 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR,
     authenticatedUsername: string | null
   ): Promise<PRStateInfo | null> {
-    return await fetchPRStateHelper({
+    const result = await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
       github: this.github,
@@ -824,6 +824,7 @@ class RatchetService extends EventEmitter {
           hasMergeConflict
         ),
     });
+    return result;
   }
 
   private computeDispatchSnapshotKey(

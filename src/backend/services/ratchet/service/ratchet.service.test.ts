@@ -70,6 +70,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   computeCIStatus: vi.fn(),
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
+  registerFetch: vi.fn(),
 };
 
 const mockSnapshotBridge: RatchetPRSnapshotBridge = {

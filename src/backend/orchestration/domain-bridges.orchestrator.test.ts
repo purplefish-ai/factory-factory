@@ -73,6 +73,7 @@ vi.mock('@/backend/services/github', () => ({
     checkHealth: vi.fn(),
     listReviewRequests: vi.fn(),
   },
+  prFetchRegistry: { register: vi.fn(), startFetch: vi.fn(), cancelFetch: vi.fn() },
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
 
@@ -90,7 +91,7 @@ vi.mock('./workspace-init.orchestrator', () => ({
 
 // --- Import mocked modules to get references ---
 
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
   fixerSessionService,
@@ -238,6 +239,14 @@ describe('configureDomainBridges', () => {
       expect(githubCLIService.computeCIStatus).toHaveBeenCalledWith([
         { name: 'build', status: 'completed', conclusion: undefined },
       ]);
+    });
+
+    it('github bridge delegates registerFetch to prFetchRegistry', () => {
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      bridge.github.registerFetch('ws1');
+      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1');
     });
   });
 

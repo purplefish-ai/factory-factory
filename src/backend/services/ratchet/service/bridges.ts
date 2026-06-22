@@ -109,4 +109,6 @@ export interface RatchetGitHubBridge {
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
   getAuthenticatedUsername(): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
+  /** Record that a PR fetch was performed for this workspace (dedup optimization). */
+  registerFetch(workspaceId: string): void;
 }

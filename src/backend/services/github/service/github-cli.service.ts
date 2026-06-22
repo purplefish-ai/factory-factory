@@ -730,6 +730,15 @@ class GitHubCLIService {
         if (pageComments.length < PAGE_SIZE) {
           break;
         }
+
+        if (page === MAX_PAGES) {
+          logger.warn('getReviewComments: reached MAX_PAGES limit, results may be incomplete', {
+            repo,
+            prNumber,
+            totalFetched: allComments.length,
+            maxPages: MAX_PAGES,
+          });
+        }
       }
 
       return allComments;
