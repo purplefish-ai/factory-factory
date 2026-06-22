@@ -175,3 +175,11 @@ export const AutoIterationStatus = {
 } as const
 
 export type AutoIterationStatus = (typeof AutoIterationStatus)[keyof typeof AutoIterationStatus]
+
+
+export const NotificationDirection = {
+  CHILD_TO_PARENT: 'CHILD_TO_PARENT',
+  PARENT_TO_CHILD: 'PARENT_TO_CHILD'
+} as const
+
+export type NotificationDirection = (typeof NotificationDirection)[keyof typeof NotificationDirection]

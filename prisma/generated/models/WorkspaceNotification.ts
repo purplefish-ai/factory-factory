@@ -31,6 +31,7 @@ export type WorkspaceNotificationMinAggregateOutputType = {
   sourceWorkspaceName: string | null
   sourceProjectName: string | null
   message: string | null
+  direction: $Enums.NotificationDirection | null
   deliveredAt: Date | null
   createdAt: Date | null
 }
@@ -42,6 +43,7 @@ export type WorkspaceNotificationMaxAggregateOutputType = {
   sourceWorkspaceName: string | null
   sourceProjectName: string | null
   message: string | null
+  direction: $Enums.NotificationDirection | null
   deliveredAt: Date | null
   createdAt: Date | null
 }
@@ -53,6 +55,7 @@ export type WorkspaceNotificationCountAggregateOutputType = {
   sourceWorkspaceName: number
   sourceProjectName: number
   message: number
+  direction: number
   deliveredAt: number
   createdAt: number
   _all: number
@@ -66,6 +69,7 @@ export type WorkspaceNotificationMinAggregateInputType = {
   sourceWorkspaceName?: true
   sourceProjectName?: true
   message?: true
+  direction?: true
   deliveredAt?: true
   createdAt?: true
 }
@@ -77,6 +81,7 @@ export type WorkspaceNotificationMaxAggregateInputType = {
   sourceWorkspaceName?: true
   sourceProjectName?: true
   message?: true
+  direction?: true
   deliveredAt?: true
   createdAt?: true
 }
@@ -88,6 +93,7 @@ export type WorkspaceNotificationCountAggregateInputType = {
   sourceWorkspaceName?: true
   sourceProjectName?: true
   message?: true
+  direction?: true
   deliveredAt?: true
   createdAt?: true
   _all?: true
@@ -172,6 +178,7 @@ export type WorkspaceNotificationGroupByOutputType = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction: $Enums.NotificationDirection
   deliveredAt: Date | null
   createdAt: Date
   _count: WorkspaceNotificationCountAggregateOutputType | null
@@ -204,6 +211,7 @@ export type WorkspaceNotificationWhereInput = {
   sourceWorkspaceName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceProjectName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
@@ -216,6 +224,7 @@ export type WorkspaceNotificationOrderByWithRelationInput = {
   sourceWorkspaceName?: Prisma.SortOrder
   sourceProjectName?: Prisma.SortOrder
   message?: Prisma.SortOrder
+  direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
@@ -231,6 +240,7 @@ export type WorkspaceNotificationWhereUniqueInput = Prisma.AtLeast<{
   sourceWorkspaceName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceProjectName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
@@ -243,6 +253,7 @@ export type WorkspaceNotificationOrderByWithAggregationInput = {
   sourceWorkspaceName?: Prisma.SortOrder
   sourceProjectName?: Prisma.SortOrder
   message?: Prisma.SortOrder
+  direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.WorkspaceNotificationCountOrderByAggregateInput
@@ -260,6 +271,7 @@ export type WorkspaceNotificationScalarWhereWithAggregatesInput = {
   sourceWorkspaceName?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
   sourceProjectName?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
   message?: Prisma.StringWithAggregatesFilter<"WorkspaceNotification"> | string
+  direction?: Prisma.EnumNotificationDirectionWithAggregatesFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"WorkspaceNotification"> | Date | string
 }
@@ -270,6 +282,7 @@ export type WorkspaceNotificationCreateInput = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
   workspace: Prisma.WorkspaceCreateNestedOneWithoutNotificationsInput
@@ -282,6 +295,7 @@ export type WorkspaceNotificationUncheckedCreateInput = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
 }
@@ -292,6 +306,7 @@ export type WorkspaceNotificationUpdateInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutNotificationsNestedInput
@@ -304,6 +319,7 @@ export type WorkspaceNotificationUncheckedUpdateInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -315,6 +331,7 @@ export type WorkspaceNotificationCreateManyInput = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
 }
@@ -325,6 +342,7 @@ export type WorkspaceNotificationUpdateManyMutationInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -336,6 +354,7 @@ export type WorkspaceNotificationUncheckedUpdateManyInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -357,6 +376,7 @@ export type WorkspaceNotificationCountOrderByAggregateInput = {
   sourceWorkspaceName?: Prisma.SortOrder
   sourceProjectName?: Prisma.SortOrder
   message?: Prisma.SortOrder
+  direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -368,6 +388,7 @@ export type WorkspaceNotificationMaxOrderByAggregateInput = {
   sourceWorkspaceName?: Prisma.SortOrder
   sourceProjectName?: Prisma.SortOrder
   message?: Prisma.SortOrder
+  direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -379,6 +400,7 @@ export type WorkspaceNotificationMinOrderByAggregateInput = {
   sourceWorkspaceName?: Prisma.SortOrder
   sourceProjectName?: Prisma.SortOrder
   message?: Prisma.SortOrder
+  direction?: Prisma.SortOrder
   deliveredAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -425,12 +447,17 @@ export type WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput 
   deleteMany?: Prisma.WorkspaceNotificationScalarWhereInput | Prisma.WorkspaceNotificationScalarWhereInput[]
 }
 
+export type EnumNotificationDirectionFieldUpdateOperationsInput = {
+  set?: $Enums.NotificationDirection
+}
+
 export type WorkspaceNotificationCreateWithoutWorkspaceInput = {
   id?: string
   sourceWorkspaceId: string
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
 }
@@ -441,6 +468,7 @@ export type WorkspaceNotificationUncheckedCreateWithoutWorkspaceInput = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
 }
@@ -480,6 +508,7 @@ export type WorkspaceNotificationScalarWhereInput = {
   sourceWorkspaceName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   sourceProjectName?: Prisma.StringFilter<"WorkspaceNotification"> | string
   message?: Prisma.StringFilter<"WorkspaceNotification"> | string
+  direction?: Prisma.EnumNotificationDirectionFilter<"WorkspaceNotification"> | $Enums.NotificationDirection
   deliveredAt?: Prisma.DateTimeNullableFilter<"WorkspaceNotification"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"WorkspaceNotification"> | Date | string
 }
@@ -490,6 +519,7 @@ export type WorkspaceNotificationCreateManyWorkspaceInput = {
   sourceWorkspaceName: string
   sourceProjectName: string
   message: string
+  direction?: $Enums.NotificationDirection
   deliveredAt?: Date | string | null
   createdAt?: Date | string
 }
@@ -500,6 +530,7 @@ export type WorkspaceNotificationUpdateWithoutWorkspaceInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -510,6 +541,7 @@ export type WorkspaceNotificationUncheckedUpdateWithoutWorkspaceInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -520,6 +552,7 @@ export type WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceInput = {
   sourceWorkspaceName?: Prisma.StringFieldUpdateOperationsInput | string
   sourceProjectName?: Prisma.StringFieldUpdateOperationsInput | string
   message?: Prisma.StringFieldUpdateOperationsInput | string
+  direction?: Prisma.EnumNotificationDirectionFieldUpdateOperationsInput | $Enums.NotificationDirection
   deliveredAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -533,6 +566,7 @@ export type WorkspaceNotificationSelect<ExtArgs extends runtime.Types.Extensions
   sourceWorkspaceName?: boolean
   sourceProjectName?: boolean
   message?: boolean
+  direction?: boolean
   deliveredAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -545,6 +579,7 @@ export type WorkspaceNotificationSelectCreateManyAndReturn<ExtArgs extends runti
   sourceWorkspaceName?: boolean
   sourceProjectName?: boolean
   message?: boolean
+  direction?: boolean
   deliveredAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -557,6 +592,7 @@ export type WorkspaceNotificationSelectUpdateManyAndReturn<ExtArgs extends runti
   sourceWorkspaceName?: boolean
   sourceProjectName?: boolean
   message?: boolean
+  direction?: boolean
   deliveredAt?: boolean
   createdAt?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
@@ -569,11 +605,12 @@ export type WorkspaceNotificationSelectScalar = {
   sourceWorkspaceName?: boolean
   sourceProjectName?: boolean
   message?: boolean
+  direction?: boolean
   deliveredAt?: boolean
   createdAt?: boolean
 }
 
-export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
+export type WorkspaceNotificationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "sourceWorkspaceId" | "sourceWorkspaceName" | "sourceProjectName" | "message" | "direction" | "deliveredAt" | "createdAt", ExtArgs["result"]["workspaceNotification"]>
 export type WorkspaceNotificationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -596,6 +633,7 @@ export type $WorkspaceNotificationPayload<ExtArgs extends runtime.Types.Extensio
     sourceWorkspaceName: string
     sourceProjectName: string
     message: string
+    direction: $Enums.NotificationDirection
     deliveredAt: Date | null
     createdAt: Date
   }, ExtArgs["result"]["workspaceNotification"]>
@@ -1028,6 +1066,7 @@ export interface WorkspaceNotificationFieldRefs {
   readonly sourceWorkspaceName: Prisma.FieldRef<"WorkspaceNotification", 'String'>
   readonly sourceProjectName: Prisma.FieldRef<"WorkspaceNotification", 'String'>
   readonly message: Prisma.FieldRef<"WorkspaceNotification", 'String'>
+  readonly direction: Prisma.FieldRef<"WorkspaceNotification", 'NotificationDirection'>
   readonly deliveredAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"WorkspaceNotification", 'DateTime'>
 }

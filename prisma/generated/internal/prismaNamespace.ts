@@ -1400,6 +1400,7 @@ export const WorkspaceNotificationScalarFieldEnum = {
   sourceWorkspaceName: 'sourceWorkspaceName',
   sourceProjectName: 'sourceProjectName',
   message: 'message',
+  direction: 'direction',
   deliveredAt: 'deliveredAt',
   createdAt: 'createdAt'
 } as const
@@ -1605,6 +1606,13 @@ export type EnumPeriodicTaskCadenceFieldRefInput<$PrismaModel> = FieldRefInputTy
  * Reference to a field of type 'PeriodicTaskExecutionStatus'
  */
 export type EnumPeriodicTaskExecutionStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PeriodicTaskExecutionStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'NotificationDirection'
+ */
+export type EnumNotificationDirectionFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationDirection'>
     
 
 

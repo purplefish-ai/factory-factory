@@ -287,6 +287,7 @@ export const WorkspaceNotificationScalarFieldEnum = {
   sourceWorkspaceName: 'sourceWorkspaceName',
   sourceProjectName: 'sourceProjectName',
   message: 'message',
+  direction: 'direction',
   deliveredAt: 'deliveredAt',
   createdAt: 'createdAt'
 } as const
