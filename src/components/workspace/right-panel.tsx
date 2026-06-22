@@ -123,7 +123,7 @@ interface TopPanelAreaProps {
   onTakeScreenshots: () => void;
   isAutoIteration: boolean;
   periodicTaskId: string | null;
-  hasChildWorkspaces: boolean;
+  isParentWorkspace: boolean;
 }
 
 function TopPanelArea({
@@ -134,7 +134,7 @@ function TopPanelArea({
   onTakeScreenshots,
   isAutoIteration,
   periodicTaskId,
-  hasChildWorkspaces,
+  isParentWorkspace,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
@@ -189,7 +189,7 @@ function TopPanelArea({
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
-        {hasChildWorkspaces && (
+        {isParentWorkspace && (
           <TabButton
             label="Children"
             icon={<Network className="h-3.5 w-3.5" />}
@@ -273,7 +273,7 @@ export function RightPanel({
   const creationSource =
     (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
   // Show children tab for all workspaces that are not themselves children
-  const hasChildWorkspaces = creationSource !== 'CHILD_WORKSPACE';
+  const isParentWorkspace = creationSource !== 'CHILD_WORKSPACE';
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -426,7 +426,7 @@ export function RightPanel({
           onTakeScreenshots={handleTakeScreenshots}
           isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
-          hasChildWorkspaces={hasChildWorkspaces}
+          isParentWorkspace={isParentWorkspace}
         />
       </ResizablePanel>
 
