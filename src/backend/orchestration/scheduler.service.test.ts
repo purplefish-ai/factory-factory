@@ -24,6 +24,12 @@ vi.mock('@/backend/services/github', () => ({
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
     attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
   },
+  prFetchRegistry: {
+    isRecentlyFetched: () => false,
+    startFetch: vi.fn(),
+    cancelFetch: vi.fn(),
+    register: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({

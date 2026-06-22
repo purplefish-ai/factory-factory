@@ -170,7 +170,7 @@ export function computeCIStatus(
  */
 export function computePRState(status: PRStatusFromGitHub): PRState {
   // Check if merged first
-  if (status.mergedAt || status.state === 'MERGED') {
+  if (status.state === 'MERGED') {
     return PRState.MERGED;
   }
 

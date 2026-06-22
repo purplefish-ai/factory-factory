@@ -16,13 +16,12 @@ import {
   mapStatusChecks,
 } from './github-cli/mappers';
 import {
-  basePRSchema,
   fullPRDetailsSchema,
   issueSchema,
-  prDetailsSchema,
   prListItemSchema,
   prStatusSchema,
   reviewCommentSchema,
+  reviewRequestedPRGraphQLSchema,
 } from './github-cli/schemas';
 import type {
   GitHubCLIErrorType,
@@ -263,7 +262,7 @@ class GitHubCLIService {
           '--repo',
           `${prInfo.owner}/${prInfo.repo}`,
           '--json',
-          'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup',
+          'number,state,isDraft,reviewDecision,statusCheckRollup,headRefName',
         ],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -298,6 +297,7 @@ class GitHubCLIService {
     prNumber: number;
     prReviewState: string | null;
     prCiStatus: CIStatus;
+    headRefName: string | null;
   } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {
@@ -309,58 +309,56 @@ class GitHubCLIService {
       prNumber: status.number,
       prReviewState: status.reviewDecision,
       prCiStatus: this.computeCIStatus(status.statusCheckRollup),
+      headRefName: status.headRefName ?? null,
     };
   }
 
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
-   * Fetches reviewDecision for each PR to show accurate status.
+   * Uses a single GraphQL query to fetch all fields in one API call.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
-    const { stdout } = await this.exec(
-      [
-        'search',
-        'prs',
-        '--review-requested=@me',
-        '--state=open',
-        '--json',
-        'number,title,url,repository,author,createdAt,isDraft',
-      ],
-      { timeout: GH_TIMEOUT_MS.default }
-    );
-
-    const basePRs = parseGhJson(basePRSchema.array(), stdout, 'listReviewRequests');
-
-    const prsWithDetails = await Promise.all(
-      basePRs.map(async (pr) => {
-        try {
-          const { stdout: prDetails } = await this.exec(
-            [
-              'pr',
-              'view',
-              String(pr.number),
-              '--repo',
-              pr.repository.nameWithOwner,
-              '--json',
-              'reviewDecision,additions,deletions,changedFiles',
-            ],
-            { timeout: GH_TIMEOUT_MS.reviewDetails }
-          );
-          const details = parseGhJson(prDetailsSchema, prDetails, 'listReviewRequests:prDetails');
-          return {
-            ...pr,
-            reviewDecision: details.reviewDecision,
-            additions: details.additions ?? 0,
-            deletions: details.deletions ?? 0,
-            changedFiles: details.changedFiles ?? 0,
-          };
-        } catch {
-          return { ...pr, reviewDecision: null, additions: 0, deletions: 0, changedFiles: 0 };
+    const query = `
+      query {
+        search(query: "is:pr is:open review-requested:@me", type: ISSUE, first: 50) {
+          nodes {
+            ... on PullRequest {
+              number title url isDraft createdAt
+              author { login }
+              repository { nameWithOwner }
+              reviewDecision
+              additions deletions changedFiles
+            }
+          }
         }
-      })
-    );
+      }
+    `;
 
-    return prsWithDetails;
+    const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+      timeout: GH_TIMEOUT_MS.default,
+    });
+
+    const parsed = reviewRequestedPRGraphQLSchema.safeParse(JSON.parse(stdout));
+    if (!parsed.success) {
+      logger.warn('Failed to parse listReviewRequests GraphQL response', {
+        error: parsed.error.message,
+      });
+      return [];
+    }
+
+    return parsed.data.data.search.nodes.map((pr) => ({
+      number: pr.number,
+      title: pr.title,
+      url: pr.url,
+      repository: { nameWithOwner: pr.repository.nameWithOwner },
+      author: { login: pr.author?.login ?? '' },
+      createdAt: pr.createdAt,
+      isDraft: pr.isDraft,
+      reviewDecision: (pr.reviewDecision as ReviewRequestedPR['reviewDecision']) ?? null,
+      additions: pr.additions ?? 0,
+      deletions: pr.deletions ?? 0,
+      changedFiles: pr.changedFiles ?? 0,
+    }));
   }
 
   /**
@@ -386,7 +384,7 @@ class GitHubCLIService {
           '--state',
           'open',
           '--json',
-          'number,url,state,createdAt',
+          'number,url,createdAt',
           '--limit',
           '10',
         ],
@@ -671,7 +669,8 @@ class GitHubCLIService {
    */
   async getReviewComments(
     repo: string,
-    prNumber: number
+    prNumber: number,
+    since?: Date
   ): Promise<
     Array<{
       id: number;
@@ -685,26 +684,64 @@ class GitHubCLIService {
     }>
   > {
     try {
-      const { stdout } = await this.exec(
-        ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
-        { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments }
-      );
+      // Paginate through all pages (100 per page) to avoid silently dropping comments beyond
+      // the first page. The `since` filter bounds incremental fetches; pagination ensures
+      // correctness for large PRs. Cap at MAX_PAGES to prevent unbounded API usage.
+      const PAGE_SIZE = 100;
+      const MAX_PAGES = 20;
+      const allComments: Array<{
+        id: number;
+        author: { login: string };
+        body: string;
+        path: string;
+        line: number | null;
+        createdAt: string;
+        updatedAt: string;
+        url: string;
+      }> = [];
 
-      if (!stdout.trim()) {
-        return [];
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const sinceParam = since ? `&since=${since.toISOString()}` : '';
+        const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}`;
+
+        const { stdout } = await this.exec(['api', path], {
+          timeout: GH_TIMEOUT_MS.default,
+          maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+        });
+
+        if (!stdout.trim()) {
+          break;
+        }
+
+        const pageComments = parseGhJson(reviewCommentSchema.array(), stdout, 'getReviewComments');
+        for (const comment of pageComments) {
+          allComments.push({
+            id: comment.id,
+            author: { login: comment.user.login },
+            body: comment.body,
+            path: comment.path,
+            line: comment.line,
+            createdAt: comment.created_at,
+            updatedAt: comment.updated_at,
+            url: comment.html_url,
+          });
+        }
+
+        if (pageComments.length < PAGE_SIZE) {
+          break;
+        }
+
+        if (page === MAX_PAGES) {
+          logger.warn('getReviewComments: reached MAX_PAGES limit, results may be incomplete', {
+            repo,
+            prNumber,
+            totalFetched: allComments.length,
+            maxPages: MAX_PAGES,
+          });
+        }
       }
 
-      const comments = parseGhJson(reviewCommentSchema.array(), stdout, 'getReviewComments');
-      return comments.map((comment) => ({
-        id: comment.id,
-        author: { login: comment.user.login },
-        body: comment.body,
-        path: comment.path,
-        line: comment.line,
-        createdAt: comment.created_at,
-        updatedAt: comment.updated_at,
-        url: comment.html_url,
-      }));
+      return allComments;
     } catch (error) {
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);

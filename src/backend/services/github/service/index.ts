@@ -14,6 +14,8 @@ export {
   type PRStatusFromGitHub,
   type ReviewRequestedPR,
 } from './github-cli.service';
+// --- PR fetch registry ---
+export { prFetchRegistry } from './pr-fetch-registry';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,

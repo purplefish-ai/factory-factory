@@ -56,8 +56,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: 'APPROVED',
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: [],
       };
 
@@ -73,8 +71,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: 'APPROVED',
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: [],
       });
     });
@@ -196,8 +192,6 @@ describe('GitHubCLIService', () => {
         state: 'MERGED' as const,
         isDraft: false,
         reviewDecision: null,
-        mergedAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -212,8 +206,6 @@ describe('GitHubCLIService', () => {
         state: 'CLOSED' as const,
         isDraft: false,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -228,8 +220,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: true,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -244,8 +234,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: false,
         reviewDecision: 'APPROVED' as const,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -260,8 +248,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: false,
         reviewDecision: 'CHANGES_REQUESTED' as const,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -276,8 +262,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: false,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -866,14 +850,12 @@ describe('GitHubCLIService', () => {
   });
 
   describe('computePRState edge cases', () => {
-    it('should return MERGED when mergedAt is set even if state is OPEN', () => {
+    it('should return MERGED when state is MERGED', () => {
       const status = {
         number: 1,
-        state: 'OPEN' as const,
+        state: 'MERGED' as const,
         isDraft: false,
         reviewDecision: null,
-        mergedAt: '2024-01-01T00:00:00Z',
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
       expect(githubCLIService.computePRState(status)).toBe('MERGED');
@@ -885,8 +867,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: false,
         reviewDecision: 'REVIEW_REQUIRED' as const,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
       expect(githubCLIService.computePRState(status)).toBe('OPEN');
@@ -898,8 +878,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN' as const,
         isDraft: true,
         reviewDecision: 'APPROVED' as const,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
       // Draft takes priority over review decision
@@ -925,8 +903,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: '',
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: null,
       };
 
@@ -1115,8 +1091,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: 'REVIEW_REQUIRED',
-        mergedAt: null,
-        updatedAt: '2026-02-01T00:00:00Z',
         statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'SUCCESS' }],
       });
 
@@ -1129,6 +1103,7 @@ describe('GitHubCLIService', () => {
         prNumber: 77,
         prReviewState: 'REVIEW_REQUIRED',
         prCiStatus: 'SUCCESS',
+        headRefName: null,
       });
 
       getStatusSpy.mockRestore();
@@ -1142,31 +1117,31 @@ describe('GitHubCLIService', () => {
       getStatusSpy.mockRestore();
     });
 
-    it('lists review requests and enriches with per-PR details', async () => {
-      mockExecFile
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify([
-            {
-              number: 12,
-              title: 'Fix bug',
-              url: 'https://github.com/o/r/pull/12',
-              repository: { nameWithOwner: 'o/r' },
-              author: { login: 'alice' },
-              createdAt: '2026-01-10T00:00:00Z',
-              isDraft: false,
+    it('lists review requests via single GraphQL call', async () => {
+      mockExecFile.mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          data: {
+            search: {
+              nodes: [
+                {
+                  number: 12,
+                  title: 'Fix bug',
+                  url: 'https://github.com/o/r/pull/12',
+                  repository: { nameWithOwner: 'o/r' },
+                  author: { login: 'alice' },
+                  createdAt: '2026-01-10T00:00:00Z',
+                  isDraft: false,
+                  reviewDecision: 'APPROVED',
+                  additions: 10,
+                  deletions: 3,
+                  changedFiles: 2,
+                },
+              ],
             },
-          ]),
-          stderr: '',
-        })
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify({
-            reviewDecision: 'APPROVED',
-            additions: 10,
-            deletions: 3,
-            changedFiles: 2,
-          }),
-          stderr: '',
-        });
+          },
+        }),
+        stderr: '',
+      });
 
       await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
         {
@@ -1183,41 +1158,18 @@ describe('GitHubCLIService', () => {
           changedFiles: 2,
         },
       ]);
+
+      // Only one execFile call — no N+1
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to default details when per-PR detail lookup fails', async () => {
-      mockExecFile
-        .mockResolvedValueOnce({
-          stdout: JSON.stringify([
-            {
-              number: 13,
-              title: 'Fallback test',
-              url: 'https://github.com/o/r/pull/13',
-              repository: { nameWithOwner: 'o/r' },
-              author: { login: 'bob' },
-              createdAt: '2026-01-11T00:00:00Z',
-              isDraft: true,
-            },
-          ]),
-          stderr: '',
-        })
-        .mockRejectedValueOnce(new Error('gh pr view failed'));
+    it('falls back to empty array when GraphQL response is malformed', async () => {
+      mockExecFile.mockResolvedValueOnce({
+        stdout: JSON.stringify({ data: { search: { nodes: 'not-an-array' } } }),
+        stderr: '',
+      });
 
-      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
-        {
-          number: 13,
-          title: 'Fallback test',
-          url: 'https://github.com/o/r/pull/13',
-          repository: { nameWithOwner: 'o/r' },
-          author: { login: 'bob' },
-          createdAt: '2026-01-11T00:00:00Z',
-          isDraft: true,
-          reviewDecision: null,
-          additions: 0,
-          deletions: 0,
-          changedFiles: 0,
-        },
-      ]);
+      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([]);
     });
 
     it('approves PR and logs failures with contextual error', async () => {
@@ -1376,8 +1328,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: [],
       };
 
@@ -1406,8 +1356,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: [],
       });
 
@@ -1431,8 +1379,6 @@ describe('GitHubCLIService', () => {
         state: 'OPEN',
         isDraft: false,
         reviewDecision: null,
-        mergedAt: null,
-        updatedAt: '2024-01-01T00:00:00Z',
         statusCheckRollup: [],
       };
 

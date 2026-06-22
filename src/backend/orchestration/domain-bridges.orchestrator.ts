@@ -17,7 +17,7 @@ import {
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
@@ -63,6 +63,7 @@ type BridgeServices = {
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
+  prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
@@ -86,6 +87,7 @@ const defaultServices: BridgeServices = {
   githubCLIService,
   kanbanStateService,
   logbookService,
+  prFetchRegistry,
   prSnapshotService,
   ratchetService,
   reconciliationService,
@@ -111,6 +113,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     githubCLIService,
     kanbanStateService,
     logbookService,
+    prFetchRegistry,
     prSnapshotService,
     ratchetService,
     reconciliationService,
@@ -139,13 +142,16 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   const ratchetGithubBridge: RatchetGitHubBridge = {
     extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
     getPRFullDetails: (repo, pr) => githubCLIService.getPRFullDetails(repo, pr),
-    getReviewComments: (repo, pr) => githubCLIService.getReviewComments(repo, pr),
+    getReviewComments: (repo, pr, since) => githubCLIService.getReviewComments(repo, pr, since),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
       ),
     getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
+    startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
+    registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
+    cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
