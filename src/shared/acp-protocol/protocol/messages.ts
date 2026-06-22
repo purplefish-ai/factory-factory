@@ -18,12 +18,17 @@ export interface AgentMessage {
     | 'stream_event'
     | 'result'
     | 'error'
-    | 'child_workspace_update';
+    | 'child_workspace_update'
+    | 'parent_workspace_update';
   timestamp?: string;
   // child_workspace_update fields (only present when type === 'child_workspace_update')
   childWorkspaceId?: string;
   childWorkspaceName?: string;
   childProjectName?: string;
+  // parent_workspace_update fields (only present when type === 'parent_workspace_update')
+  parentWorkspaceId?: string;
+  parentWorkspaceName?: string;
+  parentProjectName?: string;
   /** Plain text message body for child_workspace_update notifications */
   text?: string;
   session_id?: string;
@@ -62,6 +67,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   result: true,
   error: true,
   child_workspace_update: true,
+  parent_workspace_update: true,
 };
 
 /**

@@ -132,6 +132,11 @@ enum AutoIterationStatus {
   FAILED          // Unrecoverable error
 }
 
+enum NotificationDirection {
+  CHILD_TO_PARENT
+  PARENT_TO_CHILD
+}
+
 
 // Models
 model Project {
@@ -436,6 +441,7 @@ model WorkspaceNotification {
   sourceWorkspaceName String    @map("source_workspace_name")
   sourceProjectName   String    @map("source_project_name")
   message             String
+  direction           NotificationDirection @default(CHILD_TO_PARENT)
 
   deliveredAt         DateTime? @map("delivered_at") // null = pending delivery
 

@@ -108,6 +108,38 @@ export async function persistChildNotification(input: {
 }
 
 /**
+ * Deliver a notification from a parent workspace to a specific child.
+ *
+ * If the child workspace has an active/idle agent session the notification will be
+ * injected live by the caller (tRPC sendMessageToChild). If it does not, this
+ * persists the notification so it is delivered when the child's next session starts.
+ */
+export async function persistParentNotification(input: {
+  parentWorkspaceId: string;
+  targetChildWorkspaceId: string;
+  message: string;
+}): Promise<void> {
+  const [parentWorkspace, childWorkspace] = await Promise.all([
+    workspaceAccessor.findByIdWithProject(input.parentWorkspaceId),
+    workspaceAccessor.findRawById(input.targetChildWorkspaceId),
+  ]);
+
+  if (!(parentWorkspace && childWorkspace)) {
+    logger.warn('persistParentNotification: workspace not found', input);
+    return;
+  }
+
+  await workspaceNotificationAccessor.create({
+    workspaceId: input.targetChildWorkspaceId,
+    sourceWorkspaceId: input.parentWorkspaceId,
+    sourceWorkspaceName: parentWorkspace.name,
+    sourceProjectName: parentWorkspace.project.name,
+    message: input.message,
+    direction: 'PARENT_TO_CHILD',
+  });
+}
+
+/**
  * Fire a lifecycle notification from a child workspace to its parent.
  * Used by orchestration layer for automatic events (PR opened/merged, archived).
  * No-op if the child has no parent.

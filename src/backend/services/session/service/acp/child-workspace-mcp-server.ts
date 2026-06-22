@@ -74,6 +74,33 @@ const SEND_MSG_TOOL = {
   },
 };
 
+const SEND_MSG_TO_CHILD_TOOL = {
+  name: 'send_message_to_child',
+  description:
+    "Send a message or instruction to a child workspace's active agent session. Use this to give a running child workspace new instructions, answer its questions, or direct it to change course.",
+  inputSchema: {
+    type: 'object',
+    properties: {
+      childWorkspaceId: { type: 'string', description: 'ID of the child workspace' },
+      message: { type: 'string', description: 'Message to send' },
+    },
+    required: ['childWorkspaceId', 'message'],
+  },
+};
+
+const ARCHIVE_CHILD_TOOL = {
+  name: 'archive_child_workspace',
+  description:
+    'Archive a child workspace when it has completed its task (e.g. PR is merged). This stops the child workspace and cleans up its resources.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      childWorkspaceId: { type: 'string', description: 'ID of the child workspace to archive' },
+    },
+    required: ['childWorkspaceId'],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // HTTP helper — calls the internal tRPC HTTP API via a simple POST
 // ---------------------------------------------------------------------------
@@ -173,6 +200,90 @@ async function handleSendMsgTool(
   }
 }
 
+async function handleSendMsgToChildTool(
+  req: JsonRpcRequest,
+  workspaceId: string,
+  args: Record<string, unknown>,
+  apiBase: string
+): Promise<void> {
+  const { result, error } = await callTrpcMutation(apiBase, 'workspace.sendMessageToChild', {
+    parentWorkspaceId: workspaceId,
+    childWorkspaceId: args.childWorkspaceId,
+    message: args.message,
+  });
+  if (error) {
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+    });
+  } else {
+    const r = result as { delivered?: boolean };
+    const status = r?.delivered ? 'delivered live' : 'queued for next session start';
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: { content: [{ type: 'text', text: `Message sent to child workspace (${status}).` }] },
+    });
+  }
+}
+
+async function handleArchiveChildTool(
+  req: JsonRpcRequest,
+  workspaceId: string,
+  args: Record<string, unknown>,
+  apiBase: string
+): Promise<void> {
+  const { error } = await callTrpcMutation(apiBase, 'workspace.archiveChild', {
+    parentWorkspaceId: workspaceId,
+    childWorkspaceId: args.childWorkspaceId,
+  });
+  if (error) {
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+    });
+  } else {
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: { content: [{ type: 'text', text: 'Child workspace archived successfully.' }] },
+    });
+  }
+}
+
+async function dispatchToolCall(
+  req: JsonRpcRequest,
+  workspaceId: string,
+  hasParent: boolean,
+  apiBase: string
+): Promise<void> {
+  const params = req.params as { name: string; arguments?: Record<string, unknown> };
+  const args = params.arguments ?? {};
+  if (params.name === 'spawn_child_workspace' && !hasParent) {
+    await handleSpawnTool(req, workspaceId, args, apiBase);
+    return;
+  }
+  if (params.name === 'send_message_to_parent' && hasParent) {
+    await handleSendMsgTool(req, workspaceId, args, apiBase);
+    return;
+  }
+  if (params.name === 'send_message_to_child' && !hasParent) {
+    await handleSendMsgToChildTool(req, workspaceId, args, apiBase);
+    return;
+  }
+  if (params.name === 'archive_child_workspace' && !hasParent) {
+    await handleArchiveChildTool(req, workspaceId, args, apiBase);
+    return;
+  }
+  send({
+    jsonrpc: '2.0',
+    id: req.id,
+    error: { code: -32_601, message: `Unknown tool: ${params.name}` },
+  });
+}
+
 async function handleRequest(
   req: JsonRpcRequest,
   workspaceId: string,
@@ -199,27 +310,15 @@ async function handleRequest(
   }
 
   if (req.method === 'tools/list') {
-    const tools = hasParent ? [SEND_MSG_TOOL] : [SPAWN_TOOL];
+    const tools = hasParent
+      ? [SEND_MSG_TOOL]
+      : [SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
   }
 
   if (req.method === 'tools/call') {
-    const params = req.params as { name: string; arguments?: Record<string, unknown> };
-    const args = params.arguments ?? {};
-    if (params.name === 'spawn_child_workspace' && !hasParent) {
-      await handleSpawnTool(req, workspaceId, args, apiBase);
-      return;
-    }
-    if (params.name === 'send_message_to_parent' && hasParent) {
-      await handleSendMsgTool(req, workspaceId, args, apiBase);
-      return;
-    }
-    send({
-      jsonrpc: '2.0',
-      id: req.id,
-      error: { code: -32_601, message: `Unknown tool: ${params.name}` },
-    });
+    await dispatchToolCall(req, workspaceId, hasParent, apiBase);
     return;
   }
 

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';
+import { ParentWorkspaceUpdateRenderer } from './message-renderers/parent-workspace-update-renderer';
 import { ToolSequenceGroup } from './tool-renderers';
 import {
   createToolCallExpansionKey,
@@ -179,6 +180,15 @@ export const MessageItem = memo(function MessageItem({
     return (
       <MessageWrapper>
         <ChildWorkspaceUpdateRenderer message={message.message} />
+      </MessageWrapper>
+    );
+  }
+
+  // Parent workspace update notifications
+  if (message.message?.type === 'parent_workspace_update') {
+    return (
+      <MessageWrapper>
+        <ParentWorkspaceUpdateRenderer message={message.message} />
       </MessageWrapper>
     );
   }

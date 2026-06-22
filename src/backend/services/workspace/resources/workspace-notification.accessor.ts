@@ -7,11 +7,15 @@ interface CreateNotificationInput {
   sourceWorkspaceName: string;
   sourceProjectName: string;
   message: string;
+  direction?: 'CHILD_TO_PARENT' | 'PARENT_TO_CHILD';
 }
 
 class WorkspaceNotificationAccessor {
   create(data: CreateNotificationInput): Promise<WorkspaceNotification> {
-    return prisma.workspaceNotification.create({ data });
+    const { direction, ...rest } = data;
+    return prisma.workspaceNotification.create({
+      data: direction ? { ...rest, direction } : rest,
+    });
   }
 
   /**

@@ -551,9 +551,9 @@ export class SessionLifecycleService {
       capabilities: this.buildAcpChatBarCapabilities(handle),
     });
 
-    // Deliver any queued notifications from child workspaces now that the session
-    // has started successfully. Doing this after startup ensures notifications are
-    // not marked as delivered if the session fails to start.
+    // Deliver any queued notifications (from child or parent workspaces) now that the
+    // session has started successfully. Doing this after startup ensures notifications
+    // are not marked as delivered if the session fails to start.
     await this.deliverPendingChildNotifications(sessionId, sessionContext.workspaceId);
 
     return handle;
@@ -927,24 +927,35 @@ export class SessionLifecycleService {
       }
       const ids: string[] = [];
       for (const notification of pending) {
-        this.sessionDomainService.appendClaudeEvent(sessionId, {
-          type: 'child_workspace_update',
-          childWorkspaceId: notification.sourceWorkspaceId,
-          childWorkspaceName: notification.sourceWorkspaceName,
-          childProjectName: notification.sourceProjectName,
-          text: notification.message,
-          timestamp: notification.createdAt.toISOString(),
-        });
+        if (notification.direction === 'PARENT_TO_CHILD') {
+          this.sessionDomainService.appendClaudeEvent(sessionId, {
+            type: 'parent_workspace_update',
+            parentWorkspaceId: notification.sourceWorkspaceId,
+            parentWorkspaceName: notification.sourceWorkspaceName,
+            parentProjectName: notification.sourceProjectName,
+            text: notification.message,
+            timestamp: notification.createdAt.toISOString(),
+          });
+        } else {
+          this.sessionDomainService.appendClaudeEvent(sessionId, {
+            type: 'child_workspace_update',
+            childWorkspaceId: notification.sourceWorkspaceId,
+            childWorkspaceName: notification.sourceWorkspaceName,
+            childProjectName: notification.sourceProjectName,
+            text: notification.message,
+            timestamp: notification.createdAt.toISOString(),
+          });
+        }
         ids.push(notification.id);
       }
       await workspaceNotificationAccessor.markDelivered(ids);
-      logger.info('Delivered pending child workspace notifications', {
+      logger.info('Delivered pending workspace notifications', {
         sessionId,
         workspaceId,
         count: pending.length,
       });
     } catch (error) {
-      logger.warn('Failed to deliver pending child workspace notifications', {
+      logger.warn('Failed to deliver pending workspace notifications', {
         sessionId,
         workspaceId,
         error: error instanceof Error ? error.message : String(error),

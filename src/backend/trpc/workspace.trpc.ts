@@ -12,6 +12,7 @@ import {
   createChildWorkspace,
   fireLifecycleNotification,
   persistChildNotification,
+  persistParentNotification,
 } from '@/backend/orchestration/workspace-children.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
@@ -625,6 +626,93 @@ export const workspaceRouter = router({
       }
 
       return { delivered: Boolean(activeSession) };
+    }),
+
+  // Send a message from a parent workspace to a child's active session (or queue it)
+  sendMessageToChild: publicProcedure
+    .input(
+      z.object({
+        parentWorkspaceId: z.string(),
+        childWorkspaceId: z.string(),
+        message: z.string().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      if (!child) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.childWorkspaceId}`,
+        });
+      }
+      if (child.parentWorkspaceId !== input.parentWorkspaceId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'The specified child workspace does not belong to this parent',
+        });
+      }
+
+      const parent = await workspaceAccessor.findByIdWithProject(input.parentWorkspaceId);
+
+      const childSessions = await agentSessionAccessor.findByWorkspaceId(input.childWorkspaceId);
+      const activeSession = [...childSessions]
+        .reverse()
+        .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
+
+      if (activeSession) {
+        const claudeMessage = {
+          type: 'parent_workspace_update' as const,
+          parentWorkspaceId: input.parentWorkspaceId,
+          parentWorkspaceName: parent?.name,
+          parentProjectName: parent?.project.name,
+          text: input.message,
+          timestamp: new Date().toISOString(),
+        };
+        const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
+        sessionDomainService.emitDelta(activeSession.id, {
+          type: 'agent_message',
+          data: claudeMessage,
+          order,
+        } as SessionDeltaEvent & { order: number });
+      } else {
+        await persistParentNotification({
+          parentWorkspaceId: input.parentWorkspaceId,
+          targetChildWorkspaceId: input.childWorkspaceId,
+          message: input.message,
+        });
+      }
+
+      return { delivered: Boolean(activeSession) };
+    }),
+
+  // Archive a child workspace on behalf of the parent
+  archiveChild: publicProcedure
+    .input(
+      z.object({
+        parentWorkspaceId: z.string(),
+        childWorkspaceId: z.string(),
+        commitUncommitted: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      if (!child) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.childWorkspaceId}`,
+        });
+      }
+      if (child.parentWorkspaceId !== input.parentWorkspaceId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'The specified child workspace does not belong to this parent',
+        });
+      }
+      return archiveWorkspace(
+        child,
+        { commitUncommitted: input.commitUncommitted ?? true },
+        ctx.appContext.services
+      );
     }),
 
   // Get count of undelivered notifications for a workspace
