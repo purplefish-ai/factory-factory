@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server';
+import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { createLogger } from '@/backend/services/logger.service';
+import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import {
   projectAccessor,
   WorkspaceCreationService,
@@ -47,6 +49,16 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
     description: input.description,
     initialPrompt: input.initialPrompt,
     reportBackOn: input.reportBackOn,
+  });
+
+  // Provision a default agent session so the workspace auto-starts on init
+  const provider = await sessionProviderResolverService.resolveProviderForWorkspaceCreation();
+  await sessionDataService.createAgentSession({
+    workspaceId: workspace.id,
+    workflow: DEFAULT_FOLLOWUP,
+    name: 'Chat 1',
+    provider,
+    providerProjectPath: null,
   });
 
   // Fire initialization in the background — same pattern as workspace.create tRPC mutation
