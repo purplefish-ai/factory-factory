@@ -34,6 +34,7 @@ import {
   workspaceNotificationAccessor,
   workspaceQueryService,
 } from '@/backend/services/workspace';
+import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
@@ -590,22 +591,31 @@ export const workspaceRouter = router({
 
       if (activeSession) {
         // Inject directly as a child_workspace_update event
-        sessionDomainService.appendClaudeEvent(activeSession.id, {
-          type: 'child_workspace_update',
+        const claudeMessage = {
+          type: 'child_workspace_update' as const,
           childWorkspaceId: input.childWorkspaceId,
           childWorkspaceName: child.name,
           childProjectName: child.project.name,
           text: input.message,
           timestamp: new Date().toISOString(),
-        });
+        };
+        const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
+        // Publish the delta so connected clients see the update immediately
+        sessionDomainService.emitDelta(activeSession.id, {
+          type: 'agent_message',
+          data: claudeMessage,
+          order,
+        } as SessionDeltaEvent & { order: number });
       }
 
-      // Always persist — even if injected live, the notification serves as a record
-      await persistChildNotification({
-        parentWorkspaceId,
-        sourceWorkspaceId: input.childWorkspaceId,
-        message: input.message,
-      });
+      // Only persist if there is no active session to receive it live
+      if (!activeSession) {
+        await persistChildNotification({
+          parentWorkspaceId,
+          sourceWorkspaceId: input.childWorkspaceId,
+          message: input.message,
+        });
+      }
 
       return { delivered: Boolean(activeSession) };
     }),

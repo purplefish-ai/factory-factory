@@ -82,7 +82,7 @@ async function callTrpcMutation(
   path: string,
   input: unknown
 ): Promise<{ result?: unknown; error?: string }> {
-  const url = `${baseUrl}/trpc/${path}`;
+  const url = `${baseUrl}/api/trpc/${path}`;
   try {
     const res = await fetch(url, {
       method: 'POST',

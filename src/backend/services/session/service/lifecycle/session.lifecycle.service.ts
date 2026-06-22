@@ -551,6 +551,11 @@ export class SessionLifecycleService {
       capabilities: this.buildAcpChatBarCapabilities(handle),
     });
 
+    // Deliver any queued notifications from child workspaces now that the session
+    // has started successfully. Doing this after startup ensures notifications are
+    // not marked as delivered if the session fails to start.
+    await this.deliverPendingChildNotifications(sessionId, sessionContext.workspaceId);
+
     return handle;
   }
 
@@ -900,9 +905,6 @@ export class SessionLifecycleService {
         branchPrefix: project?.githubOwner,
       });
     }
-
-    // Deliver any queued notifications from child workspaces into this session's transcript
-    await this.deliverPendingChildNotifications(sessionId, workspace.id);
 
     return {
       workingDir: workspace.worktreePath,

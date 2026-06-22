@@ -11,3 +11,15 @@ BEGIN
     AND "parent_workspace_id" IS NOT NULL
   );
 END;
+
+CREATE TRIGGER enforce_workspace_depth_1_update
+BEFORE UPDATE ON "Workspace"
+WHEN NEW."parent_workspace_id" IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'Child workspaces cannot have children (max depth 1)')
+  WHERE EXISTS (
+    SELECT 1 FROM "Workspace"
+    WHERE "id" = NEW."parent_workspace_id"
+    AND "parent_workspace_id" IS NOT NULL
+  );
+END;

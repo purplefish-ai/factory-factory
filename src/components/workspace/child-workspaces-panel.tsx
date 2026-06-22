@@ -1,6 +1,7 @@
 import { ExternalLink, Network, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,9 @@ function NewChildWorkspaceDialog({
       setProjectId('');
       setInitialPrompt('');
       setReportBackOn('');
+    },
+    onError: (error) => {
+      toast.error(`Failed to create child workspace: ${error.message}`);
     },
   });
 
