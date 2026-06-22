@@ -592,9 +592,9 @@ export const workspaceRouter = router({
       // Try to find an active/idle session on the parent workspace to inject into.
       // Use the most recently created active session so we target the current one.
       const parentSessions = await agentSessionAccessor.findByWorkspaceId(parentWorkspaceId);
-      const activeSession = parentSessions.findLast(
-        (s) => s.status === 'RUNNING' || s.status === 'IDLE'
-      );
+      const activeSession = [...parentSessions]
+        .reverse()
+        .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
 
       if (activeSession) {
         // Inject directly as a child_workspace_update event
