@@ -928,23 +928,35 @@ export class SessionLifecycleService {
       const ids: string[] = [];
       for (const notification of pending) {
         if (notification.direction === 'PARENT_TO_CHILD') {
-          this.sessionDomainService.appendClaudeEvent(sessionId, {
-            type: 'parent_workspace_update',
+          const claudeMessage = {
+            type: 'parent_workspace_update' as const,
             parentWorkspaceId: notification.sourceWorkspaceId,
             parentWorkspaceName: notification.sourceWorkspaceName,
             parentProjectName: notification.sourceProjectName,
             text: notification.message,
             timestamp: notification.createdAt.toISOString(),
-          });
+          };
+          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
+          this.sessionDomainService.emitDelta(sessionId, {
+            type: 'agent_message',
+            data: claudeMessage,
+            order,
+          } as SessionDeltaEvent & { order: number });
         } else {
-          this.sessionDomainService.appendClaudeEvent(sessionId, {
-            type: 'child_workspace_update',
+          const claudeMessage = {
+            type: 'child_workspace_update' as const,
             childWorkspaceId: notification.sourceWorkspaceId,
             childWorkspaceName: notification.sourceWorkspaceName,
             childProjectName: notification.sourceProjectName,
             text: notification.message,
             timestamp: notification.createdAt.toISOString(),
-          });
+          };
+          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
+          this.sessionDomainService.emitDelta(sessionId, {
+            type: 'agent_message',
+            data: claudeMessage,
+            order,
+          } as SessionDeltaEvent & { order: number });
         }
         ids.push(notification.id);
       }
