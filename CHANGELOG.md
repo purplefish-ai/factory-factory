@@ -5,6 +5,45 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.21] - 2026-06-22
+
+### Added
+
+- Open workspace file links in chat (#1674)
+
+### Changed
+
+- Sync export schema provider enums (#1668)
+- Simplify issue intake launch flow (#1670)
+- Backfill missing Codex tool calls (#1672)
+- Honor default Codex reasoning effort after plan approval (#1675)
+- Unify workspace status reason (#1671)
+- Make GitHub issue start prompt editable (#1681)
+- Clean up CI log warnings (#1703)
+
+### Fixed
+
+- Fix chat test message id lookup (#1667)
+- Fix rewind capability checks (#1666)
+- Handle wrapped base64 attachments (#1669)
+- Fix ratchet handling of review summaries (#1673)
+- Fix session history hydration race (#1679, #1685)
+- Fix recovered plan approval workflow (#1678, #1684)
+- Fix stale ratchet review summaries (#1680, #1683)
+- Fix markdown workspace middle-clicks (#1677, #1682)
+- Handle file lock restore failures (#1676, #1686)
+- Filter stale changes-requested after approve-then-comment (#1688, #1691)
+- Skip enqueueing cleared initial prompts (#1689, #1690)
+- Fix slash commands not appearing in workspace chat window (#1698)
+- Fix multi-instance WebSocket origin propagation from the CLI (#1699)
+- Update workspace branch names when PRs are on a different branch (#1700)
+
+### Security
+
+- Fix Dependabot dependency alerts (#1687, #1701)
+- Add CodeQL workflow with merge_group trigger (#1694)
+- Fix CodeQL advanced workflow triggers (#1702)
+
 ## [0.3.20] - 2026-05-29
 
 ### Added
