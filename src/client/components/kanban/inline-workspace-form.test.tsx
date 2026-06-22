@@ -89,6 +89,14 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
     },
+    project: {
+      listSlashCommands: {
+        useQuery: () => ({
+          data: { commands: [] },
+          isFetched: true,
+        }),
+      },
+    },
   },
 }));
 
@@ -130,6 +138,23 @@ vi.mock('@/components/chat/chat-input/hooks/use-project-file-mentions', () => ({
 
 vi.mock('@/components/chat/file-mention-palette', () => ({
   FileMentionPalette: () => null,
+}));
+
+vi.mock('@/components/chat/slash-command-palette', () => ({
+  SlashCommandPalette: () => null,
+}));
+
+vi.mock('@/components/chat/chat-input/hooks/use-slash-commands', () => ({
+  useSlashCommands: () => ({
+    slashMenuOpen: false,
+    slashFilter: '',
+    commandsReady: true,
+    paletteRef: { current: null },
+    handleInputChange: vi.fn(),
+    handleSlashCommandSelect: vi.fn(),
+    handleSlashMenuClose: vi.fn(),
+    delegateToSlashMenu: () => 'passthrough',
+  }),
 }));
 
 vi.mock('@/components/ui/button', () => ({

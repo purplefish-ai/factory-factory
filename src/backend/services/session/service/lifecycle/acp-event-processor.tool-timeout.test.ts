@@ -109,7 +109,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -127,7 +131,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -143,7 +151,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -163,7 +175,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', {
@@ -183,7 +199,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -200,7 +220,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -216,7 +240,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
@@ -238,7 +266,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta(
@@ -257,7 +289,11 @@ describe('AcpEventProcessor tool call timeouts', () => {
     const processor = new AcpEventProcessor(
       makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
     );
-    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.registerSessionContext('sid', {
+      workspaceId: 'ws',
+      workingDir: '/tmp',
+      provider: 'CLAUDE',
+    });
     processor.beginPromptTurn('sid');
 
     processor.handleAcpDelta(

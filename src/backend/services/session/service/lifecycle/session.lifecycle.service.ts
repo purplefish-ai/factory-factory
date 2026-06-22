@@ -489,6 +489,7 @@ export class SessionLifecycleService {
     this.acpEventProcessor.registerSessionContext(sessionId, {
       workspaceId: sessionContext.workspaceId,
       workingDir: sessionContext.workingDir,
+      provider: session?.provider ?? 'CLAUDE',
     });
 
     const handlers = this.setupAcpEventHandler(sessionId);
