@@ -106,7 +106,7 @@ function getAcpProcessorState() {
         sessionToWorkingDir: Map<string, string>;
         registerSessionContext: (
           sessionId: string,
-          context: { workspaceId: string; workingDir: string }
+          context: { workspaceId: string; workingDir: string; provider: 'CLAUDE' | 'CODEX' }
         ) => void;
         beginPromptTurn: (sessionId: string) => void;
         handleAcpDelta: (sid: string, delta: unknown) => void;
@@ -1968,6 +1968,7 @@ describe('SessionService', () => {
       acpProcessor.registerSessionContext('session-1', {
         workspaceId: 'workspace-1',
         workingDir: '/tmp/work',
+        provider: 'CLAUDE',
       });
       acpProcessor.beginPromptTurn('session-1');
       acpProcessor.handleAcpDelta(

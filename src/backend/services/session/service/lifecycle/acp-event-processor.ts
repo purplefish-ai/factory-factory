@@ -11,7 +11,8 @@ import {
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { AgentMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
+import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionConfigService } from './session.config.service';
 import type { SessionPermissionService } from './session.permission.service';
 
@@ -64,6 +65,8 @@ export class AcpEventProcessor {
   readonly sessionToWorkspace = new Map<string, string>();
   /** Maps sessionId → workingDir for interceptor context */
   readonly sessionToWorkingDir = new Map<string, string>();
+  /** Maps sessionId → provider for slash command caching */
+  private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -125,10 +128,11 @@ export class AcpEventProcessor {
 
   registerSessionContext(
     sessionId: string,
-    context: { workspaceId: string; workingDir: string }
+    context: { workspaceId: string; workingDir: string; provider: 'CLAUDE' | 'CODEX' }
   ): void {
     this.sessionToWorkspace.set(sessionId, context.workspaceId);
     this.sessionToWorkingDir.set(sessionId, context.workingDir);
+    this.sessionToProvider.set(sessionId, context.provider);
   }
 
   setReplaySuppression(sessionId: string, suppress: boolean): void {
@@ -150,6 +154,7 @@ export class AcpEventProcessor {
   clearSessionContext(sessionId: string): void {
     this.sessionToWorkspace.delete(sessionId);
     this.sessionToWorkingDir.delete(sessionId);
+    this.sessionToProvider.delete(sessionId);
   }
 
   clearPendingToolCalls(sessionId: string): void {
@@ -204,6 +209,15 @@ export class AcpEventProcessor {
     }
 
     if (delta.type !== 'agent_message') {
+      if (delta.type === 'slash_commands') {
+        const commands = (delta as { slashCommands?: CommandInfo[] }).slashCommands;
+        const provider = this.sessionToProvider.get(sid);
+        if (provider && commands && commands.length > 0) {
+          slashCommandCacheService.setCachedCommands(provider, commands).catch((err: unknown) => {
+            logger.warn('Failed to cache slash commands', { error: err });
+          });
+        }
+      }
       this.sessionDomainService.emitDelta(sid, delta);
       return;
     }
