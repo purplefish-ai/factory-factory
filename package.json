@@ -191,6 +191,9 @@
       "protobufjs",
       "sharp"
     ],
+    "ignoredBuiltDependencies": [
+      "electron-winstaller"
+    ],
     "overrides": {
       "@isaacs/brace-expansion": ">=5.0.1",
       "@modelcontextprotocol/sdk>ajv": ">=8.18.0",
