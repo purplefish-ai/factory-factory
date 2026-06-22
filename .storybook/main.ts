@@ -32,6 +32,12 @@ const config: StorybookConfig = {
       '@prisma-gen': path.resolve(__dirname, '../prisma/generated'),
     };
 
+    // Storybook's prebundled chunks (iframe, docs renderer) exceed Vite's
+    // default 500 kB warning threshold. Raise the limit to keep the build
+    // log clean — these are vendor bundles we don't control.
+    config.build = config.build || {};
+    config.build.chunkSizeWarningLimit = 2000;
+
     return config;
   },
 

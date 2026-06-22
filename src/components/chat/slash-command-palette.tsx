@@ -46,6 +46,8 @@ export interface SlashCommandPaletteProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Imperative handle ref for keyboard handling */
   paletteRef?: React.RefObject<SlashCommandPaletteHandle | null>;
+  /** Whether to open above or below the anchor. Defaults to 'above'. */
+  placement?: 'above' | 'below';
 }
 
 // =============================================================================
@@ -71,6 +73,7 @@ export function SlashCommandPalette({
   filter,
   anchorRef,
   paletteRef,
+  placement = 'above',
 }: SlashCommandPaletteProps) {
   // Filter commands based on the filter text (case-insensitive)
   const filteredCommands = useMemo(
@@ -112,7 +115,8 @@ export function SlashCommandPalette({
     <div
       ref={containerRef}
       className={cn(
-        'absolute bottom-full left-0 mb-1 w-full max-w-md z-50',
+        'absolute left-0 w-full max-w-md z-50',
+        placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1',
         'rounded-md border bg-popover text-popover-foreground shadow-md'
       )}
     >

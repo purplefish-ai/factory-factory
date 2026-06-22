@@ -8,7 +8,7 @@
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
 
@@ -215,12 +215,23 @@ class SchedulerService {
       return { success: false, reason: 'no_pr_url' };
     }
 
+    if (prFetchRegistry.isRecentlyFetched(workspaceId)) {
+      logger.debug('Skipping PR sync — recently fetched by another service', { workspaceId });
+      return { success: true, reason: 'skipped_recent' };
+    }
+
+    // Claim the workspace synchronously before yielding to the event loop so that
+    // concurrent callers see it as in-flight and skip their own redundant fetches.
+    prFetchRegistry.startFetch(workspaceId);
     try {
       const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
       if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
+        prFetchRegistry.cancelFetch(workspaceId);
         return { success: false, reason: 'fetch_failed' };
       }
+
+      prFetchRegistry.register(workspaceId);
 
       logger.debug('PR status synced', {
         workspaceId,
@@ -231,6 +242,7 @@ class SchedulerService {
 
       return { success: true };
     } catch (error) {
+      prFetchRegistry.cancelFetch(workspaceId);
       logger.error('PR sync failed for workspace', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }

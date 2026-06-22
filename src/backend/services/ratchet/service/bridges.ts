@@ -105,8 +105,14 @@ export interface RatchetWorkspaceBridge {
 export interface RatchetGitHubBridge {
   extractPRInfo(prUrl: string): { owner: string; repo: string; number?: number } | null;
   getPRFullDetails(repo: string, prNumber: number): Promise<RatchetPRFullDetails>;
-  getReviewComments(repo: string, prNumber: number): Promise<RatchetReviewComment[]>;
+  getReviewComments(repo: string, prNumber: number, since?: Date): Promise<RatchetReviewComment[]>;
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
   getAuthenticatedUsername(): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
+  /** Claim this workspace as in-flight before starting an async fetch (dedup optimization). */
+  startFetch(workspaceId: string): void;
+  /** Record that a PR fetch completed successfully for this workspace (dedup optimization). */
+  registerFetch(workspaceId: string): void;
+  /** Release an in-flight claim without recording a successful fetch (call on failure). */
+  cancelFetch(workspaceId: string): void;
 }

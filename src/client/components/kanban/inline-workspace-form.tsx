@@ -9,7 +9,9 @@ import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { collectAttachments } from '@/components/chat/chat-input/hooks/attachment-file-conversion';
 import { usePasteDropHandler } from '@/components/chat/chat-input/hooks/use-paste-drop-handler';
 import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-project-file-mentions';
+import { useSlashCommands } from '@/components/chat/chat-input/hooks/use-slash-commands';
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
+import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,6 +39,35 @@ import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
 } from '@/shared/workspace-words';
+
+function handleFormKeyDown(
+  e: React.KeyboardEvent,
+  opts: {
+    delegateToSlashMenu: (key: string) => string;
+    delegateToFileMentionMenu: (key: string) => string;
+    isCreating: boolean;
+    onCancel: () => void;
+    onLaunch: () => void;
+  }
+) {
+  if (opts.delegateToSlashMenu(e.key) === 'handled') {
+    e.preventDefault();
+    return;
+  }
+  if (opts.delegateToFileMentionMenu(e.key) === 'handled') {
+    e.preventDefault();
+    return;
+  }
+  if (!opts.isCreating) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      opts.onCancel();
+    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      opts.onLaunch();
+    }
+  }
+}
 
 interface InlineWorkspaceFormProps {
   projectId: string;
@@ -410,13 +441,30 @@ export function InlineWorkspaceForm({
     }
   }, []);
 
-  const fileMentions = useProjectFileMentions({
-    projectId,
-    inputRef: textareaRef,
-    onChange: (value) => {
+  const onPromptChange = useCallback(
+    (value: string) => {
       setInitialPrompt(value);
       autoResize();
     },
+    [autoResize]
+  );
+
+  const fileMentions = useProjectFileMentions({
+    projectId,
+    inputRef: textareaRef,
+    onChange: onPromptChange,
+  });
+
+  const { data: slashCommandsData, isFetched: slashCommandsFetched } =
+    trpc.project.listSlashCommands.useQuery({ projectId }, { staleTime: 60_000 });
+  const projectCommands = slashCommandsData?.commands ?? [];
+
+  const slashCommands = useSlashCommands({
+    enabled: true,
+    slashCommands: projectCommands,
+    commandsLoaded: slashCommandsFetched,
+    inputRef: textareaRef,
+    onChange: onPromptChange,
   });
 
   // Initialize defaults from user settings once loaded
@@ -502,6 +550,8 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
   const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
+  const isLaunchDisabled =
+    isCreating || isLoadingSettings || (shouldFetchExistingNames && isLoadingWorkspaceList);
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -583,35 +633,36 @@ export function InlineWorkspaceForm({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Delegate to file mention menu first
-    const mentionResult = fileMentions.delegateToFileMentionMenu(e.key);
-    if (mentionResult === 'handled') {
-      e.preventDefault();
-      return;
-    }
-
-    if (e.key === 'Escape' && !isCreating) {
-      e.preventDefault();
-      onCancel();
-    }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isCreating) {
-      e.preventDefault();
-      handleLaunch(mode);
-    }
-  };
+  const handleKeyDown = (e: React.KeyboardEvent) =>
+    handleFormKeyDown(e, {
+      delegateToSlashMenu: slashCommands.delegateToSlashMenu,
+      delegateToFileMentionMenu: fileMentions.delegateToFileMentionMenu,
+      isCreating,
+      onCancel,
+      onLaunch: () => handleLaunch(mode),
+    });
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    setInitialPrompt(newValue);
+    slashCommands.handleInputChange(e);
+    fileMentions.detectFileMention(e.target.value);
     autoResize();
-    fileMentions.detectFileMention(newValue);
   };
 
   return (
     <Card className="shrink-0 border-dashed border-primary/50">
       <CardContent className="p-3 space-y-3" onKeyDown={handleKeyDown}>
         <div className="relative">
+          <SlashCommandPalette
+            commands={projectCommands}
+            isOpen={slashCommands.slashMenuOpen}
+            isLoading={!slashCommands.commandsReady}
+            onClose={slashCommands.handleSlashMenuClose}
+            onSelect={slashCommands.handleSlashCommandSelect}
+            filter={slashCommands.slashFilter}
+            anchorRef={textareaRef as React.RefObject<HTMLElement | null>}
+            paletteRef={slashCommands.paletteRef}
+            placement="below"
+          />
           <FileMentionPalette
             files={fileMentions.files}
             isOpen={fileMentions.fileMentionMenuOpen}
@@ -748,11 +799,7 @@ export function InlineWorkspaceForm({
                   mode !== 'STANDARD' && 'bg-primary/90'
                 )}
                 onClick={() => handleLaunch(mode)}
-                disabled={
-                  isCreating ||
-                  isLoadingSettings ||
-                  (shouldFetchExistingNames && isLoadingWorkspaceList)
-                }
+                disabled={isLaunchDisabled}
               >
                 {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                 {launchButtonLabels[mode]}
@@ -762,11 +809,7 @@ export function InlineWorkspaceForm({
                   <Button
                     size="sm"
                     className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                    disabled={
-                      isCreating ||
-                      isLoadingSettings ||
-                      (shouldFetchExistingNames && isLoadingWorkspaceList)
-                    }
+                    disabled={isLaunchDisabled}
                   >
                     <ChevronDown className="h-3 w-3" />
                   </Button>

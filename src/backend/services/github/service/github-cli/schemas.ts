@@ -33,9 +33,8 @@ export const prStatusSchema = z.object({
   state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
   isDraft: z.boolean(),
   reviewDecision: reviewDecisionSchema,
-  mergedAt: z.string().nullable(),
-  updatedAt: z.string(),
   statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
+  headRefName: z.string().optional(),
 });
 
 const authorSchema = z.object({
@@ -66,7 +65,6 @@ export const prDetailsSchema = z.object({
 export const prListItemSchema = z.object({
   number: z.number(),
   url: z.string(),
-  state: z.string(),
   createdAt: z.string(),
 });
 
@@ -149,6 +147,28 @@ export const issueSchema = z.object({
   state: z.enum(['OPEN', 'CLOSED']),
   createdAt: z.string(),
   author: authorSchema,
+});
+
+export const reviewRequestedPRGraphQLSchema = z.object({
+  data: z.object({
+    search: z.object({
+      nodes: z.array(
+        z.object({
+          number: z.number(),
+          title: z.string(),
+          url: z.string(),
+          isDraft: z.boolean(),
+          createdAt: z.string(),
+          author: z.object({ login: z.string() }).nullable(),
+          repository: z.object({ nameWithOwner: z.string() }),
+          reviewDecision: reviewDecisionSchema.optional(),
+          additions: z.number().optional(),
+          deletions: z.number().optional(),
+          changedFiles: z.number().optional(),
+        })
+      ),
+    }),
+  }),
 });
 
 export const reviewCommentSchema = z.object({

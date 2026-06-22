@@ -1,5 +1,5 @@
 import { File, Folder } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -90,7 +90,7 @@ function usePlacement(
 ): 'above' | 'below' {
   const [placement, setPlacement] = useState<'above' | 'below'>('above');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!(isOpen && anchorRef.current)) {
       return;
     }

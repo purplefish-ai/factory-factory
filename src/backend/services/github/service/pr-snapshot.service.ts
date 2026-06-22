@@ -55,6 +55,7 @@ interface ReviewCheckInput {
 interface ApplySnapshotOptions {
   eventPrUrl?: string | null;
   persistPrUrl?: string | null;
+  branchName?: string;
 }
 
 class PRSnapshotService extends EventEmitter {
@@ -137,6 +138,12 @@ class PRSnapshotService extends EventEmitter {
         return { success: false, reason: 'fetch_failed' };
       }
 
+      // Correct branchName if the PR was created on a different branch than what's stored
+      const branchNameUpdate =
+        snapshot.headRefName && snapshot.headRefName !== workspace.branchName
+          ? { branchName: snapshot.headRefName }
+          : {};
+
       // Write full PR snapshot atomically, including prUrl
       await this.applySnapshot(
         workspaceId,
@@ -148,8 +155,17 @@ class PRSnapshotService extends EventEmitter {
         },
         {
           persistPrUrl: prUrl,
+          ...branchNameUpdate,
         }
       );
+
+      if (branchNameUpdate.branchName) {
+        logger.info('Corrected workspace branchName to match PR head branch', {
+          workspaceId,
+          oldBranchName: workspace.branchName,
+          newBranchName: branchNameUpdate.branchName,
+        });
+      }
 
       logger.info('Attached PR and refreshed snapshot', {
         workspaceId,
@@ -243,6 +259,7 @@ class PRSnapshotService extends EventEmitter {
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
       ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
+      ...(options.branchName !== undefined ? { branchName: options.branchName } : {}),
     });
 
     await this.kanban.updateCachedKanbanColumn(workspaceId);
