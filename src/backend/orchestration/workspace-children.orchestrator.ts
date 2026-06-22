@@ -52,14 +52,21 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
   });
 
   // Provision a default agent session so the workspace auto-starts on init
-  const provider = await sessionProviderResolverService.resolveProviderForWorkspaceCreation();
-  await sessionDataService.createAgentSession({
-    workspaceId: workspace.id,
-    workflow: DEFAULT_FOLLOWUP,
-    name: 'Chat 1',
-    provider,
-    providerProjectPath: null,
-  });
+  try {
+    const provider = await sessionProviderResolverService.resolveProviderForWorkspaceCreation();
+    await sessionDataService.createAgentSession({
+      workspaceId: workspace.id,
+      workflow: DEFAULT_FOLLOWUP,
+      name: 'Chat 1',
+      provider,
+      providerProjectPath: null,
+    });
+  } catch (err) {
+    logger.warn('Failed to create default session for child workspace', {
+      workspaceId: workspace.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Fire initialization in the background — same pattern as workspace.create tRPC mutation
   initializeWorkspaceWorktree(workspace.id).catch((err: unknown) => {
