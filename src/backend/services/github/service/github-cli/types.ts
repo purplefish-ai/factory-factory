@@ -11,8 +11,6 @@ export interface PRStatusFromGitHub {
   state: 'OPEN' | 'CLOSED' | 'MERGED';
   isDraft: boolean;
   reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
-  mergedAt: string | null;
-  updatedAt: string;
   statusCheckRollup: Array<{
     name?: string;
     workflowName?: string;

@@ -8,7 +8,7 @@
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
 
@@ -215,12 +215,19 @@ class SchedulerService {
       return { success: false, reason: 'no_pr_url' };
     }
 
+    if (prFetchRegistry.isRecentlyFetched(workspaceId)) {
+      logger.debug('Skipping PR sync — recently fetched by another service', { workspaceId });
+      return { success: true, reason: 'skipped_recent' };
+    }
+
     try {
       const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
       if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
       }
+
+      prFetchRegistry.register(workspaceId);
 
       logger.debug('PR status synced', {
         workspaceId,

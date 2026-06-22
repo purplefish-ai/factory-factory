@@ -3,6 +3,7 @@ import {
   SERVICE_INTERVAL_MS,
   SERVICE_THRESHOLDS,
 } from '@/backend/services/constants';
+import { prFetchRegistry } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
@@ -403,7 +404,11 @@ export async function fetchPRState(params: {
   try {
     const [prDetails, reviewComments] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber),
-      github.getReviewComments(prContext.repo, prContext.prNumber),
+      github.getReviewComments(
+        prContext.repo,
+        prContext.prNumber,
+        workspace.prReviewLastCheckedAt ?? undefined
+      ),
     ]);
 
     const statusCheckRollup =
@@ -445,6 +450,8 @@ export async function fetchPRState(params: {
         url: c.url,
       }));
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
+
+    prFetchRegistry.register(workspace.id);
 
     return {
       ciStatus,

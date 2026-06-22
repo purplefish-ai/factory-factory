@@ -105,7 +105,7 @@ export interface RatchetWorkspaceBridge {
 export interface RatchetGitHubBridge {
   extractPRInfo(prUrl: string): { owner: string; repo: string; number?: number } | null;
   getPRFullDetails(repo: string, prNumber: number): Promise<RatchetPRFullDetails>;
-  getReviewComments(repo: string, prNumber: number): Promise<RatchetReviewComment[]>;
+  getReviewComments(repo: string, prNumber: number, since?: Date): Promise<RatchetReviewComment[]>;
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
   getAuthenticatedUsername(): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
