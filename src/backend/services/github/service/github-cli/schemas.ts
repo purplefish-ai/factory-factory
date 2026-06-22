@@ -161,7 +161,7 @@ export const reviewRequestedPRGraphQLSchema = z.object({
           createdAt: z.string(),
           author: z.object({ login: z.string() }).nullable(),
           repository: z.object({ nameWithOwner: z.string() }),
-          reviewDecision: z.string().nullable().optional(),
+          reviewDecision: reviewDecisionSchema.optional(),
           additions: z.number().optional(),
           deletions: z.number().optional(),
           changedFiles: z.number().optional(),
