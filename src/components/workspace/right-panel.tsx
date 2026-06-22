@@ -142,7 +142,7 @@ function TopPanelArea({
   const showScreenshots = activeTopTab === 'screenshots';
   const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
-  const showChildWorkspaces = activeTopTab === 'child-workspaces';
+  const showChildWorkspaces = isParentWorkspace && activeTopTab === 'child-workspaces';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
