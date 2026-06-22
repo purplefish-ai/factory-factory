@@ -16,6 +16,7 @@
  */
 
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Types (minimal MCP protocol subset)
@@ -274,7 +275,7 @@ export function getChildWorkspaceMcpServerConfig(opts: {
   return {
     name: 'factory-factory-child-workspace',
     command: process.execPath, // node
-    args: [__filename],
+    args: [fileURLToPath(import.meta.url)],
     env: {
       FF_CHILD_WORKSPACE_MCP: '1',
       FF_WORKSPACE_ID: opts.workspaceId,

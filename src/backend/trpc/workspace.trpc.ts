@@ -574,7 +574,13 @@ export const workspaceRouter = router({
     )
     .mutation(async ({ input }) => {
       const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
-      if (!child?.parentWorkspaceId) {
+      if (!child) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.childWorkspaceId}`,
+        });
+      }
+      if (!child.parentWorkspaceId) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'This workspace has no parent',
@@ -583,9 +589,10 @@ export const workspaceRouter = router({
 
       const parentWorkspaceId = child.parentWorkspaceId;
 
-      // Try to find an active/idle session on the parent workspace to inject into
+      // Try to find an active/idle session on the parent workspace to inject into.
+      // Use the most recently created active session so we target the current one.
       const parentSessions = await agentSessionAccessor.findByWorkspaceId(parentWorkspaceId);
-      const activeSession = parentSessions.find(
+      const activeSession = parentSessions.findLast(
         (s) => s.status === 'RUNNING' || s.status === 'IDLE'
       );
 
