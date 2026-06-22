@@ -63,6 +63,7 @@ type BridgeServices = {
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
+  prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
@@ -86,6 +87,7 @@ const defaultServices: BridgeServices = {
   githubCLIService,
   kanbanStateService,
   logbookService,
+  prFetchRegistry,
   prSnapshotService,
   ratchetService,
   reconciliationService,
@@ -111,6 +113,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     githubCLIService,
     kanbanStateService,
     logbookService,
+    prFetchRegistry,
     prSnapshotService,
     ratchetService,
     reconciliationService,
@@ -146,7 +149,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       ),
     getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
+    startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
     registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
+    cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {

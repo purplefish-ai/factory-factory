@@ -401,9 +401,9 @@ export async function fetchPRState(params: {
   }
 
   try {
-    // Register optimistically before the async fetch so concurrent scheduler/ratchet
-    // calls see this workspace as in-flight and skip redundant fetches.
-    github.registerFetch(workspace.id);
+    // Claim this workspace as in-flight before the async fetch so concurrent
+    // scheduler/ratchet calls see it and skip redundant fetches.
+    github.startFetch(workspace.id);
 
     const [prDetails, reviewComments] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber),
@@ -454,6 +454,9 @@ export async function fetchPRState(params: {
       }));
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
+    // Record successful fetch completion so the dedup registry tracks this workspace.
+    github.registerFetch(workspace.id);
+
     return {
       ciStatus,
       snapshotKey,
@@ -466,6 +469,8 @@ export async function fetchPRState(params: {
       reviewComments: [...filteredReviewComments, ...reviewSummaries],
     };
   } catch (error) {
+    // Release the in-flight claim so the workspace is eligible for a future retry.
+    github.cancelFetch(workspace.id);
     backoff.handleError(
       error,
       logger,

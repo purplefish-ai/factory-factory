@@ -241,12 +241,28 @@ describe('configureDomainBridges', () => {
       ]);
     });
 
+    it('github bridge delegates startFetch to prFetchRegistry', () => {
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      bridge.github.startFetch('ws1');
+      expect(prFetchRegistry.startFetch).toHaveBeenCalledWith('ws1');
+    });
+
     it('github bridge delegates registerFetch to prFetchRegistry', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
       bridge.github.registerFetch('ws1');
       expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1');
+    });
+
+    it('github bridge delegates cancelFetch to prFetchRegistry', () => {
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      bridge.github.cancelFetch('ws1');
+      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1');
     });
   });
 
