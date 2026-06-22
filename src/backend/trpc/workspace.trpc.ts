@@ -8,11 +8,17 @@ import {
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
+import {
+  createChildWorkspace,
+  fireLifecycleNotification,
+  persistChildNotification,
+} from '@/backend/orchestration/workspace-children.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
+  agentSessionAccessor,
   sessionDataService,
   sessionDomainService,
   sessionProviderResolverService,
@@ -23,7 +29,9 @@ import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
+  workspaceAccessor,
   workspaceDataService,
+  workspaceNotificationAccessor,
   workspaceQueryService,
 } from '@/backend/services/workspace';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
@@ -470,7 +478,22 @@ export const workspaceRouter = router({
   // Sync PR status for a workspace (immediate refresh from GitHub)
   syncPRStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(({ input }) => workspaceQueryService.syncPRStatus(input.workspaceId)),
+    .mutation(async ({ input }) => {
+      const result = await workspaceQueryService.syncPRStatus(input.workspaceId);
+      if (result.success && result.prState && result.previousPrState !== result.prState) {
+        const { prState } = result;
+        if (prState === 'OPEN' && result.previousPrState === 'NONE') {
+          fireLifecycleNotification(input.workspaceId, 'A pull request has been opened.').catch(
+            () => undefined
+          );
+        } else if (prState === 'MERGED') {
+          fireLifecycleNotification(input.workspaceId, 'The pull request has been merged.').catch(
+            () => undefined
+          );
+        }
+      }
+      return result;
+    }),
 
   // Sync PR status for all workspaces in a project (immediate refresh from GitHub)
   syncAllPRStatuses: publicProcedure
@@ -481,6 +504,116 @@ export const workspaceRouter = router({
   hasChanges: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .query(({ input }) => workspaceQueryService.hasChanges(input.workspaceId)),
+
+  // -------------------------------------------------------------------------
+  // Child workspace procedures
+  // -------------------------------------------------------------------------
+
+  // Create a child workspace under a parent, optionally in a different project
+  createChild: publicProcedure
+    .input(
+      z.object({
+        parentWorkspaceId: z.string(),
+        projectId: z.string(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        initialPrompt: z.string().optional(),
+        reportBackOn: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const workspaceId = await createChildWorkspace(input);
+      return { workspaceId };
+    }),
+
+  // List non-archived children of a workspace with status summaries
+  listChildren: publicProcedure
+    .input(z.object({ parentWorkspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const children = await workspaceAccessor.findChildrenWithStatus(input.parentWorkspaceId);
+      return children.map((child) => ({
+        id: child.id,
+        name: child.name,
+        description: child.description,
+        status: child.status,
+        prState: child.prState,
+        prUrl: child.prUrl,
+        cachedKanbanColumn: child.cachedKanbanColumn,
+        projectId: child.projectId,
+        projectName: child.project.name,
+        projectSlug: child.project.slug,
+        createdAt: child.createdAt,
+      }));
+    }),
+
+  // Get the parent workspace summary for a child workspace
+  getParent: publicProcedure
+    .input(z.object({ childWorkspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const parent = await workspaceAccessor.findParentWorkspace(input.childWorkspaceId);
+      if (!parent) {
+        return null;
+      }
+      return {
+        id: parent.id,
+        name: parent.name,
+        projectId: parent.projectId,
+        projectName: parent.project.name,
+        projectSlug: parent.project.slug,
+      };
+    }),
+
+  // Send a message from a child workspace to the parent's active session (or queue it)
+  sendMessageToParent: publicProcedure
+    .input(
+      z.object({
+        childWorkspaceId: z.string(),
+        message: z.string().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      if (!child?.parentWorkspaceId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'This workspace has no parent',
+        });
+      }
+
+      const parentWorkspaceId = child.parentWorkspaceId;
+
+      // Try to find an active/idle session on the parent workspace to inject into
+      const parentSessions = await agentSessionAccessor.findByWorkspaceId(parentWorkspaceId);
+      const activeSession = parentSessions.find(
+        (s) => s.status === 'RUNNING' || s.status === 'IDLE'
+      );
+
+      if (activeSession) {
+        // Inject directly as a child_workspace_update event
+        sessionDomainService.appendClaudeEvent(activeSession.id, {
+          type: 'child_workspace_update',
+          childWorkspaceId: input.childWorkspaceId,
+          childWorkspaceName: child.name,
+          childProjectName: child.project.name,
+          text: input.message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Always persist — even if injected live, the notification serves as a record
+      await persistChildNotification({
+        parentWorkspaceId,
+        sourceWorkspaceId: input.childWorkspaceId,
+        message: input.message,
+      });
+
+      return { delivered: Boolean(activeSession) };
+    }),
+
+  // Get count of undelivered notifications for a workspace
+  getPendingNotificationCount: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(({ input }) => workspaceNotificationAccessor.countPending(input.workspaceId)),
 
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,

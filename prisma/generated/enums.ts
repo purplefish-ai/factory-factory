@@ -108,7 +108,8 @@ export const WorkspaceCreationSource = {
   RESUME_BRANCH: 'RESUME_BRANCH',
   GITHUB_ISSUE: 'GITHUB_ISSUE',
   LINEAR_ISSUE: 'LINEAR_ISSUE',
-  PERIODIC_TASK: 'PERIODIC_TASK'
+  PERIODIC_TASK: 'PERIODIC_TASK',
+  CHILD_WORKSPACE: 'CHILD_WORKSPACE'
 } as const
 
 export type WorkspaceCreationSource = (typeof WorkspaceCreationSource)[keyof typeof WorkspaceCreationSource]

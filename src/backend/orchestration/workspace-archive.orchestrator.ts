@@ -6,6 +6,7 @@ import {
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import type { WorkspaceWithProject } from './types';
+import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');
 
@@ -130,6 +131,17 @@ async function completeArchive(
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
   runScriptService.evictWorkspaceBuffers(workspace.id);
+
+  // Notify parent workspace that this child was archived (fire-and-forget)
+  fireLifecycleNotification(
+    workspace.id,
+    `Child workspace "${workspace.name}" has been archived.`
+  ).catch((err: unknown) =>
+    logger.warn('Failed to send archive lifecycle notification', {
+      workspaceId: workspace.id,
+      error: err,
+    })
+  );
 
   // Handle associated GitHub issue after successful archive
   await handleGitHubIssueOnArchive(workspace, services);

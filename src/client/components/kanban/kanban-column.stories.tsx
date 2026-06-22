@@ -79,6 +79,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   autoIterationProgress: null,
   autoIterationSessionId: null,
   periodicTaskId: null,
+  parentWorkspaceId: null,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [

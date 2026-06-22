@@ -59,7 +59,8 @@ export const ModelName = {
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
   PeriodicTask: 'PeriodicTask',
-  PeriodicTaskExecution: 'PeriodicTaskExecution'
+  PeriodicTaskExecution: 'PeriodicTaskExecution',
+  WorkspaceNotification: 'WorkspaceNotification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -163,6 +164,7 @@ export const WorkspaceScalarFieldEnum = {
   autoIterationProgress: 'autoIterationProgress',
   autoIterationSessionId: 'autoIterationSessionId',
   periodicTaskId: 'periodicTaskId',
+  parentWorkspaceId: 'parentWorkspaceId',
   hasHadSessions: 'hasHadSessions',
   cachedKanbanColumn: 'cachedKanbanColumn',
   stateComputedAt: 'stateComputedAt'
@@ -276,6 +278,20 @@ export const PeriodicTaskExecutionScalarFieldEnum = {
 } as const
 
 export type PeriodicTaskExecutionScalarFieldEnum = (typeof PeriodicTaskExecutionScalarFieldEnum)[keyof typeof PeriodicTaskExecutionScalarFieldEnum]
+
+
+export const WorkspaceNotificationScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  sourceWorkspaceId: 'sourceWorkspaceId',
+  sourceWorkspaceName: 'sourceWorkspaceName',
+  sourceProjectName: 'sourceProjectName',
+  message: 'message',
+  deliveredAt: 'deliveredAt',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
 
 
 export const SortOrder = {

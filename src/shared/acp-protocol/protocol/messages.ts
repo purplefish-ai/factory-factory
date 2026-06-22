@@ -11,8 +11,21 @@ import type {
  * These are the messages forwarded from the ACP runtime.
  */
 export interface AgentMessage {
-  type: 'system' | 'assistant' | 'user' | 'stream_event' | 'result' | 'error';
+  type:
+    | 'system'
+    | 'assistant'
+    | 'user'
+    | 'stream_event'
+    | 'result'
+    | 'error'
+    | 'child_workspace_update';
   timestamp?: string;
+  // child_workspace_update fields (only present when type === 'child_workspace_update')
+  childWorkspaceId?: string;
+  childWorkspaceName?: string;
+  childProjectName?: string;
+  /** Plain text message body for child_workspace_update notifications */
+  text?: string;
   session_id?: string;
   parent_tool_use_id?: string; // For subagent tracking (Phase 10)
   message?: {
@@ -48,6 +61,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   stream_event: true,
   result: true,
   error: true,
+  child_workspace_update: true,
 };
 
 /**

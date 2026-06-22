@@ -523,13 +523,19 @@ export class AcpRuntimeManager {
     const storedId = options.resumeProviderSessionId;
     const canResume = agentCapabilities.loadSession === true && !!storedId;
 
+    const mcpServers = (options.mcpServers ?? []).map((s) => ({
+      name: s.name,
+      command: s.command,
+      args: s.args,
+      env: Object.entries(s.env).map(([name, value]) => ({ name, value })),
+    }));
     if (canResume && storedId) {
       let loadResult: LoadSessionResponse | null = null;
       try {
         loadResult = await connection.loadSession({
           sessionId: storedId,
           cwd: options.workingDir,
-          mcpServers: [],
+          mcpServers,
         });
       } catch (error) {
         const details = getAcpErrorLogDetails(error);
@@ -557,7 +563,7 @@ export class AcpRuntimeManager {
 
     const sessionResult = await connection.newSession({
       cwd: options.workingDir,
-      mcpServers: [],
+      mcpServers,
     });
     logger.info('ACP session created', {
       sessionId,

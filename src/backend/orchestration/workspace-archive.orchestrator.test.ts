@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 
+vi.mock('./workspace-children.orchestrator', () => ({
+  fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findStaleArchivingWithProject: vi.fn(),

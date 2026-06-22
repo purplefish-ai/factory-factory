@@ -86,6 +86,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   autoIterationProgress: null,
   autoIterationSessionId: null,
   periodicTaskId: null,
+  parentWorkspaceId: null,
 };
 
 export const NoPR: Story = {

@@ -85,6 +85,7 @@ enum WorkspaceCreationSource {
   GITHUB_ISSUE    // Created from GitHub issue
   LINEAR_ISSUE    // Created from Linear issue
   PERIODIC_TASK   // Created by a periodic task execution
+  CHILD_WORKSPACE // Created as a child of another workspace
 }
 
 enum IssueProvider {
@@ -257,6 +258,12 @@ model Workspace {
   periodicTask          PeriodicTask?           @relation(fields: [periodicTaskId], references: [id])
   periodicTaskExecution PeriodicTaskExecution?
 
+  // Parent/child workspace hierarchy (max depth 1)
+  parentWorkspaceId   String?           @map("parent_workspace_id")
+  parentWorkspace     Workspace?        @relation("WorkspaceChildren", fields: [parentWorkspaceId], references: [id])
+  childWorkspaces     Workspace[]       @relation("WorkspaceChildren")
+  notifications       WorkspaceNotification[]
+
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
 
@@ -417,4 +424,24 @@ model PeriodicTaskExecution {
   @@index([periodicTaskId])
   @@index([periodicTaskId, status])
   @@index([status])
+}
+
+// Queued notifications from child workspaces, delivered when parent's next session starts
+model WorkspaceNotification {
+  id                  String    @id @default(cuid())
+  workspaceId         String    @map("workspace_id")
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  sourceWorkspaceId   String    @map("source_workspace_id")
+  sourceWorkspaceName String    @map("source_workspace_name")
+  sourceProjectName   String    @map("source_project_name")
+  message             String
+
+  deliveredAt         DateTime? @map("delivered_at") // null = pending delivery
+
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@map("workspace_notifications")
+  @@index([workspaceId])
+  @@index([workspaceId, deliveredAt])
 }

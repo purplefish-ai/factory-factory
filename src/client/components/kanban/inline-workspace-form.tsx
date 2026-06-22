@@ -145,6 +145,7 @@ function createOptimisticWorkingWorkspace(params: {
     autoIterationProgress: null,
     autoIterationSessionId: null,
     periodicTaskId: null,
+    parentWorkspaceId: null,
     agentSessions: [],
     terminalSessions: [],
     kanbanColumn: 'WORKING',

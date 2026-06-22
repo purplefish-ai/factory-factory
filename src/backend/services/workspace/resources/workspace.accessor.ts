@@ -37,11 +37,18 @@ interface CreateWorkspaceInput {
   ratchetEnabled?: boolean;
   defaultSessionProvider?: Prisma.WorkspaceCreateInput['defaultSessionProvider'];
   ratchetSessionProvider?: Prisma.WorkspaceCreateInput['ratchetSessionProvider'];
-  creationSource?: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE' | 'PERIODIC_TASK';
+  creationSource?:
+    | 'MANUAL'
+    | 'RESUME_BRANCH'
+    | 'GITHUB_ISSUE'
+    | 'LINEAR_ISSUE'
+    | 'PERIODIC_TASK'
+    | 'CHILD_WORKSPACE';
   creationMetadata?: Prisma.InputJsonValue;
   mode?: 'STANDARD' | 'AUTO_ITERATION';
   autoIterationConfig?: Prisma.InputJsonValue;
   periodicTaskId?: string;
+  parentWorkspaceId?: string;
 }
 
 interface UpdateWorkspaceInput {
@@ -157,6 +164,7 @@ class WorkspaceAccessor {
         mode: data.mode,
         autoIterationConfig: data.autoIterationConfig,
         periodicTaskId: data.periodicTaskId,
+        parentWorkspaceId: data.parentWorkspaceId,
       },
     });
   }
@@ -715,6 +723,44 @@ class WorkspaceAccessor {
         prReviewLastCheckedAt: true,
       },
     }) as Promise<WorkspaceForRatchet | null>;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Parent / child workspace hierarchy
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find non-archived child workspaces for a given parent.
+   */
+  findChildrenByParentId(parentId: string): Promise<Workspace[]> {
+    return prisma.workspace.findMany({
+      where: { parentWorkspaceId: parentId, status: { not: 'ARCHIVED' } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Find child workspaces with session counts included, for status summaries.
+   */
+  findChildrenWithStatus(
+    parentId: string
+  ): Promise<Prisma.WorkspaceGetPayload<{ include: { agentSessions: true; project: true } }>[]> {
+    return prisma.workspace.findMany({
+      where: { parentWorkspaceId: parentId, status: { not: 'ARCHIVED' } },
+      include: { agentSessions: true, project: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Find the parent workspace summary for a given child workspace id.
+   * Returns the parent with project included for cross-project navigation.
+   */
+  findParentWorkspace(childId: string): Promise<WorkspaceWithProject | null> {
+    return prisma.workspace.findFirst({
+      where: { childWorkspaces: { some: { id: childId } } },
+      include: { project: true },
+    });
   }
 }
 

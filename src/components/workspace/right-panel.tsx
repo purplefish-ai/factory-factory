@@ -4,6 +4,7 @@ import {
   FileQuestion,
   Files,
   ListTodo,
+  Network,
   Plus,
   RefreshCw,
   Terminal,
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 
 import { AutoIterationPanel } from './auto-iteration-panel';
+import { ChildWorkspacesPanel } from './child-workspaces-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
@@ -46,7 +48,8 @@ type TopPanelTab =
   | 'tasks'
   | 'screenshots'
   | 'auto-iteration'
-  | 'periodic-task';
+  | 'periodic-task'
+  | 'child-workspaces';
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
@@ -64,7 +67,8 @@ function parseStoredTopTab(value: string | null): TopPanelTab | null {
     value === 'tasks' ||
     value === 'screenshots' ||
     value === 'auto-iteration' ||
-    value === 'periodic-task'
+    value === 'periodic-task' ||
+    value === 'child-workspaces'
   ) {
     return value;
   }
@@ -119,6 +123,7 @@ interface TopPanelAreaProps {
   onTakeScreenshots: () => void;
   isAutoIteration: boolean;
   periodicTaskId: string | null;
+  hasChildWorkspaces: boolean;
 }
 
 function TopPanelArea({
@@ -129,6 +134,7 @@ function TopPanelArea({
   onTakeScreenshots,
   isAutoIteration,
   periodicTaskId,
+  hasChildWorkspaces,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
@@ -136,6 +142,7 @@ function TopPanelArea({
   const showScreenshots = activeTopTab === 'screenshots';
   const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
+  const showChildWorkspaces = activeTopTab === 'child-workspaces';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
@@ -182,6 +189,14 @@ function TopPanelArea({
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
+        {hasChildWorkspaces && (
+          <TabButton
+            label="Children"
+            icon={<Network className="h-3.5 w-3.5" />}
+            isActive={showChildWorkspaces}
+            onSelect={() => onTopTabChange('child-workspaces')}
+          />
+        )}
 
         <div className="flex-1" />
 
@@ -216,6 +231,7 @@ function TopPanelArea({
         {showPeriodicTask && periodicTaskId && (
           <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
         )}
+        {showChildWorkspaces && <ChildWorkspacesPanel workspaceId={workspaceId} />}
       </div>
     </div>
   );
@@ -254,6 +270,10 @@ export function RightPanel({
   const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
   const periodicTaskId =
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
+  const creationSource =
+    (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
+  // Show children tab for all workspaces that are not themselves children
+  const hasChildWorkspaces = creationSource !== 'CHILD_WORKSPACE';
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -406,6 +426,7 @@ export function RightPanel({
           onTakeScreenshots={handleTakeScreenshots}
           isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
+          hasChildWorkspaces={hasChildWorkspaces}
         />
       </ResizablePanel>
 

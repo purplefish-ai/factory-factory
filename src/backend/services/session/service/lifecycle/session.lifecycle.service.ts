@@ -1,3 +1,4 @@
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -7,6 +8,7 @@ import type {
   AcpRuntimeManager,
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
+import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
   SessionAutoIterationExitBridge,
   SessionLifecycleWorkspaceBridge,
@@ -15,7 +17,7 @@ import { chatConnectionService } from '@/backend/services/session/service/chat/c
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
@@ -48,6 +50,7 @@ type SessionContext = {
   systemPrompt: string | undefined;
   model: string;
   workspaceId: string;
+  parentWorkspaceId?: string | null;
 };
 
 type GetOrCreateSessionClientOptions = {
@@ -495,6 +498,13 @@ export class SessionLifecycleService {
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
     this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
 
+    const apiPort = String(configService.getBackendPort());
+    const mcpServerConfig = getChildWorkspaceMcpServerConfig({
+      workspaceId: sessionContext.workspaceId,
+      parentWorkspaceId: sessionContext.parentWorkspaceId ?? null,
+      apiBaseUrl: `http://localhost:${apiPort}`,
+    });
+
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
       workingDir: sessionContext.workingDir,
@@ -503,6 +513,7 @@ export class SessionLifecycleService {
       permissionPreset,
       sessionId,
       resumeProviderSessionId: session?.providerSessionId ?? undefined,
+      mcpServers: [mcpServerConfig],
     };
 
     let handle: AcpProcessHandle;
@@ -854,6 +865,9 @@ export class SessionLifecycleService {
       });
     }
 
+    // Resolve parent workspace context for child workspace system prompt injection
+    const parentCtx = await this.resolveParentWorkspaceContext(workspace);
+
     const { workflowPrompt, systemPrompt, injectedBranchRename } =
       this.promptBuilder.buildSystemPrompt({
         workflow: session.workflow,
@@ -863,6 +877,11 @@ export class SessionLifecycleService {
           hasHadSessions: workspace.hasHadSessions,
           name: workspace.name,
           description: workspace.description ?? undefined,
+          runScriptPort: workspace.runScriptPort,
+          parentWorkspaceId: workspace.parentWorkspaceId,
+          parentWorkspaceName: parentCtx.parentWorkspaceName,
+          parentProjectName: parentCtx.parentProjectName,
+          reportBackOn: parentCtx.reportBackOn,
         },
         project,
       });
@@ -881,13 +900,74 @@ export class SessionLifecycleService {
       });
     }
 
+    // Deliver any queued notifications from child workspaces into this session's transcript
+    await this.deliverPendingChildNotifications(sessionId, workspace.id);
+
     return {
       workingDir: workspace.worktreePath,
       resumeProviderSessionId: session.providerSessionId ?? undefined,
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,
+      parentWorkspaceId: workspace.parentWorkspaceId,
     };
+  }
+
+  private async deliverPendingChildNotifications(
+    sessionId: string,
+    workspaceId: string
+  ): Promise<void> {
+    try {
+      const pending = await workspaceNotificationAccessor.findPending(workspaceId);
+      if (pending.length === 0) {
+        return;
+      }
+      const ids: string[] = [];
+      for (const notification of pending) {
+        this.sessionDomainService.appendClaudeEvent(sessionId, {
+          type: 'child_workspace_update',
+          childWorkspaceId: notification.sourceWorkspaceId,
+          childWorkspaceName: notification.sourceWorkspaceName,
+          childProjectName: notification.sourceProjectName,
+          text: notification.message,
+          timestamp: notification.createdAt.toISOString(),
+        });
+        ids.push(notification.id);
+      }
+      await workspaceNotificationAccessor.markDelivered(ids);
+      logger.info('Delivered pending child workspace notifications', {
+        sessionId,
+        workspaceId,
+        count: pending.length,
+      });
+    } catch (error) {
+      logger.warn('Failed to deliver pending child workspace notifications', {
+        sessionId,
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async resolveParentWorkspaceContext(workspace: {
+    parentWorkspaceId: string | null;
+    creationMetadata: unknown;
+  }): Promise<{ parentWorkspaceName?: string; parentProjectName?: string; reportBackOn?: string }> {
+    if (!workspace.parentWorkspaceId) {
+      return {};
+    }
+    let parentWorkspaceName: string | undefined;
+    let parentProjectName: string | undefined;
+    const parentWorkspace = await this.repository.getWorkspaceById(workspace.parentWorkspaceId);
+    if (parentWorkspace) {
+      parentWorkspaceName = parentWorkspace.name;
+      const parentProject = await this.repository.getProjectById(parentWorkspace.projectId);
+      parentProjectName = parentProject?.name;
+    }
+    const metadata = workspace.creationMetadata as Record<string, unknown> | null;
+    const reportBackOn =
+      typeof metadata?.reportBackOn === 'string' ? metadata.reportBackOn : undefined;
+    return { parentWorkspaceName, parentProjectName, reportBackOn };
   }
 
   private async resolvePermissionPreset(
