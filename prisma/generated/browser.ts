@@ -62,3 +62,8 @@ export type PeriodicTask = Prisma.PeriodicTaskModel
  * 
  */
 export type PeriodicTaskExecution = Prisma.PeriodicTaskExecutionModel
+/**
+ * Model WorkspaceNotification
+ * 
+ */
+export type WorkspaceNotification = Prisma.WorkspaceNotificationModel

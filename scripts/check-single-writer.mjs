@@ -144,6 +144,7 @@ const workspaceMutationDeniedFields = new Set([
   'createdAt',
   'updatedAt',
   'periodicTaskId',
+  'parentWorkspaceId',
 ]);
 
 const workspaceMutationRules = {

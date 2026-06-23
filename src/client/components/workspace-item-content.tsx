@@ -1,7 +1,17 @@
-import { CircleDot, Clock, GitBranch, GitPullRequest } from 'lucide-react';
+import { CircleDot, Clock, GitBranch, GitPullRequest, Network } from 'lucide-react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
+
+function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
+  if (creationSource === 'PERIODIC_TASK') {
+    return <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />;
+  }
+  if (creationSource === 'CHILD_WORKSPACE') {
+    return <Network className="h-3 w-3 shrink-0 text-violet-500" />;
+  }
+  return null;
+}
 
 function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => void }) {
   const content = (
@@ -53,7 +63,6 @@ export function WorkspaceItemContent({
       ? `#${workspace.githubIssueNumber}`
       : workspace.linearIssueId;
   const hasIssue = Boolean(issueLabel);
-  const isPeriodicTask = workspace.creationSource === 'PERIODIC_TASK';
   const statusReason = getVisibleWorkspaceStatusReason(workspace.statusReason);
 
   return (
@@ -63,7 +72,7 @@ export function WorkspaceItemContent({
           pendingRequestType={workspace.pendingRequestType}
           isWorking={workspace.isWorking}
         />
-        {isPeriodicTask && <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />}
+        <CreationSourceIcon creationSource={workspace.creationSource} />
         <span className="truncate text-sm">{workspace.name}</span>
       </div>
       {hasMetaRow && (

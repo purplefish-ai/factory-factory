@@ -13,6 +13,7 @@ const DEFAULT_ALLOWLISTED_FILES = new Set([
   'src/backend/services/logger.service.ts',
   'src/backend/services/terminal/service/terminal.service.ts',
   'src/backend/services/run-script/service/startup-script.service.ts',
+  'src/backend/services/session/service/acp/child-workspace-mcp-server.ts',
   'src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts',
   'src/backend/services/session/service/acp/codex-app-server-adapter/codex-model-catalog-loader.ts',
   'src/backend/services/session/service/data/codex-session-history-loader.service.ts',

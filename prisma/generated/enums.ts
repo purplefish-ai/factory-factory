@@ -108,7 +108,8 @@ export const WorkspaceCreationSource = {
   RESUME_BRANCH: 'RESUME_BRANCH',
   GITHUB_ISSUE: 'GITHUB_ISSUE',
   LINEAR_ISSUE: 'LINEAR_ISSUE',
-  PERIODIC_TASK: 'PERIODIC_TASK'
+  PERIODIC_TASK: 'PERIODIC_TASK',
+  CHILD_WORKSPACE: 'CHILD_WORKSPACE'
 } as const
 
 export type WorkspaceCreationSource = (typeof WorkspaceCreationSource)[keyof typeof WorkspaceCreationSource]
@@ -174,3 +175,11 @@ export const AutoIterationStatus = {
 } as const
 
 export type AutoIterationStatus = (typeof AutoIterationStatus)[keyof typeof AutoIterationStatus]
+
+
+export const NotificationDirection = {
+  CHILD_TO_PARENT: 'CHILD_TO_PARENT',
+  PARENT_TO_CHILD: 'PARENT_TO_CHILD'
+} as const
+
+export type NotificationDirection = (typeof NotificationDirection)[keyof typeof NotificationDirection]

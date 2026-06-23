@@ -392,7 +392,8 @@ export const ModelName = {
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
   PeriodicTask: 'PeriodicTask',
-  PeriodicTaskExecution: 'PeriodicTaskExecution'
+  PeriodicTaskExecution: 'PeriodicTaskExecution',
+  WorkspaceNotification: 'WorkspaceNotification'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -408,7 +409,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution"
+    modelProps: "project" | "decisionLog" | "workspace" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1078,6 +1079,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    WorkspaceNotification: {
+      payload: Prisma.$WorkspaceNotificationPayload<ExtArgs>
+      fields: Prisma.WorkspaceNotificationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceNotificationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceNotificationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceNotificationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceNotificationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceNotificationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceNotificationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceNotificationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceNotificationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceNotificationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceNotificationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceNotificationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceNotificationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceNotificationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceNotificationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceNotificationPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceNotificationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceNotification>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceNotificationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceNotificationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceNotificationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceNotificationCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1202,6 +1277,7 @@ export const WorkspaceScalarFieldEnum = {
   autoIterationProgress: 'autoIterationProgress',
   autoIterationSessionId: 'autoIterationSessionId',
   periodicTaskId: 'periodicTaskId',
+  parentWorkspaceId: 'parentWorkspaceId',
   hasHadSessions: 'hasHadSessions',
   cachedKanbanColumn: 'cachedKanbanColumn',
   stateComputedAt: 'stateComputedAt'
@@ -1315,6 +1391,21 @@ export const PeriodicTaskExecutionScalarFieldEnum = {
 } as const
 
 export type PeriodicTaskExecutionScalarFieldEnum = (typeof PeriodicTaskExecutionScalarFieldEnum)[keyof typeof PeriodicTaskExecutionScalarFieldEnum]
+
+
+export const WorkspaceNotificationScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  sourceWorkspaceId: 'sourceWorkspaceId',
+  sourceWorkspaceName: 'sourceWorkspaceName',
+  sourceProjectName: 'sourceProjectName',
+  message: 'message',
+  direction: 'direction',
+  deliveredAt: 'deliveredAt',
+  createdAt: 'createdAt'
+} as const
+
+export type WorkspaceNotificationScalarFieldEnum = (typeof WorkspaceNotificationScalarFieldEnum)[keyof typeof WorkspaceNotificationScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1519,6 +1610,13 @@ export type EnumPeriodicTaskExecutionStatusFieldRefInput<$PrismaModel> = FieldRe
 
 
 /**
+ * Reference to a field of type 'NotificationDirection'
+ */
+export type EnumNotificationDirectionFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'NotificationDirection'>
+    
+
+
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -1628,6 +1726,7 @@ export type GlobalOmitConfig = {
   userSettings?: Prisma.UserSettingsOmit
   periodicTask?: Prisma.PeriodicTaskOmit
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOmit
+  workspaceNotification?: Prisma.WorkspaceNotificationOmit
 }
 
 /* Types for Logging */

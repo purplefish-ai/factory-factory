@@ -152,6 +152,7 @@ const mockWorkspace: Workspace = {
   autoIterationProgress: null,
   autoIterationSessionId: null,
   periodicTaskId: null,
+  parentWorkspaceId: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
 };

@@ -63,6 +63,15 @@ export type WorkspaceCreationSource =
       initialPrompt?: string;
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
+    }
+  | {
+      type: 'CHILD_WORKSPACE';
+      parentWorkspaceId: string;
+      projectId: string;
+      name: string;
+      description?: string;
+      initialPrompt?: string;
+      reportBackOn?: string;
     };
 
 /**
@@ -83,11 +92,18 @@ type PreparedWorkspaceCreation = {
     linearIssueId?: string;
     linearIssueIdentifier?: string;
     linearIssueUrl?: string;
-    creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE' | 'PERIODIC_TASK';
+    creationSource:
+      | 'MANUAL'
+      | 'RESUME_BRANCH'
+      | 'GITHUB_ISSUE'
+      | 'LINEAR_ISSUE'
+      | 'PERIODIC_TASK'
+      | 'CHILD_WORKSPACE';
     creationMetadata?: Prisma.InputJsonValue;
     defaultSessionProvider?: Prisma.WorkspaceCreateInput['defaultSessionProvider'];
     mode?: 'STANDARD' | 'AUTO_ITERATION';
     autoIterationConfig?: Prisma.InputJsonValue;
+    parentWorkspaceId?: string;
   };
   initMode?: {
     useExistingBranch: boolean;
@@ -121,7 +137,9 @@ export class WorkspaceCreationService {
     const { preparedInput, initMode } = await this.prepareCreation(source);
 
     // Apply workspace creation defaults from user settings where needed.
-    const ratchetEnabled = await this.resolveWorkspaceCreationDefaults(source.ratchetEnabled);
+    const ratchetEnabled = await this.resolveWorkspaceCreationDefaults(
+      'ratchetEnabled' in source ? source.ratchetEnabled : undefined
+    );
 
     // Create workspace record
     const workspace = await workspaceAccessor.create({
@@ -153,6 +171,8 @@ export class WorkspaceCreationService {
         return this.prepareGitHubIssueCreation(source);
       case 'LINEAR_ISSUE':
         return this.prepareLinearIssueCreation(source);
+      case 'CHILD_WORKSPACE':
+        return await this.prepareChildWorkspaceCreation(source);
     }
   }
 
@@ -301,6 +321,51 @@ export class WorkspaceCreationService {
         defaultSessionProvider: source.provider,
         creationSource: 'LINEAR_ISSUE',
         creationMetadata: metadata as Prisma.InputJsonValue,
+      },
+    };
+  }
+
+  private async prepareChildWorkspaceCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'CHILD_WORKSPACE' }>
+  ): Promise<PreparedWorkspaceCreation> {
+    const parent = await workspaceAccessor.findRawById(source.parentWorkspaceId);
+    if (!parent) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: `Parent workspace not found: ${source.parentWorkspaceId}`,
+      });
+    }
+    if (parent.status === 'ARCHIVED') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Cannot create a child workspace under an archived parent',
+      });
+    }
+    if (parent.parentWorkspaceId) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Child workspaces cannot have children (max depth 1)',
+      });
+    }
+
+    const metadata: Record<string, unknown> = {
+      parentWorkspaceId: source.parentWorkspaceId,
+    };
+    if (source.initialPrompt) {
+      metadata.initialPrompt = source.initialPrompt;
+    }
+    if (source.reportBackOn) {
+      metadata.reportBackOn = source.reportBackOn;
+    }
+
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        name: source.name,
+        description: source.description,
+        creationSource: 'CHILD_WORKSPACE',
+        creationMetadata: metadata as Prisma.InputJsonValue,
+        parentWorkspaceId: source.parentWorkspaceId,
       },
     };
   }

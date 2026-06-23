@@ -418,6 +418,7 @@ class WorkspaceQueryService {
       return { success: false, reason: 'no_pr_url' as const };
     }
 
+    const previousPrState = workspace.prState;
     const prResult = await this.prSnapshot.refreshWorkspace(workspaceId, workspace.prUrl);
     if (!(prResult.success && prResult.snapshot)) {
       return { success: false, reason: 'fetch_failed' as const };
@@ -429,7 +430,7 @@ class WorkspaceQueryService {
       prState: prResult.snapshot.prState,
     });
 
-    return { success: true, prState: prResult.snapshot.prState };
+    return { success: true, prState: prResult.snapshot.prState, previousPrState };
   }
 
   async syncAllPRStatuses(projectId: string) {

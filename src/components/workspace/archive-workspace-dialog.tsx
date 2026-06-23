@@ -27,6 +27,8 @@ export type ArchiveWorkspaceDialogProps = {
   description?: string;
   warningText?: string;
   checkboxLabel?: string;
+  /** Number of active (non-archived) child workspaces */
+  activeChildCount?: number;
 };
 
 export function ArchiveWorkspaceDialog({
@@ -38,6 +40,7 @@ export function ArchiveWorkspaceDialog({
   description = defaultDescription,
   warningText = defaultWarning,
   checkboxLabel = defaultLabel,
+  activeChildCount = 0,
 }: ArchiveWorkspaceDialogProps) {
   const [commitChangesChecked, setCommitChangesChecked] = useState(true);
 
@@ -59,6 +62,12 @@ export function ArchiveWorkspaceDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3">
+          {activeChildCount > 0 && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+              This workspace has {activeChildCount} active child workspace
+              {activeChildCount !== 1 ? 's' : ''}. Archiving will not automatically archive them.
+            </div>
+          )}
           {hasUncommitted && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {warningText}

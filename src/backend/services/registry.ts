@@ -2,6 +2,7 @@ export const prismaModelNames = [
   'Project',
   'DecisionLog',
   'Workspace',
+  'WorkspaceNotification',
   'AgentSession',
   'TerminalSession',
   'ClosedSession',
@@ -40,7 +41,7 @@ export const serviceRegistry = {
   },
   workspace: {
     dependsOn: ['settings', 'auto-iteration'],
-    ownsModels: ['Project', 'Workspace'],
+    ownsModels: ['Project', 'Workspace', 'WorkspaceNotification'],
   },
   terminal: {
     dependsOn: [],

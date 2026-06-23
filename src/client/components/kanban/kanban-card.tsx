@@ -5,12 +5,14 @@ import {
   GitBranch,
   GitPullRequest,
   MessageSquare,
+  Network,
   Pencil,
   Play,
   RefreshCw,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { shouldShowWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
@@ -132,6 +134,12 @@ function CardArchiveButton({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const requiresConfirmation = !isWorkspaceDoneOrMerged(workspace);
+  const isParent = workspace.creationSource !== 'CHILD_WORKSPACE';
+  const { data: children } = trpc.workspace.listChildren.useQuery(
+    { parentWorkspaceId: workspace.id },
+    { enabled: requiresConfirmation && dialogOpen && isParent }
+  );
+  const activeChildCount = children?.length ?? 0;
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -167,6 +175,7 @@ function CardArchiveButton({
           onOpenChange={setDialogOpen}
           hasUncommitted={false}
           onConfirm={(commitUncommitted) => onArchive(workspace.id, commitUncommitted)}
+          activeChildCount={activeChildCount}
         />
       )}
     </>
@@ -311,7 +320,8 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     showBranch ||
     showPR ||
     !!sessionRuntimeError ||
-    workspace.mode === 'AUTO_ITERATION';
+    workspace.mode === 'AUTO_ITERATION' ||
+    workspace.creationSource === 'CHILD_WORKSPACE';
   return {
     showPR,
     isArchived,
@@ -496,6 +506,12 @@ export function KanbanCard({
               </div>
             )}
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
+            {workspace.creationSource === 'CHILD_WORKSPACE' && (
+              <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
+                <Network className="h-3 w-3" />
+                <span>Child workspace</span>
+              </div>
+            )}
             {sessionRuntimeError && (
               <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
                 <AlertTriangle className="h-3 w-3 shrink-0" />

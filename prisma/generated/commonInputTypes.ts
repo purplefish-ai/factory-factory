@@ -511,6 +511,23 @@ export type EnumPeriodicTaskExecutionStatusWithAggregatesFilter<$PrismaModel = n
   _max?: Prisma.NestedEnumPeriodicTaskExecutionStatusFilter<$PrismaModel>
 }
 
+export type EnumNotificationDirectionFilter<$PrismaModel = never> = {
+  equals?: $Enums.NotificationDirection | Prisma.EnumNotificationDirectionFieldRefInput<$PrismaModel>
+  in?: $Enums.NotificationDirection[]
+  notIn?: $Enums.NotificationDirection[]
+  not?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel> | $Enums.NotificationDirection
+}
+
+export type EnumNotificationDirectionWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.NotificationDirection | Prisma.EnumNotificationDirectionFieldRefInput<$PrismaModel>
+  in?: $Enums.NotificationDirection[]
+  notIn?: $Enums.NotificationDirection[]
+  not?: Prisma.NestedEnumNotificationDirectionWithAggregatesFilter<$PrismaModel> | $Enums.NotificationDirection
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel>
+}
+
 export type NestedStringFilter<$PrismaModel = never> = {
   equals?: string | Prisma.StringFieldRefInput<$PrismaModel>
   in?: string[]
@@ -1001,6 +1018,23 @@ export type NestedEnumPeriodicTaskExecutionStatusWithAggregatesFilter<$PrismaMod
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumPeriodicTaskExecutionStatusFilter<$PrismaModel>
   _max?: Prisma.NestedEnumPeriodicTaskExecutionStatusFilter<$PrismaModel>
+}
+
+export type NestedEnumNotificationDirectionFilter<$PrismaModel = never> = {
+  equals?: $Enums.NotificationDirection | Prisma.EnumNotificationDirectionFieldRefInput<$PrismaModel>
+  in?: $Enums.NotificationDirection[]
+  notIn?: $Enums.NotificationDirection[]
+  not?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel> | $Enums.NotificationDirection
+}
+
+export type NestedEnumNotificationDirectionWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.NotificationDirection | Prisma.EnumNotificationDirectionFieldRefInput<$PrismaModel>
+  in?: $Enums.NotificationDirection[]
+  notIn?: $Enums.NotificationDirection[]
+  not?: Prisma.NestedEnumNotificationDirectionWithAggregatesFilter<$PrismaModel> | $Enums.NotificationDirection
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumNotificationDirectionFilter<$PrismaModel>
 }
 
 
