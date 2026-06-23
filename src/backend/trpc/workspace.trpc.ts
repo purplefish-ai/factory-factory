@@ -20,6 +20,7 @@ import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
   agentSessionAccessor,
+  chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
   sessionProviderResolverService,
@@ -598,7 +599,7 @@ export const workspaceRouter = router({
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
 
       if (activeSession) {
-        // Inject directly as a child_workspace_update event
+        // Show notification card in parent's UI
         const claudeMessage = {
           type: 'child_workspace_update' as const,
           childWorkspaceId: input.childWorkspaceId,
@@ -608,12 +609,26 @@ export const workspaceRouter = router({
           timestamp: new Date().toISOString(),
         };
         const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
-        // Publish the delta so connected clients see the update immediately
         sessionDomainService.emitDelta(activeSession.id, {
           type: 'agent_message',
           data: claudeMessage,
           order,
         } as SessionDeltaEvent & { order: number });
+        // Enqueue as a user message so the parent agent acts on it
+        const msgId = `child-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const enqueueText = `[Message from child workspace "${child.name}"]: ${input.message}`;
+        sessionDomainService.enqueue(activeSession.id, {
+          id: msgId,
+          text: enqueueText,
+          timestamp: new Date().toISOString(),
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        });
+        await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
       }
 
       // Only persist if there is no active session to receive it live
@@ -660,6 +675,7 @@ export const workspaceRouter = router({
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
 
       if (activeSession) {
+        // Show notification card in child's UI
         const claudeMessage = {
           type: 'parent_workspace_update' as const,
           parentWorkspaceId: input.parentWorkspaceId,
@@ -674,6 +690,22 @@ export const workspaceRouter = router({
           data: claudeMessage,
           order,
         } as SessionDeltaEvent & { order: number });
+        // Enqueue as a user message so the child agent acts on it
+        const msgId = `parent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const parentLabel = parent?.name ?? 'parent workspace';
+        const enqueueText = `[Message from parent workspace "${parentLabel}"]: ${input.message}`;
+        sessionDomainService.enqueue(activeSession.id, {
+          id: msgId,
+          text: enqueueText,
+          timestamp: new Date().toISOString(),
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        });
+        await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
       } else {
         await persistParentNotification({
           parentWorkspaceId: input.parentWorkspaceId,
