@@ -1,9 +1,10 @@
 /**
  * Child workspace MCP server.
  *
- * Exposes two tools over stdio MCP (JSON-RPC 2.0):
- *   - spawn_child_workspace  — available when FF_WORKSPACE_PARENT_ID is NOT set
- *   - send_message_to_parent — available when FF_WORKSPACE_PARENT_ID IS set
+ * Exposes tools over stdio MCP (JSON-RPC 2.0):
+ *   Parent workspaces: spawn_child_workspace, list_projects,
+ *                      send_message_to_child, archive_child_workspace
+ *   Child workspaces:  send_message_to_parent
  *
  * The server reads its workspace context from environment variables set by the
  * ACP runtime manager:
@@ -101,6 +102,17 @@ const ARCHIVE_CHILD_TOOL = {
   },
 };
 
+const LIST_PROJECTS_TOOL = {
+  name: 'list_projects',
+  description:
+    'List all available projects. Use this to discover project IDs before calling spawn_child_workspace.',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // HTTP helper — calls the internal tRPC HTTP API via a simple POST
 // ---------------------------------------------------------------------------
@@ -117,6 +129,29 @@ async function callTrpcMutation(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ json: input }),
     });
+    const body = (await res.json()) as {
+      result?: { data?: { json?: unknown } };
+      error?: { message?: string };
+    };
+    if (!res.ok || body.error) {
+      return { error: body.error?.message ?? `HTTP ${res.status}` };
+    }
+    return { result: body.result?.data?.json };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function callTrpcQuery(
+  baseUrl: string,
+  path: string,
+  input?: unknown
+): Promise<{ result?: unknown; error?: string }> {
+  const inputParam =
+    input !== undefined ? `?input=${encodeURIComponent(JSON.stringify({ json: input }))}` : '';
+  const url = `${baseUrl}/api/trpc/${path}${inputParam}`;
+  try {
+    const res = await fetch(url, { method: 'GET' });
     const body = (await res.json()) as {
       result?: { data?: { json?: unknown } };
       error?: { message?: string };
@@ -253,6 +288,28 @@ async function handleArchiveChildTool(
   }
 }
 
+async function handleListProjectsTool(req: JsonRpcRequest, apiBase: string): Promise<void> {
+  const { result, error } = await callTrpcQuery(apiBase, 'project.list');
+  if (error) {
+    send({
+      jsonrpc: '2.0',
+      id: req.id,
+      result: { content: [{ type: 'text', text: `Error: ${error}` }], isError: true },
+    });
+    return;
+  }
+  const projects = result as Array<{ id: string; name: string; slug: string }> | undefined;
+  const text =
+    projects && projects.length > 0
+      ? projects.map((p) => `- ${p.name} (id: ${p.id}, slug: ${p.slug})`).join('\n')
+      : 'No projects found.';
+  send({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: { content: [{ type: 'text', text }] },
+  });
+}
+
 async function dispatchToolCall(
   req: JsonRpcRequest,
   workspaceId: string,
@@ -263,6 +320,10 @@ async function dispatchToolCall(
   const args = params.arguments ?? {};
   if (params.name === 'spawn_child_workspace' && !hasParent) {
     await handleSpawnTool(req, workspaceId, args, apiBase);
+    return;
+  }
+  if (params.name === 'list_projects' && !hasParent) {
+    await handleListProjectsTool(req, apiBase);
     return;
   }
   if (params.name === 'send_message_to_parent' && hasParent) {
@@ -312,7 +373,7 @@ async function handleRequest(
   if (req.method === 'tools/list') {
     const tools = hasParent
       ? [SEND_MSG_TOOL]
-      : [SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
+      : [LIST_PROJECTS_TOOL, SPAWN_TOOL, SEND_MSG_TO_CHILD_TOOL, ARCHIVE_CHILD_TOOL];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
   }
