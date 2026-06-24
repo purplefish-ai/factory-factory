@@ -525,6 +525,14 @@ describe('configureDomainBridges', () => {
       expect(ratchetService.clearRatchetActiveSessionIfMatching).toHaveBeenCalledWith('ws1', 's1');
     });
 
+    it('sessionService message queue bridge delegates pending dispatch to chat handlers', async () => {
+      configureDomainBridges();
+      const bridge = getBridge(sessionService.configure);
+
+      await bridge.messageQueue?.tryDispatchNextMessage('s1');
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
+    });
+
     it('sessionService prompt-turn callback delegates queue dispatch to chat handlers', async () => {
       configureDomainBridges();
       const onPromptTurnComplete = vi.mocked(sessionService.setPromptTurnCompleteHandler).mock

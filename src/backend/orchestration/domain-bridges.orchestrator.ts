@@ -229,6 +229,10 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
         ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
     },
+    messageQueue: {
+      tryDispatchNextMessage: (sessionId) =>
+        chatMessageHandlerService.tryDispatchNextMessage(sessionId),
+    },
     autoIterationExit: {
       onAutoIterationSessionExit: (workspaceId, sessionId) =>
         autoIterationService.onSessionDeath(workspaceId, sessionId),

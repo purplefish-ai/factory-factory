@@ -454,6 +454,10 @@ export class SessionDomainService extends EventEmitter {
     return this.registry.getQueueLength(sessionId);
   }
 
+  hasQueuedMessage(sessionId: string, messageId: string): boolean {
+    return this.registry.getQueueSnapshot(sessionId).some((message) => message.id === messageId);
+  }
+
   getTranscriptSnapshot(sessionId: string): ChatMessage[] {
     const store = this.registry.getOrCreate(sessionId);
     return [...store.transcript].sort(messageSort);

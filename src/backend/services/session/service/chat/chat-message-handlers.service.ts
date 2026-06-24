@@ -15,6 +15,7 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { workspaceNotificationAccessor } from '@/backend/services/workspace';
 import {
   type AgentContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -34,6 +35,7 @@ import type { ClientCreator } from './chat-message-handlers/types';
 const logger = createLogger('chat-message-handlers');
 const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
 const TURN_IN_PROGRESS_RETRY_MAX_MS = 30_000;
+const WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX = 'workspace-notification-';
 
 // ============================================================================
 // Types
@@ -506,6 +508,7 @@ class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
         userMessage: dispatchedUserMessage,
       });
+      await this.markWorkspaceNotificationDeliveredIfNeeded(msg.id);
     } catch (error) {
       if (isCompactCommand && compactionClient) {
         compactionClient.endCompaction();
@@ -518,6 +521,27 @@ class ChatMessageHandlerService {
         dbSessionId,
         messageId: msg.id,
         remainingInQueue: sessionDomainService.getQueueLength(dbSessionId),
+      });
+    }
+  }
+
+  private async markWorkspaceNotificationDeliveredIfNeeded(messageId: string): Promise<void> {
+    if (!messageId.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
+      return;
+    }
+
+    const notificationId = messageId.slice(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX.length);
+    if (!notificationId) {
+      return;
+    }
+
+    try {
+      await workspaceNotificationAccessor.markDelivered([notificationId]);
+    } catch (error) {
+      logger.warn('[Chat WS] Failed to mark workspace notification delivered', {
+        messageId,
+        notificationId,
+        error: this.formatDispatchError(error),
       });
     }
   }

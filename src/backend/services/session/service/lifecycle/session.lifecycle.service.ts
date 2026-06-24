@@ -11,6 +11,7 @@ import type {
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
   SessionAutoIterationExitBridge,
+  SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
@@ -18,7 +19,7 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import {
@@ -61,6 +62,7 @@ type GetOrCreateSessionClientOptions = {
 
 type StartSessionOptions = {
   initialPrompt?: string;
+  initialPromptIsDefault?: boolean;
   startupModePreset?: SessionStartupModePreset;
 };
 
@@ -97,6 +99,7 @@ export class SessionLifecycleService {
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
+  private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
@@ -115,9 +118,11 @@ export class SessionLifecycleService {
 
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
+    messageQueue?: SessionLifecycleMessageQueueBridge;
     autoIterationExit?: SessionAutoIterationExitBridge;
   }): void {
     this.workspaceBridge = bridges.workspace;
+    this.messageQueueBridge = bridges.messageQueue ?? null;
     this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
@@ -142,19 +147,17 @@ export class SessionLifecycleService {
 
     const startupModePreset = options?.startupModePreset;
 
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      sessionId,
-      {},
-      session
-    );
+    const { handle, resolvedPreset, dispatchableNotificationCount } =
+      await this.getOrCreateAcpSessionClient(sessionId, {}, session);
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
     await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+    await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
 
-    const initialPrompt =
-      typeof options?.initialPrompt === 'string'
-        ? options.initialPrompt
-        : 'Continue with the task.';
-    if (initialPrompt) {
+    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+    const shouldSendInitialPrompt =
+      dispatchableNotificationCount === 0 ||
+      (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault);
+    if (shouldSendInitialPrompt && initialPrompt) {
       await sendSessionMessage(sessionId, initialPrompt);
     }
 
@@ -184,6 +187,7 @@ export class SessionLifecycleService {
     }
     await this.startSession(sessionId, sendSessionMessage, {
       initialPrompt: 'Continue with the task.',
+      initialPromptIsDefault: true,
     });
     logger.info('Session restarted', { sessionId });
   }
@@ -290,13 +294,11 @@ export class SessionLifecycleService {
     }
 
     const hadClient = !!this.runtimeManager.getClient(sessionId);
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      sessionId,
-      options ?? {},
-      session
-    );
+    const { handle, resolvedPreset, dispatchableNotificationCount } =
+      await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
     if (!hadClient) {
       await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+      await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
     }
 
     return handle;
@@ -307,13 +309,11 @@ export class SessionLifecycleService {
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
     const hadClient = !!this.runtimeManager.getClient(session.id);
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      session.id,
-      options ?? {},
-      session
-    );
+    const { handle, resolvedPreset, dispatchableNotificationCount } =
+      await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
     if (!hadClient) {
       await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
+      await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
     }
 
     return handle;
@@ -482,7 +482,7 @@ export class SessionLifecycleService {
     },
     session?: AgentSessionRecord,
     permissionPreset?: PermissionPreset
-  ): Promise<AcpProcessHandle> {
+  ): Promise<{ handle: AcpProcessHandle; dispatchableNotificationCount: number }> {
     const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
       throw new Error(`Session context not ready: ${sessionId}`);
@@ -551,12 +551,14 @@ export class SessionLifecycleService {
       capabilities: this.buildAcpChatBarCapabilities(handle),
     });
 
-    // Deliver any queued notifications (from child or parent workspaces) now that the
-    // session has started successfully. Doing this after startup ensures notifications
-    // are not marked as delivered if the session fails to start.
-    await this.deliverPendingChildNotifications(sessionId, sessionContext.workspaceId);
+    // Queue pending notifications only after the ACP client starts successfully.
+    // Callers decide when dispatch is safe for their startup flow.
+    const dispatchableNotificationCount = await this.deliverPendingChildNotifications(
+      sessionId,
+      sessionContext.workspaceId
+    );
 
-    return handle;
+    return { handle, dispatchableNotificationCount };
   }
 
   private shouldSuppressReplayDuringAcpResume(
@@ -777,7 +779,11 @@ export class SessionLifecycleService {
       model?: string;
     },
     session: AgentSessionRecord
-  ): Promise<{ handle: AcpProcessHandle; resolvedPreset?: PermissionPreset }> {
+  ): Promise<{
+    handle: AcpProcessHandle;
+    resolvedPreset?: PermissionPreset;
+    dispatchableNotificationCount: number;
+  }> {
     const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -786,7 +792,7 @@ export class SessionLifecycleService {
         activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
-      return { handle: existingAcp };
+      return { handle: existingAcp, dispatchableNotificationCount: 0 };
     }
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -799,8 +805,11 @@ export class SessionLifecycleService {
     const resolvedPreset = await this.resolvePermissionPreset(session);
 
     let handle: AcpProcessHandle;
+    let dispatchableNotificationCount = 0;
     try {
-      handle = await this.createAcpClient(sessionId, options, session, resolvedPreset);
+      const created = await this.createAcpClient(sessionId, options, session, resolvedPreset);
+      handle = created.handle;
+      dispatchableNotificationCount = created.dispatchableNotificationCount;
     } catch (error) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -823,7 +832,24 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
-    return { handle, resolvedPreset };
+    return { handle, resolvedPreset, dispatchableNotificationCount };
+  }
+
+  private async dispatchQueuedNotificationsIfNeeded(
+    sessionId: string,
+    dispatchableNotificationCount: number
+  ): Promise<void> {
+    if (dispatchableNotificationCount === 0 || !this.messageQueueBridge) {
+      return;
+    }
+    try {
+      await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
+    } catch (error) {
+      logger.warn('Failed to dispatch queued workspace notifications', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async persistAcpConfigSnapshot(
@@ -919,57 +945,128 @@ export class SessionLifecycleService {
   private async deliverPendingChildNotifications(
     sessionId: string,
     workspaceId: string
-  ): Promise<void> {
+  ): Promise<number> {
     try {
       const pending = await workspaceNotificationAccessor.findPending(workspaceId);
       if (pending.length === 0) {
-        return;
+        return 0;
       }
-      const ids: string[] = [];
+      if (!this.messageQueueBridge) {
+        logger.warn(
+          'Cannot deliver pending workspace notifications: message queue bridge missing',
+          {
+            sessionId,
+            workspaceId,
+            count: pending.length,
+          }
+        );
+        return 0;
+      }
+      let enqueuedCount = 0;
+      let dispatchableCount = 0;
       for (const notification of pending) {
+        const timestamp = notification.createdAt.toISOString();
+        const messageId = `workspace-notification-${notification.id}`;
+        if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
+          dispatchableCount += 1;
+          continue;
+        }
+        if (this.hasCommittedQueuedWorkspaceNotificationMessage(sessionId, messageId)) {
+          await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notification.id);
+          continue;
+        }
+
+        let enqueueText: string;
+        let claudeMessage: AgentMessage;
         if (notification.direction === 'PARENT_TO_CHILD') {
-          const claudeMessage = {
+          claudeMessage = {
             type: 'parent_workspace_update' as const,
             parentWorkspaceId: notification.sourceWorkspaceId,
             parentWorkspaceName: notification.sourceWorkspaceName,
             parentProjectName: notification.sourceProjectName,
             text: notification.message,
-            timestamp: notification.createdAt.toISOString(),
+            timestamp,
           };
-          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
-          this.sessionDomainService.emitDelta(sessionId, {
-            type: 'agent_message',
-            data: claudeMessage,
-            order,
-          } as SessionDeltaEvent & { order: number });
+          enqueueText = `[Message from parent workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         } else {
-          const claudeMessage = {
+          claudeMessage = {
             type: 'child_workspace_update' as const,
             childWorkspaceId: notification.sourceWorkspaceId,
             childWorkspaceName: notification.sourceWorkspaceName,
             childProjectName: notification.sourceProjectName,
             text: notification.message,
-            timestamp: notification.createdAt.toISOString(),
+            timestamp,
           };
-          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
-          this.sessionDomainService.emitDelta(sessionId, {
-            type: 'agent_message',
-            data: claudeMessage,
-            order,
-          } as SessionDeltaEvent & { order: number });
+          enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
-        ids.push(notification.id);
+
+        const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
+          id: messageId,
+          text: enqueueText,
+          timestamp,
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        } satisfies QueuedMessage);
+        if ('error' in enqueueResult) {
+          logger.warn('Failed to enqueue pending workspace notification', {
+            sessionId,
+            workspaceId,
+            notificationId: notification.id,
+            error: enqueueResult.error,
+          });
+          continue;
+        }
+        enqueuedCount += 1;
+        dispatchableCount += 1;
+        const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'agent_message',
+          data: claudeMessage,
+          order,
+        } as SessionDeltaEvent & { order: number });
       }
-      await workspaceNotificationAccessor.markDelivered(ids);
-      logger.info('Delivered pending workspace notifications', {
+      logger.info('Queued pending workspace notifications', {
         sessionId,
         workspaceId,
-        count: pending.length,
+        count: enqueuedCount,
+        dispatchableCount,
       });
+      return dispatchableCount;
     } catch (error) {
       logger.warn('Failed to deliver pending workspace notifications', {
         sessionId,
         workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    }
+  }
+
+  private hasCommittedQueuedWorkspaceNotificationMessage(
+    sessionId: string,
+    messageId: string
+  ): boolean {
+    return this.sessionDomainService
+      .getTranscriptSnapshot(sessionId)
+      .some((entry) => entry.source === 'user' && entry.id === messageId);
+  }
+
+  private async markDeliveredAfterTranscriptMatch(
+    sessionId: string,
+    workspaceId: string,
+    notificationId: string
+  ): Promise<void> {
+    try {
+      await workspaceNotificationAccessor.markDelivered([notificationId]);
+    } catch (error) {
+      logger.warn('Failed to mark already-transcripted workspace notification delivered', {
+        sessionId,
+        workspaceId,
+        notificationId,
         error: error instanceof Error ? error.message : String(error),
       });
     }

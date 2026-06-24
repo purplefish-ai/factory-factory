@@ -26,6 +26,11 @@ export interface SessionLifecycleWorkspaceBridge {
   clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void>;
 }
 
+/** Queued message dispatch callback needed by session lifecycle service */
+export interface SessionLifecycleMessageQueueBridge {
+  tryDispatchNextMessage(sessionId: string): Promise<void>;
+}
+
 /** Auto-iteration exit notification bridge */
 export interface SessionAutoIterationExitBridge {
   onAutoIterationSessionExit(workspaceId: string, sessionId: string): void;
