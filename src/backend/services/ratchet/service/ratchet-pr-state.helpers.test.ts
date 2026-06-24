@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState } from '@/shared/core';
+import type { RatchetGitHubBridge } from './bridges';
 import type { PRStateInfo } from './ratchet.types';
 import {
   buildFailedCheckDiagnostics,
@@ -130,6 +132,66 @@ describe('shouldSkipCleanPR', () => {
   });
 });
 
+describe('fetchPRState', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } as never;
+
+  const backoff = {
+    handleError: vi.fn(),
+  } as unknown as RateLimitBackoff;
+
+  function makeWorkspace() {
+    return {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/123',
+      prNumber: 123,
+      prReviewLastCheckedAt: null,
+    } as never;
+  }
+
+  function makeGitHub(overrides: Partial<RatchetGitHubBridge> = {}): RatchetGitHubBridge {
+    return {
+      extractPRInfo: vi.fn(() => ({ owner: 'example', repo: 'repo', number: 123 })),
+      getPRFullDetails: vi.fn(),
+      getReviewComments: vi.fn(),
+      computeCIStatus: vi.fn(),
+      getAuthenticatedUsername: vi.fn(),
+      fetchAndComputePRState: vi.fn(),
+      isRecentlyFetched: vi.fn(() => false),
+      startFetch: vi.fn(),
+      registerFetch: vi.fn(),
+      cancelFetch: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('skips GitHub API calls when the workspace was recently fetched', async () => {
+    const github = makeGitHub({
+      isRecentlyFetched: vi.fn(() => true),
+    });
+
+    const result = await fetchPRState({
+      workspace: makeWorkspace(),
+      authenticatedUsername: null,
+      github,
+      backoff,
+      logger,
+    });
+
+    expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
+    expect(github.isRecentlyFetched).toHaveBeenCalledWith('ws-1');
+    expect(github.startFetch).not.toHaveBeenCalled();
+    expect(github.getPRFullDetails).not.toHaveBeenCalled();
+    expect(github.getReviewComments).not.toHaveBeenCalled();
+    expect(github.registerFetch).not.toHaveBeenCalled();
+    expect(github.cancelFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('computeDispatchSnapshotKey', () => {
   it('includes merge:conflict suffix when hasMergeConflict is true', () => {
     const key = computeDispatchSnapshotKey(CIStatus.SUCCESS, false, null, null, true);
@@ -237,6 +299,7 @@ describe('fetchPRState', () => {
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
+      isRecentlyFetched: vi.fn(() => false),
       startFetch: vi.fn(),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
@@ -261,7 +324,11 @@ describe('fetchPRState', () => {
     });
 
     expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
-    expect(result?.reviewComments).toEqual([
+    if (!result || 'skipped' in result) {
+      throw new Error('Expected PR state fetch to return PR details');
+    }
+
+    expect(result.reviewComments).toEqual([
       {
         author: 'reviewer',
         body: 'Please handle this edge case.',

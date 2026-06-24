@@ -73,7 +73,12 @@ vi.mock('@/backend/services/github', () => ({
     checkHealth: vi.fn(),
     listReviewRequests: vi.fn(),
   },
-  prFetchRegistry: { register: vi.fn(), startFetch: vi.fn(), cancelFetch: vi.fn() },
+  prFetchRegistry: {
+    isRecentlyFetched: vi.fn(),
+    register: vi.fn(),
+    startFetch: vi.fn(),
+    cancelFetch: vi.fn(),
+  },
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
 
@@ -247,6 +252,15 @@ describe('configureDomainBridges', () => {
 
       bridge.github.startFetch('ws1');
       expect(prFetchRegistry.startFetch).toHaveBeenCalledWith('ws1');
+    });
+
+    it('github bridge delegates isRecentlyFetched to prFetchRegistry', () => {
+      vi.mocked(prFetchRegistry.isRecentlyFetched).mockReturnValue(true);
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      expect(bridge.github.isRecentlyFetched('ws1')).toBe(true);
+      expect(prFetchRegistry.isRecentlyFetched).toHaveBeenCalledWith('ws1');
     });
 
     it('github bridge delegates registerFetch to prFetchRegistry', () => {
