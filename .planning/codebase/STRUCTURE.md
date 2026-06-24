@@ -54,8 +54,8 @@ factory-factory/
 
 **`src/backend/orchestration/`:**
 - Purpose: Cross-service workflows that intentionally span capsules.
-- Contains: bridge wiring, workspace init/archive, snapshot event collector/reconciliation, scheduler, CLI health, data backup, decision-log query helpers.
-- Key files: `src/backend/orchestration/domain-bridges.orchestrator.ts`, `src/backend/orchestration/workspace-init.orchestrator.ts`, `src/backend/orchestration/event-collector.orchestrator.ts`, `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
+- Contains: bridge wiring, workspace init/archive, child workspace coordination, snapshot event collector/reconciliation, scheduler, CLI health, data backup, decision-log query helpers.
+- Key files: `src/backend/orchestration/domain-bridges.orchestrator.ts`, `src/backend/orchestration/workspace-init.orchestrator.ts`, `src/backend/orchestration/workspace-children.orchestrator.ts`, `src/backend/orchestration/event-collector.orchestrator.ts`, `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
 
 **`src/backend/trpc/`:**
 - Purpose: Typed HTTP API surface for the React client.

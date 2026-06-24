@@ -34,7 +34,7 @@
 - tRPC `^11.10.0` - backend API routers in `src/backend/trpc/` and typed React client in `src/client/lib/trpc.ts`
 - React `^19.2.4` / React DOM `^19.2.4` - frontend application in `src/client/main.tsx`, `src/client/root.tsx`, and `src/client/router.tsx`
 - React Router `^7.13.1` - browser routes declared in `src/client/router.tsx`
-- Vite `^7.3.2` with `@vitejs/plugin-react` `^5.1.4` - client build/dev server in `vite.config.ts`
+- Vite `^7.3.5` with `@vitejs/plugin-react` `^5.1.4` - client build/dev server in `vite.config.ts`
 - Tailwind CSS `^4.2.1` with `@tailwindcss/vite` `^4.2.1` - frontend styling pipeline in `vite.config.ts` and `src/client/globals.css`
 - Prisma `7.7.0` with SQLite - schema in `prisma/schema.prisma`, runtime client in `src/backend/db.ts`, CLI config in `prisma.config.ts`
 - Electron `^40.8.5` and `electron-builder` `^26.8.1` - desktop packaging and app lifecycle in `electron/` and `electron-builder.yml`

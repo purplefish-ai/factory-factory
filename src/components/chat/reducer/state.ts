@@ -101,7 +101,7 @@ function createSessionSwitchResetState(): Pick<
       ...createInitialSessionRuntimeState(),
       phase: 'loading', // Override to 'loading' for session switch
     },
-    slashCommands: [], // Clear for new session - will be sent when Claude starts
+    slashCommands: [], // Clear for new session - populated on session load from cache/disk scan
     slashCommandsLoaded: false,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
   };
