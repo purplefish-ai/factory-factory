@@ -299,6 +299,7 @@ describe('fetchPRState', () => {
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
+      isRecentlyFetched: vi.fn(() => false),
       startFetch: vi.fn(),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
@@ -323,7 +324,11 @@ describe('fetchPRState', () => {
     });
 
     expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
-    expect(result?.reviewComments).toEqual([
+    if (!result || 'skipped' in result) {
+      throw new Error('Expected PR state fetch to return PR details');
+    }
+
+    expect(result.reviewComments).toEqual([
       {
         author: 'reviewer',
         body: 'Please handle this edge case.',
