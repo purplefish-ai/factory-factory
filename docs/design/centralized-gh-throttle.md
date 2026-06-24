@@ -19,14 +19,14 @@ All calls live in `GitHubCLIService` (`src/backend/services/github/service/githu
 | `getAuthenticatedUsername()` | `gh api user` | 10s | None |
 | `checkHealth()` | `gh --version` + `gh auth status` | 5s / 10s | None |
 | `getPRStatus()` | `gh pr view --json ...` | 30s | Caller: scheduler `p-limit(5)`, ratchet `p-limit(20)` |
-| `listReviewRequests()` | `gh search prs` + N × `gh pr view` | 30s / 10s | Internal: `mapWithConcurrencyLimit(5)` for detail fetches |
+| `listReviewRequests()` | `gh api graphql` (single query) | 30s | None (single API call) |
 | `findPRForBranch()` | `gh pr list --head ...` | 30s | Caller: scheduler `p-limit(5)` |
 | `approvePR()` | `gh pr review --approve` | 30s | None |
 | `getPRFullDetails()` | `gh pr view --json (many fields)` | 30s | None |
 | `getPRDiff()` | `gh pr diff` | 60s | None |
 | `submitReview()` | `gh pr review` | 30s | None |
 | `listIssues()` | `gh issue list` | 30s | None |
-| `getReviewComments()` | `gh api repos/.../pulls/.../comments` | 30s | None |
+| `getReviewComments()` | `gh api repos/.../pulls/.../comments` (paginated, `?since=` for incremental) | 30s | None |
 | `addPRComment()` | `gh pr comment` | 30s | None |
 | `addIssueComment()` | `gh issue comment` | 30s | None |
 | `getIssue()` | `gh issue view` | 30s | None |
@@ -101,7 +101,7 @@ Rationale:
 | `scheduler.service.ts` | `pLimit(SERVICE_CONCURRENCY.schedulerPrSyncs)` wrapping each `syncSinglePR` / `discoverPRForWorkspace` | Remove `prSyncLimit` entirely; just `Promise.all(workspaces.map(...))` |
 | `ratchet.service.ts` | `pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks)` wrapping each `checkWorkspace` | Remove `checkLimit` entirely; just `Promise.all(...)` |
 | `SERVICE_CONCURRENCY` constant | `schedulerPrSyncs: 5`, `ratchetWorkspaceChecks: 20` | Remove both (or keep for non-gh concurrency if any) |
-| `mapWithConcurrencyLimit` in `listReviewRequests()` | Hardcoded limit of 5 | Remove; detail fetches naturally throttled by `exec()` |
+| ~~`mapWithConcurrencyLimit` in `listReviewRequests()`~~ | ~~Hardcoded limit of 5~~ | **Done:** Replaced with single GraphQL query (see commit 2cd69eaf) |
 | `github-cli/utils.ts` | `mapWithConcurrencyLimit` helper | Delete if unused elsewhere |
 
 ### In-flight deduplication (singleflight)
