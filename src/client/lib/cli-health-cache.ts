@@ -14,7 +14,40 @@ interface CheckCLIHealthUtils {
   invalidate: () => Promise<unknown>;
 }
 
-export function syncUnauthenticatedGitHubCLIHealth(
+function getAllHealthy(health: CLIHealthStatus) {
+  return (
+    health.claude.isInstalled &&
+    health.claude.isAuthenticated === true &&
+    health.github.isInstalled &&
+    health.github.isAuthenticated
+  );
+}
+
+function createFallbackHealth(github: GitHubCLIHealthStatus): CLIHealthStatus {
+  return {
+    claude: { isInstalled: true, isAuthenticated: true },
+    codex: { isInstalled: true, isAuthenticated: true },
+    github,
+    allHealthy: false,
+  };
+}
+
+function patchGitHubHealth(
+  current: CLIHealthStatus,
+  github: GitHubCLIHealthStatus
+): CLIHealthStatus {
+  const patched = {
+    ...current,
+    github,
+  };
+
+  return {
+    ...patched,
+    allHealthy: getAllHealthy(patched),
+  };
+}
+
+export function syncGitHubCLIHealth(
   checkCLIHealth: CheckCLIHealthUtils,
   github: GitHubCLIHealthStatus
 ) {
@@ -26,11 +59,7 @@ export function syncUnauthenticatedGitHubCLIHealth(
     }
 
     patchedExistingCache = true;
-    return {
-      ...current,
-      github,
-      allHealthy: false,
-    };
+    return patchGitHubHealth(current, github);
   });
 
   if (patchedExistingCache) {
@@ -40,13 +69,12 @@ export function syncUnauthenticatedGitHubCLIHealth(
   void checkCLIHealth
     .fetch({ forceRefresh: true })
     .then((freshHealth) => {
-      checkCLIHealth.setData({ forceRefresh: false }, () => ({
-        ...freshHealth,
-        github,
-        allHealthy: false,
-      }));
+      checkCLIHealth.setData({ forceRefresh: false }, () => patchGitHubHealth(freshHealth, github));
     })
     .catch(() => {
+      checkCLIHealth.setData({ forceRefresh: false }, (current) =>
+        patchGitHubHealth(current ?? createFallbackHealth(github), github)
+      );
       void checkCLIHealth.invalidate();
     });
 }

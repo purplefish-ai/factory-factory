@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncUnauthenticatedGitHubCLIHealth } from './cli-health-cache';
+import { syncGitHubCLIHealth } from './cli-health-cache';
 
-type CheckCLIHealthUtils = Parameters<typeof syncUnauthenticatedGitHubCLIHealth>[0];
+type CheckCLIHealthUtils = Parameters<typeof syncGitHubCLIHealth>[0];
 type CLIHealth = Awaited<ReturnType<CheckCLIHealthUtils['fetch']>>;
-type GitHubHealth = Parameters<typeof syncUnauthenticatedGitHubCLIHealth>[1];
+type GitHubHealth = Parameters<typeof syncGitHubCLIHealth>[1];
 
 const healthyCLIHealth: CLIHealth = {
-  claude: { isInstalled: true },
+  claude: { isInstalled: true, isAuthenticated: true },
   codex: { isInstalled: true, isAuthenticated: true },
   github: { isInstalled: true, isAuthenticated: true },
   allHealthy: true,
@@ -39,11 +39,11 @@ function createCheckCLIHealthUtils(current: CLIHealth | undefined) {
   };
 }
 
-describe('syncUnauthenticatedGitHubCLIHealth', () => {
+describe('syncGitHubCLIHealth', () => {
   it('patches an existing CLI health cache entry immediately', () => {
     const { checkCLIHealth, getCurrent, fetch } = createCheckCLIHealthUtils(healthyCLIHealth);
 
-    syncUnauthenticatedGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
+    syncGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
 
     expect(getCurrent()).toEqual({
       ...healthyCLIHealth,
@@ -53,10 +53,25 @@ describe('syncUnauthenticatedGitHubCLIHealth', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('clears a previous GitHub auth warning when issue fetches recover', () => {
+    const { checkCLIHealth, getCurrent } = createCheckCLIHealthUtils({
+      ...healthyCLIHealth,
+      github: unauthenticatedGitHubHealth,
+      allHealthy: false,
+    });
+
+    syncGitHubCLIHealth(checkCLIHealth, {
+      isInstalled: true,
+      isAuthenticated: true,
+    });
+
+    expect(getCurrent()).toEqual(healthyCLIHealth);
+  });
+
   it('force-refreshes full CLI health before writing when the cache is missing', async () => {
     const { checkCLIHealth, getCurrent, fetch } = createCheckCLIHealthUtils(undefined);
 
-    syncUnauthenticatedGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
+    syncGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith({ forceRefresh: true }));
 
     expect(getCurrent()).toEqual({
@@ -67,10 +82,17 @@ describe('syncUnauthenticatedGitHubCLIHealth', () => {
   });
 
   it('invalidates the health query when the fallback refresh fails', async () => {
-    const { checkCLIHealth, fetch, invalidate } = createCheckCLIHealthUtils(undefined);
+    const { checkCLIHealth, fetch, getCurrent, invalidate } = createCheckCLIHealthUtils(undefined);
     fetch.mockRejectedValueOnce(new Error('failed'));
 
-    syncUnauthenticatedGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
+    syncGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+
+    expect(getCurrent()).toEqual({
+      claude: { isInstalled: true, isAuthenticated: true },
+      codex: { isInstalled: true, isAuthenticated: true },
+      github: unauthenticatedGitHubHealth,
+      allHealthy: false,
+    });
   });
 });

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { syncUnauthenticatedGitHubCLIHealth } from '@/client/lib/cli-health-cache';
+import { syncGitHubCLIHealth } from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -138,11 +138,11 @@ export function KanbanProvider({
   );
 
   useEffect(() => {
-    if (!githubIssuesData?.health || githubIssuesData.health.isAuthenticated !== false) {
+    if (!githubIssuesData?.health) {
       return;
     }
 
-    syncUnauthenticatedGitHubCLIHealth(utils.admin.checkCLIHealth, githubIssuesData.health);
+    syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubIssuesData.health);
   }, [githubIssuesData?.health, utils.admin.checkCLIHealth]);
 
   // Linear issues — enabled only when provider is Linear
