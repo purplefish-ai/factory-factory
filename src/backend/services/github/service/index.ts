@@ -4,6 +4,7 @@
 
 // Bridge interfaces for orchestration layer wiring
 export type { GitHubKanbanBridge } from './bridges';
+export { classifyError as classifyGitHubCLIError } from './github-cli/errors';
 // --- GitHub CLI wrapper ---
 export {
   type GitHubCLIErrorType,

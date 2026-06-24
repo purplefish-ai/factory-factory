@@ -80,6 +80,29 @@ describe('collectIssues', () => {
 
     expect(issues).toHaveLength(0);
   });
+
+  it('tells users how to refresh expired GitHub CLI credentials', () => {
+    const issues = collectIssues({
+      claude: {
+        isInstalled: true,
+      },
+      codex: {
+        isInstalled: true,
+        isAuthenticated: true,
+      },
+      github: {
+        isInstalled: true,
+        isAuthenticated: false,
+      },
+    });
+
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        title: 'GitHub CLI not authenticated',
+        description: expect.stringContaining('gh auth refresh -h github.com'),
+      })
+    );
+  });
 });
 
 describe('CLI health warning dismissal storage', () => {

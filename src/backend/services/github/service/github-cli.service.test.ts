@@ -35,6 +35,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 // Import after mocks are set up
 import { execFile } from 'node:child_process';
 import { deriveCiStatusFromCheckRollup } from '@/shared/core';
+import { classifyError } from './github-cli/errors';
 import { githubCLIService } from './github-cli.service';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
@@ -382,6 +383,18 @@ describe('GitHubCLIService', () => {
         error: 'GitHub CLI (gh) is not installed. Install from https://cli.github.com/',
         errorType: 'cli_not_installed',
       });
+    });
+  });
+
+  describe('classifyError', () => {
+    it('classifies bad credentials and auth refresh hints as auth_required', () => {
+      expect(
+        classifyError(
+          new Error(
+            'HTTP 401: Bad credentials (https://api.github.com/graphql)\nTry authenticating with:  gh auth refresh -h github.com'
+          )
+        )
+      ).toBe('auth_required');
     });
   });
 
