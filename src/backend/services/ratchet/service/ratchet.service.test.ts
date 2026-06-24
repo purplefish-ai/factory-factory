@@ -70,6 +70,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   computeCIStatus: vi.fn(),
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
+  isRecentlyFetched: vi.fn(),
   startFetch: vi.fn(),
   registerFetch: vi.fn(),
   cancelFetch: vi.fn(),
@@ -1289,6 +1290,34 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         action: { type: 'ERROR', error: 'Failed to fetch PR state' },
         newState: RatchetState.IDLE,
       });
+    });
+
+    it('returns WAITING action when fetchPRState skips a recent fetch', async () => {
+      const workspace = {
+        id: 'ws-recent-fetch',
+        prUrl: 'https://github.com/example/repo/pull/99',
+        prNumber: 99,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue({ skipped: true, reason: 'recently_fetched' });
+
+      const result = await unsafeCoerce<{
+        processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(result).toMatchObject({
+        action: { type: 'WAITING', reason: 'recently_fetched' },
+        newState: RatchetState.IDLE,
+      });
+      expect(workspaceAccessor.update).not.toHaveBeenCalled();
     });
 
     it('returns WAITING when shutting down', async () => {

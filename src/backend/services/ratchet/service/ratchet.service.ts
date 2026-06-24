@@ -7,6 +7,7 @@ import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import type {
+  PRStateFetchResult,
   PRStateInfo,
   RatchetAction,
   RatchetCheckResult,
@@ -34,6 +35,7 @@ import {
   fetchPRState as fetchPRStateHelper,
   getAuthenticatedUsernameCached as getAuthenticatedUsernameCachedHelper,
   hasNewReviewActivitySinceLastDispatch as hasNewReviewActivitySinceLastDispatchHelper,
+  isPRStateFetchSkipped,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
 import { handleReviewCommentPoll as handleReviewCommentPollHelper } from './ratchet-review-poll.helpers';
@@ -357,8 +359,25 @@ class RatchetService extends EventEmitter {
 
     try {
       const authenticatedUsername = await this.getAuthenticatedUsernameCached();
-      const prStateInfo = await this.fetchPRState(workspace, authenticatedUsername);
-      if (!prStateInfo) {
+      const prStateResult = await this.fetchPRState(workspace, authenticatedUsername);
+      if (isPRStateFetchSkipped(prStateResult)) {
+        const action: RatchetAction = { type: 'WAITING', reason: prStateResult.reason };
+        this.logWorkspaceRatchetingDecision(
+          workspace,
+          workspace.ratchetState,
+          workspace.ratchetState,
+          action,
+          null
+        );
+        return {
+          workspaceId: workspace.id,
+          previousState: workspace.ratchetState,
+          newState: workspace.ratchetState,
+          action,
+        };
+      }
+
+      if (!prStateResult) {
         const action: RatchetAction = { type: 'ERROR', error: 'Failed to fetch PR state' };
         this.logWorkspaceRatchetingDecision(
           workspace,
@@ -375,6 +394,7 @@ class RatchetService extends EventEmitter {
         };
       }
 
+      const prStateInfo = prStateResult;
       const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
       const decision = this.decideRatchetAction(decisionContext);
 
@@ -736,7 +756,7 @@ class RatchetService extends EventEmitter {
       reviewPollTrackers: this.reviewPollTrackers,
       isShuttingDown: this.isShuttingDown,
       fetchPRState: (workspaceArg, authenticatedUsernameArg) =>
-        this.fetchPRState(workspaceArg, authenticatedUsernameArg),
+        this.fetchPRStateForReviewPoll(workspaceArg, authenticatedUsernameArg),
       shouldSkipCleanPR: (workspaceArg, prStateInfoArg) =>
         this.shouldSkipCleanPR(workspaceArg, prStateInfoArg),
       logger,
@@ -800,7 +820,7 @@ class RatchetService extends EventEmitter {
   private async fetchPRState(
     workspace: WorkspaceWithPR,
     authenticatedUsername: string | null
-  ): Promise<PRStateInfo | null> {
+  ): Promise<PRStateFetchResult> {
     const result = await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
@@ -825,6 +845,14 @@ class RatchetService extends EventEmitter {
         ),
     });
     return result;
+  }
+
+  private async fetchPRStateForReviewPoll(
+    workspace: WorkspaceWithPR,
+    authenticatedUsername: string | null
+  ): Promise<PRStateInfo | null> {
+    const result = await this.fetchPRState(workspace, authenticatedUsername);
+    return isPRStateFetchSkipped(result) ? null : result;
   }
 
   private computeDispatchSnapshotKey(

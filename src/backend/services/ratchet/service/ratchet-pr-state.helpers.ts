@@ -8,6 +8,8 @@ import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
 import type {
+  PRStateFetchResult,
+  PRStateFetchSkipped,
   PRStateInfo,
   RatchetDecisionContext,
   RatchetStatusCheckRollupItem,
@@ -29,6 +31,10 @@ const FAILURE_CONCLUSIONS = new Set([
   'ACTION_REQUIRED',
   'STARTUP_FAILURE',
 ]);
+
+export function isPRStateFetchSkipped(result: PRStateFetchResult): result is PRStateFetchSkipped {
+  return result !== null && 'skipped' in result && result.skipped === true;
+}
 
 export function determineRatchetState(pr: PRStateInfo): RatchetState {
   if (pr.prState === 'MERGED') {
@@ -384,7 +390,7 @@ export async function fetchPRState(params: {
     statusChecks: RatchetStatusCheckRollupItem[] | null,
     hasMergeConflict?: boolean
   ) => string;
-}): Promise<PRStateInfo | null> {
+}): Promise<PRStateFetchResult> {
   const {
     workspace,
     authenticatedUsername,
@@ -398,6 +404,14 @@ export async function fetchPRState(params: {
   const prContext = resolveRatchetPrContext(workspace, github, logger);
   if (!prContext) {
     return null;
+  }
+
+  if (github.isRecentlyFetched(workspace.id)) {
+    logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
+      workspaceId: workspace.id,
+      prUrl: workspace.prUrl,
+    });
+    return { skipped: true, reason: 'recently_fetched' };
   }
 
   try {

@@ -109,6 +109,8 @@ export interface RatchetGitHubBridge {
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
   getAuthenticatedUsername(): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
+  /** True when another service has an in-flight or recent PR fetch for this workspace. */
+  isRecentlyFetched(workspaceId: string): boolean;
   /** Claim this workspace as in-flight before starting an async fetch (dedup optimization). */
   startFetch(workspaceId: string): void;
   /** Record that a PR fetch completed successfully for this workspace (dedup optimization). */

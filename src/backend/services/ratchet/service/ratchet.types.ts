@@ -29,6 +29,13 @@ export interface PRStateInfo {
   }>;
 }
 
+export interface PRStateFetchSkipped {
+  skipped: true;
+  reason: 'recently_fetched';
+}
+
+export type PRStateFetchResult = PRStateInfo | PRStateFetchSkipped | null;
+
 export interface ReviewPollTracker {
   snapshotKey: string;
   lastPolledAt: number;

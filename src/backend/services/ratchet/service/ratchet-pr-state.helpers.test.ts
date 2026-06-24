@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState } from '@/shared/core';
+import type { RatchetGitHubBridge } from './bridges';
 import type { PRStateInfo } from './ratchet.types';
 import {
   buildFailedCheckDiagnostics,
@@ -7,6 +9,7 @@ import {
   computeCiSnapshotKey,
   computeDispatchSnapshotKey,
   determineRatchetState,
+  fetchPRState,
   shouldSkipCleanPR,
 } from './ratchet-pr-state.helpers';
 
@@ -126,6 +129,66 @@ describe('shouldSkipCleanPR', () => {
   it('does not skip when changes are requested', () => {
     const prState = makePRState({ hasChangesRequested: true });
     expect(shouldSkipCleanPR(makeWorkspace(), prState, logger)).toBe(false);
+  });
+});
+
+describe('fetchPRState', () => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } as never;
+
+  const backoff = {
+    handleError: vi.fn(),
+  } as unknown as RateLimitBackoff;
+
+  function makeWorkspace() {
+    return {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/123',
+      prNumber: 123,
+      prReviewLastCheckedAt: null,
+    } as never;
+  }
+
+  function makeGitHub(overrides: Partial<RatchetGitHubBridge> = {}): RatchetGitHubBridge {
+    return {
+      extractPRInfo: vi.fn(() => ({ owner: 'example', repo: 'repo', number: 123 })),
+      getPRFullDetails: vi.fn(),
+      getReviewComments: vi.fn(),
+      computeCIStatus: vi.fn(),
+      getAuthenticatedUsername: vi.fn(),
+      fetchAndComputePRState: vi.fn(),
+      isRecentlyFetched: vi.fn(() => false),
+      startFetch: vi.fn(),
+      registerFetch: vi.fn(),
+      cancelFetch: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('skips GitHub API calls when the workspace was recently fetched', async () => {
+    const github = makeGitHub({
+      isRecentlyFetched: vi.fn(() => true),
+    });
+
+    const result = await fetchPRState({
+      workspace: makeWorkspace(),
+      authenticatedUsername: null,
+      github,
+      backoff,
+      logger,
+    });
+
+    expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
+    expect(github.isRecentlyFetched).toHaveBeenCalledWith('ws-1');
+    expect(github.startFetch).not.toHaveBeenCalled();
+    expect(github.getPRFullDetails).not.toHaveBeenCalled();
+    expect(github.getReviewComments).not.toHaveBeenCalled();
+    expect(github.registerFetch).not.toHaveBeenCalled();
+    expect(github.cancelFetch).not.toHaveBeenCalled();
   });
 });
 
