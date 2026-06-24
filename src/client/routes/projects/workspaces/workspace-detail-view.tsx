@@ -62,6 +62,7 @@ interface ArchiveDialogProps {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   hasUncommitted: boolean;
+  activeChildCount: number;
   onConfirm: (commitUncommitted: boolean) => void;
 }
 
@@ -227,6 +228,7 @@ export function WorkspaceDetailView({
         open={archiveDialog.open}
         onOpenChange={archiveDialog.setOpen}
         hasUncommitted={archiveDialog.hasUncommitted}
+        activeChildCount={archiveDialog.activeChildCount}
         onConfirm={archiveDialog.onConfirm}
       />
     </div>
