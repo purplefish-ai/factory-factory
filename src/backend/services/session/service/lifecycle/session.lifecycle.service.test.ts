@@ -290,6 +290,92 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
+
+  it('does not requeue an already-committed pending notification when delivery retry fails', async () => {
+    const createdAt = new Date('2026-06-22T10:30:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt,
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockRejectedValue(
+      new Error('database unavailable')
+    );
+    const { service, sessionDomainService } = createLifecycleService({
+      transcript: [
+        {
+          id: 'workspace-notification-notif-parent',
+          source: 'user',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+          timestamp: createdAt.toISOString(),
+          order: 1,
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(0);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+  });
+
+  it('does not treat UI-only workspace update cards as delivered user messages', async () => {
+    const createdAt = new Date('2026-06-22T10:30:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt,
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    const { service, sessionDomainService } = createLifecycleService({
+      transcript: [
+        {
+          id: 'session-1-1',
+          source: 'agent',
+          message: {
+            type: 'parent_workspace_update',
+            parentWorkspaceId: 'parent-workspace',
+            parentWorkspaceName: 'Parent Workspace',
+            parentProjectName: 'Parent Project',
+            text: 'Please check the failing test.',
+            timestamp: createdAt.toISOString(),
+          },
+          timestamp: createdAt.toISOString(),
+          order: 1,
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(1);
+    expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        id: 'workspace-notification-notif-parent',
+      })
+    );
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
 });
 
 function createStartableLifecycleService(options?: {
