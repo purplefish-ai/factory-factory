@@ -54,6 +54,10 @@ type SessionContext = {
   parentWorkspaceId?: string | null;
 };
 
+type PendingWorkspaceNotification = Awaited<
+  ReturnType<typeof workspaceNotificationAccessor.findPending>
+>[number];
+
 type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
   model?: string;
@@ -961,6 +965,10 @@ export class SessionLifecycleService {
         if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
           continue;
         }
+        if (this.hasWorkspaceNotificationTranscriptMessage(sessionId, notification, timestamp)) {
+          await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notification.id);
+          continue;
+        }
 
         let enqueueText: string;
         let claudeMessage: AgentMessage;
@@ -1027,6 +1035,46 @@ export class SessionLifecycleService {
         error: error instanceof Error ? error.message : String(error),
       });
       return 0;
+    }
+  }
+
+  private hasWorkspaceNotificationTranscriptMessage(
+    sessionId: string,
+    notification: PendingWorkspaceNotification,
+    timestamp: string
+  ): boolean {
+    return this.sessionDomainService.getTranscriptSnapshot(sessionId).some((entry) => {
+      const message = entry.message;
+      if (!message || message.timestamp !== timestamp || message.text !== notification.message) {
+        return false;
+      }
+      if (notification.direction === 'PARENT_TO_CHILD') {
+        return (
+          message.type === 'parent_workspace_update' &&
+          message.parentWorkspaceId === notification.sourceWorkspaceId
+        );
+      }
+      return (
+        message.type === 'child_workspace_update' &&
+        message.childWorkspaceId === notification.sourceWorkspaceId
+      );
+    });
+  }
+
+  private async markDeliveredAfterTranscriptMatch(
+    sessionId: string,
+    workspaceId: string,
+    notificationId: string
+  ): Promise<void> {
+    try {
+      await workspaceNotificationAccessor.markDelivered([notificationId]);
+    } catch (error) {
+      logger.warn('Failed to mark already-transcripted workspace notification delivered', {
+        sessionId,
+        workspaceId,
+        notificationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

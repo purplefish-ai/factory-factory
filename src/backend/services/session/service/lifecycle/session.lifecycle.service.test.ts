@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationAccessor } from '@/backend/services/workspace';
+import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionLifecycleService } from './session.lifecycle.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -31,6 +32,7 @@ vi.mock('@/backend/services/settings', () => ({
 
 function createLifecycleService(options?: {
   enqueue?: SessionDomainService['enqueue'];
+  transcript?: ChatMessage[];
   tryDispatchNextMessage?: (sessionId: string) => Promise<void>;
 }) {
   const sessionDomainService = {
@@ -40,6 +42,7 @@ function createLifecycleService(options?: {
     enqueue:
       options?.enqueue ??
       vi.fn((_sessionId: string, _message: unknown) => ({ position: 0 }) as const),
+    getTranscriptSnapshot: vi.fn(() => options?.transcript ?? []),
   };
   const tryDispatchNextMessage = options?.tryDispatchNextMessage ?? vi.fn(async () => undefined);
 
@@ -248,6 +251,51 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
+
+  it('marks an already-transcripted pending notification delivered without requeueing it', async () => {
+    const createdAt = new Date('2026-06-22T10:30:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt,
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
+      transcript: [
+        {
+          id: 'session-1-1',
+          source: 'agent',
+          timestamp: createdAt.toISOString(),
+          order: 1,
+          message: {
+            type: 'parent_workspace_update',
+            parentWorkspaceId: 'parent-workspace',
+            parentWorkspaceName: 'Parent Workspace',
+            parentProjectName: 'Parent Project',
+            text: 'Please check the failing test.',
+            timestamp: createdAt.toISOString(),
+          },
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(0);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 });
 
