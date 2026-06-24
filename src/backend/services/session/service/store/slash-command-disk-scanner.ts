@@ -17,11 +17,15 @@ function parseCommandDescription(filePath: string): string {
   }
 }
 
+function isRealPathContainedInRoot(rootReal: string, targetReal: string): boolean {
+  const rel = relative(rootReal, targetReal);
+  return !(rel.startsWith('..') || isAbsolute(rel));
+}
+
 function isContainedInRoot(rootReal: string, filePath: string): boolean {
   try {
     const fileReal = realpathSync(filePath);
-    const rel = relative(rootReal, fileReal);
-    return !(rel.startsWith('..') || isAbsolute(rel));
+    return isRealPathContainedInRoot(rootReal, fileReal);
   } catch {
     return false;
   }
@@ -33,11 +37,25 @@ export function commandNameKey(name: string): string {
   return colonIndex >= 0 ? normalized.slice(colonIndex + 1) : normalized;
 }
 
-function scanCommandsFromDir(dir: string, seen: Set<string>): CommandInfo[] {
+export function isWorkspaceScopedCommandName(name: string): boolean {
+  const normalized = name.trim().replace(/^\/+/, '');
+  const colonIndex = normalized.lastIndexOf(':');
+  if (colonIndex < 0) {
+    return false;
+  }
+  const scope = normalized.slice(0, colonIndex);
+  return scope === 'project' || scope === 'workspace';
+}
+
+function scanCommandsFromDir(dir: string, seen: Set<string>, containmentRoot = dir): CommandInfo[] {
   let files: string[];
   let rootReal: string;
   try {
-    rootReal = realpathSync(dir);
+    rootReal = realpathSync(containmentRoot);
+    const dirReal = realpathSync(dir);
+    if (!isRealPathContainedInRoot(rootReal, dirReal)) {
+      return [];
+    }
     files = readdirSync(dir).filter((file) => file.endsWith('.md'));
   } catch {
     return [];
@@ -71,7 +89,7 @@ export function scanClaudeWorkspaceCommandsFromDisk(
   if (!worktreePath) {
     return [];
   }
-  return scanCommandsFromDir(join(worktreePath, '.claude', 'commands'), seen);
+  return scanCommandsFromDir(join(worktreePath, '.claude', 'commands'), seen, worktreePath);
 }
 
 export function scanClaudeWorkspaceCommandNames(worktreePath: string | null): Set<string> {

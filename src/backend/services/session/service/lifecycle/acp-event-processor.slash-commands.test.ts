@@ -113,17 +113,23 @@ describe('AcpEventProcessor slash command caching', () => {
       type: 'slash_commands',
       slashCommands: [
         { name: '/global-only', description: 'Global only' },
+        { name: '/workspace-only', description: 'Global name collision' },
+        { name: '/user:workspace-only', description: 'User name collision' },
         { name: '/project:workspace-only', description: 'Workspace only' },
       ],
     });
 
     expect(mocks.setCachedCommands).toHaveBeenCalledWith('CLAUDE', [
       { name: '/global-only', description: 'Global only' },
+      { name: '/workspace-only', description: 'Global name collision' },
+      { name: '/user:workspace-only', description: 'User name collision' },
     ]);
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
       type: 'slash_commands',
       slashCommands: [
         { name: '/global-only', description: 'Global only' },
+        { name: '/workspace-only', description: 'Global name collision' },
+        { name: '/user:workspace-only', description: 'User name collision' },
         { name: '/project:workspace-only', description: 'Workspace only' },
       ],
     });

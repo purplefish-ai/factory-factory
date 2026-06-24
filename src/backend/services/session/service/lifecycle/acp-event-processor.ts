@@ -14,6 +14,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/se
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import {
   commandNameKey,
+  isWorkspaceScopedCommandName,
   scanClaudeWorkspaceCommandNames,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
@@ -349,7 +350,13 @@ export class AcpEventProcessor {
       return commands;
     }
 
-    return commands.filter((command) => !workspaceCommandNames.has(commandNameKey(command.name)));
+    return commands.filter(
+      (command) =>
+        !(
+          isWorkspaceScopedCommandName(command.name) &&
+          workspaceCommandNames.has(commandNameKey(command.name))
+        )
+    );
   }
 
   /**
