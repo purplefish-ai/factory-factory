@@ -146,18 +146,17 @@ export class SessionLifecycleService {
 
     const startupModePreset = options?.startupModePreset;
 
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      sessionId,
-      {},
-      session
-    );
+    const { handle, resolvedPreset, pendingNotificationCount } =
+      await this.getOrCreateAcpSessionClient(sessionId, {}, session);
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
     await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+    await this.dispatchQueuedNotificationsIfNeeded(sessionId, pendingNotificationCount);
 
+    const hasExplicitInitialPrompt = typeof options?.initialPrompt === 'string';
     const initialPrompt =
-      typeof options?.initialPrompt === 'string'
-        ? options.initialPrompt
-        : 'Continue with the task.';
+      hasExplicitInitialPrompt || pendingNotificationCount === 0
+        ? (options?.initialPrompt ?? 'Continue with the task.')
+        : '';
     if (initialPrompt) {
       await sendSessionMessage(sessionId, initialPrompt);
     }
@@ -294,13 +293,11 @@ export class SessionLifecycleService {
     }
 
     const hadClient = !!this.runtimeManager.getClient(sessionId);
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      sessionId,
-      options ?? {},
-      session
-    );
+    const { handle, resolvedPreset, pendingNotificationCount } =
+      await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
     if (!hadClient) {
       await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+      await this.dispatchQueuedNotificationsIfNeeded(sessionId, pendingNotificationCount);
     }
 
     return handle;
@@ -311,13 +308,11 @@ export class SessionLifecycleService {
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
     const hadClient = !!this.runtimeManager.getClient(session.id);
-    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
-      session.id,
-      options ?? {},
-      session
-    );
+    const { handle, resolvedPreset, pendingNotificationCount } =
+      await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
     if (!hadClient) {
       await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
+      await this.dispatchQueuedNotificationsIfNeeded(session.id, pendingNotificationCount);
     }
 
     return handle;
@@ -486,7 +481,7 @@ export class SessionLifecycleService {
     },
     session?: AgentSessionRecord,
     permissionPreset?: PermissionPreset
-  ): Promise<AcpProcessHandle> {
+  ): Promise<{ handle: AcpProcessHandle; pendingNotificationCount: number }> {
     const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
       throw new Error(`Session context not ready: ${sessionId}`);
@@ -555,12 +550,14 @@ export class SessionLifecycleService {
       capabilities: this.buildAcpChatBarCapabilities(handle),
     });
 
-    // Deliver any queued notifications (from child or parent workspaces) now that the
-    // session has started successfully. Doing this after startup ensures notifications
-    // are not marked as delivered if the session fails to start.
-    await this.deliverPendingChildNotifications(sessionId, sessionContext.workspaceId);
+    // Queue pending notifications only after the ACP client starts successfully.
+    // Callers decide when dispatch is safe for their startup flow.
+    const pendingNotificationCount = await this.deliverPendingChildNotifications(
+      sessionId,
+      sessionContext.workspaceId
+    );
 
-    return handle;
+    return { handle, pendingNotificationCount };
   }
 
   private shouldSuppressReplayDuringAcpResume(
@@ -781,7 +778,11 @@ export class SessionLifecycleService {
       model?: string;
     },
     session: AgentSessionRecord
-  ): Promise<{ handle: AcpProcessHandle; resolvedPreset?: PermissionPreset }> {
+  ): Promise<{
+    handle: AcpProcessHandle;
+    resolvedPreset?: PermissionPreset;
+    pendingNotificationCount: number;
+  }> {
     const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -790,7 +791,7 @@ export class SessionLifecycleService {
         activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
-      return { handle: existingAcp };
+      return { handle: existingAcp, pendingNotificationCount: 0 };
     }
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -803,8 +804,11 @@ export class SessionLifecycleService {
     const resolvedPreset = await this.resolvePermissionPreset(session);
 
     let handle: AcpProcessHandle;
+    let pendingNotificationCount = 0;
     try {
-      handle = await this.createAcpClient(sessionId, options, session, resolvedPreset);
+      const created = await this.createAcpClient(sessionId, options, session, resolvedPreset);
+      handle = created.handle;
+      pendingNotificationCount = created.pendingNotificationCount;
     } catch (error) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -827,7 +831,17 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
-    return { handle, resolvedPreset };
+    return { handle, resolvedPreset, pendingNotificationCount };
+  }
+
+  private async dispatchQueuedNotificationsIfNeeded(
+    sessionId: string,
+    pendingNotificationCount: number
+  ): Promise<void> {
+    if (pendingNotificationCount === 0 || !this.messageQueueBridge) {
+      return;
+    }
+    await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
   }
 
   private async persistAcpConfigSnapshot(
@@ -923,11 +937,11 @@ export class SessionLifecycleService {
   private async deliverPendingChildNotifications(
     sessionId: string,
     workspaceId: string
-  ): Promise<void> {
+  ): Promise<number> {
     try {
       const pending = await workspaceNotificationAccessor.findPending(workspaceId);
       if (pending.length === 0) {
-        return;
+        return 0;
       }
       if (!this.messageQueueBridge) {
         logger.warn(
@@ -938,10 +952,9 @@ export class SessionLifecycleService {
             count: pending.length,
           }
         );
-        return;
+        return 0;
       }
       let enqueuedCount = 0;
-      const queueWasEmpty = this.sessionDomainService.getQueueLength(sessionId) === 0;
       for (const notification of pending) {
         const timestamp = notification.createdAt.toISOString();
         const messageId = `workspace-notification-${notification.id}`;
@@ -1001,20 +1014,19 @@ export class SessionLifecycleService {
           order,
         } as SessionDeltaEvent & { order: number });
       }
-      if (enqueuedCount > 0 && queueWasEmpty) {
-        await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
-      }
       logger.info('Queued pending workspace notifications', {
         sessionId,
         workspaceId,
         count: enqueuedCount,
       });
+      return enqueuedCount;
     } catch (error) {
       logger.warn('Failed to deliver pending workspace notifications', {
         sessionId,
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
       });
+      return 0;
     }
   }
 
