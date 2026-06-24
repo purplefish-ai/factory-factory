@@ -407,11 +407,7 @@ export async function fetchPRState(params: {
 
     const [prDetails, reviewComments] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber),
-      github.getReviewComments(
-        prContext.repo,
-        prContext.prNumber,
-        workspace.prReviewLastCheckedAt ?? undefined
-      ),
+      github.getReviewComments(prContext.repo, prContext.prNumber),
     ]);
 
     const statusCheckRollup =
