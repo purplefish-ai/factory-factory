@@ -56,7 +56,8 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   } else if (!health.github.isAuthenticated) {
     issues.push({
       title: 'GitHub CLI not authenticated',
-      description: 'Run "gh auth login" in your terminal to authenticate with GitHub.',
+      description:
+        'Run "gh auth refresh -h github.com" or "gh auth login" in your terminal to authenticate with GitHub.',
     });
   }
 

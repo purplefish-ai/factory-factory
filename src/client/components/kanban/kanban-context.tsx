@@ -1,5 +1,17 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
+import {
+  shouldSyncGitHubCLIHealthFromIssuesResponse,
+  syncGitHubCLIHealth,
+} from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -127,6 +139,20 @@ export function KanbanProvider({
     { projectId },
     { refetchInterval: 60_000, staleTime: 30_000, enabled: !isLinear }
   );
+
+  useEffect(() => {
+    if (!githubIssuesData?.health) {
+      return;
+    }
+
+    if (
+      !shouldSyncGitHubCLIHealthFromIssuesResponse(githubIssuesData.health, githubIssuesData.error)
+    ) {
+      return;
+    }
+
+    syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubIssuesData.health);
+  }, [githubIssuesData?.error, githubIssuesData?.health, utils.admin.checkCLIHealth]);
 
   // Linear issues — enabled only when provider is Linear
   const {

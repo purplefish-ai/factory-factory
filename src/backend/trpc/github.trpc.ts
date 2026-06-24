@@ -5,10 +5,27 @@
  */
 
 import { z } from 'zod';
-import { githubCLIService } from '@/backend/services/github';
+import {
+  classifyGitHubCLIError,
+  type GitHubCLIHealthStatus,
+  githubCLIService,
+} from '@/backend/services/github';
 import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
+
+const GITHUB_AUTH_REQUIRED_MESSAGE =
+  'GitHub CLI authentication failed. Run `gh auth refresh -h github.com` or `gh auth login` to authenticate.';
+
+function buildAuthRequiredHealth(health: GitHubCLIHealthStatus): GitHubCLIHealthStatus {
+  return {
+    ...health,
+    isInstalled: true,
+    isAuthenticated: false,
+    error: GITHUB_AUTH_REQUIRED_MESSAGE,
+    errorType: 'auth_required',
+  };
+}
 
 export const githubRouter = router({
   /**
@@ -70,6 +87,15 @@ export const githubRouter = router({
         const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {});
         return { issues, health, error: null, authenticatedUser };
       } catch (err) {
+        if (classifyGitHubCLIError(err) === 'auth_required') {
+          return {
+            issues: [],
+            health: buildAuthRequiredHealth(health),
+            error: GITHUB_AUTH_REQUIRED_MESSAGE,
+            authenticatedUser,
+          };
+        }
+
         return {
           issues: [],
           health,
@@ -126,6 +152,14 @@ export const githubRouter = router({
           error: null,
         };
       } catch (err) {
+        if (classifyGitHubCLIError(err) === 'auth_required') {
+          return {
+            issues: [],
+            health: buildAuthRequiredHealth(health),
+            error: GITHUB_AUTH_REQUIRED_MESSAGE,
+          };
+        }
+
         return {
           issues: [],
           health,

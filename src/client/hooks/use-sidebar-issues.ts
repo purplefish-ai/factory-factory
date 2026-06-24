@@ -1,5 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
+import {
+  shouldSyncGitHubCLIHealthFromIssuesResponse,
+  syncGitHubCLIHealth,
+} from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -17,6 +21,7 @@ export function useSidebarIssues(
   serverWorkspaces: ServerWorkspace[] | undefined
 ): { issues: NormalizedIssue[] | undefined; isLoading: boolean } {
   const isLinear = issueProvider === 'LINEAR';
+  const utils = trpc.useUtils();
 
   const { data: githubData, isLoading: isLoadingGithub } =
     trpc.github.listIssuesForProject.useQuery(
@@ -31,6 +36,18 @@ export function useSidebarIssues(
     );
 
   const isLoading = isLinear ? isLoadingLinear : isLoadingGithub;
+
+  useEffect(() => {
+    if (!githubData?.health) {
+      return;
+    }
+
+    if (!shouldSyncGitHubCLIHealthFromIssuesResponse(githubData.health, githubData.error)) {
+      return;
+    }
+
+    syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubData.health);
+  }, [githubData?.error, githubData?.health, utils.admin.checkCLIHealth]);
 
   const normalizedIssues = useMemo(() => {
     if (isLinear) {
