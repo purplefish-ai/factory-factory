@@ -4,7 +4,8 @@ import type { AppContext } from '@/backend/app-context';
 /**
  * CORS middleware.
  * Configures Cross-Origin Resource Sharing based on CORS_ALLOWED_ORIGINS env var.
- * Defaults to localhost:3000 and localhost:3001 if not specified.
+ * The CLI sets this automatically to the frontend origin; fallback defaults are
+ * only used when running outside the CLI (e.g., Docker, custom deployments).
  * Handles OPTIONS preflight requests.
  */
 export function createCorsMiddleware(appContext: AppContext) {
