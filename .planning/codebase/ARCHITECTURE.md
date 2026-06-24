@@ -90,7 +90,7 @@
 **Orchestration Layer:**
 - Purpose: Coordinate cross-domain workflows while preserving service boundaries.
 - Location: `src/backend/orchestration/`
-- Contains: domain bridge configuration, workspace initialization/archive, event collection, snapshot reconciliation, schedulers, health helpers.
+- Contains: domain bridge configuration, workspace initialization/archive, child workspace coordination, event collection, snapshot reconciliation, schedulers, health helpers.
 - Depends on: service barrels and shared pure helpers.
 - Used by: `src/backend/server.ts`, selected tRPC mutations such as workspace create/archive, startup tasks.
 

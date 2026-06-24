@@ -173,7 +173,7 @@ syncAllPRStatuses.mutate()  ──HTTP──►  server awaits DB query (~5ms)
 
 ## What Does Not Change
 
-- The ratchet poller continues to refresh PR statuses every ~60s regardless.
+- The ratchet poller continues to refresh PR statuses every ~2min regardless.
 - The `gitConcurrencyLimit(3)` and per-call 30s timeout are unchanged — the background work behaves identically, it just no longer blocks the HTTP response.
 - The WebSocket snapshot mechanism is unchanged; this fix relies entirely on existing infrastructure.
 - No changes to the tRPC schema; the return type shape changes from `{ synced, failed }` to `{ queued }` but callers don't consume the return value.
