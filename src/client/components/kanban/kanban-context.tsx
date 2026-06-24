@@ -8,7 +8,10 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { syncGitHubCLIHealth } from '@/client/lib/cli-health-cache';
+import {
+  shouldSyncGitHubCLIHealthFromIssuesResponse,
+  syncGitHubCLIHealth,
+} from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -142,8 +145,14 @@ export function KanbanProvider({
       return;
     }
 
+    if (
+      !shouldSyncGitHubCLIHealthFromIssuesResponse(githubIssuesData.health, githubIssuesData.error)
+    ) {
+      return;
+    }
+
     syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubIssuesData.health);
-  }, [githubIssuesData?.health, utils.admin.checkCLIHealth]);
+  }, [githubIssuesData?.error, githubIssuesData?.health, utils.admin.checkCLIHealth]);
 
   // Linear issues — enabled only when provider is Linear
   const {

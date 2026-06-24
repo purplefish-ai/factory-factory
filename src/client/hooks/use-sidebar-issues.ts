@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
-import { syncGitHubCLIHealth } from '@/client/lib/cli-health-cache';
+import {
+  shouldSyncGitHubCLIHealthFromIssuesResponse,
+  syncGitHubCLIHealth,
+} from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -39,8 +42,12 @@ export function useSidebarIssues(
       return;
     }
 
+    if (!shouldSyncGitHubCLIHealthFromIssuesResponse(githubData.health, githubData.error)) {
+      return;
+    }
+
     syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubData.health);
-  }, [githubData?.health, utils.admin.checkCLIHealth]);
+  }, [githubData?.error, githubData?.health, utils.admin.checkCLIHealth]);
 
   const normalizedIssues = useMemo(() => {
     if (isLinear) {

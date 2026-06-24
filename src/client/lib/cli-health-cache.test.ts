@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncGitHubCLIHealth } from './cli-health-cache';
+import {
+  shouldSyncGitHubCLIHealthFromIssuesResponse,
+  syncGitHubCLIHealth,
+} from './cli-health-cache';
 
 type CheckCLIHealthUtils = Parameters<typeof syncGitHubCLIHealth>[0];
 type CLIHealth = Awaited<ReturnType<CheckCLIHealthUtils['fetch']>>;
@@ -94,5 +97,28 @@ describe('syncGitHubCLIHealth', () => {
       github: unauthenticatedGitHubHealth,
       allHealthy: false,
     });
+  });
+});
+
+describe('shouldSyncGitHubCLIHealthFromIssuesResponse', () => {
+  it('syncs explicit unauthenticated health even when the issues response has an error', () => {
+    expect(
+      shouldSyncGitHubCLIHealthFromIssuesResponse(
+        unauthenticatedGitHubHealth,
+        'GitHub CLI authentication failed'
+      )
+    ).toBe(true);
+  });
+
+  it('syncs authenticated health only after issues fetch successfully', () => {
+    const authenticatedHealth: GitHubHealth = {
+      isInstalled: true,
+      isAuthenticated: true,
+    };
+
+    expect(shouldSyncGitHubCLIHealthFromIssuesResponse(authenticatedHealth, null)).toBe(true);
+    expect(
+      shouldSyncGitHubCLIHealthFromIssuesResponse(authenticatedHealth, 'Failed to fetch issues')
+    ).toBe(false);
   });
 });

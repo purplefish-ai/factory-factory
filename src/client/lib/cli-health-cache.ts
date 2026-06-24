@@ -14,6 +14,13 @@ interface CheckCLIHealthUtils {
   invalidate: () => Promise<unknown>;
 }
 
+export function shouldSyncGitHubCLIHealthFromIssuesResponse(
+  github: GitHubCLIHealthStatus,
+  error: string | null | undefined
+) {
+  return github.isAuthenticated === false || error === null;
+}
+
 function getAllHealthy(health: CLIHealthStatus) {
   return (
     health.claude.isInstalled &&
