@@ -19,7 +19,7 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
-import type { QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import {
@@ -944,8 +944,9 @@ export class SessionLifecycleService {
       for (const notification of pending) {
         const timestamp = notification.createdAt.toISOString();
         let enqueueText: string;
+        let claudeMessage: AgentMessage;
         if (notification.direction === 'PARENT_TO_CHILD') {
-          const claudeMessage = {
+          claudeMessage = {
             type: 'parent_workspace_update' as const,
             parentWorkspaceId: notification.sourceWorkspaceId,
             parentWorkspaceName: notification.sourceWorkspaceName,
@@ -953,15 +954,9 @@ export class SessionLifecycleService {
             text: notification.message,
             timestamp,
           };
-          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
-          this.sessionDomainService.emitDelta(sessionId, {
-            type: 'agent_message',
-            data: claudeMessage,
-            order,
-          } as SessionDeltaEvent & { order: number });
           enqueueText = `[Message from parent workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         } else {
-          const claudeMessage = {
+          claudeMessage = {
             type: 'child_workspace_update' as const,
             childWorkspaceId: notification.sourceWorkspaceId,
             childWorkspaceName: notification.sourceWorkspaceName,
@@ -969,12 +964,6 @@ export class SessionLifecycleService {
             text: notification.message,
             timestamp,
           };
-          const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
-          this.sessionDomainService.emitDelta(sessionId, {
-            type: 'agent_message',
-            data: claudeMessage,
-            order,
-          } as SessionDeltaEvent & { order: number });
           enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
 
@@ -998,6 +987,12 @@ export class SessionLifecycleService {
           });
           continue;
         }
+        const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
+        this.sessionDomainService.emitDelta(sessionId, {
+          type: 'agent_message',
+          data: claudeMessage,
+          order,
+        } as SessionDeltaEvent & { order: number });
         await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
         ids.push(notification.id);
       }
@@ -1005,7 +1000,7 @@ export class SessionLifecycleService {
       logger.info('Delivered pending workspace notifications', {
         sessionId,
         workspaceId,
-        count: pending.length,
+        count: ids.length,
       });
     } catch (error) {
       logger.warn('Failed to deliver pending workspace notifications', {

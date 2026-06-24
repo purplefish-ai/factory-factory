@@ -174,12 +174,14 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: new Date('2026-06-22T10:30:00.000Z'),
       },
     ] as never);
-    const { service, tryDispatchNextMessage } = createLifecycleService({
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
       enqueue: vi.fn(() => ({ error: 'Queue full' })),
     });
 
     await deliverPendingChildNotifications(service);
 
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith([]);
   });
