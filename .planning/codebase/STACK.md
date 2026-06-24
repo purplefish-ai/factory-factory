@@ -101,6 +101,7 @@
 - `docker-compose.yml`: single-service production deployment, data volume, port binding, and Cloudflare mode env name
 - `electron-builder.yml`: Electron app metadata, bundled files/resources, native module unpacking, macOS/Windows/Linux targets
 - `.github/workflows/ci.yml`: CI checks, build, Storybook, tests, coverage report
+- `.github/workflows/codeql.yml`: CodeQL security scanning (merge_group trigger)
 - `.github/workflows/docker-publish.yml`: GHCR Docker image build/push
 - `.github/workflows/npm-publish.yml`: npm publishing workflow
 - `.github/workflows/electron-release.yml`: Electron artifact build/release workflow

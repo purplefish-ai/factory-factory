@@ -139,6 +139,7 @@
 **CI Pipeline:**
 - GitHub Actions
   - CI checks/build/storybook/test: `.github/workflows/ci.yml`
+  - CodeQL security scanning: `.github/workflows/codeql.yml`
   - Docker image publishing: `.github/workflows/docker-publish.yml`
   - npm publishing: `.github/workflows/npm-publish.yml`
   - Electron artifact builds/releases: `.github/workflows/electron-release.yml`
