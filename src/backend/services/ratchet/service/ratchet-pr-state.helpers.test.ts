@@ -7,6 +7,7 @@ import {
   computeCiSnapshotKey,
   computeDispatchSnapshotKey,
   determineRatchetState,
+  fetchPRState,
   shouldSkipCleanPR,
 } from './ratchet-pr-state.helpers';
 
@@ -205,6 +206,70 @@ describe('computeCiSnapshotKey', () => {
     ]);
 
     expect(key).toBe('ci:FAILURE:ci:STARTUP_FAILURE:100');
+  });
+});
+
+describe('fetchPRState', () => {
+  it('fetches all inline review comments even after a prior review check', async () => {
+    const getReviewComments = vi.fn().mockResolvedValue([
+      {
+        author: { login: 'reviewer' },
+        body: 'Please handle this edge case.',
+        path: 'src/example.ts',
+        line: 42,
+        updatedAt: '2026-01-01T00:00:00Z',
+        url: 'https://github.com/example/repo/pull/123#discussion_r1',
+      },
+    ]);
+    const github = {
+      extractPRInfo: vi.fn().mockReturnValue({ owner: 'example', repo: 'repo', number: 123 }),
+      getPRFullDetails: vi.fn().mockResolvedValue({
+        state: 'OPEN',
+        number: 123,
+        url: 'https://github.com/example/repo/pull/123',
+        reviewDecision: 'CHANGES_REQUESTED',
+        mergeStateStatus: 'CLEAN',
+        reviews: [],
+        comments: [],
+        statusCheckRollup: null,
+      }),
+      getReviewComments,
+      computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
+      getAuthenticatedUsername: vi.fn(),
+      fetchAndComputePRState: vi.fn(),
+      startFetch: vi.fn(),
+      registerFetch: vi.fn(),
+      cancelFetch: vi.fn(),
+    };
+
+    const result = await fetchPRState({
+      workspace: {
+        id: 'ws-1',
+        prUrl: 'https://github.com/example/repo/pull/123',
+        prNumber: 123,
+        prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+      } as never,
+      authenticatedUsername: null,
+      github,
+      backoff: { handleError: vi.fn() } as never,
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as never,
+    });
+
+    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
+    expect(result?.reviewComments).toEqual([
+      {
+        author: 'reviewer',
+        body: 'Please handle this edge case.',
+        path: 'src/example.ts',
+        line: 42,
+        url: 'https://github.com/example/repo/pull/123#discussion_r1',
+      },
+    ]);
   });
 });
 
