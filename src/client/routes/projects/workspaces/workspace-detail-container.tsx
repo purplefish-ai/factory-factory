@@ -159,6 +159,7 @@ export function WorkspaceDetailContainer() {
     sessionIds
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
   const effectiveDefaultProvider = resolveEffectiveSessionProvider(
     workspace?.defaultSessionProvider,
     userSettings?.defaultSessionProvider
@@ -174,6 +175,12 @@ export function WorkspaceDetailContainer() {
     { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
+  const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
+  const { data: childWorkspaces } = trpc.workspace.listChildren.useQuery(
+    { parentWorkspaceId: workspaceId },
+    { enabled: !isDoneOrMergedWorkspace && archiveDialogOpen && isParentWorkspace }
+  );
+  const activeChildCount = childWorkspaces?.length ?? 0;
 
   const {
     messages,
@@ -304,8 +311,6 @@ export function WorkspaceDetailContainer() {
     },
     [archiveWorkspace, workspaceId]
   );
-  const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
-
   const handleArchiveRequest = useCallback(() => {
     // If workspace is done/merged, skip confirmation and archive immediately.
     // Default commitUncommitted to true so we never lose work if git status hasn't loaded yet.
@@ -494,6 +499,7 @@ export function WorkspaceDetailContainer() {
           open: archiveDialogOpen,
           setOpen: setArchiveDialogOpen,
           hasUncommitted: hasUncommitted && !isDoneOrMergedWorkspace,
+          activeChildCount,
           onConfirm: handleArchive,
         }}
       />
