@@ -12,6 +12,10 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
+import {
+  commandNameKey,
+  scanClaudeWorkspaceCommandNames,
+} from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionConfigService } from './session.config.service';
 import type { SessionPermissionService } from './session.permission.service';
@@ -210,13 +214,7 @@ export class AcpEventProcessor {
 
     if (delta.type !== 'agent_message') {
       if (delta.type === 'slash_commands') {
-        const commands = (delta as { slashCommands?: CommandInfo[] }).slashCommands;
-        const provider = this.sessionToProvider.get(sid);
-        if (provider && commands && commands.length > 0) {
-          slashCommandCacheService.setCachedCommands(provider, commands).catch((err: unknown) => {
-            logger.warn('Failed to cache slash commands', { error: err });
-          });
-        }
+        this.cacheSlashCommandsFromDelta(sid, delta);
       }
       this.sessionDomainService.emitDelta(sid, delta);
       return;
@@ -314,6 +312,44 @@ export class AcpEventProcessor {
       return;
     }
     this.sessionDomainService.injectCommittedUserMessage(sid, normalized);
+  }
+
+  private cacheSlashCommandsFromDelta(sid: string, delta: SessionDeltaEvent): void {
+    const commands = (delta as { slashCommands?: CommandInfo[] }).slashCommands;
+    const provider = this.sessionToProvider.get(sid);
+    if (!(provider && commands && commands.length > 0)) {
+      return;
+    }
+
+    const cacheableCommands = this.getCacheableSlashCommands(sid, provider, commands);
+    if (cacheableCommands.length === 0) {
+      return;
+    }
+
+    slashCommandCacheService
+      .setCachedCommands(provider, cacheableCommands)
+      .catch((err: unknown) => {
+        logger.warn('Failed to cache slash commands', { error: err });
+      });
+  }
+
+  private getCacheableSlashCommands(
+    sessionId: string,
+    provider: 'CLAUDE' | 'CODEX',
+    commands: CommandInfo[]
+  ): CommandInfo[] {
+    if (provider !== 'CLAUDE') {
+      return commands;
+    }
+
+    const workspaceCommandNames = scanClaudeWorkspaceCommandNames(
+      this.sessionToWorkingDir.get(sessionId) ?? null
+    );
+    if (workspaceCommandNames.size === 0) {
+      return commands;
+    }
+
+    return commands.filter((command) => !workspaceCommandNames.has(commandNameKey(command.name)));
   }
 
   /**

@@ -4,6 +4,7 @@ import { userSettingsAccessor } from '@/backend/services/settings';
 import type { CommandInfo } from '@/shared/acp-protocol';
 
 const logger = createLogger('slash-command-cache');
+const CACHE_PAYLOAD_VERSION = 2;
 
 function isCommandInfo(value: unknown): value is CommandInfo {
   if (!value || typeof value !== 'object') {
@@ -61,6 +62,19 @@ function toProviderCommandMap(value: unknown): CachedSlashCommandsByProvider | n
   return Object.keys(map).length > 0 ? map : null;
 }
 
+function toVersionedProviderCommandMap(value: unknown): CachedSlashCommandsByProvider | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (record.version !== CACHE_PAYLOAD_VERSION) {
+    return null;
+  }
+
+  return toProviderCommandMap(record.global);
+}
+
 function toProviderPayload(
   commandsByProvider: CachedSlashCommandsByProvider
 ): Prisma.InputJsonObject {
@@ -78,7 +92,10 @@ function toProviderPayload(
       ),
     ]);
 
-  return Object.fromEntries(entries) as Prisma.InputJsonObject;
+  return {
+    version: CACHE_PAYLOAD_VERSION,
+    global: Object.fromEntries(entries) as Prisma.InputJsonObject,
+  };
 }
 
 function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
@@ -107,8 +124,17 @@ function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
 class SlashCommandCacheService {
   async getCachedCommands(provider: SessionProvider): Promise<CommandInfo[] | null> {
     const settings = await userSettingsAccessor.get();
-    const commandsByProvider = toProviderCommandMap(settings.cachedSlashCommands);
-    return commandsByProvider?.[provider] ?? null;
+    const versionedCommandsByProvider = toVersionedProviderCommandMap(settings.cachedSlashCommands);
+    if (versionedCommandsByProvider) {
+      return versionedCommandsByProvider[provider] ?? null;
+    }
+
+    if (provider === 'CODEX') {
+      const legacyCommandsByProvider = toProviderCommandMap(settings.cachedSlashCommands);
+      return legacyCommandsByProvider?.CODEX ?? null;
+    }
+
+    return null;
   }
 
   async setCachedCommands(provider: SessionProvider, commands: CommandInfo[]): Promise<void> {
@@ -120,7 +146,11 @@ class SlashCommandCacheService {
 
     try {
       const settings = await userSettingsAccessor.get();
-      const existingMap = toProviderCommandMap(settings.cachedSlashCommands) ?? {};
+      const existingMap = toVersionedProviderCommandMap(settings.cachedSlashCommands) ?? {};
+      const legacyMap = toProviderCommandMap(settings.cachedSlashCommands);
+      if (!existingMap.CODEX && legacyMap?.CODEX) {
+        existingMap.CODEX = legacyMap.CODEX;
+      }
       const existing = existingMap[provider] ?? null;
 
       if (existing && areCommandsEqual(existing, normalized)) {
