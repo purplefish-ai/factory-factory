@@ -6,6 +6,7 @@ import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
   SessionAutoIterationExitBridge,
+  SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -128,6 +129,7 @@ export class SessionService {
    */
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
+    messageQueue?: SessionLifecycleMessageQueueBridge;
     autoIterationExit?: SessionAutoIterationExitBridge;
   }): void {
     this.workspaceBridge = bridges.workspace;

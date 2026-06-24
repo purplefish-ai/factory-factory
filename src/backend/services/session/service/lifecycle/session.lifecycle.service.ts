@@ -11,6 +11,7 @@ import type {
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
   SessionAutoIterationExitBridge,
+  SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
@@ -18,7 +19,7 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
 import {
@@ -97,6 +98,7 @@ export class SessionLifecycleService {
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
+  private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
@@ -115,9 +117,11 @@ export class SessionLifecycleService {
 
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
+    messageQueue?: SessionLifecycleMessageQueueBridge;
     autoIterationExit?: SessionAutoIterationExitBridge;
   }): void {
     this.workspaceBridge = bridges.workspace;
+    this.messageQueueBridge = bridges.messageQueue ?? null;
     this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
@@ -925,8 +929,21 @@ export class SessionLifecycleService {
       if (pending.length === 0) {
         return;
       }
+      if (!this.messageQueueBridge) {
+        logger.warn(
+          'Cannot deliver pending workspace notifications: message queue bridge missing',
+          {
+            sessionId,
+            workspaceId,
+            count: pending.length,
+          }
+        );
+        return;
+      }
       const ids: string[] = [];
       for (const notification of pending) {
+        const timestamp = notification.createdAt.toISOString();
+        let enqueueText: string;
         if (notification.direction === 'PARENT_TO_CHILD') {
           const claudeMessage = {
             type: 'parent_workspace_update' as const,
@@ -934,7 +951,7 @@ export class SessionLifecycleService {
             parentWorkspaceName: notification.sourceWorkspaceName,
             parentProjectName: notification.sourceProjectName,
             text: notification.message,
-            timestamp: notification.createdAt.toISOString(),
+            timestamp,
           };
           const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
           this.sessionDomainService.emitDelta(sessionId, {
@@ -942,6 +959,7 @@ export class SessionLifecycleService {
             data: claudeMessage,
             order,
           } as SessionDeltaEvent & { order: number });
+          enqueueText = `[Message from parent workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         } else {
           const claudeMessage = {
             type: 'child_workspace_update' as const,
@@ -949,7 +967,7 @@ export class SessionLifecycleService {
             childWorkspaceName: notification.sourceWorkspaceName,
             childProjectName: notification.sourceProjectName,
             text: notification.message,
-            timestamp: notification.createdAt.toISOString(),
+            timestamp,
           };
           const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
           this.sessionDomainService.emitDelta(sessionId, {
@@ -957,7 +975,30 @@ export class SessionLifecycleService {
             data: claudeMessage,
             order,
           } as SessionDeltaEvent & { order: number });
+          enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
+
+        const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
+          id: `workspace-notification-${notification.id}`,
+          text: enqueueText,
+          timestamp,
+          settings: {
+            selectedModel: null,
+            reasoningEffort: null,
+            thinkingEnabled: false,
+            planModeEnabled: false,
+          },
+        } satisfies QueuedMessage);
+        if ('error' in enqueueResult) {
+          logger.warn('Failed to enqueue pending workspace notification', {
+            sessionId,
+            workspaceId,
+            notificationId: notification.id,
+            error: enqueueResult.error,
+          });
+          continue;
+        }
+        await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
         ids.push(notification.id);
       }
       await workspaceNotificationAccessor.markDelivered(ids);
