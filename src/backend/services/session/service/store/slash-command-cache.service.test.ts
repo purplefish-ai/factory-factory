@@ -70,7 +70,7 @@ describe('slashCommandCacheService', () => {
     });
   });
 
-  it('reads and writes empty versioned provider cache payloads', async () => {
+  it('treats empty versioned provider cache payloads as cache misses', async () => {
     vi.mocked(userSettingsAccessor.get)
       .mockResolvedValueOnce({
         cachedSlashCommands: {
@@ -90,7 +90,7 @@ describe('slashCommandCacheService', () => {
         },
       } as never);
 
-    await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toEqual([]);
+    await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toBeNull();
 
     await slashCommandCacheService.setCachedCommands('CLAUDE', []);
 
@@ -98,7 +98,6 @@ describe('slashCommandCacheService', () => {
       cachedSlashCommands: {
         version: 2,
         global: {
-          CLAUDE: [],
           CODEX: [{ name: '/status', description: 'Status' }],
         },
       },

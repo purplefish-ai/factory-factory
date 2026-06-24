@@ -82,7 +82,7 @@ function toVersionedProviderCommandMap(value: unknown): CachedSlashCommandsByPro
   const map: CachedSlashCommandsByProvider = {};
   const global = record.global as Record<string, unknown>;
   for (const provider of ['CLAUDE', 'CODEX'] as const) {
-    const commands = toCommandInfoArray(global[provider], true);
+    const commands = toCommandInfoArray(global[provider]);
     if (commands) {
       map[provider] = commands;
     }
@@ -95,7 +95,9 @@ function toProviderPayload(
   commandsByProvider: CachedSlashCommandsByProvider
 ): Prisma.InputJsonObject {
   const entries = Object.entries(commandsByProvider)
-    .filter((entry): entry is [SessionProvider, CommandInfo[]] => Boolean(entry[1]))
+    .filter(
+      (entry): entry is [SessionProvider, CommandInfo[]] => Boolean(entry[1]) && entry[1].length > 0
+    )
     .map(([provider, commands]) => [
       provider,
       commands.map(
