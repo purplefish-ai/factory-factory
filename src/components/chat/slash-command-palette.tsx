@@ -57,9 +57,9 @@ export interface SlashCommandPaletteProps {
 /**
  * Slash command palette component.
  *
- * Displays a floating dropdown above the chat input that shows available
- * slash commands from the Claude CLI. Supports keyboard navigation and
- * filtering by command name.
+ * Displays a floating dropdown above or below the chat input that shows
+ * available slash commands from the agent provider. Supports keyboard
+ * navigation and filtering by command name.
  *
  * Keyboard handling is controlled by the parent component via the paletteRef.
  * Call paletteRef.current.handleKeyDown(key) to handle keyboard events.
