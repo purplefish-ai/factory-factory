@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, isAbsolute, join, relative } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -17,7 +14,12 @@ import { sessionService } from '@/backend/services/session/service/lifecycle/ses
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
-import type { ChatMessage } from '@/shared/acp-protocol';
+import {
+  commandNameKey,
+  scanClaudeGlobalCommandsFromDisk,
+  scanClaudeWorkspaceCommandsFromDisk,
+} from '@/backend/services/session/service/store/slash-command-disk-scanner';
+import type { ChatMessage, CommandInfo } from '@/shared/acp-protocol';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
@@ -463,7 +465,8 @@ async function sendCachedSlashCommandsIfNeeded(
   worktreePath: string | null
 ): Promise<void> {
   const cached = await slashCommandCacheService.getCachedCommands(provider);
-  const commands = cached ?? (provider === 'CLAUDE' ? scanCommandsFromDisk(worktreePath) : []);
+  const commands =
+    provider === 'CLAUDE' ? buildClaudeSlashCommandsForLoad(cached, worktreePath) : (cached ?? []);
 
   const slashCommandsMsg = {
     type: 'slash_commands',
@@ -472,70 +475,26 @@ async function sendCachedSlashCommandsIfNeeded(
   sessionDomainService.emitDelta(sessionId, slashCommandsMsg);
 }
 
-function parseCommandDescription(filePath: string): string {
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) {
-      return '';
-    }
-    const descLine = match[1]?.split(/\r?\n/).find((l) => l.startsWith('description:'));
-    return descLine ? descLine.slice('description:'.length).trim() : '';
-  } catch {
-    return '';
-  }
-}
-
-function isContainedInRoot(rootReal: string, filePath: string): boolean {
-  try {
-    const fileReal = realpathSync(filePath);
-    const rel = relative(rootReal, fileReal);
-    return !(rel.startsWith('..') || isAbsolute(rel));
-  } catch {
-    return false;
-  }
-}
-
-function scanCommandsFromDir(
-  dir: string,
-  seen: Set<string>
-): { name: string; description: string }[] {
-  let files: string[];
-  let rootReal: string;
-  try {
-    rootReal = realpathSync(dir);
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
-  } catch {
-    return [];
-  }
-
-  const commands: { name: string; description: string }[] = [];
-  for (const file of files) {
-    const filePath = join(dir, file);
-    if (!isContainedInRoot(rootReal, filePath)) {
-      continue;
-    }
-    const name = basename(file, '.md');
-    if (seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    commands.push({ name, description: parseCommandDescription(filePath) });
-  }
-  return commands;
-}
-
-/**
- * Scan ~/.claude/commands/ and {worktreePath}/.claude/commands/ for markdown command files.
- * Used as a cold-start fallback before the ACP process fires available_commands_update.
- */
-function scanCommandsFromDisk(
+function buildClaudeSlashCommandsForLoad(
+  cached: CommandInfo[] | null,
   worktreePath: string | null
-): { name: string; description: string }[] {
-  const dirs = [
-    join(homedir(), '.claude', 'commands'),
-    ...(worktreePath ? [join(worktreePath, '.claude', 'commands')] : []),
-  ];
+): CommandInfo[] {
   const seen = new Set<string>();
-  return dirs.flatMap((dir) => scanCommandsFromDir(dir, seen));
+  if (cached) {
+    const commands: CommandInfo[] = [];
+    for (const command of cached) {
+      const key = commandNameKey(command.name);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      commands.push(command);
+    }
+    commands.push(...scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen));
+    return commands;
+  }
+
+  const commands = scanClaudeGlobalCommandsFromDisk(seen);
+  commands.push(...scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen));
+  return commands;
 }

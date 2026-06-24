@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -84,6 +87,8 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { createLoadSessionHandler } from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
+  const tempDirs: string[] = [];
+
   beforeEach(() => {
     const historyRetryAtBySession = new Map<string, number>();
     const pruneExpiredHistoryRetryEntries = (now: number): void => {
@@ -159,6 +164,12 @@ describe('createLoadSessionHandler', () => {
     mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
+  });
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('hydrates Claude transcript from JSONL history', async () => {
@@ -1151,6 +1162,56 @@ describe('createLoadSessionHandler', () => {
           currentValue: 'claude-sonnet-4-5',
           options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
         },
+      ],
+    });
+  });
+
+  it('emits cached Claude commands plus a fresh workspace command scan on passive load', async () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'ff-slash-commands-'));
+    tempDirs.push(worktreePath);
+    const commandsDir = join(worktreePath, '.claude', 'commands');
+    mkdirSync(commandsDir, { recursive: true });
+    writeFileSync(
+      join(commandsDir, 'workspace-only.md'),
+      '---\ndescription: Workspace only\n---\n'
+    );
+    writeFileSync(
+      join(commandsDir, 'duplicate.md'),
+      '---\ndescription: Workspace duplicate\n---\n'
+    );
+
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      workspace: { status: 'READY', worktreePath },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.getCachedCommands.mockResolvedValue([
+      { name: '/global-only', description: 'Global only' },
+      { name: '/project:duplicate', description: 'Cached duplicate' },
+    ]);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: worktreePath,
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [
+        { name: '/global-only', description: 'Global only' },
+        { name: '/project:duplicate', description: 'Cached duplicate' },
+        { name: 'workspace-only', description: 'Workspace only' },
       ],
     });
   });
