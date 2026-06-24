@@ -940,9 +940,15 @@ export class SessionLifecycleService {
         );
         return;
       }
-      const ids: string[] = [];
+      let enqueuedCount = 0;
+      const queueWasEmpty = this.sessionDomainService.getQueueLength(sessionId) === 0;
       for (const notification of pending) {
         const timestamp = notification.createdAt.toISOString();
+        const messageId = `workspace-notification-${notification.id}`;
+        if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
+          continue;
+        }
+
         let enqueueText: string;
         let claudeMessage: AgentMessage;
         if (notification.direction === 'PARENT_TO_CHILD') {
@@ -968,7 +974,7 @@ export class SessionLifecycleService {
         }
 
         const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
-          id: `workspace-notification-${notification.id}`,
+          id: messageId,
           text: enqueueText,
           timestamp,
           settings: {
@@ -987,20 +993,21 @@ export class SessionLifecycleService {
           });
           continue;
         }
+        enqueuedCount += 1;
         const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
         this.sessionDomainService.emitDelta(sessionId, {
           type: 'agent_message',
           data: claudeMessage,
           order,
         } as SessionDeltaEvent & { order: number });
-        await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
-        ids.push(notification.id);
       }
-      await workspaceNotificationAccessor.markDelivered(ids);
-      logger.info('Delivered pending workspace notifications', {
+      if (enqueuedCount > 0 && queueWasEmpty) {
+        await this.messageQueueBridge.tryDispatchNextMessage(sessionId);
+      }
+      logger.info('Queued pending workspace notifications', {
         sessionId,
         workspaceId,
-        count: ids.length,
+        count: enqueuedCount,
       });
     } catch (error) {
       logger.warn('Failed to deliver pending workspace notifications', {

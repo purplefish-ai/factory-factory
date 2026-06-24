@@ -22,14 +22,17 @@ vi.mock('@/backend/services/workspace', () => ({
 
 function createLifecycleService(options?: {
   enqueue?: SessionDomainService['enqueue'];
+  queueLength?: number;
   tryDispatchNextMessage?: (sessionId: string) => Promise<void>;
 }) {
   const sessionDomainService = {
     appendClaudeEvent: vi.fn((_sessionId: string, _message: unknown) => 1),
     emitDelta: vi.fn(),
+    hasQueuedMessage: vi.fn((_sessionId: string, _messageId: string) => false),
     enqueue:
       options?.enqueue ??
       vi.fn((_sessionId: string, _message: unknown) => ({ position: 0 }) as const),
+    getQueueLength: vi.fn(() => options?.queueLength ?? 0),
   };
   const tryDispatchNextMessage = options?.tryDispatchNextMessage ?? vi.fn(async () => undefined);
 
@@ -151,13 +154,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         text: '[Message from child workspace "Child Workspace"]: The branch is ready for review.',
       })
     );
-    expect(tryDispatchNextMessage).toHaveBeenCalledTimes(2);
-    expect(tryDispatchNextMessage).toHaveBeenNthCalledWith(1, 'session-1');
-    expect(tryDispatchNextMessage).toHaveBeenNthCalledWith(2, 'session-1');
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith([
-      'notif-parent',
-      'notif-child',
-    ]);
+    expect(tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+    expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
   });
 
   it('leaves notifications pending when enqueue fails', async () => {
@@ -183,6 +182,63 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith([]);
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch pending notifications ahead of an existing queued message', async () => {
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: new Date('2026-06-22T10:30:00.000Z'),
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
+      queueLength: 1,
+    });
+
+    await deliverPendingChildNotifications(service);
+
+    expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        id: 'workspace-notification-notif-parent',
+      })
+    );
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate a pending workspace notification that is already queued', async () => {
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: new Date('2026-06-22T10:30:00.000Z'),
+      },
+    ] as never);
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
+    sessionDomainService.hasQueuedMessage.mockReturnValue(true);
+
+    await deliverPendingChildNotifications(service);
+
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
-const { mockSessionDomainService, mockSessionService, mockSessionDataService } = vi.hoisted(() => ({
+const {
+  mockSessionDomainService,
+  mockSessionService,
+  mockSessionDataService,
+  mockWorkspaceNotificationAccessor,
+} = vi.hoisted(() => ({
   mockSessionDomainService: {
     peekNextMessage: vi.fn(),
     dequeueNext: vi.fn(),
@@ -28,6 +33,9 @@ const { mockSessionDomainService, mockSessionService, mockSessionDataService } =
   mockSessionDataService: {
     findAgentSessionById: vi.fn(),
   },
+  mockWorkspaceNotificationAccessor: {
+    markDelivered: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
@@ -40,6 +48,10 @@ vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
 
 vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: mockSessionDataService,
+}));
+
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceNotificationAccessor: mockWorkspaceNotificationAccessor,
 }));
 
 vi.mock('./chat-message-handlers/registry', () => ({
@@ -77,6 +89,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.setSessionModel.mockResolvedValue(undefined);
     mockSessionService.setSessionReasoningEffort.mockResolvedValue(undefined);
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
+    mockWorkspaceNotificationAccessor.markDelivered.mockResolvedValue(undefined);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
@@ -116,6 +129,27 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(removeCallOrder).toBeDefined();
     expect(requeueCallOrder).toBeDefined();
     expect(removeCallOrder!).toBeLessThan(requeueCallOrder!);
+  });
+
+  it('marks a workspace notification delivered after its queued message commits', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('does not call markIdle when process has already stopped during dispatch failure', async () => {
