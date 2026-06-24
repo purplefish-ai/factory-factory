@@ -292,7 +292,10 @@ describe('SessionLifecycleService pending workspace notifications', () => {
   });
 });
 
-function createStartableLifecycleService(options?: { pendingNotificationCount?: number }) {
+function createStartableLifecycleService(options?: {
+  pendingNotificationCount?: number;
+  tryDispatchNextMessage?: () => Promise<void>;
+}) {
   const session = {
     id: 'session-1',
     workspaceId: 'workspace-1',
@@ -361,7 +364,7 @@ function createStartableLifecycleService(options?: { pendingNotificationCount?: 
     setReplaySuppression: vi.fn(),
     clearSessionState: vi.fn(),
   };
-  const tryDispatchNextMessage = vi.fn(async () => undefined);
+  const tryDispatchNextMessage = vi.fn(options?.tryDispatchNextMessage ?? (async () => undefined));
   const sendSessionMessage = vi.fn(async () => undefined);
 
   const service = new SessionLifecycleService({
@@ -448,6 +451,20 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     );
 
     await service.restartSession('session-1', sendSessionMessage);
+
+    expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not fail startup when queued notification dispatch fails', async () => {
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
+      {
+        pendingNotificationCount: 1,
+        tryDispatchNextMessage: () => Promise.reject(new Error('dispatch failed')),
+      }
+    );
+
+    await expect(service.startSession('session-1', sendSessionMessage)).resolves.toBeUndefined();
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).not.toHaveBeenCalled();
