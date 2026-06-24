@@ -62,6 +62,7 @@ type GetOrCreateSessionClientOptions = {
 
 type StartSessionOptions = {
   initialPrompt?: string;
+  initialPromptIsDefault?: boolean;
   startupModePreset?: SessionStartupModePreset;
 };
 
@@ -152,12 +153,11 @@ export class SessionLifecycleService {
     await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
     await this.dispatchQueuedNotificationsIfNeeded(sessionId, pendingNotificationCount);
 
-    const hasExplicitInitialPrompt = typeof options?.initialPrompt === 'string';
-    const initialPrompt =
-      hasExplicitInitialPrompt || pendingNotificationCount === 0
-        ? (options?.initialPrompt ?? 'Continue with the task.')
-        : '';
-    if (initialPrompt) {
+    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+    const shouldSendInitialPrompt =
+      pendingNotificationCount === 0 ||
+      (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault);
+    if (shouldSendInitialPrompt && initialPrompt) {
       await sendSessionMessage(sessionId, initialPrompt);
     }
 
@@ -187,6 +187,7 @@ export class SessionLifecycleService {
     }
     await this.startSession(sessionId, sendSessionMessage, {
       initialPrompt: 'Continue with the task.',
+      initialPromptIsDefault: true,
     });
     logger.info('Session restarted', { sessionId });
   }

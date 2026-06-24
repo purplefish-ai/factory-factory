@@ -338,6 +338,7 @@ function createStartableLifecycleService(options?: { pendingNotificationCount?: 
   };
   const runtimeManager = {
     isStopInProgress: vi.fn(() => false),
+    isSessionRunning: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
     getOrCreateClient: vi.fn(async () => handle),
   };
@@ -437,5 +438,18 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(dispatchOrder).toBeDefined();
     expect(sendOrder).toBeDefined();
     expect(dispatchOrder!).toBeLessThan(sendOrder!);
+  });
+
+  it('skips the restart default continue prompt when notifications are queued', async () => {
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
+      {
+        pendingNotificationCount: 1,
+      }
+    );
+
+    await service.restartSession('session-1', sendSessionMessage);
+
+    expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 });
