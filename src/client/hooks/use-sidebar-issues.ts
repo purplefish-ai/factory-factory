@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
+import { syncUnauthenticatedGitHubCLIHealth } from '@/client/lib/cli-health-cache';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -38,17 +39,7 @@ export function useSidebarIssues(
       return;
     }
 
-    utils.admin.checkCLIHealth.setData({ forceRefresh: false }, (current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        github: githubData.health,
-        allHealthy: false,
-      };
-    });
+    syncUnauthenticatedGitHubCLIHealth(utils.admin.checkCLIHealth, githubData.health);
   }, [githubData?.health, utils.admin.checkCLIHealth]);
 
   const normalizedIssues = useMemo(() => {
