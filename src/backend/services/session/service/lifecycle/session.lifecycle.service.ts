@@ -54,10 +54,6 @@ type SessionContext = {
   parentWorkspaceId?: string | null;
 };
 
-type PendingWorkspaceNotification = Awaited<
-  ReturnType<typeof workspaceNotificationAccessor.findPending>
->[number];
-
 type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
   model?: string;
@@ -959,13 +955,15 @@ export class SessionLifecycleService {
         return 0;
       }
       let enqueuedCount = 0;
+      let dispatchableCount = 0;
       for (const notification of pending) {
         const timestamp = notification.createdAt.toISOString();
         const messageId = `workspace-notification-${notification.id}`;
         if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
+          dispatchableCount += 1;
           continue;
         }
-        if (this.hasWorkspaceNotificationTranscriptMessage(sessionId, notification, timestamp)) {
+        if (this.hasCommittedWorkspaceNotificationMessage(sessionId, messageId)) {
           await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notification.id);
           continue;
         }
@@ -1015,6 +1013,7 @@ export class SessionLifecycleService {
           continue;
         }
         enqueuedCount += 1;
+        dispatchableCount += 1;
         const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
         this.sessionDomainService.emitDelta(sessionId, {
           type: 'agent_message',
@@ -1026,8 +1025,9 @@ export class SessionLifecycleService {
         sessionId,
         workspaceId,
         count: enqueuedCount,
+        dispatchableCount,
       });
-      return enqueuedCount;
+      return dispatchableCount;
     } catch (error) {
       logger.warn('Failed to deliver pending workspace notifications', {
         sessionId,
@@ -1038,27 +1038,10 @@ export class SessionLifecycleService {
     }
   }
 
-  private hasWorkspaceNotificationTranscriptMessage(
-    sessionId: string,
-    notification: PendingWorkspaceNotification,
-    timestamp: string
-  ): boolean {
-    return this.sessionDomainService.getTranscriptSnapshot(sessionId).some((entry) => {
-      const message = entry.message;
-      if (!message || message.timestamp !== timestamp || message.text !== notification.message) {
-        return false;
-      }
-      if (notification.direction === 'PARENT_TO_CHILD') {
-        return (
-          message.type === 'parent_workspace_update' &&
-          message.parentWorkspaceId === notification.sourceWorkspaceId
-        );
-      }
-      return (
-        message.type === 'child_workspace_update' &&
-        message.childWorkspaceId === notification.sourceWorkspaceId
-      );
-    });
+  private hasCommittedWorkspaceNotificationMessage(sessionId: string, messageId: string): boolean {
+    return this.sessionDomainService
+      .getTranscriptSnapshot(sessionId)
+      .some((entry) => entry.source === 'user' && entry.id === messageId);
   }
 
   private async markDeliveredAfterTranscriptMatch(

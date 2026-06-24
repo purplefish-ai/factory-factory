@@ -226,7 +226,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
   });
 
-  it('does not duplicate a pending workspace notification that is already queued', async () => {
+  it('reports a pending workspace notification that is already queued as dispatchable', async () => {
     vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
       {
         id: 'notif-parent',
@@ -245,7 +245,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
 
-    expect(enqueuedCount).toBe(0);
+    expect(enqueuedCount).toBe(1);
     expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
@@ -253,7 +253,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
   });
 
-  it('marks an already-transcripted pending notification delivered without requeueing it', async () => {
+  it('marks an already-committed pending notification delivered without requeueing it', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
     vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
       {
@@ -272,18 +272,11 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
       transcript: [
         {
-          id: 'session-1-1',
-          source: 'agent',
+          id: 'workspace-notification-notif-parent',
+          source: 'user',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
           timestamp: createdAt.toISOString(),
           order: 1,
-          message: {
-            type: 'parent_workspace_update',
-            parentWorkspaceId: 'parent-workspace',
-            parentWorkspaceName: 'Parent Workspace',
-            parentProjectName: 'Parent Project',
-            text: 'Please check the failing test.',
-            timestamp: createdAt.toISOString(),
-          },
         },
       ],
     });
