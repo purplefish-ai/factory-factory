@@ -6,6 +6,7 @@ const mockGithubCLIService = vi.hoisted(() => ({
   listIssues: vi.fn(),
   getIssue: vi.fn(),
 }));
+const mockClassifyGitHubCLIError = vi.hoisted(() => vi.fn());
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByIdWithProject: vi.fn(),
@@ -18,6 +19,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
 
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: mockGithubCLIService,
+  classifyGitHubCLIError: mockClassifyGitHubCLIError,
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
@@ -34,6 +36,7 @@ function createCaller() {
 describe('githubRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClassifyGitHubCLIError.mockReturnValue('unknown');
     mockWorkspaceDataService.findByProjectId.mockResolvedValue([]);
   });
 
@@ -135,6 +138,36 @@ describe('githubRouter', () => {
       ],
       health: { isInstalled: true, isAuthenticated: true },
       error: null,
+    });
+  });
+
+  it('returns unauthenticated health when issue listing hits bad gh credentials', async () => {
+    const caller = createCaller();
+    mockGithubCLIService.checkHealth.mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '2.20.0',
+    });
+    mockProjectManagementService.findById.mockResolvedValue({
+      id: 'p1',
+      githubOwner: 'purplefish-ai',
+      githubRepo: 'factory-factory',
+    });
+    mockGithubCLIService.listIssues.mockRejectedValueOnce(new Error('HTTP 401: Bad credentials'));
+    mockClassifyGitHubCLIError.mockReturnValueOnce('auth_required');
+
+    await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
+      issues: [],
+      health: {
+        isInstalled: true,
+        isAuthenticated: false,
+        version: '2.20.0',
+        error:
+          'GitHub CLI authentication failed. Run `gh auth refresh -h github.com` or `gh auth login` to authenticate.',
+        errorType: 'auth_required',
+      },
+      error:
+        'GitHub CLI authentication failed. Run `gh auth refresh -h github.com` or `gh auth login` to authenticate.',
     });
   });
 });

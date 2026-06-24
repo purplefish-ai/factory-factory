@@ -12,7 +12,12 @@ function isAuthRequiredError(message: string): boolean {
   return (
     message.includes('authentication') ||
     message.includes('not logged in') ||
-    message.includes('gh auth login')
+    message.includes('gh auth login') ||
+    message.includes('gh auth refresh') ||
+    message.includes('bad credentials') ||
+    message.includes('invalid token') ||
+    message.includes('token is invalid') ||
+    message.includes('requires authentication')
   );
 }
 
