@@ -69,4 +69,39 @@ describe('slashCommandCacheService', () => {
       },
     });
   });
+
+  it('reads and writes empty versioned provider cache payloads', async () => {
+    vi.mocked(userSettingsAccessor.get)
+      .mockResolvedValueOnce({
+        cachedSlashCommands: {
+          version: 2,
+          global: {
+            CLAUDE: [],
+          },
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        cachedSlashCommands: {
+          version: 2,
+          global: {
+            CLAUDE: [{ name: '/stale', description: 'Stale' }],
+            CODEX: [{ name: '/status', description: 'Status' }],
+          },
+        },
+      } as never);
+
+    await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toEqual([]);
+
+    await slashCommandCacheService.setCachedCommands('CLAUDE', []);
+
+    expect(userSettingsAccessor.update).toHaveBeenCalledWith({
+      cachedSlashCommands: {
+        version: 2,
+        global: {
+          CLAUDE: [],
+          CODEX: [{ name: '/status', description: 'Status' }],
+        },
+      },
+    });
+  });
 });

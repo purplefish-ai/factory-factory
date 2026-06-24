@@ -318,15 +318,11 @@ export class AcpEventProcessor {
   private cacheSlashCommandsFromDelta(sid: string, delta: SessionDeltaEvent): void {
     const commands = (delta as { slashCommands?: CommandInfo[] }).slashCommands;
     const provider = this.sessionToProvider.get(sid);
-    if (!(provider && commands && commands.length > 0)) {
+    if (!(provider && commands)) {
       return;
     }
 
     const cacheableCommands = this.getCacheableSlashCommands(sid, provider, commands);
-    if (cacheableCommands.length === 0) {
-      return;
-    }
-
     slashCommandCacheService
       .setCachedCommands(provider, cacheableCommands)
       .catch((err: unknown) => {

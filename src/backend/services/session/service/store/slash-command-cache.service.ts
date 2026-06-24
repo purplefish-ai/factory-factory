@@ -34,12 +34,15 @@ function normalizeCommands(commands: CommandInfo[]): CommandInfo[] {
   });
 }
 
-function toCommandInfoArray(value: unknown): CommandInfo[] | null {
+function toCommandInfoArray(value: unknown, allowEmpty = false): CommandInfo[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
   const commands = value.filter(isCommandInfo);
-  return commands.length > 0 ? normalizeCommands(commands) : null;
+  if (commands.length > 0) {
+    return normalizeCommands(commands);
+  }
+  return allowEmpty && value.length === 0 ? [] : null;
 }
 
 type SessionProvider = 'CLAUDE' | 'CODEX';
@@ -72,7 +75,20 @@ function toVersionedProviderCommandMap(value: unknown): CachedSlashCommandsByPro
     return null;
   }
 
-  return toProviderCommandMap(record.global);
+  if (!record.global || typeof record.global !== 'object' || Array.isArray(record.global)) {
+    return null;
+  }
+
+  const map: CachedSlashCommandsByProvider = {};
+  const global = record.global as Record<string, unknown>;
+  for (const provider of ['CLAUDE', 'CODEX'] as const) {
+    const commands = toCommandInfoArray(global[provider], true);
+    if (commands) {
+      map[provider] = commands;
+    }
+  }
+
+  return Object.keys(map).length > 0 ? map : null;
 }
 
 function toProviderPayload(
@@ -138,10 +154,6 @@ class SlashCommandCacheService {
   }
 
   async setCachedCommands(provider: SessionProvider, commands: CommandInfo[]): Promise<void> {
-    if (commands.length === 0) {
-      return;
-    }
-
     const normalized = normalizeCommands(commands);
 
     try {

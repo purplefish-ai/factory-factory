@@ -134,4 +134,58 @@ describe('AcpEventProcessor slash command caching', () => {
       ],
     });
   });
+
+  it('writes an empty Claude provider cache when all commands are workspace-local', () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'ff-acp-slash-commands-'));
+    tempDirs.push(worktreePath);
+    const commandsDir = join(worktreePath, '.claude', 'commands');
+    mkdirSync(commandsDir, { recursive: true });
+    writeFileSync(
+      join(commandsDir, 'workspace-only.md'),
+      '---\ndescription: Workspace only\n---\n'
+    );
+
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+    processor.registerSessionContext('session-1', {
+      workspaceId: 'workspace-1',
+      workingDir: worktreePath,
+      provider: 'CLAUDE',
+    });
+
+    processor.handleAcpDelta('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/project:workspace-only', description: 'Workspace only' }],
+    });
+
+    expect(mocks.setCachedCommands).toHaveBeenCalledWith('CLAUDE', []);
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/project:workspace-only', description: 'Workspace only' }],
+    });
+  });
+
+  it('writes an empty provider cache for explicit empty command updates', () => {
+    const worktreePath = mkdtempSync(join(tmpdir(), 'ff-acp-slash-commands-'));
+    tempDirs.push(worktreePath);
+
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+    processor.registerSessionContext('session-1', {
+      workspaceId: 'workspace-1',
+      workingDir: worktreePath,
+      provider: 'CLAUDE',
+    });
+
+    processor.handleAcpDelta('session-1', {
+      type: 'slash_commands',
+      slashCommands: [],
+    });
+
+    expect(mocks.setCachedCommands).toHaveBeenCalledWith('CLAUDE', []);
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [],
+    });
+  });
 });
