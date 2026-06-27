@@ -50,6 +50,10 @@ type DateSessionDirectoryCandidate = {
   mtimeMs: number;
   dateKey: string;
 };
+type SessionFileSelection = {
+  cwdMatch: string | null;
+  idOnlyMatch: string | null;
+};
 
 const sessionFileLookupCache = new Map<string, SessionFileLookupCacheEntry>();
 
@@ -113,7 +117,7 @@ function buildSessionFileLookupCacheKey(params: {
   });
 }
 
-function getCachedSessionFilePath(cacheKey: string): string | null | undefined {
+async function getCachedSessionFilePath(cacheKey: string): Promise<string | null | undefined> {
   const cached = sessionFileLookupCache.get(cacheKey);
   if (!cached) {
     return undefined;
@@ -122,6 +126,14 @@ function getCachedSessionFilePath(cacheKey: string): string | null | undefined {
   if (cached.expiresAtMs <= Date.now()) {
     sessionFileLookupCache.delete(cacheKey);
     return undefined;
+  }
+
+  if (cached.filePath !== null) {
+    const stats = await stat(cached.filePath).catch(() => null);
+    if (!stats?.isFile()) {
+      sessionFileLookupCache.delete(cacheKey);
+      return undefined;
+    }
   }
 
   sessionFileLookupCache.delete(cacheKey);
@@ -546,7 +558,7 @@ async function collectRecentDateSessionDirs(
     isDateDirectoryPart(year, 4)
   );
 
-  for (const year of years) {
+  yearLoop: for (const year of years) {
     const yearDir = join(sessionsDir, year);
     const months = (await listSubdirectories(yearDir)).filter((month) =>
       isDateDirectoryPart(month, 2)
@@ -566,6 +578,10 @@ async function collectRecentDateSessionDirs(
           mtimeMs: stats?.mtimeMs ?? Number.NEGATIVE_INFINITY,
           dateKey: `${year}-${month}-${day}`,
         });
+
+        if (candidates.length >= MAX_RECENT_SESSION_DATE_DIRS) {
+          break yearLoop;
+        }
       }
     }
   }
@@ -573,16 +589,16 @@ async function collectRecentDateSessionDirs(
   candidates.sort(
     (left, right) => right.mtimeMs - left.mtimeMs || right.dateKey.localeCompare(left.dateKey)
   );
-  return candidates.slice(0, MAX_RECENT_SESSION_DATE_DIRS);
+  return candidates;
 }
 
 async function selectMatchingSessionFilePath(params: {
   candidates: string[];
   providerSessionId: string;
   workingDir: string;
-}): Promise<string | null> {
+}): Promise<SessionFileSelection> {
   if (params.candidates.length === 0) {
-    return null;
+    return { cwdMatch: null, idOnlyMatch: null };
   }
 
   const withMtime = await Promise.all(
@@ -606,7 +622,7 @@ async function selectMatchingSessionFilePath(params: {
       isMatchingProviderSessionId(meta.id, params.providerSessionId) &&
       meta.cwd === params.workingDir
     ) {
-      return candidate.candidatePath;
+      return { cwdMatch: candidate.candidatePath, idOnlyMatch: null };
     }
   }
 
@@ -616,11 +632,11 @@ async function selectMatchingSessionFilePath(params: {
       typeof meta?.id === 'string' &&
       isMatchingProviderSessionId(meta.id, params.providerSessionId)
     ) {
-      return candidate.candidatePath;
+      return { cwdMatch: null, idOnlyMatch: candidate.candidatePath };
     }
   }
 
-  return null;
+  return { cwdMatch: null, idOnlyMatch: null };
 }
 
 async function resolveUncachedSessionFilePath(
@@ -634,13 +650,13 @@ async function resolveUncachedSessionFilePath(
     expectedDateDirs,
     fileSuffixes
   );
-  const expectedMatch = await selectMatchingSessionFilePath({
+  const expectedSelection = await selectMatchingSessionFilePath({
     candidates: expectedCandidates,
     providerSessionId,
     workingDir,
   });
-  if (expectedMatch) {
-    return expectedMatch;
+  if (expectedSelection.cwdMatch) {
+    return expectedSelection.cwdMatch;
   }
 
   const recentDateDirs = await collectRecentDateSessionDirs(sessionsDir);
@@ -648,11 +664,12 @@ async function resolveUncachedSessionFilePath(
     recentDateDirs.map((candidate) => candidate.directoryPath),
     fileSuffixes
   );
-  return await selectMatchingSessionFilePath({
+  const recentSelection = await selectMatchingSessionFilePath({
     candidates: recentCandidates,
     providerSessionId,
     workingDir,
   });
+  return recentSelection.cwdMatch ?? expectedSelection.idOnlyMatch ?? recentSelection.idOnlyMatch;
 }
 
 async function resolveSessionFilePath(
@@ -667,7 +684,7 @@ async function resolveSessionFilePath(
   }
 
   const cacheKey = buildSessionFileLookupCacheKey({ sessionsDir, workingDir, providerSessionId });
-  const cachedFilePath = getCachedSessionFilePath(cacheKey);
+  const cachedFilePath = await getCachedSessionFilePath(cacheKey);
   if (cachedFilePath !== undefined) {
     return cachedFilePath;
   }

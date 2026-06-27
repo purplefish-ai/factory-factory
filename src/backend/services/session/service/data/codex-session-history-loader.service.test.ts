@@ -21,6 +21,13 @@ function writeSessionFile(params: {
   return sessionFilePath;
 }
 
+function formatRelativeDateDir(date: Date): string {
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
+}
+
 describe('codexSessionHistoryLoaderService', () => {
   let tempDir: string;
   let originalCodexHome: string | undefined;
@@ -415,6 +422,107 @@ describe('codexSessionHistoryLoaderService', () => {
     });
   });
 
+  it('checks recent date directories for cwd matches before using an expected-date id-only fallback', async () => {
+    const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
+    const expectedWrongCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/other' },
+        },
+        {
+          timestamp: '2026-02-14T19:42:55.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from expected wrong cwd' },
+        },
+      ],
+    });
+    const matchingCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/20',
+      fileName: `rollout-2026-02-20T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/match' },
+        },
+        {
+          timestamp: '2026-02-20T19:42:55.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from recent matching cwd' },
+        },
+      ],
+    });
+    utimesSync(
+      expectedWrongCwdPath,
+      new Date('2026-02-20T20:42:55.000Z'),
+      new Date('2026-02-20T20:42:55.000Z')
+    );
+    utimesSync(
+      matchingCwdPath,
+      new Date('2026-02-20T19:42:55.000Z'),
+      new Date('2026-02-20T19:42:55.000Z')
+    );
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: '/Users/test/match',
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath: matchingCwdPath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({
+      type: 'user',
+      content: 'from recent matching cwd',
+    });
+  });
+
+  it('does not scan beyond the bounded recent date directory window', async () => {
+    const providerSessionId = 'session-beyond-recent-cap';
+    const cwd = '/Users/test/project';
+    const newestDate = Date.UTC(2026, 5, 1);
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    for (let offset = 0; offset < 120; offset += 1) {
+      mkdirSync(
+        join(tempDir, 'sessions', formatRelativeDateDir(new Date(newestDate - offset * oneDayMs))),
+        {
+          recursive: true,
+        }
+      );
+    }
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: formatRelativeDateDir(new Date(newestDate - 120 * oneDayMs)),
+      fileName: `rollout-2026-02-01T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-01T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'outside bounded scan' },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toEqual({ status: 'not_found' });
+  });
+
   it('returns not_found when candidate filename matches but session_meta id does not', async () => {
     const providerSessionId = 'session-meta-mismatch';
     writeSessionFile({
@@ -485,6 +593,66 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     expect(secondResult).toEqual({ status: 'not_found' });
+  });
+
+  it('ignores stale positive cache entries when the cached session file was removed', async () => {
+    const providerSessionId = 'session-stale-positive-cache';
+    const cwd = '/Users/test/project';
+    const firstPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'first cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: firstPath });
+
+    rmSync(firstPath, { force: true });
+    const secondPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'replacement file' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: secondPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'replacement file',
+    });
   });
 
   it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
