@@ -45,5 +45,17 @@ describe('PortAllocationService', () => {
       );
       expect(isPortInUse).not.toHaveBeenCalled();
     });
+
+    it('rejects ports outside the valid TCP range before probing ports', async () => {
+      const isPortInUse = vi.spyOn(PortAllocationService, 'isPortInUse');
+
+      await expect(PortAllocationService.findFreePort(0, 1)).rejects.toThrow(
+        'Invalid port range 0-1'
+      );
+      await expect(PortAllocationService.findFreePort(65_535, 65_536)).rejects.toThrow(
+        'Invalid port range 65535-65536'
+      );
+      expect(isPortInUse).not.toHaveBeenCalled();
+    });
   });
 });

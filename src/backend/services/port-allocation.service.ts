@@ -4,6 +4,8 @@ import { createServer } from 'node:net';
  * Service for finding and allocating free network ports
  */
 export class PortAllocationService {
+  private static readonly MIN_PORT = 1;
+  private static readonly MAX_PORT = 65_535;
   private static readonly DEFAULT_START_PORT = 3000;
   private static readonly DEFAULT_END_PORT = 9999;
 
@@ -47,7 +49,12 @@ export class PortAllocationService {
     endPort = PortAllocationService.DEFAULT_END_PORT
   ): Promise<number> {
     const range = endPort - startPort + 1;
-    if (!(Number.isInteger(startPort) && Number.isInteger(endPort)) || range <= 0) {
+    if (
+      !(Number.isInteger(startPort) && Number.isInteger(endPort)) ||
+      startPort < PortAllocationService.MIN_PORT ||
+      endPort > PortAllocationService.MAX_PORT ||
+      range <= 0
+    ) {
       throw new Error(`Invalid port range ${startPort}-${endPort}`);
     }
 
