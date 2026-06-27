@@ -35,10 +35,11 @@ export type ArchiveWorkspaceDependencies = {
   };
 };
 
-export type WorkspaceRuntimeCleanupDependencies = Pick<
-  ArchiveWorkspaceDependencies,
-  'runScriptService' | 'sessionService' | 'terminalService'
->;
+export type WorkspaceRuntimeCleanupDependencies = {
+  runScriptService: Pick<ArchiveWorkspaceDependencies['runScriptService'], 'stopRunScript'>;
+  sessionService: ArchiveWorkspaceDependencies['sessionService'];
+  terminalService: ArchiveWorkspaceDependencies['terminalService'];
+};
 
 export interface ArchiveRecoveryResult {
   archived: string[];
