@@ -1,8 +1,14 @@
-import { isIP } from 'node:net';
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { Request } from 'express';
 import superjson from 'superjson';
 import type { AppContext } from '@/backend/app-context';
+import {
+  isLoopbackRemoteAddress,
+  isOriginAllowed,
+  isTrustedLocalAddress,
+} from '@/backend/lib/request-trust';
+
+export { isLoopbackRemoteAddress };
 
 export type RequestTrustInfo = {
   remoteAddress?: string;
@@ -29,24 +35,8 @@ function getHeaderValue(value: string | string[] | undefined): string | undefine
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function isLoopbackRemoteAddress(remoteAddress: string | undefined): boolean {
-  if (!remoteAddress) {
-    return false;
-  }
-
-  const normalized = remoteAddress.startsWith('::ffff:')
-    ? remoteAddress.slice('::ffff:'.length)
-    : remoteAddress;
-
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') {
-    return true;
-  }
-
-  return isIP(normalized) === 4 && normalized.startsWith('127.');
-}
-
 function buildRequestTrust(req: Request): RequestTrustInfo {
-  const remoteAddress = req.socket.remoteAddress ?? req.ip;
+  const remoteAddress = req.ip ?? req.socket.remoteAddress;
   return {
     remoteAddress,
     origin: getHeaderValue(req.headers.origin),
@@ -87,7 +77,11 @@ function isTrustedLocalContext(ctx: Context): boolean {
     return true;
   }
 
-  if (!ctx.requestTrust.isLocal) {
+  const corsConfig = ctx.appContext.services.configService.getCorsConfig();
+  const isLocal =
+    ctx.requestTrust.isLocal ||
+    isTrustedLocalAddress(ctx.requestTrust.remoteAddress, corsConfig.trustedLocalCidrs);
+  if (!isLocal) {
     return false;
   }
 
@@ -95,8 +89,7 @@ function isTrustedLocalContext(ctx: Context): boolean {
     return true;
   }
 
-  const allowedOrigins = ctx.appContext.services.configService.getCorsConfig().allowedOrigins;
-  return allowedOrigins.includes(ctx.requestTrust.origin);
+  return isOriginAllowed(ctx.requestTrust.origin, corsConfig.allowedOrigins);
 }
 
 /**

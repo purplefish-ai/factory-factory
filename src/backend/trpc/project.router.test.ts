@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CorsConfig } from '@/backend/services/config.service';
 import { IssueProvider } from '@/shared/core/enums';
 
 const mockProjectManagementService = vi.hoisted(() => ({
@@ -62,11 +63,16 @@ vi.mock('@/backend/services/git-clone.service', () => ({
 
 import { projectRouter } from './project.trpc';
 
-function createCaller(requestTrust?: {
-  remoteAddress?: string;
-  origin?: string;
-  isLocal: boolean;
-}) {
+function createCaller(
+  requestTrust?: {
+    remoteAddress?: string;
+    origin?: string;
+    isLocal: boolean;
+  },
+  corsConfig: CorsConfig = {
+    allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+  }
+) {
   return projectRouter.createCaller({
     requestTrust,
     appContext: {
@@ -74,9 +80,7 @@ function createCaller(requestTrust?: {
         configService: {
           getWorktreeBaseDir: () => '/tmp/worktrees',
           getReposDir: () => '/repos',
-          getCorsConfig: () => ({
-            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
-          }),
+          getCorsConfig: () => corsConfig,
         },
       },
     },
@@ -366,6 +370,38 @@ describe('projectRouter', () => {
       },
       { worktreeBaseDir: '/tmp/worktrees' }
     );
+  });
+
+  it('allows privileged project mutations from equivalent loopback origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://127.0.0.1:3000',
+      isLocal: true,
+    });
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalled();
+  });
+
+  it('allows privileged project mutations from configured trusted local CIDRs', async () => {
+    const caller = createCaller(
+      {
+        remoteAddress: '172.17.0.1',
+        origin: 'http://localhost:3000',
+        isLocal: false,
+      },
+      {
+        allowedOrigins: ['http://localhost:3000'],
+        trustedLocalCidrs: ['172.17.0.1/32'],
+      }
+    );
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalled();
   });
 
   it('rejects privileged project mutations from disallowed browser origins', async () => {

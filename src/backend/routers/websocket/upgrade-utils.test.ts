@@ -74,4 +74,20 @@ describe('validateWebSocketOrigin', () => {
     expect(socket.write).not.toHaveBeenCalled();
     expect(socket.destroy).not.toHaveBeenCalled();
   });
+
+  it('allows upgrades from equivalent loopback origins', () => {
+    const socket = createSocket();
+
+    const isValid = validateWebSocketOrigin({
+      request: { headers: { origin: 'http://127.0.0.1:3000' } } as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000']),
+      logger: createLogger(),
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(true);
+    expect(socket.write).not.toHaveBeenCalled();
+    expect(socket.destroy).not.toHaveBeenCalled();
+  });
 });
