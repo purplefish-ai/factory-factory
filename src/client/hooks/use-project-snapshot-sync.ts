@@ -197,7 +197,7 @@ function applySnapshotFullMessage(
       workspaces: message.entries.map((e) =>
         mapSnapshotEntryToServerWorkspace(e, existingById.get(e.workspaceId))
       ),
-      reviewCount: prev?.reviewCount ?? 0,
+      reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
     };
   }) as never);
 
@@ -228,7 +228,7 @@ function applySnapshotChangedMessage(
     if (!prev) {
       return {
         workspaces: [mapSnapshotEntryToServerWorkspace(message.entry)],
-        reviewCount: 0,
+        reviewCount: message.reviewCount ?? 0,
       };
     }
 
@@ -243,7 +243,7 @@ function applySnapshotChangedMessage(
       workspaces.push(mapped);
     }
 
-    return { workspaces, reviewCount: prev.reviewCount };
+    return { workspaces, reviewCount: message.reviewCount ?? prev.reviewCount };
   }) as never);
 
   setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
@@ -273,7 +273,7 @@ function applySnapshotRemovedMessage(
     }
     return {
       workspaces: prev.workspaces.filter((w) => w.id !== message.workspaceId),
-      reviewCount: prev.reviewCount,
+      reviewCount: message.reviewCount ?? prev.reviewCount,
     };
   }) as never);
 

@@ -152,7 +152,7 @@ describe('useProjectSnapshotSync', () => {
   // ===========================================================================
 
   describe('snapshot_full message (sidebar)', () => {
-    it('calls setData with mapped entries and preserves reviewCount from prev', () => {
+    it('calls setData with mapped entries and preserves reviewCount from prev when omitted', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -173,6 +173,23 @@ describe('useProjectSnapshotSync', () => {
       expect(result.workspaces[0].id).toBe('ws-1');
       expect(result.workspaces[0].name).toBe('alpha');
       expect(result.reviewCount).toBe(5);
+    });
+
+    it('uses reviewCount from the snapshot_full message when provided', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [],
+        reviewCount: 9,
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater({ workspaces: [], reviewCount: 5 });
+      expect(result.reviewCount).toBe(9);
+      expect(result.workspaces).toHaveLength(0);
     });
 
     it('preserves existing stateComputedAt and sets snapshotComputedAt', () => {
@@ -243,6 +260,27 @@ describe('useProjectSnapshotSync', () => {
       expect(result.workspaces[0].name).toBe('updated-name');
       expect(result.workspaces[1].name).toBe('other');
       expect(result.reviewCount).toBe(3);
+    });
+
+    it('updates reviewCount from the snapshot_changed message when provided', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+        reviewCount: 4,
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater({
+        workspaces: [{ id: 'ws-1', name: 'existing' }],
+        reviewCount: 8,
+      });
+      expect(result.reviewCount).toBe(4);
+      expect(result.workspaces).toHaveLength(1);
     });
 
     it('does not overwrite existing stateComputedAt during upsert', () => {
@@ -332,6 +370,25 @@ describe('useProjectSnapshotSync', () => {
       expect(result.workspaces).toHaveLength(1);
       expect(result.workspaces[0].name).toBe('stays');
       expect(result.reviewCount).toBe(7);
+    });
+
+    it('updates reviewCount from the snapshot_removed message when provided', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+        reviewCount: 2,
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater({
+        workspaces: [{ id: 'ws-1', name: 'gone' }],
+        reviewCount: 7,
+      });
+      expect(result.reviewCount).toBe(2);
+      expect(result.workspaces).toHaveLength(0);
     });
 
     it('returns prev unchanged when prev is null', () => {

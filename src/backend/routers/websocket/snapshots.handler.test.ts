@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
@@ -30,9 +30,17 @@ class MockWebSocket extends EventEmitter {
 }
 
 // Use vi.hoisted so these are available inside hoisted vi.mock factories
-const { storeListeners, mockGetByProjectId, mockSendBadRequest } = vi.hoisted(() => ({
-  storeListeners: new Map<string, (event: unknown) => void>(),
+const {
+  storeListeners,
+  mockGetByProjectId,
+  mockGetCachedReviewCount,
+  mockRefreshReviewCountIfStale,
+  mockSendBadRequest,
+} = vi.hoisted(() => ({
+  storeListeners: new Map<string, (event: unknown) => unknown>(),
   mockGetByProjectId: vi.fn(() => []),
+  mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
+  mockRefreshReviewCountIfStale: vi.fn(),
   mockSendBadRequest: vi.fn(),
 }));
 
@@ -46,11 +54,23 @@ vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
     SNAPSHOT_REMOVED: 'snapshot_removed',
     workspaceSnapshotStore: {
       getByProjectId: mockGetByProjectId,
-      on: vi.fn((event: string, listener: (event: unknown) => void) => {
+      on: vi.fn((event: string, listener: (event: unknown) => unknown) => {
         storeListeners.set(event, listener);
         originalOn(event, listener);
         return emitter;
       }),
+    },
+  };
+});
+
+vi.mock('@/backend/services/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
+  return {
+    ...actual,
+    workspaceQueryService: {
+      ...actual.workspaceQueryService,
+      getCachedReviewCount: mockGetCachedReviewCount,
+      refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
     },
   };
 });
@@ -139,11 +159,21 @@ function callHandler(
   return { wss, socket, wsAliveMap };
 }
 
+async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
+  await vi.waitFor(() => {
+    expect(ws.send).toHaveBeenCalled();
+  });
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('createSnapshotsUpgradeHandler', () => {
+  beforeEach(() => {
+    mockGetCachedReviewCount.mockReturnValue(5);
+  });
+
   afterEach(() => {
     // Clean up connection map between tests
     snapshotConnections.clear();
@@ -152,7 +182,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
   });
 
-  it('sends full snapshot on connect', () => {
+  it('sends full snapshot with review count on connect', async () => {
     const visibleEntry = {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
@@ -171,13 +201,52 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, ws, 'proj-1');
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'snapshot_full',
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'snapshot_full',
+          projectId: 'proj-1',
+          entries: [visibleEntry],
+          reviewCount: 5,
+        })
+      );
+    });
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
+  });
+
+  it('omits review count from full snapshot when cache is not populated', async () => {
+    mockGetCachedReviewCount.mockReturnValue(undefined);
+    mockGetByProjectId.mockReturnValue([
+      {
+        workspaceId: 'ws-1',
         projectId: 'proj-1',
-        entries: [visibleEntry],
-      })
-    );
+        name: 'Visible',
+        status: 'READY',
+      },
+    ] as never);
+
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+
+    callHandler(handler, ws, 'proj-1');
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'snapshot_full',
+          projectId: 'proj-1',
+          entries: [
+            {
+              workspaceId: 'ws-1',
+              projectId: 'proj-1',
+              name: 'Visible',
+              status: 'READY',
+            },
+          ],
+        })
+      );
+    });
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
   it('rejects connection without projectId', () => {
@@ -201,7 +270,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     expect(ws.send).not.toHaveBeenCalled();
   });
 
-  it('routes snapshot_changed to correct project clients', () => {
+  it('routes snapshot_changed with review count to correct project clients', async () => {
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
 
     const wsA = new MockWebSocket();
@@ -209,6 +278,9 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, wsA, 'proj-A');
     callHandler(handler, wsB, 'proj-B');
+
+    await waitForInitialSnapshot(wsA);
+    await waitForInitialSnapshot(wsB);
 
     // Clear send calls from full snapshot on connect
     wsA.send.mockClear();
@@ -227,23 +299,60 @@ describe('createSnapshotsUpgradeHandler', () => {
         status: 'READY',
       } as never,
     };
-    changedListener!(event);
+    await changedListener!(event);
 
     expect(wsA.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_changed',
         workspaceId: 'ws-1',
         entry: event.entry,
+        reviewCount: 5,
       })
     );
     expect(wsB.send).not.toHaveBeenCalled();
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
-  it('routes ARCHIVING snapshot_changed as snapshot_removed', () => {
+  it('omits review count from snapshot_changed when cache is not populated', async () => {
+    mockGetCachedReviewCount.mockReturnValue(undefined);
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
+    await waitForInitialSnapshot(ws);
+    ws.send.mockClear();
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    const event: SnapshotChangedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Updated',
+        status: 'READY',
+      } as never,
+    };
+    await changedListener!(event);
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: event.entry,
+      })
+    );
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
+  });
+
+  it('routes ARCHIVING snapshot_changed as snapshot_removed with review count', async () => {
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+
+    callHandler(handler, ws, 'proj-1');
+    await waitForInitialSnapshot(ws);
     ws.send.mockClear();
 
     const changedListener = storeListeners.get('snapshot_changed');
@@ -259,21 +368,23 @@ describe('createSnapshotsUpgradeHandler', () => {
         status: 'ARCHIVING',
       } as never,
     };
-    changedListener!(event);
+    await changedListener!(event);
 
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
+        reviewCount: 5,
       })
     );
   });
 
-  it('sends snapshot_removed to project clients', () => {
+  it('sends snapshot_removed with review count to project clients', async () => {
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
+    await waitForInitialSnapshot(ws);
     ws.send.mockClear();
 
     const removedListener = storeListeners.get('snapshot_removed');
@@ -283,28 +394,30 @@ describe('createSnapshotsUpgradeHandler', () => {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
     };
-    removedListener!(event);
+    await removedListener!(event);
 
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
+        reviewCount: 5,
       })
     );
   });
 
-  it('does not send to non-OPEN sockets', () => {
+  it('does not send to non-OPEN sockets', async () => {
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
+    await waitForInitialSnapshot(ws);
     ws.send.mockClear();
 
     // Set socket to CLOSED state
     ws.readyState = WS_READY_STATE.CLOSED;
 
     const changedListener = storeListeners.get('snapshot_changed');
-    changedListener!({
+    await changedListener!({
       workspaceId: 'ws-1',
       projectId: 'proj-1',
       entry: { workspaceId: 'ws-1', status: 'READY' },
