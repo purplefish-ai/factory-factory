@@ -788,6 +788,34 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBeUndefined();
     });
 
+    it('clears the SIGTERM grace-period timeout when the child exits quickly', async () => {
+      const child = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      child.kill = vi.fn(() => {
+        child.exitCode = 0;
+        child.emit('exit', 0, null);
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        await manager.stopClient('session-1');
+
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('escalates to SIGKILL after timeout', async () => {
       const child = setupSuccessfulSpawn();
 
@@ -1145,6 +1173,51 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopAllClients', () => {
+    it('clears per-client shutdown timeouts when clients stop quickly', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const secondChild = createMockChildProcess();
+      mockSpawn.mockReturnValueOnce(secondChild);
+
+      await manager.getOrCreateClient(
+        'session-2',
+        { ...defaultOptions(), sessionId: 'session-2' },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      firstChild.kill = vi.fn(() => {
+        firstChild.exitCode = 0;
+        firstChild.emit('exit', 0, null);
+        return true;
+      });
+      secondChild.kill = vi.fn(() => {
+        secondChild.exitCode = 0;
+        secondChild.emit('exit', 0, null);
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        await manager.stopAllClients(10_000);
+
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(vi.getTimerCount()).toBe(0);
+        expect([...manager.getAllClients()]).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rejects new client creation after shutdown begins', async () => {
       await manager.stopAllClients();
 
