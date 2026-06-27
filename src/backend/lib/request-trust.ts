@@ -98,6 +98,17 @@ function parseOrigin(origin: string): URL | undefined {
   }
 }
 
+function isCanonicalOriginUrl(origin: string, url: URL): boolean {
+  return (
+    url.origin === origin &&
+    url.username === '' &&
+    url.password === '' &&
+    url.pathname === '/' &&
+    url.search === '' &&
+    url.hash === ''
+  );
+}
+
 function getEffectivePort(url: URL): string {
   if (url.port) {
     return url.port;
@@ -112,13 +123,25 @@ export function isOriginAllowed(origin: string, allowedOrigins: readonly string[
   }
 
   const parsedOrigin = parseOrigin(origin);
-  if (!(parsedOrigin && isLoopbackHostname(parsedOrigin.hostname))) {
+  if (
+    !(
+      parsedOrigin &&
+      isCanonicalOriginUrl(origin, parsedOrigin) &&
+      isLoopbackHostname(parsedOrigin.hostname)
+    )
+  ) {
     return false;
   }
 
   return allowedOrigins.some((allowedOrigin) => {
     const parsedAllowedOrigin = parseOrigin(allowedOrigin);
-    if (!(parsedAllowedOrigin && isLoopbackHostname(parsedAllowedOrigin.hostname))) {
+    if (
+      !(
+        parsedAllowedOrigin &&
+        isCanonicalOriginUrl(allowedOrigin, parsedAllowedOrigin) &&
+        isLoopbackHostname(parsedAllowedOrigin.hostname)
+      )
+    ) {
       return false;
     }
 

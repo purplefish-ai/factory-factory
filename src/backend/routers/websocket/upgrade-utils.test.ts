@@ -90,4 +90,20 @@ describe('validateWebSocketOrigin', () => {
     expect(socket.write).not.toHaveBeenCalled();
     expect(socket.destroy).not.toHaveBeenCalled();
   });
+
+  it('rejects credentialed loopback origins', () => {
+    const socket = createSocket();
+
+    const isValid = validateWebSocketOrigin({
+      request: { headers: { origin: 'http://evil@localhost:3000' } } as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000']),
+      logger: createLogger(),
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(false);
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+  });
 });

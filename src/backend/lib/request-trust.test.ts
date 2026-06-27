@@ -54,5 +54,13 @@ describe('request trust helpers', () => {
       expect(isOriginAllowed('https://app.example.com', ['https://example.com'])).toBe(false);
       expect(isOriginAllowed('not a url', ['http://localhost:3000'])).toBe(false);
     });
+
+    it('rejects loopback aliases with URL credentials or extra components', () => {
+      expect(isOriginAllowed('http://evil@localhost:3000', ['http://localhost:3000'])).toBe(false);
+      expect(isOriginAllowed('http://localhost:3000/path', ['http://127.0.0.1:3000'])).toBe(false);
+      expect(isOriginAllowed('http://localhost:3000?x=1', ['http://127.0.0.1:3000'])).toBe(false);
+      expect(isOriginAllowed('http://localhost:3000#hash', ['http://127.0.0.1:3000'])).toBe(false);
+      expect(isOriginAllowed('http://localhost:3000/', ['http://127.0.0.1:3000'])).toBe(false);
+    });
   });
 });
