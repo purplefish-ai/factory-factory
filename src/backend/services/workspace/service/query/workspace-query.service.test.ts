@@ -618,6 +618,30 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
+    let resolveLookup:
+      | ((workspaces: Array<{ id: string; prUrl: string | null }>) => void)
+      | undefined;
+    const lookupPromise = new Promise<Array<{ id: string; prUrl: string | null }>>((resolve) => {
+      resolveLookup = resolve;
+    });
+
+    mockFindByProjectIdWithSessions.mockReturnValueOnce(lookupPromise);
+    mockRefreshWorkspace.mockResolvedValueOnce({ success: true });
+
+    const firstSync = workspaceQueryService.syncAllPRStatuses('p1');
+    await Promise.resolve();
+
+    await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledTimes(1);
+
+    resolveLookup?.([{ id: 'w1', prUrl: 'https://github.com/o/r/pull/1' }]);
+    await expect(firstSync).resolves.toEqual({ queued: 1 });
+    await vi.waitFor(() => {
+      expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('hasChanges checks workspace metadata and git stats safely', async () => {
     mockFindByIdWithProject.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);

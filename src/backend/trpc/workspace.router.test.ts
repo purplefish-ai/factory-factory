@@ -22,6 +22,7 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
 
 const mockDeriveFlowState = vi.hoisted(() => vi.fn());
 const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
+const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
@@ -41,6 +42,9 @@ const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   workspaceQueryService: mockWorkspaceQueryService,
+  workspaceActivityService: {
+    clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
+  },
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
   computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
   computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
@@ -566,6 +570,7 @@ describe('workspaceRouter', () => {
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
+    expect(mockClearWorkspaceActivity).toHaveBeenCalledWith('w1');
 
     await expect(caller.refreshFactoryConfigs({ projectId: 'p1' })).resolves.toEqual({
       refreshed: 3,

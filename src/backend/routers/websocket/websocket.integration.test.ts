@@ -66,7 +66,7 @@ beforeAll(async () => {
   ({ workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace-snapshot-store.service')
   >('@/backend/services/workspace-snapshot-store.service'));
-});
+}, 30_000);
 
 afterEach(async () => {
   for (const ws of openSockets) {

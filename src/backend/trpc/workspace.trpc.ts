@@ -35,6 +35,7 @@ import {
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceAccessor,
+  workspaceActivityService,
   workspaceDataService,
   workspaceNotificationAccessor,
   workspaceQueryService,
@@ -461,6 +462,7 @@ export const workspaceRouter = router({
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     // Clean up running sessions, terminals, and dev processes before deleting
     await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
+    workspaceActivityService.clearWorkspace(input.id);
     return workspaceDataService.delete(input.id);
   }),
 

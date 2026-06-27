@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
-import { removeWorkspaceFromProjectSummaryCache } from '@/client/lib/workspace-cache-helpers';
+import {
+  removeWorkspaceFromProjectSummaryCache,
+  restoreWorkspacesToListCache,
+  restoreWorkspacesToProjectSummaryCache,
+} from '@/client/lib/workspace-cache-helpers';
 import {
   type NewSessionProviderSelection,
   resolveExplicitSessionProvider,
@@ -236,15 +240,15 @@ export function useSessionManagement({
 
       if (context?.projectId) {
         if (context.previousWorkspaceList) {
-          utils.workspace.listWithKanbanState.setData(
-            { projectId: context.projectId },
-            context.previousWorkspaceList
+          utils.workspace.listWithKanbanState.setData({ projectId: context.projectId }, (old) =>
+            restoreWorkspacesToListCache(old, context.previousWorkspaceList, [_variables.id])
           );
         }
         if (context.previousProjectSummaryState) {
-          utils.workspace.getProjectSummaryState.setData(
-            { projectId: context.projectId },
-            context.previousProjectSummaryState
+          utils.workspace.getProjectSummaryState.setData({ projectId: context.projectId }, (old) =>
+            restoreWorkspacesToProjectSummaryCache(old, context.previousProjectSummaryState, [
+              _variables.id,
+            ])
           );
         }
       }
