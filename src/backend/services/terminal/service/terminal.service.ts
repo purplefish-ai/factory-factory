@@ -208,6 +208,7 @@ export class TerminalService {
 
   // Resource monitoring interval
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private resourceUpdateInFlight = false;
   private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
 
   /**
@@ -262,12 +263,20 @@ export class TerminalService {
         return;
       }
 
+      if (this.resourceUpdateInFlight) {
+        logger.debug('Skipping terminal resource update; previous update still running');
+        return;
+      }
+
+      this.resourceUpdateInFlight = true;
       try {
         await this.updateAllTerminalResources();
       } catch (error) {
         logger.error('Failed to update terminal resources', {
           error: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        this.resourceUpdateInFlight = false;
       }
     }, TerminalService.MONITORING_INTERVAL_MS);
   }
