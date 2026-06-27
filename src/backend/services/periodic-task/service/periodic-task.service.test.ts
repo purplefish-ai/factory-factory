@@ -3,9 +3,13 @@ import type { createLogger } from '@/backend/services/logger.service';
 import { WorkspaceStatus } from '@/shared/core';
 
 const mockUpdateExecution = vi.hoisted(() => vi.fn());
+const mockCreateExecution = vi.hoisted(() => vi.fn());
+const mockMarkDispatched = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/periodic-task/resources/periodic-task.accessor', () => ({
   periodicTaskAccessor: {
+    createExecution: (...args: unknown[]) => mockCreateExecution(...args),
+    markDispatched: (...args: unknown[]) => mockMarkDispatched(...args),
     updateExecution: (...args: unknown[]) => mockUpdateExecution(...args),
   },
 }));
@@ -40,6 +44,53 @@ async function checkSingleExecution(
   await method.call(service, execution);
 }
 
+async function dispatchTask(
+  service: PeriodicTaskService,
+  params: {
+    taskId?: string;
+    projectId?: string;
+    name?: string;
+    prompt?: string;
+  } = {}
+): Promise<void> {
+  const method = Reflect.get(service, 'dispatchTask') as (
+    taskId: string,
+    projectId: string,
+    name: string,
+    prompt: string,
+    cadence: 'DAILY',
+    scheduledTime: string | null,
+    timezone: string | null,
+    scheduledDayOfMonth: number | null
+  ) => Promise<void>;
+  await method.call(
+    service,
+    params.taskId ?? 'task-1',
+    params.projectId ?? 'project-1',
+    params.name ?? 'Daily cleanup',
+    params.prompt ?? 'Clean up stale data',
+    'DAILY',
+    '09:00',
+    'UTC',
+    null
+  );
+}
+
+function createServiceWithWorkspaceBridge(
+  createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' })
+): PeriodicTaskService {
+  const service = new PeriodicTaskService(logger);
+  service.configure({
+    workspace: {
+      createWorkspaceForTask,
+    },
+    status: {
+      getWorkspaceStatus: vi.fn(),
+    },
+  });
+  return service;
+}
+
 function createServiceWithWorkspaceStatus(status: {
   status: WorkspaceStatus;
   prUrl: string | null;
@@ -67,10 +118,72 @@ describe('PeriodicTaskService', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(now);
+    mockCreateExecution.mockResolvedValue({
+      id: 'exec-1',
+      periodicTaskId: 'task-1',
+      workspaceId: 'workspace-1',
+      status: 'RUNNING',
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('creates the workspace and execution before advancing the next run', async () => {
+    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+
+    await dispatchTask(service);
+
+    expect(createWorkspaceForTask).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      name: expect.stringContaining('Daily cleanup'),
+      prompt: 'Clean up stale data',
+      periodicTaskId: 'task-1',
+    });
+    expect(mockCreateExecution).toHaveBeenCalledWith({
+      periodicTaskId: 'task-1',
+      workspaceId: 'workspace-1',
+      status: 'RUNNING',
+    });
+    expect(mockMarkDispatched).toHaveBeenCalledWith('task-1', 'DAILY', '09:00', 'UTC', null);
+    const [createWorkspaceOrder] = createWorkspaceForTask.mock.invocationCallOrder;
+    const [createExecutionOrder] = mockCreateExecution.mock.invocationCallOrder;
+    const [markDispatchedOrder] = mockMarkDispatched.mock.invocationCallOrder;
+    expect(createWorkspaceOrder).toBeDefined();
+    expect(createExecutionOrder).toBeDefined();
+    expect(markDispatchedOrder).toBeDefined();
+    if (
+      createWorkspaceOrder === undefined ||
+      createExecutionOrder === undefined ||
+      markDispatchedOrder === undefined
+    ) {
+      throw new Error('Expected dispatch calls to have invocation order');
+    }
+    expect(createWorkspaceOrder).toBeLessThan(createExecutionOrder);
+    expect(createExecutionOrder).toBeLessThan(markDispatchedOrder);
+  });
+
+  it('leaves the task due when workspace creation fails', async () => {
+    const createWorkspaceForTask = vi
+      .fn()
+      .mockRejectedValue(new Error('default session create failed'));
+    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+
+    await expect(dispatchTask(service)).rejects.toThrow('default session create failed');
+
+    expect(mockCreateExecution).not.toHaveBeenCalled();
+    expect(mockMarkDispatched).not.toHaveBeenCalled();
+  });
+
+  it('leaves the task due when execution creation fails', async () => {
+    const service = createServiceWithWorkspaceBridge();
+    mockCreateExecution.mockRejectedValue(new Error('execution insert failed'));
+
+    await expect(dispatchTask(service)).rejects.toThrow('execution insert failed');
+
+    expect(mockMarkDispatched).not.toHaveBeenCalled();
   });
 
   it('marks stale READY executions without PR or active agent work as failed', async () => {

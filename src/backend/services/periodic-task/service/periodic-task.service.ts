@@ -157,16 +157,6 @@ export class PeriodicTaskService {
 
     this.logger.info('Dispatching periodic task', { taskId, name });
 
-    // Advance nextRunAt first so a crash after this point won't re-dispatch
-    // the same due window on the next poll (at worst we miss one run).
-    await periodicTaskAccessor.markDispatched(
-      taskId,
-      cadence,
-      scheduledTime,
-      timezone,
-      scheduledDayOfMonth
-    );
-
     const result = await this.workspaceBridge.createWorkspaceForTask({
       projectId,
       name: `${name} — ${new Date().toLocaleDateString()}`,
@@ -179,6 +169,14 @@ export class PeriodicTaskService {
       workspaceId: result.workspaceId,
       status: 'RUNNING',
     });
+
+    await periodicTaskAccessor.markDispatched(
+      taskId,
+      cadence,
+      scheduledTime,
+      timezone,
+      scheduledDayOfMonth
+    );
 
     this.logger.info('Periodic task dispatched', {
       taskId,
