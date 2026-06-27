@@ -315,50 +315,72 @@ class GitHubCLIService {
 
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
-   * Uses a single GraphQL query to fetch all fields in one API call.
+   * Uses paginated GraphQL search calls to fetch all matching PRs.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
-    const query = `
-      query {
-        search(query: "is:pr is:open review-requested:@me", type: ISSUE, first: 50) {
-          nodes {
-            ... on PullRequest {
-              number title url isDraft createdAt
-              author { login }
-              repository { nameWithOwner }
-              reviewDecision
-              additions deletions changedFiles
+    const prs: ReviewRequestedPR[] = [];
+    let afterCursor: string | null = null;
+    let hasNextPage = true;
+
+    while (hasNextPage) {
+      const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
+      const query = `
+        query {
+          search(query: "is:pr is:open review-requested:@me", type: ISSUE, first: 50${afterClause}) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              ... on PullRequest {
+                number title url isDraft createdAt
+                author { login }
+                repository { nameWithOwner }
+                reviewDecision
+                additions deletions changedFiles
+              }
             }
           }
         }
-      }
-    `;
+      `;
 
-    const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
-      timeout: GH_TIMEOUT_MS.default,
-    });
-
-    const parsed = reviewRequestedPRGraphQLSchema.safeParse(JSON.parse(stdout));
-    if (!parsed.success) {
-      logger.warn('Failed to parse listReviewRequests GraphQL response', {
-        error: parsed.error.message,
+      const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+        timeout: GH_TIMEOUT_MS.default,
       });
-      return [];
+
+      const parsed = reviewRequestedPRGraphQLSchema.safeParse(JSON.parse(stdout));
+      if (!parsed.success) {
+        logger.warn('Failed to parse listReviewRequests GraphQL response', {
+          error: parsed.error.message,
+        });
+        return [];
+      }
+
+      prs.push(
+        ...parsed.data.data.search.nodes.map((pr) => ({
+          number: pr.number,
+          title: pr.title,
+          url: pr.url,
+          repository: { nameWithOwner: pr.repository.nameWithOwner },
+          author: { login: pr.author?.login ?? '' },
+          createdAt: pr.createdAt,
+          isDraft: pr.isDraft,
+          reviewDecision: (pr.reviewDecision as ReviewRequestedPR['reviewDecision']) ?? null,
+          additions: pr.additions ?? 0,
+          deletions: pr.deletions ?? 0,
+          changedFiles: pr.changedFiles ?? 0,
+        }))
+      );
+
+      hasNextPage = parsed.data.data.search.pageInfo.hasNextPage;
+      afterCursor = parsed.data.data.search.pageInfo.endCursor;
+      if (hasNextPage && !afterCursor) {
+        logger.warn('GitHub review request page is missing an end cursor');
+        return prs;
+      }
     }
 
-    return parsed.data.data.search.nodes.map((pr) => ({
-      number: pr.number,
-      title: pr.title,
-      url: pr.url,
-      repository: { nameWithOwner: pr.repository.nameWithOwner },
-      author: { login: pr.author?.login ?? '' },
-      createdAt: pr.createdAt,
-      isDraft: pr.isDraft,
-      reviewDecision: (pr.reviewDecision as ReviewRequestedPR['reviewDecision']) ?? null,
-      additions: pr.additions ?? 0,
-      deletions: pr.deletions ?? 0,
-      changedFiles: pr.changedFiles ?? 0,
-    }));
+    return prs;
   }
 
   /**

@@ -152,6 +152,10 @@ export const issueSchema = z.object({
 export const reviewRequestedPRGraphQLSchema = z.object({
   data: z.object({
     search: z.object({
+      pageInfo: z.object({
+        hasNextPage: z.boolean(),
+        endCursor: z.string().nullable(),
+      }),
       nodes: z.array(
         z.object({
           number: z.number(),

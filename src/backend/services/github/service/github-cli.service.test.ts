@@ -1135,6 +1135,7 @@ describe('GitHubCLIService', () => {
         stdout: JSON.stringify({
           data: {
             search: {
+              pageInfo: { hasNextPage: false, endCursor: null },
               nodes: [
                 {
                   number: 12,
@@ -1174,6 +1175,90 @@ describe('GitHubCLIService', () => {
 
       // Only one execFile call — no N+1
       expect(mockExecFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('paginates review requests until GitHub search has no next page', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: {
+              search: {
+                pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+                nodes: [
+                  {
+                    number: 50,
+                    title: 'Boundary PR',
+                    url: 'https://github.com/o/r/pull/50',
+                    repository: { nameWithOwner: 'o/r' },
+                    author: { login: 'alice' },
+                    createdAt: '2026-01-10T00:00:00Z',
+                    isDraft: false,
+                    reviewDecision: null,
+                    additions: 1,
+                    deletions: 2,
+                    changedFiles: 3,
+                  },
+                ],
+              },
+            },
+          }),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: {
+              search: {
+                pageInfo: { hasNextPage: false, endCursor: 'cursor-2' },
+                nodes: [
+                  {
+                    number: 51,
+                    title: 'Overflow PR',
+                    url: 'https://github.com/o/r/pull/51',
+                    repository: { nameWithOwner: 'o/r' },
+                    author: null,
+                    createdAt: '2026-01-11T00:00:00Z',
+                    isDraft: true,
+                  },
+                ],
+              },
+            },
+          }),
+          stderr: '',
+        });
+
+      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
+        {
+          number: 50,
+          title: 'Boundary PR',
+          url: 'https://github.com/o/r/pull/50',
+          repository: { nameWithOwner: 'o/r' },
+          author: { login: 'alice' },
+          createdAt: '2026-01-10T00:00:00Z',
+          isDraft: false,
+          reviewDecision: null,
+          additions: 1,
+          deletions: 2,
+          changedFiles: 3,
+        },
+        {
+          number: 51,
+          title: 'Overflow PR',
+          url: 'https://github.com/o/r/pull/51',
+          repository: { nameWithOwner: 'o/r' },
+          author: { login: '' },
+          createdAt: '2026-01-11T00:00:00Z',
+          isDraft: true,
+          reviewDecision: null,
+          additions: 0,
+          deletions: 0,
+          changedFiles: 0,
+        },
+      ]);
+
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+      expect(mockExecFile.mock.calls[1]?.[1]).toEqual(
+        expect.arrayContaining([expect.stringContaining('after: "cursor-1"')])
+      );
     });
 
     it('falls back to empty array when GraphQL response is malformed', async () => {
