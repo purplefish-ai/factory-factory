@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   periodicTask: {
     findUnique: vi.fn(),
     update: vi.fn(),
+  },
+  periodicTaskExecution: {
+    create: vi.fn(),
   },
 }));
 
@@ -214,6 +218,8 @@ describe('periodicTaskAccessor.markDispatched', () => {
     vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
     prismaMock.periodicTask.findUnique.mockReset();
     prismaMock.periodicTask.update.mockReset();
+    prismaMock.$transaction.mockReset();
+    prismaMock.periodicTaskExecution.create.mockReset();
   });
 
   afterEach(() => {
@@ -247,5 +253,69 @@ describe('periodicTaskAccessor.markDispatched', () => {
       hour: '09',
       minute: '00',
     });
+  });
+});
+
+describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
+    prismaMock.periodicTask.findUnique.mockReset();
+    prismaMock.periodicTask.update.mockReset();
+    prismaMock.periodicTaskExecution.create.mockReset();
+    prismaMock.$transaction.mockReset();
+    prismaMock.$transaction.mockImplementation(async (operations: Promise<unknown>[]) =>
+      Promise.all(operations)
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('creates the execution and advances the schedule in one transaction', async () => {
+    const execution = {
+      id: 'exec-1',
+      periodicTaskId: 'task-1',
+      workspaceId: null,
+      status: 'RUNNING',
+    };
+    const executionCreate = Promise.resolve(execution);
+    const taskUpdate = Promise.resolve({});
+    prismaMock.periodicTaskExecution.create.mockReturnValue(executionCreate);
+    prismaMock.periodicTask.update.mockReturnValue(taskUpdate);
+
+    await expect(
+      periodicTaskAccessor.createExecutionAndMarkDispatched(
+        {
+          periodicTaskId: 'task-1',
+          workspaceId: null,
+          status: 'RUNNING',
+        },
+        {
+          cadence: 'DAILY',
+          scheduledTime: '09:00',
+          timezone: 'UTC',
+          scheduledDayOfMonth: null,
+        }
+      )
+    ).resolves.toBe(execution);
+
+    expect(prismaMock.periodicTaskExecution.create).toHaveBeenCalledWith({
+      data: {
+        periodicTaskId: 'task-1',
+        workspaceId: null,
+        status: 'RUNNING',
+      },
+    });
+    expect(prismaMock.periodicTask.update).toHaveBeenCalledWith({
+      where: { id: 'task-1' },
+      data: expect.objectContaining({
+        lastRunAt: new Date('2026-02-28T15:00:00.000Z'),
+        scheduledDayOfMonth: null,
+        nextRunAt: new Date('2026-03-01T09:00:00.000Z'),
+      }),
+    });
+    expect(prismaMock.$transaction).toHaveBeenCalledWith([executionCreate, taskUpdate]);
   });
 });
