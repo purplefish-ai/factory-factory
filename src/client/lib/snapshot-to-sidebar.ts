@@ -156,17 +156,20 @@ const SnapshotFullMessageSchema = z.object({
   type: z.literal('snapshot_full'),
   projectId: z.string(),
   entries: z.array(WorkspaceSnapshotEntrySchema),
+  reviewCount: z.number().int().nonnegative().optional(),
 });
 
 const SnapshotChangedMessageSchema = z.object({
   type: z.literal('snapshot_changed'),
   workspaceId: z.string(),
   entry: WorkspaceSnapshotEntrySchema,
+  reviewCount: z.number().int().nonnegative().optional(),
 });
 
 const SnapshotRemovedMessageSchema = z.object({
   type: z.literal('snapshot_removed'),
   workspaceId: z.string(),
+  reviewCount: z.number().int().nonnegative().optional(),
 });
 
 export const SnapshotServerMessageSchema = z.discriminatedUnion('type', [
