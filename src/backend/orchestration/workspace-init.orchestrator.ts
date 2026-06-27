@@ -166,7 +166,7 @@ async function cleanupUnregisteredWorktreeAfterInitFailure(
       return;
     }
 
-    assertWorktreePathSafe(worktreeInfo.worktreePath, project.worktreeBasePath);
+    await assertWorktreePathSafe(worktreeInfo.worktreePath, project.worktreeBasePath);
     await gitOpsService.removeWorktree(worktreeInfo.worktreePath, project);
     logger.info('Removed unregistered worktree after init failure', {
       workspaceId,

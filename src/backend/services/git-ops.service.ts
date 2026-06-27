@@ -95,9 +95,22 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
     const worktreeName = path.basename(worktreePath);
+    const expectedWorktreePath = path.resolve(worktreePath);
+    const configuredWorktreePath = path.resolve(gitClient.getWorktreePath(worktreeName));
 
-    const registeredWorktree = await gitClient.checkWorktreeExists(worktreeName);
+    if (expectedWorktreePath !== configuredWorktreePath) {
+      throw new Error('Refusing to remove worktree because requested path does not match project');
+    }
+
+    const registeredWorktree = (await gitClient.listWorktreesWithBranches()).find(
+      (entry) => path.basename(entry.path) === worktreeName
+    );
     if (registeredWorktree) {
+      if (path.resolve(registeredWorktree.path) !== expectedWorktreePath) {
+        throw new Error(
+          'Refusing to remove worktree because Git registered a different path for that name'
+        );
+      }
       await gitClient.deleteWorktree(worktreeName);
       return;
     }

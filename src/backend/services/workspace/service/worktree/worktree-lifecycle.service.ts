@@ -1,3 +1,4 @@
+import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { gitOpsService } from '@/backend/services/git-ops.service';
@@ -10,14 +11,60 @@ export class WorktreePathSafetyError extends Error {
   }
 }
 
-export function assertWorktreePathSafe(worktreePath: string, worktreeBasePath: string): void {
-  const resolvedWorktreePath = path.resolve(worktreePath);
-  const resolvedBasePath = path.resolve(worktreeBasePath);
-  const basePrefix = `${resolvedBasePath}${path.sep}`;
+const isErrnoCode = (error: unknown, code: string): boolean =>
+  (error as NodeJS.ErrnoException).code === code;
 
-  if (resolvedWorktreePath === resolvedBasePath || !resolvedWorktreePath.startsWith(basePrefix)) {
+function assertPathWithinBase(worktreePath: string, basePath: string): void {
+  const basePrefix = `${basePath}${path.sep}`;
+
+  if (worktreePath === basePath || !worktreePath.startsWith(basePrefix)) {
     throw new WorktreePathSafetyError(
       'Workspace worktree path is outside the worktree base directory'
+    );
+  }
+}
+
+export async function assertWorktreePathSafe(
+  worktreePath: string,
+  worktreeBasePath: string
+): Promise<void> {
+  const resolvedWorktreePath = path.resolve(worktreePath);
+  const resolvedBasePath = path.resolve(worktreeBasePath);
+
+  assertPathWithinBase(resolvedWorktreePath, resolvedBasePath);
+
+  let worktreeStats: Awaited<ReturnType<typeof lstat>>;
+  try {
+    worktreeStats = await lstat(resolvedWorktreePath);
+  } catch (error) {
+    if (isErrnoCode(error, 'ENOENT')) {
+      return;
+    }
+    throw error;
+  }
+
+  if (worktreeStats.isSymbolicLink()) {
+    throw new WorktreePathSafetyError('Workspace worktree path must not be a symbolic link');
+  }
+
+  let realBasePath: string;
+  let realWorktreePath: string;
+  try {
+    [realBasePath, realWorktreePath] = await Promise.all([
+      realpath(resolvedBasePath),
+      realpath(resolvedWorktreePath),
+    ]);
+  } catch (error) {
+    throw new WorktreePathSafetyError(
+      `Unable to verify workspace worktree path: ${(error as Error).message}`
+    );
+  }
+
+  try {
+    assertPathWithinBase(realWorktreePath, realBasePath);
+  } catch {
+    throw new WorktreePathSafetyError(
+      'Workspace worktree real path is outside the worktree base directory'
     );
   }
 }
@@ -81,7 +128,7 @@ class WorktreeLifecycleService {
     }
 
     const project = getProjectOrThrow(workspace);
-    assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
+    await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
 
     const worktreeExists = await pathExists(worktreePath);
     if (!worktreeExists) {
