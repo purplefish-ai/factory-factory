@@ -12,6 +12,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
+import { workspaceQueryService } from '@/backend/services/workspace';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -48,8 +49,10 @@ export const snapshotConnections: SnapshotConnectionsMap = new Map();
 
 class SnapshotStoreSubscriptionState {
   private active = false;
-  private snapshotChangedListener: ((event: SnapshotChangedEvent) => void) | null = null;
-  private snapshotRemovedListener: ((event: SnapshotRemovedEvent) => void) | null = null;
+  private snapshotChangedListener: ((event: SnapshotChangedEvent) => void | Promise<void>) | null =
+    null;
+  private snapshotRemovedListener: ((event: SnapshotRemovedEvent) => void | Promise<void>) | null =
+    null;
 
   ensure(
     connections: SnapshotConnectionsMap,
@@ -65,16 +68,19 @@ class SnapshotStoreSubscriptionState {
         return;
       }
 
+      const reviewCount = getSnapshotReviewCount(logger);
       const message = JSON.stringify(
         isHiddenWorkspaceStatus(event.entry.status)
           ? {
               type: 'snapshot_removed',
               workspaceId: event.workspaceId,
+              reviewCount,
             }
           : {
               type: 'snapshot_changed',
               workspaceId: event.workspaceId,
               entry: event.entry,
+              reviewCount,
             }
       );
 
@@ -91,9 +97,11 @@ class SnapshotStoreSubscriptionState {
         return;
       }
 
+      const reviewCount = getSnapshotReviewCount(logger);
       const message = JSON.stringify({
         type: 'snapshot_removed',
         workspaceId: event.workspaceId,
+        reviewCount,
       });
 
       for (const ws of projectClients) {
@@ -136,6 +144,21 @@ const defaultSnapshotStoreSubscriptionState = new SnapshotStoreSubscriptionState
 
 function isHiddenWorkspaceStatus(status: WorkspaceStatus): boolean {
   return status === WorkspaceStatus.ARCHIVING || status === WorkspaceStatus.ARCHIVED;
+}
+
+function getSnapshotReviewCount(
+  logger: ReturnType<AppContext['services']['createLogger']>
+): number | undefined {
+  try {
+    const reviewCount = workspaceQueryService.getCachedReviewCount();
+    workspaceQueryService.refreshReviewCountIfStale();
+    return reviewCount;
+  } catch (error) {
+    logger.debug('Failed to read review count for snapshot message', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
 }
 
 export function resetSnapshotsHandlerStateForTests(): void {
@@ -205,6 +228,7 @@ export function createSnapshotsUpgradeHandler(
         if (ws.readyState !== WS_READY_STATE.OPEN) {
           return;
         }
+        const reviewCount = getSnapshotReviewCount(logger);
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
@@ -213,18 +237,19 @@ export function createSnapshotsUpgradeHandler(
             type: 'snapshot_full',
             projectId,
             entries,
+            reviewCount,
           })
         );
       };
 
       const storeHasEntries = workspaceSnapshotStore.getByProjectId(projectId).length > 0;
       if (storeHasEntries) {
-        sendSnapshot();
+        void sendSnapshot();
       } else {
         snapshotReconciliationService
           .waitForInProgress()
           .then(sendSnapshot)
-          .catch(() => sendSnapshot());
+          .catch(() => void sendSnapshot());
       }
 
       ws.on('close', () => {
