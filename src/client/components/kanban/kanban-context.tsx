@@ -21,6 +21,7 @@ import { trpc } from '@/client/lib/trpc';
 import {
   removeWorkspaceFromProjectSummaryCache,
   removeWorkspacesFromProjectSummaryCache,
+  restoreWorkspacesToProjectSummaryCache,
 } from '@/client/lib/workspace-cache-helpers';
 import type { WorkspaceWithKanban } from './kanban-card';
 
@@ -253,7 +254,9 @@ export function KanbanProvider({
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
     } catch (error) {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, previousProjectSummaryState);
+      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+        restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
+      );
       throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
@@ -321,7 +324,13 @@ export function KanbanProvider({
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
       ]);
     } catch (error) {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, previousProjectSummaryState);
+      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+        restoreWorkspacesToProjectSummaryCache(
+          old,
+          previousProjectSummaryState,
+          workspaceIdsToArchive
+        )
+      );
       throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
