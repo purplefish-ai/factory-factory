@@ -14,6 +14,10 @@ export function appendToRollingOutput(
   next: string,
   { maxChars, truncationMarker }: RollingOutputOptions
 ): string {
+  if (maxChars <= 0) {
+    return '';
+  }
+
   const wasTruncated = current.startsWith(truncationMarker);
   const currentBody = wasTruncated ? current.slice(truncationMarker.length) : current;
   const combinedBody = currentBody + next;
@@ -22,8 +26,13 @@ export function appendToRollingOutput(
     return combinedBody;
   }
 
-  const maxBodyChars = Math.max(maxChars - truncationMarker.length, 0);
-  return truncationMarker + combinedBody.slice(-maxBodyChars);
+  const boundedMarker = truncationMarker.slice(0, maxChars);
+  const maxBodyChars = maxChars - boundedMarker.length;
+  if (maxBodyChars <= 0) {
+    return boundedMarker;
+  }
+
+  return boundedMarker + combinedBody.slice(-maxBodyChars);
 }
 
 export function trimRollingOutput(output: string, options: RollingOutputOptions): string {

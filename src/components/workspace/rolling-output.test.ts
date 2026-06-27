@@ -24,4 +24,22 @@ describe('rolling output', () => {
   it('trims restored output with the same bounded representation', () => {
     expect(trimRollingOutput('abcdefghijklmnop', options)).toBe('[cut]\nklmnop');
   });
+
+  it('does not exceed the cap when the truncation marker is longer than the cap', () => {
+    expect(
+      appendToRollingOutput('abc', 'def', {
+        maxChars: 4,
+        truncationMarker: '[cut]\n',
+      })
+    ).toBe('[cut');
+  });
+
+  it('returns an empty string for a non-positive cap', () => {
+    expect(
+      appendToRollingOutput('abc', 'def', {
+        maxChars: 0,
+        truncationMarker: '[cut]\n',
+      })
+    ).toBe('');
+  });
 });
