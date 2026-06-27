@@ -10,6 +10,7 @@ import {
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
+  timeout: NodeJS.Timeout;
 };
 
 type CodexJsonRpcError = {
@@ -36,9 +37,32 @@ export class CodexRequestError extends Error {
   }
 }
 
+export class CodexRequestTimeoutError extends Error {
+  readonly id: number;
+  readonly method: string;
+  readonly timeoutMs: number;
+
+  constructor(params: { id: number; method: string; timeoutMs: number }) {
+    super(
+      `Codex app-server request "${params.method}" (id=${params.id}) timed out after ${params.timeoutMs}ms`
+    );
+    this.name = 'CodexRequestTimeoutError';
+    this.id = params.id;
+    this.method = params.method;
+    this.timeoutMs = params.timeoutMs;
+  }
+}
+
+export const DEFAULT_CODEX_RPC_REQUEST_TIMEOUT_MS = 120_000;
+
+export type CodexRpcRequestOptions = {
+  timeoutMs?: number;
+};
+
 export type CodexRpcClientOptions = {
   cwd: string;
   env: NodeJS.ProcessEnv;
+  requestTimeoutMs?: number;
   onStderr?: (line: string) => void;
   onNotification?: (notification: { method: string; params: unknown }) => void;
   onRequest?: (request: CodexRpcServerRequest) => void;
@@ -67,6 +91,7 @@ function toRequestErrorPayload(error: unknown): CodexJsonRpcError {
 
 export class CodexRpcClient {
   private readonly options: CodexRpcClientOptions;
+  private readonly requestTimeoutMs: number;
   private child: ChildProcess | null = null;
   private lineReader: ReadlineInterface | null = null;
   private nextId = 1;
@@ -74,6 +99,7 @@ export class CodexRpcClient {
 
   constructor(options: CodexRpcClientOptions) {
     this.options = options;
+    this.requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs);
   }
 
   start(): void {
@@ -157,7 +183,6 @@ export class CodexRpcClient {
       return;
     }
 
-    child.kill('SIGTERM');
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         if (child.exitCode === null) {
@@ -170,12 +195,18 @@ export class CodexRpcClient {
         clearTimeout(timeout);
         resolve();
       });
+      child.kill('SIGTERM');
     });
   }
 
-  async request<TResponse>(method: string, params?: unknown): Promise<TResponse> {
+  async request<TResponse>(
+    method: string,
+    params?: unknown,
+    requestOptions?: CodexRpcRequestOptions
+  ): Promise<TResponse> {
     const id = this.nextId;
     this.nextId += 1;
+    const timeoutMs = normalizeRequestTimeoutMs(requestOptions?.timeoutMs ?? this.requestTimeoutMs);
 
     const payload: Record<string, unknown> = {
       id,
@@ -184,18 +215,35 @@ export class CodexRpcClient {
     };
 
     const responsePromise = new Promise<TResponse>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        const pending = this.takePending(id);
+        if (!pending) {
+          return;
+        }
+
+        const error = new CodexRequestTimeoutError({ id, method, timeoutMs });
+        pending.reject(error);
+        void this.stop().catch((stopError: unknown) => {
+          this.options.onProtocolError?.({
+            reason: 'request_timeout_stop_failed',
+            payload: stopError instanceof Error ? stopError.message : String(stopError),
+          });
+        });
+      }, timeoutMs);
+      timeout.unref?.();
+
       this.pending.set(id, {
         resolve: (value) => resolve(value as TResponse),
         reject,
+        timeout,
       });
     });
 
     try {
       this.write(payload);
     } catch (error) {
-      const pending = this.pending.get(id);
+      const pending = this.takePending(id);
       if (pending) {
-        this.pending.delete(id);
         pending.reject(error);
       }
     }
@@ -221,9 +269,21 @@ export class CodexRpcClient {
 
   private rejectPending(error: unknown): void {
     for (const [, pending] of this.pending) {
+      clearTimeout(pending.timeout);
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private takePending(id: number): PendingRequest | undefined {
+    const pending = this.pending.get(id);
+    if (!pending) {
+      return undefined;
+    }
+
+    this.pending.delete(id);
+    clearTimeout(pending.timeout);
+    return pending;
   }
 
   private write(payload: unknown): void {
@@ -314,12 +374,11 @@ export class CodexRpcClient {
       return;
     }
 
-    const pending = this.pending.get(response.id);
+    const pending = this.takePending(response.id);
     if (!pending) {
       return;
     }
 
-    this.pending.delete(response.id);
     if (response.error) {
       pending.reject(
         new CodexRequestError({
@@ -333,4 +392,12 @@ export class CodexRpcClient {
 
     pending.resolve(response.result);
   }
+}
+
+function normalizeRequestTimeoutMs(timeoutMs: number | undefined): number {
+  if (!Number.isFinite(timeoutMs) || timeoutMs === undefined || timeoutMs <= 0) {
+    return DEFAULT_CODEX_RPC_REQUEST_TIMEOUT_MS;
+  }
+
+  return Math.floor(timeoutMs);
 }
