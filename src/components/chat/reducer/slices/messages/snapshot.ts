@@ -1,4 +1,4 @@
-import { convertPendingRequest } from '@/components/chat/reducer/helpers';
+import { applyRendererMessages, convertPendingRequest } from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState, PendingMessageContent } from '@/components/chat/reducer/types';
 
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
@@ -18,20 +18,23 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         action.payload.queuedMessages.map((queued) => [queued.id, queued] as const)
       );
 
-      return {
-        ...state,
-        messages: snapshotMessages,
-        queuedMessages,
-        pendingRequest,
-        sessionRuntime: action.payload.sessionRuntime,
-        toolUseIdToIndex: new Map(),
-        pendingMessages: newPendingMessages,
-        lastRejectedMessage: state.lastRejectedMessage,
-        messageIdToUuid: new Map(),
-        pendingUserMessageUuids: [],
-        localUserMessageIds: new Set(),
-        rewindPreview: null,
-      };
+      return applyRendererMessages(
+        {
+          ...state,
+          messages: [],
+          queuedMessages,
+          pendingRequest,
+          sessionRuntime: action.payload.sessionRuntime,
+          toolUseIdToIndex: new Map(),
+          pendingMessages: newPendingMessages,
+          lastRejectedMessage: state.lastRejectedMessage,
+          messageIdToUuid: new Map(),
+          pendingUserMessageUuids: [],
+          localUserMessageIds: new Set(),
+          rewindPreview: null,
+        },
+        snapshotMessages
+      );
     }
     default:
       return state;

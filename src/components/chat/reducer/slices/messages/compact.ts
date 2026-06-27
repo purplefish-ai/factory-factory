@@ -1,3 +1,4 @@
+import { applyRendererMessages } from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 
@@ -15,11 +16,13 @@ export function reduceMessageCompactSlice(state: ChatState, action: ChatAction):
         timestamp: new Date().toISOString(),
         order: maxOrder + 1,
       };
-      return {
-        ...state,
-        hasCompactBoundary: true,
-        messages: [...state.messages, compactBoundaryMessage],
-      };
+      return applyRendererMessages(
+        {
+          ...state,
+          hasCompactBoundary: true,
+        },
+        [...state.messages, compactBoundaryMessage]
+      );
     }
     default:
       return state;
