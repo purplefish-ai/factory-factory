@@ -448,6 +448,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   return {
     async start(): Promise<string> {
+      if (explicitStartupStarted) {
+        throw new Error('Server startup has already been initiated');
+      }
+
       explicitStartupStarted = true;
       startupComplete = false;
 

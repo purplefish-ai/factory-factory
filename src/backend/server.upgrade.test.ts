@@ -465,6 +465,36 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.ratchetService.start).toHaveBeenCalledOnce();
   });
 
+  it('rejects concurrent start calls without running startup cleanup', async () => {
+    const harness = createTestHarness();
+    let reconciliationStarted!: () => void;
+    let continueReconciliation!: () => void;
+    const reconciliationStartedPromise = new Promise<void>((resolve) => {
+      reconciliationStarted = resolve;
+    });
+    const continueReconciliationPromise = new Promise<void>((resolve) => {
+      continueReconciliation = resolve;
+    });
+    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
+      reconciliationStarted();
+      await continueReconciliationPromise;
+    });
+
+    const server = createTestServer(harness.context, 0);
+    const startPromise = server.start();
+    await reconciliationStartedPromise;
+
+    await expect(server.start()).rejects.toThrow('Server startup has already been initiated');
+    expect(stopInterceptors).not.toHaveBeenCalled();
+    expect(harness.services.sessionService.stopAllClients).not.toHaveBeenCalled();
+    expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
+    expect(prisma.$disconnect).not.toHaveBeenCalled();
+
+    continueReconciliation();
+    await expect(startPromise).resolves.toBe('http://localhost:0');
+    expect(server.getHttpServer().listening).toBe(true);
+  });
+
   it('writes backend port to stdout when run script proxy mode is enabled', async () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const harness = createTestHarness({
