@@ -164,18 +164,18 @@ export class PeriodicTaskService {
       periodicTaskId: taskId,
     });
 
-    await periodicTaskAccessor.createExecution({
-      periodicTaskId: taskId,
-      workspaceId: result.workspaceId,
-      status: 'RUNNING',
-    });
-
-    await periodicTaskAccessor.markDispatched(
-      taskId,
-      cadence,
-      scheduledTime,
-      timezone,
-      scheduledDayOfMonth
+    await periodicTaskAccessor.createExecutionAndMarkDispatched(
+      {
+        periodicTaskId: taskId,
+        workspaceId: result.workspaceId,
+        status: 'RUNNING',
+      },
+      {
+        cadence,
+        scheduledTime,
+        timezone,
+        scheduledDayOfMonth,
+      }
     );
 
     this.logger.info('Periodic task dispatched', {

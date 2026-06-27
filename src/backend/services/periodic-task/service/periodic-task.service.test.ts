@@ -4,11 +4,14 @@ import { WorkspaceStatus } from '@/shared/core';
 
 const mockUpdateExecution = vi.hoisted(() => vi.fn());
 const mockCreateExecution = vi.hoisted(() => vi.fn());
+const mockCreateExecutionAndMarkDispatched = vi.hoisted(() => vi.fn());
 const mockMarkDispatched = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/periodic-task/resources/periodic-task.accessor', () => ({
   periodicTaskAccessor: {
     createExecution: (...args: unknown[]) => mockCreateExecution(...args),
+    createExecutionAndMarkDispatched: (...args: unknown[]) =>
+      mockCreateExecutionAndMarkDispatched(...args),
     markDispatched: (...args: unknown[]) => mockMarkDispatched(...args),
     updateExecution: (...args: unknown[]) => mockUpdateExecution(...args),
   },
@@ -124,13 +127,19 @@ describe('PeriodicTaskService', () => {
       workspaceId: 'workspace-1',
       status: 'RUNNING',
     });
+    mockCreateExecutionAndMarkDispatched.mockResolvedValue({
+      id: 'exec-1',
+      periodicTaskId: 'task-1',
+      workspaceId: 'workspace-1',
+      status: 'RUNNING',
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('creates the workspace and execution before advancing the next run', async () => {
+  it('creates the workspace before atomically creating the execution and advancing the next run', async () => {
     const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
     const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
 
@@ -142,27 +151,29 @@ describe('PeriodicTaskService', () => {
       prompt: 'Clean up stale data',
       periodicTaskId: 'task-1',
     });
-    expect(mockCreateExecution).toHaveBeenCalledWith({
-      periodicTaskId: 'task-1',
-      workspaceId: 'workspace-1',
-      status: 'RUNNING',
-    });
-    expect(mockMarkDispatched).toHaveBeenCalledWith('task-1', 'DAILY', '09:00', 'UTC', null);
+    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalledWith(
+      {
+        periodicTaskId: 'task-1',
+        workspaceId: 'workspace-1',
+        status: 'RUNNING',
+      },
+      {
+        cadence: 'DAILY',
+        scheduledTime: '09:00',
+        timezone: 'UTC',
+        scheduledDayOfMonth: null,
+      }
+    );
+    expect(mockCreateExecution).not.toHaveBeenCalled();
+    expect(mockMarkDispatched).not.toHaveBeenCalled();
     const [createWorkspaceOrder] = createWorkspaceForTask.mock.invocationCallOrder;
-    const [createExecutionOrder] = mockCreateExecution.mock.invocationCallOrder;
-    const [markDispatchedOrder] = mockMarkDispatched.mock.invocationCallOrder;
+    const [persistDispatchOrder] = mockCreateExecutionAndMarkDispatched.mock.invocationCallOrder;
     expect(createWorkspaceOrder).toBeDefined();
-    expect(createExecutionOrder).toBeDefined();
-    expect(markDispatchedOrder).toBeDefined();
-    if (
-      createWorkspaceOrder === undefined ||
-      createExecutionOrder === undefined ||
-      markDispatchedOrder === undefined
-    ) {
+    expect(persistDispatchOrder).toBeDefined();
+    if (createWorkspaceOrder === undefined || persistDispatchOrder === undefined) {
       throw new Error('Expected dispatch calls to have invocation order');
     }
-    expect(createWorkspaceOrder).toBeLessThan(createExecutionOrder);
-    expect(createExecutionOrder).toBeLessThan(markDispatchedOrder);
+    expect(createWorkspaceOrder).toBeLessThan(persistDispatchOrder);
   });
 
   it('leaves the task due when workspace creation fails', async () => {
@@ -173,16 +184,20 @@ describe('PeriodicTaskService', () => {
 
     await expect(dispatchTask(service)).rejects.toThrow('default session create failed');
 
-    expect(mockCreateExecution).not.toHaveBeenCalled();
+    expect(mockCreateExecutionAndMarkDispatched).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
   });
 
-  it('leaves the task due when execution creation fails', async () => {
+  it('leaves the task due when dispatch persistence fails', async () => {
     const service = createServiceWithWorkspaceBridge();
-    mockCreateExecution.mockRejectedValue(new Error('execution insert failed'));
+    mockCreateExecutionAndMarkDispatched.mockRejectedValue(
+      new Error('dispatch persistence failed')
+    );
 
-    await expect(dispatchTask(service)).rejects.toThrow('execution insert failed');
+    await expect(dispatchTask(service)).rejects.toThrow('dispatch persistence failed');
 
+    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalled();
+    expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
   });
 

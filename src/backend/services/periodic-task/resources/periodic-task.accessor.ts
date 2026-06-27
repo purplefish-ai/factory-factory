@@ -11,6 +11,12 @@ const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
 type TimeZoneDateParts = { year: number; month: number; day: number };
 type TimeZoneDateTimeParts = TimeZoneDateParts & { hour: number; minute: number };
 type ScheduledTimeParts = { hours: number; minutes: number };
+type PeriodicTaskDispatchSchedule = {
+  cadence: PeriodicTaskCadence;
+  scheduledTime: string | null;
+  timezone: string | null;
+  scheduledDayOfMonth: number | null;
+};
 
 function getTimeZoneDateParts(date: Date, timezone: string): TimeZoneDateParts {
   const parts = Object.fromEntries(
@@ -233,6 +239,42 @@ function computeNextRunAt(
   return next;
 }
 
+async function buildDispatchedTaskData(
+  id: string,
+  { cadence, scheduledTime, timezone, scheduledDayOfMonth }: PeriodicTaskDispatchSchedule
+): Promise<{
+  lastRunAt: Date;
+  scheduledDayOfMonth: number | null;
+  nextRunAt: Date;
+}> {
+  const dispatchedAt = new Date();
+  let resolvedScheduledDayOfMonth = scheduledDayOfMonth;
+  if (cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
+    const task = await prisma.periodicTask.findUnique({
+      where: { id },
+      select: { createdAt: true, scheduledDayOfMonth: true, timezone: true },
+    });
+    resolvedScheduledDayOfMonth = resolveScheduledDayOfMonth(
+      cadence,
+      task?.scheduledDayOfMonth,
+      task?.timezone ?? timezone,
+      task?.createdAt ?? dispatchedAt
+    );
+  }
+
+  return {
+    lastRunAt: dispatchedAt,
+    scheduledDayOfMonth: resolvedScheduledDayOfMonth,
+    nextRunAt: computeNextRunAt(
+      cadence,
+      dispatchedAt,
+      scheduledTime,
+      timezone,
+      resolvedScheduledDayOfMonth
+    ),
+  };
+}
+
 // ─── Public types ───────────────────────────────────────────────────────────
 
 interface CreatePeriodicTaskInput {
@@ -375,33 +417,16 @@ export const periodicTaskAccessor = {
     timezone: string | null,
     scheduledDayOfMonth: number | null
   ): Promise<void> {
-    let resolvedScheduledDayOfMonth = scheduledDayOfMonth;
-    if (cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
-      const task = await prisma.periodicTask.findUnique({
-        where: { id },
-        select: { createdAt: true, scheduledDayOfMonth: true, timezone: true },
-      });
-      resolvedScheduledDayOfMonth = resolveScheduledDayOfMonth(
-        cadence,
-        task?.scheduledDayOfMonth,
-        task?.timezone ?? timezone,
-        task?.createdAt ?? new Date()
-      );
-    }
+    const data = await buildDispatchedTaskData(id, {
+      cadence,
+      scheduledTime,
+      timezone,
+      scheduledDayOfMonth,
+    });
 
     await prisma.periodicTask.update({
       where: { id },
-      data: {
-        lastRunAt: new Date(),
-        scheduledDayOfMonth: resolvedScheduledDayOfMonth,
-        nextRunAt: computeNextRunAt(
-          cadence,
-          new Date(),
-          scheduledTime,
-          timezone,
-          resolvedScheduledDayOfMonth
-        ),
-      },
+      data,
     });
   },
 
@@ -419,6 +444,32 @@ export const periodicTaskAccessor = {
         status: input.status,
       },
     });
+  },
+
+  async createExecutionAndMarkDispatched(
+    input: {
+      periodicTaskId: string;
+      workspaceId: string;
+      status: PeriodicTaskExecutionStatus;
+    },
+    schedule: PeriodicTaskDispatchSchedule
+  ): Promise<PeriodicTaskExecution> {
+    const data = await buildDispatchedTaskData(input.periodicTaskId, schedule);
+    const [execution] = await prisma.$transaction([
+      prisma.periodicTaskExecution.create({
+        data: {
+          periodicTaskId: input.periodicTaskId,
+          workspaceId: input.workspaceId,
+          status: input.status,
+        },
+      }),
+      prisma.periodicTask.update({
+        where: { id: input.periodicTaskId },
+        data,
+      }),
+    ]);
+
+    return execution;
   },
 
   async updateExecution(
