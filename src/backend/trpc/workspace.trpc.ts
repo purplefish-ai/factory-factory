@@ -32,6 +32,7 @@ import {
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceAccessor,
+  workspaceActivityService,
   workspaceDataService,
   workspaceNotificationAccessor,
   workspaceQueryService,
@@ -469,6 +470,7 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    workspaceActivityService.clearWorkspace(input.id);
     return workspaceDataService.delete(input.id);
   }),
 
