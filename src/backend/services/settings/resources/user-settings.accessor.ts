@@ -76,31 +76,24 @@ class UserSettingsAccessor {
   async get(): Promise<UserSettings> {
     const userId = 'default';
 
-    let settings = await prisma.userSettings.findUnique({
+    return await prisma.userSettings.upsert({
       where: { userId },
+      update: {},
+      create: {
+        userId,
+        preferredIde: 'cursor',
+        customIdeCommand: null,
+        playSoundOnComplete: true,
+        defaultSessionProvider: 'CLAUDE',
+        defaultClaudeModel: 'sonnet',
+        defaultCodexModel: 'default',
+        defaultClaudeReasoningEffort: null,
+        defaultCodexReasoningEffort: null,
+        defaultWorkspacePermissions: 'STRICT',
+        ratchetReplyToPrComments: true,
+        ratchetPermissions: 'YOLO',
+      },
     });
-
-    // Create default settings if they don't exist
-    if (!settings) {
-      settings = await prisma.userSettings.create({
-        data: {
-          userId,
-          preferredIde: 'cursor',
-          customIdeCommand: null,
-          playSoundOnComplete: true,
-          defaultSessionProvider: 'CLAUDE',
-          defaultClaudeModel: 'sonnet',
-          defaultCodexModel: 'default',
-          defaultClaudeReasoningEffort: null,
-          defaultCodexReasoningEffort: null,
-          defaultWorkspacePermissions: 'STRICT',
-          ratchetReplyToPrComments: true,
-          ratchetPermissions: 'YOLO',
-        },
-      });
-    }
-
-    return settings;
   }
 
   async getDefaultSessionProvider(): Promise<SessionProvider> {
