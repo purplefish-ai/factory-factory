@@ -96,6 +96,10 @@ export function clearDraft(sessionId: string | null): void {
 
 const PersistedAttachmentsSchema = AttachmentSchema.array();
 
+export type InputAttachmentsPersistenceResult =
+  | { ok: true; operation: 'save' | 'clear' | 'skip' }
+  | { ok: false; operation: 'save' | 'clear'; error: unknown };
+
 /**
  * Load input attachments from sessionStorage for a specific session.
  */
@@ -126,18 +130,20 @@ export function loadInputAttachments(sessionId: string | null): MessageAttachmen
 export function persistInputAttachments(
   sessionId: string | null,
   attachments: MessageAttachment[]
-): void {
+): InputAttachmentsPersistenceResult {
   if (!sessionId || typeof window === 'undefined') {
-    return;
+    return { ok: true, operation: 'skip' };
   }
+  const operation = attachments.length > 0 ? 'save' : 'clear';
   try {
     if (attachments.length > 0) {
       sessionStorage.setItem(getAttachmentsKey(sessionId), JSON.stringify(attachments));
     } else {
       sessionStorage.removeItem(getAttachmentsKey(sessionId));
     }
-  } catch {
-    // Silently ignore storage errors
+    return { ok: true, operation };
+  } catch (error) {
+    return { ok: false, operation, error };
   }
 }
 

@@ -25,6 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/chat-protocol';
 import {
   clearInputAttachments as clearPersistedInputAttachments,
@@ -91,6 +92,20 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   connected: boolean;
 }
 
+function showAttachmentPersistenceError(operation: 'save' | 'clear') {
+  if (operation === 'save') {
+    toast.error('Attachments were not autosaved', {
+      description:
+        'They are still in this composer, but may be lost if you reload or switch sessions.',
+    });
+    return;
+  }
+
+  toast.error('Saved attachments could not be cleared', {
+    description: 'Previously saved attachments may reappear after a reload or session switch.',
+  });
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -133,7 +148,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Update attachments and keep sessionStorage in sync.
   const setInputAttachments = useCallback((attachments: MessageAttachment[]) => {
     setInputAttachmentsState(attachments);
-    persistInputAttachments(dbSessionIdRef.current, attachments);
+    const persistenceResult = persistInputAttachments(dbSessionIdRef.current, attachments);
+    if (!persistenceResult.ok) {
+      showAttachmentPersistenceError(persistenceResult.operation);
+    }
   }, []);
 
   // Clear attachments from both state and persistence.

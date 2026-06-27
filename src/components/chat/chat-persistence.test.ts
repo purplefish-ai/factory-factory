@@ -352,21 +352,46 @@ describe('input attachment persistence', () => {
 
   describe('persistInputAttachments', () => {
     it('should not persist for null sessionId', () => {
-      persistInputAttachments(null, sampleAttachments);
+      const result = persistInputAttachments(null, sampleAttachments);
       expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: true, operation: 'skip' });
     });
 
     it('should persist attachments as JSON', () => {
-      persistInputAttachments('session-123', sampleAttachments);
+      const result = persistInputAttachments('session-123', sampleAttachments);
       const stored = mockStorage.get('chat-attachments-session-123');
       expect(stored).toBeDefined();
       expect(JSON.parse(stored ?? '')).toEqual(sampleAttachments);
+      expect(result).toEqual({ ok: true, operation: 'save' });
     });
 
     it('should remove attachments when empty array is persisted', () => {
       mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
-      persistInputAttachments('session-123', []);
+      const result = persistInputAttachments('session-123', []);
       expect(mockStorage.has('chat-attachments-session-123')).toBe(false);
+      expect(result).toEqual({ ok: true, operation: 'clear' });
+    });
+
+    it('should report setItem failures without throwing', () => {
+      const storageError = new Error('Storage full');
+      mockSessionStorage.setItem.mockImplementationOnce(() => {
+        throw storageError;
+      });
+
+      const result = persistInputAttachments('session-123', sampleAttachments);
+
+      expect(result).toEqual({ ok: false, operation: 'save', error: storageError });
+    });
+
+    it('should report removeItem failures without throwing', () => {
+      const storageError = new Error('Storage unavailable');
+      mockSessionStorage.removeItem.mockImplementationOnce(() => {
+        throw storageError;
+      });
+
+      const result = persistInputAttachments('session-123', []);
+
+      expect(result).toEqual({ ok: false, operation: 'clear', error: storageError });
     });
   });
 

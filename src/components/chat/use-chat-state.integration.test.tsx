@@ -3,10 +3,17 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
 import { type UseChatStateReturn, useChatState } from './use-chat-state';
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: vi.fn(),
+  },
+}));
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   configurable: true,
@@ -131,6 +138,32 @@ describe('useChatState rejected message recovery', () => {
     expect(harness.chatRef.current?.inputAttachments).toEqual([createAttachment()]);
     expect(sessionStorage.getItem('chat-draft-session-A')).toBe('sensitive data');
     expect(sessionStorage.getItem('chat-attachments-session-A')).toContain('secret.txt');
+
+    harness.cleanup();
+  });
+
+  it('warns when input attachments cannot be autosaved', async () => {
+    const harness = renderChatState('session-A');
+    await flushEffects();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+
+    flushSync(() => {
+      harness.chatRef.current?.setInputAttachments([createAttachment()]);
+    });
+
+    await flushEffects();
+
+    expect(harness.chatRef.current?.inputAttachments).toEqual([createAttachment()]);
+    expect(sessionStorage.getItem('chat-attachments-session-A')).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith(
+      'Attachments were not autosaved',
+      expect.objectContaining({
+        description:
+          'They are still in this composer, but may be lost if you reload or switch sessions.',
+      })
+    );
 
     harness.cleanup();
   });
