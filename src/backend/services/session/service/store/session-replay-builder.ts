@@ -5,13 +5,18 @@ import {
   QUEUED_MESSAGE_ORDER_BASE,
   type WebSocketMessage as ReplayEventMessage,
   resolveSelectedModel,
+  trimTranscriptForRenderer,
 } from '@/shared/acp-protocol';
 import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 
+function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
+  return trimTranscriptForRenderer(store.transcript);
+}
+
 export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
-  const snapshot = [...store.transcript];
+  const snapshot = selectRendererTranscriptWindow(store);
   store.queue.forEach((queued, index) => {
     snapshot.push({
       id: queued.id,
@@ -34,7 +39,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
     },
   ];
 
-  const transcript = [...store.transcript].sort(messageSort);
+  const transcript = selectRendererTranscriptWindow(store);
   for (const message of transcript) {
     if (message.source === 'user') {
       replayEvents.push({
