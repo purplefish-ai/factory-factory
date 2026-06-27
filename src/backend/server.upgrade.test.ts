@@ -680,6 +680,25 @@ describe('server websocket upgrade routing', () => {
     expect(prisma.$disconnect).toHaveBeenCalledOnce();
   });
 
+  it('does not allow retrying start after startup failure cleanup', async () => {
+    const harness = createTestHarness();
+    vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
+      throw new Error('scheduler failed');
+    });
+    const server = createTestServer(harness.context, 0);
+
+    await expect(server.start()).rejects.toThrow('scheduler failed');
+
+    expect(server.getHttpServer().listening).toBe(false);
+    await expect(server.start()).rejects.toThrow('Server has already been stopped');
+
+    await server.stop();
+    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledOnce();
+    expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
+    expect(prisma.$disconnect).toHaveBeenCalledOnce();
+  });
+
   it('runs cleanup fan-out when server stops', async () => {
     const harness = createTestHarness();
     const server = createTestServer(harness.context);

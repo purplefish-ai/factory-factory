@@ -86,6 +86,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   let actualPort: number = REQUESTED_PORT;
   let explicitStartupStarted = false;
   let startupComplete = false;
+  let cleanupStarted = false;
   let cleanupPromise: Promise<void> | null = null;
 
   const app = express();
@@ -407,6 +408,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       return cleanupPromise;
     }
 
+    cleanupStarted = true;
     cleanupPromise = (async () => {
       logger.info('Starting graceful cleanup');
 
@@ -448,6 +450,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   return {
     async start(): Promise<string> {
+      if (cleanupStarted) {
+        throw new Error('Server has already been stopped');
+      }
+
       if (explicitStartupStarted) {
         throw new Error('Server startup has already been initiated');
       }
@@ -537,7 +543,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       } catch (error) {
         startupComplete = false;
         await performCleanup();
-        explicitStartupStarted = false;
         throw error;
       }
     },
