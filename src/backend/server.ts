@@ -70,7 +70,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     acpTraceLogger,
     configService,
     createLogger,
-    findAvailablePort,
     ratchetService,
     rateLimiter,
     schedulerService,
@@ -83,6 +82,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
   const REQUESTED_HOST = configService.getBackendHost();
   const ENDPOINT_HOST = REQUESTED_HOST ?? 'localhost';
+  const PORT_BIND_MAX_ATTEMPTS = 10;
   let actualPort: number = REQUESTED_PORT;
 
   const app = express();
@@ -96,6 +96,82 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
   const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(context);
   const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
+
+  const isAddressInUseError = (error: unknown): error is NodeJS.ErrnoException =>
+    error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+
+  const listenOnPort = (port: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const onError = (error: Error) => {
+        server.off('listening', onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        server.off('error', onError);
+        resolve();
+      };
+
+      server.once('error', onError);
+      server.once('listening', onListening);
+
+      try {
+        server.listen(port, REQUESTED_HOST);
+      } catch (error) {
+        server.off('error', onError);
+        server.off('listening', onListening);
+        reject(error);
+      }
+    });
+
+  const bindServerWithPortFallback = async (): Promise<void> => {
+    let lastAddressInUseError: NodeJS.ErrnoException | undefined;
+
+    for (let attempt = 0; attempt < PORT_BIND_MAX_ATTEMPTS; attempt++) {
+      const candidatePort = REQUESTED_PORT + attempt;
+
+      try {
+        await listenOnPort(candidatePort);
+        actualPort = candidatePort;
+
+        if (actualPort !== REQUESTED_PORT) {
+          logger.warn('Requested port in use, using alternative', {
+            requestedPort: REQUESTED_PORT,
+            actualPort,
+          });
+        }
+
+        return;
+      } catch (error) {
+        if (!isAddressInUseError(error)) {
+          throw error;
+        }
+
+        lastAddressInUseError = error;
+      }
+    }
+
+    const error = new Error(
+      `Could not bind server to an available port starting from ${REQUESTED_PORT}`
+    );
+    error.cause = lastAddressInUseError;
+    throw error;
+  };
+
+  const closeBoundServer = async (): Promise<void> => {
+    if (!server.listening) {
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  };
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -362,14 +438,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         source: configService.getDatabasePathFromEnv() ? 'DATABASE_PATH env var' : 'default',
       });
 
-      actualPort = await findAvailablePort(REQUESTED_PORT);
-      if (actualPort !== REQUESTED_PORT) {
-        logger.warn('Requested port in use, using alternative', {
-          requestedPort: REQUESTED_PORT,
-          actualPort,
-        });
-      }
-
       const runStartupReconciliation = async (): Promise<void> => {
         await runStartupTask('Failed to cleanup orphan sessions on startup', () =>
           reconciliationService.cleanupOrphans()
@@ -406,63 +474,47 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         );
       };
 
-      return new Promise((resolve, reject) => {
-        let startupFailed = false;
-        const onServerError = (error: Error) => {
-          startupFailed = true;
-          reject(error);
-        };
-        server.once('error', onServerError);
+      try {
+        configureDomainBridges(context.services);
+        configureEventCollector(context.services);
 
-        void (async () => {
-          try {
-            configureDomainBridges(context.services);
-            configureEventCollector(context.services);
+        await bindServerWithPortFallback();
+        await runStartupReconciliation();
 
-            await runStartupReconciliation();
+        configureSnapshotReconciliation(context.services);
 
-            if (startupFailed) {
-              return;
-            }
+        logger.info('Backend server started', {
+          port: actualPort,
+          environment: configService.getEnvironment(),
+        });
+        if (configService.isRunScriptProxyEnabled()) {
+          process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+        }
 
-            server.listen(actualPort, REQUESTED_HOST, async () => {
-              configureSnapshotReconciliation(context.services);
+        sessionFileLogger.cleanupOldLogs();
+        acpTraceLogger.cleanupOldLogs();
+        await startInterceptors();
+        reconciliationService.startPeriodicCleanup();
+        rateLimiter.start();
+        schedulerService.start();
+        ratchetService.start();
+        periodicTaskService.start();
 
-              logger.info('Backend server started', {
-                port: actualPort,
-                environment: configService.getEnvironment(),
-              });
-              if (configService.isRunScriptProxyEnabled()) {
-                process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
-              }
+        logger.info('Server endpoints available', {
+          server: `http://${ENDPOINT_HOST}:${actualPort}`,
+          health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
+          healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
+          trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
+          wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
+          wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
+          wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
+        });
 
-              sessionFileLogger.cleanupOldLogs();
-              acpTraceLogger.cleanupOldLogs();
-              await startInterceptors();
-              reconciliationService.startPeriodicCleanup();
-              rateLimiter.start();
-              schedulerService.start();
-              ratchetService.start();
-              periodicTaskService.start();
-
-              logger.info('Server endpoints available', {
-                server: `http://${ENDPOINT_HOST}:${actualPort}`,
-                health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
-                healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
-                trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
-                wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
-                wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
-                wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
-              });
-
-              resolve(`http://${ENDPOINT_HOST}:${actualPort}`);
-            });
-          } catch (error) {
-            server.off('error', onServerError);
-            reject(error);
-          }
-        })();
-      });
+        return `http://${ENDPOINT_HOST}:${actualPort}`;
+      } catch (error) {
+        await closeBoundServer();
+        throw error;
+      }
     },
 
     async stop(): Promise<void> {
