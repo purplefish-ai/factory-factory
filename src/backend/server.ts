@@ -70,7 +70,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     acpTraceLogger,
     configService,
     createLogger,
-    findAvailablePort,
     ratchetService,
     rateLimiter,
     schedulerService,
@@ -83,7 +82,12 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
   const REQUESTED_HOST = configService.getBackendHost();
   const ENDPOINT_HOST = REQUESTED_HOST ?? 'localhost';
+  const PORT_BIND_MAX_ATTEMPTS = 10;
   let actualPort: number = REQUESTED_PORT;
+  let explicitStartupStarted = false;
+  let startupComplete = false;
+  let cleanupStarted = false;
+  let cleanupPromise: Promise<void> | null = null;
 
   const app = express();
 
@@ -96,6 +100,90 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
   const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(context);
   const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
+  const websocketUpgradeHandlers = new Map<string, typeof chatUpgradeHandler>([
+    ['/chat', chatUpgradeHandler],
+    ['/terminal', terminalUpgradeHandler],
+    ['/setup-terminal', setupTerminalUpgradeHandler],
+    ['/dev-logs', devLogsUpgradeHandler],
+    ['/post-run-logs', postRunLogsUpgradeHandler],
+    ['/snapshots', snapshotsUpgradeHandler],
+  ]);
+
+  const isAddressInUseError = (error: unknown): error is NodeJS.ErrnoException =>
+    error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+
+  const listenOnPort = (port: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const onError = (error: Error) => {
+        server.off('listening', onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        server.off('error', onError);
+        resolve();
+      };
+
+      server.once('error', onError);
+      server.once('listening', onListening);
+
+      try {
+        server.listen(port, REQUESTED_HOST);
+      } catch (error) {
+        server.off('error', onError);
+        server.off('listening', onListening);
+        reject(error);
+      }
+    });
+
+  const bindServerWithPortFallback = async (): Promise<void> => {
+    let lastAddressInUseError: NodeJS.ErrnoException | undefined;
+
+    for (let attempt = 0; attempt < PORT_BIND_MAX_ATTEMPTS; attempt++) {
+      const candidatePort = REQUESTED_PORT + attempt;
+
+      try {
+        await listenOnPort(candidatePort);
+        actualPort = candidatePort;
+
+        if (actualPort !== REQUESTED_PORT) {
+          logger.warn('Requested port in use, using alternative', {
+            requestedPort: REQUESTED_PORT,
+            actualPort,
+          });
+        }
+
+        return;
+      } catch (error) {
+        if (!isAddressInUseError(error)) {
+          throw error;
+        }
+
+        lastAddressInUseError = error;
+      }
+    }
+
+    const error = new Error(
+      `Could not bind server to an available port starting from ${REQUESTED_PORT}`
+    );
+    error.cause = lastAddressInUseError;
+    throw error;
+  };
+
+  const closeBoundServer = async (): Promise<void> => {
+    if (!server.listening) {
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  };
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -122,6 +210,18 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   app.use(createCorsMiddleware(context));
   app.use(createRequestLoggerMiddleware(context));
   app.use(express.json({ limit: '10mb' }));
+  app.use((_req, res, next) => {
+    if (!explicitStartupStarted || startupComplete) {
+      next();
+      return;
+    }
+
+    res.set('Retry-After', '1');
+    res.status(503).json({
+      error: 'Service starting',
+      message: 'Backend startup is still completing. Please retry shortly.',
+    });
+  });
 
   // ============================================================================
   // Initialize Interceptors
@@ -152,7 +252,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     const loadStaticIndexHtml = (message: string) => {
       try {
         indexHtml = readFileSync(indexHtmlPath, 'utf8');
-        if (indexHtmlReloadInterval) {
+        if (indexHtmlReloadInterval !== null) {
           clearInterval(indexHtmlReloadInterval);
           indexHtmlReloadInterval = null;
         }
@@ -253,33 +353,17 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       return;
     }
 
-    if (url.pathname === '/chat') {
-      chatUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+    if (explicitStartupStarted && !startupComplete) {
+      socket.write(
+        'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 1\r\n\r\n'
+      );
+      socket.destroy();
       return;
     }
 
-    if (url.pathname === '/terminal') {
-      terminalUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
-      return;
-    }
-
-    if (url.pathname === '/setup-terminal') {
-      setupTerminalUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
-      return;
-    }
-
-    if (url.pathname === '/dev-logs') {
-      devLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
-      return;
-    }
-
-    if (url.pathname === '/post-run-logs') {
-      postRunLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
-      return;
-    }
-
-    if (url.pathname === '/snapshots') {
-      snapshotsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+    const upgradeHandler = websocketUpgradeHandlers.get(url.pathname);
+    if (upgradeHandler) {
+      upgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 
@@ -319,37 +403,46 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     }
   };
 
-  const performCleanup = async () => {
-    logger.info('Starting graceful cleanup');
-
-    clearInterval(heartbeatInterval);
-    if (indexHtmlReloadInterval) {
-      clearInterval(indexHtmlReloadInterval);
-      indexHtmlReloadInterval = null;
+  const performCleanup = (): Promise<void> => {
+    if (cleanupPromise !== null) {
+      return cleanupPromise;
     }
-    await stopInterceptors();
 
-    // Close WebSocket server
-    wss.close();
-    server.close();
+    cleanupStarted = true;
+    cleanupPromise = (async () => {
+      logger.info('Starting graceful cleanup');
 
-    // Stop all Claude clients via sessionService (unified lifecycle management)
-    await sessionService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
+      clearInterval(heartbeatInterval);
+      if (indexHtmlReloadInterval !== null) {
+        clearInterval(indexHtmlReloadInterval);
+        indexHtmlReloadInterval = null;
+      }
+      await stopInterceptors();
 
-    terminalService.cleanup();
-    sessionFileLogger.cleanup();
-    acpTraceLogger.cleanup();
-    await rateLimiter.stop();
+      // Close WebSocket server
+      wss.close();
+      await closeBoundServer();
 
-    await schedulerService.stop();
-    stopEventCollector();
-    await snapshotReconciliationService.stop();
-    await ratchetService.stop();
-    await periodicTaskService.stop();
-    await reconciliationService.stopPeriodicCleanup();
-    await prisma.$disconnect();
+      // Stop all Claude clients via sessionService (unified lifecycle management)
+      await sessionService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
 
-    logger.info('Graceful cleanup completed');
+      terminalService.cleanup();
+      sessionFileLogger.cleanup();
+      acpTraceLogger.cleanup();
+      await rateLimiter.stop();
+
+      await schedulerService.stop();
+      stopEventCollector();
+      await snapshotReconciliationService.stop();
+      await ratchetService.stop();
+      await periodicTaskService.stop();
+      await reconciliationService.stopPeriodicCleanup();
+      await prisma.$disconnect();
+
+      logger.info('Graceful cleanup completed');
+    })();
+
+    return cleanupPromise;
   };
 
   // ============================================================================
@@ -357,18 +450,21 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   return {
     async start(): Promise<string> {
+      if (cleanupStarted) {
+        throw new Error('Server has already been stopped');
+      }
+
+      if (explicitStartupStarted) {
+        throw new Error('Server startup has already been initiated');
+      }
+
+      explicitStartupStarted = true;
+      startupComplete = false;
+
       logger.info('Database path', {
         path: configService.getDatabasePath(),
         source: configService.getDatabasePathFromEnv() ? 'DATABASE_PATH env var' : 'default',
       });
-
-      actualPort = await findAvailablePort(REQUESTED_PORT);
-      if (actualPort !== REQUESTED_PORT) {
-        logger.warn('Requested port in use, using alternative', {
-          requestedPort: REQUESTED_PORT,
-          actualPort,
-        });
-      }
 
       const runStartupReconciliation = async (): Promise<void> => {
         await runStartupTask('Failed to cleanup orphan sessions on startup', () =>
@@ -406,63 +502,49 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         );
       };
 
-      return new Promise((resolve, reject) => {
-        let startupFailed = false;
-        const onServerError = (error: Error) => {
-          startupFailed = true;
-          reject(error);
-        };
-        server.once('error', onServerError);
+      try {
+        configureDomainBridges(context.services);
+        configureEventCollector(context.services);
 
-        void (async () => {
-          try {
-            configureDomainBridges(context.services);
-            configureEventCollector(context.services);
+        await bindServerWithPortFallback();
+        await runStartupReconciliation();
 
-            await runStartupReconciliation();
+        configureSnapshotReconciliation(context.services);
 
-            if (startupFailed) {
-              return;
-            }
+        logger.info('Backend server started', {
+          port: actualPort,
+          environment: configService.getEnvironment(),
+        });
+        if (configService.isRunScriptProxyEnabled()) {
+          process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+        }
 
-            server.listen(actualPort, REQUESTED_HOST, async () => {
-              configureSnapshotReconciliation(context.services);
+        sessionFileLogger.cleanupOldLogs();
+        acpTraceLogger.cleanupOldLogs();
+        await startInterceptors();
+        reconciliationService.startPeriodicCleanup();
+        rateLimiter.start();
+        schedulerService.start();
+        ratchetService.start();
+        periodicTaskService.start();
+        startupComplete = true;
 
-              logger.info('Backend server started', {
-                port: actualPort,
-                environment: configService.getEnvironment(),
-              });
-              if (configService.isRunScriptProxyEnabled()) {
-                process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
-              }
+        logger.info('Server endpoints available', {
+          server: `http://${ENDPOINT_HOST}:${actualPort}`,
+          health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
+          healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
+          trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
+          wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
+          wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
+          wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
+        });
 
-              sessionFileLogger.cleanupOldLogs();
-              acpTraceLogger.cleanupOldLogs();
-              await startInterceptors();
-              reconciliationService.startPeriodicCleanup();
-              rateLimiter.start();
-              schedulerService.start();
-              ratchetService.start();
-              periodicTaskService.start();
-
-              logger.info('Server endpoints available', {
-                server: `http://${ENDPOINT_HOST}:${actualPort}`,
-                health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
-                healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
-                trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
-                wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
-                wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
-                wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
-              });
-
-              resolve(`http://${ENDPOINT_HOST}:${actualPort}`);
-            });
-          } catch (error) {
-            server.off('error', onServerError);
-            reject(error);
-          }
-        })();
-      });
+        return `http://${ENDPOINT_HOST}:${actualPort}`;
+      } catch (error) {
+        startupComplete = false;
+        await performCleanup();
+        throw error;
+      }
     },
 
     async stop(): Promise<void> {
