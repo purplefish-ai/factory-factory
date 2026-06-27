@@ -1144,6 +1144,98 @@ describe('AcpRuntimeManager', () => {
     });
   });
 
+  describe('stopAllClients', () => {
+    it('rejects new client creation after shutdown begins', async () => {
+      await manager.stopAllClients();
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-after-shutdown',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP runtime manager is shutting down');
+
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('aborts in-flight client creation and kills the spawned subprocess', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep creation pending until shutdown aborts it.
+          })
+      );
+
+      const createPromise = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const createRejection = createPromise.catch((error: unknown) => error);
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+      });
+
+      await manager.stopAllClients(50);
+
+      await expect(createRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(manager.getClient('session-1')).toBeUndefined();
+      expect(manager.getPendingClient('session-1')).toBeUndefined();
+    });
+
+    it('rejects queued creation requests after an in-flight creation is aborted', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep the first creation holding the per-session lock.
+          })
+      );
+
+      const firstCreate = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const firstRejection = firstCreate.catch((error: unknown) => error);
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+      });
+
+      const secondCreate = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const secondRejection = secondCreate.catch((error: unknown) => error);
+
+      await manager.stopAllClients(50);
+
+      await expect(firstRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      await expect(secondRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(manager.getClient('session-1')).toBeUndefined();
+    });
+  });
+
   describe('sendPrompt', () => {
     it('sets isPromptInFlight, calls connection.prompt, clears flag on resolve', async () => {
       setupSuccessfulSpawn();

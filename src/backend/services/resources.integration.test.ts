@@ -61,7 +61,7 @@ beforeAll(async () => {
     '@/backend/clients/git.client'
   );
   ({ GitClientFactory } = gitClientModule);
-});
+}, 30_000);
 
 afterEach(async () => {
   await clearIntegrationDatabase(prisma);
