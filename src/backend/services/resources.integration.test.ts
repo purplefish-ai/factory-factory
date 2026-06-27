@@ -614,6 +614,52 @@ describe('resource accessors integration', () => {
       expect(orderA).toEqual(['ws-3', 'ws-1']);
       expect(orderB).toEqual(['ws-9']);
     });
+
+    it('retries stale workspace order writes and preserves concurrent project entries', async () => {
+      const projectA = await createProjectFixture();
+      const projectB = await createProjectFixture();
+      await userSettingsAccessor.get();
+
+      type UserSettingsUpdateManyResult = ReturnType<typeof prisma.userSettings.updateMany>;
+      const originalUpdateMany = prisma.userSettings.updateMany.bind(prisma.userSettings);
+      let injectedConcurrentUpdate = false;
+      const updateManySpy = vi
+        .spyOn(prisma.userSettings, 'updateMany')
+        .mockImplementation((args): UserSettingsUpdateManyResult => {
+          if (!injectedConcurrentUpdate) {
+            injectedConcurrentUpdate = true;
+
+            return prisma.userSettings
+              .findUniqueOrThrow({
+                where: { userId: 'default' },
+              })
+              .then((currentSettings) =>
+                prisma.userSettings.update({
+                  where: { userId: 'default' },
+                  data: {
+                    workspaceOrder: { [projectB.id]: ['ws-9'] },
+                    updatedAt: new Date(currentSettings.updatedAt.getTime() + 1000),
+                  },
+                })
+              )
+              .then(() => originalUpdateMany(args)) as UserSettingsUpdateManyResult;
+          }
+
+          return originalUpdateMany(args);
+        });
+
+      await userSettingsAccessor.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
+
+      const settings = await prisma.userSettings.findUniqueOrThrow({
+        where: { userId: 'default' },
+      });
+
+      expect(updateManySpy).toHaveBeenCalledTimes(2);
+      expect(settings.workspaceOrder).toEqual({
+        [projectB.id]: ['ws-9'],
+        [projectA.id]: ['ws-3', 'ws-1'],
+      });
+    });
   });
 
   describe('decisionLogAccessor', () => {
