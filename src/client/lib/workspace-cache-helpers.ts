@@ -75,3 +75,58 @@ export function removeWorkspacesFromProjectSummaryCache<TWorkspace extends Works
 
   return { ...cache, workspaces };
 }
+
+export function restoreWorkspacesToListCache<TWorkspace extends WorkspaceWithId>(
+  cache: TWorkspace[] | undefined,
+  previousCache: TWorkspace[] | undefined,
+  workspaceIds: Iterable<string>
+): TWorkspace[] | undefined {
+  if (!(cache && previousCache)) {
+    return cache;
+  }
+
+  const idsToRestore = new Set(workspaceIds);
+  if (idsToRestore.size === 0) {
+    return cache;
+  }
+
+  const currentIds = new Set(cache.map((workspace) => workspace.id));
+  const workspacesToRestore = previousCache.filter(
+    (workspace) => idsToRestore.has(workspace.id) && !currentIds.has(workspace.id)
+  );
+
+  if (workspacesToRestore.length === 0) {
+    return cache;
+  }
+
+  return [...cache, ...workspacesToRestore];
+}
+
+export function restoreWorkspacesToProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
+  previousCache: ProjectSummaryCacheData<TWorkspace> | undefined,
+  workspaceIds: Iterable<string>
+): ProjectSummaryCacheData<TWorkspace> | undefined {
+  if (!(cache && previousCache)) {
+    return cache;
+  }
+
+  const idsToRestore = new Set(workspaceIds);
+  if (idsToRestore.size === 0) {
+    return cache;
+  }
+
+  const currentIds = new Set(cache.workspaces.map((workspace) => workspace.id));
+  const workspacesToRestore = previousCache.workspaces.filter(
+    (workspace) => idsToRestore.has(workspace.id) && !currentIds.has(workspace.id)
+  );
+
+  if (workspacesToRestore.length === 0) {
+    return cache;
+  }
+
+  return {
+    ...cache,
+    workspaces: [...cache.workspaces, ...workspacesToRestore],
+  };
+}

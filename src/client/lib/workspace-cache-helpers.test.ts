@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   removeWorkspaceFromProjectSummaryCache,
   removeWorkspacesFromProjectSummaryCache,
+  restoreWorkspacesToListCache,
+  restoreWorkspacesToProjectSummaryCache,
 } from './workspace-cache-helpers';
 
 describe('workspace-cache-helpers', () => {
@@ -42,5 +44,83 @@ describe('workspace-cache-helpers', () => {
       workspaces: [{ id: 'ws-2' }],
       reviewCount: 1,
     });
+  });
+
+  it('restores only missing optimistically removed workspaces', () => {
+    const previousCache = {
+      workspaces: [
+        { id: 'ws-1', name: 'Archived workspace' },
+        { id: 'ws-2', name: 'Removed by snapshot' },
+      ],
+      reviewCount: 4,
+    };
+    const currentCache = {
+      workspaces: [{ id: 'ws-3', name: 'Still current' }],
+      reviewCount: 2,
+    };
+
+    const updated = restoreWorkspacesToProjectSummaryCache(currentCache, previousCache, ['ws-1']);
+
+    expect(updated).toEqual({
+      workspaces: [
+        { id: 'ws-3', name: 'Still current' },
+        { id: 'ws-1', name: 'Archived workspace' },
+      ],
+      reviewCount: 2,
+    });
+  });
+
+  it('preserves concurrent updates to workspaces already in the cache', () => {
+    const previousCache = {
+      workspaces: [
+        { id: 'ws-1', name: 'Archived workspace' },
+        { id: 'ws-2', name: 'Old name' },
+      ],
+      reviewCount: 4,
+    };
+    const currentCache = {
+      workspaces: [{ id: 'ws-2', name: 'Updated by snapshot' }],
+      reviewCount: 1,
+    };
+
+    const updated = restoreWorkspacesToProjectSummaryCache(currentCache, previousCache, ['ws-1']);
+
+    expect(updated).toEqual({
+      workspaces: [
+        { id: 'ws-2', name: 'Updated by snapshot' },
+        { id: 'ws-1', name: 'Archived workspace' },
+      ],
+      reviewCount: 1,
+    });
+  });
+
+  it('does not duplicate workspaces already restored by another cache update', () => {
+    const previousCache = {
+      workspaces: [{ id: 'ws-1', name: 'Old snapshot' }],
+      reviewCount: 4,
+    };
+    const currentCache = {
+      workspaces: [{ id: 'ws-1', name: 'Fresh snapshot' }],
+      reviewCount: 3,
+    };
+
+    const updated = restoreWorkspacesToProjectSummaryCache(currentCache, previousCache, ['ws-1']);
+
+    expect(updated).toBe(currentCache);
+  });
+
+  it('restores only missing workspaces to list caches', () => {
+    const previousCache = [
+      { id: 'ws-1', name: 'Archived workspace' },
+      { id: 'ws-2', name: 'Removed by snapshot' },
+    ];
+    const currentCache = [{ id: 'ws-3', name: 'Still current' }];
+
+    const updated = restoreWorkspacesToListCache(currentCache, previousCache, ['ws-1']);
+
+    expect(updated).toEqual([
+      { id: 'ws-3', name: 'Still current' },
+      { id: 'ws-1', name: 'Archived workspace' },
+    ]);
   });
 });
