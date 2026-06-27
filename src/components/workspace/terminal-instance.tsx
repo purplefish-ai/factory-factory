@@ -31,7 +31,7 @@ export function TerminalInstance({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const lastOutputLengthRef = useRef(0);
+  const lastOutputRef = useRef('');
   const initialOutputRef = useRef(output);
 
   // Store callbacks in refs to avoid reinitializing terminal when they change
@@ -97,7 +97,7 @@ export function TerminalInstance({
     // Write initial output captured at mount time to avoid re-initializing on every update.
     if (initialOutputRef.current) {
       terminal.write(initialOutputRef.current);
-      lastOutputLengthRef.current = initialOutputRef.current.length;
+      lastOutputRef.current = initialOutputRef.current;
     }
 
     // Handle user input via ref to always use latest callback
@@ -132,24 +132,26 @@ export function TerminalInstance({
       return;
     }
 
-    // Handle output reset (e.g., when switching tabs or clearing)
-    if (output.length < lastOutputLengthRef.current) {
-      terminalRef.current.clear();
-      lastOutputLengthRef.current = 0;
-      // If there's new output after reset, write it
-      if (output.length > 0) {
-        terminalRef.current.write(output);
-        lastOutputLengthRef.current = output.length;
-      }
+    const lastOutput = lastOutputRef.current;
+
+    if (output === lastOutput) {
       return;
     }
 
-    // Handle new output appended
-    if (output.length > lastOutputLengthRef.current) {
-      const newOutput = output.slice(lastOutputLengthRef.current);
+    // Handle new output appended.
+    if (output.startsWith(lastOutput)) {
+      const newOutput = output.slice(lastOutput.length);
       terminalRef.current.write(newOutput);
-      lastOutputLengthRef.current = output.length;
+      lastOutputRef.current = output;
+      return;
     }
+
+    // Handle output reset or rolling-buffer rewrites after truncation.
+    terminalRef.current.clear();
+    if (output.length > 0) {
+      terminalRef.current.write(output);
+    }
+    lastOutputRef.current = output;
   }, [output]);
 
   // Focus terminal when it becomes active (e.g., tab switch)
