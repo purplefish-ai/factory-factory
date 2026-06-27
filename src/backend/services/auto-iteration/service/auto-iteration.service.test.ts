@@ -119,7 +119,7 @@ describe('AutoIterationService resume', () => {
     expect(loop.loopPromise).not.toBeNull();
   });
 
-  it('releases the resume sentinel if restarting the loop fails', async () => {
+  it('restores paused state and releases the resume sentinel if restarting the loop fails', async () => {
     const loop = createPausedLoop('ws-1');
     serviceInternals.loops.set('ws-1', loop);
 
@@ -149,9 +149,53 @@ describe('AutoIterationService resume', () => {
     await expect(firstResume).rejects.toThrow('status update failed');
     await secondResume;
 
-    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledTimes(2);
-    expect(workspaceBridge.getWorktreePath).toHaveBeenCalledTimes(1);
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenNthCalledWith(
+      2,
+      'ws-1',
+      AutoIterationStatus.PAUSED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledTimes(3);
+    expect(workspaceBridge.getWorktreePath).toHaveBeenCalledTimes(2);
     expect(runLoop).toHaveBeenCalledTimes(1);
     expect(loop.loopPromise).not.toBeNull();
+    expect(loop.pauseRequested).toBe(false);
+  });
+
+  it('keeps resume recoverable when worktree lookup fails', async () => {
+    const loop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', loop);
+
+    vi.mocked(workspaceBridge.getWorktreePath)
+      .mockRejectedValueOnce(new Error('Workspace ws-1 has no worktree path'))
+      .mockResolvedValueOnce('/tmp/worktree');
+
+    const runLoop = vi
+      .spyOn(serviceInternals, 'runLoop')
+      .mockImplementation(() => new Promise<void>(() => undefined));
+
+    await expect(service.resume('ws-1')).rejects.toThrow('has no worktree path');
+
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledWith(
+      'ws-1',
+      AutoIterationStatus.PAUSED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).not.toHaveBeenCalledWith(
+      'ws-1',
+      AutoIterationStatus.RUNNING
+    );
+    expect(loop.loopPromise).toBeNull();
+    expect(loop.pauseRequested).toBe(true);
+    expect(service.getStatus('ws-1')?.status).toBe(AutoIterationStatus.PAUSED);
+
+    await service.resume('ws-1');
+
+    expect(workspaceBridge.getWorktreePath).toHaveBeenCalledTimes(2);
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenLastCalledWith(
+      'ws-1',
+      AutoIterationStatus.RUNNING
+    );
+    expect(runLoop).toHaveBeenCalledTimes(1);
+    expect(loop.loopPromise).not.toBeNull();
+    expect(loop.pauseRequested).toBe(false);
   });
 });
