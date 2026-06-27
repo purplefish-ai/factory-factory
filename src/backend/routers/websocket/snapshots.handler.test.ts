@@ -39,7 +39,7 @@ const {
 } = vi.hoisted(() => ({
   storeListeners: new Map<string, (event: unknown) => unknown>(),
   mockGetByProjectId: vi.fn(() => []),
-  mockGetCachedReviewCount: vi.fn(() => 5),
+  mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
   mockRefreshReviewCountIfStale: vi.fn(),
   mockSendBadRequest: vi.fn(),
 }));
@@ -214,6 +214,41 @@ describe('createSnapshotsUpgradeHandler', () => {
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
+  it('omits review count from full snapshot when cache is not populated', async () => {
+    mockGetCachedReviewCount.mockReturnValue(undefined);
+    mockGetByProjectId.mockReturnValue([
+      {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Visible',
+        status: 'READY',
+      },
+    ] as never);
+
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+
+    callHandler(handler, ws, 'proj-1');
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'snapshot_full',
+          projectId: 'proj-1',
+          entries: [
+            {
+              workspaceId: 'ws-1',
+              projectId: 'proj-1',
+              name: 'Visible',
+              status: 'READY',
+            },
+          ],
+        })
+      );
+    });
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
+  });
+
   it('rejects connection without projectId', () => {
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
@@ -275,6 +310,40 @@ describe('createSnapshotsUpgradeHandler', () => {
       })
     );
     expect(wsB.send).not.toHaveBeenCalled();
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
+  });
+
+  it('omits review count from snapshot_changed when cache is not populated', async () => {
+    mockGetCachedReviewCount.mockReturnValue(undefined);
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+
+    callHandler(handler, ws, 'proj-1');
+    await waitForInitialSnapshot(ws);
+    ws.send.mockClear();
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    const event: SnapshotChangedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Updated',
+        status: 'READY',
+      } as never,
+    };
+    await changedListener!(event);
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: event.entry,
+      })
+    );
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 

@@ -123,8 +123,8 @@ class WorkspaceQueryService {
     return refreshPromise;
   }
 
-  getCachedReviewCount(): number {
-    return this.cachedReviewCount?.count ?? 0;
+  getCachedReviewCount(): number | undefined {
+    return this.cachedReviewCount?.count;
   }
 
   refreshReviewCountIfStale(): void {
@@ -199,7 +199,7 @@ class WorkspaceQueryService {
     );
 
     // Stale-while-revalidate: return cached count immediately, refresh in background if stale.
-    const reviewCount = this.getCachedReviewCount();
+    const reviewCount = this.getCachedReviewCount() ?? 0;
     this.refreshReviewCountIfStale();
 
     return {

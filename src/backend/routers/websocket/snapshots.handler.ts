@@ -229,9 +229,6 @@ export function createSnapshotsUpgradeHandler(
           return;
         }
         const reviewCount = getSnapshotReviewCount(logger);
-        if (ws.readyState !== WS_READY_STATE.OPEN) {
-          return;
-        }
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
