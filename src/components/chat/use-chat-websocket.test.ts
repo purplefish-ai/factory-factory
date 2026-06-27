@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateHydrationBatch,
+  evaluateLoadSessionRetry,
   parseHydrationBatch,
   scheduleConnectLoadingStart,
   shouldScheduleConnectLoading,
@@ -196,6 +197,60 @@ describe('useChatWebSocket hydration guard logic', () => {
       expect(guardState.currentLoadRequestId).toBe('load-123');
       expect(guardState.clearLoadTimeoutCalled).toBe(false);
       expect(guardState.messageProcessed).toBe(true);
+    });
+  });
+
+  describe('load_session retry strategy', () => {
+    it('keeps retrying the active hydration request while attempts remain', () => {
+      expect(
+        evaluateLoadSessionRetry({
+          loadGeneration: 2,
+          currentLoadGeneration: 2,
+          loadRequestId: 'load-123',
+          currentLoadRequestId: 'load-123',
+          retryAttempt: 1,
+          maxRetryAttempts: 3,
+        })
+      ).toBe('retry');
+    });
+
+    it('stops retrying when a newer load generation starts', () => {
+      expect(
+        evaluateLoadSessionRetry({
+          loadGeneration: 2,
+          currentLoadGeneration: 3,
+          loadRequestId: 'load-123',
+          currentLoadRequestId: 'load-123',
+          retryAttempt: 1,
+          maxRetryAttempts: 3,
+        })
+      ).toBe('stale');
+    });
+
+    it('stops retrying when the active request has already completed', () => {
+      expect(
+        evaluateLoadSessionRetry({
+          loadGeneration: 2,
+          currentLoadGeneration: 2,
+          loadRequestId: 'load-123',
+          currentLoadRequestId: null,
+          retryAttempt: 1,
+          maxRetryAttempts: 3,
+        })
+      ).toBe('stale');
+    });
+
+    it('stops retrying after the configured retry limit', () => {
+      expect(
+        evaluateLoadSessionRetry({
+          loadGeneration: 2,
+          currentLoadGeneration: 2,
+          loadRequestId: 'load-123',
+          currentLoadRequestId: 'load-123',
+          retryAttempt: 4,
+          maxRetryAttempts: 3,
+        })
+      ).toBe('exhausted');
     });
   });
 });

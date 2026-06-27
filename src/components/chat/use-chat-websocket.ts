@@ -26,6 +26,8 @@ import type {
 import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
+  evaluateLoadSessionRetry,
+  LOAD_SESSION_MAX_RETRY_ATTEMPTS,
   parseHydrationBatch,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
@@ -176,21 +178,25 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   }, []);
 
   const scheduleLoadRetry = useCallback(
-    (loadGeneration: number, loadRequestId: string) => {
+    (loadGeneration: number, loadRequestId: string, retryAttempt = 1) => {
       clearLoadTimeout();
       loadTimeoutRef.current = setTimeout(() => {
-        if (
-          currentLoadGenerationRef.current !== loadGeneration ||
-          currentLoadRequestIdRef.current !== loadRequestId
-        ) {
-          loadTimeoutRef.current = null;
+        const decision = evaluateLoadSessionRetry({
+          loadGeneration,
+          currentLoadGeneration: currentLoadGenerationRef.current,
+          loadRequestId,
+          currentLoadRequestId: currentLoadRequestIdRef.current,
+          retryAttempt,
+        });
+        loadTimeoutRef.current = null;
+        if (decision !== 'retry') {
           return;
         }
 
-        const nextLoadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        currentLoadRequestIdRef.current = nextLoadRequestId;
-        sendRef.current({ type: 'load_session', loadRequestId: nextLoadRequestId });
-        scheduleLoadRetry(loadGeneration, nextLoadRequestId);
+        sendRef.current({ type: 'load_session', loadRequestId });
+        if (retryAttempt < LOAD_SESSION_MAX_RETRY_ATTEMPTS) {
+          scheduleLoadRetry(loadGeneration, loadRequestId, retryAttempt + 1);
+        }
       }, LOAD_SESSION_RETRY_TIMEOUT_MS);
     },
     [clearLoadTimeout]
