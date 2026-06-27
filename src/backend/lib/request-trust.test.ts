@@ -45,6 +45,13 @@ describe('request trust helpers', () => {
       expect(isOriginAllowed('http://127.42.0.9:3000', ['http://localhost:3000'])).toBe(true);
     });
 
+    it('treats explicit default ports as canonical loopback origins', () => {
+      expect(isOriginAllowed('http://127.0.0.1:80', ['http://localhost'])).toBe(true);
+      expect(isOriginAllowed('http://localhost', ['http://127.0.0.1:80'])).toBe(true);
+      expect(isOriginAllowed('https://127.0.0.1:443', ['https://localhost'])).toBe(true);
+      expect(isOriginAllowed('https://localhost', ['https://127.0.0.1:443'])).toBe(true);
+    });
+
     it('does not match loopback aliases across schemes or ports', () => {
       expect(isOriginAllowed('http://127.0.0.1:3001', ['http://localhost:3000'])).toBe(false);
       expect(isOriginAllowed('https://127.0.0.1:3000', ['http://localhost:3000'])).toBe(false);
@@ -61,6 +68,7 @@ describe('request trust helpers', () => {
       expect(isOriginAllowed('http://localhost:3000?x=1', ['http://127.0.0.1:3000'])).toBe(false);
       expect(isOriginAllowed('http://localhost:3000#hash', ['http://127.0.0.1:3000'])).toBe(false);
       expect(isOriginAllowed('http://localhost:3000/', ['http://127.0.0.1:3000'])).toBe(false);
+      expect(isOriginAllowed('http://localhost:80/', ['http://127.0.0.1'])).toBe(false);
     });
   });
 });

@@ -99,8 +99,13 @@ function parseOrigin(origin: string): URL | undefined {
 }
 
 function isCanonicalOriginUrl(origin: string, url: URL): boolean {
+  const canonicalOrigin =
+    url.origin === origin ||
+    (url.protocol === 'http:' && origin === `${url.origin}:80`) ||
+    (url.protocol === 'https:' && origin === `${url.origin}:443`);
+
   return (
-    url.origin === origin &&
+    canonicalOrigin &&
     url.username === '' &&
     url.password === '' &&
     url.pathname === '/' &&
