@@ -253,7 +253,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       ).toBe('exhausted');
     });
 
-    it('can end loading on retry exhaustion while preserving a late matching response', () => {
+    it('ends loading on retry exhaustion and clears the guard for routine snapshots', () => {
       const guardState: GuardState = {
         currentLoadRequestId: 'load-123',
         clearLoadTimeoutCalled: false,
@@ -271,9 +271,10 @@ describe('useChatWebSocket hydration guard logic', () => {
       });
       if (retryDecision === 'exhausted') {
         loadingEnded = true;
+        guardState.currentLoadRequestId = null;
       }
 
-      createHandleMessage(guardState)({ type: 'session_snapshot', loadRequestId: 'load-123' });
+      createHandleMessage(guardState)({ type: 'session_snapshot' });
 
       expect(loadingEnded).toBe(true);
       expect(guardState.currentLoadRequestId).toBe(null);

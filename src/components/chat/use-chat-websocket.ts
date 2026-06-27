@@ -195,6 +195,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         });
         loadTimeoutRef.current = null;
         if (decision === 'exhausted') {
+          currentLoadRequestIdRef.current = null;
           clearConnectLoadingTimeout();
           chat.dispatch({ type: 'SESSION_LOADING_END' });
           return;
