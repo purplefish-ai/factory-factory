@@ -3,7 +3,6 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { agentSessionAccessor } from '@/backend/services/session';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -924,7 +923,7 @@ class RatchetService extends EventEmitter {
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {
-    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
+    const sessions = await this.session.findSessionsByWorkspaceId(workspaceId);
     const activeRatchetSessions = sessions.filter(
       (session) =>
         session.workflow === 'ratchet' &&

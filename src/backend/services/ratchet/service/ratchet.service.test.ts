@@ -57,6 +57,7 @@ import {
 } from './ratchet.service';
 
 const mockSessionBridge: RatchetSessionBridge = {
+  findSessionsByWorkspaceId: vi.fn(),
   isSessionRunning: vi.fn(),
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
@@ -101,6 +102,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.setRatchetActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
@@ -2302,7 +2304,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetActiveSessionId: null,
       } as never);
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
         {
           id: 'raced-ratchet-session',
           workflow: 'ratchet',

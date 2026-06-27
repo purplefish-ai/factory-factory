@@ -45,6 +45,7 @@ import { workspaceAccessor } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
 
 const mockSessionBridge: RatchetSessionBridge = {
+  findSessionsByWorkspaceId: vi.fn(),
   isSessionRunning: vi.fn(),
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
