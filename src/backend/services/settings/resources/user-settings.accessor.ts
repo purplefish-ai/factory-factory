@@ -1,9 +1,5 @@
-import type {
-  Prisma,
-  SessionPermissionPreset,
-  SessionProvider,
-  UserSettings,
-} from '@prisma-gen/client';
+import type { SessionPermissionPreset, SessionProvider, UserSettings } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
 import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
@@ -68,6 +64,10 @@ function normalizeOptionalEffort(value: string | null | undefined): string | nul
   return normalized.length > 0 ? normalized : null;
 }
 
+function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -76,24 +76,46 @@ class UserSettingsAccessor {
   async get(): Promise<UserSettings> {
     const userId = 'default';
 
-    return await prisma.userSettings.upsert({
+    const existing = await prisma.userSettings.findUnique({
       where: { userId },
-      update: {},
-      create: {
-        userId,
-        preferredIde: 'cursor',
-        customIdeCommand: null,
-        playSoundOnComplete: true,
-        defaultSessionProvider: 'CLAUDE',
-        defaultClaudeModel: 'sonnet',
-        defaultCodexModel: 'default',
-        defaultClaudeReasoningEffort: null,
-        defaultCodexReasoningEffort: null,
-        defaultWorkspacePermissions: 'STRICT',
-        ratchetReplyToPrComments: true,
-        ratchetPermissions: 'YOLO',
-      },
     });
+
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await prisma.userSettings.create({
+        data: {
+          userId,
+          preferredIde: 'cursor',
+          customIdeCommand: null,
+          playSoundOnComplete: true,
+          defaultSessionProvider: 'CLAUDE',
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'default',
+          defaultClaudeReasoningEffort: null,
+          defaultCodexReasoningEffort: null,
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetReplyToPrComments: true,
+          ratchetPermissions: 'YOLO',
+        },
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+      });
+
+      if (!settings) {
+        throw error;
+      }
+
+      return settings;
+    }
   }
 
   async getDefaultSessionProvider(): Promise<SessionProvider> {
