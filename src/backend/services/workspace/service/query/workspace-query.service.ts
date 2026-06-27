@@ -35,7 +35,6 @@ const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
-  private reviewCountRefreshInFlight = false;
   private reviewCountRefreshPromise: Promise<number> | null = null;
   private prStatusSyncInFlight = false;
 
@@ -95,7 +94,6 @@ class WorkspaceQueryService {
       return this.reviewCountRefreshPromise;
     }
 
-    this.reviewCountRefreshInFlight = true;
     const refreshPromise = Promise.resolve()
       .then(() => this.github.checkHealth())
       .then(async (health) => {
@@ -118,12 +116,24 @@ class WorkspaceQueryService {
         return this.cachedReviewCount?.count ?? 0;
       })
       .finally(() => {
-        this.reviewCountRefreshInFlight = false;
         this.reviewCountRefreshPromise = null;
       });
 
     this.reviewCountRefreshPromise = refreshPromise;
     return refreshPromise;
+  }
+
+  getCachedReviewCount(): number {
+    return this.cachedReviewCount?.count ?? 0;
+  }
+
+  refreshReviewCountIfStale(): void {
+    const now = Date.now();
+    const isStale =
+      !this.cachedReviewCount || now - this.cachedReviewCount.fetchedAt >= REVIEW_CACHE_TTL_MS;
+    if (isStale) {
+      void this.refreshReviewCount();
+    }
   }
 
   async getProjectSummaryState(projectId: string) {
@@ -189,13 +199,8 @@ class WorkspaceQueryService {
     );
 
     // Stale-while-revalidate: return cached count immediately, refresh in background if stale.
-    const reviewCount = this.cachedReviewCount?.count ?? 0;
-    const now = Date.now();
-    const isStale =
-      !this.cachedReviewCount || now - this.cachedReviewCount.fetchedAt >= REVIEW_CACHE_TTL_MS;
-    if (isStale && !this.reviewCountRefreshInFlight) {
-      void this.refreshReviewCount();
-    }
+    const reviewCount = this.getCachedReviewCount();
+    this.refreshReviewCountIfStale();
 
     return {
       workspaces: workspaces.map((w) => {

@@ -62,13 +62,13 @@ class SnapshotStoreSubscriptionState {
       return;
     }
 
-    const changedListener = async (event: SnapshotChangedEvent) => {
+    const changedListener = (event: SnapshotChangedEvent) => {
       const projectClients = connections.get(event.projectId);
       if (!projectClients || projectClients.size === 0) {
         return;
       }
 
-      const reviewCount = await getSnapshotReviewCount(logger);
+      const reviewCount = getSnapshotReviewCount(logger);
       const message = JSON.stringify(
         isHiddenWorkspaceStatus(event.entry.status)
           ? {
@@ -91,13 +91,13 @@ class SnapshotStoreSubscriptionState {
       }
     };
 
-    const removedListener = async (event: SnapshotRemovedEvent) => {
+    const removedListener = (event: SnapshotRemovedEvent) => {
       const projectClients = connections.get(event.projectId);
       if (!projectClients || projectClients.size === 0) {
         return;
       }
 
-      const reviewCount = await getSnapshotReviewCount(logger);
+      const reviewCount = getSnapshotReviewCount(logger);
       const message = JSON.stringify({
         type: 'snapshot_removed',
         workspaceId: event.workspaceId,
@@ -146,13 +146,15 @@ function isHiddenWorkspaceStatus(status: WorkspaceStatus): boolean {
   return status === WorkspaceStatus.ARCHIVING || status === WorkspaceStatus.ARCHIVED;
 }
 
-async function getSnapshotReviewCount(
+function getSnapshotReviewCount(
   logger: ReturnType<AppContext['services']['createLogger']>
-): Promise<number | undefined> {
+): number | undefined {
   try {
-    return await workspaceQueryService.refreshReviewCount();
+    const reviewCount = workspaceQueryService.getCachedReviewCount();
+    workspaceQueryService.refreshReviewCountIfStale();
+    return reviewCount;
   } catch (error) {
-    logger.debug('Failed to refresh review count for snapshot message', {
+    logger.debug('Failed to read review count for snapshot message', {
       error: error instanceof Error ? error.message : String(error),
     });
     return undefined;
@@ -222,11 +224,11 @@ export function createSnapshotsUpgradeHandler(
       // If a startup reconciliation is in progress and the store has no entries
       // yet for this project, wait for it before sending snapshot_full so the
       // client receives populated data rather than an empty array.
-      const sendSnapshot = async () => {
+      const sendSnapshot = () => {
         if (ws.readyState !== WS_READY_STATE.OPEN) {
           return;
         }
-        const reviewCount = await getSnapshotReviewCount(logger);
+        const reviewCount = getSnapshotReviewCount(logger);
         if (ws.readyState !== WS_READY_STATE.OPEN) {
           return;
         }

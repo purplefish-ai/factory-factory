@@ -30,13 +30,19 @@ class MockWebSocket extends EventEmitter {
 }
 
 // Use vi.hoisted so these are available inside hoisted vi.mock factories
-const { storeListeners, mockGetByProjectId, mockRefreshReviewCount, mockSendBadRequest } =
-  vi.hoisted(() => ({
-    storeListeners: new Map<string, (event: unknown) => unknown>(),
-    mockGetByProjectId: vi.fn(() => []),
-    mockRefreshReviewCount: vi.fn(async () => 5),
-    mockSendBadRequest: vi.fn(),
-  }));
+const {
+  storeListeners,
+  mockGetByProjectId,
+  mockGetCachedReviewCount,
+  mockRefreshReviewCountIfStale,
+  mockSendBadRequest,
+} = vi.hoisted(() => ({
+  storeListeners: new Map<string, (event: unknown) => unknown>(),
+  mockGetByProjectId: vi.fn(() => []),
+  mockGetCachedReviewCount: vi.fn(() => 5),
+  mockRefreshReviewCountIfStale: vi.fn(),
+  mockSendBadRequest: vi.fn(),
+}));
 
 vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
   const { EventEmitter } = require('node:events');
@@ -63,7 +69,8 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
     ...actual,
     workspaceQueryService: {
       ...actual.workspaceQueryService,
-      refreshReviewCount: mockRefreshReviewCount,
+      getCachedReviewCount: mockGetCachedReviewCount,
+      refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
     },
   };
 });
@@ -164,7 +171,7 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
 
 describe('createSnapshotsUpgradeHandler', () => {
   beforeEach(() => {
-    mockRefreshReviewCount.mockResolvedValue(5);
+    mockGetCachedReviewCount.mockReturnValue(5);
   });
 
   afterEach(() => {
@@ -204,6 +211,7 @@ describe('createSnapshotsUpgradeHandler', () => {
         })
       );
     });
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
   it('rejects connection without projectId', () => {
@@ -267,6 +275,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       })
     );
     expect(wsB.send).not.toHaveBeenCalled();
+    expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
   it('routes ARCHIVING snapshot_changed as snapshot_removed with review count', async () => {
