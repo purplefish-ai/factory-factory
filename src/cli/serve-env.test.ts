@@ -31,4 +31,12 @@ describe('buildServeEnv', () => {
 
     expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:3504');
   });
+
+  it('respects CORS_ALLOWED_ORIGINS from the base environment', () => {
+    const env = buildServeEnv({ host: 'localhost' }, '/tmp/factory.db', 3000, 3001, {
+      CORS_ALLOWED_ORIGINS: 'https://home.adeesha.dev',
+    });
+
+    expect(env.CORS_ALLOWED_ORIGINS).toBe('https://home.adeesha.dev');
+  });
 });

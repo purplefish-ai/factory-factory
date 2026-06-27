@@ -21,6 +21,6 @@ export function buildServeEnv(
     BACKEND_HOST: options.host,
     BACKEND_PORT: backendPort.toString(),
     NODE_ENV: options.dev ? 'development' : 'production',
-    CORS_ALLOWED_ORIGINS: corsOrigins,
+    CORS_ALLOWED_ORIGINS: baseEnv.CORS_ALLOWED_ORIGINS || corsOrigins,
   };
 }
