@@ -29,6 +29,9 @@ export interface ExecResult {
   signal?: NodeJS.Signals | null;
   timedOut?: boolean;
   aborted?: boolean;
+  maxBufferExceeded?: boolean;
+  stdoutOverflowed?: boolean;
+  stderrOverflowed?: boolean;
 }
 
 export interface ExecShellOptions {
@@ -39,6 +42,7 @@ export interface ExecShellOptions {
 }
 
 export interface ExecCommandOptions extends SpawnOptions {
+  maxBuffer?: number;
   timeout?: number;
   killSignal?: NodeJS.Signals | number;
   forceKillAfterTimeout?: number;
@@ -142,20 +146,31 @@ export function execCommand(
     const {
       forceKillAfterTimeout = 5000,
       killSignal = 'SIGTERM',
+      maxBuffer = LIB_LIMITS.execCommandDefaultMaxBufferBytes,
       signal,
-      timeout,
+      timeout = LIB_LIMITS.execCommandDefaultTimeoutMs,
       ...spawnOptions
     } = options ?? {};
     const proc = spawn(command, args, { ...spawnOptions, shell: false });
 
-    let stdout = '';
-    let stderr = '';
     let timedOut = false;
     let aborted = false;
+    let maxBufferExceeded = false;
     let settled = false;
     let forceKillTimeout: NodeJS.Timeout | undefined;
-    const stdoutDecoder = new StringDecoder('utf8');
-    const stderrDecoder = new StringDecoder('utf8');
+    const stdoutOutput = {
+      text: '',
+      bytes: 0,
+      overflowed: false,
+      decoder: new StringDecoder('utf8'),
+    };
+    const stderrOutput = {
+      text: '',
+      bytes: 0,
+      overflowed: false,
+      decoder: new StringDecoder('utf8'),
+    };
+    const maxBufferEnabled = typeof maxBuffer === 'number' && maxBuffer > 0;
 
     const cleanupCallbacks: Array<() => void> = [];
 
@@ -171,6 +186,35 @@ export function execCommand(
           forceKillTimeout.unref?.();
         }
       }
+    };
+
+    const appendOutput = (
+      output: {
+        text: string;
+        bytes: number;
+        overflowed: boolean;
+        decoder: StringDecoder;
+      },
+      data: Buffer
+    ): void => {
+      if (output.overflowed) {
+        return;
+      }
+
+      if (!(maxBufferEnabled && output.bytes + data.length > maxBuffer)) {
+        output.text += output.decoder.write(data);
+        output.bytes += data.length;
+        return;
+      }
+
+      const remainingBytes = Math.max(maxBuffer - output.bytes, 0);
+      if (remainingBytes > 0) {
+        output.text += output.decoder.write(data.subarray(0, remainingBytes));
+      }
+      output.bytes = maxBuffer;
+      output.overflowed = true;
+      maxBufferExceeded = true;
+      terminate();
     };
     cleanupCallbacks.push(() => {
       if (forceKillTimeout) {
@@ -204,13 +248,9 @@ export function execCommand(
       }
     }
 
-    proc.stdout?.on('data', (data: Buffer) => {
-      stdout += stdoutDecoder.write(data);
-    });
+    proc.stdout?.on('data', (data: Buffer) => appendOutput(stdoutOutput, data));
 
-    proc.stderr?.on('data', (data: Buffer) => {
-      stderr += stderrDecoder.write(data);
-    });
+    proc.stderr?.on('data', (data: Buffer) => appendOutput(stderrOutput, data));
 
     proc.on('error', (error) => {
       for (const cleanup of cleanupCallbacks) {
@@ -232,10 +272,17 @@ export function execCommand(
       }
       settled = true;
 
-      const finalStdout = stdout + stdoutDecoder.end();
-      let finalStderr = stderr + stderrDecoder.end();
+      const finalStdout = stdoutOutput.text + stdoutOutput.decoder.end();
+      let finalStderr = stderrOutput.text + stderrOutput.decoder.end();
       if (timedOut) {
         finalStderr = [finalStderr, `${command} timed out after ${timeout}ms`]
+          .filter(Boolean)
+          .join('\n');
+      } else if (maxBufferExceeded) {
+        finalStderr = [
+          finalStderr,
+          `${command} exceeded maxBuffer of ${maxBuffer} bytes; output was truncated`,
+        ]
           .filter(Boolean)
           .join('\n');
       } else if (aborted) {
@@ -249,6 +296,9 @@ export function execCommand(
         signal: signalCode,
         timedOut,
         aborted,
+        maxBufferExceeded,
+        stdoutOverflowed: stdoutOutput.overflowed,
+        stderrOverflowed: stderrOutput.overflowed,
       });
     });
   });
