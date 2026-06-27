@@ -126,13 +126,25 @@ describe('gitOpsService', () => {
     expect(mockRm).not.toHaveBeenCalled();
   });
 
-  it('removeWorktree refuses registered worktrees whose path differs from the requested path', async () => {
-    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/tmp/external/w1' }]);
-
-    await expect(gitOpsService.removeWorktree('/repo/worktrees/w1', project)).rejects.toThrow(
-      'Refusing to remove worktree because Git registered a different path for that name'
+  it('removeWorktree matches the registered worktree by full path when basenames collide', async () => {
+    const collidingProject = {
+      repoPath: '/repo/factory-factory',
+      worktreeBasePath: '/repo/factory-factory/worktrees',
+    };
+    mockGitClient.getWorktreePath.mockImplementation(
+      (name: string) => `/repo/factory-factory/worktrees/${name}`
     );
-    expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([
+      { path: '/repo/factory-factory' },
+      { path: '/repo/factory-factory/worktrees/factory-factory' },
+    ]);
+
+    await gitOpsService.removeWorktree(
+      '/repo/factory-factory/worktrees/factory-factory',
+      collidingProject
+    );
+
+    expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('factory-factory');
     expect(mockRm).not.toHaveBeenCalled();
   });
 
