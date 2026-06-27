@@ -252,5 +252,32 @@ describe('useChatWebSocket hydration guard logic', () => {
         })
       ).toBe('exhausted');
     });
+
+    it('can end loading on retry exhaustion while preserving a late matching response', () => {
+      const guardState: GuardState = {
+        currentLoadRequestId: 'load-123',
+        clearLoadTimeoutCalled: false,
+        messageProcessed: false,
+      };
+      let loadingEnded = false;
+
+      const retryDecision = evaluateLoadSessionRetry({
+        loadGeneration: 2,
+        currentLoadGeneration: 2,
+        loadRequestId: 'load-123',
+        currentLoadRequestId: guardState.currentLoadRequestId,
+        retryAttempt: 4,
+        maxRetryAttempts: 3,
+      });
+      if (retryDecision === 'exhausted') {
+        loadingEnded = true;
+      }
+
+      createHandleMessage(guardState)({ type: 'session_snapshot', loadRequestId: 'load-123' });
+
+      expect(loadingEnded).toBe(true);
+      expect(guardState.currentLoadRequestId).toBe(null);
+      expect(guardState.messageProcessed).toBe(true);
+    });
   });
 });

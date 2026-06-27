@@ -27,7 +27,6 @@ import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
-  LOAD_SESSION_MAX_RETRY_ATTEMPTS,
   parseHydrationBatch,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
@@ -177,6 +176,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     cancelConnectLoadingRef.current = null;
   }, []);
 
+  const chat = useChatState({
+    dbSessionId,
+    send: useCallback((message: unknown) => sendRef.current(message), []),
+    connected: false, // Will be overridden by transport.connected in return value
+  });
+
   const scheduleLoadRetry = useCallback(
     (loadGeneration: number, loadRequestId: string, retryAttempt = 1) => {
       clearLoadTimeout();
@@ -189,24 +194,21 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           retryAttempt,
         });
         loadTimeoutRef.current = null;
+        if (decision === 'exhausted') {
+          clearConnectLoadingTimeout();
+          chat.dispatch({ type: 'SESSION_LOADING_END' });
+          return;
+        }
         if (decision !== 'retry') {
           return;
         }
 
         sendRef.current({ type: 'load_session', loadRequestId });
-        if (retryAttempt < LOAD_SESSION_MAX_RETRY_ATTEMPTS) {
-          scheduleLoadRetry(loadGeneration, loadRequestId, retryAttempt + 1);
-        }
+        scheduleLoadRetry(loadGeneration, loadRequestId, retryAttempt + 1);
       }, LOAD_SESSION_RETRY_TIMEOUT_MS);
     },
-    [clearLoadTimeout]
+    [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout]
   );
-
-  const chat = useChatState({
-    dbSessionId,
-    send: useCallback((message: unknown) => sendRef.current(message), []),
-    connected: false, // Will be overridden by transport.connected in return value
-  });
 
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
