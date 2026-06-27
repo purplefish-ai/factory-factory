@@ -10,7 +10,7 @@ vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => mockSpawn(...args),
 }));
 
-import { CodexRequestError, CodexRpcClient } from './codex-rpc-client';
+import { CodexRequestError, CodexRequestTimeoutError, CodexRpcClient } from './codex-rpc-client';
 
 type MockChild = EventEmitter & {
   stdin: PassThrough;
@@ -203,6 +203,102 @@ describe('CodexRpcClient', () => {
     );
 
     expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+  });
+
+  it('rejects unresponsive requests with a timeout and stops codex', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const client = new CodexRpcClient({
+        cwd: '/tmp/workspace',
+        env: {},
+      });
+
+      client.start();
+      const responsePromise = client.request(
+        'turn/start',
+        { threadId: 'thread_1' },
+        { timeoutMs: 50 }
+      );
+      const rejection = responsePromise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(50);
+
+      const error = await rejection;
+      expect(error).toBeInstanceOf(CodexRequestTimeoutError);
+      expect(error).toMatchObject({
+        id: 1,
+        method: 'turn/start',
+        timeoutMs: 50,
+      });
+      expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to the configured client timeout for invalid per-request overrides', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const client = new CodexRpcClient({
+        cwd: '/tmp/workspace',
+        env: {},
+        requestTimeoutMs: 25,
+      });
+
+      client.start();
+      const responsePromise = client.request(
+        'turn/start',
+        { threadId: 'thread_1' },
+        { timeoutMs: 0 }
+      );
+      const rejection = responsePromise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      const error = await rejection;
+      expect(error).toBeInstanceOf(CodexRequestTimeoutError);
+      expect(error).toMatchObject({
+        id: 1,
+        method: 'turn/start',
+        timeoutMs: 25,
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears request timeout state when a response arrives before the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const client = new CodexRpcClient({
+        cwd: '/tmp/workspace',
+        env: {},
+      });
+
+      client.start();
+      const responsePromise = client.request<{ ok: boolean }>(
+        'turn/start',
+        { threadId: 'thread_1' },
+        { timeoutMs: 50 }
+      );
+      child.stdout.write('{"id":1,"result":{"ok":true}}\n');
+
+      await expect(responsePromise).resolves.toEqual({ ok: true });
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops the subprocess gracefully', async () => {
