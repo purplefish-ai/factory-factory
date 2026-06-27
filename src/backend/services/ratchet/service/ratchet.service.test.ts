@@ -1573,6 +1573,24 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   describe('shutdown behavior', () => {
+    it('clears review poll trackers on stop', async () => {
+      const trackers = unsafeCoerce<{
+        reviewPollTrackers: Map<
+          string,
+          { snapshotKey: string; lastPolledAt: number; pollCount: number }
+        >;
+      }>(ratchetService).reviewPollTrackers;
+      trackers.set('ws-poll', {
+        snapshotKey: 'snapshot-1',
+        lastPolledAt: Date.now(),
+        pollCount: 0,
+      });
+
+      await ratchetService.stop();
+
+      expect(trackers.size).toBe(0);
+    });
+
     it('stops immediately while monitor loop is sleeping', async () => {
       vi.useFakeTimers();
 
@@ -1593,6 +1611,32 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  describe('clearWorkspaceState', () => {
+    it('clears only the review poll tracker for the target workspace', () => {
+      const trackers = unsafeCoerce<{
+        reviewPollTrackers: Map<
+          string,
+          { snapshotKey: string; lastPolledAt: number; pollCount: number }
+        >;
+      }>(ratchetService).reviewPollTrackers;
+      trackers.set('ws-target', {
+        snapshotKey: 'snapshot-target',
+        lastPolledAt: Date.now(),
+        pollCount: 0,
+      });
+      trackers.set('ws-other', {
+        snapshotKey: 'snapshot-other',
+        lastPolledAt: Date.now(),
+        pollCount: 0,
+      });
+
+      ratchetService.clearWorkspaceState('ws-target');
+
+      expect(trackers.has('ws-target')).toBe(false);
+      expect(trackers.has('ws-other')).toBe(true);
+    });
+  });
+
   describe('checkWorkspaceById', () => {
     it('returns null when shutting down', async () => {
       unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
@@ -1604,9 +1648,21 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('returns null when workspace not found', async () => {
       unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
       vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(null);
+      const trackers = unsafeCoerce<{
+        reviewPollTrackers: Map<
+          string,
+          { snapshotKey: string; lastPolledAt: number; pollCount: number }
+        >;
+      }>(ratchetService).reviewPollTrackers;
+      trackers.set('ws-nonexistent', {
+        snapshotKey: 'snapshot-1',
+        lastPolledAt: Date.now(),
+        pollCount: 0,
+      });
 
       const result = await ratchetService.checkWorkspaceById('ws-nonexistent');
       expect(result).toBeNull();
+      expect(trackers.has('ws-nonexistent')).toBe(false);
     });
 
     it('deduplicates concurrent checks for the same workspace', async () => {
@@ -2263,6 +2319,17 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetActiveSessionId: null,
       } as never);
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      const trackers = unsafeCoerce<{
+        reviewPollTrackers: Map<
+          string,
+          { snapshotKey: string; lastPolledAt: number; pollCount: number }
+        >;
+      }>(ratchetService).reviewPollTrackers;
+      trackers.set('ws-disable', {
+        snapshotKey: 'snapshot-1',
+        lastPolledAt: Date.now(),
+        pollCount: 0,
+      });
 
       const toggledEvents: RatchetToggledEvent[] = [];
       const stateEvents: RatchetStateChangedEvent[] = [];
@@ -2295,6 +2362,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           ratchetState: RatchetState.IDLE,
         },
       ]);
+      expect(trackers.has('ws-disable')).toBe(false);
     });
 
     it('stops ratchet workflow sessions found after disabling workspace', async () => {

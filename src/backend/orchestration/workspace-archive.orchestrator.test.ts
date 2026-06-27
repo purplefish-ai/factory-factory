@@ -66,6 +66,9 @@ const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
   githubCLIService: {
     addIssueComment: vi.fn(),
   },
+  ratchetService: {
+    clearWorkspaceState: vi.fn(),
+  },
   runScriptService: {
     stopRunScript: vi.fn(),
     evictWorkspaceBuffers: vi.fn(),
@@ -101,6 +104,7 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'READY' })
     );
+    vi.mocked(services.ratchetService.clearWorkspaceState).mockReturnValue(undefined);
     vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([]);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
@@ -168,6 +172,13 @@ describe('archiveWorkspace', () => {
       expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
       expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
       expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
+    });
+
+    it('clears ratchet in-memory state after successful archive', async () => {
+      const workspace = makeWorkspace();
+      await archiveWorkspace(workspace, defaultOptions);
+
+      expect(services.ratchetService.clearWorkspaceState).toHaveBeenCalledWith('ws-1');
     });
 
     it('returns the archived workspace', async () => {
@@ -272,6 +283,7 @@ describe('archiveWorkspace', () => {
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
+      expect(services.ratchetService.clearWorkspaceState).not.toHaveBeenCalled();
     });
 
     it('rolls status back when archive fails after entering ARCHIVING', async () => {
@@ -496,6 +508,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
     vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'FAILED' })
     );
+    vi.mocked(services.ratchetService.clearWorkspaceState).mockReturnValue(undefined);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
@@ -529,6 +542,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
     });
     expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
+    expect(services.ratchetService.clearWorkspaceState).toHaveBeenCalledWith('ws-1');
   });
 
   it('marks a stale ARCHIVING workspace as FAILED when recovery cannot complete', async () => {

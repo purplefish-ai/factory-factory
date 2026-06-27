@@ -1,14 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPathExists = vi.fn();
+const mockMkdir = vi.fn();
+const mockRm = vi.fn();
+const mockExecCommand = vi.fn();
 const mockGitCommand = vi.fn();
+
+vi.mock('node:fs/promises', () => ({
+  mkdir: (...args: unknown[]) => mockMkdir(...args),
+  rm: (...args: unknown[]) => mockRm(...args),
+}));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
   pathExists: (...args: unknown[]) => mockPathExists(...args),
 }));
 
 vi.mock('@/backend/lib/shell', () => ({
-  execCommand: vi.fn(),
+  execCommand: (...args: unknown[]) => mockExecCommand(...args),
   gitCommand: (...args: unknown[]) => mockGitCommand(...args),
 }));
 
@@ -153,5 +161,115 @@ describe('GitCloneService.checkExistingClone', () => {
     await expect(gitCloneService.checkExistingClone('/tmp/source-tree/src')).resolves.toBe(
       'not_repo'
     );
+  });
+});
+
+describe('GitCloneService.clone', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockResolvedValue(undefined);
+    mockPathExists.mockResolvedValue(false);
+  });
+
+  it('runs git clone with a timeout and non-interactive prompts disabled', async () => {
+    mockExecCommand.mockResolvedValue({ code: 0, stdout: '', stderr: 'Receiving objects' });
+
+    await expect(
+      gitCloneService.clone(
+        'https://github.com/purplefish-ai/factory-factory',
+        '/tmp/repos/purplefish-ai/factory-factory'
+      )
+    ).resolves.toEqual({ success: true, output: 'Receiving objects' });
+
+    expect(mockMkdir).toHaveBeenCalledWith('/tmp/repos/purplefish-ai', { recursive: true });
+    expect(mockExecCommand).toHaveBeenCalledWith(
+      'git',
+      [
+        'clone',
+        '--progress',
+        'https://github.com/purplefish-ai/factory-factory',
+        '/tmp/repos/purplefish-ai/factory-factory',
+      ],
+      expect.objectContaining({
+        timeout: 600_000,
+        env: expect.objectContaining({
+          GCM_INTERACTIVE: 'never',
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_SSH_COMMAND: expect.stringContaining('BatchMode=yes'),
+        }),
+      })
+    );
+  });
+
+  it('cleans up a failed partial clone destination that did not exist before cloning', async () => {
+    mockPathExists.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mockExecCommand.mockResolvedValue({
+      code: 128,
+      stdout: '',
+      stderr: 'fatal: remote end hung up unexpectedly',
+    });
+
+    await expect(
+      gitCloneService.clone(
+        'https://github.com/purplefish-ai/factory-factory',
+        '/tmp/repos/purplefish-ai/factory-factory'
+      )
+    ).resolves.toEqual({
+      success: false,
+      output: 'fatal: remote end hung up unexpectedly',
+      error: 'fatal: remote end hung up unexpectedly',
+    });
+
+    expect(mockRm).toHaveBeenCalledWith('/tmp/repos/purplefish-ai/factory-factory', {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it('does not remove a destination that existed before a failed clone attempt', async () => {
+    mockPathExists.mockResolvedValue(true);
+    mockExecCommand.mockResolvedValue({
+      code: 128,
+      stdout: '',
+      stderr: 'fatal: destination path already exists',
+    });
+
+    await expect(
+      gitCloneService.clone(
+        'https://github.com/purplefish-ai/factory-factory',
+        '/tmp/repos/purplefish-ai/factory-factory'
+      )
+    ).resolves.toMatchObject({
+      success: false,
+      error: 'fatal: destination path already exists',
+    });
+
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('returns a clear error when git clone times out', async () => {
+    mockPathExists.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mockExecCommand.mockResolvedValue({
+      code: -1,
+      stdout: '',
+      stderr: 'git timed out after 600000ms',
+      timedOut: true,
+    });
+
+    await expect(
+      gitCloneService.clone(
+        'https://github.com/purplefish-ai/factory-factory',
+        '/tmp/repos/purplefish-ai/factory-factory'
+      )
+    ).resolves.toMatchObject({
+      success: false,
+      error: 'Clone timed out after 600 seconds',
+    });
+
+    expect(mockRm).toHaveBeenCalledWith('/tmp/repos/purplefish-ai/factory-factory', {
+      recursive: true,
+      force: true,
+    });
   });
 });
