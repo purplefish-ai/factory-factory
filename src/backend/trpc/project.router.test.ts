@@ -18,8 +18,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
 const mockGitCommandC = vi.hoisted(() => vi.fn());
 const mockEncrypt = vi.hoisted(() => vi.fn((value: string) => `enc:${value}`));
 const mockReadConfig = vi.hoisted(() => vi.fn());
-const mockListFilesRecursive = vi.hoisted(() => vi.fn());
-const mockCompareFilesByRelevance = vi.hoisted(() => vi.fn());
+const mockSearchFilesRecursive = vi.hoisted(() => vi.fn());
 const mockParseGithubUrl = vi.hoisted(() => vi.fn());
 const mockCheckGithubAuth = vi.hoisted(() => vi.fn());
 const mockGetClonePath = vi.hoisted(() => vi.fn());
@@ -47,8 +46,7 @@ vi.mock('@/backend/services/factory-config.service', () => ({
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
-  listFilesRecursive: (...args: unknown[]) => mockListFilesRecursive(...args),
-  compareFilesByRelevance: (...args: unknown[]) => mockCompareFilesByRelevance(...args),
+  searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
 }));
 
 vi.mock('@/backend/services/git-clone.service', () => ({
@@ -93,7 +91,6 @@ describe('projectRouter', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'project-router-test-'));
     vi.clearAllMocks();
-    mockCompareFilesByRelevance.mockImplementation((a: string, b: string) => a.localeCompare(b));
     mockParseGithubUrl.mockReturnValue({
       owner: 'purplefish-ai',
       repo: 'factory-factory',
@@ -209,22 +206,13 @@ describe('projectRouter', () => {
     );
   });
 
-  it('filters/sorts file listings and validates project exists', async () => {
+  it('delegates file autocomplete to bounded search and validates project exists', async () => {
     const caller = createCaller();
     mockProjectManagementService.findById.mockResolvedValueOnce({
       id: 'p1',
       repoPath: '/repo/path',
     });
-    mockListFilesRecursive.mockResolvedValueOnce([
-      'src/zeta.ts',
-      'README.md',
-      'src/alpha.ts',
-      'docs/notes.md',
-    ]);
-    mockCompareFilesByRelevance.mockImplementation((a: string, b: string, query?: string) => {
-      expect(query).toBe('src');
-      return a.localeCompare(b);
-    });
+    mockSearchFilesRecursive.mockResolvedValueOnce(['src/alpha.ts', 'src/zeta.ts']);
 
     await expect(
       caller.listAllFiles({
@@ -234,6 +222,11 @@ describe('projectRouter', () => {
       })
     ).resolves.toEqual({
       files: ['src/alpha.ts', 'src/zeta.ts'],
+    });
+
+    expect(mockSearchFilesRecursive).toHaveBeenCalledWith('/repo/path', {
+      query: 'SRC',
+      limit: 2,
     });
 
     mockProjectManagementService.findById.mockResolvedValueOnce(null);

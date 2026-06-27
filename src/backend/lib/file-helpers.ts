@@ -31,6 +31,21 @@ const isErrnoCode = (error: unknown, code: string): boolean =>
 const isWithinPath = (targetPath: string, rootPath: string): boolean =>
   targetPath === rootPath || targetPath.startsWith(rootPath + path.sep);
 
+const DEFAULT_FILE_IGNORE_PATTERNS = [
+  '.git',
+  'node_modules',
+  '.next',
+  'dist',
+  'build',
+  '.turbo',
+  'coverage',
+  '.vscode',
+  '.idea',
+];
+
+const shouldIgnoreFileSearchEntry = (name: string, ignorePatterns: string[]): boolean =>
+  ignorePatterns.includes(name) || name.startsWith('.');
+
 const resolveSymlinkTargetPath = async (candidatePath: string): Promise<string | null> => {
   let candidateStats: Awaited<ReturnType<typeof lstat>>;
 
@@ -136,27 +151,11 @@ export async function listFilesRecursive(
   const fullPath = path.join(rootPath, currentPath);
   const files: string[] = [];
 
-  const ignorePatterns = [
-    '.git',
-    'node_modules',
-    '.next',
-    'dist',
-    'build',
-    '.turbo',
-    'coverage',
-    '.vscode',
-    '.idea',
-  ];
-
   try {
     const dirents = await readdir(fullPath, { withFileTypes: true });
 
     for (const dirent of dirents) {
-      if (ignorePatterns.includes(dirent.name)) {
-        continue;
-      }
-
-      if (dirent.name.startsWith('.')) {
+      if (shouldIgnoreFileSearchEntry(dirent.name, DEFAULT_FILE_IGNORE_PATTERNS)) {
         continue;
       }
 
@@ -179,6 +178,113 @@ export async function listFilesRecursive(
   }
 
   return files;
+}
+
+export interface SearchFilesRecursiveOptions {
+  query?: string;
+  limit?: number;
+  maxDepth?: number;
+  ignorePatterns?: string[];
+}
+
+interface PendingSearchDirectory {
+  relativePath: string;
+  depth: number;
+}
+
+interface FileSearchTraversalState {
+  directories: PendingSearchDirectory[];
+  files: string[];
+  ignorePatterns: string[];
+  limit: number;
+  queryLower: string | undefined;
+}
+
+const readSortedSearchDirents = async (directoryPath: string) => {
+  try {
+    const dirents = await readdir(directoryPath, { withFileTypes: true });
+    return dirents.sort((a, b) => a.name.localeCompare(b.name));
+  } catch (_error) {
+    return [];
+  }
+};
+
+const sortFileSearchResults = (files: string[], queryLower?: string): string[] =>
+  files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
+
+const matchesFileSearchQuery = (filePath: string, queryLower?: string): boolean =>
+  !queryLower || filePath.toLowerCase().includes(queryLower);
+
+type SearchDirent = Awaited<ReturnType<typeof readSortedSearchDirents>>[number];
+
+const collectFileSearchEntry = (
+  state: FileSearchTraversalState,
+  dirent: SearchDirent,
+  relativePath: string,
+  depth: number
+): boolean => {
+  if (shouldIgnoreFileSearchEntry(dirent.name, state.ignorePatterns)) {
+    return false;
+  }
+
+  const filePath = relativePath ? path.join(relativePath, dirent.name) : dirent.name;
+
+  if (dirent.isDirectory()) {
+    state.directories.push({ relativePath: filePath, depth: depth + 1 });
+    return false;
+  }
+
+  if (!matchesFileSearchQuery(filePath, state.queryLower)) {
+    return false;
+  }
+
+  state.files.push(filePath);
+  return state.files.length >= state.limit;
+};
+
+/**
+ * Recursively searches files with a bounded result set for autocomplete.
+ * Traversal is breadth-first and deterministic so shallow paths are considered
+ * before deep paths, then the bounded candidates are relevance-sorted.
+ */
+export async function searchFilesRecursive(
+  rootPath: string,
+  {
+    query,
+    limit = 50,
+    maxDepth = 10,
+    ignorePatterns = DEFAULT_FILE_IGNORE_PATTERNS,
+  }: SearchFilesRecursiveOptions = {}
+): Promise<string[]> {
+  if (limit <= 0) {
+    return [];
+  }
+
+  const queryLower = query?.toLowerCase();
+  const state: FileSearchTraversalState = {
+    directories: [{ relativePath: '', depth: 0 }],
+    files: [],
+    ignorePatterns,
+    limit,
+    queryLower,
+  };
+
+  for (const { relativePath, depth } of state.directories) {
+    if (depth >= maxDepth) {
+      continue;
+    }
+
+    const fullPath = path.join(rootPath, relativePath);
+    const dirents = await readSortedSearchDirents(fullPath);
+
+    for (const dirent of dirents) {
+      if (collectFileSearchEntry(state, dirent, relativePath, depth)) {
+        return sortFileSearchResults(state.files, queryLower);
+      }
+    }
+  }
+
+  return sortFileSearchResults(state.files, queryLower);
 }
 
 /**

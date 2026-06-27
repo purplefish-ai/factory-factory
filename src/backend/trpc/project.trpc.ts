@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
-import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
+import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -242,16 +242,10 @@ export const projectRouter = router({
         throw new Error(`Project not found: ${input.projectId}`);
       }
 
-      let files = await listFilesRecursive(project.repoPath);
-
-      if (input.query) {
-        const queryLower = input.query.toLowerCase();
-        files = files.filter((file) => file.toLowerCase().includes(queryLower));
-      }
-
-      const queryLower = input.query?.toLowerCase();
-      files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
-      files = files.slice(0, input.limit);
+      const files = await searchFilesRecursive(project.repoPath, {
+        query: input.query,
+        limit: input.limit,
+      });
 
       return { files };
     }),
