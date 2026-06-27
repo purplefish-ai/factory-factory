@@ -64,8 +64,23 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { workspaceInitRouter } from './init.trpc';
 
-function createCaller() {
-  return workspaceInitRouter.createCaller({ appContext: {} } as never);
+function createCaller(requestTrust?: {
+  remoteAddress?: string;
+  origin?: string;
+  isLocal: boolean;
+}) {
+  return workspaceInitRouter.createCaller({
+    requestTrust,
+    appContext: {
+      services: {
+        configService: {
+          getCorsConfig: () => ({
+            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+          }),
+        },
+      },
+    },
+  } as never);
 }
 
 describe('workspaceInitRouter', () => {
@@ -188,6 +203,21 @@ describe('workspaceInitRouter', () => {
     await expect(caller.retryInit({ id: 'w1' })).rejects.toMatchObject({
       code: 'TOO_MANY_REQUESTS',
     });
+  });
+
+  it('rejects retry initialization from untrusted requests', async () => {
+    const caller = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+
+    await expect(caller.retryInit({ id: 'w1' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockFindByIdWithProject).not.toHaveBeenCalled();
+    expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(mockExecuteStartupScriptPipeline).not.toHaveBeenCalled();
   });
 
   it('throws TOO_MANY_REQUESTS when failed existing-worktree retry exceeds max retries', async () => {

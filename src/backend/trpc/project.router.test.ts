@@ -62,13 +62,21 @@ vi.mock('@/backend/services/git-clone.service', () => ({
 
 import { projectRouter } from './project.trpc';
 
-function createCaller() {
+function createCaller(requestTrust?: {
+  remoteAddress?: string;
+  origin?: string;
+  isLocal: boolean;
+}) {
   return projectRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
         configService: {
           getWorktreeBaseDir: () => '/tmp/worktrees',
           getReposDir: () => '/repos',
+          getCorsConfig: () => ({
+            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+          }),
         },
       },
     },
@@ -302,6 +310,75 @@ describe('projectRouter', () => {
         },
       })
     );
+  });
+
+  it('rejects privileged project mutations from untrusted requests', async () => {
+    const caller = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+
+    await expect(caller.create({ repoPath: '/repo/path' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(caller.update({ id: 'p1', name: 'Renamed' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(
+      caller.createFromGithub({ githubUrl: 'https://github.com/purplefish-ai/factory-factory' })
+    ).rejects.toThrow('trusted local Factory Factory client');
+    await expect(
+      caller.saveFactoryConfig({
+        projectId: 'p1',
+        config: { scripts: { run: 'pnpm dev' } },
+      })
+    ).rejects.toThrow('trusted local Factory Factory client');
+
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.create).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.update).not.toHaveBeenCalled();
+    expect(mockGetClonePath).not.toHaveBeenCalled();
+    expect(mockCloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('allows privileged project mutations from trusted local origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://localhost:3000',
+      isLocal: true,
+    });
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(
+      caller.create({
+        repoPath: '/good/path',
+        startupScriptPath: 'scripts/start.sh',
+      })
+    ).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalledWith(
+      {
+        repoPath: '/good/path',
+        startupScriptCommand: undefined,
+        startupScriptPath: 'scripts/start.sh',
+        startupScriptTimeout: undefined,
+      },
+      { worktreeBaseDir: '/tmp/worktrees' }
+    );
+  });
+
+  it('rejects privileged project mutations from disallowed browser origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'https://attacker.example',
+      isLocal: true,
+    });
+
+    await expect(caller.create({ repoPath: '/repo/path' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
   });
 
   it('creates projects successfully and validates update edge cases', async () => {

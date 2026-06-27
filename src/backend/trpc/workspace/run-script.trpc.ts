@@ -2,12 +2,12 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { workspaceDataService } from '@/backend/services/workspace';
-import { publicProcedure, router } from '@/backend/trpc/trpc';
+import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
 export const workspaceRunScriptRouter = router({
   // Create factory-factory.json configuration file
-  createFactoryConfig: publicProcedure
+  createFactoryConfig: trustedLocalProcedure
     .input(
       z.object({
         workspaceId: z.string(),
@@ -55,7 +55,7 @@ export const workspaceRunScriptRouter = router({
       }
     }),
   // Start the run script for a workspace
-  startRunScript: publicProcedure
+  startRunScript: trustedLocalProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.appContext.services.runScriptService.startRunScript(
@@ -78,7 +78,7 @@ export const workspaceRunScriptRouter = router({
     }),
 
   // Stop the run script for a workspace
-  stopRunScript: publicProcedure
+  stopRunScript: trustedLocalProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.appContext.services.runScriptService.stopRunScript(

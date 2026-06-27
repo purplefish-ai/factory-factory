@@ -1,7 +1,14 @@
-import { initTRPC } from '@trpc/server';
+import { isIP } from 'node:net';
+import { initTRPC, TRPCError } from '@trpc/server';
 import type { Request } from 'express';
 import superjson from 'superjson';
 import type { AppContext } from '@/backend/app-context';
+
+export type RequestTrustInfo = {
+  remoteAddress?: string;
+  origin?: string;
+  isLocal: boolean;
+};
 
 /**
  * Context for tRPC procedures.
@@ -12,9 +19,40 @@ export type Context = {
   projectId?: string;
   /** Top-level Task ID from X-Top-Level-Task-Id header */
   topLevelTaskId?: string;
+  /** Request trust metadata for privileged state-changing procedures */
+  requestTrust?: RequestTrustInfo;
   /** App-level services and config */
   appContext: AppContext;
 };
+
+function getHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function isLoopbackRemoteAddress(remoteAddress: string | undefined): boolean {
+  if (!remoteAddress) {
+    return false;
+  }
+
+  const normalized = remoteAddress.startsWith('::ffff:')
+    ? remoteAddress.slice('::ffff:'.length)
+    : remoteAddress;
+
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') {
+    return true;
+  }
+
+  return isIP(normalized) === 4 && normalized.startsWith('127.');
+}
+
+function buildRequestTrust(req: Request): RequestTrustInfo {
+  const remoteAddress = req.socket.remoteAddress ?? req.ip;
+  return {
+    remoteAddress,
+    origin: getHeaderValue(req.headers.origin),
+    isLocal: isLoopbackRemoteAddress(remoteAddress),
+  };
+}
 
 /**
  * Creates tRPC context from Express request.
@@ -29,6 +67,7 @@ export const createContext =
     return {
       projectId: typeof projectId === 'string' ? projectId : undefined,
       topLevelTaskId: typeof topLevelTaskId === 'string' ? topLevelTaskId : undefined,
+      requestTrust: buildRequestTrust(req),
       appContext,
     };
   };
@@ -40,3 +79,38 @@ const t = initTRPC.context<Context>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 export const middleware = t.middleware;
+
+function isTrustedLocalContext(ctx: Context): boolean {
+  // In-process callers, including tests and orchestration code using createCaller,
+  // do not cross the HTTP trust boundary.
+  if (!ctx.requestTrust) {
+    return true;
+  }
+
+  if (!ctx.requestTrust.isLocal) {
+    return false;
+  }
+
+  if (!ctx.requestTrust.origin) {
+    return true;
+  }
+
+  const allowedOrigins = ctx.appContext.services.configService.getCorsConfig().allowedOrigins;
+  return allowedOrigins.includes(ctx.requestTrust.origin);
+}
+
+/**
+ * Procedure for mutations that can create workspaces, write executable config,
+ * or trigger local command execution. HTTP callers must be local and use an
+ * allowed browser origin when an Origin header is present.
+ */
+export const trustedLocalProcedure = publicProcedure.use(({ ctx, next }) => {
+  if (!isTrustedLocalContext(ctx)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'This action is only available from a trusted local Factory Factory client.',
+    });
+  }
+
+  return next();
+});
