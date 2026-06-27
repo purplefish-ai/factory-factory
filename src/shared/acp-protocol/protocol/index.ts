@@ -8,6 +8,7 @@ export * from './interaction';
 export * from './messages';
 export * from './models';
 export * from './queued';
+export * from './renderer-window';
 export * from './result-dedup';
 export * from './session';
 export * from './state-machine';

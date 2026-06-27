@@ -6,11 +6,13 @@ import type {
   UserQuestionRequest,
 } from '@/lib/chat-protocol';
 import {
+  DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
   getToolUseIdFromEvent,
   isReasoningToolCall,
   isStreamEventMessage,
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
+  trimTranscriptForRenderer,
   updateTokenStatsFromResult,
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
@@ -116,6 +118,73 @@ export function insertMessageByOrder(
   return result;
 }
 
+export function trimMessagesForRenderer(
+  messages: ChatMessage[],
+  limit = DEFAULT_RENDERER_TRANSCRIPT_LIMIT
+): ChatMessage[] {
+  return trimTranscriptForRenderer(messages, limit);
+}
+
+function buildToolUseIdToIndex(messages: ChatMessage[]): Map<string, number> {
+  const toolUseIdToIndex = new Map<string, number>();
+  messages.forEach((message, index) => {
+    if (!message.message) {
+      return;
+    }
+    const toolUseId = getToolUseIdFromMessage(message.message);
+    if (toolUseId) {
+      toolUseIdToIndex.set(toolUseId, index);
+    }
+  });
+  return toolUseIdToIndex;
+}
+
+function filterMapByIds<Value>(
+  map: Map<string, Value>,
+  retainedIds: Set<string>
+): Map<string, Value> {
+  const filtered = new Map<string, Value>();
+  for (const [id, value] of map) {
+    if (retainedIds.has(id)) {
+      filtered.set(id, value);
+    }
+  }
+  return filtered;
+}
+
+function filterSetByIds(set: Set<string>, retainedIds: Set<string>): Set<string> {
+  const filtered = new Set<string>();
+  for (const id of set) {
+    if (retainedIds.has(id)) {
+      filtered.add(id);
+    }
+  }
+  return filtered;
+}
+
+export function applyRendererMessages(state: ChatState, messages: ChatMessage[]): ChatState {
+  const retainedMessages = trimMessagesForRenderer(messages);
+  const retainedIds = new Set(retainedMessages.map((message) => message.id));
+  const hasUnmappedLocalUserMessage = retainedMessages.some(
+    (message) =>
+      message.source === 'user' &&
+      state.localUserMessageIds.has(message.id) &&
+      !state.messageIdToUuid.has(message.id)
+  );
+
+  return {
+    ...state,
+    messages: retainedMessages,
+    toolUseIdToIndex: buildToolUseIdToIndex(retainedMessages),
+    messageIdToUuid: filterMapByIds(state.messageIdToUuid, retainedIds),
+    localUserMessageIds: filterSetByIds(state.localUserMessageIds, retainedIds),
+    pendingUserMessageUuids:
+      hasUnmappedLocalUserMessage || state.pendingMessages.size > 0
+        ? state.pendingUserMessageUuids
+        : [],
+  };
+}
+
 /**
  * Checks if a message is a tool_use message with the given ID.
  */
@@ -180,11 +249,6 @@ function upsertClaudeMessageAtOrder(
   if (!existingMsg) {
     return null;
   }
-  const existingToolUseId = existingMsg.message
-    ? getToolUseIdFromMessage(existingMsg.message)
-    : null;
-  const incomingToolUseId = getToolUseIdFromMessage(claudeMsg);
-
   const updatedMessages = [...state.messages];
   updatedMessages[existingIndex] = {
     ...existingMsg,
@@ -192,25 +256,7 @@ function upsertClaudeMessageAtOrder(
     timestamp: claudeMsg.timestamp ?? existingMsg.timestamp,
   };
 
-  if (existingToolUseId !== incomingToolUseId) {
-    const nextToolUseIdToIndex = new Map(state.toolUseIdToIndex);
-    if (existingToolUseId) {
-      nextToolUseIdToIndex.delete(existingToolUseId);
-    }
-    if (incomingToolUseId) {
-      nextToolUseIdToIndex.set(incomingToolUseId, existingIndex);
-    }
-    return {
-      ...state,
-      messages: updatedMessages,
-      toolUseIdToIndex: nextToolUseIdToIndex,
-    };
-  }
-
-  return {
-    ...state,
-    messages: updatedMessages,
-  };
+  return applyRendererMessages(state, updatedMessages);
 }
 
 /**
@@ -277,17 +323,7 @@ export function handleClaudeMessage(
   // Create and add the message using order-based insertion
   const chatMessage = createClaudeMessage(claudeMsg, order);
   const newMessages = insertMessageByOrder(baseState.messages, chatMessage);
-  const newIndex = newMessages.indexOf(chatMessage);
-
-  // Track tool_use message index for O(1) updates
-  const toolUseId = getToolUseIdFromMessage(claudeMsg);
-  if (toolUseId) {
-    const newToolUseIdToIndex = new Map(baseState.toolUseIdToIndex);
-    newToolUseIdToIndex.set(toolUseId, newIndex);
-    return { ...baseState, messages: newMessages, toolUseIdToIndex: newToolUseIdToIndex };
-  }
-
-  return { ...baseState, messages: newMessages };
+  return applyRendererMessages(baseState, newMessages);
 }
 
 /**
