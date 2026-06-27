@@ -1,4 +1,8 @@
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { gitOpsService } from '@/backend/services/git-ops.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -8,20 +12,81 @@ import {
 } from './worktree-lifecycle.service';
 
 describe('worktreeLifecycleService path safety', () => {
-  it('allows worktree paths under the base path', () => {
-    expect(() => assertWorktreePathSafe('/tmp/worktrees/ws-1', '/tmp/worktrees')).not.toThrow();
+  it('allows worktree paths under the base path', async () => {
+    await expect(assertWorktreePathSafe('/tmp/worktrees/ws-1', '/tmp/worktrees')).resolves.toBe(
+      undefined
+    );
   });
 
-  it('rejects worktree paths that equal the base path', () => {
-    expect(() => assertWorktreePathSafe('/tmp/worktrees', '/tmp/worktrees')).toThrow(
+  it('rejects worktree paths that equal the base path', async () => {
+    await expect(assertWorktreePathSafe('/tmp/worktrees', '/tmp/worktrees')).rejects.toThrow(
       WorktreePathSafetyError
     );
   });
 
-  it('rejects worktree paths outside the base path', () => {
-    expect(() => assertWorktreePathSafe('/tmp/worktrees/../other', '/tmp/worktrees')).toThrow(
-      WorktreePathSafetyError
-    );
+  it('rejects worktree paths outside the base path', async () => {
+    await expect(
+      assertWorktreePathSafe('/tmp/worktrees/../other', '/tmp/worktrees')
+    ).rejects.toThrow(WorktreePathSafetyError);
+  });
+
+  it('rejects a worktree root that has been replaced with a symlink', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-safety-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const victimWorktreePath = path.join(worktreeBasePath, 'victim');
+    const swappedWorktreePath = path.join(worktreeBasePath, 'swapped');
+
+    await mkdir(victimWorktreePath, { recursive: true });
+    await symlink(victimWorktreePath, swappedWorktreePath, 'dir');
+
+    try {
+      await expect(assertWorktreePathSafe(swappedWorktreePath, worktreeBasePath)).rejects.toThrow(
+        WorktreePathSafetyError
+      );
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('worktreeLifecycleService cleanup', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('refuses cleanup when the worktree root is a symlink to another worktree', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-cleanup-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const victimWorktreePath = path.join(worktreeBasePath, 'victim');
+    const swappedWorktreePath = path.join(worktreeBasePath, 'swapped');
+    const commitSpy = vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+
+    await mkdir(victimWorktreePath, { recursive: true });
+    await symlink(victimWorktreePath, swappedWorktreePath, 'dir');
+
+    const workspace = unsafeCoerce<
+      Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
+    >({
+      name: 'Swapped workspace',
+      worktreePath: swappedWorktreePath,
+      project: {
+        repoPath: path.join(tempRoot, 'repo'),
+        worktreeBasePath,
+      },
+    });
+
+    try {
+      await expect(
+        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
+          commitUncommitted: true,
+        })
+      ).rejects.toThrow(WorktreePathSafetyError);
+      expect(commitSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

@@ -48,6 +48,7 @@ const project = {
 describe('gitOpsService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGitClient.getWorktreePath.mockImplementation((name: string) => `/repo/worktrees/${name}`);
   });
 
   it('forwards workspace git stats helper', async () => {
@@ -98,22 +99,53 @@ describe('gitOpsService', () => {
   });
 
   it('removeWorktree uses git when registered and fs fallback otherwise', async () => {
-    mockGitClient.checkWorktreeExists.mockResolvedValueOnce(true);
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/repo/worktrees/w1' }]);
 
     await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
     expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('w1');
 
-    mockGitClient.checkWorktreeExists.mockResolvedValueOnce(false);
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([]);
     mockPathExists.mockResolvedValueOnce(true);
 
     await gitOpsService.removeWorktree('/repo/worktrees/w2', project);
     expect(mockRm).toHaveBeenCalledWith('/repo/worktrees/w2', { recursive: true, force: true });
 
-    mockGitClient.checkWorktreeExists.mockResolvedValueOnce(false);
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([]);
     mockPathExists.mockResolvedValueOnce(false);
 
     await gitOpsService.removeWorktree('/repo/worktrees/w3', project);
     expect(mockRm).toHaveBeenCalledTimes(1);
+  });
+
+  it('removeWorktree refuses requested paths that do not match the configured worktree path', async () => {
+    await expect(gitOpsService.removeWorktree('/repo/other/w1', project)).rejects.toThrow(
+      'Refusing to remove worktree because requested path does not match project'
+    );
+    expect(mockGitClient.listWorktreesWithBranches).not.toHaveBeenCalled();
+    expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('removeWorktree matches the registered worktree by full path when basenames collide', async () => {
+    const collidingProject = {
+      repoPath: '/repo/factory-factory',
+      worktreeBasePath: '/repo/factory-factory/worktrees',
+    };
+    mockGitClient.getWorktreePath.mockImplementation(
+      (name: string) => `/repo/factory-factory/worktrees/${name}`
+    );
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([
+      { path: '/repo/factory-factory' },
+      { path: '/repo/factory-factory/worktrees/factory-factory' },
+    ]);
+
+    await gitOpsService.removeWorktree(
+      '/repo/factory-factory/worktrees/factory-factory',
+      collidingProject
+    );
+
+    expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('factory-factory');
+    expect(mockRm).not.toHaveBeenCalled();
   });
 
   it('ensures base branch exists unless repository is blank', async () => {
