@@ -17,6 +17,7 @@ import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
 type Logger = ReturnType<typeof createLogger>;
 
 export const PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS = 5 * 60_000;
+export const PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS = 15 * 60_000;
 
 /** Bridge for workspace creation — wired by orchestration layer. */
 export interface PeriodicTaskWorkspaceBridge {
@@ -231,7 +232,23 @@ export class PeriodicTaskService {
     startedAt: Date;
   }): Promise<void> {
     try {
-      if (!(execution.workspaceId && this.statusBridge)) {
+      if (!execution.workspaceId) {
+        const reservationAgeMs = Date.now() - execution.startedAt.getTime();
+        if (reservationAgeMs >= PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS) {
+          await periodicTaskAccessor.updateExecution(execution.id, {
+            status: 'FAILED',
+            errorMessage: 'Workspace reservation did not link a workspace before timeout',
+            completedAt: new Date(),
+          });
+          this.logger.warn('Periodic task workspace reservation timed out', {
+            executionId: execution.id,
+            reservationAgeMs,
+          });
+        }
+        return;
+      }
+
+      if (!this.statusBridge) {
         return;
       }
 

@@ -19,6 +19,7 @@ vi.mock('@/backend/services/periodic-task/resources/periodic-task.accessor', () 
 
 import {
   PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS,
+  PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS,
   PeriodicTaskService,
 } from './periodic-task.service';
 
@@ -218,6 +219,47 @@ describe('PeriodicTaskService', () => {
     expect(createWorkspaceForTask).not.toHaveBeenCalled();
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
+  });
+
+  it('marks stale workspace reservations as failed', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+    });
+
+    await checkSingleExecution(service, {
+      id: 'exec-1',
+      workspaceId: null,
+      startedAt: new Date(Date.now() - PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS - 1),
+    });
+
+    expect(mockUpdateExecution).toHaveBeenCalledWith(
+      'exec-1',
+      expect.objectContaining({
+        status: 'FAILED',
+        errorMessage: 'Workspace reservation did not link a workspace before timeout',
+        completedAt: expect.any(Date),
+      })
+    );
+  });
+
+  it('keeps recent workspace reservations running while workspace creation may still be in flight', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+    });
+
+    await checkSingleExecution(service, {
+      id: 'exec-1',
+      workspaceId: null,
+      startedAt: new Date(Date.now() - PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS + 1),
+    });
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
   });
 
   it('marks stale READY executions without PR or active agent work as failed', async () => {
