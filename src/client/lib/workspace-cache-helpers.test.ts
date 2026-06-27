@@ -70,6 +70,20 @@ describe('workspace-cache-helpers', () => {
     });
   });
 
+  it('restores the previous project summary cache when the current cache is missing', () => {
+    const previousCache = {
+      workspaces: [
+        { id: 'ws-1', name: 'Archived workspace' },
+        { id: 'ws-2', name: 'Still current' },
+      ],
+      reviewCount: 4,
+    };
+
+    const updated = restoreWorkspacesToProjectSummaryCache(undefined, previousCache, ['ws-1']);
+
+    expect(updated).toBe(previousCache);
+  });
+
   it('preserves concurrent updates to workspaces already in the cache', () => {
     const previousCache = {
       workspaces: [
@@ -153,6 +167,17 @@ describe('workspace-cache-helpers', () => {
       { id: 'ws-1', name: 'Archived workspace' },
       { id: 'ws-2', name: 'Still current' },
     ]);
+  });
+
+  it('restores the previous list cache when the current cache is missing', () => {
+    const previousCache = [
+      { id: 'ws-1', name: 'Archived workspace' },
+      { id: 'ws-2', name: 'Still current' },
+    ];
+
+    const updated = restoreWorkspacesToListCache(undefined, previousCache, ['ws-1']);
+
+    expect(updated).toBe(previousCache);
   });
 
   it('restores list cache workspaces at their previous relative position', () => {

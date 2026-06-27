@@ -108,13 +108,17 @@ export function restoreWorkspacesToListCache<TWorkspace extends WorkspaceWithId>
   previousCache: TWorkspace[] | undefined,
   workspaceIds: Iterable<string>
 ): TWorkspace[] | undefined {
-  if (!(cache && previousCache)) {
+  if (!previousCache) {
     return cache;
   }
 
   const idsToRestore = new Set(workspaceIds);
   if (idsToRestore.size === 0) {
     return cache;
+  }
+
+  if (!cache) {
+    return previousCache;
   }
 
   const currentIds = new Set(cache.map((workspace) => workspace.id));
@@ -134,13 +138,17 @@ export function restoreWorkspacesToProjectSummaryCache<TWorkspace extends Worksp
   previousCache: ProjectSummaryCacheData<TWorkspace> | undefined,
   workspaceIds: Iterable<string>
 ): ProjectSummaryCacheData<TWorkspace> | undefined {
-  if (!(cache && previousCache)) {
+  if (!previousCache) {
     return cache;
   }
 
   const idsToRestore = new Set(workspaceIds);
   if (idsToRestore.size === 0) {
     return cache;
+  }
+
+  if (!cache) {
+    return previousCache;
   }
 
   const currentIds = new Set(cache.workspaces.map((workspace) => workspace.id));
