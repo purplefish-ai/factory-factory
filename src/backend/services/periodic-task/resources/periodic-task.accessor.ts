@@ -434,7 +434,7 @@ export const periodicTaskAccessor = {
 
   async createExecution(input: {
     periodicTaskId: string;
-    workspaceId: string;
+    workspaceId: string | null;
     status: PeriodicTaskExecutionStatus;
   }): Promise<PeriodicTaskExecution> {
     return await prisma.periodicTaskExecution.create({
@@ -449,7 +449,7 @@ export const periodicTaskAccessor = {
   async createExecutionAndMarkDispatched(
     input: {
       periodicTaskId: string;
-      workspaceId: string;
+      workspaceId: string | null;
       status: PeriodicTaskExecutionStatus;
     },
     schedule: PeriodicTaskDispatchSchedule
@@ -476,6 +476,7 @@ export const periodicTaskAccessor = {
     id: string,
     data: {
       status?: PeriodicTaskExecutionStatus;
+      workspaceId?: string | null;
       prUrl?: string | null;
       prNumber?: number | null;
       errorMessage?: string | null;

@@ -4,7 +4,7 @@
  * Polling loop that:
  * 1. Finds enabled periodic tasks where nextRunAt <= now
  * 2. Skips tasks that already have a RUNNING execution
- * 3. Creates a new workspace + execution for due tasks
+ * 3. Reserves an execution + creates a new workspace for due tasks
  * 4. Monitors RUNNING executions for PR creation or failure
  */
 
@@ -157,17 +157,10 @@ export class PeriodicTaskService {
 
     this.logger.info('Dispatching periodic task', { taskId, name });
 
-    const result = await this.workspaceBridge.createWorkspaceForTask({
-      projectId,
-      name: `${name} — ${new Date().toLocaleDateString()}`,
-      prompt,
-      periodicTaskId: taskId,
-    });
-
-    await periodicTaskAccessor.createExecutionAndMarkDispatched(
+    const execution = await periodicTaskAccessor.createExecutionAndMarkDispatched(
       {
         periodicTaskId: taskId,
-        workspaceId: result.workspaceId,
+        workspaceId: null,
         status: 'RUNNING',
       },
       {
@@ -178,10 +171,42 @@ export class PeriodicTaskService {
       }
     );
 
+    let result: { workspaceId: string };
+    try {
+      result = await this.workspaceBridge.createWorkspaceForTask({
+        projectId,
+        name: `${name} — ${new Date().toLocaleDateString()}`,
+        prompt,
+        periodicTaskId: taskId,
+      });
+    } catch (error) {
+      await this.markReservedExecutionFailed(execution.id, error);
+      throw error;
+    }
+
+    await periodicTaskAccessor.updateExecution(execution.id, {
+      workspaceId: result.workspaceId,
+    });
+
     this.logger.info('Periodic task dispatched', {
       taskId,
       workspaceId: result.workspaceId,
     });
+  }
+
+  private async markReservedExecutionFailed(executionId: string, error: unknown): Promise<void> {
+    try {
+      await periodicTaskAccessor.updateExecution(executionId, {
+        status: 'FAILED',
+        errorMessage: toError(error).message,
+        completedAt: new Date(),
+      });
+    } catch (updateError) {
+      this.logger.error('Failed to mark reserved periodic task execution failed', {
+        executionId,
+        error: toError(updateError).message,
+      });
+    }
   }
 
   // ─── Monitor running executions ─────────────────────────────────────────

@@ -277,7 +277,7 @@ describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
     const execution = {
       id: 'exec-1',
       periodicTaskId: 'task-1',
-      workspaceId: 'workspace-1',
+      workspaceId: null,
       status: 'RUNNING',
     };
     const executionCreate = Promise.resolve(execution);
@@ -289,7 +289,7 @@ describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
       periodicTaskAccessor.createExecutionAndMarkDispatched(
         {
           periodicTaskId: 'task-1',
-          workspaceId: 'workspace-1',
+          workspaceId: null,
           status: 'RUNNING',
         },
         {
@@ -304,7 +304,7 @@ describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
     expect(prismaMock.periodicTaskExecution.create).toHaveBeenCalledWith({
       data: {
         periodicTaskId: 'task-1',
-        workspaceId: 'workspace-1',
+        workspaceId: null,
         status: 'RUNNING',
       },
     });
