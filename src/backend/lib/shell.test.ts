@@ -95,6 +95,38 @@ describe('execCommand', () => {
     expect(result.aborted).toBe(true);
     expect(result.stderr).toContain('was aborted');
   });
+
+  it('kills the process and truncates stdout when maxBuffer is exceeded', async () => {
+    const script = `
+      process.stdout.write('a'.repeat(1024));
+      setTimeout(() => {}, 5000);
+    `;
+
+    const result = await execCommand(process.execPath, ['-e', script], { maxBuffer: 16 });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout).toBe('a'.repeat(16));
+    expect(result.maxBufferExceeded).toBe(true);
+    expect(result.stdoutOverflowed).toBe(true);
+    expect(result.stderrOverflowed).toBe(false);
+    expect(result.stderr).toContain('exceeded maxBuffer of 16 bytes');
+  });
+
+  it('kills the process and truncates stderr when maxBuffer is exceeded', async () => {
+    const script = `
+      process.stderr.write('b'.repeat(1024));
+      setTimeout(() => {}, 5000);
+    `;
+
+    const result = await execCommand(process.execPath, ['-e', script], { maxBuffer: 16 });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('b'.repeat(16));
+    expect(result.maxBufferExceeded).toBe(true);
+    expect(result.stdoutOverflowed).toBe(false);
+    expect(result.stderrOverflowed).toBe(true);
+    expect(result.stderr).toContain('exceeded maxBuffer of 16 bytes');
+  });
 });
 
 describe('escapeForOsascript', () => {
