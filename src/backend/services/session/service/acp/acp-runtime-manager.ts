@@ -101,6 +101,25 @@ function isMethodNotFoundError(error: unknown): boolean {
   return details.code === -32_601 || details.message.includes('Method not found');
 }
 
+async function raceWithSoftTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | undefined> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<undefined>((resolve) => {
+    timeout = setTimeout(() => resolve(undefined), timeoutMs);
+    timeout.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
@@ -615,8 +634,7 @@ export class AcpRuntimeManager {
       // Send SIGTERM after registering exit listener to avoid missing fast exits.
       handle.child.kill('SIGTERM');
 
-      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 5000));
-      await Promise.race([exitPromise, timeoutPromise]);
+      await raceWithSoftTimeout(exitPromise, 5000);
 
       // Escalate to SIGKILL if still alive
       if (handle.child.exitCode === null) {
@@ -842,10 +860,7 @@ export class AcpRuntimeManager {
     const stopPromises: Promise<void>[] = [];
 
     for (const sessionId of this.sessions.keys()) {
-      const stopPromise = Promise.race([
-        this.stopClient(sessionId),
-        new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-      ]);
+      const stopPromise = raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs);
       stopPromises.push(stopPromise);
     }
 
