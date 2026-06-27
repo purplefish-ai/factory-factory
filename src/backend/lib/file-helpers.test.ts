@@ -1,19 +1,21 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLanguageFromPath } from '@/lib/language-detection';
-import { isBinaryContent, isPathSafe, pathExists } from './file-helpers';
+import { isBinaryContent, isPathSafe, pathExists, searchFilesRecursive } from './file-helpers';
 
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({
   lstat: vi.fn(),
+  readdir: vi.fn(),
   readlink: vi.fn(),
   realpath: vi.fn(),
   stat: vi.fn(),
 }));
 
-import { lstat, readlink, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, readlink, realpath, stat } from 'node:fs/promises';
 
 const mockedLstat = vi.mocked(lstat);
+const mockedReaddir = vi.mocked(readdir);
 const mockedReadlink = vi.mocked(readlink);
 const mockedRealpath = vi.mocked(realpath);
 const mockedStat = vi.mocked(stat);
@@ -21,6 +23,10 @@ const createErrno = (code: string): NodeJS.ErrnoException => {
   const error = new Error(code) as NodeJS.ErrnoException;
   error.code = code;
   return error;
+};
+type TestDirent = {
+  name: string;
+  isDirectory: () => boolean;
 };
 
 describe('file-helpers', () => {
@@ -289,6 +295,103 @@ describe('file-helpers', () => {
         const result = await isPathSafe(symlinkWorktree, 'src/index.ts');
         expect(result).toBe(true);
       });
+    });
+  });
+
+  describe('searchFilesRecursive', () => {
+    const createDirent = (name: string, type: 'file' | 'directory'): TestDirent => ({
+      name,
+      isDirectory: () => type === 'directory',
+    });
+
+    const mockDirectoryTree = (entries: Map<string, TestDirent[]>) => {
+      mockedReaddir.mockImplementation(((targetPath: unknown) => {
+        const dirents = entries.get(String(targetPath));
+        if (dirents) {
+          return Promise.resolve(dirents);
+        }
+        return Promise.reject(createErrno('ENOENT'));
+      }) as never);
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('returns a bounded deterministic list while ignoring hidden and generated paths', async () => {
+      mockDirectoryTree(
+        new Map([
+          [
+            '/repo',
+            [
+              createDirent('src', 'directory'),
+              createDirent('node_modules', 'directory'),
+              createDirent('.env', 'file'),
+              createDirent('README.md', 'file'),
+            ],
+          ],
+          ['/repo/src', [createDirent('index.ts', 'file')]],
+          ['/repo/node_modules', [createDirent('ignored.js', 'file')]],
+        ])
+      );
+
+      await expect(searchFilesRecursive('/repo', { limit: 10 })).resolves.toEqual([
+        'README.md',
+        path.join('src', 'index.ts'),
+      ]);
+      expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/node_modules', expect.anything());
+    });
+
+    it('filters case-insensitively and sorts bounded candidates by relevance', async () => {
+      mockDirectoryTree(
+        new Map([
+          ['/repo', [createDirent('src', 'directory'), createDirent('docs', 'directory')]],
+          [
+            '/repo/src',
+            [
+              createDirent('my-button.ts', 'file'),
+              createDirent('Button.tsx', 'file'),
+              createDirent('button', 'file'),
+            ],
+          ],
+          ['/repo/docs', [createDirent('notes.md', 'file')]],
+        ])
+      );
+
+      await expect(searchFilesRecursive('/repo', { query: 'BUTTON', limit: 10 })).resolves.toEqual([
+        path.join('src', 'button'),
+        path.join('src', 'Button.tsx'),
+        path.join('src', 'my-button.ts'),
+      ]);
+    });
+
+    it('stops walking once enough matches are found', async () => {
+      mockDirectoryTree(
+        new Map([
+          ['/repo', [createDirent('a', 'directory'), createDirent('z', 'directory')]],
+          ['/repo/a', [createDirent('target.ts', 'file')]],
+          ['/repo/z', [createDirent('target-later.ts', 'file')]],
+        ])
+      );
+
+      await expect(searchFilesRecursive('/repo', { query: 'target', limit: 1 })).resolves.toEqual([
+        path.join('a', 'target.ts'),
+      ]);
+      expect(mockedReaddir).toHaveBeenCalledTimes(2);
+      expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/z', expect.anything());
+    });
+
+    it('respects the max depth bound', async () => {
+      mockDirectoryTree(
+        new Map([
+          ['/repo', [createDirent('level1', 'directory')]],
+          ['/repo/level1', [createDirent('level2', 'directory')]],
+          ['/repo/level1/level2', [createDirent('deep.ts', 'file')]],
+        ])
+      );
+
+      await expect(searchFilesRecursive('/repo', { limit: 10, maxDepth: 2 })).resolves.toEqual([]);
+      expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/level1/level2', expect.anything());
     });
   });
 
