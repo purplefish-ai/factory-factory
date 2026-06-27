@@ -49,6 +49,26 @@ describe('execCommand', () => {
     expect(result.stderr).toContain('timed out after 25ms');
   });
 
+  it('does not mark a successful process timed out while waiting for stdio close', async () => {
+    const script = `
+      const { spawn } = require('node:child_process');
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 500);'], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      child.unref();
+      process.exit(0);
+    `;
+
+    const result = await execCommand(process.execPath, ['-e', script], {
+      timeout: 200,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.timedOut).toBe(false);
+    expect(result.stderr).not.toContain('timed out after 200ms');
+  });
+
   it('force-kills the process when it ignores the timeout signal', async () => {
     const script = "process.on('SIGTERM', () => {}); setTimeout(() => {}, 5000);";
 

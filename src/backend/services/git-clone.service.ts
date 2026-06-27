@@ -2,6 +2,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('git-clone');
@@ -95,7 +96,7 @@ class GitCloneService {
 
     const result = await execCommand('git', ['clone', '--progress', url, destination], {
       env: {
-        ...process.env,
+        ...configService.getChildProcessEnv(),
         GCM_INTERACTIVE: 'never',
         GIT_TERMINAL_PROMPT: '0',
         GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new',

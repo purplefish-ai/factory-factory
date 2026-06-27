@@ -180,6 +180,9 @@ export function execCommand(
 
     if (typeof timeout === 'number' && timeout > 0) {
       const timeoutId = setTimeout(() => {
+        if (proc.exitCode !== null || proc.signalCode !== null) {
+          return;
+        }
         timedOut = true;
         terminate();
       }, timeout);
