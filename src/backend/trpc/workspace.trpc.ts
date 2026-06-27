@@ -7,7 +7,10 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
-import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
+import {
+  archiveWorkspace,
+  cleanupWorkspaceRuntimeResources,
+} from '@/backend/orchestration/workspace-archive.orchestrator';
 import {
   createChildWorkspace,
   fireLifecycleNotification,
@@ -456,37 +459,8 @@ export const workspaceRouter = router({
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const { runScriptService, sessionService, terminalService } = ctx.appContext.services;
-    const logger = getLogger(ctx);
     // Clean up running sessions, terminals, and dev processes before deleting
-    const cleanupResults = await Promise.allSettled([
-      sessionService.stopWorkspaceSessions(input.id),
-      (async () => {
-        const result = await runScriptService.stopRunScript(input.id);
-        if (!result.success) {
-          throw new Error(result.error ?? 'Unknown run script stop failure');
-        }
-      })(),
-      Promise.resolve().then(() => {
-        terminalService.destroyWorkspaceTerminals(input.id);
-      }),
-    ]);
-    const cleanupErrors = cleanupResults.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : []
-    );
-
-    if (cleanupErrors.length > 0) {
-      logger.error('Failed to cleanup workspace resources before delete', {
-        workspaceId: input.id,
-        errors: cleanupErrors.map((error) =>
-          error instanceof Error ? error.message : String(error)
-        ),
-      });
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to cleanup workspace resources before delete',
-      });
-    }
+    await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     return workspaceDataService.delete(input.id);
   }),
 

@@ -23,6 +23,7 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
 const mockDeriveFlowState = vi.hoisted(() => vi.fn());
 const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
+const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
@@ -82,6 +83,8 @@ vi.mock('@/shared/workspace-sidebar-status', () => ({
 
 vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
   archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
+  cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
+    mockCleanupWorkspaceRuntimeResources(...args),
 }));
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
@@ -186,6 +189,36 @@ describe('workspaceRouter', () => {
     mockComputeKanbanColumn.mockReturnValue('WAITING');
     mockComputePendingRequestType.mockReturnValue(null);
     mockCreateAgentSession.mockResolvedValue({ id: 'session-1' });
+    mockCleanupWorkspaceRuntimeResources.mockImplementation(
+      async (
+        workspaceId: string,
+        services: {
+          sessionService: { stopWorkspaceSessions(workspaceId: string): Promise<void> };
+          runScriptService: {
+            stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }>;
+          };
+          terminalService: { destroyWorkspaceTerminals(workspaceId: string): void };
+        },
+        operation: string
+      ) => {
+        const cleanupResults = await Promise.allSettled([
+          services.sessionService.stopWorkspaceSessions(workspaceId),
+          (async () => {
+            const result = await services.runScriptService.stopRunScript(workspaceId);
+            if (!result.success) {
+              throw new Error(result.error ?? 'Unknown run script stop failure');
+            }
+          })(),
+          Promise.resolve().then(() => {
+            services.terminalService.destroyWorkspaceTerminals(workspaceId);
+          }),
+        ]);
+
+        if (cleanupResults.some((result) => result.status === 'rejected')) {
+          throw new Error(`Failed to cleanup workspace resources before ${operation}`);
+        }
+      }
+    );
   });
 
   it('lists workspaces and returns enriched workspace details', async () => {
@@ -521,6 +554,15 @@ describe('workspaceRouter', () => {
     const { caller, sessionService, runScriptService, terminalService } = createCaller();
 
     await expect(caller.delete({ id: 'w1' })).resolves.toEqual({ deleted: true });
+    expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        sessionService,
+        runScriptService,
+        terminalService,
+      }),
+      'delete'
+    );
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
