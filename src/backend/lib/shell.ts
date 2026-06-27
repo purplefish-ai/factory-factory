@@ -26,6 +26,9 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
   code: number;
+  signal?: NodeJS.Signals | null;
+  timedOut?: boolean;
+  aborted?: boolean;
 }
 
 export interface ExecShellOptions {
@@ -33,6 +36,12 @@ export interface ExecShellOptions {
   timeout?: number;
   env?: NodeJS.ProcessEnv;
   maxBuffer?: number;
+}
+
+export interface ExecCommandOptions extends SpawnOptions {
+  timeout?: number;
+  killSignal?: NodeJS.Signals | number;
+  forceKillAfterTimeout?: number;
 }
 
 // ============================================================================
@@ -127,15 +136,73 @@ export function validateSessionName(name: string): string {
 export function execCommand(
   command: string,
   args: string[],
-  options?: SpawnOptions
+  options?: ExecCommandOptions
 ): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, { ...options, shell: false });
+    const {
+      forceKillAfterTimeout = 5000,
+      killSignal = 'SIGTERM',
+      signal,
+      timeout,
+      ...spawnOptions
+    } = options ?? {};
+    const proc = spawn(command, args, { ...spawnOptions, shell: false });
 
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let aborted = false;
+    let settled = false;
+    let forceKillTimeout: NodeJS.Timeout | undefined;
     const stdoutDecoder = new StringDecoder('utf8');
     const stderrDecoder = new StringDecoder('utf8');
+
+    const cleanupCallbacks: Array<() => void> = [];
+
+    const terminate = () => {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        proc.kill(killSignal);
+        if (killSignal !== 'SIGKILL' && forceKillAfterTimeout > 0 && !forceKillTimeout) {
+          forceKillTimeout = setTimeout(() => {
+            if (proc.exitCode === null && proc.signalCode === null) {
+              proc.kill('SIGKILL');
+            }
+          }, forceKillAfterTimeout);
+          forceKillTimeout.unref?.();
+        }
+      }
+    };
+    cleanupCallbacks.push(() => {
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+      }
+    });
+
+    if (typeof timeout === 'number' && timeout > 0) {
+      const timeoutId = setTimeout(() => {
+        if (proc.exitCode !== null || proc.signalCode !== null) {
+          return;
+        }
+        timedOut = true;
+        terminate();
+      }, timeout);
+      timeoutId.unref?.();
+      cleanupCallbacks.push(() => clearTimeout(timeoutId));
+    }
+
+    if (signal) {
+      if (signal.aborted) {
+        aborted = true;
+        terminate();
+      } else {
+        const abortHandler = () => {
+          aborted = true;
+          terminate();
+        };
+        signal.addEventListener('abort', abortHandler, { once: true });
+        cleanupCallbacks.push(() => signal.removeEventListener('abort', abortHandler));
+      }
+    }
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += stdoutDecoder.write(data);
@@ -146,14 +213,42 @@ export function execCommand(
     });
 
     proc.on('error', (error) => {
+      for (const cleanup of cleanupCallbacks) {
+        cleanup();
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
       reject(new Error(`Failed to execute ${command}: ${error.message}`));
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signalCode) => {
+      for (const cleanup of cleanupCallbacks) {
+        cleanup();
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
+
+      const finalStdout = stdout + stdoutDecoder.end();
+      let finalStderr = stderr + stderrDecoder.end();
+      if (timedOut) {
+        finalStderr = [finalStderr, `${command} timed out after ${timeout}ms`]
+          .filter(Boolean)
+          .join('\n');
+      } else if (aborted) {
+        finalStderr = [finalStderr, `${command} was aborted`].filter(Boolean).join('\n');
+      }
+
       resolve({
-        stdout: stdout + stdoutDecoder.end(),
-        stderr: stderr + stderrDecoder.end(),
+        stdout: finalStdout,
+        stderr: finalStderr,
         code: code ?? -1,
+        signal: signalCode,
+        timedOut,
+        aborted,
       });
     });
   });
