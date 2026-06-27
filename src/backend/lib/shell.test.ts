@@ -38,6 +38,63 @@ describe('execCommand', () => {
 
     expect(result.code).not.toBe(0);
   });
+
+  it('kills the process and marks the result when timeout expires', async () => {
+    const result = await execCommand(process.execPath, ['-e', 'setTimeout(() => {}, 5000);'], {
+      timeout: 25,
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.timedOut).toBe(true);
+    expect(result.stderr).toContain('timed out after 25ms');
+  });
+
+  it('does not mark a successful process timed out while waiting for stdio close', async () => {
+    const script = `
+      const { spawn } = require('node:child_process');
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 500);'], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      child.unref();
+      process.exit(0);
+    `;
+
+    const result = await execCommand(process.execPath, ['-e', script], {
+      timeout: 200,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.timedOut).toBe(false);
+    expect(result.stderr).not.toContain('timed out after 200ms');
+  });
+
+  it('force-kills the process when it ignores the timeout signal', async () => {
+    const script = "process.on('SIGTERM', () => {}); setTimeout(() => {}, 5000);";
+
+    const result = await execCommand(process.execPath, ['-e', script], {
+      forceKillAfterTimeout: 25,
+      timeout: 100,
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.signal).toBe('SIGKILL');
+    expect(result.timedOut).toBe(true);
+  });
+
+  it('kills the process and marks the result when the abort signal fires', async () => {
+    const controller = new AbortController();
+    const promise = execCommand(process.execPath, ['-e', 'setTimeout(() => {}, 5000);'], {
+      signal: controller.signal,
+    });
+
+    setTimeout(() => controller.abort(), 25).unref();
+    const result = await promise;
+
+    expect(result.code).not.toBe(0);
+    expect(result.aborted).toBe(true);
+    expect(result.stderr).toContain('was aborted');
+  });
 });
 
 describe('escapeForOsascript', () => {
