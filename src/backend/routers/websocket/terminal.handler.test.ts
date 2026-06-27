@@ -12,6 +12,12 @@ import { createTerminalUpgradeHandler, terminalConnections } from './terminal.ha
 const allowedOrigin = 'http://localhost:3000';
 const mockClearTerminalPid = vi.fn();
 
+type MockTerminalDescriptor = {
+  id: string;
+  createdAt: Date;
+  outputBuffer: string;
+};
+
 vi.mock('@/backend/services/session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/backend/services/session')>();
   return {
@@ -56,7 +62,7 @@ function createTerminalService() {
   const exitListeners = new Map<string, Set<(exitCode: number) => void>>();
 
   const terminalService = {
-    getTerminalsForWorkspace: vi.fn(() => []),
+    getTerminalsForWorkspace: vi.fn(() => [] as MockTerminalDescriptor[]),
     onOutput: vi.fn((id: string, callback: (output: string) => void) => {
       const listeners = outputListeners.get(id) ?? new Set();
       listeners.add(callback);
@@ -96,11 +102,22 @@ function createWss(ws: MockWebSocket) {
   } as unknown as WebSocketServer;
 }
 
+function createRequest(origin = allowedOrigin, remoteAddress = '127.0.0.1') {
+  return {
+    headers: { origin },
+    socket: { remoteAddress },
+  } as unknown as IncomingMessage;
+}
+
 describe('createTerminalUpgradeHandler', () => {
   beforeEach(() => {
     terminalConnections.clear();
     vi.clearAllMocks();
     mockClearTerminalPid.mockResolvedValue(undefined);
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      id: 'workspace-1',
+      worktreePath: '/tmp/worktree',
+    } as never);
   });
 
   it('rejects upgrades without workspaceId', () => {
@@ -117,7 +134,7 @@ describe('createTerminalUpgradeHandler', () => {
     } as unknown as AppContext;
     const handler = createTerminalUpgradeHandler(appContext);
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -149,7 +166,7 @@ describe('createTerminalUpgradeHandler', () => {
     } as unknown as AppContext;
     const handler = createTerminalUpgradeHandler(appContext);
 
-    const request = { headers: { origin: 'https://attacker.example' } } as IncomingMessage;
+    const request = createRequest('https://attacker.example');
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -167,7 +184,85 @@ describe('createTerminalUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
-  it('keeps existing connections streaming when a new client connects', () => {
+  it('rejects untrusted remote addresses before opening a WebSocket', () => {
+    const { terminalService } = createTerminalService();
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    const request = createRequest(allowedOrigin, '203.0.113.10');
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/terminal?workspaceId=workspace-1'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(terminalService.getTerminalsForWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown workspaces before replaying terminal buffers', async () => {
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(null as never);
+    const { terminalService } = createTerminalService();
+    terminalService.getTerminalsForWorkspace.mockReturnValue([
+      {
+        id: 'terminal-1',
+        createdAt: new Date('2026-02-11T00:00:00.000Z'),
+        outputBuffer: 'secret output',
+      },
+    ]);
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    const request = createRequest();
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/terminal?workspaceId=missing-workspace'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    await vi.waitFor(() => {
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
+    });
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.stringContaining('Workspace not found or has no worktree')
+    );
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(terminalService.getTerminalsForWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('keeps existing connections streaming when a new client connects', async () => {
     const workspaceId = 'workspace-1';
     const terminalId = 'terminal-1';
 
@@ -241,13 +336,17 @@ describe('createTerminalUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL(`http://localhost/terminal?workspaceId=${workspaceId}`);
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(2);
+    });
 
     const listeners = outputListeners.get(terminalId);
     expect(listeners?.size).toBe(2);
@@ -288,7 +387,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -300,6 +399,10 @@ describe('createTerminalUpgradeHandler', () => {
       wss,
       wsAliveMap
     );
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    });
 
     ws.emit('message', JSON.stringify({ type: 'create', cols: 120, rows: 40 }));
     await Promise.resolve();
@@ -404,7 +507,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(
@@ -415,6 +518,10 @@ describe('createTerminalUpgradeHandler', () => {
       wss,
       new WeakMap<WebSocket, boolean>()
     );
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    });
 
     ws.emit(
       'message',
@@ -489,7 +596,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(
@@ -500,6 +607,10 @@ describe('createTerminalUpgradeHandler', () => {
       wss,
       new WeakMap<WebSocket, boolean>()
     );
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    });
 
     ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
 
@@ -525,7 +636,10 @@ describe('createTerminalUpgradeHandler', () => {
 
   it('sends structured errors for invalid or failed terminal operations', async () => {
     const workspaceId = 'workspace-1';
-    vi.mocked(workspaceDataService.findById).mockResolvedValue(null as never);
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      id: workspaceId,
+      worktreePath: '/tmp/worktree',
+    } as never);
 
     const { terminalService } = createTerminalService();
     terminalService.createTerminal.mockRejectedValueOnce(new Error('creation failed'));
@@ -543,7 +657,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(
@@ -554,6 +668,10 @@ describe('createTerminalUpgradeHandler', () => {
       wss,
       new WeakMap<WebSocket, boolean>()
     );
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    });
 
     ws.emit('message', '{invalid-json');
     await Promise.resolve();
@@ -569,6 +687,7 @@ describe('createTerminalUpgradeHandler', () => {
       JSON.stringify({ type: 'error', message: 'Invalid message format' })
     );
 
+    vi.mocked(workspaceDataService.findById).mockResolvedValueOnce(null as never);
     ws.emit('message', JSON.stringify({ type: 'create' }));
     await Promise.resolve();
     await Promise.resolve();
