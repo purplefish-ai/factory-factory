@@ -263,6 +263,7 @@ export class SessionLifecycleService {
 
   async stopWorkspaceSessions(workspaceId: string): Promise<void> {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
+    const stopErrors: unknown[] = [];
 
     for (const session of sessions) {
       if (
@@ -277,8 +278,15 @@ export class SessionLifecycleService {
             workspaceId,
             error: error instanceof Error ? error.message : String(error),
           });
+          stopErrors.push(error);
         }
       }
+    }
+
+    if (stopErrors.length > 0) {
+      throw new Error(
+        `Failed to stop ${stopErrors.length} workspace session${stopErrors.length === 1 ? '' : 's'}`
+      );
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });

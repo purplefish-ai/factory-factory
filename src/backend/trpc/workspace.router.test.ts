@@ -122,7 +122,9 @@ function createCaller(requestTrust?: {
     stopWorkspaceSessions: vi.fn(async () => undefined),
   };
   const runScriptService = {
-    stopRunScript: vi.fn(async () => undefined),
+    stopRunScript: vi.fn(
+      async (): Promise<{ success: boolean; error?: string }> => ({ success: true })
+    ),
   };
   const terminalService = {
     destroyWorkspaceTerminals: vi.fn(),
@@ -532,5 +534,46 @@ describe('workspaceRouter', () => {
     await expect(caller.syncPRStatus({ workspaceId: 'w1' })).resolves.toEqual({ synced: true });
     await expect(caller.syncAllPRStatuses({ projectId: 'p1' })).resolves.toEqual({ synced: 10 });
     await expect(caller.hasChanges({ workspaceId: 'w1' })).resolves.toEqual({ hasChanges: true });
+  });
+
+  it('does not delete when run script cleanup reports failure', async () => {
+    const { caller, sessionService, runScriptService, terminalService } = createCaller();
+    runScriptService.stopRunScript.mockResolvedValue({ success: false, error: 'stop failed' });
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow(
+      'Failed to cleanup workspace resources before delete'
+    );
+    expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
+    expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
+    expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not delete when workspace session cleanup throws', async () => {
+    const { caller, sessionService, runScriptService, terminalService } = createCaller();
+    sessionService.stopWorkspaceSessions.mockRejectedValue(new Error('session cleanup failed'));
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow(
+      'Failed to cleanup workspace resources before delete'
+    );
+    expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
+    expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
+    expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not delete when terminal cleanup throws', async () => {
+    const { caller, sessionService, runScriptService, terminalService } = createCaller();
+    terminalService.destroyWorkspaceTerminals.mockImplementation(() => {
+      throw new Error('terminal cleanup failed');
+    });
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow(
+      'Failed to cleanup workspace resources before delete'
+    );
+    expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
+    expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
+    expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
 });

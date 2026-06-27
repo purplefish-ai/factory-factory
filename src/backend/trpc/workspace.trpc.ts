@@ -459,14 +459,32 @@ export const workspaceRouter = router({
     const { runScriptService, sessionService, terminalService } = ctx.appContext.services;
     const logger = getLogger(ctx);
     // Clean up running sessions, terminals, and dev processes before deleting
-    try {
-      await sessionService.stopWorkspaceSessions(input.id);
-      await runScriptService.stopRunScript(input.id);
-      terminalService.destroyWorkspaceTerminals(input.id);
-    } catch (error) {
+    const cleanupResults = await Promise.allSettled([
+      sessionService.stopWorkspaceSessions(input.id),
+      (async () => {
+        const result = await runScriptService.stopRunScript(input.id);
+        if (!result.success) {
+          throw new Error(result.error ?? 'Unknown run script stop failure');
+        }
+      })(),
+      Promise.resolve().then(() => {
+        terminalService.destroyWorkspaceTerminals(input.id);
+      }),
+    ]);
+    const cleanupErrors = cleanupResults.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    );
+
+    if (cleanupErrors.length > 0) {
       logger.error('Failed to cleanup workspace resources before delete', {
         workspaceId: input.id,
-        error: error instanceof Error ? error.message : String(error),
+        errors: cleanupErrors.map((error) =>
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to cleanup workspace resources before delete',
       });
     }
     return workspaceDataService.delete(input.id);
