@@ -212,6 +212,18 @@ async function closeNetServer(server: NetServer): Promise<void> {
   });
 }
 
+async function waitForHttpServerToListen(server: ReturnType<typeof createServer>): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (server.getHttpServer().listening) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error('Expected HTTP server to start listening');
+}
+
 async function occupyConsecutivePorts(
   count: number
 ): Promise<{ startPort: number; servers: NetServer[] }> {
@@ -507,6 +519,50 @@ describe('server websocket upgrade routing', () => {
     );
   });
 
+  it('gates HTTP requests and websocket upgrades while startup reconciliation is pending', async () => {
+    const harness = createTestHarness();
+    let reconciliationStarted!: () => void;
+    let continueReconciliation!: () => void;
+    const reconciliationStartedPromise = new Promise<void>((resolve) => {
+      reconciliationStarted = resolve;
+    });
+    const continueReconciliationPromise = new Promise<void>((resolve) => {
+      continueReconciliation = resolve;
+    });
+    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
+      reconciliationStarted();
+      await continueReconciliationPromise;
+    });
+
+    const server = createTestServer(harness.context, 0);
+    const startPromise = server.start();
+    await reconciliationStartedPromise;
+    await waitForHttpServerToListen(server);
+
+    const response = await request(server.getHttpServer()).get('/health');
+    const socket = {
+      destroy: vi.fn(),
+      write: vi.fn(),
+    };
+    const upgradeRequest = {
+      headers: { host: 'localhost:3001' },
+      url: '/chat?sessionId=s1',
+    };
+    server.getHttpServer().emit('upgrade', upgradeRequest, socket, Buffer.alloc(0));
+
+    expect(response.status).toBe(503);
+    expect(response.body).toMatchObject({ error: 'Service starting' });
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('503 Service Unavailable'));
+    expect(socket.destroy).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+
+    continueReconciliation();
+    await expect(startPromise).resolves.toBe('http://localhost:0');
+
+    const readyResponse = await request(server.getHttpServer()).get('/health');
+    expect(readyResponse.status).toBe(200);
+  });
+
   it('retries the next port when the requested port is already bound', async () => {
     const { startPort, servers: occupiedServers } = await occupyConsecutivePorts(2);
     const requestedPortReservation = occupiedServers[0];
@@ -568,6 +624,30 @@ describe('server websocket upgrade routing', () => {
 
     await expect(startPromise).rejects.toThrow('listen failed');
     expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
+  });
+
+  it('runs normal cleanup when startup fails after the server is bound', async () => {
+    const harness = createTestHarness();
+    vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
+      throw new Error('scheduler failed');
+    });
+    const server = createTestServer(harness.context, 0);
+
+    await expect(server.start()).rejects.toThrow('scheduler failed');
+
+    expect(server.getHttpServer().listening).toBe(false);
+    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
+    expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
+    expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
+    expect(stopEventCollector).toHaveBeenCalledOnce();
+    expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
+    expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
+    expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(prisma.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('runs cleanup fan-out when server stops', async () => {
