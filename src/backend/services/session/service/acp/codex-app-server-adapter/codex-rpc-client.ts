@@ -206,7 +206,10 @@ export class CodexRpcClient {
   ): Promise<TResponse> {
     const id = this.nextId;
     this.nextId += 1;
-    const timeoutMs = normalizeRequestTimeoutMs(requestOptions?.timeoutMs ?? this.requestTimeoutMs);
+    const timeoutMs =
+      requestOptions?.timeoutMs === undefined
+        ? this.requestTimeoutMs
+        : normalizeRequestTimeoutMs(requestOptions.timeoutMs, this.requestTimeoutMs);
 
     const payload: Record<string, unknown> = {
       id,
@@ -394,9 +397,12 @@ export class CodexRpcClient {
   }
 }
 
-function normalizeRequestTimeoutMs(timeoutMs: number | undefined): number {
+function normalizeRequestTimeoutMs(
+  timeoutMs: number | undefined,
+  fallbackMs = DEFAULT_CODEX_RPC_REQUEST_TIMEOUT_MS
+): number {
   if (!Number.isFinite(timeoutMs) || timeoutMs === undefined || timeoutMs <= 0) {
-    return DEFAULT_CODEX_RPC_REQUEST_TIMEOUT_MS;
+    return fallbackMs;
   }
 
   return Math.floor(timeoutMs);

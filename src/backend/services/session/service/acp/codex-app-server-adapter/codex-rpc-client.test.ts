@@ -239,6 +239,40 @@ describe('CodexRpcClient', () => {
     }
   });
 
+  it('falls back to the configured client timeout for invalid per-request overrides', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const client = new CodexRpcClient({
+        cwd: '/tmp/workspace',
+        env: {},
+        requestTimeoutMs: 25,
+      });
+
+      client.start();
+      const responsePromise = client.request(
+        'turn/start',
+        { threadId: 'thread_1' },
+        { timeoutMs: 0 }
+      );
+      const rejection = responsePromise.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      const error = await rejection;
+      expect(error).toBeInstanceOf(CodexRequestTimeoutError);
+      expect(error).toMatchObject({
+        id: 1,
+        method: 'turn/start',
+        timeoutMs: 25,
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('clears request timeout state when a response arrives before the deadline', async () => {
     vi.useFakeTimers();
     try {
