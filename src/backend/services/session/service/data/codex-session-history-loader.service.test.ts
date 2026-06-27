@@ -714,6 +714,81 @@ describe('codexSessionHistoryLoaderService', () => {
     });
   });
 
+  it('does not reuse a positive cache entry whose session_meta id changed', async () => {
+    const providerSessionId = 'session-positive-cache-id-validation';
+    const cwd = '/Users/test/project';
+    const cachedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'first cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: cachedPath });
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: 'different-session-id', cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:02.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'wrong replaced file' },
+        },
+      ],
+    });
+    const replacementPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'replacement original session' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: replacementPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'replacement original session',
+    });
+  });
+
   it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
     const unprefixedSessionId = '019c620a-8a8d-7b33-9b20-f9bd7c6512a7';
     const providerSessionId = `sess_${unprefixedSessionId}`;

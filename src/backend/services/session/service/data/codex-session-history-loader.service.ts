@@ -119,6 +119,7 @@ function buildSessionFileLookupCacheKey(params: {
 
 async function getCachedSessionFilePath(params: {
   cacheKey: string;
+  providerSessionId: string;
   workingDir: string;
 }): Promise<string | null | undefined> {
   const cached = sessionFileLookupCache.get(params.cacheKey);
@@ -139,7 +140,11 @@ async function getCachedSessionFilePath(params: {
     }
 
     const meta = await parseSessionMeta(cached.filePath);
-    if (meta?.cwd !== params.workingDir) {
+    if (
+      typeof meta?.id !== 'string' ||
+      !isMatchingProviderSessionId(meta.id, params.providerSessionId) ||
+      meta.cwd !== params.workingDir
+    ) {
       sessionFileLookupCache.delete(params.cacheKey);
       return undefined;
     }
@@ -693,7 +698,11 @@ async function resolveSessionFilePath(
   }
 
   const cacheKey = buildSessionFileLookupCacheKey({ sessionsDir, workingDir, providerSessionId });
-  const cachedFilePath = await getCachedSessionFilePath({ cacheKey, workingDir });
+  const cachedFilePath = await getCachedSessionFilePath({
+    cacheKey,
+    providerSessionId,
+    workingDir,
+  });
   if (cachedFilePath !== undefined) {
     return cachedFilePath;
   }
