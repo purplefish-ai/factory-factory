@@ -130,6 +130,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
+    findSessionsByWorkspaceId: (workspaceId) =>
+      sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
     isSessionRunning: (id) => sessionService.isSessionRunning(id),
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),

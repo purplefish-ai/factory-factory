@@ -3,18 +3,106 @@ import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import type { RatchetSessionBridge } from './bridges';
-import { fixerSessionService } from './fixer-session.service';
+import { type AcquireAndDispatchResult, fixerSessionService } from './fixer-session.service';
 import type { PRStateInfo, RatchetAction, WorkspaceWithPR } from './ratchet.types';
 
 type Logger = ReturnType<typeof createLogger>;
 
 const RATCHET_WORKFLOW = 'ratchet';
 
+async function recordActiveSessionOrDisable(params: {
+  workspaceId: string;
+  sessionId: string;
+  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  sessionBridge: RatchetSessionBridge;
+  logger: Logger;
+  logMessage: string;
+}): Promise<RatchetAction | null> {
+  const { workspaceId, sessionId, setActiveSession, sessionBridge, logger, logMessage } = params;
+  const recorded = await setActiveSession(workspaceId, sessionId);
+  if (recorded) {
+    return null;
+  }
+
+  logger.info(logMessage, {
+    workspaceId,
+    sessionId,
+  });
+  if (sessionBridge.isSessionRunning(sessionId)) {
+    await sessionBridge.stopSession(sessionId);
+  }
+  return { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
+}
+
+async function handleStartedFixerResult(params: {
+  workspaceId: string;
+  result: Extract<AcquireAndDispatchResult, { status: 'started' }>;
+  sessionBridge: RatchetSessionBridge;
+  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  clearActiveSession: (workspaceId: string) => Promise<void>;
+  logger: Logger;
+}): Promise<RatchetAction> {
+  const { workspaceId, result, sessionBridge, setActiveSession, clearActiveSession, logger } =
+    params;
+  const promptSent = result.promptSent ?? true;
+  if (!promptSent) {
+    logger.warn('Ratchet session started but prompt delivery failed', {
+      workspaceId,
+      sessionId: result.sessionId,
+    });
+    await clearActiveSession(workspaceId);
+    if (sessionBridge.isSessionRunning(result.sessionId)) {
+      await sessionBridge.stopSession(result.sessionId);
+    }
+    return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
+  }
+
+  const disabledAction = await recordActiveSessionOrDisable({
+    workspaceId,
+    sessionId: result.sessionId,
+    setActiveSession,
+    sessionBridge,
+    logger,
+    logMessage: 'Ratchet disabled before fixer session could be recorded',
+  });
+  if (disabledAction) {
+    return disabledAction;
+  }
+
+  return {
+    type: 'TRIGGERED_FIXER',
+    sessionId: result.sessionId,
+    promptSent,
+  };
+}
+
+async function handleAlreadyActiveFixerResult(params: {
+  workspaceId: string;
+  result: Extract<AcquireAndDispatchResult, { status: 'already_active' }>;
+  sessionBridge: RatchetSessionBridge;
+  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  logger: Logger;
+}): Promise<RatchetAction> {
+  const { workspaceId, result, sessionBridge, setActiveSession, logger } = params;
+  const disabledAction = await recordActiveSessionOrDisable({
+    workspaceId,
+    sessionId: result.sessionId,
+    setActiveSession,
+    sessionBridge,
+    logger,
+    logMessage: 'Ratchet disabled before active fixer session could be recorded',
+  });
+  if (disabledAction) {
+    return disabledAction;
+  }
+  return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
+}
+
 export async function triggerRatchetFixer(params: {
   workspace: WorkspaceWithPR;
   prStateInfo: PRStateInfo;
   sessionBridge: RatchetSessionBridge;
-  setActiveSession: (workspaceId: string, sessionId: string) => Promise<void>;
+  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
   clearActiveSession: (workspaceId: string) => Promise<void>;
   logger: Logger;
 }): Promise<RatchetAction> {
@@ -45,31 +133,24 @@ export async function triggerRatchetFixer(params: {
     });
 
     if (result.status === 'started') {
-      const promptSent = result.promptSent ?? true;
-      if (!promptSent) {
-        logger.warn('Ratchet session started but prompt delivery failed', {
-          workspaceId: workspace.id,
-          sessionId: result.sessionId,
-        });
-        await clearActiveSession(workspace.id);
-        if (sessionBridge.isSessionRunning(result.sessionId)) {
-          await sessionBridge.stopSession(result.sessionId);
-        }
-        return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
-      }
-
-      await setActiveSession(workspace.id, result.sessionId);
-
-      return {
-        type: 'TRIGGERED_FIXER',
-        sessionId: result.sessionId,
-        promptSent,
-      };
+      return await handleStartedFixerResult({
+        workspaceId: workspace.id,
+        result,
+        sessionBridge,
+        setActiveSession,
+        clearActiveSession,
+        logger,
+      });
     }
 
     if (result.status === 'already_active') {
-      await setActiveSession(workspace.id, result.sessionId);
-      return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
+      return await handleAlreadyActiveFixerResult({
+        workspaceId: workspace.id,
+        result,
+        sessionBridge,
+        setActiveSession,
+        logger,
+      });
     }
 
     if (result.status === 'skipped') {

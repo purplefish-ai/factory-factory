@@ -109,6 +109,60 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  it('sets ratchet active session only when ratchet is enabled', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.setRatchetActiveSessionIfEnabled('ws-1', 'session-1')
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', ratchetEnabled: true },
+      data: { ratchetActiveSessionId: 'session-1' },
+    });
+  });
+
+  it('returns false when ratchet active session conditional update affects no rows', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      workspaceAccessor.setRatchetActiveSessionIfEnabled('ws-1', 'session-1')
+    ).resolves.toBe(false);
+  });
+
+  it('updates ratchet check state only when ratchet is enabled', async () => {
+    const checkedAt = new Date('2026-01-01T00:00:00.000Z');
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.updateRatchetCheckIfEnabled('ws-1', {
+        ratchetState: 'CI_FAILED',
+        ratchetLastCheckedAt: checkedAt,
+        ratchetLastCiRunId: 'snapshot-1',
+      })
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', ratchetEnabled: true },
+      data: {
+        ratchetState: 'CI_FAILED',
+        ratchetLastCheckedAt: checkedAt,
+        ratchetLastCiRunId: 'snapshot-1',
+      },
+    });
+  });
+
+  it('returns false when ratchet check conditional update affects no rows', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      workspaceAccessor.updateRatchetCheckIfEnabled('ws-1', {
+        ratchetState: 'READY',
+        ratchetLastCheckedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+    ).resolves.toBe(false);
+  });
+
   it('appends init output and skips existence check when update succeeds', async () => {
     mockExecuteRaw.mockResolvedValue(1);
 
