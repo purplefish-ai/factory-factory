@@ -452,7 +452,7 @@ describe('TerminalService', () => {
       expect(mockPidusage).toHaveBeenCalledTimes(2);
     });
 
-    it('does not let an unresolved update from a stopped monitor block restarted monitoring', async () => {
+    it('does not let an unresolved update from the last terminal block restarted monitoring', async () => {
       vi.useFakeTimers();
       const firstPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
       const secondPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
@@ -466,9 +466,8 @@ describe('TerminalService', () => {
       expect(mockPidusage).toHaveBeenCalledTimes(1);
 
       service.destroyTerminal(defaultOpts.workspaceId, terminalId);
-      await vi.advanceTimersByTimeAsync(5000);
-
       await service.createTerminal(defaultOpts);
+
       await vi.advanceTimersByTimeAsync(5000);
       expect(mockPidusage).toHaveBeenCalledTimes(2);
 

@@ -514,6 +514,10 @@ export class TerminalService {
       this.activeTerminals.delete(workspaceId);
     }
 
+    if (this.getActiveTerminalCount() === 0) {
+      this.stopResourceMonitoring();
+    }
+
     // Dispose PTY event listeners before killing
     for (const dispose of instance.disposables) {
       try {
