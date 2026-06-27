@@ -101,6 +101,25 @@ function isMethodNotFoundError(error: unknown): boolean {
   return details.code === -32_601 || details.message.includes('Method not found');
 }
 
+async function raceWithSoftTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | undefined> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<undefined>((resolve) => {
+    timeout = setTimeout(() => resolve(undefined), timeoutMs);
+    timeout.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
@@ -681,8 +700,7 @@ export class AcpRuntimeManager {
       // Send SIGTERM after registering exit listener to avoid missing fast exits.
       handle.child.kill('SIGTERM');
 
-      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 5000));
-      await Promise.race([exitPromise, timeoutPromise]);
+      await raceWithSoftTimeout(exitPromise, 5000);
 
       // Escalate to SIGKILL if still alive
       if (handle.child.exitCode === null) {
@@ -923,10 +941,7 @@ export class AcpRuntimeManager {
   private async stopCurrentClients(timeoutMs: number): Promise<void> {
     const sessionIds = [...this.sessions.keys()];
     const stopPromises = sessionIds.map((sessionId) =>
-      Promise.race([
-        this.stopClient(sessionId),
-        new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-      ])
+      raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
     );
 
     await Promise.all(stopPromises);
@@ -938,10 +953,10 @@ export class AcpRuntimeManager {
       return;
     }
 
-    await Promise.race([
-      Promise.allSettled(pendingCreations),
-      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-    ]);
+    await raceWithSoftTimeout(
+      Promise.allSettled(pendingCreations).then(() => undefined),
+      timeoutMs
+    );
   }
 
   getAllClients(): IterableIterator<[string, AcpProcessHandle]> {
