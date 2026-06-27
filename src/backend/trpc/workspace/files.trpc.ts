@@ -3,12 +3,11 @@ import path from 'node:path';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import {
-  compareFilesByRelevance,
   type FileEntry,
   isBinaryContent,
   isPathSafe,
-  listFilesRecursive,
   MAX_FILE_SIZE,
+  searchFilesRecursive,
 } from '@/backend/lib/file-helpers';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import { getLanguageFromPath } from '@/lib/language-detection';
@@ -63,21 +62,10 @@ export const workspaceFilesRouter = router({
       const { worktreePath } = result;
 
       try {
-        // Get all files recursively
-        let files = await listFilesRecursive(worktreePath);
-
-        // Filter by query if provided (case-insensitive)
-        if (input.query) {
-          const queryLower = input.query.toLowerCase();
-          files = files.filter((file) => file.toLowerCase().includes(queryLower));
-        }
-
-        // Sort by relevance (prefer shorter paths, exact matches first)
-        const queryLower = input.query?.toLowerCase();
-        files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
-
-        // Limit results
-        files = files.slice(0, input.limit);
+        const files = await searchFilesRecursive(worktreePath, {
+          query: input.query,
+          limit: input.limit,
+        });
 
         logger.info('listAllFiles returning files', {
           workspaceId: input.workspaceId,

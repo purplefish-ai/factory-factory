@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AutoIterationSessionBridge } from '@/backend/services/auto-iteration';
 
 // --- Module mocks (inline vi.fn() - no top-level variable references) ---
 
@@ -125,6 +126,18 @@ import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
+}
+
+type ConfigureDomainBridgeServices = NonNullable<Parameters<typeof configureDomainBridges>[0]>;
+type AutoIterationServiceBridge = NonNullable<
+  ConfigureDomainBridgeServices['autoIterationService']
+>;
+
+function createAutoIterationServiceMock(): AutoIterationServiceBridge {
+  return {
+    configure: vi.fn(),
+    onSessionDeath: vi.fn(),
+  } as unknown as AutoIterationServiceBridge;
 }
 
 describe('configureDomainBridges', () => {
@@ -464,6 +477,79 @@ describe('configureDomainBridges', () => {
       });
       expect(sessionService.isSessionRunning).toHaveBeenCalledWith('session-1');
       expect(sessionDomainService.getQueueLength).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('auto-iteration session bridge', () => {
+    it('cleans up a recycled session when handoff send fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const sendError = new Error('prompt failed');
+      vi.mocked(workspaceAccessor.findRawById)
+        .mockResolvedValueOnce({
+          autoIterationSessionId: 'old-session',
+        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>)
+        .mockResolvedValueOnce({
+          autoIterationSessionId: 'new-session',
+        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionService.sendAcpMessage).mockRejectedValue(sendError);
+
+      configureDomainBridges({ autoIterationService: autoIterationServiceMock });
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        sendError
+      );
+
+      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionService.startSession).toHaveBeenCalledWith('new-session', {
+        startupModePreset: 'non_interactive',
+      });
+      expect(workspaceAccessor.update).toHaveBeenNthCalledWith(1, 'ws-1', {
+        autoIterationSessionId: 'new-session',
+      });
+      expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
+        { type: 'text', text: 'handoff prompt' },
+      ]);
+      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(workspaceAccessor.update).toHaveBeenNthCalledWith(2, 'ws-1', {
+        autoIterationSessionId: null,
+      });
+      expect(vi.mocked(workspaceAccessor.update).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]!
+      );
+    });
+
+    it('does not clear a newer auto-iteration session after recycle cleanup', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      vi.mocked(workspaceAccessor.findRawById)
+        .mockResolvedValueOnce({
+          autoIterationSessionId: 'old-session',
+        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>)
+        .mockResolvedValueOnce({
+          autoIterationSessionId: 'newer-session',
+        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionService.sendAcpMessage).mockRejectedValue(new Error('prompt failed'));
+
+      configureDomainBridges({ autoIterationService: autoIterationServiceMock });
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        'prompt failed'
+      );
+
+      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(workspaceAccessor.update).toHaveBeenCalledTimes(1);
+      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-1', {
+        autoIterationSessionId: 'new-session',
+      });
     });
   });
 
