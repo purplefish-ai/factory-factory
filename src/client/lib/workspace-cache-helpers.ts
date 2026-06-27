@@ -39,6 +39,33 @@ export type ProjectSummaryCacheData<TWorkspace extends WorkspaceWithId> = {
   reviewCount: number;
 };
 
+function restoreWorkspacesByPreviousOrder<TWorkspace extends WorkspaceWithId>(
+  currentWorkspaces: TWorkspace[],
+  previousWorkspaces: TWorkspace[],
+  workspacesToRestore: TWorkspace[]
+): TWorkspace[] {
+  const previousIndexById = new Map(
+    previousWorkspaces.map((workspace, index) => [workspace.id, index])
+  );
+  const restoredWorkspaces = [...currentWorkspaces];
+
+  for (const workspace of workspacesToRestore) {
+    const previousIndex = previousIndexById.get(workspace.id) ?? Number.MAX_SAFE_INTEGER;
+    const insertIndex = restoredWorkspaces.findIndex((current) => {
+      const currentPreviousIndex = previousIndexById.get(current.id);
+      return currentPreviousIndex !== undefined && currentPreviousIndex > previousIndex;
+    });
+
+    if (insertIndex === -1) {
+      restoredWorkspaces.push(workspace);
+    } else {
+      restoredWorkspaces.splice(insertIndex, 0, workspace);
+    }
+  }
+
+  return restoredWorkspaces;
+}
+
 export function removeWorkspaceFromProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
   cache: ProjectSummaryCacheData<TWorkspace> | undefined,
   workspaceId: string
@@ -99,7 +126,7 @@ export function restoreWorkspacesToListCache<TWorkspace extends WorkspaceWithId>
     return cache;
   }
 
-  return [...cache, ...workspacesToRestore];
+  return restoreWorkspacesByPreviousOrder(cache, previousCache, workspacesToRestore);
 }
 
 export function restoreWorkspacesToProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
@@ -127,6 +154,10 @@ export function restoreWorkspacesToProjectSummaryCache<TWorkspace extends Worksp
 
   return {
     ...cache,
-    workspaces: [...cache.workspaces, ...workspacesToRestore],
+    workspaces: restoreWorkspacesByPreviousOrder(
+      cache.workspaces,
+      previousCache.workspaces,
+      workspacesToRestore
+    ),
   };
 }
