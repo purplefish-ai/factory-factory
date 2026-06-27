@@ -25,6 +25,8 @@ interface UpdateUserSettingsInput {
 // Type for workspace order storage: { [projectId]: workspaceId[] }
 export type WorkspaceOrderMap = Record<string, string[]>;
 
+const WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS = 5;
+
 function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderMap {
   const parsed = workspaceOrderMapSchema.safeParse(value);
   return parsed.success ? parsed.data : {};
@@ -174,18 +176,35 @@ class UserSettingsAccessor {
    */
   async updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
     const userId = 'default';
-    const settings = await this.get();
-    const orderMap = parseWorkspaceOrderMap(settings.workspaceOrder);
 
-    // Update the order for this project
-    orderMap[projectId] = workspaceIds;
+    for (let attempt = 0; attempt < WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS; attempt += 1) {
+      const settings = await this.get();
+      const orderMap = parseWorkspaceOrderMap(settings.workspaceOrder);
+      const nextOrderMap = {
+        ...orderMap,
+        [projectId]: workspaceIds,
+      };
 
-    return await prisma.userSettings.update({
-      where: { userId },
-      data: {
-        workspaceOrder: orderMap,
-      },
-    });
+      const result = await prisma.userSettings.updateMany({
+        where: {
+          userId,
+          updatedAt: settings.updatedAt,
+        },
+        data: {
+          workspaceOrder: nextOrderMap,
+        },
+      });
+
+      if (result.count === 1) {
+        return await prisma.userSettings.findUniqueOrThrow({
+          where: { userId },
+        });
+      }
+    }
+
+    throw new Error(
+      `Failed to update workspace order for project ${projectId} after ${WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS} attempts`
+    );
   }
 }
 
