@@ -19,13 +19,18 @@ export function parseHydrationBatch(data: unknown): HydrationBatch | null {
 
 export function evaluateHydrationBatch(
   batch: HydrationBatch,
-  pendingLoadRequestId: string | null
+  pendingLoadRequestId: string | null,
+  acceptedLoadRequestId: string | null = null
 ): HydrationBatchDecision {
   if (pendingLoadRequestId) {
     if (!batch.loadRequestId) {
       return 'drop';
     }
     return batch.loadRequestId === pendingLoadRequestId ? 'match' : 'drop';
+  }
+
+  if (acceptedLoadRequestId && batch.loadRequestId) {
+    return batch.loadRequestId === acceptedLoadRequestId ? 'match' : 'drop';
   }
 
   return batch.loadRequestId ? 'drop' : 'pass';

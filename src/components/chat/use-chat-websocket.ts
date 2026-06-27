@@ -159,6 +159,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
+  const exhaustedLoadRequestIdRef = useRef<string | null>(null);
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
@@ -195,6 +196,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         });
         loadTimeoutRef.current = null;
         if (decision === 'exhausted') {
+          exhaustedLoadRequestIdRef.current = loadRequestId;
           currentLoadRequestIdRef.current = null;
           clearConnectLoadingTimeout();
           chat.dispatch({ type: 'SESSION_LOADING_END' });
@@ -216,7 +218,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     (data: unknown) => {
       const batch = parseHydrationBatch(data);
       if (batch) {
-        const decision = evaluateHydrationBatch(batch, currentLoadRequestIdRef.current);
+        const decision = evaluateHydrationBatch(
+          batch,
+          currentLoadRequestIdRef.current,
+          exhaustedLoadRequestIdRef.current
+        );
         if (decision === 'drop') {
           // A hydration response with a loadRequestId can arrive late (for example
           // from a prior reconnect attempt). Ignore it so stale replay batches
@@ -228,8 +234,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
         }
         if (decision === 'match') {
           currentLoadRequestIdRef.current = null;
+          exhaustedLoadRequestIdRef.current = null;
           clearLoadTimeout();
           clearConnectLoadingTimeout();
+        } else {
+          exhaustedLoadRequestIdRef.current = null;
         }
       }
       chat.handleMessage(data);
@@ -250,6 +259,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     const loadGeneration = currentLoadGenerationRef.current + 1;
     currentLoadGenerationRef.current = loadGeneration;
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    exhaustedLoadRequestIdRef.current = null;
     currentLoadRequestIdRef.current = loadRequestId;
     scheduleLoadRetry(loadGeneration, loadRequestId);
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
@@ -258,6 +268,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
+    exhaustedLoadRequestIdRef.current = null;
     currentLoadGenerationRef.current += 1;
     clearLoadTimeout();
     clearConnectLoadingTimeout();
@@ -268,6 +279,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   useEffect(() => {
     return () => {
       currentLoadRequestIdRef.current = null;
+      exhaustedLoadRequestIdRef.current = null;
       currentLoadGenerationRef.current += 1;
       clearLoadTimeout();
       clearConnectLoadingTimeout();
