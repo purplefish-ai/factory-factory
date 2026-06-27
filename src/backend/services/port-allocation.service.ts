@@ -6,7 +6,6 @@ import { createServer } from 'node:net';
 export class PortAllocationService {
   private static readonly DEFAULT_START_PORT = 3000;
   private static readonly DEFAULT_END_PORT = 9999;
-  private static readonly MAX_ATTEMPTS = 100;
 
   /**
    * Check if a port is in use by attempting to bind to it
@@ -41,17 +40,22 @@ export class PortAllocationService {
    * @param startPort - Start of port range (default: 3000)
    * @param endPort - End of port range (default: 9999)
    * @returns Available port number
-   * @throws Error if no free port found after MAX_ATTEMPTS attempts
+   * @throws Error if no free port exists in the range
    */
   static async findFreePort(
     startPort = PortAllocationService.DEFAULT_START_PORT,
     endPort = PortAllocationService.DEFAULT_END_PORT
   ): Promise<number> {
     const range = endPort - startPort + 1;
+    if (!(Number.isInteger(startPort) && Number.isInteger(endPort)) || range <= 0) {
+      throw new Error(`Invalid port range ${startPort}-${endPort}`);
+    }
 
-    for (let attempt = 0; attempt < PortAllocationService.MAX_ATTEMPTS; attempt++) {
-      // Pick a random port in range to reduce collisions
-      const port = startPort + Math.floor(Math.random() * range);
+    // Randomize the starting point to reduce collisions, then scan without replacement.
+    const startOffset = Math.floor(Math.random() * range);
+
+    for (let offset = 0; offset < range; offset++) {
+      const port = startPort + ((startOffset + offset) % range);
 
       const inUse = await PortAllocationService.isPortInUse(port);
       if (!inUse) {
@@ -59,8 +63,6 @@ export class PortAllocationService {
       }
     }
 
-    throw new Error(
-      `Could not find free port after ${PortAllocationService.MAX_ATTEMPTS} attempts in range ${startPort}-${endPort}`
-    );
+    throw new Error(`Could not find free port in range ${startPort}-${endPort}`);
   }
 }
