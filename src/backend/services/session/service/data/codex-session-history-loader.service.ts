@@ -117,27 +117,36 @@ function buildSessionFileLookupCacheKey(params: {
   });
 }
 
-async function getCachedSessionFilePath(cacheKey: string): Promise<string | null | undefined> {
-  const cached = sessionFileLookupCache.get(cacheKey);
+async function getCachedSessionFilePath(params: {
+  cacheKey: string;
+  workingDir: string;
+}): Promise<string | null | undefined> {
+  const cached = sessionFileLookupCache.get(params.cacheKey);
   if (!cached) {
     return undefined;
   }
 
   if (cached.expiresAtMs <= Date.now()) {
-    sessionFileLookupCache.delete(cacheKey);
+    sessionFileLookupCache.delete(params.cacheKey);
     return undefined;
   }
 
   if (cached.filePath !== null) {
     const stats = await stat(cached.filePath).catch(() => null);
     if (!stats?.isFile()) {
-      sessionFileLookupCache.delete(cacheKey);
+      sessionFileLookupCache.delete(params.cacheKey);
+      return undefined;
+    }
+
+    const meta = await parseSessionMeta(cached.filePath);
+    if (meta?.cwd !== params.workingDir) {
+      sessionFileLookupCache.delete(params.cacheKey);
       return undefined;
     }
   }
 
-  sessionFileLookupCache.delete(cacheKey);
-  sessionFileLookupCache.set(cacheKey, cached);
+  sessionFileLookupCache.delete(params.cacheKey);
+  sessionFileLookupCache.set(params.cacheKey, cached);
   return cached.filePath;
 }
 
@@ -684,7 +693,7 @@ async function resolveSessionFilePath(
   }
 
   const cacheKey = buildSessionFileLookupCacheKey({ sessionsDir, workingDir, providerSessionId });
-  const cachedFilePath = await getCachedSessionFilePath(cacheKey);
+  const cachedFilePath = await getCachedSessionFilePath({ cacheKey, workingDir });
   if (cachedFilePath !== undefined) {
     return cachedFilePath;
   }

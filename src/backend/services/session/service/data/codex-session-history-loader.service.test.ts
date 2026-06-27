@@ -655,6 +655,65 @@ describe('codexSessionHistoryLoaderService', () => {
     });
   });
 
+  it('does not reuse an id-only positive cache entry when a cwd match appears later', async () => {
+    const providerSessionId = 'session-id-only-positive-cache';
+    const requestedCwd = '/Users/test/project';
+    const idOnlyPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/other' },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'id-only cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: requestedCwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: idOnlyPath });
+
+    const matchingCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: requestedCwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'later cwd match' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: requestedCwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: matchingCwdPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'later cwd match',
+    });
+  });
+
   it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
     const unprefixedSessionId = '019c620a-8a8d-7b33-9b20-f9bd7c6512a7';
     const providerSessionId = `sess_${unprefixedSessionId}`;
