@@ -592,6 +592,15 @@ describe('resource accessors integration', () => {
       expect(settings.defaultCodexModel).toBe('default');
     });
 
+    it('returns one default row for concurrent first reads', async () => {
+      const settings = await Promise.all(
+        Array.from({ length: 10 }, () => userSettingsAccessor.get())
+      );
+
+      expect(new Set(settings.map((row) => row.id)).size).toBe(1);
+      expect(await prisma.userSettings.count({ where: { userId: 'default' } })).toBe(1);
+    });
+
     it('persists workspace order by project id', async () => {
       const projectA = await createProjectFixture();
       const projectB = await createProjectFixture();

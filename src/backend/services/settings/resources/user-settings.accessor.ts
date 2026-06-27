@@ -1,9 +1,5 @@
-import type {
-  Prisma,
-  SessionPermissionPreset,
-  SessionProvider,
-  UserSettings,
-} from '@prisma-gen/client';
+import type { SessionPermissionPreset, SessionProvider, UserSettings } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
 import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
@@ -68,6 +64,10 @@ function normalizeOptionalEffort(value: string | null | undefined): string | nul
   return normalized.length > 0 ? normalized : null;
 }
 
+function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -76,13 +76,16 @@ class UserSettingsAccessor {
   async get(): Promise<UserSettings> {
     const userId = 'default';
 
-    let settings = await prisma.userSettings.findUnique({
+    const existing = await prisma.userSettings.findUnique({
       where: { userId },
     });
 
-    // Create default settings if they don't exist
-    if (!settings) {
-      settings = await prisma.userSettings.create({
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      return await prisma.userSettings.create({
         data: {
           userId,
           preferredIde: 'cursor',
@@ -98,9 +101,21 @@ class UserSettingsAccessor {
           ratchetPermissions: 'YOLO',
         },
       });
-    }
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
 
-    return settings;
+      const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+      });
+
+      if (!settings) {
+        throw error;
+      }
+
+      return settings;
+    }
   }
 
   async getDefaultSessionProvider(): Promise<SessionProvider> {
