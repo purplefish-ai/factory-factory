@@ -15,7 +15,7 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
-import { publicProcedure, router } from '@/backend/trpc/trpc';
+import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 
 const logger = createLogger('workspace-init-trpc');
 
@@ -87,7 +87,7 @@ export const workspaceInitRouter = router({
   }),
 
   // Retry failed initialization
-  retryInit: publicProcedure
+  retryInit: trustedLocalProcedure
     .input(z.object({ id: z.string(), useExistingBranch: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       const workspace = await workspaceDataService.findByIdWithProject(input.id);

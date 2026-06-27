@@ -15,7 +15,7 @@ import {
   IssueTrackerConfigSchema,
   sanitizeIssueTrackerConfig,
 } from '@/shared/schemas/issue-tracker-config.schema';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 function parseCommandFileDescription(filePath: string): string {
   try {
@@ -272,7 +272,7 @@ export const projectRouter = router({
     }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
-  create: publicProcedure
+  create: trustedLocalProcedure
     .input(
       z.object({
         repoPath: z.string().min(1, 'Repository path is required'),
@@ -311,7 +311,7 @@ export const projectRouter = router({
     }),
 
   // Update a project
-  update: publicProcedure
+  update: trustedLocalProcedure
     .input(
       z.object({
         id: z.string(),
@@ -383,7 +383,7 @@ export const projectRouter = router({
     }),
 
   // Save factory-factory.json to the project repo
-  saveFactoryConfig: publicProcedure
+  saveFactoryConfig: trustedLocalProcedure
     .input(
       z.object({
         projectId: z.string(),
@@ -408,7 +408,7 @@ export const projectRouter = router({
   }),
 
   // Clone a GitHub repo and create a project
-  createFromGithub: publicProcedure
+  createFromGithub: trustedLocalProcedure
     .input(
       z.object({
         githubUrl: z

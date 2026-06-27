@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket } from 'ws';
 import type { AppServices } from '@/backend/app-context';
+import { isOriginAllowed } from '@/backend/lib/request-trust';
 
 type WebSocketOriginLogger = Pick<ReturnType<AppServices['createLogger']>, 'warn'>;
 type WebSocketOriginConfigService = Pick<AppServices['configService'], 'getCorsConfig'>;
@@ -33,7 +34,7 @@ export function validateWebSocketOrigin({
   }
 
   const allowedOrigins = configService.getCorsConfig().allowedOrigins;
-  if (!allowedOrigins.includes(origin)) {
+  if (!isOriginAllowed(origin, allowedOrigins)) {
     logger.warn(`Rejected ${connectionName} connection from unauthorized origin`, { origin });
     sendBadRequest(socket, 'Unauthorized origin');
     return false;

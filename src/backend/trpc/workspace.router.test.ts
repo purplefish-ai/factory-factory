@@ -113,7 +113,11 @@ vi.mock('./workspace/run-script.trpc', () => ({
 
 import { workspaceRouter } from './workspace.trpc';
 
-function createCaller() {
+function createCaller(requestTrust?: {
+  remoteAddress?: string;
+  origin?: string;
+  isLocal: boolean;
+}) {
   const sessionService = {
     stopWorkspaceSessions: vi.fn(async () => undefined),
   };
@@ -135,11 +139,15 @@ function createCaller() {
   };
 
   const caller = workspaceRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
         configService: {
           getWorktreeBaseDir: () => '/tmp/worktrees',
           getMaxSessionsPerWorkspace: () => 2,
+          getCorsConfig: () => ({
+            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+          }),
         },
         cliHealthService,
         createLogger: () => ({
@@ -245,6 +253,35 @@ describe('workspaceRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+  });
+
+  it('rejects privileged workspace mutations from untrusted requests', async () => {
+    const { caller } = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+
+    await expect(
+      caller.create({
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'New Workspace',
+      })
+    ).rejects.toThrow('trusted local Factory Factory client');
+
+    await expect(
+      caller.createChild({
+        parentWorkspaceId: 'parent-1',
+        projectId: 'p1',
+        name: 'Child Workspace',
+      })
+    ).rejects.toThrow('trusted local Factory Factory client');
+
+    expect(mockResolveProviderForWorkspaceCreation).not.toHaveBeenCalled();
+    expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
+    expect(mockCreateAgentSession).not.toHaveBeenCalled();
+    expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
   });
 
   it('passes initial attachments through manual workspace creation', async () => {

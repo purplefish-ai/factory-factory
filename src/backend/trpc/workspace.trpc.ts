@@ -42,7 +42,7 @@ import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schem
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { type Context, publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
@@ -218,78 +218,82 @@ export const workspaceRouter = router({
   }),
 
   // Create a new workspace
-  create: publicProcedure.input(workspaceCreationSourceSchema).mutation(async ({ ctx, input }) => {
-    const logger = getLogger(ctx);
-    const { configService } = ctx.appContext.services;
-    const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
-    const explicitProvider =
-      input.type === 'MANUAL' || input.type === 'GITHUB_ISSUE' || input.type === 'LINEAR_ISSUE'
-        ? input.provider
-        : undefined;
-    let defaultSessionProvider: SessionProvider | undefined;
-
-    // Workspace creation provisions a default session when session capacity is enabled.
-    // Block creation if the effective provider cannot be used on this machine.
-    if (maxSessionsPerWorkspace > 0) {
-      defaultSessionProvider =
-        await sessionProviderResolverService.resolveProviderForWorkspaceCreation(explicitProvider);
-      const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-      const providerUnavailableMessage = getProviderUnavailableMessage(
-        defaultSessionProvider,
-        cliHealth
-      );
-      if (providerUnavailableMessage) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: `Cannot create workspace: ${providerUnavailableMessage}`,
-        });
-      }
-    }
-
-    // Use the canonical workspace creation service
-    const workspaceCreationService = new WorkspaceCreationService({
-      logger,
-    });
-
-    const workspace = await workspaceCreationService.create(input);
-
-    if (maxSessionsPerWorkspace > 0 && defaultSessionProvider) {
-      try {
-        await sessionDataService.createAgentSession({
-          workspaceId: workspace.id,
-          workflow: DEFAULT_FOLLOWUP,
-          name: 'Chat 1',
-          provider: defaultSessionProvider,
-          providerProjectPath: null,
-        });
-      } catch (error) {
-        logger.warn('Failed to create default session for workspace', {
-          workspaceId: workspace.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    const branchName =
-      input.type === 'MANUAL'
-        ? input.branchName
-        : input.type === 'RESUME_BRANCH'
-          ? input.branchName
+  create: trustedLocalProcedure
+    .input(workspaceCreationSourceSchema)
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
+      const { configService } = ctx.appContext.services;
+      const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
+      const explicitProvider =
+        input.type === 'MANUAL' || input.type === 'GITHUB_ISSUE' || input.type === 'LINEAR_ISSUE'
+          ? input.provider
           : undefined;
-    const useExistingBranch = input.type === 'RESUME_BRANCH';
+      let defaultSessionProvider: SessionProvider | undefined;
 
-    void initializeWorkspaceWorktree(workspace.id, {
-      branchName,
-      useExistingBranch,
-    }).catch((error) => {
-      const initError = error instanceof Error ? error : new Error(String(error));
-      logger.error('Unexpected error during background workspace initialization', initError, {
-        workspaceId: workspace.id,
+      // Workspace creation provisions a default session when session capacity is enabled.
+      // Block creation if the effective provider cannot be used on this machine.
+      if (maxSessionsPerWorkspace > 0) {
+        defaultSessionProvider =
+          await sessionProviderResolverService.resolveProviderForWorkspaceCreation(
+            explicitProvider
+          );
+        const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
+        const providerUnavailableMessage = getProviderUnavailableMessage(
+          defaultSessionProvider,
+          cliHealth
+        );
+        if (providerUnavailableMessage) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: `Cannot create workspace: ${providerUnavailableMessage}`,
+          });
+        }
+      }
+
+      // Use the canonical workspace creation service
+      const workspaceCreationService = new WorkspaceCreationService({
+        logger,
       });
-    });
 
-    return workspace;
-  }),
+      const workspace = await workspaceCreationService.create(input);
+
+      if (maxSessionsPerWorkspace > 0 && defaultSessionProvider) {
+        try {
+          await sessionDataService.createAgentSession({
+            workspaceId: workspace.id,
+            workflow: DEFAULT_FOLLOWUP,
+            name: 'Chat 1',
+            provider: defaultSessionProvider,
+            providerProjectPath: null,
+          });
+        } catch (error) {
+          logger.warn('Failed to create default session for workspace', {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      const branchName =
+        input.type === 'MANUAL'
+          ? input.branchName
+          : input.type === 'RESUME_BRANCH'
+            ? input.branchName
+            : undefined;
+      const useExistingBranch = input.type === 'RESUME_BRANCH';
+
+      void initializeWorkspaceWorktree(workspace.id, {
+        branchName,
+        useExistingBranch,
+      }).catch((error) => {
+        const initError = error instanceof Error ? error : new Error(String(error));
+        logger.error('Unexpected error during background workspace initialization', initError, {
+          workspaceId: workspace.id,
+        });
+      });
+
+      return workspace;
+    }),
 
   // Rename a workspace
   rename: publicProcedure
@@ -513,7 +517,7 @@ export const workspaceRouter = router({
   // -------------------------------------------------------------------------
 
   // Create a child workspace under a parent, optionally in a different project
-  createChild: publicProcedure
+  createChild: trustedLocalProcedure
     .input(
       z.object({
         parentWorkspaceId: z.string(),
