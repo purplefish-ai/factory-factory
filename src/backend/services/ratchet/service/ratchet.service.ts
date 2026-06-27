@@ -137,6 +137,8 @@ class RatchetService extends EventEmitter {
       this.monitorLoop = null;
     }
 
+    this.reviewPollTrackers.clear();
+
     logger.info('Ratchet service stopped');
   }
 
@@ -234,6 +236,7 @@ class RatchetService extends EventEmitter {
 
     const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
     if (!workspace) {
+      this.clearWorkspaceState(workspaceId);
       return null;
     }
 
@@ -242,6 +245,10 @@ class RatchetService extends EventEmitter {
 
   async clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void> {
     await workspaceAccessor.clearRatchetActiveSession(workspaceId, sessionId);
+  }
+
+  clearWorkspaceState(workspaceId: string): void {
+    this.reviewPollTrackers.delete(workspaceId);
   }
 
   private async runWorkspaceCheckSafely(
@@ -304,6 +311,7 @@ class RatchetService extends EventEmitter {
     });
 
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
+    this.clearWorkspaceState(workspaceId);
 
     if (workspace.ratchetState !== RatchetState.IDLE) {
       this.emit(RATCHET_STATE_CHANGED, {
@@ -401,7 +409,7 @@ class RatchetService extends EventEmitter {
       const decision = this.decideRatchetAction(decisionContext);
 
       if (prStateInfo.prState === 'MERGED') {
-        this.reviewPollTrackers.delete(workspace.id);
+        this.clearWorkspaceState(workspace.id);
       } else if (decisionContext.isCleanPrWithNoNewReviewActivity) {
         const pollDispatch = await this.processReviewCommentPoll(
           workspace,
@@ -412,7 +420,7 @@ class RatchetService extends EventEmitter {
           return pollDispatch;
         }
       } else {
-        this.reviewPollTrackers.delete(workspace.id);
+        this.clearWorkspaceState(workspace.id);
       }
 
       const action = await this.applyRatchetDecision(decisionContext, decision);

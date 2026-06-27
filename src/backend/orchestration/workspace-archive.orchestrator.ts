@@ -27,6 +27,9 @@ export type ArchiveWorkspaceDependencies = {
     stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }>;
     evictWorkspaceBuffers(workspaceId: string): void;
   };
+  ratchetService: {
+    clearWorkspaceState(workspaceId: string): void;
+  };
   sessionService: {
     stopWorkspaceSessions(workspaceId: string): Promise<void>;
   };
@@ -131,6 +134,7 @@ async function completeArchive(
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
   runScriptService.evictWorkspaceBuffers(workspace.id);
+  services.ratchetService.clearWorkspaceState(workspace.id);
 
   // Notify parent workspace that this child was archived (fire-and-forget)
   fireLifecycleNotification(
