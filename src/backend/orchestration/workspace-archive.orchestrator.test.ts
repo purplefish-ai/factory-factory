@@ -40,6 +40,7 @@ import {
 import type { ArchiveWorkspaceDependencies } from './workspace-archive.orchestrator';
 import {
   archiveWorkspace as archiveWorkspaceWithServices,
+  cleanupWorkspaceRuntimeResources,
   recoverStaleArchivingWorkspaces,
 } from './workspace-archive.orchestrator';
 
@@ -200,6 +201,16 @@ describe('archiveWorkspace', () => {
   });
 
   describe('process cleanup errors (fail closed)', () => {
+    it('uses operation-specific wording when shared runtime cleanup fails', async () => {
+      vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
+        unsafeCoerce({ success: false, error: 'stop failed' })
+      );
+
+      await expect(cleanupWorkspaceRuntimeResources('ws-1', services, 'delete')).rejects.toThrow(
+        /Failed to cleanup workspace resources before delete/
+      );
+    });
+
     it('fails archive when session stop fails', async () => {
       vi.mocked(services.sessionService.stopWorkspaceSessions).mockRejectedValue(
         new Error('session stop failed')

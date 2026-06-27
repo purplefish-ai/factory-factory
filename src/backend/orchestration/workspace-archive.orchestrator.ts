@@ -38,9 +38,53 @@ export type ArchiveWorkspaceDependencies = {
   };
 };
 
+export type WorkspaceRuntimeCleanupDependencies = {
+  runScriptService: Pick<ArchiveWorkspaceDependencies['runScriptService'], 'stopRunScript'>;
+  sessionService: ArchiveWorkspaceDependencies['sessionService'];
+  terminalService: ArchiveWorkspaceDependencies['terminalService'];
+};
+
 export interface ArchiveRecoveryResult {
   archived: string[];
   failed: Array<{ id: string; error: string }>;
+}
+
+export async function cleanupWorkspaceRuntimeResources(
+  workspaceId: string,
+  services: WorkspaceRuntimeCleanupDependencies,
+  operation: 'archive' | 'delete'
+): Promise<void> {
+  const { runScriptService, sessionService, terminalService } = services;
+
+  const cleanupResults = await Promise.allSettled([
+    sessionService.stopWorkspaceSessions(workspaceId),
+    (async () => {
+      const result = await runScriptService.stopRunScript(workspaceId);
+      if (!result.success) {
+        throw new Error(result.error ?? 'Unknown run script stop failure');
+      }
+    })(),
+    Promise.resolve().then(() => {
+      terminalService.destroyWorkspaceTerminals(workspaceId);
+    }),
+  ]);
+
+  const cleanupErrors = cleanupResults.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : []
+  );
+
+  if (cleanupErrors.length > 0) {
+    logger.error(`Failed to cleanup workspace resources before ${operation}`, {
+      workspaceId,
+      errors: cleanupErrors.map((error) =>
+        error instanceof Error ? error.message : String(error)
+      ),
+    });
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `Failed to cleanup workspace resources before ${operation}`,
+    });
+  }
 }
 
 /**
@@ -90,37 +134,7 @@ async function completeArchive(
   options: WorktreeCleanupOptions,
   services: ArchiveWorkspaceDependencies
 ) {
-  const { runScriptService, sessionService, terminalService } = services;
-
-  const cleanupResults = await Promise.allSettled([
-    sessionService.stopWorkspaceSessions(workspace.id),
-    (async () => {
-      const result = await runScriptService.stopRunScript(workspace.id);
-      if (!result.success) {
-        throw new Error(result.error ?? 'Unknown run script stop failure');
-      }
-    })(),
-    Promise.resolve().then(() => {
-      terminalService.destroyWorkspaceTerminals(workspace.id);
-    }),
-  ]);
-
-  const cleanupErrors = cleanupResults.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : []
-  );
-
-  if (cleanupErrors.length > 0) {
-    logger.error('Failed to cleanup workspace resources before archive', {
-      workspaceId: workspace.id,
-      errors: cleanupErrors.map((error) =>
-        error instanceof Error ? error.message : String(error)
-      ),
-    });
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Failed to cleanup workspace resources before archive',
-    });
-  }
+  await cleanupWorkspaceRuntimeResources(workspace.id, services, 'archive');
 
   try {
     await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, options);
@@ -133,7 +147,7 @@ async function completeArchive(
   }
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
-  runScriptService.evictWorkspaceBuffers(workspace.id);
+  services.runScriptService.evictWorkspaceBuffers(workspace.id);
   services.ratchetService.clearWorkspaceState(workspace.id);
 
   // Notify parent workspace that this child was archived (fire-and-forget)

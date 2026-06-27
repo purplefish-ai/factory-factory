@@ -7,7 +7,10 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
-import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
+import {
+  archiveWorkspace,
+  cleanupWorkspaceRuntimeResources,
+} from '@/backend/orchestration/workspace-archive.orchestrator';
 import {
   createChildWorkspace,
   fireLifecycleNotification,
@@ -457,19 +460,8 @@ export const workspaceRouter = router({
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const { runScriptService, sessionService, terminalService } = ctx.appContext.services;
-    const logger = getLogger(ctx);
     // Clean up running sessions, terminals, and dev processes before deleting
-    try {
-      await sessionService.stopWorkspaceSessions(input.id);
-      await runScriptService.stopRunScript(input.id);
-      terminalService.destroyWorkspaceTerminals(input.id);
-    } catch (error) {
-      logger.error('Failed to cleanup workspace resources before delete', {
-        workspaceId: input.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     workspaceActivityService.clearWorkspace(input.id);
     return workspaceDataService.delete(input.id);
   }),
