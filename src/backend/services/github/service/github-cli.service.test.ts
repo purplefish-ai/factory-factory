@@ -1270,6 +1270,55 @@ describe('GitHubCLIService', () => {
       await expect(githubCLIService.listReviewRequests()).resolves.toEqual([]);
     });
 
+    it('keeps fetched review requests when a later GraphQL page is malformed', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: {
+              search: {
+                pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+                nodes: [
+                  {
+                    number: 50,
+                    title: 'Boundary PR',
+                    url: 'https://github.com/o/r/pull/50',
+                    repository: { nameWithOwner: 'o/r' },
+                    author: { login: 'alice' },
+                    createdAt: '2026-01-10T00:00:00Z',
+                    isDraft: false,
+                    reviewDecision: null,
+                    additions: 1,
+                    deletions: 2,
+                    changedFiles: 3,
+                  },
+                ],
+              },
+            },
+          }),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({ data: { search: { nodes: 'not-an-array' } } }),
+          stderr: '',
+        });
+
+      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
+        {
+          number: 50,
+          title: 'Boundary PR',
+          url: 'https://github.com/o/r/pull/50',
+          repository: { nameWithOwner: 'o/r' },
+          author: { login: 'alice' },
+          createdAt: '2026-01-10T00:00:00Z',
+          isDraft: false,
+          reviewDecision: null,
+          additions: 1,
+          deletions: 2,
+          changedFiles: 3,
+        },
+      ]);
+    });
+
     it('approves PR and logs failures with contextual error', async () => {
       mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
       await expect(githubCLIService.approvePR('o', 'r', 22)).resolves.toBeUndefined();

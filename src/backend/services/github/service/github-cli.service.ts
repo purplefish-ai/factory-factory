@@ -353,7 +353,7 @@ class GitHubCLIService {
         logger.warn('Failed to parse listReviewRequests GraphQL response', {
           error: parsed.error.message,
         });
-        return [];
+        return prs;
       }
 
       prs.push(
