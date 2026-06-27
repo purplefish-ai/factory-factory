@@ -208,7 +208,8 @@ export class TerminalService {
 
   // Resource monitoring interval
   private monitoringInterval: NodeJS.Timeout | null = null;
-  private resourceUpdateInFlight = false;
+  private resourceUpdateInFlightGeneration: number | null = null;
+  private resourceMonitoringGeneration = 0;
   private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
 
   /**
@@ -256,6 +257,10 @@ export class TerminalService {
     }
 
     logger.debug('Starting terminal resource monitoring');
+    const monitoringGeneration = this.resourceMonitoringGeneration + 1;
+    this.resourceMonitoringGeneration = monitoringGeneration;
+    this.resourceUpdateInFlightGeneration = null;
+
     this.monitoringInterval = setInterval(async () => {
       // Stop monitoring if no terminals
       if (this.getActiveTerminalCount() === 0) {
@@ -263,12 +268,12 @@ export class TerminalService {
         return;
       }
 
-      if (this.resourceUpdateInFlight) {
+      if (this.resourceUpdateInFlightGeneration === monitoringGeneration) {
         logger.debug('Skipping terminal resource update; previous update still running');
         return;
       }
 
-      this.resourceUpdateInFlight = true;
+      this.resourceUpdateInFlightGeneration = monitoringGeneration;
       try {
         await this.updateAllTerminalResources();
       } catch (error) {
@@ -276,7 +281,9 @@ export class TerminalService {
           error: error instanceof Error ? error.message : String(error),
         });
       } finally {
-        this.resourceUpdateInFlight = false;
+        if (this.resourceUpdateInFlightGeneration === monitoringGeneration) {
+          this.resourceUpdateInFlightGeneration = null;
+        }
       }
     }, TerminalService.MONITORING_INTERVAL_MS);
   }
@@ -285,10 +292,12 @@ export class TerminalService {
    * Update resource usage for all terminals.
    */
   private async updateAllTerminalResources(): Promise<void> {
-    for (const workspaceTerminals of this.terminals.values()) {
-      for (const instance of workspaceTerminals.values()) {
-        await this.updateTerminalResource(instance);
-      }
+    const terminalInstances = Array.from(this.terminals.values()).flatMap((workspaceTerminals) =>
+      Array.from(workspaceTerminals.values())
+    );
+
+    for (const instance of terminalInstances) {
+      await this.updateTerminalResource(instance);
     }
   }
 
@@ -326,6 +335,7 @@ export class TerminalService {
       logger.debug('Stopping terminal resource monitoring');
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
+      this.resourceUpdateInFlightGeneration = null;
     }
   }
 

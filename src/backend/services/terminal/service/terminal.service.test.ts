@@ -451,6 +451,41 @@ describe('TerminalService', () => {
       await vi.advanceTimersByTimeAsync(5000);
       expect(mockPidusage).toHaveBeenCalledTimes(2);
     });
+
+    it('does not let an unresolved update from a stopped monitor block restarted monitoring', async () => {
+      vi.useFakeTimers();
+      const firstPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+      const secondPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+      mockPidusage
+        .mockReturnValueOnce(firstPendingUsage.promise)
+        .mockReturnValueOnce(secondPendingUsage.promise);
+
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(1);
+
+      service.destroyTerminal(defaultOpts.workspaceId, terminalId);
+      await vi.advanceTimersByTimeAsync(5000);
+
+      await service.createTerminal(defaultOpts);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(2);
+
+      firstPendingUsage.resolve(createPidUsageStat(3.5, 2048));
+      await firstPendingUsage.promise;
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(2);
+
+      secondPendingUsage.resolve(createPidUsageStat(4.5, 4096));
+      await secondPendingUsage.promise;
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(3);
+    });
   });
 
   // =========================================================================
