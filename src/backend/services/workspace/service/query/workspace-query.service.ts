@@ -36,6 +36,7 @@ class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
   private reviewCountRefreshInFlight = false;
+  private reviewCountRefreshPromise: Promise<number> | null = null;
   private prStatusSyncInFlight = false;
 
   private sessionBridge: WorkspaceQuerySessionBridge | null = null;
@@ -87,6 +88,42 @@ class WorkspaceQueryService {
       );
     }
     return this.prSnapshotBridge;
+  }
+
+  refreshReviewCount(): Promise<number> {
+    if (this.reviewCountRefreshPromise !== null) {
+      return this.reviewCountRefreshPromise;
+    }
+
+    this.reviewCountRefreshInFlight = true;
+    const refreshPromise = Promise.resolve()
+      .then(() => this.github.checkHealth())
+      .then(async (health) => {
+        if (!(health.isInstalled && health.isAuthenticated)) {
+          return this.cachedReviewCount?.count ?? 0;
+        }
+
+        const prs = await this.github.listReviewRequests();
+        const count = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
+        this.cachedReviewCount = {
+          count,
+          fetchedAt: Date.now(),
+        };
+        return count;
+      })
+      .catch((error) => {
+        logger.debug('Failed to fetch review count', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return this.cachedReviewCount?.count ?? 0;
+      })
+      .finally(() => {
+        this.reviewCountRefreshInFlight = false;
+        this.reviewCountRefreshPromise = null;
+      });
+
+    this.reviewCountRefreshPromise = refreshPromise;
+    return refreshPromise;
   }
 
   async getProjectSummaryState(projectId: string) {
@@ -157,26 +194,7 @@ class WorkspaceQueryService {
     const isStale =
       !this.cachedReviewCount || now - this.cachedReviewCount.fetchedAt >= REVIEW_CACHE_TTL_MS;
     if (isStale && !this.reviewCountRefreshInFlight) {
-      this.reviewCountRefreshInFlight = true;
-      this.github
-        .checkHealth()
-        .then(async (health) => {
-          if (health.isInstalled && health.isAuthenticated) {
-            const prs = await this.github.listReviewRequests();
-            this.cachedReviewCount = {
-              count: prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length,
-              fetchedAt: Date.now(),
-            };
-          }
-        })
-        .catch((error) => {
-          logger.debug('Failed to fetch review count', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        })
-        .finally(() => {
-          this.reviewCountRefreshInFlight = false;
-        });
+      void this.refreshReviewCount();
     }
 
     return {
