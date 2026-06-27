@@ -24,6 +24,15 @@ export function reduceMessageUuidSlice(state: ChatState, action: ChatAction): Ch
         };
       }
 
+      if (state.pendingMessages.size === 0) {
+        debugLog(
+          `[chat-reducer] UUID received with no retained local user message, dropping: ${action.payload.uuid}`
+        );
+        return state.pendingUserMessageUuids.length > 0
+          ? { ...state, pendingUserMessageUuids: [] }
+          : state;
+      }
+
       debugLog(
         `[chat-reducer] UUID received but no unmapped user message found, queueing: ${action.payload.uuid}`
       );
