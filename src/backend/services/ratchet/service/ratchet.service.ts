@@ -3,8 +3,9 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { agentSessionAccessor } from '@/backend/services/session';
 import { workspaceAccessor } from '@/backend/services/workspace';
-import { CIStatus, RatchetState } from '@/shared/core';
+import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import type {
   PRStateFetchResult,
@@ -303,6 +304,8 @@ class RatchetService extends EventEmitter {
       ratchetLastCiRunId: null,
     });
 
+    await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
+
     if (workspace.ratchetState !== RatchetState.IDLE) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId,
@@ -415,35 +418,7 @@ class RatchetService extends EventEmitter {
 
       const action = await this.applyRatchetDecision(decisionContext, decision);
 
-      await this.updateWorkspaceAfterCheck(
-        workspace,
-        prStateInfo,
-        action,
-        decisionContext.finalState
-      );
-      if (decisionContext.previousState !== decisionContext.finalState) {
-        this.emit(RATCHET_STATE_CHANGED, {
-          workspaceId: workspace.id,
-          fromState: decisionContext.previousState,
-          toState: decisionContext.finalState,
-          prCiStatus: prStateInfo.ciStatus,
-        } satisfies RatchetStateChangedEvent);
-      }
-      this.logWorkspaceRatchetingDecision(
-        workspace,
-        decisionContext.previousState,
-        decisionContext.finalState,
-        action,
-        prStateInfo,
-        decisionContext
-      );
-
-      return {
-        workspaceId: workspace.id,
-        previousState: decisionContext.previousState,
-        newState: decisionContext.finalState,
-        action,
-      };
+      return await this.finishRatchetCheck(workspace, prStateInfo, action, decisionContext);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error processing workspace in ratchet', toError(error), {
@@ -712,35 +687,53 @@ class RatchetService extends EventEmitter {
     const freshDecision = this.decideRatchetAction(freshContext);
     const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
 
-    await this.updateWorkspaceAfterCheck(
+    return await this.finishRatchetCheck(
       workspace,
       pollResult.freshPrState,
       freshAction,
-      freshContext.finalState
+      freshContext
     );
-    if (freshContext.previousState !== freshContext.finalState) {
+  }
+
+  private async finishRatchetCheck(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo,
+    action: RatchetAction,
+    decisionContext: RatchetDecisionContext
+  ): Promise<WorkspaceRatchetResult> {
+    const updateApplied = await this.updateWorkspaceAfterCheck(
+      workspace,
+      prStateInfo,
+      action,
+      decisionContext.finalState
+    );
+    const resultAction: RatchetAction = updateApplied
+      ? action
+      : { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
+    const resultState = updateApplied ? decisionContext.finalState : RatchetState.IDLE;
+    if (updateApplied && decisionContext.previousState !== decisionContext.finalState) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId: workspace.id,
-        fromState: freshContext.previousState,
-        toState: freshContext.finalState,
-        prCiStatus: pollResult.freshPrState.ciStatus,
+        fromState: decisionContext.previousState,
+        toState: decisionContext.finalState,
+        prCiStatus: prStateInfo.ciStatus,
       } satisfies RatchetStateChangedEvent);
     }
 
     this.logWorkspaceRatchetingDecision(
       workspace,
-      freshContext.previousState,
-      freshContext.finalState,
-      freshAction,
-      pollResult.freshPrState,
-      freshContext
+      decisionContext.previousState,
+      resultState,
+      resultAction,
+      prStateInfo,
+      decisionContext
     );
 
     return {
       workspaceId: workspace.id,
-      previousState: freshContext.previousState,
-      newState: freshContext.finalState,
-      action: freshAction,
+      previousState: decisionContext.previousState,
+      newState: resultState,
+      action: resultAction,
     };
   }
 
@@ -775,11 +768,11 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo,
     action: RatchetAction,
     nextState: RatchetState
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date();
     const dispatched = action.type === 'TRIGGERED_FIXER' && action.promptSent;
 
-    await workspaceAccessor.update(workspace.id, {
+    const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspace.id, {
       ratchetState: nextState,
       ratchetLastCheckedAt: now,
       ...(dispatched
@@ -788,6 +781,10 @@ class RatchetService extends EventEmitter {
           }
         : {}),
     });
+
+    if (!updated) {
+      return false;
+    }
 
     if (dispatched) {
       await this.snapshot.recordReviewCheck(workspace.id, now);
@@ -800,6 +797,8 @@ class RatchetService extends EventEmitter {
         observedAt: now,
       });
     }
+
+    return true;
   }
 
   private async getActiveRatchetSession(workspace: WorkspaceWithPR): Promise<RatchetAction | null> {
@@ -909,8 +908,8 @@ class RatchetService extends EventEmitter {
     });
   }
 
-  private async setActiveSession(workspaceId: string, sessionId: string): Promise<void> {
-    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: sessionId });
+  private async setActiveSession(workspaceId: string, sessionId: string): Promise<boolean> {
+    return await workspaceAccessor.setRatchetActiveSessionIfEnabled(workspaceId, sessionId);
   }
 
   private async clearActiveSession(workspaceId: string): Promise<void> {
@@ -922,6 +921,31 @@ class RatchetService extends EventEmitter {
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: null,
     });
+  }
+
+  private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {
+    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
+    const activeRatchetSessions = sessions.filter(
+      (session) =>
+        session.workflow === 'ratchet' &&
+        (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
+    );
+
+    for (const session of activeRatchetSessions) {
+      if (!this.session.isSessionRunning(session.id)) {
+        continue;
+      }
+
+      try {
+        await this.session.stopSession(session.id);
+      } catch (error) {
+        logger.warn('Failed to stop ratchet session after disabling ratchet', {
+          workspaceId,
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 }
 

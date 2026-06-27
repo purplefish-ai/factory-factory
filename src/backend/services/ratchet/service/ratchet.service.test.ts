@@ -10,6 +10,8 @@ vi.mock('@/backend/services/workspace', () => ({
     findWithPRsForRatchet: vi.fn(),
     findForRatchetById: vi.fn(),
     update: vi.fn(),
+    updateRatchetCheckIfEnabled: vi.fn(),
+    setRatchetActiveSessionIfEnabled: vi.fn(),
   },
 }));
 
@@ -96,6 +98,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       github: mockGitHubBridge,
       snapshot: mockSnapshotBridge,
     });
+    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(true);
+    vi.mocked(workspaceAccessor.setRatchetActiveSessionIfEnabled).mockResolvedValue(true);
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
@@ -294,16 +299,68 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'TRIGGERED_FIXER' },
     });
 
-    const finalUpdatePayload = vi.mocked(workspaceAccessor.update).mock.calls.at(-1)?.[1] as Record<
-      string,
-      unknown
-    >;
+    const finalUpdatePayload = vi
+      .mocked(workspaceAccessor.updateRatchetCheckIfEnabled)
+      .mock.calls.at(-1)?.[1] as Record<string, unknown>;
     expect(finalUpdatePayload.ratchetLastCiRunId).toBe('2026-01-02T00:00:00Z');
     expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
     expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
       'ws-change',
       expect.any(Date)
     );
+  });
+
+  it('stops fixer and returns disabled when active-session recording loses disable race', async () => {
+    const workspace = {
+      id: 'ws-disable-race-dispatch',
+      prUrl: 'https://github.com/example/repo/pull/40',
+      prNumber: 40,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: 'new-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 40,
+    });
+
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'raced-session',
+      promptSent: true,
+    } as never);
+    vi.mocked(workspaceAccessor.setRatchetActiveSessionIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      newState: RatchetState.IDLE,
+      action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
+    });
+    expect(workspaceAccessor.setRatchetActiveSessionIfEnabled).toHaveBeenCalledWith(
+      'ws-disable-race-dispatch',
+      'raced-session'
+    );
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('raced-session');
+    expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
   });
 
   it('dispatches when session is running but idle', async () => {
@@ -690,6 +747,55 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR is clean (green CI and no new review activity)',
       },
     });
+  });
+
+  it('returns disabled when stale check-state update loses disable race', async () => {
+    const recentCheck = new Date();
+    const workspace = {
+      id: 'ws-disable-race-state',
+      prUrl: 'https://github.com/example/repo/pull/41',
+      prNumber: 41,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      prReviewLastCheckedAt: recentCheck,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'new-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: recentCheck.getTime() - 1000,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 41,
+    });
+    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+    const events: RatchetStateChangedEvent[] = [];
+    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+      events.push(event);
+    });
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      newState: RatchetState.IDLE,
+      action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
+    });
+    expect(events).toHaveLength(0);
+    ratchetService.removeAllListeners();
   });
 
   it('self-heals when review check timestamp is stale with no active session', async () => {
@@ -2049,6 +2155,39 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
     });
 
+    it('stops already-active fixer when active-session recording loses disable race', async () => {
+      const workspace = {
+        id: 'ws-already-active-disabled',
+        prUrl: 'https://github.com/example/repo/pull/24',
+        prNumber: 24,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_FAILED,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'already_active',
+        sessionId: 'existing-session',
+      } as never);
+      vi.mocked(workspaceAccessor.setRatchetActiveSessionIfEnabled).mockResolvedValue(false);
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      const result = await unsafeCoerce<{
+        triggerFixer: (w: unknown, prStateInfo: unknown) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(workspace, {
+        ciStatus: CIStatus.FAILURE,
+        prNumber: 24,
+      });
+
+      expect(result).toMatchObject({
+        type: 'DISABLED',
+        reason: 'Workspace ratcheting disabled',
+      });
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('existing-session');
+    });
+
     it('handles skipped result from acquireAndDispatch', async () => {
       const workspace = {
         id: 'ws-skipped',
@@ -2154,6 +2293,35 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           ratchetState: RatchetState.IDLE,
         },
       ]);
+    });
+
+    it('stops ratchet workflow sessions found after disabling workspace', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-disable-raced-session',
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        {
+          id: 'raced-ratchet-session',
+          workflow: 'ratchet',
+          status: SessionStatus.RUNNING,
+        },
+        {
+          id: 'manual-session',
+          workflow: 'default',
+          status: SessionStatus.RUNNING,
+        },
+      ] as never);
+      vi.mocked(mockSessionBridge.isSessionRunning).mockImplementation(
+        (sessionId) => sessionId === 'raced-ratchet-session'
+      );
+
+      await ratchetService.setWorkspaceRatcheting('ws-disable-raced-session', false);
+
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledTimes(1);
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('raced-ratchet-session');
     });
   });
 
