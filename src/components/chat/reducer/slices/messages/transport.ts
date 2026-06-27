@@ -1,4 +1,8 @@
-import { generateMessageId, handleClaudeMessage } from '@/components/chat/reducer/helpers';
+import {
+  applyRendererMessages,
+  generateMessageId,
+  handleClaudeMessage,
+} from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 
@@ -23,11 +27,13 @@ export function reduceMessageTransportSlice(state: ChatState, action: ChatAction
       // Clear loading state if error occurs while loading (e.g., load_session fails)
       const sessionStatus =
         state.sessionStatus.phase === 'loading' ? { phase: 'ready' as const } : state.sessionStatus;
-      return {
-        ...state,
-        messages: [...state.messages, errorChatMessage],
-        sessionStatus,
-      };
+      return applyRendererMessages(
+        {
+          ...state,
+          sessionStatus,
+        },
+        [...state.messages, errorChatMessage]
+      );
     }
     default:
       return state;
