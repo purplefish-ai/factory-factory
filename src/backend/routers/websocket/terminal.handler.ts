@@ -19,6 +19,7 @@ import {
   getOrCreateConnectionSet,
   markWebSocketAlive,
   sendBadRequest,
+  validateTrustedLocalWebSocketRequest,
   validateWebSocketOrigin,
 } from './upgrade-utils';
 
@@ -296,6 +297,23 @@ function handlePingMessage(ws: WebSocket): void {
   }
 }
 
+async function authorizeTerminalWorkspaceUpgrade(
+  workspaceId: string,
+  socket: Duplex,
+  logger: ReturnType<AppContext['services']['createLogger']>
+): Promise<boolean> {
+  const workspace = await workspaceDataService.findById(workspaceId);
+  if (!workspace?.worktreePath) {
+    logger.warn('Rejected terminal WebSocket for unknown workspace or missing worktree', {
+      workspaceId,
+    });
+    sendBadRequest(socket, 'Workspace not found or has no worktree');
+    return false;
+  }
+
+  return true;
+}
+
 async function handleTerminalMessage(
   ws: WebSocket,
   workspaceId: string,
@@ -347,6 +365,99 @@ async function handleTerminalMessage(
   }
 }
 
+async function handleTerminalSocketMessage(
+  ws: WebSocket,
+  workspaceId: string,
+  data: unknown,
+  terminalService: AppContext['services']['terminalService'],
+  logger: ReturnType<AppContext['services']['createLogger']>
+): Promise<void> {
+  try {
+    await handleTerminalMessage(ws, workspaceId, data as Buffer, terminalService, logger);
+  } catch (error) {
+    const err = toError(error);
+    const isParsError = err instanceof SyntaxError;
+    const errorMessage = isParsError
+      ? 'Invalid message format'
+      : `Operation failed: ${err.message}`;
+
+    logger.error('Error handling terminal message', err, {
+      workspaceId,
+      isParsError,
+    });
+
+    if (ws.readyState === WS_READY_STATE.OPEN) {
+      ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
+    }
+  }
+}
+
+function handleTerminalSocketClose(
+  ws: WebSocket,
+  workspaceId: string,
+  logger: ReturnType<AppContext['services']['createLogger']>
+): void {
+  logger.info('Terminal WebSocket connection closed', { workspaceId });
+
+  cleanupTerminalListeners(ws, logger);
+
+  const connections = terminalConnections.get(workspaceId);
+  if (!connections) {
+    return;
+  }
+
+  connections.delete(ws);
+  if (connections.size > 0) {
+    return;
+  }
+
+  terminalConnections.delete(workspaceId);
+  logger.info('All WebSocket connections closed for workspace', {
+    workspaceId,
+    message: 'Terminals will persist until explicitly closed or workspace is archived/deleted',
+  });
+  // NOTE: Do NOT destroy terminals when navigating away from a workspace.
+  // Terminals should persist across navigation and only be destroyed when:
+  // 1. User explicitly closes a terminal tab
+  // 2. Workspace is archived or deleted
+  // 3. Server shuts down
+}
+
+function initializeTerminalWebSocket({
+  ws,
+  workspaceId,
+  terminalService,
+  logger,
+  wsAliveMap,
+}: {
+  ws: WebSocket;
+  workspaceId: string;
+  terminalService: AppContext['services']['terminalService'];
+  logger: ReturnType<AppContext['services']['createLogger']>;
+  wsAliveMap: WeakMap<WebSocket, boolean>;
+}): void {
+  logger.info('Terminal WebSocket connection established', { workspaceId });
+
+  markWebSocketAlive(ws, wsAliveMap);
+
+  getOrCreateConnectionSet(terminalConnections, workspaceId).add(ws);
+  addTerminalCleanupMap(ws);
+  logConnectionEstablished(workspaceId, logger);
+  sendExistingTerminals(ws, workspaceId, terminalService, logger);
+
+  ws.on('message', (data) => {
+    void handleTerminalSocketMessage(ws, workspaceId, data, terminalService, logger);
+  });
+
+  ws.on('close', () => {
+    handleTerminalSocketClose(ws, workspaceId, logger);
+  });
+
+  ws.on('error', (error) => {
+    logger.error('Terminal WebSocket error', error);
+  });
+}
+
 // ============================================================================
 // Terminal Upgrade Handler
 // ============================================================================
@@ -376,6 +487,18 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
       return;
     }
 
+    if (
+      !validateTrustedLocalWebSocketRequest({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'terminal WebSocket',
+      })
+    ) {
+      return;
+    }
+
     const workspaceId = url.searchParams.get('workspaceId');
 
     if (!workspaceId) {
@@ -384,64 +507,26 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      logger.info('Terminal WebSocket connection established', { workspaceId });
+    void authorizeTerminalWorkspaceUpgrade(workspaceId, socket, logger)
+      .then((authorized) => {
+        if (!authorized) {
+          return;
+        }
 
-      markWebSocketAlive(ws, wsAliveMap);
-
-      getOrCreateConnectionSet(terminalConnections, workspaceId).add(ws);
-      addTerminalCleanupMap(ws);
-      logConnectionEstablished(workspaceId, logger);
-      sendExistingTerminals(ws, workspaceId, terminalService, logger);
-
-      ws.on('message', async (data) => {
-        try {
-          await handleTerminalMessage(ws, workspaceId, data as Buffer, terminalService, logger);
-        } catch (error) {
-          const err = toError(error);
-          const isParsError = err instanceof SyntaxError;
-          const errorMessage = isParsError
-            ? 'Invalid message format'
-            : `Operation failed: ${err.message}`;
-
-          logger.error('Error handling terminal message', err, {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          initializeTerminalWebSocket({
+            ws,
             workspaceId,
-            isParsError,
+            terminalService,
+            logger,
+            wsAliveMap,
           });
-
-          if (ws.readyState === WS_READY_STATE.OPEN) {
-            ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
-          }
-        }
+        });
+      })
+      .catch((error) => {
+        const err = toError(error);
+        logger.error('Failed to authorize terminal WebSocket workspace', err, { workspaceId });
+        sendBadRequest(socket, 'Workspace authorization failed');
       });
-
-      ws.on('close', () => {
-        logger.info('Terminal WebSocket connection closed', { workspaceId });
-
-        cleanupTerminalListeners(ws, logger);
-
-        const connections = terminalConnections.get(workspaceId);
-        if (connections) {
-          connections.delete(ws);
-          if (connections.size === 0) {
-            terminalConnections.delete(workspaceId);
-            logger.info('All WebSocket connections closed for workspace', {
-              workspaceId,
-              message:
-                'Terminals will persist until explicitly closed or workspace is archived/deleted',
-            });
-            // NOTE: Do NOT destroy terminals when navigating away from a workspace.
-            // Terminals should persist across navigation and only be destroyed when:
-            // 1. User explicitly closes a terminal tab
-            // 2. Workspace is archived or deleted
-            // 3. Server shuts down
-          }
-        }
-      });
-
-      ws.on('error', (error) => {
-        logger.error('Terminal WebSocket error', error);
-      });
-    });
   };
 }
