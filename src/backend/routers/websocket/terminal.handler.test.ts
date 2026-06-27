@@ -102,9 +102,13 @@ function createWss(ws: MockWebSocket) {
   } as unknown as WebSocketServer;
 }
 
-function createRequest(origin = allowedOrigin, remoteAddress = '127.0.0.1') {
+function createRequest(
+  origin = allowedOrigin,
+  remoteAddress = '127.0.0.1',
+  headers: Record<string, string> = {}
+) {
   return {
-    headers: { origin },
+    headers: { origin, ...headers },
     socket: { remoteAddress },
   } as unknown as IncomingMessage;
 }
@@ -214,6 +218,51 @@ describe('createTerminalUpgradeHandler', () => {
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(terminalService.getTerminalsForWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('rejects forwarded local upgrades before replaying terminal buffers', () => {
+    const { terminalService } = createTerminalService();
+    terminalService.getTerminalsForWorkspace.mockReturnValue([
+      {
+        id: 'terminal-1',
+        createdAt: new Date('2026-02-11T00:00:00.000Z'),
+        outputBuffer: 'secret output',
+      },
+    ]);
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    const request = createRequest(allowedOrigin, '127.0.0.1', {
+      'x-forwarded-for': '203.0.113.10',
+    });
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/terminal?workspaceId=workspace-1'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.stringContaining('Forwarded WebSocket upgrades are not trusted')
+    );
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(workspaceDataService.findById).not.toHaveBeenCalled();
     expect(terminalService.getTerminalsForWorkspace).not.toHaveBeenCalled();
   });
 

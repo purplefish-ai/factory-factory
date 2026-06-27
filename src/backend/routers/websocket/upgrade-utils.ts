@@ -7,6 +7,19 @@ import { isOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-tr
 type WebSocketOriginLogger = Pick<ReturnType<AppServices['createLogger']>, 'warn'>;
 type WebSocketOriginConfigService = Pick<AppServices['configService'], 'getCorsConfig'>;
 
+const FORWARDED_CLIENT_ADDRESS_HEADERS = [
+  'forwarded',
+  'x-forwarded-for',
+  'x-real-ip',
+  'x-client-ip',
+  'cf-connecting-ip',
+  'true-client-ip',
+] as const;
+
+function getForwardedClientAddressHeaders(request: IncomingMessage): string[] {
+  return FORWARDED_CLIENT_ADDRESS_HEADERS.filter((header) => request.headers[header] !== undefined);
+}
+
 export function sendBadRequest(socket: Duplex, message?: string): void {
   const body = message ? `\r\n\r\n${message}` : '\r\n\r\n';
   socket.write(`HTTP/1.1 400 Bad Request${body}`);
@@ -69,6 +82,16 @@ export function validateTrustedLocalWebSocketRequest({
       remoteAddress,
     });
     sendForbidden(socket, 'Untrusted remote address');
+    return false;
+  }
+
+  const forwardedClientAddressHeaders = getForwardedClientAddressHeaders(request);
+  if (forwardedClientAddressHeaders.length > 0) {
+    logger.warn(`Rejected ${connectionName} connection with forwarded client address headers`, {
+      forwardedClientAddressHeaders,
+      remoteAddress,
+    });
+    sendForbidden(socket, 'Forwarded WebSocket upgrades are not trusted');
     return false;
   }
 
