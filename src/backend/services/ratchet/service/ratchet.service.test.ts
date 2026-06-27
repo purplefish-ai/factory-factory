@@ -2322,6 +2322,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await ratchetService.setWorkspaceRatcheting('ws-disable-raced-session', false);
 
+      expect(mockSessionBridge.findSessionsByWorkspaceId).toHaveBeenCalledWith(
+        'ws-disable-raced-session'
+      );
       expect(mockSessionBridge.stopSession).toHaveBeenCalledTimes(1);
       expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('raced-ratchet-session');
     });
