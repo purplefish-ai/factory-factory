@@ -11,7 +11,13 @@ import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('codex-session-history-loader');
 const SAFE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-const MAX_SESSION_FILE_SEARCH_DEPTH = 5;
+const UUID_V7_SESSION_ID_PATTERN =
+  /^([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_DATE_SESSION_FILE_SEARCH_DEPTH = 3;
+const MAX_RECENT_SESSION_DATE_DIRS = 120;
+const SESSION_FILE_LOOKUP_CACHE_LIMIT = 1024;
+const POSITIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS = 5 * 60 * 1000;
+const NEGATIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS = 30 * 1000;
 const JsonObjectSchema = z.record(z.string(), z.unknown());
 
 const CodexHistoryEntrySchema = z
@@ -35,6 +41,17 @@ const CodexSessionMetaEntrySchema = z
   .passthrough();
 
 type CodexHistoryEntry = z.infer<typeof CodexHistoryEntrySchema>;
+type SessionFileLookupCacheEntry = {
+  filePath: string | null;
+  expiresAtMs: number;
+};
+type DateSessionDirectoryCandidate = {
+  directoryPath: string;
+  mtimeMs: number;
+  dateKey: string;
+};
+
+const sessionFileLookupCache = new Map<string, SessionFileLookupCacheEntry>();
 
 export type CodexSessionHistoryLoadResult =
   | { status: 'loaded'; history: HistoryMessage[]; filePath: string }
@@ -82,6 +99,104 @@ function getProviderSessionIdCandidates(providerSessionId: string): string[] {
 
 function isMatchingProviderSessionId(candidateId: string, providerSessionId: string): boolean {
   return normalizeProviderSessionId(candidateId) === normalizeProviderSessionId(providerSessionId);
+}
+
+function buildSessionFileLookupCacheKey(params: {
+  sessionsDir: string;
+  workingDir: string;
+  providerSessionId: string;
+}): string {
+  return JSON.stringify({
+    sessionsDir: params.sessionsDir,
+    workingDir: params.workingDir,
+    providerSessionId: normalizeProviderSessionId(params.providerSessionId),
+  });
+}
+
+function getCachedSessionFilePath(cacheKey: string): string | null | undefined {
+  const cached = sessionFileLookupCache.get(cacheKey);
+  if (!cached) {
+    return undefined;
+  }
+
+  if (cached.expiresAtMs <= Date.now()) {
+    sessionFileLookupCache.delete(cacheKey);
+    return undefined;
+  }
+
+  sessionFileLookupCache.delete(cacheKey);
+  sessionFileLookupCache.set(cacheKey, cached);
+  return cached.filePath;
+}
+
+function setCachedSessionFilePath(cacheKey: string, filePath: string | null): void {
+  const ttlMs =
+    filePath === null
+      ? NEGATIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS
+      : POSITIVE_SESSION_FILE_LOOKUP_CACHE_TTL_MS;
+  sessionFileLookupCache.set(cacheKey, {
+    filePath,
+    expiresAtMs: Date.now() + ttlMs,
+  });
+
+  while (sessionFileLookupCache.size > SESSION_FILE_LOOKUP_CACHE_LIMIT) {
+    const oldestKey = sessionFileLookupCache.keys().next().value;
+    if (typeof oldestKey !== 'string') {
+      break;
+    }
+    sessionFileLookupCache.delete(oldestKey);
+  }
+}
+
+function getUuidV7TimestampMs(providerSessionId: string): number | null {
+  const normalizedSessionId = normalizeProviderSessionId(providerSessionId);
+  const match = UUID_V7_SESSION_ID_PATTERN.exec(normalizedSessionId);
+  if (!match) {
+    return null;
+  }
+
+  const timestampMs = Number.parseInt(`${match[1]}${match[2]}`, 16);
+  if (!Number.isSafeInteger(timestampMs)) {
+    return null;
+  }
+
+  return timestampMs;
+}
+
+function formatUtcDateSessionDir(sessionsDir: string, timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return join(sessionsDir, year, month, day);
+}
+
+function getExpectedDateSessionDirs(sessionsDir: string, providerSessionId: string): string[] {
+  const timestampMs = getUuidV7TimestampMs(providerSessionId);
+  if (timestampMs === null) {
+    return [];
+  }
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  return [
+    formatUtcDateSessionDir(sessionsDir, timestampMs),
+    formatUtcDateSessionDir(sessionsDir, timestampMs - oneDayMs),
+    formatUtcDateSessionDir(sessionsDir, timestampMs + oneDayMs),
+  ];
+}
+
+function isDateDirectoryPart(entryName: string, digits: number): boolean {
+  return entryName.length === digits && /^\d+$/.test(entryName);
+}
+
+function buildSessionFileSuffixes(providerSessionId: string): string[] {
+  return getProviderSessionIdCandidates(providerSessionId).map(
+    (sessionIdCandidate) => `${sessionIdCandidate}.jsonl`
+  );
+}
+
+function isCandidateSessionFile(fileName: string, fileSuffixes: string[]): boolean {
+  return fileSuffixes.some((fileSuffix) => fileName.endsWith(fileSuffix));
 }
 
 function truncateForLog(value: string, maxLength = 200): string {
@@ -358,12 +473,12 @@ async function parseSessionMeta(filePath: string): Promise<{ id?: string; cwd?: 
   return null;
 }
 
-async function collectCandidateSessionFiles(
+async function collectCandidateSessionFilesInDateDir(
   directoryPath: string,
-  fileSuffix: string,
+  fileSuffixes: string[],
   depth = 0
 ): Promise<string[]> {
-  if (depth > MAX_SESSION_FILE_SEARCH_DEPTH) {
+  if (depth > MAX_DATE_SESSION_FILE_SEARCH_DEPTH) {
     return [];
   }
 
@@ -376,12 +491,12 @@ async function collectCandidateSessionFiles(
   for (const entry of entries) {
     const fullPath = join(directoryPath, entry.name);
     if (entry.isDirectory()) {
-      const nested = await collectCandidateSessionFiles(fullPath, fileSuffix, depth + 1);
+      const nested = await collectCandidateSessionFilesInDateDir(fullPath, fileSuffixes, depth + 1);
       candidatePaths.push(...nested);
       continue;
     }
 
-    if (entry.isFile() && entry.name.endsWith(fileSuffix)) {
+    if (entry.isFile() && isCandidateSessionFile(entry.name, fileSuffixes)) {
       candidatePaths.push(fullPath);
     }
   }
@@ -389,35 +504,89 @@ async function collectCandidateSessionFiles(
   return candidatePaths;
 }
 
-async function resolveSessionFilePath(
-  workingDir: string,
-  providerSessionId: string
-): Promise<string | null> {
-  const sessionsDir = getCodexSessionsDir();
-  try {
-    await access(sessionsDir);
-  } catch {
-    return null;
-  }
-
-  const sessionIdCandidates = getProviderSessionIdCandidates(providerSessionId);
+async function collectCandidateSessionFilesFromDirs(
+  directoryPaths: string[],
+  fileSuffixes: string[]
+): Promise<string[]> {
   const candidateSet = new Set<string>();
-  for (const sessionIdCandidate of sessionIdCandidates) {
-    const discovered = await collectCandidateSessionFiles(
-      sessionsDir,
-      `${sessionIdCandidate}.jsonl`
-    );
+  const visitedDirectoryPaths = new Set<string>();
+
+  for (const directoryPath of directoryPaths) {
+    if (visitedDirectoryPaths.has(directoryPath)) {
+      continue;
+    }
+    visitedDirectoryPaths.add(directoryPath);
+
+    const discovered = await collectCandidateSessionFilesInDateDir(directoryPath, fileSuffixes);
     for (const candidatePath of discovered) {
       candidateSet.add(candidatePath);
     }
   }
-  const candidates = [...candidateSet];
-  if (candidates.length === 0) {
+
+  return [...candidateSet];
+}
+
+async function listSubdirectories(directoryPath: string): Promise<string[]> {
+  const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => null);
+  if (!entries) {
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((left, right) => right.localeCompare(left));
+}
+
+async function collectRecentDateSessionDirs(
+  sessionsDir: string
+): Promise<DateSessionDirectoryCandidate[]> {
+  const candidates: DateSessionDirectoryCandidate[] = [];
+  const years = (await listSubdirectories(sessionsDir)).filter((year) =>
+    isDateDirectoryPart(year, 4)
+  );
+
+  for (const year of years) {
+    const yearDir = join(sessionsDir, year);
+    const months = (await listSubdirectories(yearDir)).filter((month) =>
+      isDateDirectoryPart(month, 2)
+    );
+
+    for (const month of months) {
+      const monthDir = join(yearDir, month);
+      const days = (await listSubdirectories(monthDir)).filter((day) =>
+        isDateDirectoryPart(day, 2)
+      );
+
+      for (const day of days) {
+        const directoryPath = join(monthDir, day);
+        const stats = await stat(directoryPath).catch(() => null);
+        candidates.push({
+          directoryPath,
+          mtimeMs: stats?.mtimeMs ?? Number.NEGATIVE_INFINITY,
+          dateKey: `${year}-${month}-${day}`,
+        });
+      }
+    }
+  }
+
+  candidates.sort(
+    (left, right) => right.mtimeMs - left.mtimeMs || right.dateKey.localeCompare(left.dateKey)
+  );
+  return candidates.slice(0, MAX_RECENT_SESSION_DATE_DIRS);
+}
+
+async function selectMatchingSessionFilePath(params: {
+  candidates: string[];
+  providerSessionId: string;
+  workingDir: string;
+}): Promise<string | null> {
+  if (params.candidates.length === 0) {
     return null;
   }
 
   const withMtime = await Promise.all(
-    candidates.map(async (candidatePath) => {
+    params.candidates.map(async (candidatePath) => {
       try {
         const stats = await stat(candidatePath);
         return { candidatePath, mtimeMs: stats.mtimeMs };
@@ -434,8 +603,8 @@ async function resolveSessionFilePath(
     metaByPath.set(candidate.candidatePath, meta);
     if (
       typeof meta?.id === 'string' &&
-      isMatchingProviderSessionId(meta.id, providerSessionId) &&
-      meta.cwd === workingDir
+      isMatchingProviderSessionId(meta.id, params.providerSessionId) &&
+      meta.cwd === params.workingDir
     ) {
       return candidate.candidatePath;
     }
@@ -443,12 +612,69 @@ async function resolveSessionFilePath(
 
   for (const candidate of withMtime) {
     const meta = metaByPath.get(candidate.candidatePath) ?? null;
-    if (typeof meta?.id === 'string' && isMatchingProviderSessionId(meta.id, providerSessionId)) {
+    if (
+      typeof meta?.id === 'string' &&
+      isMatchingProviderSessionId(meta.id, params.providerSessionId)
+    ) {
       return candidate.candidatePath;
     }
   }
 
   return null;
+}
+
+async function resolveUncachedSessionFilePath(
+  sessionsDir: string,
+  workingDir: string,
+  providerSessionId: string
+): Promise<string | null> {
+  const fileSuffixes = buildSessionFileSuffixes(providerSessionId);
+  const expectedDateDirs = getExpectedDateSessionDirs(sessionsDir, providerSessionId);
+  const expectedCandidates = await collectCandidateSessionFilesFromDirs(
+    expectedDateDirs,
+    fileSuffixes
+  );
+  const expectedMatch = await selectMatchingSessionFilePath({
+    candidates: expectedCandidates,
+    providerSessionId,
+    workingDir,
+  });
+  if (expectedMatch) {
+    return expectedMatch;
+  }
+
+  const recentDateDirs = await collectRecentDateSessionDirs(sessionsDir);
+  const recentCandidates = await collectCandidateSessionFilesFromDirs(
+    recentDateDirs.map((candidate) => candidate.directoryPath),
+    fileSuffixes
+  );
+  return await selectMatchingSessionFilePath({
+    candidates: recentCandidates,
+    providerSessionId,
+    workingDir,
+  });
+}
+
+async function resolveSessionFilePath(
+  workingDir: string,
+  providerSessionId: string
+): Promise<string | null> {
+  const sessionsDir = getCodexSessionsDir();
+  try {
+    await access(sessionsDir);
+  } catch {
+    return null;
+  }
+
+  const cacheKey = buildSessionFileLookupCacheKey({ sessionsDir, workingDir, providerSessionId });
+  const cachedFilePath = getCachedSessionFilePath(cacheKey);
+  if (cachedFilePath !== undefined) {
+    return cachedFilePath;
+  }
+
+  const filePath = await resolveUncachedSessionFilePath(sessionsDir, workingDir, providerSessionId);
+  setCachedSessionFilePath(cacheKey, filePath);
+  return filePath;
 }
 
 class CodexSessionHistoryLoaderService {

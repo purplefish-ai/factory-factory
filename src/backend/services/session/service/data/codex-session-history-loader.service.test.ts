@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -201,6 +201,71 @@ describe('codexSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it('resolves UUIDv7 sessions from the expected date directory before unrelated trees', async () => {
+    const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
+    const cwd = '/Users/test/project';
+    const expectedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T19:42:56.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from expected date dir' },
+        },
+      ],
+    });
+    const unrelatedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: 'archive/not/date/tree',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T19:42:57.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from unrelated tree' },
+        },
+      ],
+    });
+    utimesSync(
+      expectedPath,
+      new Date('2026-02-14T19:42:56.000Z'),
+      new Date('2026-02-14T19:42:56.000Z')
+    );
+    utimesSync(
+      unrelatedPath,
+      new Date('2026-02-14T19:43:56.000Z'),
+      new Date('2026-02-14T19:43:56.000Z')
+    );
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath: expectedPath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'user',
+        content: 'from expected date dir',
+        timestamp: '2026-02-14T19:42:56.000Z',
+      },
+    ]);
+  });
+
   it('records raw function args when response_item arguments are not valid JSON objects', async () => {
     const providerSessionId = 'session-fn-args';
     const cwd = '/Users/test/project';
@@ -384,6 +449,42 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     expect(result).toEqual({ status: 'not_found' });
+  });
+
+  it('caches negative lookups for missing session files', async () => {
+    const providerSessionId = 'session-negative-cache';
+    const cwd = '/Users/test/missing';
+    mkdirSync(join(tempDir, 'sessions'), { recursive: true });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toEqual({ status: 'not_found' });
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'created after miss' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toEqual({ status: 'not_found' });
   });
 
   it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
