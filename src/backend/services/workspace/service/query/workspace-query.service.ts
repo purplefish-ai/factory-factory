@@ -439,33 +439,39 @@ class WorkspaceQueryService {
       return { queued: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
-      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
-    });
-
-    const workspacesWithPRs = workspaces.filter(
-      (w): w is typeof w & { prUrl: string } => w.prUrl !== null
-    );
-
-    if (workspacesWithPRs.length === 0) {
-      return { queued: 0 };
-    }
-
     this.prStatusSyncInFlight = true;
 
-    // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
-    Promise.all(
-      workspacesWithPRs.map((workspace) =>
-        gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl))
-      )
-    )
-      .then(() => logger.info('Batch PR status sync completed', { projectId }))
-      .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
-      .finally(() => {
-        this.prStatusSyncInFlight = false;
+    try {
+      const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
+        excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       });
 
-    return { queued: workspacesWithPRs.length };
+      const workspacesWithPRs = workspaces.filter(
+        (w): w is typeof w & { prUrl: string } => w.prUrl !== null
+      );
+
+      if (workspacesWithPRs.length === 0) {
+        this.prStatusSyncInFlight = false;
+        return { queued: 0 };
+      }
+
+      // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
+      Promise.all(
+        workspacesWithPRs.map((workspace) =>
+          gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl))
+        )
+      )
+        .then(() => logger.info('Batch PR status sync completed', { projectId }))
+        .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
+        .finally(() => {
+          this.prStatusSyncInFlight = false;
+        });
+
+      return { queued: workspacesWithPRs.length };
+    } catch (error) {
+      this.prStatusSyncInFlight = false;
+      throw error;
+    }
   }
 
   async hasChanges(workspaceId: string): Promise<boolean> {
