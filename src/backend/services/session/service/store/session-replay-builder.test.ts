@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { type ChatMessage, DEFAULT_RENDERER_TRANSCRIPT_LIMIT } from '@/shared/acp-protocol';
 import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore } from './session-store.types';
 
@@ -58,6 +59,38 @@ function createStore(): SessionStore {
       updatedAt: '2026-02-01T00:00:04.000Z',
     },
     nextOrder: 2,
+  };
+}
+
+function createUserMessage(id: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'user',
+    text: `message ${order}`,
+    timestamp: '2026-02-01T00:00:00.000Z',
+    order,
+  };
+}
+
+function createToolResultMessage(id: string, toolUseId: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'agent',
+    message: {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: 'Tool output',
+          },
+        ],
+      },
+    },
+    timestamp: '2026-02-01T00:00:00.000Z',
+    order,
   };
 }
 
@@ -135,5 +168,68 @@ describe('session-replay-builder', () => {
         }),
       ])
     );
+  });
+
+  it('builds snapshots from a bounded recent transcript window without mutating the store', () => {
+    const store = createStore();
+    store.transcript = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 5 }, (_, order) =>
+      createUserMessage(`m-${order}`, order)
+    );
+    store.queue = [
+      {
+        id: 'queued-visible',
+        text: 'queued',
+        timestamp: '2026-02-01T00:00:02.000Z',
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+    ];
+
+    const snapshot = buildSnapshotMessages(store);
+
+    expect(store.transcript).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 5);
+    expect(snapshot).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 1);
+    expect(snapshot[0]!.id).toBe('m-5');
+    expect(snapshot.at(-1)?.id).toBe('queued-visible');
+  });
+
+  it('starts bounded snapshots at a render-safe boundary', () => {
+    const store = createStore();
+    store.transcript = [
+      createUserMessage('too-old', 0),
+      createToolResultMessage('orphaned-tool-result', 'tool-too-old', 1),
+      ...Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1 }, (_, index) =>
+        createUserMessage(`m-${index + 2}`, index + 2)
+      ),
+    ];
+    store.queue = [];
+
+    const snapshot = buildSnapshotMessages(store);
+
+    expect(snapshot).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1);
+    expect(snapshot[0]!.id).toBe('m-2');
+    expect(snapshot.some((message) => message.id === 'orphaned-tool-result')).toBe(false);
+  });
+
+  it('builds replay batches from a bounded recent transcript window', () => {
+    const store = createStore();
+    store.transcript = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 3 }, (_, order) =>
+      createUserMessage(`m-${order}`, order)
+    );
+    store.queue = [];
+    store.pendingInteractiveRequest = null;
+
+    const replayEvents = buildReplayEvents(store);
+    const acceptedMessageIds = replayEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
+      .map((event) => event.id);
+
+    expect(acceptedMessageIds).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
+    expect(acceptedMessageIds[0]).toBe('m-3');
+    expect(acceptedMessageIds.at(-1)).toBe(`m-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 2}`);
   });
 });
