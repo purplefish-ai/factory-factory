@@ -102,6 +102,7 @@ describe('useChatState rejected message recovery', () => {
   afterEach(() => {
     document.body.innerHTML = '';
     sessionStorage.clear();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -162,6 +163,44 @@ describe('useChatState rejected message recovery', () => {
       expect.objectContaining({
         description:
           'They are still in this composer, but may be lost if you reload or switch sessions.',
+      })
+    );
+
+    harness.cleanup();
+  });
+
+  it('warns when sent input attachments cannot be cleared from storage', async () => {
+    const harness = renderChatState('session-A');
+    await flushEffects();
+
+    flushSync(() => {
+      harness.chatRef.current?.setInputAttachments([createAttachment()]);
+    });
+
+    await flushEffects();
+    const removeItem = Storage.prototype.removeItem;
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (
+      this: Storage,
+      key: string
+    ) {
+      if (key === 'chat-attachments-session-A') {
+        throw new DOMException('Storage unavailable', 'InvalidStateError');
+      }
+      return removeItem.call(this, key);
+    });
+
+    flushSync(() => {
+      harness.chatRef.current?.sendMessage('send with attachment');
+    });
+
+    await flushEffects();
+
+    expect(harness.chatRef.current?.inputAttachments).toEqual([]);
+    expect(sessionStorage.getItem('chat-attachments-session-A')).toContain('secret.txt');
+    expect(toast.error).toHaveBeenCalledWith(
+      'Saved attachments could not be cleared',
+      expect.objectContaining({
+        description: 'Previously saved attachments may reappear after a reload or session switch.',
       })
     );
 

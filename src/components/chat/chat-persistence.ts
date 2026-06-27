@@ -150,14 +150,15 @@ export function persistInputAttachments(
 /**
  * Clear persisted input attachments for a specific session.
  */
-export function clearInputAttachments(sessionId: string | null): void {
+export function clearInputAttachments(sessionId: string | null): InputAttachmentsPersistenceResult {
   if (!sessionId || typeof window === 'undefined') {
-    return;
+    return { ok: true, operation: 'skip' };
   }
   try {
     sessionStorage.removeItem(getAttachmentsKey(sessionId));
-  } catch {
-    // Silently ignore storage errors
+    return { ok: true, operation: 'clear' };
+  } catch (error) {
+    return { ok: false, operation: 'clear', error };
   }
 }
 

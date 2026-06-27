@@ -157,7 +157,10 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Clear attachments from both state and persistence.
   const clearInputAttachments = useCallback(() => {
     setInputAttachmentsState([]);
-    clearPersistedInputAttachments(dbSessionIdRef.current);
+    const persistenceResult = clearPersistedInputAttachments(dbSessionIdRef.current);
+    if (!persistenceResult.ok) {
+      showAttachmentPersistenceError(persistenceResult.operation);
+    }
   }, []);
 
   // =============================================================================

@@ -397,14 +397,27 @@ describe('input attachment persistence', () => {
 
   describe('clearInputAttachments', () => {
     it('should not clear for null sessionId', () => {
-      clearInputAttachments(null);
+      const result = clearInputAttachments(null);
       expect(mockSessionStorage.removeItem).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: true, operation: 'skip' });
     });
 
     it('should remove attachments from storage', () => {
       mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
-      clearInputAttachments('session-123');
+      const result = clearInputAttachments('session-123');
       expect(mockStorage.has('chat-attachments-session-123')).toBe(false);
+      expect(result).toEqual({ ok: true, operation: 'clear' });
+    });
+
+    it('should report removeItem failures without throwing', () => {
+      const storageError = new Error('Storage unavailable');
+      mockSessionStorage.removeItem.mockImplementationOnce(() => {
+        throw storageError;
+      });
+
+      const result = clearInputAttachments('session-123');
+
+      expect(result).toEqual({ ok: false, operation: 'clear', error: storageError });
     });
   });
 });
