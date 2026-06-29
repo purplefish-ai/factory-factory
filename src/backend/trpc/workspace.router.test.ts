@@ -132,6 +132,7 @@ function createCaller(requestTrust?: {
     stopRunScript: vi.fn(
       async (): Promise<{ success: boolean; error?: string }> => ({ success: true })
     ),
+    evictWorkspaceBuffers: vi.fn(),
   };
   const terminalService = {
     destroyWorkspaceTerminals: vi.fn(),
@@ -569,6 +570,13 @@ describe('workspaceRouter', () => {
     );
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('w1');
+    const evictionCallOrder = runScriptService.evictWorkspaceBuffers.mock.invocationCallOrder[0];
+    const deleteCallOrder = mockWorkspaceDataService.delete.mock.invocationCallOrder[0];
+    if (evictionCallOrder === undefined || deleteCallOrder === undefined) {
+      throw new Error('Expected buffer eviction and workspace deletion to be called');
+    }
+    expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockClearWorkspaceActivity).toHaveBeenCalledWith('w1');
 
@@ -592,6 +600,7 @@ describe('workspaceRouter', () => {
     );
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
@@ -605,6 +614,7 @@ describe('workspaceRouter', () => {
     );
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
@@ -620,6 +630,7 @@ describe('workspaceRouter', () => {
     );
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
+    expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });

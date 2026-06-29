@@ -164,6 +164,47 @@ describe('claudeSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it('normalizes tool_result entries with omitted content to an empty string', async () => {
+    const providerSessionId = 'provider-session-empty-tool-result';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp: '2026-02-14T00:00:00.000Z',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'tool-1' }],
+          },
+        },
+      ],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'tool_result',
+        content: '',
+        toolId: 'tool-1',
+        timestamp: '2026-02-14T00:00:00.000Z',
+      },
+    ]);
+    expect(JSON.parse(JSON.stringify(result.history))).toEqual(result.history);
+  });
+
   it('falls back to scanning all project directories when cwd differs', async () => {
     const providerSessionId = 'provider-session-2';
     const originalCwd = '/Users/test/original';
