@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,6 +61,13 @@ vi.mock('@/backend/services/git-clone.service', () => ({
 }));
 
 import { projectRouter } from './project.trpc';
+
+function mkfifo(path: string): void {
+  const result = spawnSync('mkfifo', [path], { encoding: 'utf-8' });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.error?.message || 'Failed to create FIFO');
+  }
+}
 
 function createCaller(
   requestTrust?: {
@@ -170,6 +178,34 @@ describe('projectRouter', () => {
     expect(result.branches).not.toContainEqual(
       expect.objectContaining({ name: 'origin/main', refType: 'remote' })
     );
+  });
+
+  it('skips non-regular slash command files', async () => {
+    const commandsPath = join(tempDir, '.claude', 'commands');
+    const fifoTarget = join(tempDir, 'command-target');
+    mkdirSync(commandsPath, { recursive: true });
+    writeFileSync(
+      join(commandsPath, 'issue-1809-valid.md'),
+      '---\ndescription: Safe command\n---\n'
+    );
+    mkfifo(join(commandsPath, 'issue-1809-pipe.md'));
+    mkfifo(fifoTarget);
+    symlinkSync(fifoTarget, join(commandsPath, 'issue-1809-linked.md'));
+    mockProjectManagementService.findById.mockResolvedValue({
+      id: 'p1',
+      repoPath: tempDir,
+    });
+
+    const caller = createCaller();
+    const result = await caller.listSlashCommands({ projectId: 'p1' });
+    const commandNames = result.commands.map((command) => command.name);
+
+    expect(result.commands).toContainEqual({
+      name: 'issue-1809-valid',
+      description: 'Safe command',
+    });
+    expect(commandNames).not.toContain('issue-1809-pipe');
+    expect(commandNames).not.toContain('issue-1809-linked');
   });
 
   it('handles malformed git ref lines and git branch listing failures', async () => {
