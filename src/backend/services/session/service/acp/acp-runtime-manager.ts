@@ -288,8 +288,6 @@ export class AcpRuntimeManager {
       detached: false,
     });
 
-    this.abortClientCreationIfStopping(child, sessionId);
-
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
     let startupErrorListener: ((error: unknown) => void) | null = null;
@@ -298,8 +296,10 @@ export class AcpRuntimeManager {
         reject(createAcpSpawnError(spawnCommand.commandLabel, error));
       child.once('error', startupErrorListener);
     });
+    const startupErrorSettled = startupError.catch(() => undefined);
 
     this.wireChildErrorHandler(child, sessionId, handlers);
+    this.abortClientCreationIfStopping(child, sessionId);
 
     // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -352,7 +352,6 @@ export class AcpRuntimeManager {
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
-    const startupErrorSettled = startupError.catch(() => undefined);
     const shutdownSignal = this.createShutdownSignal(sessionId);
     const stopSignal = this.createSessionStopSignal(sessionId);
     const startupCancelOn = Promise.race([

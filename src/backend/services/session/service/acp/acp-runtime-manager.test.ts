@@ -1133,6 +1133,58 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBeUndefined();
     });
 
+    it('wires child error handlers before aborting creation during stop', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      // SIGTERM marks the old process as no longer running, but delay exit.
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        return true;
+      });
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+      });
+
+      const secondChild = createMockChildProcess();
+      secondChild.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          secondChild.emit('error', new Error('cleanup child error'));
+        }
+        if (signal === 'SIGKILL') {
+          secondChild.exitCode = 137;
+          secondChild.emit('exit', 137, 'SIGKILL');
+        }
+        return true;
+      });
+      mockSpawn.mockReturnValueOnce(secondChild);
+      const handlers = defaultHandlers();
+
+      await expect(
+        manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext())
+      ).rejects.toThrow('ACP session stop requested');
+
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGKILL');
+      await vi.waitFor(() => {
+        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+      });
+
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
+      await stopPromise;
+    });
+
     it('clears creation lock bookkeeping when stop rejects a concurrent create', async () => {
       const firstChild = setupSuccessfulSpawn();
 
