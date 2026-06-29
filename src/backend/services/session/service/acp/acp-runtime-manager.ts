@@ -775,11 +775,7 @@ export class AcpRuntimeManager {
     timedOutHandle: AcpProcessHandle,
     timeoutMs: number | undefined
   ): Promise<void> {
-    if (this.sessions.get(sessionId) !== timedOutHandle) {
-      logger.info('Ignoring stale prompt timeout for replaced ACP session', {
-        sessionId,
-        timeoutMs,
-      });
+    if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
       return;
     }
 
@@ -789,6 +785,9 @@ export class AcpRuntimeManager {
         this.cancelPrompt(sessionId).then(() => true),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
       ]);
+      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
+        return;
+      }
       if (!cancelled) {
         logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
         this.clearPromptInFlight(sessionId);
@@ -797,6 +796,9 @@ export class AcpRuntimeManager {
         });
       }
     } catch {
+      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
+        return;
+      }
       // Cancel failed — stop the client forcibly
       logger.warn('Cancel failed after timeout, stopping client', { sessionId });
       this.clearPromptInFlight(sessionId);
@@ -804,6 +806,22 @@ export class AcpRuntimeManager {
         // Best-effort cleanup
       });
     }
+  }
+
+  private isCurrentPromptTimeoutHandle(
+    sessionId: string,
+    timedOutHandle: AcpProcessHandle,
+    timeoutMs: number | undefined
+  ): boolean {
+    if (this.sessions.get(sessionId) === timedOutHandle) {
+      return true;
+    }
+
+    logger.info('Ignoring stale prompt timeout for replaced ACP session', {
+      sessionId,
+      timeoutMs,
+    });
+    return false;
   }
 
   private clearPromptInFlight(sessionId: string): void {

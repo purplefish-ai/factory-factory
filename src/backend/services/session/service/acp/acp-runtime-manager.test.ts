@@ -1442,6 +1442,57 @@ describe('AcpRuntimeManager', () => {
       }
     });
 
+    it('does not clear or stop a replacement session when timeout cancel hangs', async () => {
+      setupSuccessfulSpawn();
+      mockPrompt.mockReturnValue(new Promise(() => undefined));
+      mockCancel.mockReturnValue(new Promise(() => undefined));
+
+      const firstHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      vi.useFakeTimers();
+
+      try {
+        const stalePrompt = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'old prompt' }],
+          100
+        );
+        const staleRejection = stalePrompt.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(mockCancel).toHaveBeenCalledTimes(1);
+
+        const internalManager = manager as unknown as {
+          sessions: Map<string, typeof firstHandle>;
+        };
+        internalManager.sessions.delete('session-1');
+
+        const replacementChild = setupSuccessfulSpawn();
+        const replacementHandle = await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        replacementHandle.isPromptInFlight = true;
+
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(staleRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        expect(replacementChild.kill).not.toHaveBeenCalled();
+        expect(manager.getClient('session-1')).toBe(replacementHandle);
+        expect(firstHandle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('does not cancel a replacement session when an old prompt timeout fires', async () => {
       const firstChild = setupSuccessfulSpawn();
       mockPrompt.mockReturnValueOnce(new Promise(() => undefined));
