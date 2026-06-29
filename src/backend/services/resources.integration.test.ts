@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   CIStatus,
+  KanbanColumn,
   PRState,
   type Prisma,
   type PrismaClient,
@@ -182,6 +183,7 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const eligible = await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.FAILED,
+        cachedKanbanColumn: KanbanColumn.WAITING,
         initRetryCount: 1,
       });
       const maxed = await createWorkspaceFixture(project.id, {
@@ -201,6 +203,7 @@ describe('resource accessors integration', () => {
       expect(eligibleResult.count).toBe(1);
       expect(maxedResult.count).toBe(0);
       expect(eligibleReloaded.status).toBe(WorkspaceStatus.PROVISIONING);
+      expect(eligibleReloaded.cachedKanbanColumn).toBe(KanbanColumn.WORKING);
       expect(eligibleReloaded.initRetryCount).toBe(2);
       expect(maxedReloaded.status).toBe(WorkspaceStatus.FAILED);
     });
