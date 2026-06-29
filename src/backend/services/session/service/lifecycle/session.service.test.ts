@@ -916,6 +916,53 @@ describe('SessionService', () => {
     await expect(firstSend).resolves.toBe('end_turn');
   });
 
+  it('marks prompt turns idle with the activity generation that started them', async () => {
+    const markSessionRunning = vi.fn().mockReturnValueOnce(101).mockReturnValueOnce(102);
+    const markSessionIdle = vi.fn();
+    sessionService.configure({
+      workspace: {
+        markSessionRunning,
+        markSessionIdle,
+        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
+      },
+    });
+    const acpProcessor = getAcpProcessorState();
+    acpProcessor.sessionToWorkspace.set('session-activity-generation', 'workspace-1');
+    vi.mocked(acpRuntimeManager.sendPrompt)
+      .mockResolvedValueOnce({ stopReason: 'end_turn' })
+      .mockResolvedValueOnce({ stopReason: 'end_turn' });
+
+    await sessionService.sendAcpMessage('session-activity-generation', [
+      { type: 'text', text: 'first' },
+    ]);
+    await sessionService.sendAcpMessage('session-activity-generation', [
+      { type: 'text', text: 'second' },
+    ]);
+
+    expect(markSessionRunning).toHaveBeenNthCalledWith(
+      1,
+      'workspace-1',
+      'session-activity-generation'
+    );
+    expect(markSessionRunning).toHaveBeenNthCalledWith(
+      2,
+      'workspace-1',
+      'session-activity-generation'
+    );
+    expect(markSessionIdle).toHaveBeenNthCalledWith(
+      1,
+      'workspace-1',
+      'session-activity-generation',
+      101
+    );
+    expect(markSessionIdle).toHaveBeenNthCalledWith(
+      2,
+      'workspace-1',
+      'session-activity-generation',
+      102
+    );
+  });
+
   it('rejects queued ACP prompts during unexpected runtime exit', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>

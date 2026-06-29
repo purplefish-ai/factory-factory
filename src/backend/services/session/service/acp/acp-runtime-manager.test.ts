@@ -192,6 +192,20 @@ function setupSuccessfulSpawn() {
   return child;
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 // ---- Tests ----
 
 describe('AcpRuntimeManager', () => {
@@ -1423,6 +1437,122 @@ describe('AcpRuntimeManager', () => {
         expect(child.kill).toHaveBeenCalledWith('SIGTERM');
         expect(manager.getClient('session-1')).toBeUndefined();
         expect(handle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not clear or stop a replacement session when timeout cancel hangs', async () => {
+      setupSuccessfulSpawn();
+      mockPrompt.mockReturnValue(new Promise(() => undefined));
+      mockCancel.mockReturnValue(new Promise(() => undefined));
+
+      const firstHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      vi.useFakeTimers();
+
+      try {
+        const stalePrompt = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'old prompt' }],
+          100
+        );
+        const staleRejection = stalePrompt.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(mockCancel).toHaveBeenCalledTimes(1);
+
+        const internalManager = manager as unknown as {
+          sessions: Map<string, typeof firstHandle>;
+        };
+        internalManager.sessions.delete('session-1');
+
+        const replacementChild = setupSuccessfulSpawn();
+        const replacementHandle = await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        replacementHandle.isPromptInFlight = true;
+
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(staleRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        expect(replacementChild.kill).not.toHaveBeenCalled();
+        expect(manager.getClient('session-1')).toBe(replacementHandle);
+        expect(firstHandle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not cancel a replacement session when an old prompt timeout fires', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      mockPrompt.mockReturnValueOnce(new Promise(() => undefined));
+      mockCancel.mockResolvedValue(undefined);
+
+      const firstHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          firstChild.killed = true;
+          firstChild.exitCode = 0;
+          firstChild.emit('exit', 0, null);
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        const stalePrompt = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'old prompt' }],
+          100
+        );
+        const staleRejection = stalePrompt.catch((error: unknown) => error);
+
+        await manager.stopClient('session-1');
+        expect(manager.getClient('session-1')).toBeUndefined();
+
+        const replacementPrompt = createDeferred<{ stopReason: string }>();
+        setupSuccessfulSpawn();
+        mockPrompt.mockReturnValueOnce(replacementPrompt.promise);
+        const replacementHandle = await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        const replacementSend = manager.sendPrompt('session-1', [
+          { type: 'text', text: 'new prompt' },
+        ]);
+        await Promise.resolve();
+
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        const cancelCallsBeforeStaleTimeout = mockCancel.mock.calls.length;
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await expect(staleRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(mockCancel).toHaveBeenCalledTimes(cancelCallsBeforeStaleTimeout);
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        expect(firstHandle.isPromptInFlight).toBe(false);
+
+        replacementPrompt.resolve({ stopReason: 'end_turn' });
+        await expect(replacementSend).resolves.toEqual({ stopReason: 'end_turn' });
+        expect(replacementHandle.isPromptInFlight).toBe(false);
       } finally {
         vi.useRealTimers();
       }
