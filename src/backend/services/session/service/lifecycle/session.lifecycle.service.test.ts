@@ -606,6 +606,22 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
+  it('sends an explicit restart prompt after queued notification dispatch starts', async () => {
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
+      {
+        pendingNotificationCount: 1,
+      }
+    );
+
+    await service.restartSession('session-1', sendSessionMessage, {
+      initialPrompt: 'Fix the failing checks',
+      startupModePreset: 'non_interactive',
+    });
+
+    expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Fix the failing checks');
+  });
+
   it('does not fail startup when queued notification dispatch fails', async () => {
     const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
       {

@@ -50,6 +50,7 @@ const mockSessionBridge: RatchetSessionBridge = {
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
   startSession: vi.fn(),
+  restartSession: vi.fn(),
   sendSessionMessage: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };
@@ -179,6 +180,33 @@ describe('FixerSessionService', () => {
       initialPrompt: 'prompt',
       startupModePreset: 'non_interactive',
     });
+  });
+
+  it('restarts an existing running idle session when configured', async () => {
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'existing',
+      sessionId: 's-running',
+      status: SessionStatus.RUNNING,
+    });
+
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    vi.mocked(mockSessionBridge.restartSession).mockResolvedValue(undefined);
+
+    const result = await fixerSessionService.acquireAndDispatch({
+      workspaceId: 'w1',
+      workflow: 'ci-fix',
+      sessionName: 'CI Fixing',
+      runningIdleAction: 'restart',
+      buildPrompt: () => 'fix the failing checks',
+    });
+
+    expect(result).toEqual({ status: 'started', sessionId: 's-running' });
+    expect(mockSessionBridge.restartSession).toHaveBeenCalledWith('s-running', {
+      initialPrompt: 'fix the failing checks',
+      startupModePreset: 'non_interactive',
+    });
+    expect(mockSessionBridge.startSession).not.toHaveBeenCalled();
   });
 
   it('does not set providerProjectPath when resolved provider is CODEX', async () => {
