@@ -1,6 +1,7 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { SessionStatus } from '@/shared/core';
 
 const mockSessionDataService = vi.hoisted(() => ({
   findAgentSessionsByWorkspaceId: vi.fn(),
@@ -246,7 +247,7 @@ describe('sessionRouter', () => {
     expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s-orphan');
   });
 
-  it('preserves startup errors even when rollback cleanup fails', async () => {
+  it('marks the created session failed when startup rollback deletion fails', async () => {
     const startupError = new Error('Runtime failed to start');
     const { caller, sessionService, sessionDomainService } = createCaller();
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
@@ -273,6 +274,49 @@ describe('sessionRouter', () => {
 
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s-cleanup-fails');
     expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s-cleanup-fails');
+    expect(mockSessionDataService.updateAgentSession).toHaveBeenCalledWith('s-cleanup-fails', {
+      status: SessionStatus.FAILED,
+      providerProcessPid: null,
+      providerMetadata: {
+        rollbackReason: 'startup_failed_after_create',
+      },
+    });
+  });
+
+  it('preserves startup errors even when rollback repair also fails', async () => {
+    const startupError = new Error('Runtime failed to start');
+    const { caller, sessionService, sessionDomainService } = createCaller();
+    mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
+      SessionProvider.CLAUDE
+    );
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
+      outcome: 'created',
+      session: {
+        id: 's-repair-fails',
+        workspaceId: 'w1',
+      },
+    });
+    sessionService.startSession.mockRejectedValue(startupError);
+    mockSessionDataService.deleteAgentSession.mockRejectedValue(new Error('Delete failed'));
+    mockSessionDataService.updateAgentSession.mockRejectedValue(new Error('Update failed'));
+
+    await expect(
+      caller.createAndStartSession({
+        workspaceId: 'w1',
+        workflow: 'followup',
+        name: 'Chat 1',
+      })
+    ).rejects.toThrow('Runtime failed to start');
+
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s-repair-fails');
+    expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s-repair-fails');
+    expect(mockSessionDataService.updateAgentSession).toHaveBeenCalledWith('s-repair-fails', {
+      status: SessionStatus.FAILED,
+      providerProcessPid: null,
+      providerMetadata: {
+        rollbackReason: 'startup_failed_after_create',
+      },
+    });
   });
 
   it('handles start/stop/delete flows and terminal session procedures', async () => {
