@@ -10,9 +10,10 @@ export function buildServeEnv(
   backendPort: number,
   baseEnv: NodeJS.ProcessEnv = process.env
 ): NodeJS.ProcessEnv {
+  const corsHost = options.host === '0.0.0.0' ? 'localhost' : options.host;
   const corsOrigins = options.dev
-    ? `http://${options.host}:${frontendPort}`
-    : `http://${options.host}:${backendPort}`;
+    ? `http://${corsHost}:${frontendPort}`
+    : `http://${corsHost}:${backendPort}`;
 
   return {
     ...baseEnv,
