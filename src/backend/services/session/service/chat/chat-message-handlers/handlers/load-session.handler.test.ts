@@ -582,6 +582,44 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalledWith('session-codex-metadata-id', 'none');
   });
 
+  it('hydrates CODEX transcript using metadata providerSessionId when column is empty', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'IDLE',
+      model: 'gpt-5.3-codex',
+      providerSessionId: '',
+      providerMetadata: {
+        acpConfigSnapshot: {
+          provider: 'CODEX',
+          providerSessionId: 'codex-provider-session-from-metadata',
+          capturedAt: '2026-02-14T00:00:00.000Z',
+          configOptions: [],
+        },
+      },
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-empty-column-id',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
+      providerSessionId: 'codex-provider-session-from-metadata',
+      workingDir: '/tmp/worktree',
+    });
+  });
+
   it('prefers CODEX providerSessionId column over metadata fallback', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CODEX',

@@ -52,7 +52,11 @@ function getProviderSessionIdFromMetadata(dbSession: ProviderSessionRecord): str
 }
 
 function getProviderSessionId(dbSession: ProviderSessionRecord): string | null {
-  return dbSession.providerSessionId ?? getProviderSessionIdFromMetadata(dbSession);
+  if (typeof dbSession.providerSessionId === 'string' && dbSession.providerSessionId.length > 0) {
+    return dbSession.providerSessionId;
+  }
+
+  return getProviderSessionIdFromMetadata(dbSession);
 }
 
 export function createLoadSessionHandler(
