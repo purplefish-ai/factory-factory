@@ -357,6 +357,7 @@ export class SessionService {
     timeoutMs?: number
   ): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
+    let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
     let promptError: unknown;
     let promptErrorSet = false;
@@ -371,7 +372,7 @@ export class SessionService {
     });
 
     if (workspaceId && this.workspaceBridge) {
-      this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
+      workspaceActivityGeneration = this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
     }
 
     try {
@@ -402,7 +403,11 @@ export class SessionService {
       throw error;
     } finally {
       if (workspaceId && this.workspaceBridge) {
-        this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+        if (workspaceActivityGeneration === undefined) {
+          this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+        } else {
+          this.workspaceBridge.markSessionIdle(workspaceId, sessionId, workspaceActivityGeneration);
+        }
       }
       if (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) {
         this.promptTurnCompletionService.schedule(sessionId);

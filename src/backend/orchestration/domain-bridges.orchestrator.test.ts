@@ -566,8 +566,8 @@ describe('configureDomainBridges', () => {
       configureDomainBridges();
       const bridge = getBridge(chatEventForwarderService.configure);
 
-      bridge.workspace.markSessionIdle('ws1', 's1');
-      expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1');
+      bridge.workspace.markSessionIdle('ws1', 's1', 12);
+      expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
     });
 
     it('chatEventForwarder workspace bridge delegates on', () => {
@@ -599,8 +599,8 @@ describe('configureDomainBridges', () => {
       configureDomainBridges();
       const bridge = getBridge(sessionService.configure);
 
-      bridge.workspace.markSessionIdle('ws1', 's1');
-      expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1');
+      bridge.workspace.markSessionIdle('ws1', 's1', 12);
+      expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
     });
 
     it('sessionService workspace bridge delegates ratchet session cleanup', async () => {

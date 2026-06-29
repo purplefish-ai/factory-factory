@@ -762,7 +762,7 @@ export class AcpRuntimeManager {
       return { stopReason: result.stopReason };
     } catch (error) {
       if (error instanceof PromptTimeoutError) {
-        await this.escalatePromptTimeout(sessionId, timeoutMs);
+        await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
       }
       handle.isPromptInFlight = false;
       throw error;
@@ -772,8 +772,17 @@ export class AcpRuntimeManager {
   /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
   private async escalatePromptTimeout(
     sessionId: string,
+    timedOutHandle: AcpProcessHandle,
     timeoutMs: number | undefined
   ): Promise<void> {
+    if (this.sessions.get(sessionId) !== timedOutHandle) {
+      logger.info('Ignoring stale prompt timeout for replaced ACP session', {
+        sessionId,
+        timeoutMs,
+      });
+      return;
+    }
+
     logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
     try {
       const cancelled = await Promise.race([

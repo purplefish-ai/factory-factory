@@ -272,7 +272,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   chatEventForwarderService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+      markSessionIdle: (wsId, sId, generation) =>
+        workspaceActivityService.markSessionIdle(wsId, sId, generation),
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
@@ -280,7 +281,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   sessionService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+      markSessionIdle: (wsId, sId, generation) =>
+        workspaceActivityService.markSessionIdle(wsId, sId, generation),
       clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
         ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
     },
