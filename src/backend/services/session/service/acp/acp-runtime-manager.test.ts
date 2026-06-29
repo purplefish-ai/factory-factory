@@ -924,6 +924,41 @@ describe('AcpRuntimeManager', () => {
       expect(result2).toBeUndefined();
     });
 
+    it('aborts in-flight client creation and kills the spawned subprocess', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep creation pending until the per-session stop aborts it.
+          })
+      );
+
+      const createPromise = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const createRejection = createPromise.catch((error: unknown) => error);
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+        expect(manager.getPendingClient('session-1')).toBeDefined();
+      });
+
+      await manager.stopClient('session-1');
+
+      await expect(createRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP session stop requested'),
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(manager.isStopInProgress('session-1')).toBe(false);
+      expect(manager.getClient('session-1')).toBeUndefined();
+      expect(manager.getPendingClient('session-1')).toBeUndefined();
+    });
+
     it('skips exit handler when stop is in progress', async () => {
       const child = setupSuccessfulSpawn();
       const handlers = defaultHandlers();
@@ -1068,7 +1103,7 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBe(newHandle);
     });
 
-    it('keeps newer client tracked when old stop exits later', async () => {
+    it('rejects client creation while a stop is in progress', async () => {
       const firstChild = setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -1094,22 +1129,77 @@ describe('AcpRuntimeManager', () => {
       const secondChild = createMockChildProcess();
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      const restartedHandle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-      expect(restartedHandle.child).toBe(secondChild);
+      await expect(
+        manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session stop requested');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGKILL');
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);
       await stopPromise;
 
-      expect(manager.getClient('session-1')).toBe(restartedHandle);
+      expect(manager.getClient('session-1')).toBeUndefined();
     });
 
-    it('preserves in-flight pending creation when stale stop exit fires', async () => {
+    it('wires child error handlers before aborting creation during stop', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      // SIGTERM marks the old process as no longer running, but delay exit.
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        return true;
+      });
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+      });
+
+      const secondChild = createMockChildProcess();
+      secondChild.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          secondChild.emit('error', new Error('cleanup child error'));
+        }
+        if (signal === 'SIGKILL') {
+          secondChild.exitCode = 137;
+          secondChild.emit('exit', 137, 'SIGKILL');
+        }
+        return true;
+      });
+      mockSpawn.mockReturnValueOnce(secondChild);
+      const handlers = defaultHandlers();
+
+      await expect(
+        manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext())
+      ).rejects.toThrow('ACP session stop requested');
+
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGKILL');
+      await vi.waitFor(() => {
+        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+      });
+
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
+      await stopPromise;
+    });
+
+    it('clears creation lock bookkeeping when stop rejects a concurrent create', async () => {
       const firstChild = setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -1135,52 +1225,24 @@ describe('AcpRuntimeManager', () => {
       const secondChild = createMockChildProcess();
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      let resolveSecondInit!: (value: {
-        protocolVersion: number;
-        agentCapabilities: Record<string, unknown>;
-        agentInfo: { name: string };
-      }) => void;
-      mockInitialize.mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecondInit = resolve;
-          })
-      );
+      await expect(
+        manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session stop requested');
 
-      const pendingRestart = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
-      });
-
-      const pendingBeforeStaleExit = manager.getPendingClient('session-1');
-      expect(pendingBeforeStaleExit).toBeDefined();
-
-      firstChild.exitCode = 0;
-      firstChild.emit('exit', 0, null);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      expect(manager.getPendingClient('session-1')).toBe(pendingBeforeStaleExit);
       const internalManager = manager as unknown as {
         creationLocks: Map<string, unknown>;
         lockRefCounts: Map<string, number>;
       };
-      expect(internalManager.creationLocks.has('session-1')).toBe(true);
-      expect(internalManager.lockRefCounts.get('session-1')).toBeGreaterThan(0);
+      expect(internalManager.creationLocks.has('session-1')).toBe(false);
+      expect(internalManager.lockRefCounts.has('session-1')).toBe(false);
 
-      resolveSecondInit({
-        protocolVersion: 1,
-        agentCapabilities: {},
-        agentInfo: { name: 'test' },
-      });
-
-      const restartedHandle = await pendingRestart;
-      expect(restartedHandle.child).toBe(secondChild);
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
 
       await stopPromise;
     });
