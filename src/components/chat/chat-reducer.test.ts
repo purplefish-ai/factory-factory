@@ -2242,6 +2242,39 @@ describe('chatReducer', () => {
       expect(newState.lastRejectedMessage?.text).toBe('My important message');
       expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
     });
+
+    it('should preserve lastRejectedMessage when replay includes an already-handled rejection', () => {
+      const state: ChatState = {
+        ...initialState,
+        lastRejectedMessage: {
+          text: 'My important message',
+          attachments: [],
+          error: 'Unsupported image type',
+          sessionId: 'session-1',
+        },
+      };
+
+      const newState = chatReducer(state, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'message_state_changed',
+              id: 'msg-1',
+              newState: MessageState.REJECTED,
+              errorMessage: 'Unsupported image type',
+            },
+          ],
+        },
+      });
+
+      expect(newState.lastRejectedMessage).toEqual({
+        text: 'My important message',
+        attachments: [],
+        error: 'Unsupported image type',
+        sessionId: 'session-1',
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
