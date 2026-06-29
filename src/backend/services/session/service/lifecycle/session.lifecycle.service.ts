@@ -43,6 +43,10 @@ import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
 const logger = createLogger('session');
 
+function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
+  return exitCode === 0 ? SessionStatus.COMPLETED : SessionStatus.FAILED;
+}
+
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 type SessionContext = {
@@ -433,10 +437,15 @@ export class SessionLifecycleService {
 
         try {
           this.sessionDomainService.markProcessExit(sid, exitCode);
+          const persistedStatus = getPersistedStatusForExitCode(exitCode);
           const session = await this.repository.updateSession(sid, {
-            status: SessionStatus.COMPLETED,
+            status: persistedStatus,
           });
-          logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
+          logger.debug('Updated ACP session status on exit', {
+            sessionId: sid,
+            exitCode,
+            status: persistedStatus,
+          });
 
           await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
           void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
