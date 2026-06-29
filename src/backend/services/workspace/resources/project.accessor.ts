@@ -140,6 +140,33 @@ async function getGitHubInfoFromRepo(
   }
 }
 
+async function detectDefaultBranch(repoPath: string): Promise<string> {
+  try {
+    const result = await gitCommandC(repoPath, ['rev-parse', '--abbrev-ref', 'origin/HEAD']);
+    const remoteHead = result.stdout.trim();
+    if (result.code === 0 && remoteHead && remoteHead !== 'origin/HEAD') {
+      const branch = remoteHead.replace(/^origin\//, '');
+      if (branch && branch !== 'HEAD') {
+        return branch;
+      }
+    }
+  } catch {
+    // Fall back to local HEAD when origin/HEAD cannot be read.
+  }
+
+  try {
+    const result = await gitCommandC(repoPath, ['symbolic-ref', '--short', 'HEAD']);
+    const branch = result.stdout.trim();
+    if (result.code === 0 && branch) {
+      return branch;
+    }
+  } catch {
+    // Keep the historical default when git metadata is unavailable.
+  }
+
+  return 'main';
+}
+
 /**
  * Compute the worktree path for a project.
  */
@@ -171,6 +198,7 @@ class ProjectAccessor {
 
     // Auto-detect GitHub info from git remote
     const githubInfo = await getGitHubInfoFromRepo(data.repoPath);
+    const defaultBranch = await detectDefaultBranch(data.repoPath);
 
     // Try base slug first, then with counter suffix if it conflicts
     let slug = baseSlug;
@@ -187,7 +215,7 @@ class ProjectAccessor {
             slug,
             repoPath: data.repoPath,
             worktreeBasePath,
-            defaultBranch: 'main',
+            defaultBranch,
             githubOwner: githubInfo?.owner ?? null,
             githubRepo: githubInfo?.repo ?? null,
             startupScriptCommand: data.startupScriptCommand ?? null,

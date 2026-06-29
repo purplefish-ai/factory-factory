@@ -126,6 +126,21 @@ function createGitRepository(remoteUrl?: string): string {
   return repoDir;
 }
 
+function createGitCommit(repoPath: string): void {
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'Initial commit'], { cwd: repoPath });
+}
+
+function setOriginHead(repoPath: string, branch: string): void {
+  execFileSync('git', ['update-ref', `refs/remotes/origin/${branch}`, 'HEAD'], { cwd: repoPath });
+  execFileSync(
+    'git',
+    ['symbolic-ref', 'refs/remotes/origin/HEAD', `refs/remotes/origin/${branch}`],
+    {
+      cwd: repoPath,
+    }
+  );
+}
+
 describe('resource accessors integration', () => {
   describe('workspaceAccessor', () => {
     it('enforces compare-and-swap status transitions', async () => {
@@ -352,6 +367,55 @@ describe('resource accessors integration', () => {
 
       expect(project.githubOwner).toBe('purplefish-ai');
       expect(project.githubRepo).toBe('factory-factory');
+    });
+
+    it('auto-detects default branch from origin HEAD during create', async () => {
+      const repoPath = createGitRepository('git@github.com:purplefish-ai/factory-factory.git');
+      createGitCommit(repoPath);
+      setOriginHead(repoPath, 'unstable');
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('unstable');
+    });
+
+    it('falls back to local HEAD when origin HEAD is unavailable during create', async () => {
+      const repoPath = createGitRepository();
+      execFileSync('git', ['checkout', '-b', 'develop'], { cwd: repoPath });
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('develop');
+    });
+
+    it('falls back to main when default branch cannot be detected during create', async () => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'ff-nongit-'));
+      tempRepoDirs.add(repoPath);
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('main');
     });
 
     it('retries slug creation when a slug collision occurs', async () => {
