@@ -2,12 +2,12 @@ import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/
 import { prisma } from '@/backend/db';
 import type {
   CIStatus,
-  KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
 } from '@/shared/core';
+import { KanbanColumn } from '@/shared/core';
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.
@@ -388,6 +388,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -410,6 +412,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -431,6 +435,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'NEW',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: null,
         initCompletedAt: null,

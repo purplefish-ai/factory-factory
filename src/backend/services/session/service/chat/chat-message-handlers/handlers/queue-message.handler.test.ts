@@ -4,12 +4,14 @@ import { MessageState } from '@/shared/acp-protocol';
 const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
+  rejectMessage: vi.fn(),
 }));
 
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: {
     enqueue: mocks.enqueue,
     emitDelta: mocks.emitDelta,
+    rejectMessage: mocks.rejectMessage,
   },
 }));
 
@@ -36,12 +38,7 @@ describe('createQueueMessageHandler', () => {
     });
 
     expect(ws.send).not.toHaveBeenCalled();
-    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'message_state_changed',
-      id: 'msg-1',
-      newState: MessageState.REJECTED,
-      errorMessage: 'Empty message',
-    });
+    expect(mocks.rejectMessage).toHaveBeenCalledWith('session-1', 'msg-1', 'Empty message');
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
@@ -96,12 +93,11 @@ describe('createQueueMessageHandler', () => {
     });
 
     expect(ws.send).not.toHaveBeenCalled();
-    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'message_state_changed',
-      id: 'msg-1',
-      newState: MessageState.REJECTED,
-      errorMessage: 'Attachment "broken.png" has invalid image data',
-    });
+    expect(mocks.rejectMessage).toHaveBeenCalledWith(
+      'session-1',
+      'msg-1',
+      'Attachment "broken.png" has invalid image data'
+    );
     expect(mocks.enqueue).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
   });
@@ -123,12 +119,7 @@ describe('createQueueMessageHandler', () => {
       message: { type: 'queue_message', id: 'msg-1', text: 'hello' } as never,
     });
 
-    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'message_state_changed',
-      id: 'msg-1',
-      newState: MessageState.REJECTED,
-      errorMessage: 'Queue full',
-    });
+    expect(mocks.rejectMessage).toHaveBeenCalledWith('session-1', 'msg-1', 'Queue full');
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 

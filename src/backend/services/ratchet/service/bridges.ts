@@ -24,6 +24,10 @@ export interface RatchetSessionBridge {
     sessionId: string,
     opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
   ): Promise<void>;
+  restartSession(
+    sessionId: string,
+    opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
+  ): Promise<void>;
   sendSessionMessage(sessionId: string, message: string): Promise<void>;
   injectCommittedUserMessage(sessionId: string, message: string): void;
 }

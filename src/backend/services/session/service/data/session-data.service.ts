@@ -1,4 +1,4 @@
-import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
+import type { Prisma, SessionProvider, TerminalSession } from '@prisma-gen/client';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
@@ -64,6 +64,7 @@ class SessionDataService {
       model?: string;
       status?: SessionStatus;
       provider?: SessionProvider;
+      providerMetadata?: Prisma.InputJsonValue | null;
       providerSessionId?: string | null;
       providerProjectPath?: string | null;
       providerProcessPid?: number | null;

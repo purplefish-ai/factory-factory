@@ -8,6 +8,7 @@ function createStore(): SessionStore {
     initialized: true,
     transcript: [],
     queue: [],
+    recentRejections: [],
     pendingInteractiveRequest: null,
     runtime: {
       phase: 'idle',

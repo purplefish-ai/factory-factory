@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import type { CommandInfo } from '@/shared/acp-protocol';
@@ -22,12 +22,18 @@ function isRealPathContainedInRoot(rootReal: string, targetReal: string): boolea
   return !(rel.startsWith('..') || isAbsolute(rel));
 }
 
-function isContainedInRoot(rootReal: string, filePath: string): boolean {
+function resolveContainedRegularFile(rootReal: string, filePath: string): string | null {
   try {
     const fileReal = realpathSync(filePath);
-    return isRealPathContainedInRoot(rootReal, fileReal);
+    if (!isRealPathContainedInRoot(rootReal, fileReal)) {
+      return null;
+    }
+    if (!statSync(fileReal).isFile()) {
+      return null;
+    }
+    return fileReal;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -64,7 +70,8 @@ function scanCommandsFromDir(dir: string, seen: Set<string>, containmentRoot = d
   const commands: CommandInfo[] = [];
   for (const file of files) {
     const filePath = join(dir, file);
-    if (!isContainedInRoot(rootReal, filePath)) {
+    const fileReal = resolveContainedRegularFile(rootReal, filePath);
+    if (!fileReal) {
       continue;
     }
     const name = basename(file, '.md');
@@ -73,7 +80,7 @@ function scanCommandsFromDir(dir: string, seen: Set<string>, containmentRoot = d
       continue;
     }
     seen.add(key);
-    commands.push({ name, description: parseCommandDescription(filePath) });
+    commands.push({ name, description: parseCommandDescription(fileReal) });
   }
   return commands;
 }

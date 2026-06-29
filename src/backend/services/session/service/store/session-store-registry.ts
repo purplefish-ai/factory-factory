@@ -18,6 +18,7 @@ export class SessionStoreRegistry {
         historyHydrated: false,
         transcript: [],
         queue: [],
+        recentRejections: [],
         pendingInteractiveRequest: null,
         runtime: createInitialSessionRuntimeState(),
         nextOrder: 0,

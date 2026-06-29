@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
@@ -31,13 +31,19 @@ function parseCommandFileDescription(filePath: string): string {
   }
 }
 
-function isContainedInRoot(rootReal: string, filePath: string): boolean {
+function resolveContainedRegularFile(rootReal: string, filePath: string): string | null {
   try {
     const fileReal = realpathSync(filePath);
     const rel = relative(rootReal, fileReal);
-    return !(rel.startsWith('..') || isAbsolute(rel));
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      return null;
+    }
+    if (!statSync(fileReal).isFile()) {
+      return null;
+    }
+    return fileReal;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -57,7 +63,8 @@ function scanSlashCommandDirs(
     }
     for (const file of files) {
       const filePath = join(dir, file);
-      if (!isContainedInRoot(rootReal, filePath)) {
+      const fileReal = resolveContainedRegularFile(rootReal, filePath);
+      if (!fileReal) {
         continue;
       }
       const name = basename(file, '.md');
@@ -65,7 +72,7 @@ function scanSlashCommandDirs(
         continue;
       }
       seen.add(name);
-      commands.push({ name, description: parseCommandFileDescription(filePath) });
+      commands.push({ name, description: parseCommandFileDescription(fileReal) });
     }
   }
   return commands;

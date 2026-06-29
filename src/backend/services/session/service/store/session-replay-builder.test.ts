@@ -40,6 +40,7 @@ function createStore(): SessionStore {
         },
       },
     ],
+    recentRejections: [],
     pendingInteractiveRequest: {
       requestId: 'req-1',
       toolName: 'ExitPlanMode',
@@ -138,6 +139,57 @@ describe('session-replay-builder', () => {
         }),
       ])
     );
+  });
+
+  it('includes recent rejected message states in replay', () => {
+    const store = createStore();
+    store.recentRejections = [
+      {
+        id: 'rejected-1',
+        errorMessage: 'Attachment is too large',
+        rejectedAt: '2026-02-01T00:00:05.000Z',
+        expiresAt: Date.now() + 60_000,
+      },
+    ];
+
+    const replayEvents = buildReplayEvents(store);
+
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'message_state_changed',
+          id: 'rejected-1',
+          newState: 'REJECTED',
+          errorMessage: 'Attachment is too large',
+        },
+      ])
+    );
+  });
+
+  it('omits expired or active-message rejection records from replay', () => {
+    const store = createStore();
+    store.recentRejections = [
+      {
+        id: 'expired-1',
+        errorMessage: 'Expired',
+        rejectedAt: '2026-02-01T00:00:05.000Z',
+        expiresAt: Date.now() - 1,
+      },
+      {
+        id: 'q1',
+        errorMessage: 'Stale reject for queued message',
+        rejectedAt: '2026-02-01T00:00:05.000Z',
+        expiresAt: Date.now() + 60_000,
+      },
+    ];
+
+    const replayEvents = buildReplayEvents(store);
+    const replayedRejectedIds = replayEvents
+      .filter((event) => event.type === 'message_state_changed' && event.newState === 'REJECTED')
+      .map((event) => event.id);
+
+    expect(replayedRejectedIds).not.toContain('expired-1');
+    expect(replayedRejectedIds).not.toContain('q1');
   });
 
   it('replays legacy tool-input requests with questions as user_question', () => {

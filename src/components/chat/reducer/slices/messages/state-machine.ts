@@ -267,7 +267,7 @@ function handleRejectedOrFailedState(
             error: errorMessage ?? 'Message failed',
             sessionId: recoveryContent.sessionId,
           }
-        : null,
+        : state.lastRejectedMessage,
     },
     state.messages.filter((m) => m.id !== id)
   );

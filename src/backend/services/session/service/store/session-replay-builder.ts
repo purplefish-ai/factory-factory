@@ -31,6 +31,30 @@ export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
   return snapshot;
 }
 
+function appendRecentRejectionEvents(
+  replayEvents: ReplayEventMessage[],
+  store: SessionStore,
+  transcript: ChatMessage[]
+): void {
+  const activeMessageIds = new Set([
+    ...transcript.map((message) => message.id),
+    ...store.queue.map((message) => message.id),
+  ]);
+  const now = Date.now();
+  for (const rejection of store.recentRejections) {
+    if (rejection.expiresAt <= now || activeMessageIds.has(rejection.id)) {
+      continue;
+    }
+
+    replayEvents.push({
+      type: 'message_state_changed',
+      id: rejection.id,
+      newState: MessageState.REJECTED,
+      errorMessage: rejection.errorMessage,
+    });
+  }
+}
+
 export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   const replayEvents: ReplayEventMessage[] = [
     {
@@ -40,6 +64,8 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   ];
 
   const transcript = selectRendererTranscriptWindow(store);
+  appendRecentRejectionEvents(replayEvents, store, transcript);
+
   for (const message of transcript) {
     if (message.source === 'user') {
       replayEvents.push({

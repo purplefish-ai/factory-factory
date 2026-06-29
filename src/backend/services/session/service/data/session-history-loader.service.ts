@@ -86,8 +86,12 @@ function withOptionalUuid<T extends HistoryMessage>(message: T, uuid: string | u
 }
 
 function safeJsonStringify(value: unknown): string {
+  if (value === undefined) {
+    return '';
+  }
+
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? '';
   } catch {
     return String(value);
   }

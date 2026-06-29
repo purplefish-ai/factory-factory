@@ -32,8 +32,22 @@ describe('buildServeEnv', () => {
     expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:3504');
   });
 
+  it('uses localhost for the default CORS origin when binding production to all interfaces', () => {
+    const env = buildServeEnv({ host: '0.0.0.0' }, '/tmp/factory.db', 3000, 7001, {});
+
+    expect(env.BACKEND_HOST).toBe('0.0.0.0');
+    expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:7001');
+  });
+
+  it('uses localhost for the default CORS origin when binding dev mode to all interfaces', () => {
+    const env = buildServeEnv({ dev: true, host: '0.0.0.0' }, '/tmp/factory.db', 5173, 7001, {});
+
+    expect(env.BACKEND_HOST).toBe('0.0.0.0');
+    expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:5173');
+  });
+
   it('respects CORS_ALLOWED_ORIGINS from the base environment', () => {
-    const env = buildServeEnv({ host: 'localhost' }, '/tmp/factory.db', 3000, 3001, {
+    const env = buildServeEnv({ host: '0.0.0.0' }, '/tmp/factory.db', 3000, 3001, {
       CORS_ALLOWED_ORIGINS: 'https://home.adeesha.dev',
     });
 
