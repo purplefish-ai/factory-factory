@@ -133,6 +133,30 @@ describe('agentSessionAccessor', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
+  it('createWithinWorkspaceLimit does not count failed rollback sessions as active', async () => {
+    mockCount.mockResolvedValue(1);
+    mockCreate.mockResolvedValue({ id: 'session-after-failed-rollback' });
+
+    await expect(
+      agentSessionAccessor.createWithinWorkspaceLimit({
+        workspaceId: 'workspace-1',
+        workflow: 'user',
+        maxSessions: 2,
+      })
+    ).resolves.toEqual({
+      outcome: 'created',
+      session: { id: 'session-after-failed-rollback' },
+    });
+
+    expect(mockCount).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+      },
+    });
+    expect(mockCreate).toHaveBeenCalled();
+  });
+
   it('findById includes workspace relation', async () => {
     mockFindUnique.mockResolvedValue({ id: 'session-1' });
 
