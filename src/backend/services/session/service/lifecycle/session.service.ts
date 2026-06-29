@@ -35,6 +35,10 @@ const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type StartSessionOptions = {
+  initialPrompt?: string;
+  startupModePreset?: SessionStartupModePreset;
+};
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 
 export type SessionServiceDependencies = {
@@ -140,13 +144,7 @@ export class SessionService {
     this.promptTurnCompletionService.setHandler(handler);
   }
 
-  async startSession(
-    sessionId: string,
-    options?: {
-      initialPrompt?: string;
-      startupModePreset?: SessionStartupModePreset;
-    }
-  ): Promise<void> {
+  async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
     await this.lifecycleService.startSession(
       sessionId,
       (id, content) => this.sendSessionMessage(id, content),
@@ -161,9 +159,11 @@ export class SessionService {
     await this.lifecycleService.stopSession(sessionId, options);
   }
 
-  async restartSession(sessionId: string): Promise<void> {
-    await this.lifecycleService.restartSession(sessionId, (id, content) =>
-      this.sendSessionMessage(id, content)
+  async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    await this.lifecycleService.restartSession(
+      sessionId,
+      (id, content) => this.sendSessionMessage(id, content),
+      options
     );
   }
 

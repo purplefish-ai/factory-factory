@@ -168,7 +168,11 @@ export class SessionLifecycleService {
     logger.info('Session started', { sessionId, provider: session.provider });
   }
 
-  async restartSession(sessionId: string, sendSessionMessage: SendSessionMessage): Promise<void> {
+  async restartSession(
+    sessionId: string,
+    sendSessionMessage: SendSessionMessage,
+    options?: StartSessionOptions
+  ): Promise<void> {
     const isRunning = this.runtimeManager.isSessionRunning(sessionId);
     const isStopInProgress = this.runtimeManager.isStopInProgress(sessionId);
 
@@ -189,10 +193,14 @@ export class SessionLifecycleService {
         });
       }
     }
-    await this.startSession(sessionId, sendSessionMessage, {
-      initialPrompt: 'Continue with the task.',
-      initialPromptIsDefault: true,
-    });
+    await this.startSession(
+      sessionId,
+      sendSessionMessage,
+      options ?? {
+        initialPrompt: 'Continue with the task.',
+        initialPromptIsDefault: true,
+      }
+    );
     logger.info('Session restarted', { sessionId });
   }
 

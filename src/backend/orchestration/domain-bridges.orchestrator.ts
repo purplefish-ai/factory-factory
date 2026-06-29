@@ -189,6 +189,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
     startSession: (id, opts) => sessionService.startSession(id, opts),
+    restartSession: (id, opts) => sessionService.restartSession(id, opts),
     sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
