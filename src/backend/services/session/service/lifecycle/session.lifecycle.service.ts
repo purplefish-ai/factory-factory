@@ -21,7 +21,7 @@ import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import { SessionStatus } from '@/shared/core';
+import { SessionStatus, type WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -51,6 +51,7 @@ type SessionContext = {
   systemPrompt: string | undefined;
   model: string;
   workspaceId: string;
+  workspaceStatus: WorkspaceStatus;
   parentWorkspaceId?: string | null;
 };
 
@@ -373,6 +374,7 @@ export class SessionLifecycleService {
     resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
+    workspaceStatus: WorkspaceStatus;
   } | null> {
     const sessionContext = await this.loadSessionContext(sessionId);
     if (!sessionContext) {
@@ -384,6 +386,7 @@ export class SessionLifecycleService {
       resumeProviderSessionId: sessionContext.resumeProviderSessionId,
       systemPrompt: sessionContext.systemPrompt,
       model: sessionContext.model,
+      workspaceStatus: sessionContext.workspaceStatus,
     };
   }
 
@@ -946,6 +949,7 @@ export class SessionLifecycleService {
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,
+      workspaceStatus: workspace.status,
       parentWorkspaceId: workspace.parentWorkspaceId,
     };
   }

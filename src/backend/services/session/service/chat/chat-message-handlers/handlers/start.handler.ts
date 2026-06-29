@@ -9,6 +9,7 @@ import {
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { WorkspaceStatus } from '@/shared/core';
 import type { StartMessageInput } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
@@ -27,6 +28,18 @@ export function createStartHandler(
       logger.error('[Chat WS] Failed to get session options', { sessionId });
       sessionDomainService.markError(sessionId, 'Session not found');
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+      return;
+    }
+    if (
+      sessionOpts.workspaceStatus === WorkspaceStatus.ARCHIVING ||
+      sessionOpts.workspaceStatus === WorkspaceStatus.ARCHIVED
+    ) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Workspace is archived or archiving and cannot start sessions.',
+        })
+      );
       return;
     }
 

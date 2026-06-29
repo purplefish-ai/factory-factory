@@ -128,6 +128,7 @@ export class AcpRuntimeManager {
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private readonly shutdownWaiters = new Set<() => void>();
+  private readonly sessionStopWaiters = new Map<string, Set<() => void>>();
   private isShuttingDown = false;
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
@@ -287,6 +288,8 @@ export class AcpRuntimeManager {
       detached: false,
     });
 
+    this.abortClientCreationIfStopping(child, sessionId);
+
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
     let startupErrorListener: ((error: unknown) => void) | null = null;
@@ -351,9 +354,11 @@ export class AcpRuntimeManager {
     const startupTimeoutMs = this.acpStartupTimeoutMs;
     const startupErrorSettled = startupError.catch(() => undefined);
     const shutdownSignal = this.createShutdownSignal(sessionId);
+    const stopSignal = this.createSessionStopSignal(sessionId);
     const startupCancelOn = Promise.race([
       startupErrorSettled,
       shutdownSignal.promise.catch(() => undefined),
+      stopSignal.promise.catch(() => undefined),
     ]);
 
     try {
@@ -375,6 +380,7 @@ export class AcpRuntimeManager {
         }),
         startupError,
         shutdownSignal.promise,
+        stopSignal.promise,
       ]);
 
       logger.info('ACP connection initialized', {
@@ -393,12 +399,14 @@ export class AcpRuntimeManager {
         }),
         startupError,
         shutdownSignal.promise,
+        stopSignal.promise,
       ]);
     } catch (error) {
       this.cleanupFailedClientCreation(child, sessionId);
       throw error;
     } finally {
       shutdownSignal.dispose();
+      stopSignal.dispose();
       if (startupErrorListener) {
         child.removeListener('error', startupErrorListener);
         startupErrorListener = null;
@@ -409,6 +417,8 @@ export class AcpRuntimeManager {
       this.cleanupFailedClientCreation(child, sessionId);
       throw this.createShutdownError(sessionId);
     }
+
+    this.abortClientCreationIfStopping(child, sessionId);
 
     // Build handle
     const agentCapabilities = initResult.agentCapabilities ?? {};
@@ -450,8 +460,21 @@ export class AcpRuntimeManager {
     });
   }
 
+  private abortClientCreationIfStopping(child: ChildProcess, sessionId: string): void {
+    if (!this.stoppingInProgress.has(sessionId)) {
+      return;
+    }
+
+    this.cleanupFailedClientCreation(child, sessionId);
+    throw this.createStopRequestedError(sessionId);
+  }
+
   private createShutdownError(sessionId: string): Error {
     return new Error(`ACP runtime manager is shutting down; cannot create client ${sessionId}`);
+  }
+
+  private createStopRequestedError(sessionId: string): Error {
+    return new Error(`ACP session stop requested; cannot create client ${sessionId}`);
   }
 
   private beginShutdown(): void {
@@ -464,6 +487,20 @@ export class AcpRuntimeManager {
       rejectShutdown();
     }
     this.shutdownWaiters.clear();
+  }
+
+  private beginSessionStop(sessionId: string): void {
+    this.stoppingInProgress.add(sessionId);
+
+    const stopWaiters = this.sessionStopWaiters.get(sessionId);
+    if (!stopWaiters) {
+      return;
+    }
+
+    for (const rejectStop of stopWaiters) {
+      rejectStop();
+    }
+    this.sessionStopWaiters.delete(sessionId);
   }
 
   private createShutdownSignal(sessionId: string): {
@@ -485,6 +522,38 @@ export class AcpRuntimeManager {
       promise,
       dispose: () => {
         this.shutdownWaiters.delete(rejectShutdown);
+      },
+    };
+  }
+
+  private createSessionStopSignal(sessionId: string): {
+    promise: Promise<never>;
+    dispose: () => void;
+  } {
+    let rejectStop!: () => void;
+    const promise = new Promise<never>((_resolve, reject) => {
+      rejectStop = () => reject(this.createStopRequestedError(sessionId));
+    });
+
+    if (this.stoppingInProgress.has(sessionId)) {
+      rejectStop();
+    } else {
+      const waiters = this.sessionStopWaiters.get(sessionId) ?? new Set<() => void>();
+      waiters.add(rejectStop);
+      this.sessionStopWaiters.set(sessionId, waiters);
+    }
+
+    return {
+      promise,
+      dispose: () => {
+        const waiters = this.sessionStopWaiters.get(sessionId);
+        if (!waiters) {
+          return;
+        }
+        waiters.delete(rejectStop);
+        if (waiters.size === 0) {
+          this.sessionStopWaiters.delete(sessionId);
+        }
       },
     };
   }
@@ -666,14 +735,30 @@ export class AcpRuntimeManager {
       return;
     }
 
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
+    const pendingCreation = this.pendingCreation.get(sessionId);
+    const initialHandle = this.sessions.get(sessionId);
+    if (!(initialHandle || pendingCreation)) {
       return;
     }
 
-    this.stoppingInProgress.add(sessionId);
-    this.managedStopChildren.add(handle.child);
+    this.beginSessionStop(sessionId);
+    let stoppedHandle: AcpProcessHandle | undefined;
     try {
+      if (pendingCreation) {
+        await raceWithSoftTimeout(
+          pendingCreation.catch(() => undefined),
+          5000
+        );
+      }
+
+      const handle = this.sessions.get(sessionId) ?? initialHandle;
+      if (!handle) {
+        return;
+      }
+      stoppedHandle = handle;
+
+      this.managedStopChildren.add(handle.child);
+
       // Cancel prompt if in flight
       if (handle.isPromptInFlight) {
         try {
@@ -713,7 +798,7 @@ export class AcpRuntimeManager {
     } finally {
       this.stoppingInProgress.delete(sessionId);
       const current = this.sessions.get(sessionId);
-      if (current === handle) {
+      if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
       }
     }
@@ -934,6 +1019,7 @@ export class AcpRuntimeManager {
     this.creationLocks.clear();
     this.lockRefCounts.clear();
     this.shutdownWaiters.clear();
+    this.sessionStopWaiters.clear();
 
     logger.info('All ACP clients stopped and cleaned up');
   }

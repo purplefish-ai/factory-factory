@@ -18,6 +18,7 @@ import type {
   HistoryMessage,
 } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { WorkspaceStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
@@ -517,6 +518,7 @@ export class SessionService {
     resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
+    workspaceStatus: WorkspaceStatus;
   } | null> {
     return this.lifecycleService.getSessionOptions(sessionId);
   }
