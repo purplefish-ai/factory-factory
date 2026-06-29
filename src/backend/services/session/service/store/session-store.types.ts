@@ -2,6 +2,13 @@ import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
+export interface RecentMessageRejection {
+  id: string;
+  errorMessage: string;
+  rejectedAt: string;
+  expiresAt: number;
+}
+
 export interface SessionStore {
   sessionId: string;
   initialized: boolean;
@@ -10,6 +17,7 @@ export interface SessionStore {
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   transcript: ChatMessage[];
   queue: QueuedMessage[];
+  recentRejections: RecentMessageRejection[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
   runtime: SessionRuntimeState;
   nextOrder: number;

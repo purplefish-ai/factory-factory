@@ -116,6 +116,32 @@ describe('SessionDomainService', () => {
     );
   });
 
+  it('includes recent rejected message states in reconnect replay', async () => {
+    sessionDomainService.rejectMessage('s1', 'rejected-1', 'Attachment is too large');
+
+    await sessionDomainService.subscribe({
+      sessionId: 's1',
+      sessionRuntime: {
+        phase: 'idle',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: '2026-02-14T00:00:02.000Z',
+      },
+    });
+
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message_state_changed',
+          id: 'rejected-1',
+          newState: 'REJECTED',
+          errorMessage: 'Attachment is too large',
+        }),
+      ])
+    );
+  });
+
   it('markProcessExit clears queue but preserves transcript for reload', () => {
     const listener = vi.fn();
     sessionDomainService.on('pending_request_changed', listener);

@@ -1159,6 +1159,51 @@ describe('chatReducer', () => {
       expect(newState.lastRejectedMessage?.text).toBe('My important message');
       expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
     });
+
+    it('should clear pending messages when replay includes a missed rejected state', () => {
+      let state = chatReducer(createInitialChatState(), {
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id: 'msg-rejected',
+          text: 'This message will be rejected',
+          attachments: [],
+          sessionId: 'session-1',
+        },
+      });
+
+      expect(state.pendingMessages.has('msg-rejected')).toBe(true);
+
+      state = chatReducer(state, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'session_runtime_snapshot',
+              sessionRuntime: {
+                phase: 'idle',
+                processState: 'alive',
+                activity: 'IDLE',
+                updatedAt: '2026-02-08T00:00:00.000Z',
+              },
+            },
+            {
+              type: 'message_state_changed',
+              id: 'msg-rejected',
+              newState: MessageState.REJECTED,
+              errorMessage: 'Empty message',
+            },
+          ],
+        },
+      });
+
+      expect(state.pendingMessages.has('msg-rejected')).toBe(false);
+      expect(state.lastRejectedMessage).toEqual({
+        text: 'This message will be rejected',
+        attachments: [],
+        error: 'Empty message',
+        sessionId: 'session-1',
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
