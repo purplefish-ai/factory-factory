@@ -620,6 +620,11 @@ describe('SessionLifecycleService startSession pending workspace notifications',
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Fix the failing checks');
+    const dispatchOrder = tryDispatchNextMessage.mock.invocationCallOrder[0];
+    const sendOrder = sendSessionMessage.mock.invocationCallOrder[0];
+    expect(dispatchOrder).toBeDefined();
+    expect(sendOrder).toBeDefined();
+    expect(dispatchOrder!).toBeLessThan(sendOrder!);
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {
