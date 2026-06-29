@@ -261,6 +261,53 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('listWithKanbanState returns FAILED workspaces from the WORKING cache bucket', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'w1',
+        status: WorkspaceStatus.FAILED,
+        prUrl: null,
+        prState: PRState.NONE,
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetState: RatchetState.IDLE,
+        runScriptStatus: RunScriptStatus.IDLE,
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WORKING',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: [],
+      isSessionWorking: false,
+      isWorking: false,
+      flowState: {
+        hasActivePr: false,
+        isWorking: false,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({
+      projectId: 'proj-1',
+      kanbanColumn: 'WORKING',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'w1',
+      status: WorkspaceStatus.FAILED,
+      kanbanColumn: 'WORKING',
+    });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
+      kanbanColumn: 'WORKING',
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
   it('surfaces session runtime errors in initial workspace query paths', async () => {
     const erroredWorkspace = {
       id: 'w1',

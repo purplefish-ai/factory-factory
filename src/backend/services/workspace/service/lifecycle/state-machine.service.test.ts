@@ -154,7 +154,7 @@ describe('WorkspaceStateMachineService', () => {
     });
 
     it('should transition from PROVISIONING to FAILED with error message', async () => {
-      const workspace = { id: 'ws-1', status: 'PROVISIONING' };
+      const workspace = { id: 'ws-1', status: 'PROVISIONING', cachedKanbanColumn: 'WAITING' };
       const updatedWorkspace = {
         ...workspace,
         status: 'FAILED',
@@ -174,8 +174,30 @@ describe('WorkspaceStateMachineService', () => {
         where: { id: 'ws-1', status: 'PROVISIONING' },
         data: expect.objectContaining({
           status: 'FAILED',
+          cachedKanbanColumn: 'WORKING',
+          stateComputedAt: expect.any(Date),
           initCompletedAt: expect.any(Date),
           initErrorMessage: 'Git clone failed',
+        }),
+      });
+    });
+
+    it('should update cached kanban column when transitioning to FAILED', async () => {
+      const workspace = { id: 'ws-1', status: 'PROVISIONING', cachedKanbanColumn: 'WAITING' };
+      const updatedWorkspace = { ...workspace, status: 'FAILED', cachedKanbanColumn: 'WORKING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      await workspaceStateMachine.transition('ws-1', 'FAILED');
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', status: 'PROVISIONING' },
+        data: expect.objectContaining({
+          status: 'FAILED',
+          cachedKanbanColumn: 'WORKING',
+          stateComputedAt: expect.any(Date),
         }),
       });
     });
@@ -264,7 +286,7 @@ describe('WorkspaceStateMachineService', () => {
     });
 
     it('should transition from READY to ARCHIVING', async () => {
-      const workspace = { id: 'ws-1', status: 'READY' };
+      const workspace = { id: 'ws-1', status: 'READY', cachedKanbanColumn: 'WAITING' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
 
       mockFindUnique.mockResolvedValue(workspace);
@@ -274,6 +296,13 @@ describe('WorkspaceStateMachineService', () => {
       const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVING');
 
       expect(result.status).toBe('ARCHIVING');
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', status: 'READY' },
+        data: expect.not.objectContaining({
+          cachedKanbanColumn: expect.anything(),
+          stateComputedAt: expect.anything(),
+        }),
+      });
     });
 
     it('should transition from FAILED to ARCHIVING', async () => {
@@ -356,8 +385,18 @@ describe('WorkspaceStateMachineService', () => {
     });
 
     it('should transition from FAILED to PROVISIONING (retry)', async () => {
-      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
-      const updatedWorkspace = { ...workspace, status: 'PROVISIONING', initRetryCount: 2 };
+      const workspace = {
+        id: 'ws-1',
+        status: 'FAILED',
+        initRetryCount: 1,
+        cachedKanbanColumn: 'WAITING',
+      };
+      const updatedWorkspace = {
+        ...workspace,
+        status: 'PROVISIONING',
+        initRetryCount: 2,
+        cachedKanbanColumn: 'WORKING',
+      };
 
       mockFindUnique
         .mockResolvedValueOnce(workspace) // First call for status check
@@ -375,6 +414,8 @@ describe('WorkspaceStateMachineService', () => {
         },
         data: expect.objectContaining({
           status: 'PROVISIONING',
+          cachedKanbanColumn: 'WORKING',
+          stateComputedAt: expect.any(Date),
           initRetryCount: { increment: 1 },
           initStartedAt: expect.any(Date),
           initErrorMessage: null,
