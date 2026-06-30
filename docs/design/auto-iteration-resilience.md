@@ -38,7 +38,7 @@ Auto-iteration has no equivalent watchdog. A stuck loop persists indefinitely at
 
 ### P4: Session death not surfaced to auto-iteration
 
-When an ACP child process exits, `wireChildExitHandler` (`acp-runtime-manager.ts:861`) fires, which calls `onExit` in the session lifecycle service (`session.lifecycle.service.ts:409`). This marks the session as `COMPLETED` and deletes it from the runtime map.
+When an ACP child process exits, `wireChildExitHandler` (`acp-runtime-manager.ts:861`) fires, which calls `onExit` in the session lifecycle service (`session.lifecycle.service.ts:441`). This marks the session as `COMPLETED` on successful exit (exit code 0) or `FAILED` otherwise, and deletes it from the runtime map.
 
 However, the auto-iteration service is **not notified**. The blocked `sendPrompt` call may reject via stream error when the child dies, and the `runLoop` catch handler sets status to `FAILED` — but this relies on the stream error propagating correctly through the ACP SDK, which is not guaranteed for all death modes (SIGKILL, OOM killer, etc.).
 
