@@ -14,15 +14,19 @@ export function createCorsMiddleware(appContext: AppContext) {
     const ALLOWED_ORIGINS = appContext.services.configService.getCorsConfig().allowedOrigins;
 
     const origin = req.headers.origin;
-    if (origin && isOriginAllowed(origin, ALLOWED_ORIGINS)) {
+    const allowCredentials = Boolean(
+      origin && origin !== 'null' && isOriginAllowed(origin, ALLOWED_ORIGINS)
+    );
+
+    if (allowCredentials && origin) {
       res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header(
       'Access-Control-Allow-Headers',
       'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Top-Level-Task-Id'
     );
-    res.header('Access-Control-Allow-Credentials', 'true');
 
     if (req.method === 'OPTIONS') {
       res.sendStatus(200);
