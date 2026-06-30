@@ -171,8 +171,8 @@ export interface SessionInitPolicyBridge {
 }
 
 export interface SessionWorkspaceBridge {
-  markSessionRunning(sessionId: string): void
-  markSessionIdle(sessionId: string): void
+  markSessionRunning(workspaceId: string, sessionId: string): number
+  markSessionIdle(workspaceId: string, sessionId: string, generation?: number): void
   on(event: string, handler: (...args: any[]) => void): void
 }
 ```
