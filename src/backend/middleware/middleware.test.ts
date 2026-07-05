@@ -247,12 +247,22 @@ describe('corsMiddleware', () => {
       );
     });
 
-    it('should set Access-Control-Allow-Credentials header to true', () => {
-      const mockReq = createMockReq();
+    it('should set Access-Control-Allow-Credentials header to true for an allowed origin', () => {
+      const mockReq = createMockReq({
+        headers: { origin: 'http://localhost:3000' },
+      });
 
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Credentials']).toBe('true');
+    });
+
+    it('should not set Access-Control-Allow-Credentials when no origin header is present', () => {
+      const mockReq = createMockReq();
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
   });
 
