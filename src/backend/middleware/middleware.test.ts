@@ -173,6 +173,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
 
     it('should not set Access-Control-Allow-Origin when no origin header is present', () => {
@@ -181,6 +182,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
 
     it('should use custom allowed origins from config', () => {
@@ -209,6 +211,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
 
     it('should allow equivalent loopback origins when custom config uses localhost', () => {

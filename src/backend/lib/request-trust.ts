@@ -122,31 +122,81 @@ function getEffectivePort(url: URL): string {
   return url.protocol === 'https:' ? '443' : '80';
 }
 
+const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'] as const;
+
+/**
+ * Parses `value` and returns its URL only when it is a canonical origin string
+ * whose host is a loopback hostname (localhost / 127.x / ::1). Returns
+ * `undefined` otherwise.
+ */
+function parseCanonicalLoopbackOrigin(value: string): URL | undefined {
+  const parsed = parseOrigin(value);
+  if (parsed && isCanonicalOriginUrl(value, parsed) && isLoopbackHostname(parsed.hostname)) {
+    return parsed;
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the `Access-Control-Allow-Origin` value to echo for a request origin.
+ *
+ * The returned value is always taken from (or derived from) the trusted
+ * allowlist — never the raw request header — so credentialed CORS responses
+ * never carry user-controlled input in the origin header. Returns `undefined`
+ * when the origin is not allowed.
+ *
+ * Loopback-equivalent hosts (localhost ↔ 127.0.0.1 ↔ [::1]) are matched by
+ * building concrete origin variants from each trusted loopback origin and
+ * returning the variant that equals the request origin, so the browser still
+ * receives an exact match while the emitted value provably originates from the
+ * allowlist.
+ */
+export function resolveAllowedOrigin(
+  origin: string,
+  allowedOrigins: readonly string[]
+): string | undefined {
+  const exactMatch = allowedOrigins.find((allowed) => allowed === origin);
+  if (exactMatch !== undefined) {
+    return exactMatch;
+  }
+
+  if (!parseCanonicalLoopbackOrigin(origin)) {
+    return undefined;
+  }
+
+  for (const allowedOrigin of allowedOrigins) {
+    const parsedAllowedOrigin = parseCanonicalLoopbackOrigin(allowedOrigin);
+    if (!parsedAllowedOrigin) {
+      continue;
+    }
+
+    const effectivePort = getEffectivePort(parsedAllowedOrigin);
+    const defaultPort = parsedAllowedOrigin.protocol === 'https:' ? '443' : '80';
+    const portSuffix = effectivePort === defaultPort ? '' : `:${effectivePort}`;
+    for (const hostname of LOOPBACK_HOSTNAMES) {
+      const candidate = `${parsedAllowedOrigin.protocol}//${hostname}${portSuffix}`;
+      if (candidate === origin) {
+        return candidate;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export function isOriginAllowed(origin: string, allowedOrigins: readonly string[]): boolean {
   if (allowedOrigins.includes(origin)) {
     return true;
   }
 
-  const parsedOrigin = parseOrigin(origin);
-  if (
-    !(
-      parsedOrigin &&
-      isCanonicalOriginUrl(origin, parsedOrigin) &&
-      isLoopbackHostname(parsedOrigin.hostname)
-    )
-  ) {
+  const parsedOrigin = parseCanonicalLoopbackOrigin(origin);
+  if (!parsedOrigin) {
     return false;
   }
 
   return allowedOrigins.some((allowedOrigin) => {
-    const parsedAllowedOrigin = parseOrigin(allowedOrigin);
-    if (
-      !(
-        parsedAllowedOrigin &&
-        isCanonicalOriginUrl(allowedOrigin, parsedAllowedOrigin) &&
-        isLoopbackHostname(parsedAllowedOrigin.hostname)
-      )
-    ) {
+    const parsedAllowedOrigin = parseCanonicalLoopbackOrigin(allowedOrigin);
+    if (!parsedAllowedOrigin) {
       return false;
     }
 

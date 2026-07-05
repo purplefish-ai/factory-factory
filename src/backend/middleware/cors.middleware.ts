@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { AppContext } from '@/backend/app-context';
-import { isOriginAllowed } from '@/backend/lib/request-trust';
+import { resolveAllowedOrigin } from '@/backend/lib/request-trust';
 
 /**
  * CORS middleware.
@@ -18,9 +18,15 @@ export function createCorsMiddleware(appContext: AppContext) {
       // Dev-only bypass: no credentials header is set, so browsers cannot issue
       // credentialed cross-origin requests even though the origin check is skipped.
       res.header('Access-Control-Allow-Origin', '*');
-    } else if (origin && isOriginAllowed(origin, corsConfig.allowedOrigins)) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
+    } else if (origin) {
+      // Echo a value taken from the trusted allowlist (never the raw request
+      // header) so credentialed responses never carry user-controlled input in
+      // the Access-Control-Allow-Origin header.
+      const allowedOrigin = resolveAllowedOrigin(origin, corsConfig.allowedOrigins);
+      if (allowedOrigin !== undefined) {
+        res.header('Access-Control-Allow-Origin', allowedOrigin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header(
