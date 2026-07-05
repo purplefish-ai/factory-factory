@@ -70,6 +70,7 @@ export interface NotificationConfig {
 export interface CorsConfig {
   allowedOrigins: string[];
   trustedLocalCidrs?: string[];
+  disabled?: boolean;
 }
 
 /**
@@ -254,6 +255,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
           .map((cidr) => cidr.trim())
           .filter(Boolean)
       : [],
+    disabled: env.CORS_DISABLE,
   };
 }
 
@@ -555,6 +557,7 @@ class ConfigService {
     return {
       allowedOrigins: [...this.config.cors.allowedOrigins],
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
+      disabled: this.config.cors.disabled,
     };
   }
 

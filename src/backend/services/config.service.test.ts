@@ -119,6 +119,7 @@ describe('configService environment accessors', () => {
     expect(configService.getCorsConfig()).toEqual({
       allowedOrigins: ['http://localhost:9999', 'https://example.com'],
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],
+      disabled: false,
     });
     expect(configService.getDebugConfig()).toEqual({ chatWebSocket: true });
     expect(configService.getCompressionConfig()).toEqual({ enabled: false });

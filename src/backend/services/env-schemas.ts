@@ -89,6 +89,7 @@ export const ConfigEnvSchema = z.object({
   NOTIFICATION_QUIET_HOURS_START: HourEnvSchema.optional().catch(undefined),
   NOTIFICATION_QUIET_HOURS_END: HourEnvSchema.optional().catch(undefined),
   CORS_ALLOWED_ORIGINS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  CORS_DISABLE: z.preprocess(parseBoolean, z.boolean()).catch(false),
   TRUSTED_LOCAL_CIDRS: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

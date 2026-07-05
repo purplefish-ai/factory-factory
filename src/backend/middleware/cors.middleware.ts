@@ -11,10 +11,12 @@ import { isOriginAllowed } from '@/backend/lib/request-trust';
  */
 export function createCorsMiddleware(appContext: AppContext) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const ALLOWED_ORIGINS = appContext.services.configService.getCorsConfig().allowedOrigins;
-
+    const corsConfig = appContext.services.configService.getCorsConfig();
     const origin = req.headers.origin;
-    if (origin && isOriginAllowed(origin, ALLOWED_ORIGINS)) {
+
+    if (corsConfig.disabled) {
+      res.header('Access-Control-Allow-Origin', origin ?? '*');
+    } else if (origin && isOriginAllowed(origin, corsConfig.allowedOrigins)) {
       res.header('Access-Control-Allow-Origin', origin);
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
