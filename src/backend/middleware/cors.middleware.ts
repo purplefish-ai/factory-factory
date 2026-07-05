@@ -15,20 +15,12 @@ export function createCorsMiddleware(appContext: AppContext) {
     const origin = req.headers.origin;
 
     if (corsConfig.disabled) {
+      // Dev-only bypass: no credentials header is set, so browsers cannot issue
+      // credentialed cross-origin requests even though the origin check is skipped.
       res.header('Access-Control-Allow-Origin', '*');
-    } else if (origin) {
-      // Use the value from the trusted allowlist rather than reflecting the raw
-      // request origin, so static analysis sees no user-controlled input in the
-      // Access-Control-Allow-Origin header for credentialed responses.
-      const exactMatch = corsConfig.allowedOrigins.find((o) => o === origin);
-      if (exactMatch !== undefined) {
-        res.header('Access-Control-Allow-Origin', exactMatch);
-        res.header('Access-Control-Allow-Credentials', 'true');
-      } else if (isOriginAllowed(origin, corsConfig.allowedOrigins)) {
-        // Loopback-equivalence match (127.x.x.x ↔ localhost): allow the request
-        // without credentials — CORS_DISABLE covers dev; this handles edge cases.
-        res.header('Access-Control-Allow-Origin', origin);
-      }
+    } else if (origin && isOriginAllowed(origin, corsConfig.allowedOrigins)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header(
