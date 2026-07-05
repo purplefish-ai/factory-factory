@@ -266,6 +266,51 @@ describe('corsMiddleware', () => {
     });
   });
 
+  describe('CORS_DISABLE mode', () => {
+    beforeEach(() => {
+      mockGetCorsConfig.mockReturnValue({
+        allowedOrigins: ['http://localhost:3000'],
+        disabled: true,
+      });
+      const appContext = toAppContext({
+        services: {
+          configService: {
+            getCorsConfig: () => mockGetCorsConfig(),
+          },
+        },
+      });
+      corsMiddleware = createCorsMiddleware(appContext);
+    });
+
+    it('should set Access-Control-Allow-Origin to * when disabled', () => {
+      const mockReq = createMockReq({
+        headers: { origin: 'http://evil.com' },
+      });
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('*');
+    });
+
+    it('should NOT set Access-Control-Allow-Credentials when disabled', () => {
+      const mockReq = createMockReq({
+        headers: { origin: 'http://evil.com' },
+      });
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Credentials']).toBeUndefined();
+    });
+
+    it('should set Access-Control-Allow-Origin to * even without an origin header when disabled', () => {
+      const mockReq = createMockReq({ headers: {} });
+
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
+
+      expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('*');
+    });
+  });
+
   describe('preflight request handling', () => {
     it('should handle OPTIONS preflight requests with 200 status', () => {
       const mockReq = createMockReq({
