@@ -25,6 +25,7 @@ export function createCorsMiddleware(appContext: AppContext) {
       const allowedOrigin = resolveAllowedOrigin(origin, corsConfig.allowedOrigins);
       if (allowedOrigin !== undefined) {
         res.header('Access-Control-Allow-Origin', allowedOrigin);
+        res.vary('Origin');
         res.header('Access-Control-Allow-Credentials', 'true');
       }
     }

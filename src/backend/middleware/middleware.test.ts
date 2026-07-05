@@ -33,6 +33,9 @@ function createMockRes() {
     header: vi.fn((name: string, value: string) => {
       headers[name] = value;
     }),
+    vary: vi.fn((field: string) => {
+      headers['Vary'] = field;
+    }),
     sendStatus: vi.fn(),
     on: vi.fn((event: string, callback: () => void) => {
       if (event === 'finish') {
@@ -143,6 +146,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://localhost:3000');
+      expect(mockRes.headers['Vary']).toBe('Origin');
     });
 
     it('should set Access-Control-Allow-Origin for allowed origins (default localhost:3001)', () => {
