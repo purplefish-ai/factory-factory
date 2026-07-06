@@ -87,7 +87,7 @@
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.25.3",
+    "@agentclientprotocol/claude-agent-acp": "^0.55.0",
     "@agentclientprotocol/sdk": "0.15.0",
     "@hookform/resolvers": "^5.2.2",
     "@linear/sdk": "^76.0.0",
