@@ -61,7 +61,7 @@
 - `@prisma/client` `7.7.0`, `prisma` `7.7.0`, `@prisma/adapter-better-sqlite3` `7.7.0` - generated Prisma client and SQLite adapter used by `src/backend/db.ts`
 - `better-sqlite3` `^12.6.2` - native SQLite driver required by Prisma's better-sqlite3 adapter
 - `@agentclientprotocol/sdk` `0.15.0` - ACP JSON-RPC/session protocol used by `src/backend/services/session/service/acp/`
-- `@agentclientprotocol/claude-agent-acp` `^0.25.3` - Claude ACP adapter binary resolved in `src/backend/services/session/service/acp/acp-runtime-manager.ts`
+- `@agentclientprotocol/claude-agent-acp` `^0.55.0` - Claude ACP adapter binary resolved in `src/backend/services/session/service/acp/acp-runtime-manager.ts`
 - `@linear/sdk` `^76.0.0` - Linear API client in `src/backend/services/linear/service/linear-client.service.ts`
 - `ws` `^8.19.0` - WebSocket server in `src/backend/server.ts` and handlers under `src/backend/routers/websocket/`
 - `node-pty` `^1.1.0` - interactive terminal service in `src/backend/services/terminal/service/terminal.service.ts`
