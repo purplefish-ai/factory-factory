@@ -163,6 +163,7 @@ describe('userSettingsRouter', () => {
           { value: 'sonnet', label: 'Sonnet' },
           { value: 'opus', label: 'Opus' },
           { value: 'haiku', label: 'Haiku' },
+          { value: 'fable', label: 'Fable' },
         ],
         efforts: [
           { value: 'low', label: 'Low' },
