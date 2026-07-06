@@ -21,7 +21,7 @@ import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import { SessionStatus } from '@/shared/core';
+import { SessionStatus, type WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -43,6 +43,10 @@ import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
 const logger = createLogger('session');
 
+function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
+  return exitCode === 0 ? SessionStatus.COMPLETED : SessionStatus.FAILED;
+}
+
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 type SessionContext = {
@@ -51,6 +55,7 @@ type SessionContext = {
   systemPrompt: string | undefined;
   model: string;
   workspaceId: string;
+  workspaceStatus: WorkspaceStatus;
   parentWorkspaceId?: string | null;
 };
 
@@ -164,7 +169,11 @@ export class SessionLifecycleService {
     logger.info('Session started', { sessionId, provider: session.provider });
   }
 
-  async restartSession(sessionId: string, sendSessionMessage: SendSessionMessage): Promise<void> {
+  async restartSession(
+    sessionId: string,
+    sendSessionMessage: SendSessionMessage,
+    options?: StartSessionOptions
+  ): Promise<void> {
     const isRunning = this.runtimeManager.isSessionRunning(sessionId);
     const isStopInProgress = this.runtimeManager.isStopInProgress(sessionId);
 
@@ -185,10 +194,14 @@ export class SessionLifecycleService {
         });
       }
     }
-    await this.startSession(sessionId, sendSessionMessage, {
-      initialPrompt: 'Continue with the task.',
-      initialPromptIsDefault: true,
-    });
+    await this.startSession(
+      sessionId,
+      sendSessionMessage,
+      options ?? {
+        initialPrompt: 'Continue with the task.',
+        initialPromptIsDefault: true,
+      }
+    );
     logger.info('Session restarted', { sessionId });
   }
 
@@ -263,6 +276,7 @@ export class SessionLifecycleService {
 
   async stopWorkspaceSessions(workspaceId: string): Promise<void> {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
+    const stopErrors: unknown[] = [];
 
     for (const session of sessions) {
       if (
@@ -277,8 +291,15 @@ export class SessionLifecycleService {
             workspaceId,
             error: error instanceof Error ? error.message : String(error),
           });
+          stopErrors.push(error);
         }
       }
+    }
+
+    if (stopErrors.length > 0) {
+      throw new Error(
+        `Failed to stop ${stopErrors.length} workspace session${stopErrors.length === 1 ? '' : 's'}`
+      );
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -365,6 +386,7 @@ export class SessionLifecycleService {
     resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
+    workspaceStatus: WorkspaceStatus;
   } | null> {
     const sessionContext = await this.loadSessionContext(sessionId);
     if (!sessionContext) {
@@ -376,6 +398,7 @@ export class SessionLifecycleService {
       resumeProviderSessionId: sessionContext.resumeProviderSessionId,
       systemPrompt: sessionContext.systemPrompt,
       model: sessionContext.model,
+      workspaceStatus: sessionContext.workspaceStatus,
     };
   }
 
@@ -425,10 +448,15 @@ export class SessionLifecycleService {
 
         try {
           this.sessionDomainService.markProcessExit(sid, exitCode);
+          const persistedStatus = getPersistedStatusForExitCode(exitCode);
           const session = await this.repository.updateSession(sid, {
-            status: SessionStatus.COMPLETED,
+            status: persistedStatus,
           });
-          logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
+          logger.debug('Updated ACP session status on exit', {
+            sessionId: sid,
+            exitCode,
+            status: persistedStatus,
+          });
 
           await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
           void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
@@ -938,6 +966,7 @@ export class SessionLifecycleService {
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,
+      workspaceStatus: workspace.status,
       parentWorkspaceId: workspace.parentWorkspaceId,
     };
   }

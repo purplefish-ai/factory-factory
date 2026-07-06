@@ -209,6 +209,17 @@ function clickButton(container: HTMLDivElement, label: string) {
   });
 }
 
+async function waitForButtonEnabled(container: HTMLDivElement, label: string) {
+  const timeoutAt = Date.now() + 1000;
+
+  while (findButton(container, label).disabled) {
+    if (Date.now() > timeoutAt) {
+      throw new Error(`${label} button did not become enabled`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 function changeTextarea(container: HTMLDivElement, value: string) {
   const textarea = container.querySelector('textarea');
   if (!textarea) {
@@ -404,7 +415,7 @@ describe('IssueLaunchSheet', () => {
 
     expect(findButton(container, 'Start').disabled).toBe(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForButtonEnabled(container, 'Start');
 
     expect(findButton(container, 'Start').disabled).toBe(false);
 

@@ -261,6 +261,53 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('listWithKanbanState returns FAILED workspaces from the WORKING cache bucket', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'w1',
+        status: WorkspaceStatus.FAILED,
+        prUrl: null,
+        prState: PRState.NONE,
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetState: RatchetState.IDLE,
+        runScriptStatus: RunScriptStatus.IDLE,
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WORKING',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: [],
+      isSessionWorking: false,
+      isWorking: false,
+      flowState: {
+        hasActivePr: false,
+        isWorking: false,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({
+      projectId: 'proj-1',
+      kanbanColumn: 'WORKING',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: 'w1',
+      status: WorkspaceStatus.FAILED,
+      kanbanColumn: 'WORKING',
+    });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
+      kanbanColumn: 'WORKING',
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
   it('surfaces session runtime errors in initial workspace query paths', async () => {
     const erroredWorkspace = {
       id: 'w1',
@@ -615,6 +662,30 @@ describe('WorkspaceQueryService', () => {
 
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
       queued: 2,
+    });
+  });
+
+  it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
+    let resolveLookup:
+      | ((workspaces: Array<{ id: string; prUrl: string | null }>) => void)
+      | undefined;
+    const lookupPromise = new Promise<Array<{ id: string; prUrl: string | null }>>((resolve) => {
+      resolveLookup = resolve;
+    });
+
+    mockFindByProjectIdWithSessions.mockReturnValueOnce(lookupPromise);
+    mockRefreshWorkspace.mockResolvedValueOnce({ success: true });
+
+    const firstSync = workspaceQueryService.syncAllPRStatuses('p1');
+    await Promise.resolve();
+
+    await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledTimes(1);
+
+    resolveLookup?.([{ id: 'w1', prUrl: 'https://github.com/o/r/pull/1' }]);
+    await expect(firstSync).resolves.toEqual({ queued: 1 });
+    await vi.waitFor(() => {
+      expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
     });
   });
 

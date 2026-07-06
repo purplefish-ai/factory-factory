@@ -192,6 +192,20 @@ function setupSuccessfulSpawn() {
   return child;
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 // ---- Tests ----
 
 describe('AcpRuntimeManager', () => {
@@ -788,6 +802,34 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBeUndefined();
     });
 
+    it('clears the SIGTERM grace-period timeout when the child exits quickly', async () => {
+      const child = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      child.kill = vi.fn(() => {
+        child.exitCode = 0;
+        child.emit('exit', 0, null);
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        await manager.stopClient('session-1');
+
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('escalates to SIGKILL after timeout', async () => {
       const child = setupSuccessfulSpawn();
 
@@ -880,6 +922,41 @@ describe('AcpRuntimeManager', () => {
       ]);
 
       expect(result2).toBeUndefined();
+    });
+
+    it('aborts in-flight client creation and kills the spawned subprocess', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep creation pending until the per-session stop aborts it.
+          })
+      );
+
+      const createPromise = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const createRejection = createPromise.catch((error: unknown) => error);
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+        expect(manager.getPendingClient('session-1')).toBeDefined();
+      });
+
+      await manager.stopClient('session-1');
+
+      await expect(createRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP session stop requested'),
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(manager.isStopInProgress('session-1')).toBe(false);
+      expect(manager.getClient('session-1')).toBeUndefined();
+      expect(manager.getPendingClient('session-1')).toBeUndefined();
     });
 
     it('skips exit handler when stop is in progress', async () => {
@@ -1026,7 +1103,7 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBe(newHandle);
     });
 
-    it('keeps newer client tracked when old stop exits later', async () => {
+    it('rejects client creation while a stop is in progress', async () => {
       const firstChild = setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -1052,22 +1129,77 @@ describe('AcpRuntimeManager', () => {
       const secondChild = createMockChildProcess();
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      const restartedHandle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-      expect(restartedHandle.child).toBe(secondChild);
+      await expect(
+        manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session stop requested');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGKILL');
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);
       await stopPromise;
 
-      expect(manager.getClient('session-1')).toBe(restartedHandle);
+      expect(manager.getClient('session-1')).toBeUndefined();
     });
 
-    it('preserves in-flight pending creation when stale stop exit fires', async () => {
+    it('wires child error handlers before aborting creation during stop', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      // SIGTERM marks the old process as no longer running, but delay exit.
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        return true;
+      });
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+      });
+
+      const secondChild = createMockChildProcess();
+      secondChild.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          secondChild.emit('error', new Error('cleanup child error'));
+        }
+        if (signal === 'SIGKILL') {
+          secondChild.exitCode = 137;
+          secondChild.emit('exit', 137, 'SIGKILL');
+        }
+        return true;
+      });
+      mockSpawn.mockReturnValueOnce(secondChild);
+      const handlers = defaultHandlers();
+
+      await expect(
+        manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext())
+      ).rejects.toThrow('ACP session stop requested');
+
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(secondChild.kill).toHaveBeenCalledWith('SIGKILL');
+      await vi.waitFor(() => {
+        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+      });
+
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
+      await stopPromise;
+    });
+
+    it('clears creation lock bookkeeping when stop rejects a concurrent create', async () => {
       const firstChild = setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -1093,54 +1225,163 @@ describe('AcpRuntimeManager', () => {
       const secondChild = createMockChildProcess();
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      let resolveSecondInit!: (value: {
-        protocolVersion: number;
-        agentCapabilities: Record<string, unknown>;
-        agentInfo: { name: string };
-      }) => void;
-      mockInitialize.mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecondInit = resolve;
-          })
-      );
+      await expect(
+        manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session stop requested');
 
-      const pendingRestart = manager.getOrCreateClient(
+      const internalManager = manager as unknown as {
+        creationLocks: Map<string, unknown>;
+        lockRefCounts: Map<string, number>;
+      };
+      expect(internalManager.creationLocks.has('session-1')).toBe(false);
+      expect(internalManager.lockRefCounts.has('session-1')).toBe(false);
+
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
+
+      await stopPromise;
+    });
+  });
+
+  describe('stopAllClients', () => {
+    it('clears per-client shutdown timeouts when clients stop quickly', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
         'session-1',
         defaultOptions(),
         defaultHandlers(),
         defaultContext()
       );
 
+      const secondChild = createMockChildProcess();
+      mockSpawn.mockReturnValueOnce(secondChild);
+
+      await manager.getOrCreateClient(
+        'session-2',
+        { ...defaultOptions(), sessionId: 'session-2' },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      firstChild.kill = vi.fn(() => {
+        firstChild.exitCode = 0;
+        firstChild.emit('exit', 0, null);
+        return true;
+      });
+      secondChild.kill = vi.fn(() => {
+        secondChild.exitCode = 0;
+        secondChild.emit('exit', 0, null);
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        await manager.stopAllClients(10_000);
+
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(vi.getTimerCount()).toBe(0);
+        expect([...manager.getAllClients()]).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects new client creation after shutdown begins', async () => {
+      await manager.stopAllClients();
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-after-shutdown',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP runtime manager is shutting down');
+
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('aborts in-flight client creation and kills the spawned subprocess', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep creation pending until shutdown aborts it.
+          })
+      );
+
+      const createPromise = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const createRejection = createPromise.catch((error: unknown) => error);
+
       await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
       });
 
-      const pendingBeforeStaleExit = manager.getPendingClient('session-1');
-      expect(pendingBeforeStaleExit).toBeDefined();
+      await manager.stopAllClients(50);
 
-      firstChild.exitCode = 0;
-      firstChild.emit('exit', 0, null);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await expect(createRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(manager.getClient('session-1')).toBeUndefined();
+      expect(manager.getPendingClient('session-1')).toBeUndefined();
+    });
 
-      expect(manager.getPendingClient('session-1')).toBe(pendingBeforeStaleExit);
-      const internalManager = manager as unknown as {
-        creationLocks: Map<string, unknown>;
-        lockRefCounts: Map<string, number>;
-      };
-      expect(internalManager.creationLocks.has('session-1')).toBe(true);
-      expect(internalManager.lockRefCounts.get('session-1')).toBeGreaterThan(0);
+    it('rejects queued creation requests after an in-flight creation is aborted', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep the first creation holding the per-session lock.
+          })
+      );
 
-      resolveSecondInit({
-        protocolVersion: 1,
-        agentCapabilities: {},
-        agentInfo: { name: 'test' },
+      const firstCreate = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const firstRejection = firstCreate.catch((error: unknown) => error);
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
       });
 
-      const restartedHandle = await pendingRestart;
-      expect(restartedHandle.child).toBe(secondChild);
+      const secondCreate = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const secondRejection = secondCreate.catch((error: unknown) => error);
 
-      await stopPromise;
+      await manager.stopAllClients(50);
+
+      await expect(firstRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      await expect(secondRejection).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(manager.getClient('session-1')).toBeUndefined();
     });
   });
 
@@ -1258,6 +1499,122 @@ describe('AcpRuntimeManager', () => {
         expect(child.kill).toHaveBeenCalledWith('SIGTERM');
         expect(manager.getClient('session-1')).toBeUndefined();
         expect(handle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not clear or stop a replacement session when timeout cancel hangs', async () => {
+      setupSuccessfulSpawn();
+      mockPrompt.mockReturnValue(new Promise(() => undefined));
+      mockCancel.mockReturnValue(new Promise(() => undefined));
+
+      const firstHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      vi.useFakeTimers();
+
+      try {
+        const stalePrompt = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'old prompt' }],
+          100
+        );
+        const staleRejection = stalePrompt.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(mockCancel).toHaveBeenCalledTimes(1);
+
+        const internalManager = manager as unknown as {
+          sessions: Map<string, typeof firstHandle>;
+        };
+        internalManager.sessions.delete('session-1');
+
+        const replacementChild = setupSuccessfulSpawn();
+        const replacementHandle = await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        replacementHandle.isPromptInFlight = true;
+
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(staleRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        expect(replacementChild.kill).not.toHaveBeenCalled();
+        expect(manager.getClient('session-1')).toBe(replacementHandle);
+        expect(firstHandle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not cancel a replacement session when an old prompt timeout fires', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      mockPrompt.mockReturnValueOnce(new Promise(() => undefined));
+      mockCancel.mockResolvedValue(undefined);
+
+      const firstHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          firstChild.killed = true;
+          firstChild.exitCode = 0;
+          firstChild.emit('exit', 0, null);
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        const stalePrompt = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'old prompt' }],
+          100
+        );
+        const staleRejection = stalePrompt.catch((error: unknown) => error);
+
+        await manager.stopClient('session-1');
+        expect(manager.getClient('session-1')).toBeUndefined();
+
+        const replacementPrompt = createDeferred<{ stopReason: string }>();
+        setupSuccessfulSpawn();
+        mockPrompt.mockReturnValueOnce(replacementPrompt.promise);
+        const replacementHandle = await manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        const replacementSend = manager.sendPrompt('session-1', [
+          { type: 'text', text: 'new prompt' },
+        ]);
+        await Promise.resolve();
+
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        const cancelCallsBeforeStaleTimeout = mockCancel.mock.calls.length;
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await expect(staleRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(mockCancel).toHaveBeenCalledTimes(cancelCallsBeforeStaleTimeout);
+        expect(replacementHandle.isPromptInFlight).toBe(true);
+        expect(firstHandle.isPromptInFlight).toBe(false);
+
+        replacementPrompt.resolve({ stopReason: 'end_turn' });
+        await expect(replacementSend).resolves.toEqual({ stopReason: 'end_turn' });
+        expect(replacementHandle.isPromptInFlight).toBe(false);
       } finally {
         vi.useRealTimers();
       }

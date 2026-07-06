@@ -2,13 +2,33 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket } from 'ws';
 import type { AppServices } from '@/backend/app-context';
+import { isOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-trust';
 
 type WebSocketOriginLogger = Pick<ReturnType<AppServices['createLogger']>, 'warn'>;
 type WebSocketOriginConfigService = Pick<AppServices['configService'], 'getCorsConfig'>;
 
+const FORWARDED_CLIENT_ADDRESS_HEADERS = [
+  'forwarded',
+  'x-forwarded-for',
+  'x-real-ip',
+  'x-client-ip',
+  'cf-connecting-ip',
+  'true-client-ip',
+] as const;
+
+function getForwardedClientAddressHeaders(request: IncomingMessage): string[] {
+  return FORWARDED_CLIENT_ADDRESS_HEADERS.filter((header) => request.headers[header] !== undefined);
+}
+
 export function sendBadRequest(socket: Duplex, message?: string): void {
   const body = message ? `\r\n\r\n${message}` : '\r\n\r\n';
   socket.write(`HTTP/1.1 400 Bad Request${body}`);
+  socket.destroy();
+}
+
+export function sendForbidden(socket: Duplex, message?: string): void {
+  const body = message ? `\r\n\r\n${message}` : '\r\n\r\n';
+  socket.write(`HTTP/1.1 403 Forbidden${body}`);
   socket.destroy();
 }
 
@@ -33,9 +53,45 @@ export function validateWebSocketOrigin({
   }
 
   const allowedOrigins = configService.getCorsConfig().allowedOrigins;
-  if (!allowedOrigins.includes(origin)) {
+  if (!isOriginAllowed(origin, allowedOrigins)) {
     logger.warn(`Rejected ${connectionName} connection from unauthorized origin`, { origin });
     sendBadRequest(socket, 'Unauthorized origin');
+    return false;
+  }
+
+  return true;
+}
+
+export function validateTrustedLocalWebSocketRequest({
+  request,
+  socket,
+  configService,
+  logger,
+  connectionName,
+}: {
+  request: IncomingMessage;
+  socket: Duplex;
+  configService: WebSocketOriginConfigService;
+  logger: WebSocketOriginLogger;
+  connectionName: string;
+}): boolean {
+  const remoteAddress = request.socket.remoteAddress;
+  const corsConfig = configService.getCorsConfig();
+  if (!isTrustedLocalAddress(remoteAddress, corsConfig.trustedLocalCidrs)) {
+    logger.warn(`Rejected ${connectionName} connection from untrusted remote address`, {
+      remoteAddress,
+    });
+    sendForbidden(socket, 'Untrusted remote address');
+    return false;
+  }
+
+  const forwardedClientAddressHeaders = getForwardedClientAddressHeaders(request);
+  if (forwardedClientAddressHeaders.length > 0) {
+    logger.warn(`Rejected ${connectionName} connection with forwarded client address headers`, {
+      forwardedClientAddressHeaders,
+      remoteAddress,
+    });
+    sendForbidden(socket, 'Forwarded WebSocket upgrades are not trusted');
     return false;
   }
 

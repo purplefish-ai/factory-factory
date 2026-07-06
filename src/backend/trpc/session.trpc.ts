@@ -59,6 +59,29 @@ async function createAgentSessionFromInput(
   return session;
 }
 
+async function rollbackCreatedSession(
+  sessionId: string,
+  sessionDomainService: Context['appContext']['services']['sessionDomainService']
+) {
+  sessionDomainService.clearSession(sessionId);
+
+  try {
+    await sessionDataService.deleteAgentSession(sessionId);
+  } catch {
+    try {
+      await sessionDataService.updateAgentSession(sessionId, {
+        status: SessionStatus.FAILED,
+        providerProcessPid: null,
+        providerMetadata: {
+          rollbackReason: 'startup_failed_after_create',
+        },
+      });
+    } catch {
+      // Preserve the startup error even if rollback cleanup cannot repair the row.
+    }
+  }
+}
+
 export const sessionRouter = router({
   // Session limits
 
@@ -140,12 +163,7 @@ export const sessionRouter = router({
           // Best-effort runtime cleanup; preserve the startup error.
         }
 
-        try {
-          sessionDomainService.clearSession(session.id);
-          await sessionDataService.deleteAgentSession(session.id);
-        } catch {
-          // Best-effort DB cleanup; preserve the startup error.
-        }
+        await rollbackCreatedSession(session.id, sessionDomainService);
 
         throw error;
       }

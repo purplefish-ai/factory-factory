@@ -4,16 +4,27 @@
  * The ratchet domain never imports from other domains directly.
  */
 
-import type { CIStatus } from '@/shared/core';
+import type { CIStatus, SessionStatus } from '@/shared/core';
 
 // --- Session bridge ---
 
 /** Session capabilities needed by ratchet domain */
+export interface RatchetSessionSummary {
+  id: string;
+  workflow: string;
+  status: SessionStatus;
+}
+
 export interface RatchetSessionBridge {
+  findSessionsByWorkspaceId(workspaceId: string): Promise<RatchetSessionSummary[]>;
   isSessionRunning(sessionId: string): boolean;
   isSessionWorking(sessionId: string): boolean;
   stopSession(sessionId: string): Promise<void>;
   startSession(
+    sessionId: string,
+    opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
+  ): Promise<void>;
+  restartSession(
     sessionId: string,
     opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
   ): Promise<void>;

@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { AppContext } from '@/backend/app-context';
+import { isOriginAllowed } from '@/backend/lib/request-trust';
 
 /**
  * CORS middleware.
@@ -13,7 +14,7 @@ export function createCorsMiddleware(appContext: AppContext) {
     const ALLOWED_ORIGINS = appContext.services.configService.getCorsConfig().allowedOrigins;
 
     const origin = req.headers.origin;
-    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && isOriginAllowed(origin, ALLOWED_ORIGINS)) {
       res.header('Access-Control-Allow-Origin', origin);
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

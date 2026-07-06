@@ -29,7 +29,10 @@ export type AcquireAndDispatchResult =
   | { status: 'error'; error: string };
 
 type SessionAcquisitionDecision =
-  | { action: 'start' | 'restart' | 'send_message' | 'already_active'; sessionId: string }
+  | { action: 'start'; sessionId: string }
+  | { action: 'restart'; sessionId: string }
+  | { action: 'send_message'; sessionId: string }
+  | { action: 'already_active'; sessionId: string }
   | { action: 'limit_reached' };
 
 class FixerSessionService {
@@ -101,6 +104,14 @@ class FixerSessionService {
       if (!workspace?.worktreePath) {
         logger.warn('Workspace not ready for fixer session', { workspaceId, workflow });
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
+      }
+
+      if (workspace.ratchetEnabled === false) {
+        logger.info('Skipping fixer session because ratchet is disabled', {
+          workspaceId,
+          workflow,
+        });
+        return { status: 'skipped', reason: 'Workspace ratcheting disabled' };
       }
 
       const acquisitionResult = await this.acquireSessionDecision(input);
@@ -213,7 +224,7 @@ class FixerSessionService {
     await input.beforeStart?.({ sessionId: acquisitionResult.sessionId, prompt });
 
     if (input.dispatchMode === 'start_empty_and_send') {
-      await this.session.startSession(acquisitionResult.sessionId, {
+      await this.startOrRestartSession(acquisitionResult, {
         initialPrompt: '',
         startupModePreset: 'non_interactive',
       });
@@ -228,7 +239,7 @@ class FixerSessionService {
         promptSent,
       };
     } else {
-      await this.session.startSession(acquisitionResult.sessionId, {
+      await this.startOrRestartSession(acquisitionResult, {
         initialPrompt: prompt,
         startupModePreset: 'non_interactive',
       });
@@ -240,6 +251,18 @@ class FixerSessionService {
       status: 'started',
       sessionId: acquisitionResult.sessionId,
     };
+  }
+
+  private async startOrRestartSession(
+    acquisitionResult: Extract<SessionAcquisitionDecision, { action: 'start' | 'restart' }>,
+    opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
+  ): Promise<void> {
+    if (acquisitionResult.action === 'restart') {
+      await this.session.restartSession(acquisitionResult.sessionId, opts);
+      return;
+    }
+
+    await this.session.startSession(acquisitionResult.sessionId, opts);
   }
 
   private async sendMessageSafely(sessionId: string, prompt: string): Promise<boolean> {

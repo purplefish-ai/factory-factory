@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createNetServer, type Server as NetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -111,7 +112,6 @@ type TestHarnessOptions = {
   backendHost?: string;
   frontendStaticPath?: string | null;
   isRunScriptProxyEnabled?: boolean;
-  requestedPortResult?: number;
 };
 
 function createTestHarness(options: TestHarnessOptions = {}) {
@@ -121,8 +121,6 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     info: vi.fn(),
     warn: vi.fn(),
   };
-
-  const requestedPortResult = options.requestedPortResult ?? 0;
 
   const services = {
     configService: {
@@ -138,7 +136,7 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       getDatabasePathFromEnv: () => undefined,
     },
     createLogger: () => logger,
-    findAvailablePort: vi.fn(async () => requestedPortResult),
+    findAvailablePort: vi.fn(async (startPort: number) => startPort),
     ratchetService: {
       start: vi.fn(),
       stop: vi.fn(async () => undefined),
@@ -181,6 +179,83 @@ function createTestHarness(options: TestHarnessOptions = {}) {
 
 function createTestAppContext(options: TestHarnessOptions = {}): AppContext {
   return createTestHarness(options).context;
+}
+
+async function occupyPort(port = 0): Promise<{ port: number; server: NetServer }> {
+  const server = createNetServer();
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Expected occupied TCP server to have a numeric port');
+  }
+
+  return { port: address.port, server };
+}
+
+async function closeNetServer(server: NetServer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function waitForHttpServerToListen(server: ReturnType<typeof createServer>): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (server.getHttpServer().listening) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error('Expected HTTP server to start listening');
+}
+
+async function occupyConsecutivePorts(
+  count: number
+): Promise<{ startPort: number; servers: NetServer[] }> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const servers: NetServer[] = [];
+
+    try {
+      const first = await occupyPort();
+      const startPort = first.port;
+      servers.push(first.server);
+
+      if (startPort + count - 1 > 65_535) {
+        await Promise.allSettled(servers.map(closeNetServer));
+        continue;
+      }
+
+      for (let offset = 1; offset < count; offset++) {
+        const occupied = await occupyPort(startPort + offset);
+        servers.push(occupied.server);
+      }
+
+      return { startPort, servers };
+    } catch (error) {
+      await Promise.allSettled(servers.map(closeNetServer));
+
+      if (attempt === 49) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Could not occupy a consecutive TCP port range');
 }
 
 describe('server websocket upgrade routing', () => {
@@ -355,17 +430,15 @@ describe('server websocket upgrade routing', () => {
   });
 
   it('starts server and wires startup services', async () => {
-    const harness = createTestHarness({
-      requestedPortResult: 0,
-    });
-    const server = createTestServer(harness.context, 47_891);
+    const harness = createTestHarness();
+    const server = createTestServer(harness.context, 0);
 
     const endpoint = await server.start();
 
     expect(endpoint).toBe('http://localhost:0');
     expect(server.getPort()).toBe(0);
-    expect(harness.services.findAvailablePort).toHaveBeenCalledWith(47_891);
-    expect(harness.logger.warn).toHaveBeenCalledOnce();
+    expect(harness.services.findAvailablePort).not.toHaveBeenCalled();
+    expect(harness.logger.warn).not.toHaveBeenCalled();
     expect(configureDomainBridges).toHaveBeenCalledWith(harness.context.services);
     expect(configureEventCollector).toHaveBeenCalledWith(harness.context.services);
     expect(configureSnapshotReconciliation).toHaveBeenCalledWith(harness.context.services);
@@ -392,11 +465,40 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.ratchetService.start).toHaveBeenCalledOnce();
   });
 
+  it('rejects concurrent start calls without running startup cleanup', async () => {
+    const harness = createTestHarness();
+    let reconciliationStarted!: () => void;
+    let continueReconciliation!: () => void;
+    const reconciliationStartedPromise = new Promise<void>((resolve) => {
+      reconciliationStarted = resolve;
+    });
+    const continueReconciliationPromise = new Promise<void>((resolve) => {
+      continueReconciliation = resolve;
+    });
+    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
+      reconciliationStarted();
+      await continueReconciliationPromise;
+    });
+
+    const server = createTestServer(harness.context, 0);
+    const startPromise = server.start();
+    await reconciliationStartedPromise;
+
+    await expect(server.start()).rejects.toThrow('Server startup has already been initiated');
+    expect(stopInterceptors).not.toHaveBeenCalled();
+    expect(harness.services.sessionService.stopAllClients).not.toHaveBeenCalled();
+    expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
+    expect(prisma.$disconnect).not.toHaveBeenCalled();
+
+    continueReconciliation();
+    await expect(startPromise).resolves.toBe('http://localhost:0');
+    expect(server.getHttpServer().listening).toBe(true);
+  });
+
   it('writes backend port to stdout when run script proxy mode is enabled', async () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const harness = createTestHarness({
       isRunScriptProxyEnabled: true,
-      requestedPortResult: 0,
     });
     const server = createTestServer(harness.context, 0);
 
@@ -407,7 +509,7 @@ describe('server websocket upgrade routing', () => {
   });
 
   it('logs startup reconciliation failures and continues starting', async () => {
-    const harness = createTestHarness({ requestedPortResult: 0 });
+    const harness = createTestHarness();
     vi.mocked(reconciliationService.cleanupOrphans).mockRejectedValueOnce(
       new Error('cleanup failed')
     );
@@ -447,8 +549,100 @@ describe('server websocket upgrade routing', () => {
     );
   });
 
+  it('gates HTTP requests and websocket upgrades while startup reconciliation is pending', async () => {
+    const harness = createTestHarness();
+    let reconciliationStarted!: () => void;
+    let continueReconciliation!: () => void;
+    const reconciliationStartedPromise = new Promise<void>((resolve) => {
+      reconciliationStarted = resolve;
+    });
+    const continueReconciliationPromise = new Promise<void>((resolve) => {
+      continueReconciliation = resolve;
+    });
+    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
+      reconciliationStarted();
+      await continueReconciliationPromise;
+    });
+
+    const server = createTestServer(harness.context, 0);
+    const startPromise = server.start();
+    await reconciliationStartedPromise;
+    await waitForHttpServerToListen(server);
+
+    const response = await request(server.getHttpServer()).get('/health');
+    const socket = {
+      destroy: vi.fn(),
+      write: vi.fn(),
+    };
+    const upgradeRequest = {
+      headers: { host: 'localhost:3001' },
+      url: '/chat?sessionId=s1',
+    };
+    server.getHttpServer().emit('upgrade', upgradeRequest, socket, Buffer.alloc(0));
+
+    expect(response.status).toBe(503);
+    expect(response.body).toMatchObject({ error: 'Service starting' });
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('503 Service Unavailable'));
+    expect(socket.destroy).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+
+    continueReconciliation();
+    await expect(startPromise).resolves.toBe('http://localhost:0');
+
+    const readyResponse = await request(server.getHttpServer()).get('/health');
+    expect(readyResponse.status).toBe(200);
+  });
+
+  it('retries the next port when the requested port is already bound', async () => {
+    const { startPort, servers: occupiedServers } = await occupyConsecutivePorts(2);
+    const requestedPortReservation = occupiedServers[0];
+    const nextPortReservation = occupiedServers[1];
+    if (!(requestedPortReservation && nextPortReservation)) {
+      throw new Error('Expected two occupied TCP port reservations');
+    }
+
+    await closeNetServer(nextPortReservation);
+
+    try {
+      const harness = createTestHarness({ backendHost: '127.0.0.1' });
+      const server = createTestServer(harness.context, startPort);
+
+      await expect(server.start()).resolves.toBe(`http://127.0.0.1:${startPort + 1}`);
+
+      expect(server.getPort()).toBe(startPort + 1);
+      expect(harness.services.findAvailablePort).not.toHaveBeenCalled();
+      expect(harness.logger.warn).toHaveBeenCalledWith('Requested port in use, using alternative', {
+        requestedPort: startPort,
+        actualPort: startPort + 1,
+      });
+      expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
+      expect(startInterceptors).toHaveBeenCalledOnce();
+    } finally {
+      await closeNetServer(requestedPortReservation);
+    }
+  });
+
+  it('rejects startup after all bind fallback ports are already bound', async () => {
+    const { startPort, servers: occupiedServers } = await occupyConsecutivePorts(10);
+
+    try {
+      const harness = createTestHarness({ backendHost: '127.0.0.1' });
+      const server = createTestServer(harness.context, startPort);
+
+      await expect(server.start()).rejects.toThrow(
+        `Could not bind server to an available port starting from ${startPort}`
+      );
+
+      expect(harness.services.findAvailablePort).not.toHaveBeenCalled();
+      expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
+      expect(startInterceptors).not.toHaveBeenCalled();
+    } finally {
+      await Promise.all(occupiedServers.map(closeNetServer));
+    }
+  });
+
   it('rejects start when http server emits an error', async () => {
-    const harness = createTestHarness({ requestedPortResult: 0 });
+    const harness = createTestHarness();
     const server = createTestServer(harness.context, 0);
     const httpServer = server.getHttpServer();
 
@@ -460,6 +654,49 @@ describe('server websocket upgrade routing', () => {
 
     await expect(startPromise).rejects.toThrow('listen failed');
     expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
+  });
+
+  it('runs normal cleanup when startup fails after the server is bound', async () => {
+    const harness = createTestHarness();
+    vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
+      throw new Error('scheduler failed');
+    });
+    const server = createTestServer(harness.context, 0);
+
+    await expect(server.start()).rejects.toThrow('scheduler failed');
+
+    expect(server.getHttpServer().listening).toBe(false);
+    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
+    expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();
+    expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
+    expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
+    expect(stopEventCollector).toHaveBeenCalledOnce();
+    expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
+    expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
+    expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(prisma.$disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not allow retrying start after startup failure cleanup', async () => {
+    const harness = createTestHarness();
+    vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
+      throw new Error('scheduler failed');
+    });
+    const server = createTestServer(harness.context, 0);
+
+    await expect(server.start()).rejects.toThrow('scheduler failed');
+
+    expect(server.getHttpServer().listening).toBe(false);
+    await expect(server.start()).rejects.toThrow('Server has already been stopped');
+
+    await server.stop();
+    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledOnce();
+    expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
+    expect(prisma.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('runs cleanup fan-out when server stops', async () => {

@@ -5,13 +5,18 @@ import {
   QUEUED_MESSAGE_ORDER_BASE,
   type WebSocketMessage as ReplayEventMessage,
   resolveSelectedModel,
+  trimTranscriptForRenderer,
 } from '@/shared/acp-protocol';
 import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 
+function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
+  return trimTranscriptForRenderer(store.transcript);
+}
+
 export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
-  const snapshot = [...store.transcript];
+  const snapshot = selectRendererTranscriptWindow(store);
   store.queue.forEach((queued, index) => {
     snapshot.push({
       id: queued.id,
@@ -26,6 +31,30 @@ export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
   return snapshot;
 }
 
+function appendRecentRejectionEvents(
+  replayEvents: ReplayEventMessage[],
+  store: SessionStore,
+  transcript: ChatMessage[]
+): void {
+  const activeMessageIds = new Set([
+    ...transcript.map((message) => message.id),
+    ...store.queue.map((message) => message.id),
+  ]);
+  const now = Date.now();
+  for (const rejection of store.recentRejections) {
+    if (rejection.expiresAt <= now || activeMessageIds.has(rejection.id)) {
+      continue;
+    }
+
+    replayEvents.push({
+      type: 'message_state_changed',
+      id: rejection.id,
+      newState: MessageState.REJECTED,
+      errorMessage: rejection.errorMessage,
+    });
+  }
+}
+
 export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   const replayEvents: ReplayEventMessage[] = [
     {
@@ -34,7 +63,9 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
     },
   ];
 
-  const transcript = [...store.transcript].sort(messageSort);
+  const transcript = selectRendererTranscriptWindow(store);
+  appendRecentRejectionEvents(replayEvents, store, transcript);
+
   for (const message of transcript) {
     if (message.source === 'user') {
       replayEvents.push({

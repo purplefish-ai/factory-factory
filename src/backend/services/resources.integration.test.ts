@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   CIStatus,
+  KanbanColumn,
   PRState,
   type Prisma,
   type PrismaClient,
@@ -61,7 +62,7 @@ beforeAll(async () => {
     '@/backend/clients/git.client'
   );
   ({ GitClientFactory } = gitClientModule);
-});
+}, 30_000);
 
 afterEach(async () => {
   await clearIntegrationDatabase(prisma);
@@ -126,6 +127,21 @@ function createGitRepository(remoteUrl?: string): string {
   return repoDir;
 }
 
+function createGitCommit(repoPath: string): void {
+  execFileSync('git', ['commit', '--allow-empty', '-m', 'Initial commit'], { cwd: repoPath });
+}
+
+function setOriginHead(repoPath: string, branch: string): void {
+  execFileSync('git', ['update-ref', `refs/remotes/origin/${branch}`, 'HEAD'], { cwd: repoPath });
+  execFileSync(
+    'git',
+    ['symbolic-ref', 'refs/remotes/origin/HEAD', `refs/remotes/origin/${branch}`],
+    {
+      cwd: repoPath,
+    }
+  );
+}
+
 describe('resource accessors integration', () => {
   describe('workspaceAccessor', () => {
     it('enforces compare-and-swap status transitions', async () => {
@@ -182,6 +198,7 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const eligible = await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.FAILED,
+        cachedKanbanColumn: KanbanColumn.WAITING,
         initRetryCount: 1,
       });
       const maxed = await createWorkspaceFixture(project.id, {
@@ -201,6 +218,7 @@ describe('resource accessors integration', () => {
       expect(eligibleResult.count).toBe(1);
       expect(maxedResult.count).toBe(0);
       expect(eligibleReloaded.status).toBe(WorkspaceStatus.PROVISIONING);
+      expect(eligibleReloaded.cachedKanbanColumn).toBe(KanbanColumn.WORKING);
       expect(eligibleReloaded.initRetryCount).toBe(2);
       expect(maxedReloaded.status).toBe(WorkspaceStatus.FAILED);
     });
@@ -352,6 +370,55 @@ describe('resource accessors integration', () => {
 
       expect(project.githubOwner).toBe('purplefish-ai');
       expect(project.githubRepo).toBe('factory-factory');
+    });
+
+    it('auto-detects default branch from origin HEAD during create', async () => {
+      const repoPath = createGitRepository('git@github.com:purplefish-ai/factory-factory.git');
+      createGitCommit(repoPath);
+      setOriginHead(repoPath, 'unstable');
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('unstable');
+    });
+
+    it('falls back to local HEAD when origin HEAD is unavailable during create', async () => {
+      const repoPath = createGitRepository();
+      execFileSync('git', ['checkout', '-b', 'develop'], { cwd: repoPath });
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('develop');
+    });
+
+    it('falls back to main when default branch cannot be detected during create', async () => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'ff-nongit-'));
+      tempRepoDirs.add(repoPath);
+
+      const project = await projectAccessor.create(
+        {
+          repoPath,
+        },
+        {
+          worktreeBaseDir: '/tmp/worktrees',
+        }
+      );
+
+      expect(project.defaultBranch).toBe('main');
     });
 
     it('retries slug creation when a slug collision occurs', async () => {
@@ -592,6 +659,15 @@ describe('resource accessors integration', () => {
       expect(settings.defaultCodexModel).toBe('default');
     });
 
+    it('returns one default row for concurrent first reads', async () => {
+      const settings = await Promise.all(
+        Array.from({ length: 10 }, () => userSettingsAccessor.get())
+      );
+
+      expect(new Set(settings.map((row) => row.id)).size).toBe(1);
+      expect(await prisma.userSettings.count({ where: { userId: 'default' } })).toBe(1);
+    });
+
     it('persists workspace order by project id', async () => {
       const projectA = await createProjectFixture();
       const projectB = await createProjectFixture();
@@ -604,6 +680,52 @@ describe('resource accessors integration', () => {
 
       expect(orderA).toEqual(['ws-3', 'ws-1']);
       expect(orderB).toEqual(['ws-9']);
+    });
+
+    it('retries stale workspace order writes and preserves concurrent project entries', async () => {
+      const projectA = await createProjectFixture();
+      const projectB = await createProjectFixture();
+      await userSettingsAccessor.get();
+
+      type UserSettingsUpdateManyResult = ReturnType<typeof prisma.userSettings.updateMany>;
+      const originalUpdateMany = prisma.userSettings.updateMany.bind(prisma.userSettings);
+      let injectedConcurrentUpdate = false;
+      const updateManySpy = vi
+        .spyOn(prisma.userSettings, 'updateMany')
+        .mockImplementation((args): UserSettingsUpdateManyResult => {
+          if (!injectedConcurrentUpdate) {
+            injectedConcurrentUpdate = true;
+
+            return prisma.userSettings
+              .findUniqueOrThrow({
+                where: { userId: 'default' },
+              })
+              .then((currentSettings) =>
+                prisma.userSettings.update({
+                  where: { userId: 'default' },
+                  data: {
+                    workspaceOrder: { [projectB.id]: ['ws-9'] },
+                    updatedAt: new Date(currentSettings.updatedAt.getTime() + 1000),
+                  },
+                })
+              )
+              .then(() => originalUpdateMany(args)) as UserSettingsUpdateManyResult;
+          }
+
+          return originalUpdateMany(args);
+        });
+
+      await userSettingsAccessor.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
+
+      const settings = await prisma.userSettings.findUniqueOrThrow({
+        where: { userId: 'default' },
+      });
+
+      expect(updateManySpy).toHaveBeenCalledTimes(2);
+      expect(settings.workspaceOrder).toEqual({
+        [projectB.id]: ['ws-9'],
+        [projectA.id]: ['ws-3', 'ws-1'],
+      });
     });
   });
 

@@ -54,6 +54,9 @@ import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 const logger = createLogger('domain-bridges');
 
+type SessionService = typeof sessionService;
+type WorkspaceAccessor = typeof workspaceAccessor;
+
 type BridgeServices = {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
@@ -102,6 +105,56 @@ const defaultServices: BridgeServices = {
   workspaceStateMachine,
 };
 
+async function stopSessionBestEffort(
+  sessionService: SessionService,
+  sessionId: string
+): Promise<void> {
+  try {
+    await sessionService.stopSession(sessionId);
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+async function stopPreviousAutoIterationSession(
+  sessionService: SessionService,
+  sessionId: string
+): Promise<void> {
+  try {
+    await sessionService.stopSession(sessionId);
+  } catch (error) {
+    if (!(error instanceof Error && /already stopped|not found/i.test(error.message))) {
+      throw error;
+    }
+    // Session may already be stopped
+  }
+}
+
+async function clearAutoIterationSessionIfMatching(
+  workspaceAccessor: WorkspaceAccessor,
+  workspaceId: string,
+  sessionId: string
+): Promise<void> {
+  try {
+    const latestWorkspace = await workspaceAccessor.findRawById(workspaceId);
+    if (latestWorkspace?.autoIterationSessionId === sessionId) {
+      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: null });
+    }
+  } catch {
+    // Preserve the original handoff or persistence error
+  }
+}
+
+async function cleanupRecycledAutoIterationSession(
+  sessionService: SessionService,
+  workspaceAccessor: WorkspaceAccessor,
+  workspaceId: string,
+  sessionId: string
+): Promise<void> {
+  await stopSessionBestEffort(sessionService, sessionId);
+  await clearAutoIterationSessionIfMatching(workspaceAccessor, workspaceId, sessionId);
+}
+
 export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
   const resolved = { ...defaultServices, ...services };
   const {
@@ -130,10 +183,13 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
+    findSessionsByWorkspaceId: (workspaceId) =>
+      sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
     isSessionRunning: (id) => sessionService.isSessionRunning(id),
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
     startSession: (id, opts) => sessionService.startSession(id, opts),
+    restartSession: (id, opts) => sessionService.restartSession(id, opts),
     sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
@@ -217,7 +273,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   chatEventForwarderService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+      markSessionIdle: (wsId, sId, generation) =>
+        workspaceActivityService.markSessionIdle(wsId, sId, generation),
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
@@ -225,7 +282,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   sessionService.configure({
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+      markSessionIdle: (wsId, sId, generation) =>
+        workspaceActivityService.markSessionIdle(wsId, sId, generation),
       clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
         ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
     },
@@ -342,14 +400,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     async recycleSession(workspaceId, handoffPrompt) {
       const ws = await workspaceAccessor.findRawById(workspaceId);
       if (ws?.autoIterationSessionId) {
-        try {
-          await sessionService.stopSession(ws.autoIterationSessionId);
-        } catch (error) {
-          if (!(error instanceof Error && /already stopped|not found/i.test(error.message))) {
-            throw error;
-          }
-          // Session may already be stopped
-        }
+        await stopPreviousAutoIterationSession(sessionService, ws.autoIterationSessionId);
       }
       const newSession = await sessionDataService.createAgentSession({
         workspaceId,
@@ -359,14 +410,21 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       try {
         await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
       } catch (err) {
-        try {
-          await sessionService.stopSession(newSession.id);
-        } catch {
-          // Best-effort cleanup
-        }
+        await stopSessionBestEffort(sessionService, newSession.id);
         throw err;
       }
-      await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
+      try {
+        await workspaceAccessor.update(workspaceId, { autoIterationSessionId: newSession.id });
+        await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
+      } catch (err) {
+        await cleanupRecycledAutoIterationSession(
+          sessionService,
+          workspaceAccessor,
+          workspaceId,
+          newSession.id
+        );
+        throw err;
+      }
       return newSession.id;
     },
   };

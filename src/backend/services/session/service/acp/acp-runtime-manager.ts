@@ -101,6 +101,25 @@ function isMethodNotFoundError(error: unknown): boolean {
   return details.code === -32_601 || details.message.includes('Method not found');
 }
 
+async function raceWithSoftTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | undefined> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<undefined>((resolve) => {
+    timeout = setTimeout(() => resolve(undefined), timeoutMs);
+    timeout.unref?.();
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
@@ -108,6 +127,9 @@ export class AcpRuntimeManager {
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
+  private readonly shutdownWaiters = new Set<() => void>();
+  private readonly sessionStopWaiters = new Map<string, Set<() => void>>();
+  private isShuttingDown = false;
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
   private preferSourceEntrypoint = true;
@@ -156,6 +178,10 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
+    if (this.isShuttingDown) {
+      return Promise.reject(this.createShutdownError(sessionId));
+    }
+
     let lock = this.creationLocks.get(sessionId);
     if (!lock) {
       lock = pLimit(1);
@@ -168,6 +194,10 @@ export class AcpRuntimeManager {
 
     return lock(async () => {
       try {
+        if (this.isShuttingDown) {
+          throw this.createShutdownError(sessionId);
+        }
+
         const existing = this.sessions.get(sessionId);
         if (existing?.isRunning()) {
           logger.debug('Returning existing running ACP client', { sessionId });
@@ -208,6 +238,10 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
+    if (this.isShuttingDown) {
+      throw this.createShutdownError(sessionId);
+    }
+
     if (!hasUsableWorkingDir(options.workingDir)) {
       throw new Error('ACP working directory is required before spawning adapter process');
     }
@@ -262,8 +296,10 @@ export class AcpRuntimeManager {
         reject(createAcpSpawnError(spawnCommand.commandLabel, error));
       child.once('error', startupErrorListener);
     });
+    const startupErrorSettled = startupError.catch(() => undefined);
 
     this.wireChildErrorHandler(child, sessionId, handlers);
+    this.abortClientCreationIfStopping(child, sessionId);
 
     // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -316,7 +352,13 @@ export class AcpRuntimeManager {
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
-    const startupErrorSettled = startupError.catch(() => undefined);
+    const shutdownSignal = this.createShutdownSignal(sessionId);
+    const stopSignal = this.createSessionStopSignal(sessionId);
+    const startupCancelOn = Promise.race([
+      startupErrorSettled,
+      shutdownSignal.promise.catch(() => undefined),
+      stopSignal.promise.catch(() => undefined),
+    ]);
 
     try {
       // Initialize handshake
@@ -333,9 +375,11 @@ export class AcpRuntimeManager {
           }),
           timeoutMs: startupTimeoutMs,
           description: 'initialize handshake',
-          cancelOn: startupErrorSettled,
+          cancelOn: startupCancelOn,
         }),
         startupError,
+        shutdownSignal.promise,
+        stopSignal.promise,
       ]);
 
       logger.info('ACP connection initialized', {
@@ -350,19 +394,30 @@ export class AcpRuntimeManager {
           promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
           timeoutMs: startupTimeoutMs,
           description: 'session creation',
-          cancelOn: startupErrorSettled,
+          cancelOn: startupCancelOn,
         }),
         startupError,
+        shutdownSignal.promise,
+        stopSignal.promise,
       ]);
     } catch (error) {
       this.cleanupFailedClientCreation(child, sessionId);
       throw error;
     } finally {
+      shutdownSignal.dispose();
+      stopSignal.dispose();
       if (startupErrorListener) {
         child.removeListener('error', startupErrorListener);
         startupErrorListener = null;
       }
     }
+
+    if (this.isShuttingDown) {
+      this.cleanupFailedClientCreation(child, sessionId);
+      throw this.createShutdownError(sessionId);
+    }
+
+    this.abortClientCreationIfStopping(child, sessionId);
 
     // Build handle
     const agentCapabilities = initResult.agentCapabilities ?? {};
@@ -402,6 +457,104 @@ export class AcpRuntimeManager {
       sessionId,
       pid: child.pid,
     });
+  }
+
+  private abortClientCreationIfStopping(child: ChildProcess, sessionId: string): void {
+    if (!this.stoppingInProgress.has(sessionId)) {
+      return;
+    }
+
+    this.cleanupFailedClientCreation(child, sessionId);
+    throw this.createStopRequestedError(sessionId);
+  }
+
+  private createShutdownError(sessionId: string): Error {
+    return new Error(`ACP runtime manager is shutting down; cannot create client ${sessionId}`);
+  }
+
+  private createStopRequestedError(sessionId: string): Error {
+    return new Error(`ACP session stop requested; cannot create client ${sessionId}`);
+  }
+
+  private beginShutdown(): void {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    this.isShuttingDown = true;
+    for (const rejectShutdown of this.shutdownWaiters) {
+      rejectShutdown();
+    }
+    this.shutdownWaiters.clear();
+  }
+
+  private beginSessionStop(sessionId: string): void {
+    this.stoppingInProgress.add(sessionId);
+
+    const stopWaiters = this.sessionStopWaiters.get(sessionId);
+    if (!stopWaiters) {
+      return;
+    }
+
+    for (const rejectStop of stopWaiters) {
+      rejectStop();
+    }
+    this.sessionStopWaiters.delete(sessionId);
+  }
+
+  private createShutdownSignal(sessionId: string): {
+    promise: Promise<never>;
+    dispose: () => void;
+  } {
+    let rejectShutdown!: () => void;
+    const promise = new Promise<never>((_resolve, reject) => {
+      rejectShutdown = () => reject(this.createShutdownError(sessionId));
+    });
+
+    if (this.isShuttingDown) {
+      rejectShutdown();
+    } else {
+      this.shutdownWaiters.add(rejectShutdown);
+    }
+
+    return {
+      promise,
+      dispose: () => {
+        this.shutdownWaiters.delete(rejectShutdown);
+      },
+    };
+  }
+
+  private createSessionStopSignal(sessionId: string): {
+    promise: Promise<never>;
+    dispose: () => void;
+  } {
+    let rejectStop!: () => void;
+    const promise = new Promise<never>((_resolve, reject) => {
+      rejectStop = () => reject(this.createStopRequestedError(sessionId));
+    });
+
+    if (this.stoppingInProgress.has(sessionId)) {
+      rejectStop();
+    } else {
+      const waiters = this.sessionStopWaiters.get(sessionId) ?? new Set<() => void>();
+      waiters.add(rejectStop);
+      this.sessionStopWaiters.set(sessionId, waiters);
+    }
+
+    return {
+      promise,
+      dispose: () => {
+        const waiters = this.sessionStopWaiters.get(sessionId);
+        if (!waiters) {
+          return;
+        }
+        waiters.delete(rejectStop);
+        if (waiters.size === 0) {
+          this.sessionStopWaiters.delete(sessionId);
+        }
+      },
+    };
   }
 
   private wireChildExitHandler(
@@ -581,14 +734,30 @@ export class AcpRuntimeManager {
       return;
     }
 
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
+    const pendingCreation = this.pendingCreation.get(sessionId);
+    const initialHandle = this.sessions.get(sessionId);
+    if (!(initialHandle || pendingCreation)) {
       return;
     }
 
-    this.stoppingInProgress.add(sessionId);
-    this.managedStopChildren.add(handle.child);
+    this.beginSessionStop(sessionId);
+    let stoppedHandle: AcpProcessHandle | undefined;
     try {
+      if (pendingCreation) {
+        await raceWithSoftTimeout(
+          pendingCreation.catch(() => undefined),
+          5000
+        );
+      }
+
+      const handle = this.sessions.get(sessionId) ?? initialHandle;
+      if (!handle) {
+        return;
+      }
+      stoppedHandle = handle;
+
+      this.managedStopChildren.add(handle.child);
+
       // Cancel prompt if in flight
       if (handle.isPromptInFlight) {
         try {
@@ -615,8 +784,7 @@ export class AcpRuntimeManager {
       // Send SIGTERM after registering exit listener to avoid missing fast exits.
       handle.child.kill('SIGTERM');
 
-      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 5000));
-      await Promise.race([exitPromise, timeoutPromise]);
+      await raceWithSoftTimeout(exitPromise, 5000);
 
       // Escalate to SIGKILL if still alive
       if (handle.child.exitCode === null) {
@@ -629,7 +797,7 @@ export class AcpRuntimeManager {
     } finally {
       this.stoppingInProgress.delete(sessionId);
       const current = this.sessions.get(sessionId);
-      if (current === handle) {
+      if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
       }
     }
@@ -678,7 +846,7 @@ export class AcpRuntimeManager {
       return { stopReason: result.stopReason };
     } catch (error) {
       if (error instanceof PromptTimeoutError) {
-        await this.escalatePromptTimeout(sessionId, timeoutMs);
+        await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
       }
       handle.isPromptInFlight = false;
       throw error;
@@ -688,14 +856,22 @@ export class AcpRuntimeManager {
   /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
   private async escalatePromptTimeout(
     sessionId: string,
+    timedOutHandle: AcpProcessHandle,
     timeoutMs: number | undefined
   ): Promise<void> {
+    if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
+      return;
+    }
+
     logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
     try {
       const cancelled = await Promise.race([
         this.cancelPrompt(sessionId).then(() => true),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
       ]);
+      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
+        return;
+      }
       if (!cancelled) {
         logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
         this.clearPromptInFlight(sessionId);
@@ -704,6 +880,9 @@ export class AcpRuntimeManager {
         });
       }
     } catch {
+      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
+        return;
+      }
       // Cancel failed — stop the client forcibly
       logger.warn('Cancel failed after timeout, stopping client', { sessionId });
       this.clearPromptInFlight(sessionId);
@@ -711,6 +890,22 @@ export class AcpRuntimeManager {
         // Best-effort cleanup
       });
     }
+  }
+
+  private isCurrentPromptTimeoutHandle(
+    sessionId: string,
+    timedOutHandle: AcpProcessHandle,
+    timeoutMs: number | undefined
+  ): boolean {
+    if (this.sessions.get(sessionId) === timedOutHandle) {
+      return true;
+    }
+
+    logger.info('Ignoring stale prompt timeout for replaced ACP session', {
+      sessionId,
+      timeoutMs,
+    });
+    return false;
   }
 
   private clearPromptInFlight(sessionId: string): void {
@@ -839,23 +1034,41 @@ export class AcpRuntimeManager {
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    const stopPromises: Promise<void>[] = [];
+    this.beginShutdown();
 
-    for (const sessionId of this.sessions.keys()) {
-      const stopPromise = Promise.race([
-        this.stopClient(sessionId),
-        new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-      ]);
-      stopPromises.push(stopPromise);
-    }
-
-    await Promise.all(stopPromises);
+    await this.stopCurrentClients(timeoutMs);
+    await this.waitForPendingCreations(timeoutMs);
+    await this.stopCurrentClients(timeoutMs);
 
     this.sessions.clear();
+    this.pendingCreation.clear();
     this.creationLocks.clear();
     this.lockRefCounts.clear();
+    this.shutdownWaiters.clear();
+    this.sessionStopWaiters.clear();
 
     logger.info('All ACP clients stopped and cleaned up');
+  }
+
+  private async stopCurrentClients(timeoutMs: number): Promise<void> {
+    const sessionIds = [...this.sessions.keys()];
+    const stopPromises = sessionIds.map((sessionId) =>
+      raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
+    );
+
+    await Promise.all(stopPromises);
+  }
+
+  private async waitForPendingCreations(timeoutMs: number): Promise<void> {
+    const pendingCreations = [...this.pendingCreation.values()];
+    if (pendingCreations.length === 0) {
+      return;
+    }
+
+    await raceWithSoftTimeout(
+      Promise.allSettled(pendingCreations).then(() => undefined),
+      timeoutMs
+    );
   }
 
   getAllClients(): IterableIterator<[string, AcpProcessHandle]> {

@@ -8,7 +8,6 @@ import {
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { MessageState } from '@/shared/acp-protocol';
 import type { QueueMessageInput } from '@/shared/websocket';
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
@@ -42,19 +41,6 @@ function validateQueueMessageInput(
   return validateAttachments(message.attachments);
 }
 
-function emitRejectedMessageState(
-  sessionId: string,
-  messageId: string,
-  errorMessage: string
-): void {
-  sessionDomainService.emitDelta(sessionId, {
-    type: 'message_state_changed',
-    id: messageId,
-    newState: MessageState.REJECTED,
-    errorMessage,
-  });
-}
-
 export function createQueueMessageHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<QueueMessageInput> {
@@ -63,7 +49,7 @@ export function createQueueMessageHandler(
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
       if (message.id) {
-        emitRejectedMessageState(sessionId, message.id, validationError);
+        sessionDomainService.rejectMessage(sessionId, message.id, validationError);
         return;
       }
 
@@ -76,7 +62,7 @@ export function createQueueMessageHandler(
     const result = sessionDomainService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      emitRejectedMessageState(sessionId, messageId, result.error);
+      sessionDomainService.rejectMessage(sessionId, messageId, result.error);
       return;
     }
 

@@ -4,7 +4,7 @@
  * Polling loop that:
  * 1. Finds enabled periodic tasks where nextRunAt <= now
  * 2. Skips tasks that already have a RUNNING execution
- * 3. Creates a new workspace + execution for due tasks
+ * 3. Reserves an execution + creates a new workspace for due tasks
  * 4. Monitors RUNNING executions for PR creation or failure
  */
 
@@ -17,6 +17,7 @@ import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
 type Logger = ReturnType<typeof createLogger>;
 
 export const PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS = 5 * 60_000;
+export const PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS = 15 * 60_000;
 
 /** Bridge for workspace creation — wired by orchestration layer. */
 export interface PeriodicTaskWorkspaceBridge {
@@ -157,33 +158,56 @@ export class PeriodicTaskService {
 
     this.logger.info('Dispatching periodic task', { taskId, name });
 
-    // Advance nextRunAt first so a crash after this point won't re-dispatch
-    // the same due window on the next poll (at worst we miss one run).
-    await periodicTaskAccessor.markDispatched(
-      taskId,
-      cadence,
-      scheduledTime,
-      timezone,
-      scheduledDayOfMonth
+    const execution = await periodicTaskAccessor.createExecutionAndMarkDispatched(
+      {
+        periodicTaskId: taskId,
+        workspaceId: null,
+        status: 'RUNNING',
+      },
+      {
+        cadence,
+        scheduledTime,
+        timezone,
+        scheduledDayOfMonth,
+      }
     );
 
-    const result = await this.workspaceBridge.createWorkspaceForTask({
-      projectId,
-      name: `${name} — ${new Date().toLocaleDateString()}`,
-      prompt,
-      periodicTaskId: taskId,
-    });
+    let result: { workspaceId: string };
+    try {
+      result = await this.workspaceBridge.createWorkspaceForTask({
+        projectId,
+        name: `${name} — ${new Date().toLocaleDateString()}`,
+        prompt,
+        periodicTaskId: taskId,
+      });
+    } catch (error) {
+      await this.markReservedExecutionFailed(execution.id, error);
+      throw error;
+    }
 
-    await periodicTaskAccessor.createExecution({
-      periodicTaskId: taskId,
+    await periodicTaskAccessor.updateExecution(execution.id, {
       workspaceId: result.workspaceId,
-      status: 'RUNNING',
     });
 
     this.logger.info('Periodic task dispatched', {
       taskId,
       workspaceId: result.workspaceId,
     });
+  }
+
+  private async markReservedExecutionFailed(executionId: string, error: unknown): Promise<void> {
+    try {
+      await periodicTaskAccessor.updateExecution(executionId, {
+        status: 'FAILED',
+        errorMessage: toError(error).message,
+        completedAt: new Date(),
+      });
+    } catch (updateError) {
+      this.logger.error('Failed to mark reserved periodic task execution failed', {
+        executionId,
+        error: toError(updateError).message,
+      });
+    }
   }
 
   // ─── Monitor running executions ─────────────────────────────────────────
@@ -208,7 +232,23 @@ export class PeriodicTaskService {
     startedAt: Date;
   }): Promise<void> {
     try {
-      if (!(execution.workspaceId && this.statusBridge)) {
+      if (!execution.workspaceId) {
+        const reservationAgeMs = Date.now() - execution.startedAt.getTime();
+        if (reservationAgeMs >= PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS) {
+          await periodicTaskAccessor.updateExecution(execution.id, {
+            status: 'FAILED',
+            errorMessage: 'Workspace reservation did not link a workspace before timeout',
+            completedAt: new Date(),
+          });
+          this.logger.warn('Periodic task workspace reservation timed out', {
+            executionId: execution.id,
+            reservationAgeMs,
+          });
+        }
+        return;
+      }
+
+      if (!this.statusBridge) {
         return;
       }
 

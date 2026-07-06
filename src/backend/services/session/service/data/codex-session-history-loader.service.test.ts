@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,6 +19,13 @@ function writeSessionFile(params: {
   );
   writeFileSync(sessionFilePath, lines.join('\n'), 'utf-8');
   return sessionFilePath;
+}
+
+function formatRelativeDateDir(date: Date): string {
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
 }
 
 describe('codexSessionHistoryLoaderService', () => {
@@ -201,6 +208,71 @@ describe('codexSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it('resolves UUIDv7 sessions from the expected date directory before unrelated trees', async () => {
+    const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
+    const cwd = '/Users/test/project';
+    const expectedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T19:42:56.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from expected date dir' },
+        },
+      ],
+    });
+    const unrelatedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: 'archive/not/date/tree',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T19:42:57.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from unrelated tree' },
+        },
+      ],
+    });
+    utimesSync(
+      expectedPath,
+      new Date('2026-02-14T19:42:56.000Z'),
+      new Date('2026-02-14T19:42:56.000Z')
+    );
+    utimesSync(
+      unrelatedPath,
+      new Date('2026-02-14T19:43:56.000Z'),
+      new Date('2026-02-14T19:43:56.000Z')
+    );
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath: expectedPath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'user',
+        content: 'from expected date dir',
+        timestamp: '2026-02-14T19:42:56.000Z',
+      },
+    ]);
+  });
+
   it('records raw function args when response_item arguments are not valid JSON objects', async () => {
     const providerSessionId = 'session-fn-args';
     const cwd = '/Users/test/project';
@@ -350,6 +422,107 @@ describe('codexSessionHistoryLoaderService', () => {
     });
   });
 
+  it('checks recent date directories for cwd matches before using an expected-date id-only fallback', async () => {
+    const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
+    const expectedWrongCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/other' },
+        },
+        {
+          timestamp: '2026-02-14T19:42:55.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from expected wrong cwd' },
+        },
+      ],
+    });
+    const matchingCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/20',
+      fileName: `rollout-2026-02-20T19-42-55-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/match' },
+        },
+        {
+          timestamp: '2026-02-20T19:42:55.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from recent matching cwd' },
+        },
+      ],
+    });
+    utimesSync(
+      expectedWrongCwdPath,
+      new Date('2026-02-20T20:42:55.000Z'),
+      new Date('2026-02-20T20:42:55.000Z')
+    );
+    utimesSync(
+      matchingCwdPath,
+      new Date('2026-02-20T19:42:55.000Z'),
+      new Date('2026-02-20T19:42:55.000Z')
+    );
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: '/Users/test/match',
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath: matchingCwdPath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({
+      type: 'user',
+      content: 'from recent matching cwd',
+    });
+  });
+
+  it('does not scan beyond the bounded recent date directory window', async () => {
+    const providerSessionId = 'session-beyond-recent-cap';
+    const cwd = '/Users/test/project';
+    const newestDate = Date.UTC(2026, 5, 1);
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    for (let offset = 0; offset < 120; offset += 1) {
+      mkdirSync(
+        join(tempDir, 'sessions', formatRelativeDateDir(new Date(newestDate - offset * oneDayMs))),
+        {
+          recursive: true,
+        }
+      );
+    }
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: formatRelativeDateDir(new Date(newestDate - 120 * oneDayMs)),
+      fileName: `rollout-2026-02-01T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-01T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'outside bounded scan' },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toEqual({ status: 'not_found' });
+  });
+
   it('returns not_found when candidate filename matches but session_meta id does not', async () => {
     const providerSessionId = 'session-meta-mismatch';
     writeSessionFile({
@@ -384,6 +557,236 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     expect(result).toEqual({ status: 'not_found' });
+  });
+
+  it('caches negative lookups for missing session files', async () => {
+    const providerSessionId = 'session-negative-cache';
+    const cwd = '/Users/test/missing';
+    mkdirSync(join(tempDir, 'sessions'), { recursive: true });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toEqual({ status: 'not_found' });
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'created after miss' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toEqual({ status: 'not_found' });
+  });
+
+  it('ignores stale positive cache entries when the cached session file was removed', async () => {
+    const providerSessionId = 'session-stale-positive-cache';
+    const cwd = '/Users/test/project';
+    const firstPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'first cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: firstPath });
+
+    rmSync(firstPath, { force: true });
+    const secondPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'replacement file' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: secondPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'replacement file',
+    });
+  });
+
+  it('does not reuse an id-only positive cache entry when a cwd match appears later', async () => {
+    const providerSessionId = 'session-id-only-positive-cache';
+    const requestedCwd = '/Users/test/project';
+    const idOnlyPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/other' },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'id-only cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: requestedCwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: idOnlyPath });
+
+    const matchingCwdPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: requestedCwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'later cwd match' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: requestedCwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: matchingCwdPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'later cwd match',
+    });
+  });
+
+  it('does not reuse a positive cache entry whose session_meta id changed', async () => {
+    const providerSessionId = 'session-positive-cache-id-validation';
+    const cwd = '/Users/test/project';
+    const cachedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'first cached file' },
+        },
+      ],
+    });
+
+    const firstResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+    expect(firstResult).toMatchObject({ status: 'loaded', filePath: cachedPath });
+
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: 'different-session-id', cwd },
+        },
+        {
+          timestamp: '2026-02-14T00:00:02.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'wrong replaced file' },
+        },
+      ],
+    });
+    const replacementPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'replacement original session' },
+        },
+      ],
+    });
+
+    const secondResult = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(secondResult).toMatchObject({ status: 'loaded', filePath: replacementPath });
+    if (secondResult.status !== 'loaded') {
+      return;
+    }
+    expect(secondResult.history).toHaveLength(1);
+    expect(secondResult.history[0]).toMatchObject({
+      type: 'user',
+      content: 'replacement original session',
+    });
   });
 
   it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {

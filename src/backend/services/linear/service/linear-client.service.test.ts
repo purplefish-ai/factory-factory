@@ -122,6 +122,7 @@ describe('LinearClientService', () => {
   describe('listMyIssues', () => {
     it('returns normalized issues with fallbacks', async () => {
       const assignedIssues = vi.fn().mockResolvedValue({
+        pageInfo: { hasNextPage: false, endCursor: null },
         nodes: [
           {
             id: 'issue-1',
@@ -178,6 +179,84 @@ describe('LinearClientService', () => {
           state: 'Unknown',
           createdAt: '2024-01-02T00:00:00.000Z',
           assigneeName: 'Bob',
+        },
+      ]);
+    });
+
+    it('paginates assigned issues beyond the first page', async () => {
+      const assignedIssues = vi
+        .fn()
+        .mockResolvedValueOnce({
+          pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+          nodes: [
+            {
+              id: 'issue-50',
+              identifier: 'ENG-50',
+              title: 'Boundary issue',
+              description: null,
+              url: 'https://linear.app/example/issue/ENG-50',
+              createdAt: new Date('2024-02-01T00:00:00.000Z'),
+              state: Promise.resolve({ name: 'Todo' }),
+              assignee: Promise.resolve(null),
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          pageInfo: { hasNextPage: false, endCursor: 'cursor-2' },
+          nodes: [
+            {
+              id: 'issue-51',
+              identifier: 'ENG-51',
+              title: 'Overflow issue',
+              description: 'Page two',
+              url: 'https://linear.app/example/issue/ENG-51',
+              createdAt: new Date('2024-02-02T00:00:00.000Z'),
+              state: Promise.resolve({ name: 'Todo' }),
+              assignee: Promise.resolve({ displayName: 'Casey', name: 'Casey C.' }),
+            },
+          ],
+        });
+      setMockClient({
+        viewer: Promise.resolve({ assignedIssues }),
+      });
+
+      const result = await linearClientService.listMyIssues('linear-api-key', 'team-1');
+
+      expect(assignedIssues).toHaveBeenNthCalledWith(1, {
+        filter: {
+          team: { id: { eq: 'team-1' } },
+          state: { type: { eq: 'unstarted' } },
+        },
+        first: 50,
+      });
+      expect(assignedIssues).toHaveBeenNthCalledWith(2, {
+        filter: {
+          team: { id: { eq: 'team-1' } },
+          state: { type: { eq: 'unstarted' } },
+        },
+        first: 50,
+        after: 'cursor-1',
+      });
+      expect(result).toEqual([
+        {
+          id: 'issue-50',
+          identifier: 'ENG-50',
+          title: 'Boundary issue',
+          description: '',
+          url: 'https://linear.app/example/issue/ENG-50',
+          state: 'Todo',
+          createdAt: '2024-02-01T00:00:00.000Z',
+          assigneeName: null,
+        },
+        {
+          id: 'issue-51',
+          identifier: 'ENG-51',
+          title: 'Overflow issue',
+          description: 'Page two',
+          url: 'https://linear.app/example/issue/ENG-51',
+          state: 'Todo',
+          createdAt: '2024-02-02T00:00:00.000Z',
+          assigneeName: 'Casey',
         },
       ]);
     });

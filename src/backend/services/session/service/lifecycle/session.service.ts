@@ -18,6 +18,7 @@ import type {
   HistoryMessage,
 } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { WorkspaceStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
@@ -35,6 +36,10 @@ const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type StartSessionOptions = {
+  initialPrompt?: string;
+  startupModePreset?: SessionStartupModePreset;
+};
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 
 export type SessionServiceDependencies = {
@@ -140,13 +145,7 @@ export class SessionService {
     this.promptTurnCompletionService.setHandler(handler);
   }
 
-  async startSession(
-    sessionId: string,
-    options?: {
-      initialPrompt?: string;
-      startupModePreset?: SessionStartupModePreset;
-    }
-  ): Promise<void> {
+  async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
     await this.lifecycleService.startSession(
       sessionId,
       (id, content) => this.sendSessionMessage(id, content),
@@ -161,9 +160,11 @@ export class SessionService {
     await this.lifecycleService.stopSession(sessionId, options);
   }
 
-  async restartSession(sessionId: string): Promise<void> {
-    await this.lifecycleService.restartSession(sessionId, (id, content) =>
-      this.sendSessionMessage(id, content)
+  async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    await this.lifecycleService.restartSession(
+      sessionId,
+      (id, content) => this.sendSessionMessage(id, content),
+      options
     );
   }
 
@@ -357,6 +358,7 @@ export class SessionService {
     timeoutMs?: number
   ): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
+    let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
     let promptError: unknown;
     let promptErrorSet = false;
@@ -371,7 +373,7 @@ export class SessionService {
     });
 
     if (workspaceId && this.workspaceBridge) {
-      this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
+      workspaceActivityGeneration = this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
     }
 
     try {
@@ -402,7 +404,11 @@ export class SessionService {
       throw error;
     } finally {
       if (workspaceId && this.workspaceBridge) {
-        this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+        if (workspaceActivityGeneration === undefined) {
+          this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+        } else {
+          this.workspaceBridge.markSessionIdle(workspaceId, sessionId, workspaceActivityGeneration);
+        }
       }
       if (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) {
         this.promptTurnCompletionService.schedule(sessionId);
@@ -517,6 +523,7 @@ export class SessionService {
     resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
+    workspaceStatus: WorkspaceStatus;
   } | null> {
     return this.lifecycleService.getSessionOptions(sessionId);
   }

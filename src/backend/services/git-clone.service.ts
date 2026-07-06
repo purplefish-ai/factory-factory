@@ -1,10 +1,12 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('git-clone');
+const GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface GithubRepo {
   owner: string;
@@ -88,13 +90,28 @@ class GitCloneService {
     // Ensure parent directory exists
     const parentDir = join(destination, '..');
     await mkdir(parentDir, { recursive: true });
+    const destinationExistedBeforeClone = await pathExists(destination);
 
     logger.info('Cloning repository', { url, destination });
 
-    const result = await execCommand('git', ['clone', '--progress', url, destination]);
+    const result = await execCommand('git', ['clone', '--progress', url, destination], {
+      env: {
+        ...configService.getChildProcessEnv(),
+        GCM_INTERACTIVE: 'never',
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new',
+      },
+      timeout: GIT_CLONE_TIMEOUT_MS,
+    });
 
     if (result.code !== 0) {
-      const errorMsg = result.stderr || result.stdout || 'Clone failed with no output';
+      if (!destinationExistedBeforeClone && (await pathExists(destination))) {
+        await rm(destination, { recursive: true, force: true });
+      }
+
+      const errorMsg = result.timedOut
+        ? `Clone timed out after ${Math.round(GIT_CLONE_TIMEOUT_MS / 1000)} seconds`
+        : result.stderr || result.stdout || 'Clone failed with no output';
       logger.error('Clone failed', { url, destination, error: errorMsg });
       return { success: false, output: result.stderr, error: errorMsg };
     }

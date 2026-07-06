@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
-import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
+import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -15,7 +15,7 @@ import {
   IssueTrackerConfigSchema,
   sanitizeIssueTrackerConfig,
 } from '@/shared/schemas/issue-tracker-config.schema';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 function parseCommandFileDescription(filePath: string): string {
   try {
@@ -31,13 +31,19 @@ function parseCommandFileDescription(filePath: string): string {
   }
 }
 
-function isContainedInRoot(rootReal: string, filePath: string): boolean {
+function resolveContainedRegularFile(rootReal: string, filePath: string): string | null {
   try {
     const fileReal = realpathSync(filePath);
     const rel = relative(rootReal, fileReal);
-    return !(rel.startsWith('..') || isAbsolute(rel));
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      return null;
+    }
+    if (!statSync(fileReal).isFile()) {
+      return null;
+    }
+    return fileReal;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -57,7 +63,8 @@ function scanSlashCommandDirs(
     }
     for (const file of files) {
       const filePath = join(dir, file);
-      if (!isContainedInRoot(rootReal, filePath)) {
+      const fileReal = resolveContainedRegularFile(rootReal, filePath);
+      if (!fileReal) {
         continue;
       }
       const name = basename(file, '.md');
@@ -65,7 +72,7 @@ function scanSlashCommandDirs(
         continue;
       }
       seen.add(name);
-      commands.push({ name, description: parseCommandFileDescription(filePath) });
+      commands.push({ name, description: parseCommandFileDescription(fileReal) });
     }
   }
   return commands;
@@ -242,16 +249,10 @@ export const projectRouter = router({
         throw new Error(`Project not found: ${input.projectId}`);
       }
 
-      let files = await listFilesRecursive(project.repoPath);
-
-      if (input.query) {
-        const queryLower = input.query.toLowerCase();
-        files = files.filter((file) => file.toLowerCase().includes(queryLower));
-      }
-
-      const queryLower = input.query?.toLowerCase();
-      files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
-      files = files.slice(0, input.limit);
+      const files = await searchFilesRecursive(project.repoPath, {
+        query: input.query,
+        limit: input.limit,
+      });
 
       return { files };
     }),
@@ -272,7 +273,7 @@ export const projectRouter = router({
     }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
-  create: publicProcedure
+  create: trustedLocalProcedure
     .input(
       z.object({
         repoPath: z.string().min(1, 'Repository path is required'),
@@ -311,7 +312,7 @@ export const projectRouter = router({
     }),
 
   // Update a project
-  update: publicProcedure
+  update: trustedLocalProcedure
     .input(
       z.object({
         id: z.string(),
@@ -383,7 +384,7 @@ export const projectRouter = router({
     }),
 
   // Save factory-factory.json to the project repo
-  saveFactoryConfig: publicProcedure
+  saveFactoryConfig: trustedLocalProcedure
     .input(
       z.object({
         projectId: z.string(),
@@ -408,7 +409,7 @@ export const projectRouter = router({
   }),
 
   // Clone a GitHub repo and create a project
-  createFromGithub: publicProcedure
+  createFromGithub: trustedLocalProcedure
     .input(
       z.object({
         githubUrl: z

@@ -31,6 +31,34 @@ type ProviderHistoryLoadResult =
   | Awaited<ReturnType<typeof codexSessionHistoryLoaderService.loadSessionHistory>>;
 type LoadedProviderHistory = Extract<ProviderHistoryLoadResult, { status: 'loaded' }>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getProviderSessionIdFromMetadata(dbSession: ProviderSessionRecord): string | null {
+  if (!isRecord(dbSession.providerMetadata)) {
+    return null;
+  }
+
+  const snapshot = dbSession.providerMetadata.acpConfigSnapshot;
+  if (!isRecord(snapshot) || snapshot.provider !== dbSession.provider) {
+    return null;
+  }
+
+  const providerSessionId = snapshot.providerSessionId;
+  return typeof providerSessionId === 'string' && providerSessionId.length > 0
+    ? providerSessionId
+    : null;
+}
+
+function getProviderSessionId(dbSession: ProviderSessionRecord): string | null {
+  if (typeof dbSession.providerSessionId === 'string' && dbSession.providerSessionId.length > 0) {
+    return dbSession.providerSessionId;
+  }
+
+  return getProviderSessionIdFromMetadata(dbSession);
+}
+
 export function createLoadSessionHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<LoadSessionMessage> {
@@ -97,10 +125,11 @@ async function hydrateProviderHistoryIfNeeded(
   const historyHydrationSource = isHistoryHydrated
     ? sessionDomainService.getHistoryHydrationSource(sessionId)
     : undefined;
+  const providerSessionId = getProviderSessionId(dbSession);
   const shouldAttemptCodexToolBackfill =
     dbSession.provider === 'CODEX' &&
     existingTranscript.length > 0 &&
-    Boolean(dbSession.providerSessionId) &&
+    Boolean(providerSessionId) &&
     historyHydrationSource !== 'jsonl';
 
   if (isHistoryHydrated && !shouldAttemptCodexToolBackfill) {
@@ -112,24 +141,25 @@ async function hydrateProviderHistoryIfNeeded(
     return;
   }
 
-  if (!dbSession.providerSessionId) {
+  if (!providerSessionId) {
     sessionDomainService.clearHistoryRetryCooldown(sessionId);
     sessionDomainService.markHistoryHydrated(sessionId, 'none');
     return;
   }
 
   if (!sessionDomainService.canAttemptHistoryHydration(sessionId)) {
-    logHistoryRetryCooldownSkip(sessionId, dbSession);
+    logHistoryRetryCooldownSkip(sessionId, dbSession, providerSessionId);
     return;
   }
 
   const loadStart = Date.now();
-  const loadResult = await loadProviderHistory(dbSession);
+  const loadResult = await loadProviderHistory(dbSession, providerSessionId);
 
   if (loadResult.status === 'loaded') {
     handleLoadedProviderHistory({
       sessionId,
       dbSession,
+      providerSessionId,
       loadResult,
       shouldAttemptCodexToolBackfill,
       loadStart,
@@ -137,24 +167,29 @@ async function hydrateProviderHistoryIfNeeded(
     return;
   }
 
-  handleUnavailableProviderHistory(sessionId, dbSession, loadResult, {
+  handleUnavailableProviderHistory(sessionId, dbSession, providerSessionId, loadResult, {
     shouldRecheckCodexToolBackfill: shouldAttemptCodexToolBackfill,
   });
 }
 
-function logHistoryRetryCooldownSkip(sessionId: string, dbSession: ProviderSessionRecord): void {
+function logHistoryRetryCooldownSkip(
+  sessionId: string,
+  dbSession: ProviderSessionRecord,
+  providerSessionId: string
+): void {
   logger.debug('Skipping provider JSONL history hydration during cooldown', {
     sessionId,
     provider: dbSession.provider,
-    providerSessionId: dbSession.providerSessionId,
+    providerSessionId,
   });
 }
 
 async function loadProviderHistory(
-  dbSession: ProviderSessionRecord
+  dbSession: ProviderSessionRecord,
+  providerSessionId: string
 ): Promise<ProviderHistoryLoadResult> {
   const input = {
-    providerSessionId: dbSession.providerSessionId ?? '',
+    providerSessionId,
     workingDir: dbSession.workspace.worktreePath ?? '',
   };
 
@@ -168,12 +203,14 @@ async function loadProviderHistory(
 function handleLoadedProviderHistory({
   sessionId,
   dbSession,
+  providerSessionId,
   loadResult,
   shouldAttemptCodexToolBackfill,
   loadStart,
 }: {
   sessionId: string;
   dbSession: ProviderSessionRecord;
+  providerSessionId: string;
   loadResult: LoadedProviderHistory;
   shouldAttemptCodexToolBackfill: boolean;
   loadStart: number;
@@ -192,6 +229,7 @@ function handleLoadedProviderHistory({
     handleLoadedHistoryWithExistingTranscript({
       sessionId,
       dbSession,
+      providerSessionId,
       loadResult,
       transcript,
       latestTranscript,
@@ -204,7 +242,7 @@ function handleLoadedProviderHistory({
   logger.debug('Hydrated provider transcript from JSONL history', {
     sessionId,
     provider: dbSession.provider,
-    providerSessionId: dbSession.providerSessionId,
+    providerSessionId,
     filePath: loadResult.filePath,
     historyCount: loadResult.history.length,
     transcriptCount: transcript.length,
@@ -215,6 +253,7 @@ function handleLoadedProviderHistory({
 function handleLoadedHistoryWithExistingTranscript({
   sessionId,
   dbSession,
+  providerSessionId,
   loadResult,
   transcript,
   latestTranscript,
@@ -222,6 +261,7 @@ function handleLoadedHistoryWithExistingTranscript({
 }: {
   sessionId: string;
   dbSession: ProviderSessionRecord;
+  providerSessionId: string;
   loadResult: LoadedProviderHistory;
   transcript: ChatMessage[];
   latestTranscript: ChatMessage[];
@@ -230,7 +270,7 @@ function handleLoadedHistoryWithExistingTranscript({
   if (dbSession.provider === 'CODEX') {
     backfillCodexToolTranscript({
       sessionId,
-      dbSession,
+      providerSessionId,
       loadResult,
       transcript,
       latestTranscript,
@@ -243,7 +283,7 @@ function handleLoadedHistoryWithExistingTranscript({
   logger.debug('Skipping provider JSONL history replace because transcript is no longer empty', {
     sessionId,
     provider: dbSession.provider,
-    providerSessionId: dbSession.providerSessionId,
+    providerSessionId,
     transcriptCount: latestTranscript.length,
     loadDurationMs: Date.now() - loadStart,
   });
@@ -251,14 +291,14 @@ function handleLoadedHistoryWithExistingTranscript({
 
 function backfillCodexToolTranscript({
   sessionId,
-  dbSession,
+  providerSessionId,
   loadResult,
   transcript,
   latestTranscript,
   loadStart,
 }: {
   sessionId: string;
-  dbSession: ProviderSessionRecord;
+  providerSessionId: string;
   loadResult: LoadedProviderHistory;
   transcript: ChatMessage[];
   latestTranscript: ChatMessage[];
@@ -276,7 +316,7 @@ function backfillCodexToolTranscript({
   });
   logger.debug('Backfilled missing Codex tool calls from JSONL history', {
     sessionId,
-    providerSessionId: dbSession.providerSessionId,
+    providerSessionId,
     filePath: loadResult.filePath,
     existingTranscriptCount: latestTranscript.length,
     backfilledTranscriptCount: backfilledTranscript.length,
@@ -287,6 +327,7 @@ function backfillCodexToolTranscript({
 function handleUnavailableProviderHistory(
   sessionId: string,
   dbSession: ProviderSessionRecord,
+  providerSessionId: string,
   loadResult: Exclude<ProviderHistoryLoadResult, { status: 'loaded' }>,
   options?: { shouldRecheckCodexToolBackfill?: boolean }
 ): void {
@@ -295,7 +336,7 @@ function handleUnavailableProviderHistory(
     logger.warn('Provider JSONL history hydration failed; keeping session eligible for retry', {
       sessionId,
       provider: dbSession.provider,
-      providerSessionId: dbSession.providerSessionId,
+      providerSessionId,
       filePath: loadResult.filePath,
     });
     return;
@@ -309,7 +350,7 @@ function handleUnavailableProviderHistory(
   logger.debug('Provider JSONL history not available; skipping runtime fallback hydration', {
     sessionId,
     provider: dbSession.provider,
-    providerSessionId: dbSession.providerSessionId,
+    providerSessionId,
     loadStatus: loadResult.status,
   });
 }

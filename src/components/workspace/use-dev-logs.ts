@@ -2,6 +2,11 @@ import { useCallback, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import {
+  appendToRollingOutput,
+  WORKSPACE_LOG_OUTPUT_MAX_CHARS,
+  WORKSPACE_LOG_TRUNCATION_MARKER,
+} from './rolling-output';
 
 const DevLogsMessageSchema = z.object({
   type: z.literal('output'),
@@ -9,6 +14,11 @@ const DevLogsMessageSchema = z.object({
 });
 
 type DevLogsMessage = z.infer<typeof DevLogsMessageSchema>;
+
+const LOG_ROLLING_OUTPUT_OPTIONS = {
+  maxChars: WORKSPACE_LOG_OUTPUT_MAX_CHARS,
+  truncationMarker: WORKSPACE_LOG_TRUNCATION_MARKER,
+};
 
 // =============================================================================
 // Types
@@ -57,7 +67,9 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
       const message: DevLogsMessage = parsed.data;
 
       if (message.type === 'output' && message.data) {
-        setOutput((prev) => prev + message.data);
+        setOutput((prev) =>
+          appendToRollingOutput(prev, message.data ?? '', LOG_ROLLING_OUTPUT_OPTIONS)
+        );
         // Scroll to bottom after a short delay to allow render
         setTimeout(scrollToBottom, 10);
       }
@@ -67,12 +79,20 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
 
   const handleConnected = useCallback(() => {
     setHasDisconnected(false);
-    setOutput((prev) => (prev ? `${prev}Reconnected!\n\n` : 'Connected!\n\n'));
+    setOutput((prev) =>
+      appendToRollingOutput(
+        prev,
+        prev ? 'Reconnected!\n\n' : 'Connected!\n\n',
+        LOG_ROLLING_OUTPUT_OPTIONS
+      )
+    );
   }, []);
 
   const handleDisconnected = useCallback(() => {
     setHasDisconnected(true);
-    setOutput((prev) => `${prev}Disconnected. Reconnecting...\n`);
+    setOutput((prev) =>
+      appendToRollingOutput(prev, 'Disconnected. Reconnecting...\n', LOG_ROLLING_OUTPUT_OPTIONS)
+    );
   }, []);
 
   const { connected } = useWebSocketTransport({

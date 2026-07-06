@@ -226,8 +226,6 @@ export class AutoIterationService {
       );
     }
 
-    loop.pauseRequested = false;
-
     // Set a pending sentinel synchronously so concurrent resume() calls wait until
     // this call has swapped in the real runLoop promise or reset after failure.
     let releaseSentinel = (): void => undefined;
@@ -237,9 +235,10 @@ export class AutoIterationService {
     loop.loopPromise = sentinel;
 
     try {
+      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
       await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
-      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+      loop.pauseRequested = false;
       loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
         this.logger.error('Auto-iteration loop failed on resume', {
           workspaceId,
@@ -249,7 +248,16 @@ export class AutoIterationService {
         this.loops.delete(workspaceId);
       });
     } catch (err) {
+      loop.pauseRequested = true;
       loop.loopPromise = null;
+      try {
+        await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.PAUSED);
+      } catch (recoveryError) {
+        this.logger.error('Failed to restore paused auto-iteration status after resume failure', {
+          workspaceId,
+          error: String(recoveryError),
+        });
+      }
       throw err;
     } finally {
       releaseSentinel();

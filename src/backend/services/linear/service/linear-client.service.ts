@@ -93,29 +93,47 @@ class LinearClientService {
   async listMyIssues(apiKey: string, teamId: string): Promise<LinearIssue[]> {
     const client = this.createClient(apiKey);
     const viewer = await client.viewer;
-    const issues = await viewer.assignedIssues({
-      filter: {
-        team: { id: { eq: teamId } },
-        state: { type: { eq: 'unstarted' } },
-      },
-      first: 50,
-    });
+    const linearIssues: LinearIssue[] = [];
+    let afterCursor: string | undefined;
+    let hasNextPage = true;
 
-    return Promise.all(
-      issues.nodes.map(async (issue) => {
-        const [state, assignee] = await Promise.all([issue.state, issue.assignee]);
-        return {
-          id: issue.id,
-          identifier: issue.identifier,
-          title: issue.title,
-          description: issue.description ?? '',
-          url: issue.url,
-          state: state?.name ?? 'Unknown',
-          createdAt: issue.createdAt.toISOString(),
-          assigneeName: assignee?.displayName ?? assignee?.name ?? null,
-        };
-      })
-    );
+    while (hasNextPage) {
+      const issues = await viewer.assignedIssues({
+        filter: {
+          team: { id: { eq: teamId } },
+          state: { type: { eq: 'unstarted' } },
+        },
+        first: 50,
+        ...(afterCursor ? { after: afterCursor } : {}),
+      });
+
+      linearIssues.push(
+        ...(await Promise.all(
+          issues.nodes.map(async (issue) => {
+            const [state, assignee] = await Promise.all([issue.state, issue.assignee]);
+            return {
+              id: issue.id,
+              identifier: issue.identifier,
+              title: issue.title,
+              description: issue.description ?? '',
+              url: issue.url,
+              state: state?.name ?? 'Unknown',
+              createdAt: issue.createdAt.toISOString(),
+              assigneeName: assignee?.displayName ?? assignee?.name ?? null,
+            };
+          })
+        ))
+      );
+      hasNextPage = issues.pageInfo.hasNextPage;
+      afterCursor = issues.pageInfo.endCursor ?? undefined;
+
+      if (hasNextPage && !afterCursor) {
+        logger.warn('Linear assigned issues page is missing an end cursor');
+        break;
+      }
+    }
+
+    return linearIssues;
   }
 
   /** Fetch a single issue by ID. */

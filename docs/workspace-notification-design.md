@@ -70,7 +70,7 @@ Electron:
 │  │  │  workspaceStates Map                               │ │          │    │
 │  │  │  {                                                 │ │          │    │
 │  │  │    workspaceId: {                                 │ │          │    │
-│  │  │      runningSessions: Set<sessionId>,  ◄──────────┼─┘          │    │
+│  │  │      runningSessions: Map<sessionId, generation>,  ◄──────────┼─┘    │    │
 │  │  │      lastActivityAt: Date                         │ │            │    │
 │  │  │    }                                              │ │            │    │
 │  │  │  }                                                │ │            │    │
@@ -574,7 +574,8 @@ const logger = createLogger('workspace-activity');
 
 interface WorkspaceActivityState {
   workspaceId: string;
-  runningSessions: Set<string>; // Set of session IDs currently running
+  runningSessions: Map<string, number>; // Session ID to current activity generation
+  currentGeneration: number;
   lastActivityAt: Date;
 }
 
@@ -609,42 +610,79 @@ class WorkspaceActivityService extends EventEmitter {
   /**
    * Mark a session as started/running in a workspace
    */
-  markSessionRunning(workspaceId: string, sessionId: string): void {
+  markSessionRunning(workspaceId: string, sessionId: string): number {
     let state = this.workspaceStates.get(workspaceId);
 
     if (!state) {
       state = {
         workspaceId,
-        runningSessions: new Set(),
+        runningSessions: new Map(),
+        currentGeneration: 0,
         lastActivityAt: new Date(),
       };
       this.workspaceStates.set(workspaceId, state);
     }
 
     const wasIdle = state.runningSessions.size === 0;
-    state.runningSessions.add(sessionId);
+    state.currentGeneration += 1;
+    const generation = state.currentGeneration;
+    state.runningSessions.set(sessionId, generation);
     state.lastActivityAt = new Date();
+
+    this.emit('session_activity_changed', {
+      workspaceId,
+      sessionId,
+      isWorking: true,
+      runningSessionCount: state.runningSessions.size,
+      updatedAt: state.lastActivityAt,
+    });
 
     if (wasIdle) {
       logger.debug('Workspace became active', { workspaceId, sessionId });
       this.emit('workspace_active', { workspaceId });
     }
+
+    return generation;
   }
 
   /**
    * Mark a session as finished/idle in a workspace
    */
-  markSessionIdle(workspaceId: string, sessionId: string): void {
+  markSessionIdle(workspaceId: string, sessionId: string, generation?: number): void {
     const state = this.workspaceStates.get(workspaceId);
 
     if (!state) {
       return; // No state tracked for this workspace
     }
 
+    const currentGeneration = state.runningSessions.get(sessionId);
+    if (currentGeneration === undefined) {
+      return;
+    }
+
+    if (generation !== undefined && currentGeneration !== generation) {
+      logger.debug('Ignoring stale workspace session idle transition', {
+        workspaceId,
+        sessionId,
+        generation,
+        currentGeneration,
+      });
+      return;
+    }
+
+    const wasActive = state.runningSessions.size > 0;
     state.runningSessions.delete(sessionId);
     state.lastActivityAt = new Date();
 
-    if (state.runningSessions.size === 0) {
+    this.emit('session_activity_changed', {
+      workspaceId,
+      sessionId,
+      isWorking: false,
+      runningSessionCount: state.runningSessions.size,
+      updatedAt: state.lastActivityAt,
+    });
+
+    if (wasActive && state.runningSessions.size === 0) {
       logger.info('All sessions finished in workspace', { workspaceId });
       this.emit('workspace_idle', {
         workspaceId,

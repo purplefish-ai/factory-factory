@@ -8,6 +8,18 @@ const mockPtyWrite = vi.fn();
 const mockPtyResize = vi.fn();
 const mockPtyKill = vi.fn();
 
+interface MockPidUsageStat {
+  cpu: number;
+  memory: number;
+  ppid: number;
+  pid: number;
+  ctime: number;
+  elapsed: number;
+  timestamp: number;
+}
+
+const mockPidusage = vi.hoisted(() => vi.fn<(pid: number | string) => Promise<MockPidUsageStat>>());
+
 let onDataCallback: ((data: string) => void) | null = null;
 let onExitCallback: ((e: { exitCode: number }) => void) | null = null;
 
@@ -40,7 +52,7 @@ vi.mock('node:module', () => ({
 }));
 
 vi.mock('pidusage', () => ({
-  default: vi.fn().mockResolvedValue({ cpu: 1.5, memory: 1024 }),
+  default: mockPidusage,
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -72,6 +84,7 @@ describe('TerminalService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPidusage.mockResolvedValue(createPidUsageStat());
     onDataCallback = null;
     onExitCallback = null;
     service = new TerminalService();
@@ -79,7 +92,31 @@ describe('TerminalService', () => {
 
   afterEach(() => {
     service.cleanup();
+    vi.useRealTimers();
   });
+
+  function createPidUsageStat(cpu = 1.5, memory = 1024): MockPidUsageStat {
+    return {
+      cpu,
+      memory,
+      ppid: 1,
+      pid: 12_345,
+      ctime: 0,
+      elapsed: 0,
+      timestamp: Date.now(),
+    };
+  }
+
+  function createDeferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+
+    return { promise, resolve, reject };
+  }
 
   // =========================================================================
   // createTerminal
@@ -371,6 +408,82 @@ describe('TerminalService', () => {
           rows: 24,
         })
       );
+    });
+  });
+
+  // =========================================================================
+  // resource monitoring
+  // =========================================================================
+  describe('resource monitoring', () => {
+    it('stores cached resource usage for admin terminal snapshots', async () => {
+      vi.useFakeTimers();
+      mockPidusage.mockResolvedValueOnce(createPidUsageStat(7.25, 4096));
+
+      await service.createTerminal(defaultOpts);
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(service.getAllTerminals()[0]?.resourceUsage).toEqual(
+        expect.objectContaining({
+          cpu: 7.25,
+          memory: 4096,
+          timestamp: expect.any(Date),
+        })
+      );
+    });
+
+    it('skips interval ticks while a resource update is still running', async () => {
+      vi.useFakeTimers();
+      const pendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+      mockPidusage.mockReturnValueOnce(pendingUsage.promise);
+
+      await service.createTerminal(defaultOpts);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(1);
+
+      pendingUsage.resolve(createPidUsageStat(3.5, 2048));
+      await pendingUsage.promise;
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not let an unresolved update from the last terminal block restarted monitoring', async () => {
+      vi.useFakeTimers();
+      const firstPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+      const secondPendingUsage = createDeferred<ReturnType<typeof createPidUsageStat>>();
+      mockPidusage
+        .mockReturnValueOnce(firstPendingUsage.promise)
+        .mockReturnValueOnce(secondPendingUsage.promise);
+
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(1);
+
+      service.destroyTerminal(defaultOpts.workspaceId, terminalId);
+      await service.createTerminal(defaultOpts);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(2);
+
+      firstPendingUsage.resolve(createPidUsageStat(3.5, 2048));
+      await firstPendingUsage.promise;
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(2);
+
+      secondPendingUsage.resolve(createPidUsageStat(4.5, 4096));
+      await secondPendingUsage.promise;
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockPidusage).toHaveBeenCalledTimes(3);
     });
   });
 

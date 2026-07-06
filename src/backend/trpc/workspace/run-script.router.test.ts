@@ -21,20 +21,29 @@ vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
 
 import { workspaceRunScriptRouter } from './run-script.trpc';
 
-function createCaller(runScriptService?: {
-  startRunScript?: (workspaceId: string) => Promise<{
-    success: boolean;
-    error?: string;
-    port?: number;
-    pid?: number;
-    proxyUrl?: string | null;
-  }>;
-  stopRunScript?: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
-  getRunScriptStatus?: (workspaceId: string) => Promise<unknown>;
-}) {
+function createCaller(
+  runScriptService?: {
+    startRunScript?: (workspaceId: string) => Promise<{
+      success: boolean;
+      error?: string;
+      port?: number;
+      pid?: number;
+      proxyUrl?: string | null;
+    }>;
+    stopRunScript?: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
+    getRunScriptStatus?: (workspaceId: string) => Promise<unknown>;
+  },
+  requestTrust?: { remoteAddress?: string; origin?: string; isLocal: boolean }
+) {
   return workspaceRunScriptRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
+        configService: {
+          getCorsConfig: () => ({
+            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+          }),
+        },
         runScriptService: {
           startRunScript: runScriptService?.startRunScript ?? (async () => ({ success: true })),
           stopRunScript: runScriptService?.stopRunScript ?? (async () => ({ success: true })),
@@ -165,6 +174,34 @@ describe('workspaceRunScriptRouter', () => {
     expect(startRunScript).toHaveBeenCalledWith('w1');
     expect(stopRunScript).toHaveBeenCalledWith('w1');
     expect(getRunScriptStatus).toHaveBeenCalledWith('w1');
+  });
+
+  it('rejects privileged run-script mutations from untrusted requests', async () => {
+    const startRunScript = vi.fn(async () => ({ success: true }));
+    const stopRunScript = vi.fn(async () => ({ success: true }));
+    const caller = createCaller(
+      { startRunScript, stopRunScript },
+      {
+        remoteAddress: '203.0.113.10',
+        origin: 'https://attacker.example',
+        isLocal: false,
+      }
+    );
+
+    await expect(
+      caller.createFactoryConfig({ workspaceId: 'w1', config: { scripts: {} } })
+    ).rejects.toThrow('trusted local Factory Factory client');
+    await expect(caller.startRunScript({ workspaceId: 'w1' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(caller.stopRunScript({ workspaceId: 'w1' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+
+    expect(mockFindByIdWithProject).not.toHaveBeenCalled();
+    expect(mockWriteFactoryConfigAndSyncWorkspace).not.toHaveBeenCalled();
+    expect(startRunScript).not.toHaveBeenCalled();
+    expect(stopRunScript).not.toHaveBeenCalled();
   });
 
   it('returns trpc error when start/stop run script fails', async () => {

@@ -1,7 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CorsConfig } from '@/backend/services/config.service';
 import { IssueProvider } from '@/shared/core/enums';
 
 const mockProjectManagementService = vi.hoisted(() => ({
@@ -17,8 +19,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
 const mockGitCommandC = vi.hoisted(() => vi.fn());
 const mockEncrypt = vi.hoisted(() => vi.fn((value: string) => `enc:${value}`));
 const mockReadConfig = vi.hoisted(() => vi.fn());
-const mockListFilesRecursive = vi.hoisted(() => vi.fn());
-const mockCompareFilesByRelevance = vi.hoisted(() => vi.fn());
+const mockSearchFilesRecursive = vi.hoisted(() => vi.fn());
 const mockParseGithubUrl = vi.hoisted(() => vi.fn());
 const mockCheckGithubAuth = vi.hoisted(() => vi.fn());
 const mockGetClonePath = vi.hoisted(() => vi.fn());
@@ -46,8 +47,7 @@ vi.mock('@/backend/services/factory-config.service', () => ({
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
-  listFilesRecursive: (...args: unknown[]) => mockListFilesRecursive(...args),
-  compareFilesByRelevance: (...args: unknown[]) => mockCompareFilesByRelevance(...args),
+  searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
 }));
 
 vi.mock('@/backend/services/git-clone.service', () => ({
@@ -62,13 +62,31 @@ vi.mock('@/backend/services/git-clone.service', () => ({
 
 import { projectRouter } from './project.trpc';
 
-function createCaller() {
+function mkfifo(path: string): void {
+  const result = spawnSync('mkfifo', [path], { encoding: 'utf-8' });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.error?.message || 'Failed to create FIFO');
+  }
+}
+
+function createCaller(
+  requestTrust?: {
+    remoteAddress?: string;
+    origin?: string;
+    isLocal: boolean;
+  },
+  corsConfig: CorsConfig = {
+    allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+  }
+) {
   return projectRouter.createCaller({
+    requestTrust,
     appContext: {
       services: {
         configService: {
           getWorktreeBaseDir: () => '/tmp/worktrees',
           getReposDir: () => '/repos',
+          getCorsConfig: () => corsConfig,
         },
       },
     },
@@ -81,7 +99,6 @@ describe('projectRouter', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'project-router-test-'));
     vi.clearAllMocks();
-    mockCompareFilesByRelevance.mockImplementation((a: string, b: string) => a.localeCompare(b));
     mockParseGithubUrl.mockReturnValue({
       owner: 'purplefish-ai',
       repo: 'factory-factory',
@@ -163,6 +180,34 @@ describe('projectRouter', () => {
     );
   });
 
+  it('skips non-regular slash command files', async () => {
+    const commandsPath = join(tempDir, '.claude', 'commands');
+    const fifoTarget = join(tempDir, 'command-target');
+    mkdirSync(commandsPath, { recursive: true });
+    writeFileSync(
+      join(commandsPath, 'issue-1809-valid.md'),
+      '---\ndescription: Safe command\n---\n'
+    );
+    mkfifo(join(commandsPath, 'issue-1809-pipe.md'));
+    mkfifo(fifoTarget);
+    symlinkSync(fifoTarget, join(commandsPath, 'issue-1809-linked.md'));
+    mockProjectManagementService.findById.mockResolvedValue({
+      id: 'p1',
+      repoPath: tempDir,
+    });
+
+    const caller = createCaller();
+    const result = await caller.listSlashCommands({ projectId: 'p1' });
+    const commandNames = result.commands.map((command) => command.name);
+
+    expect(result.commands).toContainEqual({
+      name: 'issue-1809-valid',
+      description: 'Safe command',
+    });
+    expect(commandNames).not.toContain('issue-1809-pipe');
+    expect(commandNames).not.toContain('issue-1809-linked');
+  });
+
   it('handles malformed git ref lines and git branch listing failures', async () => {
     mockProjectManagementService.findById.mockResolvedValue({
       id: 'p1',
@@ -197,22 +242,13 @@ describe('projectRouter', () => {
     );
   });
 
-  it('filters/sorts file listings and validates project exists', async () => {
+  it('delegates file autocomplete to bounded search and validates project exists', async () => {
     const caller = createCaller();
     mockProjectManagementService.findById.mockResolvedValueOnce({
       id: 'p1',
       repoPath: '/repo/path',
     });
-    mockListFilesRecursive.mockResolvedValueOnce([
-      'src/zeta.ts',
-      'README.md',
-      'src/alpha.ts',
-      'docs/notes.md',
-    ]);
-    mockCompareFilesByRelevance.mockImplementation((a: string, b: string, query?: string) => {
-      expect(query).toBe('src');
-      return a.localeCompare(b);
-    });
+    mockSearchFilesRecursive.mockResolvedValueOnce(['src/alpha.ts', 'src/zeta.ts']);
 
     await expect(
       caller.listAllFiles({
@@ -222,6 +258,11 @@ describe('projectRouter', () => {
       })
     ).resolves.toEqual({
       files: ['src/alpha.ts', 'src/zeta.ts'],
+    });
+
+    expect(mockSearchFilesRecursive).toHaveBeenCalledWith('/repo/path', {
+      query: 'SRC',
+      limit: 2,
     });
 
     mockProjectManagementService.findById.mockResolvedValueOnce(null);
@@ -302,6 +343,107 @@ describe('projectRouter', () => {
         },
       })
     );
+  });
+
+  it('rejects privileged project mutations from untrusted requests', async () => {
+    const caller = createCaller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    });
+
+    await expect(caller.create({ repoPath: '/repo/path' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(caller.update({ id: 'p1', name: 'Renamed' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    await expect(
+      caller.createFromGithub({ githubUrl: 'https://github.com/purplefish-ai/factory-factory' })
+    ).rejects.toThrow('trusted local Factory Factory client');
+    await expect(
+      caller.saveFactoryConfig({
+        projectId: 'p1',
+        config: { scripts: { run: 'pnpm dev' } },
+      })
+    ).rejects.toThrow('trusted local Factory Factory client');
+
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.create).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.update).not.toHaveBeenCalled();
+    expect(mockGetClonePath).not.toHaveBeenCalled();
+    expect(mockCloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('allows privileged project mutations from trusted local origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://localhost:3000',
+      isLocal: true,
+    });
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(
+      caller.create({
+        repoPath: '/good/path',
+        startupScriptPath: 'scripts/start.sh',
+      })
+    ).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalledWith(
+      {
+        repoPath: '/good/path',
+        startupScriptCommand: undefined,
+        startupScriptPath: 'scripts/start.sh',
+        startupScriptTimeout: undefined,
+      },
+      { worktreeBaseDir: '/tmp/worktrees' }
+    );
+  });
+
+  it('allows privileged project mutations from equivalent loopback origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'http://127.0.0.1:3000',
+      isLocal: true,
+    });
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalled();
+  });
+
+  it('allows privileged project mutations from configured trusted local CIDRs', async () => {
+    const caller = createCaller(
+      {
+        remoteAddress: '172.17.0.1',
+        origin: 'http://localhost:3000',
+        isLocal: false,
+      },
+      {
+        allowedOrigins: ['http://localhost:3000'],
+        trustedLocalCidrs: ['172.17.0.1/32'],
+      }
+    );
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(caller.create({ repoPath: '/good/path' })).resolves.toEqual({ id: 'created' });
+    expect(mockProjectManagementService.create).toHaveBeenCalled();
+  });
+
+  it('rejects privileged project mutations from disallowed browser origins', async () => {
+    const caller = createCaller({
+      remoteAddress: '127.0.0.1',
+      origin: 'https://attacker.example',
+      isLocal: true,
+    });
+
+    await expect(caller.create({ repoPath: '/repo/path' })).rejects.toThrow(
+      'trusted local Factory Factory client'
+    );
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
   });
 
   it('creates projects successfully and validates update edge cases', async () => {

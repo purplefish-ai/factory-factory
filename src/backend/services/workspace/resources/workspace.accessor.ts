@@ -2,12 +2,12 @@ import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/
 import { prisma } from '@/backend/db';
 import type {
   CIStatus,
-  KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
 } from '@/shared/core';
+import { KanbanColumn } from '@/shared/core';
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.
@@ -388,6 +388,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -410,6 +412,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -431,6 +435,8 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'NEW',
+        cachedKanbanColumn: KanbanColumn.WORKING,
+        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: null,
         initCompletedAt: null,
@@ -567,6 +573,34 @@ class WorkspaceAccessor {
       where: { id: workspaceId, ratchetActiveSessionId: sessionId },
       data: { ratchetActiveSessionId: null },
     });
+  }
+
+  /**
+   * Record a ratchet fixer session only while ratcheting is still enabled.
+   * The conditional update closes the disable-vs-dispatch race where an
+   * in-flight ratchet check could repopulate the active session after disable.
+   */
+  async setRatchetActiveSessionIfEnabled(workspaceId: string, sessionId: string): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id: workspaceId, ratchetEnabled: true },
+      data: { ratchetActiveSessionId: sessionId },
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Persist ratchet check output only while ratcheting remains enabled.
+   * This prevents stale in-flight checks from overwriting the disabled state.
+   */
+  async updateRatchetCheckIfEnabled(
+    workspaceId: string,
+    data: Pick<UpdateWorkspaceInput, 'ratchetState' | 'ratchetLastCheckedAt' | 'ratchetLastCiRunId'>
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id: workspaceId, ratchetEnabled: true },
+      data,
+    });
+    return result.count > 0;
   }
 
   /**

@@ -47,7 +47,7 @@ flowchart TB
         ChatHandler["chat.handler.ts<br/>WebSocket Handler"]
 
         subgraph ActivityService["workspace-activity.service.ts"]
-            StateMap["workspaceStates Map<br/>{<br/>  workspaceId: {<br/>    runningSessions: Set<sessionId>,<br/>    lastActivityAt: Date<br/>  }<br/>}"]
+            StateMap["workspaceStates Map<br/>{<br/>  workspaceId: {<br/>    runningSessions: Map<sessionId, generation>,<br/>    lastActivityAt: Date<br/>  }<br/>}"]
             IdleEvent["Event: 'workspace_idle'<br/>(when runningSessions.size === 0)"]
             IdleHandler["workspace_idle handler:<br/>1. Query workspace by ID<br/>2. Emit 'request_notification'"]
         end

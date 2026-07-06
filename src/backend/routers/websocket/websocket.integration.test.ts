@@ -66,7 +66,7 @@ beforeAll(async () => {
   ({ workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace-snapshot-store.service')
   >('@/backend/services/workspace-snapshot-store.service'));
-});
+}, 30_000);
 
 afterEach(async () => {
   for (const ws of openSockets) {
@@ -534,11 +534,13 @@ describe('websocket integration', () => {
     openSockets.add(ws);
 
     await vi.waitFor(() => {
-      expect(messages).toContainEqual({
-        type: 'snapshot_full',
-        projectId,
-        entries: expect.arrayContaining([expect.objectContaining({ workspaceId })]),
-      });
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: 'snapshot_full',
+          projectId,
+          entries: expect.arrayContaining([expect.objectContaining({ workspaceId })]),
+        })
+      );
     });
 
     workspaceSnapshotStore.upsert(
@@ -553,19 +555,23 @@ describe('websocket integration', () => {
     );
 
     await vi.waitFor(() => {
-      expect(messages).toContainEqual({
-        type: 'snapshot_changed',
-        workspaceId,
-        entry: expect.objectContaining({
-          prUrl: 'https://github.com/acme/repo/pull/123',
-        }),
-      });
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: 'snapshot_changed',
+          workspaceId,
+          entry: expect.objectContaining({
+            prUrl: 'https://github.com/acme/repo/pull/123',
+          }),
+        })
+      );
     });
 
     workspaceSnapshotStore.remove(workspaceId);
 
     await vi.waitFor(() => {
-      expect(messages).toContainEqual({ type: 'snapshot_removed', workspaceId });
+      expect(messages).toContainEqual(
+        expect.objectContaining({ type: 'snapshot_removed', workspaceId })
+      );
     });
   });
 

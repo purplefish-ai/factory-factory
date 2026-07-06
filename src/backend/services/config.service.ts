@@ -69,6 +69,7 @@ export interface NotificationConfig {
  */
 export interface CorsConfig {
   allowedOrigins: string[];
+  trustedLocalCidrs?: string[];
 }
 
 /**
@@ -238,10 +239,17 @@ function buildNotificationConfig(env: ConfigEnv): NotificationConfig {
  */
 function buildCorsConfig(env: ConfigEnv): CorsConfig {
   const originsEnv = env.CORS_ALLOWED_ORIGINS;
+  const trustedCidrsEnv = env.TRUSTED_LOCAL_CIDRS;
   const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 
   return {
     allowedOrigins: originsEnv ? originsEnv.split(',').map((o) => o.trim()) : defaultOrigins,
+    trustedLocalCidrs: trustedCidrsEnv
+      ? trustedCidrsEnv
+          .split(',')
+          .map((cidr) => cidr.trim())
+          .filter(Boolean)
+      : [],
   };
 }
 
@@ -540,7 +548,10 @@ class ConfigService {
    * Get CORS configuration
    */
   getCorsConfig(): CorsConfig {
-    return { ...this.config.cors };
+    return {
+      allowedOrigins: [...this.config.cors.allowedOrigins],
+      trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
+    };
   }
 
   /**

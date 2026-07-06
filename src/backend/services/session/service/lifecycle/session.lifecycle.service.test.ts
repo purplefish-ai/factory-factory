@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { SessionStatus } from '@/shared/core';
 import { SessionLifecycleService } from './session.lifecycle.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -80,6 +81,69 @@ async function deliverPendingChildNotifications(
     }
   ).deliverPendingChildNotifications(sessionId, workspaceId);
 }
+
+function createStoppableLifecycleService() {
+  const repository = {
+    getSessionsByWorkspaceId: vi.fn(async () => [
+      { id: 'session-running', status: SessionStatus.RUNNING },
+      { id: 'session-runtime-only', status: SessionStatus.COMPLETED },
+      { id: 'session-idle', status: SessionStatus.IDLE },
+    ]),
+  };
+  const runtimeManager = {
+    isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+  };
+  const service = new SessionLifecycleService({
+    repository: repository as never,
+    promptBuilder: {} as never,
+    runtimeManager: runtimeManager as never,
+    sessionDomainService: {} as never,
+    sessionPermissionService: {} as never,
+    sessionConfigService: {} as never,
+    acpEventProcessor: {} as never,
+    promptTurnCompletionService: {} as never,
+    retryService: {} as never,
+  });
+  const stopSession = vi.fn((_sessionId: string): Promise<void> => Promise.resolve());
+  (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
+
+  return { service, repository, runtimeManager, stopSession };
+}
+
+describe('SessionLifecycleService stopWorkspaceSessions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('stops running sessions and runtime-only sessions', async () => {
+    const { service, repository, runtimeManager, stopSession } = createStoppableLifecycleService();
+
+    await service.stopWorkspaceSessions('workspace-1');
+
+    expect(repository.getSessionsByWorkspaceId).toHaveBeenCalledWith('workspace-1');
+    expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-runtime-only');
+    expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-idle');
+    expect(stopSession).toHaveBeenCalledWith('session-running');
+    expect(stopSession).toHaveBeenCalledWith('session-runtime-only');
+    expect(stopSession).not.toHaveBeenCalledWith('session-idle');
+  });
+
+  it('attempts every running session and throws when any stop fails', async () => {
+    const { service, stopSession } = createStoppableLifecycleService();
+    stopSession.mockImplementation((sessionId: string) => {
+      if (sessionId === 'session-running') {
+        return Promise.reject(new Error('stop failed'));
+      }
+      return Promise.resolve();
+    });
+
+    await expect(service.stopWorkspaceSessions('workspace-1')).rejects.toThrow(
+      'Failed to stop 1 workspace session'
+    );
+    expect(stopSession).toHaveBeenCalledWith('session-running');
+    expect(stopSession).toHaveBeenCalledWith('session-runtime-only');
+  });
+});
 
 describe('SessionLifecycleService pending workspace notifications', () => {
   beforeEach(() => {
@@ -540,6 +604,27 @@ describe('SessionLifecycleService startSession pending workspace notifications',
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('sends an explicit restart prompt after queued notification dispatch starts', async () => {
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
+      {
+        pendingNotificationCount: 1,
+      }
+    );
+
+    await service.restartSession('session-1', sendSessionMessage, {
+      initialPrompt: 'Fix the failing checks',
+      startupModePreset: 'non_interactive',
+    });
+
+    expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Fix the failing checks');
+    const dispatchOrder = tryDispatchNextMessage.mock.invocationCallOrder[0];
+    const sendOrder = sendSessionMessage.mock.invocationCallOrder[0];
+    expect(dispatchOrder).toBeDefined();
+    expect(sendOrder).toBeDefined();
+    expect(dispatchOrder!).toBeLessThan(sendOrder!);
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {

@@ -15,7 +15,11 @@ import type {
   UserQuestionRequest,
   WebSocketMessage,
 } from '@/lib/chat-protocol';
-import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/chat-protocol';
+import {
+  DEFAULT_CHAT_SETTINGS,
+  DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+  MessageState,
+} from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -163,6 +167,36 @@ function createTestToolResultMessage(toolUseId: string): AgentMessage {
         },
       ],
     },
+  };
+}
+
+function createUserChatMessage(id: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'user',
+    text: `Message ${order}`,
+    timestamp: '2024-01-01T00:00:00.000Z',
+    order,
+  };
+}
+
+function createToolUseChatMessage(id: string, toolUseId: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'agent',
+    message: createTestToolUseMessage(toolUseId),
+    timestamp: '2024-01-01T00:00:00.000Z',
+    order,
+  };
+}
+
+function createToolResultChatMessage(id: string, toolUseId: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'agent',
+    message: createTestToolResultMessage(toolUseId),
+    timestamp: '2024-01-01T00:00:00.000Z',
+    order,
   };
 }
 
@@ -1125,6 +1159,51 @@ describe('chatReducer', () => {
       expect(newState.lastRejectedMessage?.text).toBe('My important message');
       expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
     });
+
+    it('should clear pending messages when replay includes a missed rejected state', () => {
+      let state = chatReducer(createInitialChatState(), {
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id: 'msg-rejected',
+          text: 'This message will be rejected',
+          attachments: [],
+          sessionId: 'session-1',
+        },
+      });
+
+      expect(state.pendingMessages.has('msg-rejected')).toBe(true);
+
+      state = chatReducer(state, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'session_runtime_snapshot',
+              sessionRuntime: {
+                phase: 'idle',
+                processState: 'alive',
+                activity: 'IDLE',
+                updatedAt: '2026-02-08T00:00:00.000Z',
+              },
+            },
+            {
+              type: 'message_state_changed',
+              id: 'msg-rejected',
+              newState: MessageState.REJECTED,
+              errorMessage: 'Empty message',
+            },
+          ],
+        },
+      });
+
+      expect(state.pendingMessages.has('msg-rejected')).toBe(false);
+      expect(state.lastRejectedMessage).toEqual({
+        text: 'This message will be rejected',
+        attachments: [],
+        error: 'Empty message',
+        sessionId: 'session-1',
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1540,6 +1619,151 @@ describe('chatReducer', () => {
 
       expect(newState.messages).toHaveLength(1);
       expect(newState.messages[0]).toEqual(userMessage);
+    });
+  });
+
+  describe('renderer transcript retention', () => {
+    it('caps live agent inserts to the recent renderer window and prunes rewind metadata', () => {
+      const messages = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT }, (_, order) =>
+        createUserChatMessage(`msg-${order}`, order)
+      );
+      const state = createInitialChatState({
+        messages,
+        messageIdToUuid: new Map([
+          ['msg-0', 'uuid-0'],
+          [`msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`, 'uuid-recent'],
+        ]),
+        localUserMessageIds: new Set(['msg-0', `msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`]),
+      });
+
+      const newState = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: {
+          message: createTestAssistantMessage(),
+          order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+        },
+      });
+
+      expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
+      expect(newState.messages[0]!.id).toBe('msg-1');
+      expect(newState.messages.at(-1)?.source).toBe('agent');
+      expect(newState.messageIdToUuid.has('msg-0')).toBe(false);
+      expect(newState.messageIdToUuid.get(`msg-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1}`)).toBe(
+        'uuid-recent'
+      );
+      expect(newState.localUserMessageIds.has('msg-0')).toBe(false);
+    });
+
+    it('drops recovered old user-message deltas that fall outside the recent window', () => {
+      const messages = Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT }, (_, index) =>
+        createUserChatMessage(`msg-${index + 100}`, index + 100)
+      );
+      const state = createInitialChatState({ messages });
+
+      const newState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'missed-old-message',
+          newState: MessageState.DISPATCHED,
+          userMessage: {
+            text: 'Recovered but too old',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 0,
+          },
+        },
+      });
+
+      expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
+      expect(newState.messages.some((message) => message.id === 'missed-old-message')).toBe(false);
+      expect(newState.messages[0]!.id).toBe('msg-100');
+    });
+
+    it('caps snapshot hydration and rebuilds tool indexes for retained messages', () => {
+      const messages = [
+        createToolUseChatMessage('old-tool', 'tool-old', 0),
+        ...Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1 }, (_, index) =>
+          createUserChatMessage(`msg-${index + 1}`, index + 1)
+        ),
+        createToolUseChatMessage('recent-tool', 'tool-recent', DEFAULT_RENDERER_TRANSCRIPT_LIMIT),
+      ];
+
+      const newState = chatReducer(initialState, {
+        type: 'SESSION_SNAPSHOT',
+        payload: {
+          messages,
+          queuedMessages: [],
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      });
+
+      expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
+      expect(newState.messages[0]!.id).toBe('msg-1');
+      expect(newState.messages.at(-1)?.id).toBe('recent-tool');
+      expect(newState.toolUseIdToIndex.has('tool-old')).toBe(false);
+      expect(newState.toolUseIdToIndex.get('tool-recent')).toBe(
+        DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1
+      );
+    });
+
+    it('starts a trimmed snapshot at a render-safe boundary', () => {
+      const messages = [
+        createUserChatMessage('too-old', 0),
+        createToolResultChatMessage('orphaned-tool-result', 'tool-too-old', 1),
+        ...Array.from({ length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1 }, (_, index) =>
+          createUserChatMessage(`msg-${index + 2}`, index + 2)
+        ),
+      ];
+
+      const newState = chatReducer(initialState, {
+        type: 'SESSION_SNAPSHOT',
+        payload: {
+          messages,
+          queuedMessages: [],
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      });
+
+      expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1);
+      expect(newState.messages[0]!.id).toBe('msg-2');
+      expect(newState.messages.some((message) => message.id === 'orphaned-tool-result')).toBe(
+        false
+      );
+    });
+
+    it('drops late user-message UUIDs when there is no retained local message or pending send', () => {
+      const state = createInitialChatState({
+        pendingUserMessageUuids: ['stale-uuid'],
+      });
+
+      const newState = chatReducer(state, {
+        type: 'USER_MESSAGE_UUID_RECEIVED',
+        payload: { uuid: 'late-uuid' },
+      });
+
+      expect(newState.pendingUserMessageUuids).toEqual([]);
+    });
+
+    it('still queues early user-message UUIDs while a local send is pending', () => {
+      const state = createInitialChatState({
+        pendingMessages: new Map([['pending-message', { text: 'Pending send' }]]),
+      });
+
+      const newState = chatReducer(state, {
+        type: 'USER_MESSAGE_UUID_RECEIVED',
+        payload: { uuid: 'early-uuid' },
+      });
+
+      expect(newState.pendingUserMessageUuids).toEqual(['early-uuid']);
     });
   });
 
@@ -2017,6 +2241,39 @@ describe('chatReducer', () => {
 
       expect(newState.lastRejectedMessage?.text).toBe('My important message');
       expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
+    });
+
+    it('should preserve lastRejectedMessage when replay includes an already-handled rejection', () => {
+      const state: ChatState = {
+        ...initialState,
+        lastRejectedMessage: {
+          text: 'My important message',
+          attachments: [],
+          error: 'Unsupported image type',
+          sessionId: 'session-1',
+        },
+      };
+
+      const newState = chatReducer(state, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'message_state_changed',
+              id: 'msg-1',
+              newState: MessageState.REJECTED,
+              errorMessage: 'Unsupported image type',
+            },
+          ],
+        },
+      });
+
+      expect(newState.lastRejectedMessage).toEqual({
+        text: 'My important message',
+        attachments: [],
+        error: 'Unsupported image type',
+        sessionId: 'session-1',
+      });
     });
   });
 
