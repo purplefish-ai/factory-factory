@@ -20,7 +20,7 @@ Pending workspace notifications are re-enqueued after a session transcript is hy
 
 ## Design
 
-`SessionLifecycleService.deliverPendingChildNotifications` will compute each notification's canonical queue text before deduplication. The transcript helper will accept both `messageId` and `messageText`, examine only `source === 'user'` entries, prefer an exact ID match, and otherwise use exact text equality. It will return the matched transcript entry ID rather than a boolean so the caller can reserve provider-generated matches in a per-pass set.
+`SessionLifecycleService.deliverPendingChildNotifications` will compute each notification's canonical queue text before deduplication. The transcript helper will accept both `messageId` and `messageText`, examine only `source === 'user'` entries, and prefer an exact ID match. Exact-text fallback is enabled only when the transcript hydration source is `jsonl`, and `workspace-notification-*` entries are excluded from fallback so Factory queue IDs remain reserved for exact matching. The helper will return the matched transcript entry ID rather than a boolean so the caller can reserve provider-generated matches in a per-pass set.
 
 Exact Factory Factory IDs remain authoritative and need no reservation because each notification has a unique queue ID. Provider-generated content matches are reserved so one JSONL entry cannot mark two same-text pending notification records delivered. If no eligible transcript entry exists, enqueue behavior remains unchanged.
 

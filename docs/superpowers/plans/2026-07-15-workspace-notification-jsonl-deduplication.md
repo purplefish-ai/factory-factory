@@ -12,6 +12,7 @@
 
 - Preserve exact-ID deduplication for live Factory Factory transcript entries.
 - Content fallback must examine only `source === 'user'` transcript entries and require exact full prompt-text equality.
+- Content fallback is enabled only for `jsonl`-hydrated transcripts and must exclude `workspace-notification-*` entries so Factory queue IDs remain exact-match-only.
 - A provider-generated transcript entry may content-match at most one pending notification per delivery pass.
 - Do not use timestamps for fallback matching because provider JSONL timestamps represent send time rather than notification creation time.
 - Do not change ACP message IDs, provider adapters, database schema, or UI behavior.
@@ -96,8 +97,9 @@ The helper must:
 
 1. Restrict candidates to user transcript entries.
 2. Return an exact-ID candidate first with `matchedByContent: false`.
-3. Otherwise return the first candidate whose `text === messageText` and whose ID is not in `consumedContentMatchIds`, with `matchedByContent: true`.
-4. Return `undefined` when neither match exists.
+3. Return `undefined` before content matching unless `getHistoryHydrationSource(sessionId) === 'jsonl'`.
+4. Otherwise return the first non-`workspace-notification-*` candidate whose `text === messageText` and whose ID is not in `consumedContentMatchIds`, with `matchedByContent: true`.
+5. Return `undefined` when neither match exists.
 
 When a match has `matchedByContent: true`, add its ID to `consumedContentMatchIds` before retrying `markDelivered`. Keep the current rule that any transcript match suppresses re-enqueueing even if `markDelivered` fails.
 
