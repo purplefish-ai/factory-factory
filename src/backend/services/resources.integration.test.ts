@@ -609,26 +609,34 @@ describe('resource accessors integration', () => {
   });
 
   describe('terminalSessionAccessor', () => {
-    it('clears pid for all matching terminal names', async () => {
+    it('clears pid only for matching terminal names in the requested workspace', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
+      const otherWorkspace = await createWorkspaceFixture(project.id);
 
       await prisma.terminalSession.createMany({
         data: [
           { workspaceId: workspace.id, name: 'terminal-a', pid: 1001 },
           { workspaceId: workspace.id, name: 'terminal-a', pid: 2002 },
           { workspaceId: workspace.id, name: 'terminal-b', pid: 3003 },
+          { workspaceId: otherWorkspace.id, name: 'terminal-a', pid: 4004 },
         ],
       });
 
-      await terminalSessionAccessor.clearPid('terminal-a');
+      await terminalSessionAccessor.clearPid(workspace.id, 'terminal-a');
 
       const all = await prisma.terminalSession.findMany({ orderBy: { name: 'asc' } });
-      const target = all.filter((session) => session.name === 'terminal-a');
-      const untouched = all.find((session) => session.name === 'terminal-b');
+      const target = all.filter(
+        (session) => session.workspaceId === workspace.id && session.name === 'terminal-a'
+      );
+      const untouchedName = all.find((session) => session.name === 'terminal-b');
+      const untouchedWorkspace = all.find(
+        (session) => session.workspaceId === otherWorkspace.id && session.name === 'terminal-a'
+      );
 
       expect(target.every((session) => session.pid === null)).toBe(true);
-      expect(untouched?.pid).toBe(3003);
+      expect(untouchedName?.pid).toBe(3003);
+      expect(untouchedWorkspace?.pid).toBe(4004);
     });
 
     it('finds only terminal sessions with a live pid', async () => {
