@@ -410,7 +410,10 @@ export class SessionService {
           this.workspaceBridge.markSessionIdle(workspaceId, sessionId, workspaceActivityGeneration);
         }
       }
-      if (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) {
+      if (
+        (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
+        !this.isSessionStopping(sessionId)
+      ) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
@@ -502,6 +505,14 @@ export class SessionService {
    */
   isSessionRunning(sessionId: string): boolean {
     return this.runtimeManager.isSessionRunning(sessionId);
+  }
+
+  isSessionStopping(sessionId: string): boolean {
+    return this.lifecycleService.isSessionStopping(sessionId);
+  }
+
+  getStopGeneration(sessionId: string): number {
+    return this.lifecycleService.getStopGeneration(sessionId);
   }
 
   /**

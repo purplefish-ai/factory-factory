@@ -23,6 +23,8 @@ const {
   mockSessionService: {
     getClient: vi.fn(),
     getSessionClient: vi.fn(),
+    isSessionStopping: vi.fn(),
+    getStopGeneration: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     setSessionModel: vi.fn(),
@@ -92,6 +94,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockWorkspaceNotificationAccessor.markDelivered.mockResolvedValue(undefined);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
+    mockSessionService.isSessionStopping.mockReturnValue(false);
+    mockSessionService.getStopGeneration.mockReturnValue(0);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -99,6 +103,137 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         initErrorMessage: null,
       },
     });
+  });
+
+  it('leaves queued messages untouched while the session is stopping', async () => {
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.peekNextMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
+    mockSessionService.getSessionClient.mockReturnValue({});
+    let resolveSession!: (session: {
+      workspace: {
+        status: string;
+        worktreePath: string;
+        initErrorMessage: null;
+      };
+    }) => void;
+    mockSessionDataService.findAgentSessionById.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      })
+    );
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveSession({
+      workspace: {
+        status: 'READY',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
+    await dispatchPromise;
+
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not reject a queued message when stop begins during permanent gate evaluation', async () => {
+    chatMessageHandlerService.configure({
+      initPolicy: {
+        getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
+      },
+    });
+    let resolveSession!: (session: {
+      workspace: {
+        status: string;
+        worktreePath: string;
+        initErrorMessage: null;
+      };
+    }) => void;
+    mockSessionDataService.findAgentSessionById.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      })
+    );
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveSession({
+      workspace: {
+        status: 'ARCHIVED',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
+    await dispatchPromise;
+
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
+  it('does not send or commit a dequeued message when stop begins during dispatch configuration', async () => {
+    let resolveModelUpdate!: () => void;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    mockSessionService.getSessionClient.mockReturnValue({});
+    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveModelUpdate();
+    await dispatchPromise;
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+  });
+
+  it('does not send or requeue a dequeued message when stop completes during configuration', async () => {
+    let resolveModelUpdate!: () => void;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    let stopGeneration = 0;
+    mockSessionService.getStopGeneration.mockImplementation(() => stopGeneration);
+    mockSessionService.getSessionClient.mockReturnValue({});
+    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    });
+
+    stopGeneration += 1;
+    resolveModelUpdate();
+    await dispatchPromise;
+
+    expect(mockSessionService.isSessionStopping).toHaveReturnedWith(false);
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
   });
 
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {
