@@ -521,8 +521,8 @@ function buildClaudeSlashCommandsForLoad(
   worktreePath: string | null
 ): CommandInfo[] {
   const seen = new Set<string>();
+  const commands = scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen);
   if (cached) {
-    const commands: CommandInfo[] = [];
     for (const command of cached) {
       const key = commandNameKey(command.name);
       if (seen.has(key)) {
@@ -531,11 +531,9 @@ function buildClaudeSlashCommandsForLoad(
       seen.add(key);
       commands.push(command);
     }
-    commands.push(...scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen));
     return commands;
   }
 
-  const commands = scanClaudeGlobalCommandsFromDisk(seen);
-  commands.push(...scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen));
+  commands.push(...scanClaudeGlobalCommandsFromDisk(seen));
   return commands;
 }
