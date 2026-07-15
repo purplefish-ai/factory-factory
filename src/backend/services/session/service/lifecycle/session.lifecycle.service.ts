@@ -1096,8 +1096,14 @@ export class SessionLifecycleService {
     if (exactIdMatch) {
       return { id: exactIdMatch.id, matchedByContent: false };
     }
+    if (this.sessionDomainService.getHistoryHydrationSource(sessionId) !== 'jsonl') {
+      return undefined;
+    }
     const contentMatch = userEntries.find(
-      (entry) => entry.text === messageText && !consumedContentMatchIds.has(entry.id)
+      (entry) =>
+        !entry.id.startsWith('workspace-notification-') &&
+        entry.text === messageText &&
+        !consumedContentMatchIds.has(entry.id)
     );
     if (contentMatch) {
       return { id: contentMatch.id, matchedByContent: true };
