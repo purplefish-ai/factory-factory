@@ -205,7 +205,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
-    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
 
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {

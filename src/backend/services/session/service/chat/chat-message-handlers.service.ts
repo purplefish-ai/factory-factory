@@ -482,6 +482,7 @@ class ChatMessageHandlerService {
     // Configuration calls above yield. Re-check the lifecycle barrier before any
     // dispatch state mutation so a stop cannot be crossed by this dequeued turn.
     if (sessionService.isSessionStopping(dbSessionId)) {
+      sessionDomainService.requeueFront(dbSessionId, msg);
       return;
     }
 

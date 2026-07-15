@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionLifecycleService } from './session.lifecycle.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -693,6 +695,7 @@ function createStartableLifecycleService(options?: {
     getProjectById: vi.fn(),
     markWorkspaceHasHadSessions: vi.fn(async () => undefined),
     updateSession: vi.fn(async () => undefined),
+    updateSessionIfStatus: vi.fn(async () => null),
   };
   const promptBuilder = {
     shouldInjectBranchRename: vi.fn(() => false),
@@ -707,12 +710,22 @@ function createStartableLifecycleService(options?: {
     isSessionRunning: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
     getOrCreateClient: vi.fn(async () => handle),
+    stopClient: vi.fn(async () => undefined),
+    isSessionWorking: vi.fn(() => false),
   };
   const sessionDomainService = {
     setRuntimeSnapshot: vi.fn(),
     emitDelta: vi.fn(),
     isHistoryHydrated: vi.fn(() => false),
     getTranscriptSnapshot: vi.fn(() => []),
+    getRuntimeSnapshot: vi.fn(() => ({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+    })),
+    clearQueuedWork: vi.fn(),
+    clearSession: vi.fn(),
   };
   const sessionConfigService = {
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
@@ -726,6 +739,10 @@ function createStartableLifecycleService(options?: {
     registerSessionContext: vi.fn(),
     setReplaySuppression: vi.fn(),
     clearSessionState: vi.fn(),
+    clearStreamingState: vi.fn(),
+    clearReplaySuppression: vi.fn(),
+    finalizeOrphanedToolCalls: vi.fn(),
+    clearSessionContext: vi.fn(),
   };
   const tryDispatchNextMessage = vi.fn(options?.tryDispatchNextMessage ?? (async () => undefined));
   const sendSessionMessage = vi.fn(async () => undefined);
@@ -735,11 +752,13 @@ function createStartableLifecycleService(options?: {
     promptBuilder: promptBuilder as never,
     runtimeManager: runtimeManager as never,
     sessionDomainService: sessionDomainService as never,
-    sessionPermissionService: {} as never,
+    sessionPermissionService: { cancelPendingRequests: vi.fn() } as never,
     sessionConfigService: sessionConfigService as never,
     acpEventProcessor: acpEventProcessor as never,
-    promptTurnCompletionService: {} as never,
-    retryService: {} as never,
+    promptTurnCompletionService: { clearSession: vi.fn() } as never,
+    retryService: {
+      run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
+    } as never,
   });
   service.configure({
     workspace: {
@@ -760,6 +779,7 @@ function createStartableLifecycleService(options?: {
     sendSessionMessage,
     tryDispatchNextMessage,
     sessionConfigService,
+    runtimeManager,
   };
 }
 
@@ -804,6 +824,74 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(dispatchOrder).toBeDefined();
     expect(sendOrder).toBeDefined();
     expect(dispatchOrder!).toBeLessThan(sendOrder!);
+  });
+
+  it('does not create a client after stop completes during permission resolution', async () => {
+    type UserSettings = Awaited<ReturnType<typeof userSettingsAccessor.get>>;
+    let resolveSettings!: (settings: UserSettings) => void;
+    const pendingSettings = new Promise<UserSettings>((resolve) => {
+      resolveSettings = resolve;
+    });
+    vi.mocked(userSettingsAccessor.get).mockReturnValueOnce(pendingSettings);
+    const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
+
+    const startResult = service
+      .startSession('session-1', sendSessionMessage)
+      .catch((error) => error);
+    await vi.waitFor(() => {
+      expect(userSettingsAccessor.get).toHaveBeenCalled();
+    });
+
+    await service.stopSession('session-1');
+    resolveSettings(
+      unsafeCoerce<UserSettings>({
+        defaultWorkspacePermissions: 'STRICT',
+        ratchetPermissions: 'YOLO',
+      })
+    );
+
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('waits for a registered client creation and stops the resulting runtime', async () => {
+    const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
+    type RuntimeHandle = Awaited<ReturnType<typeof runtimeManager.getOrCreateClient>>;
+    let resolveClient!: (handle: RuntimeHandle) => void;
+    const pendingClient = new Promise<RuntimeHandle>((resolve) => {
+      resolveClient = resolve;
+    });
+    runtimeManager.getOrCreateClient.mockReturnValueOnce(pendingClient);
+
+    const startResult = service
+      .startSession('session-1', sendSessionMessage)
+      .catch((error) => error);
+    await vi.waitFor(() => {
+      expect(runtimeManager.getOrCreateClient).toHaveBeenCalled();
+    });
+
+    const stopPromise = service.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(runtimeManager.stopClient).toHaveBeenCalledTimes(1);
+    });
+    resolveClient(
+      unsafeCoerce<RuntimeHandle>({
+        provider: 'CLAUDE',
+        providerSessionId: 'provider-session-1',
+        configOptions: [],
+        isPromptInFlight: false,
+      })
+    );
+
+    await stopPromise;
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(runtimeManager.stopClient).toHaveBeenCalledTimes(2);
+    expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {
