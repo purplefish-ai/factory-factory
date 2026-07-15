@@ -3,6 +3,8 @@ export interface ServeEnvOptions {
   host: string;
 }
 
+const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
+
 export function buildServeEnv(
   options: ServeEnvOptions,
   databasePath: string,
@@ -10,7 +12,7 @@ export function buildServeEnv(
   backendPort: number,
   baseEnv: NodeJS.ProcessEnv = process.env
 ): NodeJS.ProcessEnv {
-  const corsHost = options.host === '0.0.0.0' ? 'localhost' : options.host;
+  const corsHost = ALL_INTERFACES_HOSTS.has(options.host) ? 'localhost' : options.host;
   const corsOrigins = options.dev
     ? `http://${corsHost}:${frontendPort}`
     : `http://${corsHost}:${backendPort}`;
