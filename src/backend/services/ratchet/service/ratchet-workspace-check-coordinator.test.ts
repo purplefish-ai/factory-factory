@@ -38,4 +38,33 @@ describe('RatchetWorkspaceCheckCoordinator', () => {
     await firstExpectation;
     await secondExpectation;
   });
+
+  it('aborts the shared runner when a workspace check times out', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-abort' } as WorkspaceWithPR;
+    let receivedSignal: AbortSignal | undefined;
+    const runner = vi.fn((signal?: AbortSignal) => {
+      receivedSignal = signal;
+      return new Promise<WorkspaceRatchetResult>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const firstRun = coordinator.run(workspace, runner);
+    const secondRun = coordinator.run(workspace, runner);
+    const firstExpectation = expect(firstRun).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+    const secondExpectation = expect(secondRun).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await firstExpectation;
+    await secondExpectation;
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(receivedSignal?.reason).toEqual(new Error('Workspace check timed out after 1000ms'));
+  });
 });
