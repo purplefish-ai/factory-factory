@@ -16,11 +16,15 @@ import {
   treeKillProcess,
   waitForChildProcessExit,
 } from './run-script-process-utils';
-import { runScriptStateMachine } from './run-script-state-machine.service';
+import {
+  RunScriptStateMachineError,
+  runScriptStateMachine,
+} from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');
 
 const MAX_OUTPUT_BUFFER_SIZE = 500 * 1024;
+const RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS = 3;
 
 export class RunScriptService {
   private readonly runningProcesses = new Map<string, ChildProcess>();
@@ -212,53 +216,107 @@ export class RunScriptService {
       return;
     }
 
+    await this.persistProcessExitState(workspaceId, code);
+
+    const currentProcess = this.runningProcesses.get(workspaceId);
+    if (currentProcess && currentProcess !== childProcess) {
+      logger.info('Skipping stale run script cleanup because a newer process is active', {
+        workspaceId,
+        exitingPid: pid,
+        activePid: currentProcess.pid,
+      });
+      return;
+    }
+
     this.runningProcesses.delete(workspaceId);
     this.runOutput.clearListeners(workspaceId);
     await this.killPostRunProcess(workspaceId);
     await runScriptProxyService.stopTunnel(workspaceId);
+  }
 
-    // Check current state:
-    // - STOPPING: best-effort STOPPING -> IDLE completion (stop flow may have failed mid-cleanup)
-    // - IDLE/COMPLETED/FAILED: already terminal, skip
-    // - otherwise: transition to COMPLETED or FAILED based on exit code
-    try {
-      const ws = await workspaceAccessor.findById(workspaceId);
-      const status = ws?.runScriptStatus;
+  private async persistProcessExitState(workspaceId: string, code: number | null): Promise<void> {
+    let lastError: unknown;
 
-      if (status === 'STOPPING') {
-        try {
-          await runScriptStateMachine.completeStopping(workspaceId);
-        } catch (error) {
-          logger.warn(
-            'Failed to complete STOPPING after process exit (likely already transitioned)',
-            {
-              workspaceId,
-              error,
-            }
-          );
+    for (let attempt = 1; attempt <= RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await this.transitionProcessExitState(workspaceId, code);
+        return;
+      } catch (error) {
+        const reconciliation = await this.reconcileProcessExitTransitionError(workspaceId, error);
+        if (reconciliation.isConsistent) {
+          return;
         }
-        return;
-      }
+        lastError = reconciliation.error;
 
-      if (status === 'IDLE' || status === 'COMPLETED' || status === 'FAILED') {
-        logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
+        if (attempt < RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS) {
+          logger.warn('Failed to persist run script exit state; retrying', {
+            workspaceId,
+            attempt,
+            maxAttempts: RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS,
+            error: toError(lastError).message,
+          });
+        }
+      }
+    }
+
+    const error = toError(lastError);
+    logger.error('Failed to persist run script exit state after retries', error, {
+      workspaceId,
+      maxAttempts: RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS,
+    });
+    throw error;
+  }
+
+  private async reconcileProcessExitTransitionError(
+    workspaceId: string,
+    error: unknown
+  ): Promise<{ isConsistent: boolean; error: unknown }> {
+    if (!(error instanceof RunScriptStateMachineError)) {
+      return { isConsistent: false, error };
+    }
+
+    try {
+      const refreshed = await workspaceAccessor.findById(workspaceId);
+      const status = refreshed?.runScriptStatus;
+      const isConsistent = status === 'IDLE' || status === 'COMPLETED' || status === 'FAILED';
+      if (isConsistent) {
+        logger.debug('Run script exit transition raced with a consistent state', {
           workspaceId,
+          status,
         });
-        return;
       }
+      return { isConsistent, error };
+    } catch (refreshError) {
+      return { isConsistent: false, error: refreshError };
+    }
+  }
 
-      // Normal exit from RUNNING (or STARTING if the process exits very fast)
-      if (code === 0) {
-        await runScriptStateMachine.markCompleted(workspaceId);
-      } else {
-        await runScriptStateMachine.markFailed(workspaceId);
-      }
-    } catch (error) {
-      // Swallow state machine errors -- the state was likely already transitioned
-      logger.warn('Exit handler state transition failed (likely already transitioned)', {
+  private async transitionProcessExitState(
+    workspaceId: string,
+    code: number | null
+  ): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found while persisting run script exit: ${workspaceId}`);
+    }
+
+    const status = workspace.runScriptStatus;
+    if (status === 'STOPPING') {
+      await runScriptStateMachine.completeStopping(workspaceId);
+      return;
+    }
+
+    if (status === 'IDLE' || status === 'COMPLETED' || status === 'FAILED') {
+      logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
         workspaceId,
-        error,
       });
+      return;
+    }
+
+    if (code === 0) {
+      await runScriptStateMachine.markCompleted(workspaceId);
+    } else {
+      await runScriptStateMachine.markFailed(workspaceId);
     }
   }
 
@@ -652,7 +710,11 @@ export class RunScriptService {
           });
         }
       },
-      () => this.postRunProcesses.delete(workspaceId)
+      () => {
+        if (this.postRunProcesses.get(workspaceId) === postRunProcess) {
+          this.postRunProcesses.delete(workspaceId);
+        }
+      }
     );
   }
 
