@@ -197,8 +197,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
 
   const ratchetGithubBridge: RatchetGitHubBridge = {
     extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
-    getPRFullDetails: (repo, pr) => githubCLIService.getPRFullDetails(repo, pr),
-    getReviewComments: (repo, pr, since) => githubCLIService.getReviewComments(repo, pr, since),
+    getPRFullDetails: (repo, pr, signal) => githubCLIService.getPRFullDetails(repo, pr, signal),
+    getReviewComments: (repo, pr, since, signal) =>
+      githubCLIService.getReviewComments(repo, pr, since, signal),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null

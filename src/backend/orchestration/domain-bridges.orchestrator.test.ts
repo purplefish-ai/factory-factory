@@ -240,6 +240,27 @@ describe('configureDomainBridges', () => {
       );
     });
 
+    it('github bridge forwards abort signals to PR reads', async () => {
+      const controller = new AbortController();
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      await bridge.github.getPRFullDetails('owner/repo', 42, controller.signal);
+      await bridge.github.getReviewComments('owner/repo', 42, undefined, controller.signal);
+
+      expect(githubCLIService.getPRFullDetails).toHaveBeenCalledWith(
+        'owner/repo',
+        42,
+        controller.signal
+      );
+      expect(githubCLIService.getReviewComments).toHaveBeenCalledWith(
+        'owner/repo',
+        42,
+        undefined,
+        controller.signal
+      );
+    });
+
     it('github bridge delegates computeCIStatus with null input', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);

@@ -1503,6 +1503,89 @@ describe('GitHubCLIService', () => {
   });
 
   describe('centralized exec - singleflight dedup', () => {
+    it('passes abort signals to PR detail child processes', async () => {
+      const controller = new AbortController();
+      mockExecFile.mockResolvedValue({
+        stdout: JSON.stringify({
+          number: 42,
+          title: 'PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          author: { login: 'author' },
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+          isDraft: false,
+          state: 'OPEN',
+          reviewDecision: null,
+          statusCheckRollup: [],
+          reviews: [],
+          comments: [],
+          labels: [],
+          additions: 0,
+          deletions: 0,
+          changedFiles: 0,
+          headRefName: 'feature',
+          baseRefName: 'main',
+          mergeStateStatus: 'CLEAN',
+        }),
+        stderr: '',
+      });
+
+      await githubCLIService.getPRFullDetails('owner/repo', 42, controller.signal);
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        expect.any(Array),
+        expect.objectContaining({ signal: controller.signal })
+      );
+    });
+
+    it('passes abort signals to review comment child processes', async () => {
+      const controller = new AbortController();
+      mockExecFile.mockResolvedValue({ stdout: '[]', stderr: '' });
+
+      await githubCLIService.getReviewComments('owner/repo', 42, undefined, controller.signal);
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        expect.any(Array),
+        expect.objectContaining({ signal: controller.signal })
+      );
+    });
+
+    it('does not singleflight identical signal-bound PR reads', async () => {
+      const first = new AbortController();
+      const second = new AbortController();
+      const prDetails = {
+        number: 42,
+        title: 'PR',
+        url: 'https://github.com/owner/repo/pull/42',
+        author: { login: 'author' },
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        isDraft: false,
+        state: 'OPEN',
+        reviewDecision: null,
+        statusCheckRollup: [],
+        reviews: [],
+        comments: [],
+        labels: [],
+        additions: 0,
+        deletions: 0,
+        changedFiles: 0,
+        headRefName: 'feature',
+        baseRefName: 'main',
+        mergeStateStatus: 'CLEAN',
+      };
+      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prDetails), stderr: '' });
+
+      await Promise.all([
+        githubCLIService.getPRFullDetails('owner/repo', 42, first.signal),
+        githubCLIService.getPRFullDetails('owner/repo', 42, second.signal),
+      ]);
+
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
+
     it('deduplicates identical concurrent read calls', async () => {
       const mockPRData = {
         number: 42,

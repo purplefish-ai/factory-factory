@@ -37,6 +37,7 @@ const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
 type ExecResult = { stdout: string; stderr: string };
+type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSignal };
 
 /**
  * Service for interacting with GitHub via the `gh` CLI.
@@ -80,27 +81,19 @@ class GitHubCLIService {
    * Fast-fails immediately when a rate limit was detected recently, preventing
    * calls from piling up in the queue and blocking user-facing requests.
    */
-  private exec(
-    args: string[],
-    options?: { timeout?: number; maxBuffer?: number }
-  ): Promise<ExecResult> {
+  private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
     if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
       return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
     }
 
-    const key = args.join('\0');
-    const existing = this.inflight.get(key);
-    if (existing) {
-      return existing;
-    }
-
-    const promise = this.execLimit(() =>
-      execFileAsync('gh', args, {
-        timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
-        ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
-      })
-    )
-      .then(
+    const execute = () =>
+      this.execLimit(() =>
+        execFileAsync('gh', args, {
+          timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
+          ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
+          ...(options?.signal ? { signal: options.signal } : {}),
+        })
+      ).then(
         (result) => result,
         (err: unknown) => {
           const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -109,11 +102,21 @@ class GitHubCLIService {
           }
           throw err;
         }
-      )
-      .finally(() => {
-        this.inflight.delete(key);
-      });
+      );
 
+    if (options?.signal) {
+      return execute();
+    }
+
+    const key = args.join('\0');
+    const existing = this.inflight.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = execute().finally(() => {
+      this.inflight.delete(key);
+    });
     this.inflight.set(key, promise);
     return promise;
   }
@@ -473,7 +476,11 @@ class GitHubCLIService {
   /**
    * Get full PR details including reviews, comments, labels, and CI status.
    */
-  async getPRFullDetails(repo: string, prNumber: number): Promise<PRWithFullDetails> {
+  async getPRFullDetails(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<PRWithFullDetails> {
     const fields = [
       'number',
       'title',
@@ -499,7 +506,7 @@ class GitHubCLIService {
     try {
       const { stdout } = await this.exec(
         ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
-        { timeout: GH_TIMEOUT_MS.default }
+        { timeout: GH_TIMEOUT_MS.default, signal }
       );
 
       const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
@@ -532,6 +539,7 @@ class GitHubCLIService {
         mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
       };
     } catch (error) {
+      signal?.throwIfAborted();
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -700,7 +708,8 @@ class GitHubCLIService {
   async getReviewComments(
     repo: string,
     prNumber: number,
-    since?: Date
+    since?: Date,
+    signal?: AbortSignal
   ): Promise<
     Array<{
       id: number;
@@ -731,13 +740,16 @@ class GitHubCLIService {
       }> = [];
 
       for (let page = 1; page <= MAX_PAGES; page++) {
+        signal?.throwIfAborted();
         const sinceParam = since ? `&since=${since.toISOString()}` : '';
         const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}`;
 
         const { stdout } = await this.exec(['api', path], {
           timeout: GH_TIMEOUT_MS.default,
           maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+          signal,
         });
+        signal?.throwIfAborted();
 
         if (!stdout.trim()) {
           break;
@@ -773,6 +785,7 @@ class GitHubCLIService {
 
       return allComments;
     } catch (error) {
+      signal?.throwIfAborted();
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
