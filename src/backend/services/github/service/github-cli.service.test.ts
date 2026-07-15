@@ -1261,6 +1261,40 @@ describe('GitHubCLIService', () => {
       );
     });
 
+    it('caps review request pagination at 20 pages', async () => {
+      const continuingPage = {
+        stdout: JSON.stringify({
+          data: {
+            search: {
+              pageInfo: { hasNextPage: true, endCursor: 'repeated-cursor' },
+              nodes: [],
+            },
+          },
+        }),
+        stderr: '',
+      };
+
+      for (let page = 0; page < 20; page++) {
+        mockExecFile.mockResolvedValueOnce(continuingPage);
+      }
+      mockExecFile.mockRejectedValueOnce(new Error('unexpected 21st page request'));
+
+      try {
+        await expect(githubCLIService.listReviewRequests()).resolves.toEqual([]);
+
+        expect(mockExecFile).toHaveBeenCalledTimes(20);
+        expect(mockLoggerWarn).toHaveBeenCalledWith(
+          'listReviewRequests: reached MAX_PAGES limit, results may be incomplete',
+          {
+            totalFetched: 0,
+            maxPages: 20,
+          }
+        );
+      } finally {
+        mockExecFile.mockReset();
+      }
+    });
+
     it('falls back to empty array when GraphQL response is malformed', async () => {
       mockExecFile.mockResolvedValueOnce({
         stdout: JSON.stringify({ data: { search: { nodes: 'not-an-array' } } }),

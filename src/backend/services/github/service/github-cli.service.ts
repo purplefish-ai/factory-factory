@@ -318,11 +318,12 @@ class GitHubCLIService {
    * Uses paginated GraphQL search calls to fetch all matching PRs.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
+    const MAX_PAGES = 20;
     const prs: ReviewRequestedPR[] = [];
     let afterCursor: string | null = null;
     let hasNextPage = true;
 
-    while (hasNextPage) {
+    for (let page = 1; page <= MAX_PAGES && hasNextPage; page++) {
       const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
       const query = `
         query {
@@ -377,6 +378,13 @@ class GitHubCLIService {
       if (hasNextPage && !afterCursor) {
         logger.warn('GitHub review request page is missing an end cursor');
         return prs;
+      }
+
+      if (page === MAX_PAGES && hasNextPage) {
+        logger.warn('listReviewRequests: reached MAX_PAGES limit, results may be incomplete', {
+          totalFetched: prs.length,
+          maxPages: MAX_PAGES,
+        });
       }
     }
 
