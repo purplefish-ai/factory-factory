@@ -81,7 +81,6 @@ export interface RatchetDecisionContext {
   prStateInfo: PRStateInfo;
   previousState: RatchetState;
   newState: RatchetState;
-  finalState: RatchetState;
   hasNewReviewActivitySinceLastDispatch: boolean;
   hasStateChangedSinceLastDispatch: boolean;
   isCleanPrWithNoNewReviewActivity: boolean;
@@ -89,7 +88,6 @@ export interface RatchetDecisionContext {
   /** Dispatch outcome after any settling done by this check. */
   dispatchOutcome: RatchetDispatchOutcome | null;
   dispatchRetryCount: number;
-  hasOtherActiveSession: boolean;
 }
 
 export type RatchetDecision =

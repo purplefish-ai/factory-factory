@@ -432,7 +432,7 @@ class RatchetService extends EventEmitter {
 
       const prStateInfo = prStateResult;
       const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
-      const decision = this.decideRatchetAction(decisionContext);
+      const decision = await this.decideRatchetAction(decisionContext);
       const action = await this.applyRatchetDecision(decisionContext, decision);
 
       return await this.finishRatchetCheck(workspace, prStateInfo, action, decisionContext);
@@ -482,7 +482,6 @@ class RatchetService extends EventEmitter {
   ): Promise<RatchetDecisionContext> {
     const previousState = workspace.ratchetState;
     const newState = determineRatchetStateHelper(prStateInfo);
-    const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
     const hasNewReviewActivitySinceLastDispatch = hasNewReviewActivitySinceLastDispatchHelper(
       workspace,
       prStateInfo
@@ -493,8 +492,10 @@ class RatchetService extends EventEmitter {
     );
     const isCleanPrWithNoNewReviewActivity = shouldSkipCleanPRHelper(workspace, prStateInfo);
 
+    // ratchetEnabled is guaranteed here: the poll query filters on it and
+    // processWorkspace returns early for disabled workspaces.
     const activeFixerCheck: ActiveFixerCheckResult =
-      workspace.ratchetEnabled && prStateInfo.prState === 'OPEN'
+      prStateInfo.prState === 'OPEN'
         ? await this.checkActiveFixerSession(workspace)
         : { kind: 'none' };
 
@@ -504,84 +505,22 @@ class RatchetService extends EventEmitter {
       activeFixerCheck.kind === 'settled'
         ? activeFixerCheck.outcome
         : workspace.ratchetDispatchOutcome;
-    const dispatchRetryCount = workspace.ratchetDispatchRetryCount;
-
-    const hasOtherActiveSession = await this.collectHasOtherActiveSession({
-      workspace,
-      activeFixerCheck,
-      isCleanPrWithNoNewReviewActivity,
-      hasStateChangedSinceLastDispatch,
-      isRetryableDeath: this.isRetryableDeath(
-        hasStateChangedSinceLastDispatch,
-        dispatchOutcome,
-        dispatchRetryCount
-      ),
-    });
 
     return {
       workspace,
       prStateInfo,
       previousState,
       newState,
-      finalState,
       hasNewReviewActivitySinceLastDispatch,
       hasStateChangedSinceLastDispatch,
       isCleanPrWithNoNewReviewActivity,
       activeFixerCheck,
       dispatchOutcome,
-      dispatchRetryCount,
-      hasOtherActiveSession,
+      dispatchRetryCount: workspace.ratchetDispatchRetryCount,
     };
   }
 
-  private isRetryableDeath(
-    hasStateChangedSinceLastDispatch: boolean,
-    dispatchOutcome: RatchetDispatchOutcome | null,
-    dispatchRetryCount: number
-  ): boolean {
-    return (
-      !hasStateChangedSinceLastDispatch &&
-      dispatchOutcome === 'DIED' &&
-      dispatchRetryCount < SERVICE_THRESHOLDS.ratchetDispatchMaxRetries
-    );
-  }
-
-  /**
-   * Query for other working sessions only when the decision could actually
-   * dispatch (mirrors the dispatch gates in decideRatchetAction to avoid a
-   * DB query on the common no-op path).
-   */
-  private async collectHasOtherActiveSession(params: {
-    workspace: WorkspaceWithPR;
-    activeFixerCheck: ActiveFixerCheckResult;
-    isCleanPrWithNoNewReviewActivity: boolean;
-    hasStateChangedSinceLastDispatch: boolean;
-    isRetryableDeath: boolean;
-  }): Promise<boolean> {
-    if (params.activeFixerCheck.kind === 'active') {
-      return false;
-    }
-    if (params.activeFixerCheck.kind === 'ended_concurrently') {
-      return false;
-    }
-
-    const couldDispatchFresh =
-      params.hasStateChangedSinceLastDispatch && !params.isCleanPrWithNoNewReviewActivity;
-    if (!(couldDispatchFresh || params.isRetryableDeath)) {
-      return false;
-    }
-
-    return await this.hasActiveSession(params.workspace.id);
-  }
-
-  private decideRatchetAction(context: RatchetDecisionContext): RatchetDecision {
-    if (!context.workspace.ratchetEnabled) {
-      return {
-        type: 'RETURN_ACTION',
-        action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
-      };
-    }
-
+  private async decideRatchetAction(context: RatchetDecisionContext): Promise<RatchetDecision> {
     if (context.prStateInfo.prState === 'MERGED') {
       return { type: 'RETURN_ACTION', action: { type: 'COMPLETED' } };
     }
@@ -646,7 +585,9 @@ class RatchetService extends EventEmitter {
       };
     }
 
-    if (context.hasOtherActiveSession) {
+    // Fetched lazily as the last gate so the common no-op path issues no
+    // session query.
+    if (await this.hasActiveSession(context.workspace.id)) {
       return {
         type: 'RETURN_ACTION',
         action: {
@@ -659,7 +600,7 @@ class RatchetService extends EventEmitter {
     return { type: 'TRIGGER_FIXER', retryCount: 0 };
   }
 
-  private decideDiedFixerRetry(context: RatchetDecisionContext): RatchetDecision {
+  private async decideDiedFixerRetry(context: RatchetDecisionContext): Promise<RatchetDecision> {
     if (context.dispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries) {
       return {
         type: 'RETURN_ACTION',
@@ -669,7 +610,7 @@ class RatchetService extends EventEmitter {
         },
       };
     }
-    if (context.hasOtherActiveSession) {
+    if (await this.hasActiveSession(context.workspace.id)) {
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'Workspace has another working session' },
@@ -711,17 +652,38 @@ class RatchetService extends EventEmitter {
       workspace,
       prStateInfo,
       action,
-      decisionContext.finalState
+      decisionContext.newState
     );
-    const resultAction: RatchetAction = updateApplied
-      ? action
-      : { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
-    const resultState = updateApplied ? decisionContext.finalState : RatchetState.IDLE;
-    if (updateApplied && decisionContext.previousState !== decisionContext.finalState) {
+
+    // The conditional update refused to persist: ratcheting was disabled while
+    // this check was in flight. Report DISABLED and emit nothing — the disable
+    // path already settled the workspace to IDLE.
+    if (!updateApplied) {
+      const disabledAction: RatchetAction = {
+        type: 'DISABLED',
+        reason: 'Workspace ratcheting disabled',
+      };
+      this.logWorkspaceRatchetingDecision(
+        workspace,
+        decisionContext.previousState,
+        RatchetState.IDLE,
+        disabledAction,
+        prStateInfo,
+        decisionContext
+      );
+      return {
+        workspaceId: workspace.id,
+        previousState: decisionContext.previousState,
+        newState: RatchetState.IDLE,
+        action: disabledAction,
+      };
+    }
+
+    if (decisionContext.previousState !== decisionContext.newState) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId: workspace.id,
         fromState: decisionContext.previousState,
-        toState: decisionContext.finalState,
+        toState: decisionContext.newState,
         prCiStatus: prStateInfo.ciStatus,
       } satisfies RatchetStateChangedEvent);
     }
@@ -729,8 +691,8 @@ class RatchetService extends EventEmitter {
     this.logWorkspaceRatchetingDecision(
       workspace,
       decisionContext.previousState,
-      resultState,
-      resultAction,
+      decisionContext.newState,
+      action,
       prStateInfo,
       decisionContext
     );
@@ -738,8 +700,8 @@ class RatchetService extends EventEmitter {
     return {
       workspaceId: workspace.id,
       previousState: decisionContext.previousState,
-      newState: resultState,
-      action: resultAction,
+      newState: decisionContext.newState,
+      action,
     };
   }
 

@@ -1255,38 +1255,36 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
   });
 
-  it('decides to trigger fixer when context is actionable', () => {
-    const decision = unsafeCoerce<{
-      decideRatchetAction: (context: unknown) => { type: string };
+  it('decides to trigger fixer when context is actionable', async () => {
+    const decision = await unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => Promise<{ type: string }>;
     }>(ratchetService).decideRatchetAction({
-      workspace: { ratchetEnabled: true },
+      workspace: { id: 'ws-decide', ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
       isCleanPrWithNoNewReviewActivity: false,
       activeFixerCheck: { kind: 'none' },
       dispatchOutcome: null,
       dispatchRetryCount: 0,
       hasStateChangedSinceLastDispatch: true,
-      hasOtherActiveSession: false,
     });
 
     expect(decision).toEqual({ type: 'TRIGGER_FIXER', retryCount: 0 });
   });
 
-  it('waits when CI is not in terminal state (PENDING)', () => {
-    const decision = unsafeCoerce<{
-      decideRatchetAction: (context: unknown) => {
+  it('waits when CI is not in terminal state (PENDING)', async () => {
+    const decision = await unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => Promise<{
         type: string;
         action?: { type: string; reason: string };
-      };
+      }>;
     }>(ratchetService).decideRatchetAction({
-      workspace: { ratchetEnabled: true },
+      workspace: { id: 'ws-decide', ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.PENDING },
       isCleanPrWithNoNewReviewActivity: false,
       activeFixerCheck: { kind: 'none' },
       dispatchOutcome: null,
       dispatchRetryCount: 0,
       hasStateChangedSinceLastDispatch: true,
-      hasOtherActiveSession: false,
     });
 
     expect(decision).toEqual({
@@ -1295,21 +1293,20 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
-  it('waits when CI is not in terminal state (UNKNOWN)', () => {
-    const decision = unsafeCoerce<{
-      decideRatchetAction: (context: unknown) => {
+  it('waits when CI is not in terminal state (UNKNOWN)', async () => {
+    const decision = await unsafeCoerce<{
+      decideRatchetAction: (context: unknown) => Promise<{
         type: string;
         action?: { type: string; reason: string };
-      };
+      }>;
     }>(ratchetService).decideRatchetAction({
-      workspace: { ratchetEnabled: true },
+      workspace: { id: 'ws-decide', ratchetEnabled: true },
       prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.UNKNOWN },
       isCleanPrWithNoNewReviewActivity: false,
       activeFixerCheck: { kind: 'none' },
       dispatchOutcome: null,
       dispatchRetryCount: 0,
       hasStateChangedSinceLastDispatch: true,
-      hasOtherActiveSession: false,
     });
 
     expect(decision).toEqual({
@@ -1975,71 +1972,75 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('decideRatchetAction edge cases', () => {
     const callDecide = (context: unknown) =>
-      unsafeCoerce<{ decideRatchetAction: (ctx: unknown) => unknown }>(
+      unsafeCoerce<{ decideRatchetAction: (ctx: unknown) => Promise<unknown> }>(
         ratchetService
       ).decideRatchetAction(context);
 
-    it('returns COMPLETED for merged PR', () => {
+    const arrangeOtherWorkingSession = () => {
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        { id: 'other-session' },
+      ] as never);
+      vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
+    };
+
+    it('returns COMPLETED for merged PR', async () => {
       expect(
-        callDecide({
-          workspace: { ratchetEnabled: true },
+        await callDecide({
+          workspace: { id: 'ws-decide', ratchetEnabled: true },
           prStateInfo: { prState: 'MERGED', ciStatus: CIStatus.SUCCESS },
           isCleanPrWithNoNewReviewActivity: false,
           activeFixerCheck: { kind: 'none' },
           dispatchOutcome: null,
           dispatchRetryCount: 0,
           hasStateChangedSinceLastDispatch: true,
-          hasOtherActiveSession: false,
         })
       ).toEqual({ type: 'RETURN_ACTION', action: { type: 'COMPLETED' } });
     });
 
-    it('returns WAITING for non-open PR', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('returns WAITING for non-open PR', async () => {
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'CLOSED', ciStatus: CIStatus.SUCCESS },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'none' },
         dispatchOutcome: null,
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: true,
-        hasOtherActiveSession: false,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('PR is not open');
     });
 
-    it('returns active session when one exists', () => {
+    it('returns active session when one exists', async () => {
       const activeSession = { type: 'FIXER_ACTIVE', sessionId: 's-1' };
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'active', action: activeSession },
         dispatchOutcome: 'RUNNING',
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: true,
-        hasOtherActiveSession: false,
-      }) as { type: string; action: unknown };
+      })) as { type: string; action: unknown };
       expect(result.action).toEqual(activeSession);
     });
 
-    it('returns WAITING when other active session blocks dispatch', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('returns WAITING when other active session blocks dispatch', async () => {
+      arrangeOtherWorkingSession();
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'none' },
         dispatchOutcome: null,
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: true,
-        hasOtherActiveSession: true,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('Workspace has another working session');
     });
 
-    it('returns WAITING when there are no CI failures or PR review comments', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('returns WAITING when there are no CI failures or PR review comments', async () => {
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: {
           prState: 'OPEN',
           ciStatus: CIStatus.SUCCESS,
@@ -2050,66 +2051,62 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         dispatchOutcome: null,
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: true,
-        hasOtherActiveSession: false,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('No CI failures or PR review comments to address');
     });
 
-    it('waits when the fixer ended concurrently during the check', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('waits when the fixer ended concurrently during the check', async () => {
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'ended_concurrently' },
         dispatchOutcome: 'COMPLETED',
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: false,
-        hasOtherActiveSession: false,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe(
         'Fixer session ended during this check; re-evaluating next cycle'
       );
     });
 
-    it('retries a died fixer ahead of the unchanged-state gate', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('retries a died fixer ahead of the unchanged-state gate', async () => {
+      const result = await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'settled', outcome: 'DIED' },
         dispatchOutcome: 'DIED',
         dispatchRetryCount: 2,
         hasStateChangedSinceLastDispatch: false,
-        hasOtherActiveSession: false,
       });
       expect(result).toEqual({ type: 'TRIGGER_FIXER', retryCount: 3 });
     });
 
-    it('does not retry a died fixer while another session is working', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('does not retry a died fixer while another session is working', async () => {
+      arrangeOtherWorkingSession();
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'settled', outcome: 'DIED' },
         dispatchOutcome: 'DIED',
         dispatchRetryCount: 0,
         hasStateChangedSinceLastDispatch: false,
-        hasOtherActiveSession: true,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('Workspace has another working session');
     });
 
-    it('gives up on a died fixer once the retry budget is spent', () => {
-      const result = callDecide({
-        workspace: { ratchetEnabled: true },
+    it('gives up on a died fixer once the retry budget is spent', async () => {
+      const result = (await callDecide({
+        workspace: { id: 'ws-decide', ratchetEnabled: true },
         prStateInfo: { prState: 'OPEN', ciStatus: CIStatus.FAILURE },
         isCleanPrWithNoNewReviewActivity: false,
         activeFixerCheck: { kind: 'none' },
         dispatchOutcome: 'DIED',
         dispatchRetryCount: 3,
         hasStateChangedSinceLastDispatch: false,
-        hasOtherActiveSession: false,
-      }) as { type: string; action?: { reason: string } };
+      })) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe(
         'Fixer died 4 times for this PR state; waiting for PR state to change'
       );
