@@ -575,6 +575,66 @@ describe('RunScriptService.stopRunScript', () => {
     expect(mockFindById).toHaveBeenNthCalledWith(2, 'ws-1');
   });
 
+  it('clears output listeners when controlled tree-kill completes before exit', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 12_345,
+      runScriptCleanupCommand: null,
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+    const service = new RunScriptService() as unknown as StopHandlerCapable & {
+      stopRunScript: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
+      appendOutput: (workspaceId: string, output: string) => void;
+      subscribeToOutput: (workspaceId: string, listener: (data: string) => void) => () => void;
+    };
+    const childProcess = { pid: 12_345 };
+    const listener = vi.fn();
+    service.runningProcesses.set('ws-1', childProcess);
+    service.subscribeToOutput('ws-1', listener);
+
+    const result = await service.stopRunScript('ws-1');
+    service.appendOutput('ws-1', 'after stop');
+
+    expect(result).toEqual({ success: true });
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('retains controlled-stop evidence when completing STOPPING fails', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'ws-1',
+        runScriptStatus: 'RUNNING',
+        runScriptPid: 12_345,
+        runScriptCleanupCommand: null,
+        worktreePath: '/tmp/ws-1',
+        runScriptPort: null,
+      })
+      .mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'STOPPING' });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockRejectedValue(new Error('database unavailable'));
+    const service = new RunScriptService() as unknown as StopHandlerCapable & {
+      stopRunScript: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
+      appendOutput: (workspaceId: string, output: string) => void;
+      subscribeToOutput: (workspaceId: string, listener: (data: string) => void) => () => void;
+    };
+    const childProcess = { pid: 12_345 };
+    const listener = vi.fn();
+    service.runningProcesses.set('ws-1', childProcess);
+    service.subscribeToOutput('ws-1', listener);
+
+    const result = await service.stopRunScript('ws-1');
+    service.appendOutput('ws-1', 'still retained');
+
+    expect(result).toEqual({ success: false, error: 'database unavailable' });
+    expect(service.runningProcesses.get('ws-1')).toBe(childProcess);
+    expect(listener).toHaveBeenCalledWith('still retained');
+  });
+
   it('returns error when workspace not found', async () => {
     mockFindById.mockResolvedValue(null);
 
@@ -1017,6 +1077,27 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
 
     expect(mockMarkCompleted).toHaveBeenCalledTimes(1);
     expect(mockFindById).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops retrying persistence when a new generation takes ownership', async () => {
+    const exitingProcess = { pid: 12_345 };
+    const newerProcess = { pid: 54_321 };
+    const service = new RunScriptService() as unknown as ExitHandlerCapable & StopHandlerCapable;
+    service.runningProcesses.set('ws-1', exitingProcess);
+    mockFindById
+      .mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'RUNNING' })
+      .mockResolvedValue({ id: 'ws-1', runScriptStatus: 'STARTING' });
+    mockMarkCompleted.mockImplementationOnce(() => {
+      service.runningProcesses.set('ws-1', newerProcess);
+      return Promise.reject(new Error('post-write fetch failed'));
+    });
+
+    await service.handleProcessExit('ws-1', exitingProcess, 12_345, 0, null);
+
+    expect(mockMarkCompleted).toHaveBeenCalledTimes(1);
+    expect(mockFindById).toHaveBeenCalledTimes(1);
+    expect(service.runningProcesses.get('ws-1')).toBe(newerProcess);
+    expect(mockStopTunnel).not.toHaveBeenCalled();
   });
 
   it('accepts a state-machine race only after confirming a terminal state', async () => {
@@ -1942,7 +2023,7 @@ describe('RunScriptService.stop-flow helper methods', () => {
     expect(mockTreeKill).not.toHaveBeenCalled();
   });
 
-  it('handles ESRCH errors during tree-kill in killProcessTree', async () => {
+  it('retains process ownership after ESRCH until the stop flow releases it', async () => {
     const esrchError = new Error('No such process') as NodeJS.ErrnoException;
     esrchError.code = 'ESRCH';
     mockTreeKill.mockImplementation(
@@ -1961,7 +2042,7 @@ describe('RunScriptService.stop-flow helper methods', () => {
     service.runningProcesses.set('ws-1', running);
 
     await service.killProcessTree('ws-1', running, null);
-    expect(service.runningProcesses.has('ws-1')).toBe(false);
+    expect(service.runningProcesses.get('ws-1')).toBe(running);
   });
 
   it('does not delete a replacement process after the previous tree-kill completes', async () => {

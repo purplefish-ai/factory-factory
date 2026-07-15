@@ -4,7 +4,7 @@
 
 **Goal:** Persist a run script's terminal state reliably before discarding in-memory lifecycle evidence, while distinguishing expected state races from database failures.
 
-**Architecture:** Keep recovery in `RunScriptService`, where the process exit result and cleanup ownership are known. Require exact tracked-child ownership, re-read and retry the outcome-level transition up to three times, accept typed CAS races only after a refreshed terminal state, and revalidate ownership across every asynchronous cleanup boundary.
+**Architecture:** Keep recovery in `RunScriptService`, where the process exit result and cleanup ownership are known. Require exact tracked-child ownership before every persistence attempt, re-read and retry the outcome-level transition up to three times, accept typed CAS races only after a refreshed terminal state, and revalidate ownership across every asynchronous cleanup boundary. Controlled stops retain ownership through tree-kill and conditionally release the captured process and listeners only after `STOPPING → IDLE` persists.
 
 **Tech Stack:** TypeScript, Prisma-backed state machine, Vitest
 
@@ -163,10 +163,17 @@ await runScriptProxyService.stopTunnel(workspaceId);
 - [ ] **Step 3: Add outcome-level reconciliation with bounded retry**
 
 ```ts
-private async persistProcessExitState(workspaceId: string, code: number | null): Promise<void> {
+private async persistProcessExitState(
+  workspaceId: string,
+  childProcess: ChildProcess,
+  code: number | null
+): Promise<void> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS; attempt += 1) {
+    if (this.runningProcesses.get(workspaceId) !== childProcess) {
+      return;
+    }
     try {
       await this.transitionProcessExitState(workspaceId, code);
       return;
@@ -267,14 +274,18 @@ git commit -m "Persist run-script exit state reliably (#1761)"
 - [ ] **Step 1: Guard every asynchronous deletion**
 
 Before a spawn-error handler marks failure, require the captured main child to remain tracked. In
-post-run `exit` and `error` handlers and both tree-kill completion callbacks, delete only when the
-captured process is still the corresponding map value. A PID-only kill has no owned map entry to
-delete.
+post-run `exit`, `error`, and tree-kill completion callbacks, delete only when the captured process
+is still the map value. Main-process tree-kill retains ownership; after waiting and durably
+completing `STOPPING → IDLE`, the stop flow removes the captured child and clears output listeners
+only if that child still owns the map entry. A failed durable transition retains both. A PID-only
+kill has no owned map entry to delete.
 
 - [ ] **Step 2: Run the focused generation-race tests**
 
 Run `pnpm test src/backend/services/run-script/service/run-script.service.test.ts` and require the
 untracked-exit, cleanup-boundary, late-callback, and replacement-process tests to pass.
+Include the combined post-write/replacement retry case and controlled-stop listener cleanup where
+tree-kill completes before `exit`.
 
 ### Task 4: Verify and review the complete branch
 

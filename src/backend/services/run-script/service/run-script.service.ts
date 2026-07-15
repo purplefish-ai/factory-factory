@@ -224,7 +224,7 @@ export class RunScriptService {
       return;
     }
 
-    await this.persistProcessExitState(workspaceId, code);
+    await this.persistProcessExitState(workspaceId, childProcess, code);
 
     let currentProcess = this.runningProcesses.get(workspaceId);
     if (currentProcess !== childProcess) {
@@ -253,10 +253,23 @@ export class RunScriptService {
     await runScriptProxyService.stopTunnel(workspaceId);
   }
 
-  private async persistProcessExitState(workspaceId: string, code: number | null): Promise<void> {
+  private async persistProcessExitState(
+    workspaceId: string,
+    childProcess: ChildProcess,
+    code: number | null
+  ): Promise<void> {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS; attempt += 1) {
+      if (this.runningProcesses.get(workspaceId) !== childProcess) {
+        logger.info('Stopping run script exit persistence after ownership changed', {
+          workspaceId,
+          exitingPid: childProcess.pid,
+          attempt,
+        });
+        return;
+      }
+
       try {
         await this.transitionProcessExitState(workspaceId, code);
         return;
@@ -505,7 +518,7 @@ export class RunScriptService {
           await this.waitForProcessExit(workspaceId, childProcess, pid);
         }
         await this.completeStoppingAfterStop(workspaceId);
-        await runScriptProxyService.stopTunnel(workspaceId);
+        await this.finishStoppedProcessCleanup(workspaceId, childProcess);
         return { success: true };
       }
 
@@ -556,7 +569,7 @@ export class RunScriptService {
 
       // Transition to IDLE state via state machine (completes stopping)
       await this.completeStoppingAfterStop(workspaceId);
-      await runScriptProxyService.stopTunnel(workspaceId);
+      await this.finishStoppedProcessCleanup(workspaceId, childProcess);
 
       return { success: true };
     } catch (error) {
@@ -772,12 +785,31 @@ export class RunScriptService {
           error: message,
         });
       },
-      () => {
-        if (childProcess && this.runningProcesses.get(workspaceId) === childProcess) {
-          this.runningProcesses.delete(workspaceId);
-        }
-      }
+      () => undefined
     );
+  }
+
+  private releaseStoppedProcess(
+    workspaceId: string,
+    childProcess: ChildProcess | undefined
+  ): boolean {
+    if (!childProcess || this.runningProcesses.get(workspaceId) !== childProcess) {
+      return false;
+    }
+
+    this.runningProcesses.delete(workspaceId);
+    this.runOutput.clearListeners(workspaceId);
+    return true;
+  }
+
+  private async finishStoppedProcessCleanup(
+    workspaceId: string,
+    childProcess: ChildProcess | undefined
+  ): Promise<void> {
+    const released = this.releaseStoppedProcess(workspaceId, childProcess);
+    if (released || !this.runningProcesses.has(workspaceId)) {
+      await runScriptProxyService.stopTunnel(workspaceId);
+    }
   }
 
   private async waitForProcessExit(
