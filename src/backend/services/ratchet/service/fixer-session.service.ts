@@ -106,14 +106,6 @@ class FixerSessionService {
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
       }
 
-      if (workspace.ratchetEnabled === false) {
-        logger.info('Skipping fixer session because ratchet is disabled', {
-          workspaceId,
-          workflow,
-        });
-        return { status: 'skipped', reason: 'Workspace ratcheting disabled' };
-      }
-
       const acquisitionResult = await this.acquireSessionDecision(input);
 
       if (acquisitionResult.action === 'limit_reached') {

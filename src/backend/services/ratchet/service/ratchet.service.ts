@@ -829,22 +829,9 @@ class RatchetService extends EventEmitter {
     return await triggerRatchetFixer({
       workspace,
       prStateInfo,
+      retryCount,
       sessionBridge: this.session,
-      recordDispatch: (workspaceId, sessionId) =>
-        workspaceAccessor.recordRatchetDispatchIfEnabled(workspaceId, {
-          sessionId,
-          snapshotKey: prStateInfo.snapshotKey,
-          retryCount,
-        }),
-      adoptActiveSession: (workspaceId, sessionId) =>
-        workspaceAccessor.adoptRatchetActiveSessionIfEnabled(workspaceId, sessionId),
-      clearActiveSession: (workspaceId) => this.clearActiveSession(workspaceId),
-      logger,
     });
-  }
-
-  private async clearActiveSession(workspaceId: string): Promise<void> {
-    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {
