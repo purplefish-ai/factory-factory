@@ -28,6 +28,7 @@ function createServiceWithPatchedInternals() {
     getOrCreateSessionClientFromRecord: vi.fn(async () => ({ id: 'client-from-record' })),
     getSessionClient: vi.fn(() => ({ id: 'existing-client' })),
     getRuntimeSnapshot: vi.fn(() => ({ phase: 'idle' })),
+    isSessionStopping: vi.fn(() => false),
     getSessionOptions: vi.fn(async () => ({ workingDir: '/tmp', model: 'gpt-5' })),
     stopAllClients: vi.fn(async () => undefined),
   };
@@ -105,6 +106,7 @@ describe('SessionService coverage wrappers', () => {
     await service.getChatBarCapabilities('session-1');
     await service.stopAllClients(2500);
     service.isSessionRunning('session-1');
+    service.isSessionStopping('session-1');
     service.isSessionWorking('session-1');
     service.isAnySessionWorking(['session-1']);
 
@@ -136,6 +138,7 @@ describe('SessionService coverage wrappers', () => {
     expect(sessionConfigService.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
     expect(lifecycleService.stopAllClients).toHaveBeenCalledWith(2500);
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-1');
+    expect(lifecycleService.isSessionStopping).toHaveBeenCalledWith('session-1');
     expect(runtimeManager.isSessionWorking).toHaveBeenCalledWith('session-1');
     expect(runtimeManager.isAnySessionWorking).toHaveBeenCalledWith(['session-1']);
   });
