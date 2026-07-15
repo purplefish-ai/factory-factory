@@ -443,7 +443,10 @@ describe('initializeWorkspaceWorktree', () => {
       createTerminalSessionDeferred.resolve(unsafeCoerce({}));
       await initializationPromise;
 
-      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith('term-default');
+      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'term-default'
+      );
     });
   });
 
@@ -1374,7 +1377,10 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
-      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith('term-default');
+      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'term-default'
+      );
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
 

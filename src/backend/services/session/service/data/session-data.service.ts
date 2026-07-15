@@ -131,8 +131,8 @@ class SessionDataService {
     return terminalSessionAccessor.findWithPid();
   }
 
-  clearTerminalPid(name: string): Promise<void> {
-    return terminalSessionAccessor.clearPid(name);
+  clearTerminalPid(workspaceId: string, name: string): Promise<void> {
+    return terminalSessionAccessor.clearPid(workspaceId, name);
   }
 }
 

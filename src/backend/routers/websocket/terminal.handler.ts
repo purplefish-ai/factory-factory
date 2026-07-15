@@ -42,6 +42,8 @@ const terminalListenerCleanup = new WeakMap<WebSocket, Map<string, (() => void)[
 
 type TerminalUnsubscribers = (() => void)[];
 
+const TERMINAL_PID_CLEAR_RETRY_DELAYS_MS = [100, 500] as const;
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -106,7 +108,7 @@ function sendExistingTerminals(
 
   const cleanupMap = terminalListenerCleanup.get(ws);
   for (const terminal of existingTerminals) {
-    attachTerminalListeners(ws, terminal.id, terminalService, logger, cleanupMap);
+    attachTerminalListeners(ws, workspaceId, terminal.id, terminalService, logger, cleanupMap);
   }
 }
 
@@ -178,7 +180,7 @@ async function handleCreateMessage(
   }
 
   const cleanupMap = terminalListenerCleanup.get(ws);
-  attachTerminalListeners(ws, terminalId, terminalService, logger, cleanupMap);
+  attachTerminalListeners(ws, workspaceId, terminalId, terminalService, logger, cleanupMap);
 
   logger.info('Sending created message to client', { terminalId, requestId: message.requestId });
   ws.send(JSON.stringify({ type: 'created', terminalId, requestId: message.requestId }));
@@ -186,6 +188,7 @@ async function handleCreateMessage(
 
 function attachTerminalListeners(
   ws: WebSocket,
+  workspaceId: string,
   terminalId: string,
   terminalService: AppContext['services']['terminalService'],
   logger: ReturnType<AppContext['services']['createLogger']>,
@@ -207,11 +210,45 @@ function attachTerminalListeners(
       ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
     }
     terminalListenerCleanup.get(ws)?.delete(terminalId);
-    sessionDataService.clearTerminalPid(terminalId).catch((err) => {
-      logger.warn('Failed to clear terminal PID', { terminalId, error: err });
-    });
+    void clearTerminalPidWithRetry(workspaceId, terminalId, logger);
   });
   unsubscribers.push(unsubExit);
+}
+
+async function clearTerminalPidWithRetry(
+  workspaceId: string,
+  terminalId: string,
+  logger: ReturnType<AppContext['services']['createLogger']>
+): Promise<void> {
+  const maxAttempts = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS.length + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await sessionDataService.clearTerminalPid(workspaceId, terminalId);
+      return;
+    } catch (error) {
+      const retryDelayMs = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS[attempt - 1];
+      if (retryDelayMs === undefined) {
+        logger.warn('Failed to clear terminal PID', {
+          workspaceId,
+          terminalId,
+          attempts: maxAttempts,
+          error,
+        });
+        return;
+      }
+
+      logger.warn('Failed to clear terminal PID; retrying', {
+        workspaceId,
+        terminalId,
+        attempt,
+        maxAttempts,
+        retryDelayMs,
+        error,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
 }
 
 function handleInputMessage(
