@@ -208,6 +208,9 @@ class ChatMessageHandlerService {
       }
 
       const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
+      if (sessionService.isSessionStopping(dbSessionId)) {
+        return;
+      }
       if (dispatchGate.policy !== 'allowed') {
         this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
         return;

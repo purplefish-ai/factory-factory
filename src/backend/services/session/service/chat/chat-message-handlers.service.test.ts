@@ -147,6 +147,44 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
 
+  it('does not reject a queued message when stop begins during permanent gate evaluation', async () => {
+    chatMessageHandlerService.configure({
+      initPolicy: {
+        getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
+      },
+    });
+    let resolveSession!: (session: {
+      workspace: {
+        status: string;
+        worktreePath: string;
+        initErrorMessage: null;
+      };
+    }) => void;
+    mockSessionDataService.findAgentSessionById.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      })
+    );
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveSession({
+      workspace: {
+        status: 'ARCHIVED',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
+    await dispatchPromise;
+
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
