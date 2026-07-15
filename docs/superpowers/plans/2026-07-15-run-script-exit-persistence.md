@@ -4,7 +4,7 @@
 
 **Goal:** Persist a run script's terminal state reliably before discarding in-memory lifecycle evidence, while distinguishing expected state races from database failures.
 
-**Architecture:** Keep recovery in `RunScriptService`, where the process exit result and cleanup ownership are known. Re-read and retry the outcome-level transition up to three times, accept typed CAS races only after a refreshed terminal state, and run workspace-scoped cleanup only while the exiting child is still the tracked generation.
+**Architecture:** Keep recovery in `RunScriptService`, where the process exit result and cleanup ownership are known. Require exact tracked-child ownership, re-read and retry the outcome-level transition up to three times, accept typed CAS races only after a refreshed terminal state, and revalidate ownership across every asynchronous cleanup boundary.
 
 **Tech Stack:** TypeScript, Prisma-backed state machine, Vitest
 
@@ -99,7 +99,10 @@ it('escalates exhausted database failures and retains lifecycle evidence', async
 Also add: a typed race whose refresh returns `COMPLETED` and resolves; a typed race whose refresh
 remains `RUNNING` and rejects after three attempts; a `STOPPING` transition that fails once and
 succeeds on retry; and a deferred transition where a newer child replaces the old one before
-persistence resolves and the old handler leaves the newer child and tunnel untouched.
+persistence resolves and the old handler leaves the newer child and tunnel untouched. Cover an
+untracked old exit during a new `STARTING` generation, replacement during post-run cleanup, late
+main/post-run callbacks, retained listeners and post-run evidence on exhaustion, and a post-write
+failure whose next read observes the durable terminal state.
 
 - [ ] **Step 3: Run the focused test and verify RED**
 
@@ -133,21 +136,27 @@ const RUN_SCRIPT_EXIT_STATE_MAX_ATTEMPTS = 3;
 - [ ] **Step 2: Move persistence ahead of lifecycle cleanup**
 
 ```ts
+const trackedProcess = this.runningProcesses.get(workspaceId);
+if (trackedProcess !== childProcess) {
+  return;
+}
+
 await this.persistProcessExitState(workspaceId, code);
 
-const currentProcess = this.runningProcesses.get(workspaceId);
-if (currentProcess && currentProcess !== childProcess) {
-  logger.info('Skipping stale run script cleanup because a newer process is active', {
-    workspaceId,
-    exitingPid: pid,
-    activePid: currentProcess.pid,
-  });
+let currentProcess = this.runningProcesses.get(workspaceId);
+if (currentProcess !== childProcess) {
+  return;
+}
+
+await this.killPostRunProcess(workspaceId);
+
+currentProcess = this.runningProcesses.get(workspaceId);
+if (currentProcess !== childProcess) {
   return;
 }
 
 this.runningProcesses.delete(workspaceId);
 this.runOutput.clearListeners(workspaceId);
-await this.killPostRunProcess(workspaceId);
 await runScriptProxyService.stopTunnel(workspaceId);
 ```
 
@@ -245,7 +254,29 @@ git add src/backend/services/run-script/service/run-script.service.ts \
 git commit -m "Persist run-script exit state reliably (#1761)"
 ```
 
-### Task 3: Verify and review the complete branch
+### Task 3: Make asynchronous lifecycle cleanup generation-safe
+
+**Files:**
+- Modify: `src/backend/services/run-script/service/run-script.service.ts`
+- Test: `src/backend/services/run-script/service/run-script.service.test.ts`
+
+**Interfaces:**
+- Consumes: captured `ChildProcess` identities in registered callbacks and tree-kill helpers.
+- Produces: identity-conditional map deletion for main and post-run process callbacks.
+
+- [ ] **Step 1: Guard every asynchronous deletion**
+
+Before a spawn-error handler marks failure, require the captured main child to remain tracked. In
+post-run `exit` and `error` handlers and both tree-kill completion callbacks, delete only when the
+captured process is still the corresponding map value. A PID-only kill has no owned map entry to
+delete.
+
+- [ ] **Step 2: Run the focused generation-race tests**
+
+Run `pnpm test src/backend/services/run-script/service/run-script.service.test.ts` and require the
+untracked-exit, cleanup-boundary, late-callback, and replacement-process tests to pass.
+
+### Task 4: Verify and review the complete branch
 
 **Files:**
 - Review: all changes from `origin/main` through `HEAD`
@@ -263,7 +294,7 @@ Run `pnpm typecheck && pnpm check:fix && pnpm test && pnpm build` and require ex
 Run `git diff --check`, `git diff origin/main`, and `git status --short`. Remove debug code and
 unrelated changes, then commit any intentional formatting fixes.
 
-### Task 4: Publish the required pull request
+### Task 5: Publish the required pull request
 
 **Files:**
 - Create temporarily: `/tmp/pr-body.md`

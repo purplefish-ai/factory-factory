@@ -184,6 +184,14 @@ export class RunScriptService {
 
     // Handle spawn errors
     childProcess.on('error', async (error) => {
+      if (this.runningProcesses.get(workspaceId) !== childProcess) {
+        logger.info('Ignoring stale run script error from non-active process', {
+          workspaceId,
+          erroredPid: pid,
+          activePid: this.runningProcesses.get(workspaceId)?.pid,
+        });
+        return;
+      }
       logger.error('Run script spawn error', error, { workspaceId, pid });
       this.runningProcesses.delete(workspaceId);
       try {
@@ -207,30 +215,41 @@ export class RunScriptService {
     logger.info('Run script exited', { workspaceId, pid, code, signal });
 
     const trackedProcess = this.runningProcesses.get(workspaceId);
-    if (trackedProcess && trackedProcess !== childProcess) {
-      logger.info('Ignoring stale run script exit from non-active process', {
+    if (trackedProcess !== childProcess) {
+      logger.info('Ignoring stale or untracked run script exit', {
         workspaceId,
         exitingPid: pid,
-        activePid: trackedProcess.pid,
+        activePid: trackedProcess?.pid,
       });
       return;
     }
 
     await this.persistProcessExitState(workspaceId, code);
 
-    const currentProcess = this.runningProcesses.get(workspaceId);
-    if (currentProcess && currentProcess !== childProcess) {
+    let currentProcess = this.runningProcesses.get(workspaceId);
+    if (currentProcess !== childProcess) {
       logger.info('Skipping stale run script cleanup because a newer process is active', {
         workspaceId,
         exitingPid: pid,
-        activePid: currentProcess.pid,
+        activePid: currentProcess?.pid,
+      });
+      return;
+    }
+
+    await this.killPostRunProcess(workspaceId);
+
+    currentProcess = this.runningProcesses.get(workspaceId);
+    if (currentProcess !== childProcess) {
+      logger.info('Skipping stale run script tunnel cleanup because ownership changed', {
+        workspaceId,
+        exitingPid: pid,
+        activePid: currentProcess?.pid,
       });
       return;
     }
 
     this.runningProcesses.delete(workspaceId);
     this.runOutput.clearListeners(workspaceId);
-    await this.killPostRunProcess(workspaceId);
     await runScriptProxyService.stopTunnel(workspaceId);
   }
 
@@ -675,12 +694,16 @@ export class RunScriptService {
         code,
         signal,
       });
-      this.postRunProcesses.delete(workspaceId);
+      if (this.postRunProcesses.get(workspaceId) === postRunProcess) {
+        this.postRunProcesses.delete(workspaceId);
+      }
     });
 
     postRunProcess.on('error', (error) => {
       logger.error('PostRun spawn error', error, { workspaceId });
-      this.postRunProcesses.delete(workspaceId);
+      if (this.postRunProcesses.get(workspaceId) === postRunProcess) {
+        this.postRunProcesses.delete(workspaceId);
+      }
     });
   }
 
@@ -749,7 +772,11 @@ export class RunScriptService {
           error: message,
         });
       },
-      () => this.runningProcesses.delete(workspaceId)
+      () => {
+        if (childProcess && this.runningProcesses.get(workspaceId) === childProcess) {
+          this.runningProcesses.delete(workspaceId);
+        }
+      }
     );
   }
 
