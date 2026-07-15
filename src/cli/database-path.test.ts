@@ -44,6 +44,18 @@ describe('resolveDatabasePath', () => {
     );
   });
 
+  it('expands BASE_DIR before DATABASE_PATH', () => {
+    expect(
+      resolveDatabasePath({
+        env: {
+          USER: 'testuser',
+          BASE_DIR: '/Users/$USER/factory-factory',
+          DATABASE_PATH: '$BASE_DIR/data.db',
+        },
+      })
+    ).toBe('/Users/testuser/factory-factory/data.db');
+  });
+
   it('prefers the explicit option path over DATABASE_PATH', () => {
     expect(
       resolveDatabasePath({
