@@ -993,6 +993,7 @@ export class SessionLifecycleService {
       }
       let enqueuedCount = 0;
       let dispatchableCount = 0;
+      const consumedContentMatchIds = new Set<string>();
       for (const notification of pending) {
         const timestamp = notification.createdAt.toISOString();
         const messageId = `workspace-notification-${notification.id}`;
@@ -1000,11 +1001,6 @@ export class SessionLifecycleService {
           dispatchableCount += 1;
           continue;
         }
-        if (this.hasCommittedQueuedWorkspaceNotificationMessage(sessionId, messageId)) {
-          await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notification.id);
-          continue;
-        }
-
         let enqueueText: string;
         let claudeMessage: AgentMessage;
         if (notification.direction === 'PARENT_TO_CHILD') {
@@ -1027,6 +1023,18 @@ export class SessionLifecycleService {
             timestamp,
           };
           enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
+        }
+        if (
+          await this.markDeliveredIfTranscriptMatch(
+            sessionId,
+            workspaceId,
+            notification.id,
+            messageId,
+            enqueueText,
+            consumedContentMatchIds
+          )
+        ) {
+          continue;
         }
 
         const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
@@ -1075,13 +1083,50 @@ export class SessionLifecycleService {
     }
   }
 
-  private hasCommittedQueuedWorkspaceNotificationMessage(
+  private findCommittedQueuedWorkspaceNotificationMessage(
     sessionId: string,
-    messageId: string
-  ): boolean {
-    return this.sessionDomainService
+    messageId: string,
+    messageText: string,
+    consumedContentMatchIds: ReadonlySet<string>
+  ): { id: string; matchedByContent: boolean } | undefined {
+    const userEntries = this.sessionDomainService
       .getTranscriptSnapshot(sessionId)
-      .some((entry) => entry.source === 'user' && entry.id === messageId);
+      .filter((entry) => entry.source === 'user');
+    const exactIdMatch = userEntries.find((entry) => entry.id === messageId);
+    if (exactIdMatch) {
+      return { id: exactIdMatch.id, matchedByContent: false };
+    }
+    const contentMatch = userEntries.find(
+      (entry) => entry.text === messageText && !consumedContentMatchIds.has(entry.id)
+    );
+    if (contentMatch) {
+      return { id: contentMatch.id, matchedByContent: true };
+    }
+    return undefined;
+  }
+
+  private async markDeliveredIfTranscriptMatch(
+    sessionId: string,
+    workspaceId: string,
+    notificationId: string,
+    messageId: string,
+    messageText: string,
+    consumedContentMatchIds: Set<string>
+  ): Promise<boolean> {
+    const committedMessage = this.findCommittedQueuedWorkspaceNotificationMessage(
+      sessionId,
+      messageId,
+      messageText,
+      consumedContentMatchIds
+    );
+    if (!committedMessage) {
+      return false;
+    }
+    if (committedMessage.matchedByContent) {
+      consumedContentMatchIds.add(committedMessage.id);
+    }
+    await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notificationId);
+    return true;
   }
 
   private async markDeliveredAfterTranscriptMatch(

@@ -355,6 +355,127 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
+  it('matches an already-committed pending notification with a provider-generated ID', async () => {
+    const createdAt = new Date('2026-06-22T10:30:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt,
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    const { service, sessionDomainService } = createLifecycleService({
+      transcript: [
+        {
+          id: '550e8400-e29b-41d4-a716-446655440000-0',
+          source: 'user',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+          timestamp: createdAt.toISOString(),
+          order: 0,
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(0);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+  });
+
+  it('does not match different user text under a provider-generated ID', async () => {
+    const createdAt = new Date('2026-06-22T10:30:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt,
+      },
+    ] as never);
+    const { service, sessionDomainService } = createLifecycleService({
+      transcript: [
+        {
+          id: '550e8400-e29b-41d4-a716-446655440000-0',
+          source: 'user',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the passing test.',
+          timestamp: createdAt.toISOString(),
+          order: 0,
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(1);
+    expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
+    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
+
+  it('consumes one provider-generated transcript entry once for duplicate pending notifications', async () => {
+    const oldestCreatedAt = new Date('2026-06-22T10:30:00.000Z');
+    const newestCreatedAt = new Date('2026-06-22T10:31:00.000Z');
+    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+      {
+        id: 'notif-parent-oldest',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: oldestCreatedAt,
+      },
+      {
+        id: 'notif-parent-newest',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: newestCreatedAt,
+      },
+    ] as never);
+    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    const { service, sessionDomainService } = createLifecycleService({
+      transcript: [
+        {
+          id: '550e8400-e29b-41d4-a716-446655440000-0',
+          source: 'user',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+          timestamp: oldestCreatedAt.toISOString(),
+          order: 0,
+        },
+      ],
+    });
+
+    const enqueuedCount = await deliverPendingChildNotifications(service);
+
+    expect(enqueuedCount).toBe(1);
+    expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
+    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledTimes(1);
+    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith([
+      'notif-parent-oldest',
+    ]);
+  });
+
   it('does not requeue an already-committed pending notification when delivery retry fails', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
     vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
