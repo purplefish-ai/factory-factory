@@ -261,24 +261,29 @@ function loadSystemConfig(): SystemConfig {
   // Expand any environment variables in BASE_DIR (e.g., $USER, $HOME)
   const rawBaseDir = env.BASE_DIR;
   const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : getDefaultBaseDir();
+  const expandedEnv = { ...process.env, BASE_DIR: baseDir };
 
   // Expand any environment variables in WORKTREE_BASE_DIR
   const rawWorktreeDir = env.WORKTREE_BASE_DIR;
   const worktreeBaseDir = rawWorktreeDir
-    ? expandEnvVars(rawWorktreeDir)
+    ? expandEnvVars(rawWorktreeDir, expandedEnv)
     : join(baseDir, 'worktrees');
 
   const nodeEnv = env.NODE_ENV;
   const debugLogDir = join(baseDir, 'debug');
   const acpTraceLogsEnabled = env.ACP_TRACE_LOGS_ENABLED ?? nodeEnv === 'development';
-  const databasePathFromEnv = env.DATABASE_PATH ? expandEnvVars(env.DATABASE_PATH) : undefined;
-  const migrationsPath = env.MIGRATIONS_PATH ? expandEnvVars(env.MIGRATIONS_PATH) : undefined;
+  const databasePathFromEnv = env.DATABASE_PATH
+    ? expandEnvVars(env.DATABASE_PATH, expandedEnv)
+    : undefined;
+  const migrationsPath = env.MIGRATIONS_PATH
+    ? expandEnvVars(env.MIGRATIONS_PATH, expandedEnv)
+    : undefined;
 
   const config: SystemConfig = {
     // Directory paths
     baseDir,
     worktreeBaseDir,
-    reposDir: env.REPOS_DIR ? expandEnvVars(env.REPOS_DIR) : join(baseDir, 'repos'),
+    reposDir: env.REPOS_DIR ? expandEnvVars(env.REPOS_DIR, expandedEnv) : join(baseDir, 'repos'),
     debugLogDir,
     acpTraceLogsPath: env.ACP_TRACE_LOGS_PATH ?? join(debugLogDir, 'acp-events'),
     claudeConfigDir: env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),

@@ -44,6 +44,18 @@ describe('resolveDatabasePath', () => {
     );
   });
 
+  it('expands BASE_DIR before DATABASE_PATH', () => {
+    const env = {
+      USER: 'testuser',
+      BASE_DIR: '/Users/$USER/factory-factory',
+      DATABASE_PATH: '$BASE_DIR/data.db',
+    };
+
+    expect(resolveDatabasePath({ env })).toBe('/Users/testuser/factory-factory/data.db');
+    expect(env.BASE_DIR).toBe('/Users/$USER/factory-factory');
+    expect(env.DATABASE_PATH).toBe('$BASE_DIR/data.db');
+  });
+
   it('prefers the explicit option path over DATABASE_PATH', () => {
     expect(
       resolveDatabasePath({

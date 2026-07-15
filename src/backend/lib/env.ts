@@ -53,13 +53,15 @@ export function expandEnvVars(
  * before importing this module.
  */
 export function getDatabasePath(): string {
-  if (process.env.DATABASE_PATH) {
-    return expandEnvVars(process.env.DATABASE_PATH);
-  }
-
   // Default development path - expand any env vars in BASE_DIR (e.g., $USER)
   const rawBaseDir = process.env.BASE_DIR;
   const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : getDefaultBaseDir();
+  const expandedEnv = { ...process.env, BASE_DIR: baseDir };
+
+  if (process.env.DATABASE_PATH) {
+    return expandEnvVars(process.env.DATABASE_PATH, expandedEnv);
+  }
+
   return join(baseDir, 'data.db');
 }
 

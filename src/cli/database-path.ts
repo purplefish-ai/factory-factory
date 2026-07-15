@@ -14,10 +14,12 @@ export function resolveDatabasePath({
   databasePath,
   env = process.env,
 }: ResolveDatabasePathOptions = {}): string {
+  const baseDir = getBaseDir(env);
+  const expandedEnv = { ...env, BASE_DIR: baseDir };
   const configuredPath =
     databasePath ||
-    (env.DATABASE_PATH ? expandEnvVars(env.DATABASE_PATH, env) : undefined) ||
-    join(getBaseDir(env), 'data.db');
+    (env.DATABASE_PATH ? expandEnvVars(env.DATABASE_PATH, expandedEnv) : undefined) ||
+    join(baseDir, 'data.db');
   return resolve(configuredPath);
 }
 
