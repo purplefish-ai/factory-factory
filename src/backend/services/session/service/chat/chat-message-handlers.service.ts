@@ -479,6 +479,12 @@ class ChatMessageHandlerService {
       msg.settings.reasoningEffort ?? null
     );
 
+    // Configuration calls above yield. Re-check the lifecycle barrier before any
+    // dispatch state mutation so a stop cannot be crossed by this dequeued turn.
+    if (sessionService.isSessionStopping(dbSessionId)) {
+      return;
+    }
+
     sessionDomainService.markRunning(dbSessionId);
 
     // Build content and send to Claude

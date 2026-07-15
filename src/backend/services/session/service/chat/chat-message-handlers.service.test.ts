@@ -185,6 +185,29 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
 
+  it('does not send or commit a dequeued message when stop begins during dispatch configuration', async () => {
+    let resolveModelUpdate!: () => void;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    mockSessionService.getSessionClient.mockReturnValue({});
+    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveModelUpdate();
+    await dispatchPromise;
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+  });
+
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),

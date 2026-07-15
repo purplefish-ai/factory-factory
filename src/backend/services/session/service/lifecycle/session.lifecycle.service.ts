@@ -142,7 +142,7 @@ export class SessionLifecycleService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (this.runtimeManager.isStopInProgress(sessionId)) {
+    if (this.isSessionStopping(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
@@ -207,7 +207,7 @@ export class SessionLifecycleService {
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
-    if (this.isSessionStopping(sessionId)) {
+    if (this.stoppingSessions.has(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
@@ -834,6 +834,10 @@ export class SessionLifecycleService {
     resolvedPreset?: PermissionPreset;
     dispatchableNotificationCount: number;
   }> {
+    if (this.isSessionStopping(sessionId)) {
+      throw new Error('Session is currently being stopped');
+    }
+
     const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
