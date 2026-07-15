@@ -57,6 +57,7 @@ import {
   type RatchetToggledEvent,
   ratchetService,
 } from './ratchet.service';
+import { buildRatchetingLogContext } from './ratchet-decision-logging.helpers';
 import {
   computeDispatchSnapshotKey,
   computeLatestReviewActivityAtMs,
@@ -661,16 +662,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
-    const state = unsafeCoerce<{
-      determineRatchetState: (pr: unknown) => RatchetState;
-    }>(ratchetService).determineRatchetState({
+    const state = determineRatchetState({
       ciStatus: CIStatus.SUCCESS,
       snapshotKey: '2026-01-02T00:00:00Z',
       hasChangesRequested: false,
       latestReviewActivityAtMs: null,
       prState: 'CLOSED',
       prNumber: 6,
-    });
+    } as never);
 
     expect(state).toBe(RatchetState.IDLE);
   });
@@ -1345,27 +1344,17 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 10,
     };
 
-    const logContext = unsafeCoerce<{
-      buildRatchetingLogContext: (
-        workspaceArg: typeof workspace,
-        previousState: RatchetState,
-        newState: RatchetState,
-        action: { type: 'WAITING'; reason: string },
-        prStateInfoArg: typeof prStateInfo,
-        prNumber: number,
-        decisionContext: { hasNewReviewActivitySinceLastDispatch: boolean }
-      ) => { reviewTimestampComparison: { hasNewReviewActivitySinceLastDispatch: boolean } };
-    }>(ratchetService).buildRatchetingLogContext(
-      workspace,
-      RatchetState.READY,
-      RatchetState.READY,
-      { type: 'WAITING', reason: 'noop' },
-      prStateInfo,
-      10,
-      { hasNewReviewActivitySinceLastDispatch: true }
-    );
+    const logContext = buildRatchetingLogContext({
+      workspace: workspace as never,
+      previousState: RatchetState.READY,
+      newState: RatchetState.READY,
+      action: { type: 'WAITING', reason: 'noop' },
+      prStateInfo: prStateInfo as never,
+      prNumber: 10,
+      decisionContext: { hasNewReviewActivitySinceLastDispatch: true } as never,
+    });
 
-    expect(logContext.reviewTimestampComparison.hasNewReviewActivitySinceLastDispatch).toBe(true);
+    expect(logContext.reviewTimestampComparison?.hasNewReviewActivitySinceLastDispatch).toBe(true);
   });
 
   it('ignores review activity authored by the authenticated user', () => {

@@ -26,10 +26,7 @@ import {
   checkActiveFixerSession as checkActiveFixerSessionHelper,
   hasActiveSession as hasActiveSessionHelper,
 } from './ratchet-active-session.helpers';
-import {
-  buildRatchetingLogContext as buildRatchetingLogContextHelper,
-  logWorkspaceRatchetingDecision as logWorkspaceRatchetingDecisionHelper,
-} from './ratchet-decision-logging.helpers';
+import { logWorkspaceRatchetingDecision as logWorkspaceRatchetingDecisionHelper } from './ratchet-decision-logging.helpers';
 import { triggerRatchetFixer } from './ratchet-fixer-dispatch.helpers';
 import type { AuthenticatedUsernameCache } from './ratchet-pr-state.helpers';
 import {
@@ -476,28 +473,6 @@ class RatchetService extends EventEmitter {
       action,
       prStateInfo,
       decisionContext,
-      logger,
-    });
-  }
-
-  buildRatchetingLogContext(
-    workspace: WorkspaceWithPR,
-    previousState: RatchetState,
-    newState: RatchetState,
-    action: RatchetAction,
-    prStateInfo: PRStateInfo | null,
-    prNumber: number | null,
-    decisionContext: RatchetDecisionContext | null
-  ) {
-    return buildRatchetingLogContextHelper({
-      workspace,
-      previousState,
-      newState,
-      action,
-      prStateInfo,
-      prNumber,
-      decisionContext,
-      logger,
     });
   }
 
@@ -506,9 +481,9 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo
   ): Promise<RatchetDecisionContext> {
     const previousState = workspace.ratchetState;
-    const newState = this.determineRatchetState(prStateInfo);
+    const newState = determineRatchetStateHelper(prStateInfo);
     const finalState = workspace.ratchetEnabled ? newState : RatchetState.IDLE;
-    const hasNewReviewActivitySinceLastDispatch = this.hasNewReviewActivitySinceLastDispatch(
+    const hasNewReviewActivitySinceLastDispatch = hasNewReviewActivitySinceLastDispatchHelper(
       workspace,
       prStateInfo
     );
@@ -516,7 +491,7 @@ class RatchetService extends EventEmitter {
       workspace,
       prStateInfo
     );
-    const isCleanPrWithNoNewReviewActivity = this.shouldSkipCleanPR(workspace, prStateInfo);
+    const isCleanPrWithNoNewReviewActivity = shouldSkipCleanPRHelper(workspace, prStateInfo);
 
     const activeFixerCheck: ActiveFixerCheckResult =
       workspace.ratchetEnabled && prStateInfo.prState === 'OPEN'
@@ -726,17 +701,6 @@ class RatchetService extends EventEmitter {
     return (prStateInfo.reviewComments?.length ?? 0) > 0;
   }
 
-  private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
-    return shouldSkipCleanPRHelper(workspace, prStateInfo);
-  }
-
-  private hasNewReviewActivitySinceLastDispatch(
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo
-  ): boolean {
-    return hasNewReviewActivitySinceLastDispatchHelper(workspace, prStateInfo);
-  }
-
   private async finishRatchetCheck(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
@@ -827,9 +791,6 @@ class RatchetService extends EventEmitter {
     return await checkActiveFixerSessionHelper({
       workspace,
       sessionBridge: this.session,
-      recordSessionEnd: (workspaceId, sessionId, outcome) =>
-        workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, outcome),
-      logger,
     });
   }
 
@@ -858,10 +819,6 @@ class RatchetService extends EventEmitter {
     });
     this.cachedAuthenticatedUsername = cache;
     return username;
-  }
-
-  private determineRatchetState(pr: PRStateInfo): RatchetState {
-    return determineRatchetStateHelper(pr);
   }
 
   private async triggerFixer(
