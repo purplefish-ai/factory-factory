@@ -509,7 +509,7 @@ describe('createTerminalUpgradeHandler', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'exit', terminalId: 'terminal-1', exitCode: 0 })
     );
-    expect(mockClearTerminalPid).toHaveBeenCalledWith('terminal-1');
+    expect(mockClearTerminalPid).toHaveBeenCalledWith(workspaceId, 'terminal-1');
 
     ws.emit('message', JSON.stringify({ type: 'destroy', terminalId: 'terminal-1' }));
     await Promise.resolve();
@@ -607,6 +607,60 @@ describe('createTerminalUpgradeHandler', () => {
         })
       );
     });
+  });
+
+  it('retries clearing the persisted pid when terminal exit cleanup transiently fails', async () => {
+    const workspaceId = 'workspace-1';
+    const terminalId = 'terminal-1';
+    const { terminalService, exitListeners } = createTerminalService();
+    terminalService.getTerminalsForWorkspace.mockReturnValue([
+      {
+        id: terminalId,
+        createdAt: new Date('2026-07-15T00:00:00.000Z'),
+        outputBuffer: '',
+      },
+    ]);
+    mockClearTerminalPid
+      .mockRejectedValueOnce(new Error('database locked'))
+      .mockResolvedValueOnce(undefined);
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const handler = createTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+
+    handler(
+      createRequest(),
+      { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    await vi.waitFor(() => {
+      expect(exitListeners.get(terminalId)?.size).toBe(1);
+    });
+
+    for (const callback of exitListeners.get(terminalId) ?? []) {
+      callback(0);
+    }
+
+    await vi.waitFor(() => {
+      expect(mockClearTerminalPid).toHaveBeenCalledTimes(2);
+    });
+    expect(mockClearTerminalPid).toHaveBeenNthCalledWith(1, workspaceId, terminalId);
+    expect(mockClearTerminalPid).toHaveBeenNthCalledWith(2, workspaceId, terminalId);
+    expect(logger.warn).not.toHaveBeenCalledWith('Failed to clear terminal PID', expect.anything());
   });
 
   it('destroys a newly created terminal when session persistence fails', async () => {

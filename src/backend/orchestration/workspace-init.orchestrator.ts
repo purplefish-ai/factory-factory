@@ -126,7 +126,7 @@ async function handleWorkspaceInitFailure(
       });
     }
     try {
-      await sessionDataService.clearTerminalPid(autoCreatedTerminalId);
+      await sessionDataService.clearTerminalPid(workspaceId, autoCreatedTerminalId);
     } catch (clearPidError) {
       logger.warn('Failed to clear default terminal PID after init failure', {
         workspaceId,
@@ -466,7 +466,7 @@ async function startDefaultTerminal(
     let terminalSessionPersisted = false;
     const clearPersistedTerminalPid = async () => {
       try {
-        await sessionDataService.clearTerminalPid(terminalId);
+        await sessionDataService.clearTerminalPid(workspaceId, terminalId);
       } catch (error) {
         logger.warn('Failed to clear terminal PID after default terminal exit', {
           workspaceId,
