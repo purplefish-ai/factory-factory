@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { expandEnvVars } from './env';
+import { expandEnvVars, getDatabasePath } from './env';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -57,5 +57,23 @@ describe('expandEnvVars', () => {
 
     expect(expandEnvVars('$USER')).toBe(basename(homedir()) || 'user');
     expect(expandEnvVars(bracedUserToken)).toBe(basename(homedir()) || 'user');
+  });
+});
+
+describe('getDatabasePath', () => {
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('expands BASE_DIR before DATABASE_PATH', () => {
+    process.env.USER = 'testuser';
+    process.env.BASE_DIR = '/Users/$USER/factory-factory';
+    process.env.DATABASE_PATH = '$BASE_DIR/data.db';
+
+    expect(getDatabasePath()).toBe('/Users/testuser/factory-factory/data.db');
   });
 });

@@ -42,6 +42,21 @@ describe('configService environment accessors', () => {
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
   });
 
+  it('expands BASE_DIR before dependent config paths', () => {
+    process.env.USER = 'testuser';
+    process.env.BASE_DIR = '/Users/$USER/factory-factory';
+    process.env.WORKTREE_BASE_DIR = '$BASE_DIR/worktrees';
+    process.env.REPOS_DIR = '${BASE_DIR}/repos';
+    process.env.DATABASE_PATH = '$BASE_DIR/data.db';
+    process.env.MIGRATIONS_PATH = '${BASE_DIR}/migrations';
+    configService.reload();
+
+    expect(configService.getWorktreeBaseDir()).toBe('/Users/testuser/factory-factory/worktrees');
+    expect(configService.getReposDir()).toBe('/Users/testuser/factory-factory/repos');
+    expect(configService.getDatabasePath()).toBe('/Users/testuser/factory-factory/data.db');
+    expect(configService.getMigrationsPath()).toBe('/Users/testuser/factory-factory/migrations');
+  });
+
   it('builds profile/configuration values from environment aliases and toggles', () => {
     process.env.DEFAULT_MODEL = 'opus';
     process.env.DEFAULT_PERMISSIONS = 'strict';
