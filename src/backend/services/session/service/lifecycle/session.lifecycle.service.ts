@@ -1024,6 +1024,7 @@ export class SessionLifecycleService {
           };
           enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
+        enqueueText = `${enqueueText}\n\n<!-- factory-factory-workspace-notification:${notification.id} -->`;
         if (
           await this.markDeliveredIfTranscriptMatch(
             sessionId,

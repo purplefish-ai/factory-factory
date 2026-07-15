@@ -212,7 +212,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       'session-1',
       expect.objectContaining({
         id: 'workspace-notification-notif-parent',
-        text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+        text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:notif-parent -->',
         timestamp: '2026-06-22T10:30:00.000Z',
         settings: {
           selectedModel: null,
@@ -227,7 +227,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       'session-1',
       expect.objectContaining({
         id: 'workspace-notification-notif-child',
-        text: '[Message from child workspace "Child Workspace"]: The branch is ready for review.',
+        text: '[Message from child workspace "Child Workspace"]: The branch is ready for review.\n\n<!-- factory-factory-workspace-notification:notif-child -->',
       })
     );
     expect(enqueuedCount).toBe(2);
@@ -379,7 +379,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         {
           id: '550e8400-e29b-41d4-a716-446655440000-0',
           source: 'user',
-          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:notif-parent -->',
           timestamp: createdAt.toISOString(),
           order: 0,
         },
@@ -395,7 +395,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
-  it('does not match different user text under a provider-generated ID', async () => {
+  it('does not match identical user text without a notification marker', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
     vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
       {
@@ -416,7 +416,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         {
           id: '550e8400-e29b-41d4-a716-446655440000-0',
           source: 'user',
-          text: '[Message from parent workspace "Parent Workspace"]: Please check the passing test.',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
           timestamp: createdAt.toISOString(),
           order: 0,
         },
@@ -464,7 +464,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         {
           id: '550e8400-e29b-41d4-a716-446655440000-0',
           source: 'user',
-          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+          text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:notif-parent-oldest -->',
           timestamp: oldestCreatedAt.toISOString(),
           order: 0,
         },

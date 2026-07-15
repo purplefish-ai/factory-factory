@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prevent pending workspace notifications from being re-enqueued when provider JSONL history already contains the exact delivered user prompt under a provider-generated ID.
+**Goal:** Prevent pending workspace notifications from being re-enqueued when provider JSONL history contains the notification-specific marked prompt under a provider-generated ID, without treating ordinary same-text prompts as delivery proof.
 
-**Architecture:** Keep the existing exact queue-ID match as the primary deduplication signal, then fall back to exact canonical prompt-text matching for user transcript entries. Reserve content-fallback matches within one pending-delivery pass so a single JSONL entry cannot satisfy multiple identical notification records.
+**Architecture:** Keep the existing exact queue-ID match as the primary deduplication signal, append a notification-ID marker to provider-bound prompts, then fall back to exact marked prompt-text matching for user transcript entries. Reserve content-fallback matches within one pending-delivery pass as defense in depth.
 
 **Tech Stack:** TypeScript, Vitest, Express backend service capsules, ACP transcript history.
 
 ## Global Constraints
 
 - Preserve exact-ID deduplication for live Factory Factory transcript entries.
-- Content fallback must examine only `source === 'user'` transcript entries and require exact full prompt-text equality.
+- Content fallback must examine only `source === 'user'` transcript entries and require exact full notification-specific marked prompt-text equality.
 - Content fallback is enabled only for `jsonl`-hydrated transcripts and must exclude `workspace-notification-*` entries so Factory queue IDs remain exact-match-only.
 - A provider-generated transcript entry may content-match at most one pending notification per delivery pass.
 - Do not use timestamps for fallback matching because provider JSONL timestamps represent send time rather than notification creation time.
@@ -38,7 +38,7 @@ Add a lifecycle test whose pending parent notification has message `Please check
 {
   id: '550e8400-e29b-41d4-a716-446655440000-0',
   source: 'user',
-  text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.',
+  text: '[Message from parent workspace "Parent Workspace"]: Please check the failing test.\n\n<!-- factory-factory-workspace-notification:notif-parent -->',
   timestamp: createdAt.toISOString(),
   order: 0,
 }
@@ -61,7 +61,7 @@ Expected: FAIL because the returned count is `1` and `enqueue` is called.
 Add focused tests that assert:
 
 ```typescript
-// Different exact user text under a provider ID does not match.
+// Identical visible user text without the notification marker does not match.
 expect(enqueuedCount).toBe(1);
 expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
 expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ The helper must:
 1. Restrict candidates to user transcript entries.
 2. Return an exact-ID candidate first with `matchedByContent: false`.
 3. Return `undefined` before content matching unless `getHistoryHydrationSource(sessionId) === 'jsonl'`.
-4. Otherwise return the first non-`workspace-notification-*` candidate whose `text === messageText` and whose ID is not in `consumedContentMatchIds`, with `matchedByContent: true`.
+4. Otherwise return the first non-`workspace-notification-*` candidate whose text equals the notification-specific marked `messageText` and whose ID is not in `consumedContentMatchIds`, with `matchedByContent: true`.
 5. Return `undefined` when neither match exists.
 
 When a match has `matchedByContent: true`, add its ID to `consumedContentMatchIds` before retrying `markDelivered`. Keep the current rule that any transcript match suppresses re-enqueueing even if `markDelivered` fails.
@@ -181,11 +181,11 @@ Create `/tmp/pr-body.md` with:
 ```markdown
 ## Summary
 - Prevent workspace notifications from being re-enqueued after provider JSONL transcript hydration.
-- Preserve exact-ID matching while adding an occurrence-aware exact-text fallback for provider-generated IDs.
+- Preserve exact-ID matching while adding notification-specific marked-text fallback for provider-generated IDs.
 
 ## Changes
-- **Session lifecycle**: Match committed user prompts by queue ID or canonical notification text without reusing one history entry for multiple notifications.
-- **Tests**: Cover provider UUID history, nonmatching text, and duplicate pending notification content.
+- **Session lifecycle**: Match committed user prompts by queue ID or notification-specific marked text without reusing one history entry for multiple notifications.
+- **Tests**: Cover provider UUID history, an identical unmarked user prompt, and duplicate pending notification content.
 
 ## Testing
 - [x] Tests pass (`pnpm test`)
