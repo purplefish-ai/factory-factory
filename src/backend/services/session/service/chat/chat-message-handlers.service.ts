@@ -180,6 +180,10 @@ class ChatMessageHandlerService {
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
+    if (sessionService.isSessionStopping(dbSessionId)) {
+      return;
+    }
+
     if (this.turnInProgressRetryTimers.has(dbSessionId)) {
       if (options.bypassTurnInProgressBackoff) {
         this.clearTurnInProgressRetry(dbSessionId);
@@ -211,6 +215,10 @@ class ChatMessageHandlerService {
 
       const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
       if (!clientResult) {
+        return;
+      }
+
+      if (sessionService.isSessionStopping(dbSessionId)) {
         return;
       }
 

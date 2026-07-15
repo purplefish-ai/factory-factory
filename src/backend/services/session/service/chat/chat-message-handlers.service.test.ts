@@ -23,6 +23,7 @@ const {
   mockSessionService: {
     getClient: vi.fn(),
     getSessionClient: vi.fn(),
+    isSessionStopping: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     setSessionModel: vi.fn(),
@@ -92,6 +93,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockWorkspaceNotificationAccessor.markDelivered.mockResolvedValue(undefined);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
+    mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -99,6 +101,50 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         initErrorMessage: null,
       },
     });
+  });
+
+  it('leaves queued messages untouched while the session is stopping', async () => {
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.peekNextMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
+    mockSessionService.getSessionClient.mockReturnValue({});
+    let resolveSession!: (session: {
+      workspace: {
+        status: string;
+        worktreePath: string;
+        initErrorMessage: null;
+      };
+    }) => void;
+    mockSessionDataService.findAgentSessionById.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      })
+    );
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveSession({
+      workspace: {
+        status: 'READY',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
+    await dispatchPromise;
+
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
 
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {

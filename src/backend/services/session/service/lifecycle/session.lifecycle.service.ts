@@ -103,6 +103,7 @@ export class SessionLifecycleService {
   private readonly retryService: SessionRetryService;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
+  private readonly stoppingSessions = new Set<string>();
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
@@ -206,8 +207,26 @@ export class SessionLifecycleService {
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
+    if (this.isSessionStopping(sessionId)) {
+      logger.debug('Session stop already in progress', { sessionId });
+      return;
+    }
+
+    this.stoppingSessions.add(sessionId);
+    try {
+      await this.stopSessionWithBarrier(sessionId, options);
+    } finally {
+      this.stoppingSessions.delete(sessionId);
+    }
+  }
+
+  private async stopSessionWithBarrier(
+    sessionId: string,
+    options?: StopSessionOptions
+  ): Promise<void> {
     this.promptTurnCompletionService.clearSession(sessionId);
     this.onBeforeStopSession?.(sessionId);
+    this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
 
@@ -242,7 +261,6 @@ export class SessionLifecycleService {
     } finally {
       this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
       await this.updateStoppedSessionState(sessionId);
-      this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'stopped',
@@ -379,6 +397,10 @@ export class SessionLifecycleService {
     }
 
     return base;
+  }
+
+  isSessionStopping(sessionId: string): boolean {
+    return this.stoppingSessions.has(sessionId) || this.runtimeManager.isStopInProgress(sessionId);
   }
 
   async getSessionOptions(sessionId: string): Promise<{

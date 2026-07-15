@@ -858,6 +858,25 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
   });
 
+  it('clears queued work before waiting for the runtime to stop', async () => {
+    const runtimeStop = createDeferred<void>();
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockReturnValue(runtimeStop.promise);
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
+
+    const stopPromise = sessionService.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(acpRuntimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+    const clearedBeforeRuntimeStopped = clearQueuedWorkSpy.mock.calls.length > 0;
+
+    runtimeStop.resolve();
+    await stopPromise;
+
+    expect(clearedBeforeRuntimeStopped).toBe(true);
+  });
+
   it('rejects queued ACP prompts during manual stop', async () => {
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -2189,6 +2208,40 @@ describe('SessionService', () => {
 
       await vi.runOnlyPendingTimersAsync();
       expect(onPromptTurnComplete).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not dispatch prompt-turn completion when a prompt settles during stop', async () => {
+    vi.useFakeTimers();
+    try {
+      const prompt = createDeferred<{ stopReason: string }>();
+      const runtimeStop = createDeferred<void>();
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
+      vi.mocked(acpRuntimeManager.stopClient).mockReturnValue(runtimeStop.promise);
+
+      const sendPromise = sessionService.sendAcpMessage('session-1', [
+        { type: 'text', text: 'hello' },
+      ]);
+      await Promise.resolve();
+
+      const stopPromise = sessionService.stopSession('session-1');
+      await vi.waitFor(() => {
+        expect(acpRuntimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      });
+
+      prompt.resolve({ stopReason: 'end_turn' });
+      await expect(sendPromise).resolves.toBe('end_turn');
+      await vi.runOnlyPendingTimersAsync();
+      const completionDispatchedDuringStop = onPromptTurnComplete.mock.calls.length > 0;
+
+      runtimeStop.resolve();
+      await stopPromise;
+
+      expect(completionDispatchedDuringStop).toBe(false);
     } finally {
       vi.useRealTimers();
     }
