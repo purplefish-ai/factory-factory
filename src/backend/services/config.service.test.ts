@@ -43,12 +43,13 @@ describe('configService environment accessors', () => {
   });
 
   it('expands BASE_DIR before dependent config paths', () => {
+    const bracedBaseDir = '$' + '{BASE_DIR}';
     process.env.USER = 'testuser';
     process.env.BASE_DIR = '/Users/$USER/factory-factory';
     process.env.WORKTREE_BASE_DIR = '$BASE_DIR/worktrees';
-    process.env.REPOS_DIR = '${BASE_DIR}/repos';
+    process.env.REPOS_DIR = `${bracedBaseDir}/repos`;
     process.env.DATABASE_PATH = '$BASE_DIR/data.db';
-    process.env.MIGRATIONS_PATH = '${BASE_DIR}/migrations';
+    process.env.MIGRATIONS_PATH = `${bracedBaseDir}/migrations`;
     configService.reload();
 
     expect(configService.getWorktreeBaseDir()).toBe('/Users/testuser/factory-factory/worktrees');
