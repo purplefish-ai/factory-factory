@@ -11,7 +11,6 @@ export type {
   RatchetReviewComment,
   RatchetSessionBridge,
   RatchetStatusCheckInput,
-  RatchetWorkspaceBridge,
 } from './bridges';
 export type {
   AcquireAndDispatchInput,
@@ -29,6 +28,3 @@ export type {
 } from './ratchet.service';
 // Core ratchet polling and dispatch
 export { RATCHET_STATE_CHANGED, RATCHET_TOGGLED, ratchetService } from './ratchet.service';
-
-// Reconciliation (workspace/session cleanup)
-export { reconciliationService } from './reconciliation.service';

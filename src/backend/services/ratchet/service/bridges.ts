@@ -101,17 +101,6 @@ export interface RatchetPRSnapshotBridge {
   recordReviewCheck(workspaceId: string, checkedAt?: Date | null): Promise<void>;
 }
 
-// --- Workspace bridge ---
-
-/** Workspace capabilities needed by ratchet domain */
-export interface RatchetWorkspaceBridge {
-  markFailed(workspaceId: string, reason: string): Promise<void>;
-  initializeWorktree(
-    workspaceId: string,
-    options?: { branchName?: string; useExistingBranch?: boolean }
-  ): Promise<void>;
-}
-
 /** GitHub capabilities needed by ratchet domain */
 export interface RatchetGitHubBridge {
   extractPRInfo(prUrl: string): { owner: string; repo: string; number?: number } | null;

@@ -4,21 +4,29 @@ import { createLogger } from '@/backend/services/logger.service';
 import { terminalSessionAccessor } from '@/backend/services/terminal';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import type { RatchetWorkspaceBridge } from './bridges';
 
 const logger = createLogger('reconciliation');
+
+/** Workspace capabilities needed for reconciliation, injected at startup. */
+export interface ReconciliationWorkspaceBridge {
+  markFailed(workspaceId: string, reason: string): Promise<void>;
+  initializeWorktree(
+    workspaceId: string,
+    options?: { branchName?: string; useExistingBranch?: boolean }
+  ): Promise<void>;
+}
 
 class ReconciliationService {
   private reconciliationInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private reconciliationInProgress: Promise<void> | null = null;
-  private _workspace: RatchetWorkspaceBridge | null = null;
+  private _workspace: ReconciliationWorkspaceBridge | null = null;
 
-  configure(bridges: { workspace: RatchetWorkspaceBridge }): void {
+  configure(bridges: { workspace: ReconciliationWorkspaceBridge }): void {
     this._workspace = bridges.workspace;
   }
 
-  private get workspace(): RatchetWorkspaceBridge {
+  private get workspace(): ReconciliationWorkspaceBridge {
     if (!this._workspace) {
       throw new Error('ReconciliationService: bridges not configured. Call configure() first.');
     }

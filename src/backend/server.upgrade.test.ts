@@ -12,12 +12,12 @@ import {
   configureEventCollector,
   stopEventCollector,
 } from '@/backend/orchestration/event-collector.orchestrator';
+import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
 import {
   configureSnapshotReconciliation,
   snapshotReconciliationService,
 } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
-import { reconciliationService } from '@/backend/services/ratchet';
 import { runScriptStateMachine } from '@/backend/services/run-script';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
@@ -59,18 +59,14 @@ vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
   recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
 }));
 
-vi.mock('@/backend/services/ratchet', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/ratchet')>();
-  return {
-    ...actual,
-    reconciliationService: {
-      cleanupOrphans: vi.fn(async () => undefined),
-      reconcile: vi.fn(async () => undefined),
-      startPeriodicCleanup: vi.fn(),
-      stopPeriodicCleanup: vi.fn(async () => undefined),
-    },
-  };
-});
+vi.mock('@/backend/orchestration/reconciliation.service', () => ({
+  reconciliationService: {
+    cleanupOrphans: vi.fn(async () => undefined),
+    reconcile: vi.fn(async () => undefined),
+    startPeriodicCleanup: vi.fn(),
+    stopPeriodicCleanup: vi.fn(async () => undefined),
+  },
+}));
 
 vi.mock('@/backend/services/run-script', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/backend/services/run-script')>();

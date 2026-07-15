@@ -34,6 +34,7 @@ import {
   configureEventCollector,
   stopEventCollector,
 } from './orchestration/event-collector.orchestrator';
+import { reconciliationService } from './orchestration/reconciliation.service';
 import {
   configureSnapshotReconciliation,
   snapshotReconciliationService,
@@ -49,7 +50,6 @@ import {
   createTerminalUpgradeHandler,
 } from './routers/websocket';
 import { periodicTaskService } from './services/periodic-task';
-import { reconciliationService } from './services/ratchet';
 import { runScriptStateMachine } from './services/run-script';
 import { workspaceAccessor } from './services/workspace';
 import { appRouter, createContext } from './trpc/index';

@@ -26,7 +26,6 @@ import {
   type RatchetPRSnapshotBridge,
   type RatchetSessionBridge,
   ratchetService,
-  reconciliationService,
 } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
@@ -50,6 +49,7 @@ import {
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { reconciliationService } from './reconciliation.service';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 const logger = createLogger('domain-bridges');

@@ -21,6 +21,9 @@ vi.mock('@/backend/services/ratchet', () => ({
     acquireAndDispatch: vi.fn(),
     getActiveSession: vi.fn(),
   },
+}));
+
+vi.mock('./reconciliation.service', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
 
@@ -99,11 +102,7 @@ vi.mock('./workspace-init.orchestrator', () => ({
 
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { periodicTaskService } from '@/backend/services/periodic-task';
-import {
-  fixerSessionService,
-  ratchetService,
-  reconciliationService,
-} from '@/backend/services/ratchet';
+import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
@@ -121,6 +120,7 @@ import {
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
+import { reconciliationService } from './reconciliation.service';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
