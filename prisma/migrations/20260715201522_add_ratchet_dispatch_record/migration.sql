@@ -81,3 +81,45 @@ CREATE INDEX "Workspace_status_prUpdatedAt_idx" ON "Workspace"("status", "prUpda
 CREATE INDEX "Workspace_status_ratchetEnabled_ratchetLastCheckedAt_idx" ON "Workspace"("status", "ratchetEnabled", "ratchetLastCheckedAt");
 PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
+
+-- Recreate the depth-1 triggers from 20260622135100_add_child_workspaces:
+-- SQLite drops triggers together with the table they are attached to, so the
+-- RedefineTables block above silently removed them. Any future migration that
+-- redefines "Workspace" must recreate these triggers the same way.
+CREATE TRIGGER enforce_workspace_depth_1
+BEFORE INSERT ON "Workspace"
+WHEN NEW."parent_workspace_id" IS NOT NULL
+BEGIN
+  -- Block self-parenting
+  SELECT RAISE(ABORT, 'A workspace cannot be its own parent')
+  WHERE NEW."id" = NEW."parent_workspace_id";
+  -- Block grandchild chains: proposed parent must not already have a parent
+  SELECT RAISE(ABORT, 'Child workspaces cannot have children (max depth 1)')
+  WHERE EXISTS (
+    SELECT 1 FROM "Workspace"
+    WHERE "id" = NEW."parent_workspace_id"
+    AND "parent_workspace_id" IS NOT NULL
+  );
+END;
+
+CREATE TRIGGER enforce_workspace_depth_1_update
+BEFORE UPDATE ON "Workspace"
+WHEN NEW."parent_workspace_id" IS NOT NULL
+BEGIN
+  -- Block self-parenting
+  SELECT RAISE(ABORT, 'A workspace cannot be its own parent')
+  WHERE NEW."id" = NEW."parent_workspace_id";
+  -- Block grandchild chains: proposed parent must not already have a parent
+  SELECT RAISE(ABORT, 'Child workspaces cannot have children (max depth 1)')
+  WHERE EXISTS (
+    SELECT 1 FROM "Workspace"
+    WHERE "id" = NEW."parent_workspace_id"
+    AND "parent_workspace_id" IS NOT NULL
+  );
+  -- Block re-parenting a workspace that already has children
+  SELECT RAISE(ABORT, 'Cannot re-parent a workspace that already has children (max depth 1)')
+  WHERE EXISTS (
+    SELECT 1 FROM "Workspace"
+    WHERE "parent_workspace_id" = NEW."id"
+  );
+END;

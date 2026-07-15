@@ -250,7 +250,7 @@ class RatchetService extends EventEmitter {
   async recordSessionEnd(
     workspaceId: string,
     sessionId: string,
-    outcome: RatchetDispatchOutcome
+    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
     await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
   }

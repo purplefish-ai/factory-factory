@@ -79,7 +79,7 @@ export async function checkActiveFixerSession(params: {
   recordSessionEnd: (
     workspaceId: string,
     sessionId: string,
-    outcome: RatchetDispatchOutcome
+    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ) => Promise<boolean>;
   logger: Logger;
 }): Promise<ActiveFixerCheckResult> {
@@ -91,7 +91,7 @@ export async function checkActiveFixerSession(params: {
   }
 
   const settle = async (
-    outcome: RatchetDispatchOutcome,
+    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>,
     reason: string
   ): Promise<ActiveFixerCheckResult> => {
     const settled = await recordSessionEnd(workspace.id, sessionId, outcome);

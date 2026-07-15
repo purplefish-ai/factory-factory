@@ -583,7 +583,7 @@ class WorkspaceAccessor {
   async recordRatchetSessionEnd(
     workspaceId: string,
     sessionId: string,
-    outcome: RatchetDispatchOutcome
+    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<boolean> {
     const result = await prisma.workspace.updateMany({
       where: { id: workspaceId, ratchetActiveSessionId: sessionId },

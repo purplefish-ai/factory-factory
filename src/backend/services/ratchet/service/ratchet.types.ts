@@ -73,7 +73,7 @@ export type WorkspaceWithPR = NonNullable<
 export type ActiveFixerCheckResult =
   | { kind: 'none' }
   | { kind: 'active'; action: RatchetAction }
-  | { kind: 'settled'; outcome: RatchetDispatchOutcome }
+  | { kind: 'settled'; outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'> }
   | { kind: 'ended_concurrently' };
 
 export interface RatchetDecisionContext {

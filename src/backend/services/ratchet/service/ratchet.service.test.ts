@@ -2322,6 +2322,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         type: 'FIXER_ACTIVE',
         sessionId: 'existing-session',
       });
+      // Adoption records the pointer + RUNNING outcome without claiming the
+      // current snapshot key was dispatched (no prompt was sent for it).
+      expect(workspaceAccessor.adoptRatchetActiveSessionIfEnabled).toHaveBeenCalledWith(
+        'ws-already-active',
+        'existing-session'
+      );
+      expect(workspaceAccessor.recordRatchetDispatchIfEnabled).not.toHaveBeenCalled();
     });
 
     it('stops already-active fixer when active-session recording loses disable race', async () => {
