@@ -240,6 +240,32 @@ class RatchetService extends EventEmitter {
     await workspaceAccessor.clearRatchetActiveSession(workspaceId, sessionId);
   }
 
+  /**
+   * Settle ratchet state for a workspace whose PR is closed (not merged).
+   * Closed PRs are excluded from the poll set, so the poll loop can no longer
+   * transition them to IDLE itself. Idempotent; no GitHub fetch.
+   */
+  async markPrClosed(workspaceId: string): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace || workspace.ratchetState === RatchetState.IDLE) {
+      return;
+    }
+
+    const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspaceId, {
+      ratchetState: RatchetState.IDLE,
+      ratchetLastCheckedAt: new Date(),
+    });
+    if (!updated) {
+      return;
+    }
+
+    this.emit(RATCHET_STATE_CHANGED, {
+      workspaceId,
+      fromState: workspace.ratchetState,
+      toState: RatchetState.IDLE,
+    } satisfies RatchetStateChangedEvent);
+  }
+
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR
   ): Promise<WorkspaceRatchetResult> {

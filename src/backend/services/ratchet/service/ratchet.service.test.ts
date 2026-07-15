@@ -1591,6 +1591,78 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  describe('markPrClosed', () => {
+    afterEach(() => {
+      ratchetService.removeAllListeners();
+    });
+
+    it('resets ratchet state to IDLE and emits a state change', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-closed',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_FAILED,
+      } as never);
+      vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(true);
+
+      const stateEvents: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        stateEvents.push(event);
+      });
+
+      await ratchetService.markPrClosed('ws-closed');
+
+      expect(workspaceAccessor.updateRatchetCheckIfEnabled).toHaveBeenCalledWith('ws-closed', {
+        ratchetState: RatchetState.IDLE,
+        ratchetLastCheckedAt: expect.any(Date),
+      });
+      expect(stateEvents).toEqual([
+        {
+          workspaceId: 'ws-closed',
+          fromState: RatchetState.CI_FAILED,
+          toState: RatchetState.IDLE,
+        },
+      ]);
+    });
+
+    it('is a no-op when ratchet state is already IDLE', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-closed',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+      } as never);
+
+      await ratchetService.markPrClosed('ws-closed');
+
+      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when ratcheting was disabled concurrently', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-closed',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_FAILED,
+      } as never);
+      vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+
+      const stateEvents: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        stateEvents.push(event);
+      });
+
+      await ratchetService.markPrClosed('ws-closed');
+
+      expect(stateEvents).toEqual([]);
+    });
+
+    it('is a no-op when workspace is not found', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(null);
+
+      await ratchetService.markPrClosed('ws-missing');
+
+      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkWorkspaceById', () => {
     it('returns null when shutting down', async () => {
       unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;

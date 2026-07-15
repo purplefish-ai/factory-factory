@@ -138,7 +138,8 @@ function shouldRefreshRatchetForPrSwitch(
     previousSnapshot.prUrl !== event.prUrl;
   // The ratchet poll query excludes prState CLOSED, so a reopened PR needs an
   // immediate check here to resume ratcheting as soon as the reopen is synced.
-  const prReopened = previousSnapshot.prState === 'CLOSED' && event.prState === 'OPEN';
+  // A reopened PR can land on any non-CLOSED state (OPEN/DRAFT/APPROVED/...).
+  const prReopened = previousSnapshot.prState === 'CLOSED' && event.prState !== 'CLOSED';
 
   return prNumberChanged || prUrlChanged || prReopened;
 }
@@ -505,6 +506,17 @@ function configureEventCollectorWithState(
     if (shouldRefreshRatchet) {
       void ratchetService.checkWorkspaceById(event.workspaceId).catch((error) => {
         logger.warn('Failed immediate ratchet refresh after PR switch', {
+          workspaceId: event.workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    // Closed PRs are excluded from the ratchet poll set, so the poll loop can no
+    // longer settle their ratchet state; reset it directly (no GitHub fetch needed).
+    if (event.prState === 'CLOSED') {
+      void ratchetService.markPrClosed(event.workspaceId).catch((error) => {
+        logger.warn('Failed to reset ratchet state for closed PR', {
           workspaceId: event.workspaceId,
           error: error instanceof Error ? error.message : String(error),
         });
