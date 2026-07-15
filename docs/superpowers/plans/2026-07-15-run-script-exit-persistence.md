@@ -120,7 +120,7 @@ errors, and deletes lifecycle evidence before persistence.
 
 **Interfaces:**
 - Consumes: `RunScriptStateMachineError`, `workspaceAccessor.findById()`, `markCompleted()`, `markFailed()`, and `completeStopping()`.
-- Produces: private `persistProcessExitState(workspaceId: string, code: number | null): Promise<void>` and generation-safe cleanup.
+- Produces: private `persistProcessExitState(workspaceId: string, childProcess: ChildProcess, code: number | null): Promise<void>` and generation-safe cleanup.
 
 - [ ] **Step 1: Import the typed error and define the retry bound**
 
@@ -141,7 +141,7 @@ if (trackedProcess !== childProcess) {
   return;
 }
 
-await this.persistProcessExitState(workspaceId, code);
+await this.persistProcessExitState(workspaceId, childProcess, code);
 
 let currentProcess = this.runningProcesses.get(workspaceId);
 if (currentProcess !== childProcess) {
