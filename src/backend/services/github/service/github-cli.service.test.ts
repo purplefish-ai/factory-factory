@@ -1076,8 +1076,27 @@ describe('GitHubCLIService', () => {
   });
 
   describe('getResolvedReviewCommentIds', () => {
+    function makeCommentsConnection(
+      commentIds: Array<number | null>,
+      pageInfo: { hasNextPage: boolean; endCursor: string | null } = {
+        hasNextPage: false,
+        endCursor: null,
+      }
+    ) {
+      return {
+        pageInfo,
+        nodes: commentIds.map((id) => ({
+          fullDatabaseId: id === null ? null : String(id),
+        })),
+      };
+    }
+
     function makeReviewThreadsResponse(
-      threads: Array<{ isResolved: boolean; commentIds: Array<number | null> }>,
+      threads: Array<{
+        isResolved: boolean;
+        commentIds: Array<number | null>;
+        commentsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
+      }>,
       pageInfo: { hasNextPage: boolean; endCursor: string | null } = {
         hasNextPage: false,
         endCursor: null,
@@ -1089,14 +1108,10 @@ describe('GitHubCLIService', () => {
             pullRequest: {
               reviewThreads: {
                 pageInfo,
-                nodes: threads.map((thread) => ({
+                nodes: threads.map((thread, index) => ({
+                  id: `thread-${index}`,
                   isResolved: thread.isResolved,
-                  comments: {
-                    pageInfo: { hasNextPage: false },
-                    nodes: thread.commentIds.map((id) => ({
-                      fullDatabaseId: id === null ? null : String(id),
-                    })),
-                  },
+                  comments: makeCommentsConnection(thread.commentIds, thread.commentsPageInfo),
                 })),
               },
             },
@@ -1144,6 +1159,51 @@ describe('GitHubCLIService', () => {
       expect(mockExecFile).toHaveBeenCalledTimes(2);
       const secondQuery = mockExecFile.mock.calls[1]?.[1]?.join(' ');
       expect(secondQuery).toContain('after: "cursor-1"');
+    });
+
+    it('pages through a resolved thread with more than one page of comments', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify(
+            makeReviewThreadsResponse([
+              {
+                isResolved: true,
+                commentIds: [1],
+                commentsPageInfo: { hasNextPage: true, endCursor: 'comment-cursor-1' },
+              },
+              { isResolved: false, commentIds: [2] },
+            ])
+          ),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: {
+              node: {
+                comments: makeCommentsConnection([3], {
+                  hasNextPage: true,
+                  endCursor: 'comment-cursor-2',
+                }),
+              },
+            },
+          }),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: { node: { comments: makeCommentsConnection([4]) } },
+          }),
+          stderr: '',
+        });
+
+      const result = await githubCLIService.getResolvedReviewCommentIds('owner/repo', 123);
+      expect(result).toEqual(new Set([1, 3, 4]));
+      expect(mockExecFile).toHaveBeenCalledTimes(3);
+      const tailQuery = mockExecFile.mock.calls[1]?.[1]?.join(' ');
+      expect(tailQuery).toContain('node(id: "thread-0")');
+      expect(tailQuery).toContain('after: "comment-cursor-1"');
+      const secondTailQuery = mockExecFile.mock.calls[2]?.[1]?.join(' ');
+      expect(secondTailQuery).toContain('after: "comment-cursor-2"');
     });
 
     it('returns an empty set when the PR is not found', async () => {

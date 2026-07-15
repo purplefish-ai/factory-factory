@@ -21,9 +21,11 @@ import {
   prListItemSchema,
   prStatusSchema,
   type ResolvedReviewThreadsPage,
+  type ReviewThreadCommentsConnection,
   resolvedReviewThreadsGraphQLSchema,
   reviewCommentSchema,
   reviewRequestedPRGraphQLSchema,
+  reviewThreadCommentsGraphQLSchema,
 } from './github-cli/schemas';
 import type {
   GitHubCLIErrorType,
@@ -40,27 +42,38 @@ const logger = createLogger('github-cli');
 
 type ExecResult = { stdout: string; stderr: string };
 
+interface TruncatedResolvedThread {
+  threadId: string;
+  afterCursor: string | null;
+}
+
+/**
+ * Collect comment ids from resolved threads into resolvedIds, returning
+ * continuations for resolved threads whose comment list was truncated at the
+ * first page (they need follow-up node queries to fetch the tail).
+ */
 function collectResolvedReviewCommentIds(
   threads: ResolvedReviewThreadsPage['nodes'],
-  resolvedIds: Set<number>,
-  logContext: { repo: string; prNumber: number }
-): void {
+  resolvedIds: Set<number>
+): TruncatedResolvedThread[] {
+  const truncatedThreads: TruncatedResolvedThread[] = [];
   for (const thread of threads) {
     if (!thread.isResolved) {
       continue;
-    }
-    if (thread.comments.pageInfo.hasNextPage) {
-      logger.warn(
-        'getResolvedReviewCommentIds: resolved thread has more than 100 comments; some resolved comments may not be filtered',
-        logContext
-      );
     }
     for (const comment of thread.comments.nodes) {
       if (comment.fullDatabaseId !== null) {
         resolvedIds.add(comment.fullDatabaseId);
       }
     }
+    if (thread.comments.pageInfo.hasNextPage) {
+      truncatedThreads.push({
+        threadId: thread.id,
+        afterCursor: thread.comments.pageInfo.endCursor,
+      });
+    }
   }
+  return truncatedThreads;
 }
 
 /**
@@ -824,42 +837,8 @@ class GitHubCLIService {
     }
 
     try {
-      const MAX_PAGES = 20;
       const resolvedIds = new Set<number>();
-      let afterCursor: string | null = null;
-
-      for (let page = 1; page <= MAX_PAGES; page++) {
-        const reviewThreads = await this.fetchReviewThreadsPage(owner, name, prNumber, afterCursor);
-        if (!reviewThreads) {
-          logger.warn('getResolvedReviewCommentIds: repository or PR not found', {
-            repo,
-            prNumber,
-          });
-          return resolvedIds;
-        }
-
-        collectResolvedReviewCommentIds(reviewThreads.nodes, resolvedIds, { repo, prNumber });
-
-        if (!reviewThreads.pageInfo.hasNextPage) {
-          break;
-        }
-        afterCursor = reviewThreads.pageInfo.endCursor;
-        if (!afterCursor) {
-          logger.warn('getResolvedReviewCommentIds: review thread page is missing an end cursor', {
-            repo,
-            prNumber,
-          });
-          break;
-        }
-
-        if (page === MAX_PAGES) {
-          logger.warn(
-            'getResolvedReviewCommentIds: reached MAX_PAGES limit, results may be incomplete',
-            { repo, prNumber, totalResolved: resolvedIds.size, maxPages: MAX_PAGES }
-          );
-        }
-      }
-
+      await this.collectResolvedIdsFromThreadPages({ owner, name, repo, prNumber }, resolvedIds);
       return resolvedIds;
     } catch (error) {
       const errorType = classifyError(error);
@@ -876,6 +855,51 @@ class GitHubCLIService {
     }
   }
 
+  private async collectResolvedIdsFromThreadPages(
+    ctx: { owner: string; name: string; repo: string; prNumber: number },
+    resolvedIds: Set<number>
+  ): Promise<void> {
+    const MAX_PAGES = 20;
+    const logContext = { repo: ctx.repo, prNumber: ctx.prNumber };
+    let afterCursor: string | null = null;
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const reviewThreads = await this.fetchReviewThreadsPage(
+        ctx.owner,
+        ctx.name,
+        ctx.prNumber,
+        afterCursor
+      );
+      if (!reviewThreads) {
+        logger.warn('getResolvedReviewCommentIds: repository or PR not found', logContext);
+        return;
+      }
+
+      const truncatedThreads = collectResolvedReviewCommentIds(reviewThreads.nodes, resolvedIds);
+      for (const thread of truncatedThreads) {
+        await this.collectResolvedThreadCommentTail(thread, resolvedIds, logContext);
+      }
+
+      if (!reviewThreads.pageInfo.hasNextPage) {
+        return;
+      }
+      afterCursor = reviewThreads.pageInfo.endCursor;
+      if (!afterCursor) {
+        logger.warn(
+          'getResolvedReviewCommentIds: review thread page is missing an end cursor',
+          logContext
+        );
+        return;
+      }
+    }
+
+    logger.warn('getResolvedReviewCommentIds: reached MAX_PAGES limit, results may be incomplete', {
+      ...logContext,
+      totalResolved: resolvedIds.size,
+      maxPages: MAX_PAGES,
+    });
+  }
+
   private async fetchReviewThreadsPage(
     owner: string,
     name: string,
@@ -890,9 +914,10 @@ class GitHubCLIService {
             reviewThreads(first: 100${afterClause}) {
               pageInfo { hasNextPage endCursor }
               nodes {
+                id
                 isResolved
                 comments(first: 100) {
-                  pageInfo { hasNextPage }
+                  pageInfo { hasNextPage endCursor }
                   nodes { fullDatabaseId }
                 }
               }
@@ -913,6 +938,84 @@ class GitHubCLIService {
       'getResolvedReviewCommentIds'
     );
     return parsed.data.repository?.pullRequest?.reviewThreads ?? null;
+  }
+
+  /**
+   * Fetch the remaining comment pages of a resolved thread whose comment list
+   * was truncated at the first page, adding their ids to resolvedIds.
+   */
+  private async collectResolvedThreadCommentTail(
+    thread: TruncatedResolvedThread,
+    resolvedIds: Set<number>,
+    logContext: { repo: string; prNumber: number }
+  ): Promise<void> {
+    const MAX_PAGES = 20;
+    let afterCursor = thread.afterCursor;
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      if (!afterCursor) {
+        logger.warn(
+          'getResolvedReviewCommentIds: truncated thread comments are missing an end cursor',
+          logContext
+        );
+        return;
+      }
+
+      const comments = await this.fetchThreadCommentsPage(thread.threadId, afterCursor);
+      if (!comments) {
+        logger.warn('getResolvedReviewCommentIds: review thread not found while paging comments', {
+          ...logContext,
+          threadId: thread.threadId,
+        });
+        return;
+      }
+
+      for (const comment of comments.nodes) {
+        if (comment.fullDatabaseId !== null) {
+          resolvedIds.add(comment.fullDatabaseId);
+        }
+      }
+
+      if (!comments.pageInfo.hasNextPage) {
+        return;
+      }
+      afterCursor = comments.pageInfo.endCursor;
+    }
+
+    logger.warn(
+      'getResolvedReviewCommentIds: reached MAX_PAGES limit while paging thread comments',
+      { ...logContext, threadId: thread.threadId, maxPages: MAX_PAGES }
+    );
+  }
+
+  private async fetchThreadCommentsPage(
+    threadId: string,
+    afterCursor: string
+  ): Promise<ReviewThreadCommentsConnection | null> {
+    const query = `
+      query {
+        node(id: ${JSON.stringify(threadId)}) {
+          ... on PullRequestReviewThread {
+            comments(first: 100, after: ${JSON.stringify(afterCursor)}) {
+              pageInfo { hasNextPage endCursor }
+              nodes { fullDatabaseId }
+            }
+          }
+        }
+      }
+    `;
+
+    const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+      timeout: GH_TIMEOUT_MS.default,
+      maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+    });
+
+    const parsed = parseGhJson(
+      reviewThreadCommentsGraphQLSchema,
+      stdout,
+      'fetchThreadCommentsPage'
+    );
+    return parsed.data.node?.comments ?? null;
   }
 
   /**

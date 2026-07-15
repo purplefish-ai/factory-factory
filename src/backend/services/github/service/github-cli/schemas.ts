@@ -175,6 +175,18 @@ export const reviewRequestedPRGraphQLSchema = z.object({
   }),
 });
 
+const reviewThreadCommentsConnectionSchema = z.object({
+  pageInfo: z.object({
+    hasNextPage: z.boolean(),
+    endCursor: z.string().nullable(),
+  }),
+  nodes: z.array(
+    z.object({
+      fullDatabaseId: z.coerce.number().nullable(),
+    })
+  ),
+});
+
 export const resolvedReviewThreadsGraphQLSchema = z.object({
   data: z.object({
     repository: z
@@ -188,17 +200,9 @@ export const resolvedReviewThreadsGraphQLSchema = z.object({
               }),
               nodes: z.array(
                 z.object({
+                  id: z.string(),
                   isResolved: z.boolean(),
-                  comments: z.object({
-                    pageInfo: z.object({
-                      hasNextPage: z.boolean(),
-                    }),
-                    nodes: z.array(
-                      z.object({
-                        fullDatabaseId: z.coerce.number().nullable(),
-                      })
-                    ),
-                  }),
+                  comments: reviewThreadCommentsConnectionSchema,
                 })
               ),
             }),
@@ -208,6 +212,20 @@ export const resolvedReviewThreadsGraphQLSchema = z.object({
       .nullable(),
   }),
 });
+
+export const reviewThreadCommentsGraphQLSchema = z.object({
+  data: z.object({
+    // `node(id:)` is typed via an inline fragment, so a non-thread node
+    // (or a deleted thread) comes back as an object without `comments`.
+    node: z
+      .object({
+        comments: reviewThreadCommentsConnectionSchema.optional(),
+      })
+      .nullable(),
+  }),
+});
+
+export type ReviewThreadCommentsConnection = z.infer<typeof reviewThreadCommentsConnectionSchema>;
 
 export type ResolvedReviewThreadsPage = NonNullable<
   NonNullable<

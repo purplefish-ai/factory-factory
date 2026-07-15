@@ -400,15 +400,21 @@ describe('fetchPRState', () => {
       getResolvedReviewCommentIds: vi.fn(() => Promise.reject(new Error('GraphQL unavailable'))),
     });
     const handleError = vi.fn();
+    const warn = vi.fn();
     const params = {
       ...makeFetchParams(github),
       backoff: { handleError } as unknown as RateLimitBackoff,
+      logger: { debug: vi.fn(), info: vi.fn(), warn, error: vi.fn() } as never,
     };
 
     const result = expectPRStateInfo(await fetchPRState(params));
 
     expect(result.reviewComments.map((c) => c.body)).toEqual(['Comment 1', 'Comment 2']);
     expect(handleError).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      'Failed to fetch resolved review threads; including all review comments',
+      expect.objectContaining({ workspaceId: 'ws-1', error: 'GraphQL unavailable' })
+    );
   });
 });
 
