@@ -29,6 +29,7 @@ function createServiceWithPatchedInternals() {
     getSessionClient: vi.fn(() => ({ id: 'existing-client' })),
     getRuntimeSnapshot: vi.fn(() => ({ phase: 'idle' })),
     isSessionStopping: vi.fn(() => false),
+    getStopGeneration: vi.fn(() => 0),
     getSessionOptions: vi.fn(async () => ({ workingDir: '/tmp', model: 'gpt-5' })),
     stopAllClients: vi.fn(async () => undefined),
   };
@@ -107,6 +108,7 @@ describe('SessionService coverage wrappers', () => {
     await service.stopAllClients(2500);
     service.isSessionRunning('session-1');
     service.isSessionStopping('session-1');
+    service.getStopGeneration('session-1');
     service.isSessionWorking('session-1');
     service.isAnySessionWorking(['session-1']);
 
@@ -139,6 +141,7 @@ describe('SessionService coverage wrappers', () => {
     expect(lifecycleService.stopAllClients).toHaveBeenCalledWith(2500);
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-1');
     expect(lifecycleService.isSessionStopping).toHaveBeenCalledWith('session-1');
+    expect(lifecycleService.getStopGeneration).toHaveBeenCalledWith('session-1');
     expect(runtimeManager.isSessionWorking).toHaveBeenCalledWith('session-1');
     expect(runtimeManager.isAnySessionWorking).toHaveBeenCalledWith(['session-1']);
   });

@@ -54,7 +54,7 @@ function createLifecycleService(options?: {
   const service = new SessionLifecycleService({
     repository: {} as never,
     promptBuilder: {} as never,
-    runtimeManager: {} as never,
+    runtimeManager: { isStopInProgress: vi.fn(() => false) } as never,
     sessionDomainService: sessionDomainService as unknown as SessionDomainService,
     sessionPermissionService: {} as never,
     sessionConfigService: {} as never,
@@ -235,6 +235,45 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(enqueuedCount).toBe(2);
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue notifications found after the startup stop generation changes', async () => {
+    let resolvePending!: (notifications: unknown[]) => void;
+    vi.mocked(workspaceNotificationAccessor.findPending).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePending = resolve;
+      }) as never
+    );
+    const { service, sessionDomainService } = createLifecycleService();
+
+    const deliveryPromise = deliverPendingChildNotifications(service);
+    await vi.waitFor(() => {
+      expect(workspaceNotificationAccessor.findPending).toHaveBeenCalledWith('workspace-1');
+    });
+
+    (
+      service as unknown as {
+        stopGenerations: Map<string, number>;
+      }
+    ).stopGenerations.set('session-1', 1);
+    resolvePending([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: new Date('2026-06-22T10:30:00.000Z'),
+      },
+    ]);
+
+    await expect(deliveryPromise).resolves.toBe(0);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
 
   it('leaves notifications pending when enqueue fails', async () => {

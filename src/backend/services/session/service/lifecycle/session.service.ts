@@ -511,6 +511,10 @@ export class SessionService {
     return this.lifecycleService.isSessionStopping(sessionId);
   }
 
+  getStopGeneration(sessionId: string): number {
+    return this.lifecycleService.getStopGeneration(sessionId);
+  }
+
   /**
    * Check if a session is actively working (not just alive, but processing)
    */

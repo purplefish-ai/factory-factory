@@ -180,7 +180,8 @@ class ChatMessageHandlerService {
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
-    if (sessionService.isSessionStopping(dbSessionId)) {
+    const stopGeneration = sessionService.getStopGeneration(dbSessionId);
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
     }
 
@@ -208,7 +209,7 @@ class ChatMessageHandlerService {
       }
 
       const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
-      if (sessionService.isSessionStopping(dbSessionId)) {
+      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         return;
       }
       if (dispatchGate.policy !== 'allowed') {
@@ -221,7 +222,7 @@ class ChatMessageHandlerService {
         return;
       }
 
-      if (sessionService.isSessionStopping(dbSessionId)) {
+      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
         return;
       }
 
@@ -232,10 +233,10 @@ class ChatMessageHandlerService {
       }
 
       try {
-        await this.dispatchMessage(dbSessionId, msg, clientResult.client);
+        await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
         this.turnInProgressRetryAttempts.delete(dbSessionId);
       } catch (error) {
-        this.handleDispatchError(dbSessionId, msg, error);
+        this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
       }
     } finally {
       this.releaseDispatchToken(dbSessionId, dispatchToken);
@@ -287,7 +288,19 @@ class ChatMessageHandlerService {
    * Handle a dispatch error. Permanent errors (e.g. unsupported image format) are
    * rejected so the user sees a clear message. Transient errors are re-queued.
    */
-  private handleDispatchError(dbSessionId: string, msg: QueuedMessage, error: unknown): void {
+  private handleDispatchError(
+    dbSessionId: string,
+    msg: QueuedMessage,
+    error: unknown,
+    stopGeneration: number
+  ): void {
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
+        emitSnapshot: false,
+      });
+      return;
+    }
+
     if (error instanceof PermanentAttachmentError) {
       logger.error('[Chat WS] Permanent dispatch error, rejecting message', {
         dbSessionId,
@@ -462,7 +475,8 @@ class ChatMessageHandlerService {
   private async dispatchMessage(
     dbSessionId: string,
     msg: QueuedMessage,
-    client?: unknown
+    client: unknown,
+    stopGeneration: number
   ): Promise<void> {
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
@@ -481,8 +495,7 @@ class ChatMessageHandlerService {
 
     // Configuration calls above yield. Re-check the lifecycle barrier before any
     // dispatch state mutation so a stop cannot be crossed by this dequeued turn.
-    if (sessionService.isSessionStopping(dbSessionId)) {
-      sessionDomainService.requeueFront(dbSessionId, msg);
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
     }
 
@@ -562,6 +575,13 @@ class ChatMessageHandlerService {
         error: this.formatDispatchError(error),
       });
     }
+  }
+
+  private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
+    return (
+      !sessionService.isSessionStopping(dbSessionId) &&
+      sessionService.getStopGeneration(dbSessionId) === stopGeneration
+    );
   }
 
   private getRequeueReason(

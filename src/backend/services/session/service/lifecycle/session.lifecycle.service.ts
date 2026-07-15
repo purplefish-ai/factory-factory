@@ -433,7 +433,7 @@ export class SessionLifecycleService {
     return this.stoppingSessions.has(sessionId) || this.runtimeManager.isStopInProgress(sessionId);
   }
 
-  private getStopGeneration(sessionId: string): number {
+  getStopGeneration(sessionId: string): number {
     return this.stopGenerations.get(sessionId) ?? 0;
   }
 
@@ -668,7 +668,8 @@ export class SessionLifecycleService {
     this.assertStartupAllowed(sessionId, stopGeneration);
     const dispatchableNotificationCount = await this.deliverPendingChildNotifications(
       sessionId,
-      sessionContext.workspaceId
+      sessionContext.workspaceId,
+      stopGeneration
     );
 
     return { handle, dispatchableNotificationCount };
@@ -1070,10 +1071,12 @@ export class SessionLifecycleService {
 
   private async deliverPendingChildNotifications(
     sessionId: string,
-    workspaceId: string
+    workspaceId: string,
+    stopGeneration = this.getStopGeneration(sessionId)
   ): Promise<number> {
     try {
       const pending = await workspaceNotificationAccessor.findPending(workspaceId);
+      this.assertStartupAllowed(sessionId, stopGeneration);
       if (pending.length === 0) {
         return 0;
       }
@@ -1092,6 +1095,7 @@ export class SessionLifecycleService {
       let dispatchableCount = 0;
       const consumedContentMatchIds = new Set<string>();
       for (const notification of pending) {
+        this.assertStartupAllowed(sessionId, stopGeneration);
         const timestamp = notification.createdAt.toISOString();
         const messageId = `workspace-notification-${notification.id}`;
         if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
@@ -1122,16 +1126,16 @@ export class SessionLifecycleService {
           enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
         enqueueText = `${enqueueText}\n\n<!-- factory-factory-workspace-notification:${notification.id} -->`;
-        if (
-          await this.markDeliveredIfTranscriptMatch(
-            sessionId,
-            workspaceId,
-            notification.id,
-            messageId,
-            enqueueText,
-            consumedContentMatchIds
-          )
-        ) {
+        const alreadyDelivered = await this.markDeliveredIfTranscriptMatch(
+          sessionId,
+          workspaceId,
+          notification.id,
+          messageId,
+          enqueueText,
+          consumedContentMatchIds
+        );
+        this.assertStartupAllowed(sessionId, stopGeneration);
+        if (alreadyDelivered) {
           continue;
         }
 
