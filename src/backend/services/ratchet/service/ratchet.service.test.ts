@@ -1912,6 +1912,81 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(result).toBeNull();
     });
 
+    it('skips the PR fetch when the workspace was recently fetched', async () => {
+      const workspace = {
+        id: 'ws-cooldown',
+        prUrl: 'https://github.com/example/repo/pull/9',
+        prNumber: 9,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      };
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspace as never);
+      vi.mocked(mockGitHubBridge.extractPRInfo).mockReturnValue({
+        owner: 'example',
+        repo: 'repo',
+        number: 9,
+      });
+      vi.mocked(mockGitHubBridge.isRecentlyFetched).mockReturnValue(true);
+
+      const result = await ratchetService.checkWorkspaceById('ws-cooldown');
+
+      expect(result?.action).toEqual({ type: 'WAITING', reason: 'recently_fetched' });
+      expect(mockGitHubBridge.getPRFullDetails).not.toHaveBeenCalled();
+    });
+
+    it('bypasses the PR fetch cooldown when requested by an event-driven check', async () => {
+      const workspace = {
+        id: 'ws-bypass',
+        prUrl: 'https://github.com/example/repo/pull/9',
+        prNumber: 9,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      };
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspace as never);
+      vi.mocked(mockGitHubBridge.extractPRInfo).mockReturnValue({
+        owner: 'example',
+        repo: 'repo',
+        number: 9,
+      });
+      vi.mocked(mockGitHubBridge.isRecentlyFetched).mockReturnValue(true);
+      vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
+        state: 'OPEN',
+        number: 9,
+        url: 'https://github.com/example/repo/pull/9',
+        reviewDecision: null,
+        mergeStateStatus: 'CLEAN',
+        reviews: [],
+        comments: [],
+        statusCheckRollup: null,
+      });
+      vi.mocked(mockGitHubBridge.getReviewComments).mockResolvedValue([]);
+      vi.mocked(mockGitHubBridge.computeCIStatus).mockReturnValue(CIStatus.SUCCESS);
+
+      const result = await ratchetService.checkWorkspaceById('ws-bypass', {
+        bypassPrFetchCooldown: true,
+      });
+
+      expect(mockGitHubBridge.getPRFullDetails).toHaveBeenCalledWith('example/repo', 9);
+      expect(result?.newState).toBe(RatchetState.READY);
+      expect(result?.action).not.toEqual({ type: 'WAITING', reason: 'recently_fetched' });
+    });
+
     it('deduplicates concurrent checks for the same workspace', async () => {
       unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
       const workspace = {

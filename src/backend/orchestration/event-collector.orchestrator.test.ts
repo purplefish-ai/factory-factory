@@ -645,7 +645,9 @@ describe('configureEventCollector', () => {
       prUrl: 'https://github.com/org/repo/pull/42',
     });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
+      bypassPrFetchCooldown: true,
+    });
   });
 
   it.each([
@@ -684,7 +686,9 @@ describe('configureEventCollector', () => {
       prUrl: 'https://github.com/org/repo/pull/42',
     });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
+      bypassPrFetchCooldown: true,
+    });
   });
 
   it('settles ratchet state without a recompute when PR is closed', () => {
@@ -798,7 +802,9 @@ describe('configureEventCollector', () => {
       prUrl: 'https://github.com/org/repo/pull/42',
     });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
+      bypassPrFetchCooldown: true,
+    });
   });
 
   it('does not trigger immediate ratchet recompute when PR identity is unchanged', () => {

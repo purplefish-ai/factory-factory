@@ -60,6 +60,17 @@ export interface RatchetToggledEvent {
   ratchetState: RatchetState;
 }
 
+export interface RatchetCheckOptions {
+  /**
+   * Fetch fresh PR state even if another service fetched this workspace's PR
+   * within the dedup cooldown. Event-driven checks (PR switch, reopen) fire
+   * right after the scheduler sync that emitted the event registered its own
+   * fetch, so without the bypass they are guaranteed to be deduped into a
+   * no-op and ratcheting would only resume on a later poll cycle.
+   */
+  bypassPrFetchCooldown?: boolean;
+}
+
 class RatchetService extends EventEmitter {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
@@ -224,7 +235,10 @@ class RatchetService extends EventEmitter {
     return { checked: workspaces.length, stateChanges, actionsTriggered, results };
   }
 
-  async checkWorkspaceById(workspaceId: string): Promise<WorkspaceRatchetResult | null> {
+  async checkWorkspaceById(
+    workspaceId: string,
+    opts?: RatchetCheckOptions
+  ): Promise<WorkspaceRatchetResult | null> {
     if (this.isShuttingDown) {
       return null;
     }
@@ -234,7 +248,7 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    return this.runWorkspaceCheckSafely(workspace);
+    return this.runWorkspaceCheckSafely(workspace, opts);
   }
 
   /**
@@ -277,10 +291,13 @@ class RatchetService extends EventEmitter {
   }
 
   private async runWorkspaceCheckSafely(
-    workspace: WorkspaceWithPR
+    workspace: WorkspaceWithPR,
+    opts?: RatchetCheckOptions
   ): Promise<WorkspaceRatchetResult> {
     try {
-      return await this.checkCoordinator.run(workspace, () => this.processWorkspace(workspace));
+      return await this.checkCoordinator.run(workspace, () =>
+        this.processWorkspace(workspace, opts)
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn('Ratchet workspace check failed', {
@@ -343,7 +360,10 @@ class RatchetService extends EventEmitter {
     } satisfies RatchetToggledEvent);
   }
 
-  private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {
+  private async processWorkspace(
+    workspace: WorkspaceWithPR,
+    opts?: RatchetCheckOptions
+  ): Promise<WorkspaceRatchetResult> {
     if (this.isShuttingDown) {
       return {
         workspaceId: workspace.id,
@@ -384,7 +404,9 @@ class RatchetService extends EventEmitter {
 
     try {
       const authenticatedUsername = await this.getAuthenticatedUsernameCached();
-      const prStateResult = await this.fetchPRState(workspace, authenticatedUsername);
+      const prStateResult = await this.fetchPRState(workspace, authenticatedUsername, {
+        bypassRecentFetchCooldown: opts?.bypassPrFetchCooldown,
+      });
       if (isPRStateFetchSkipped(prStateResult)) {
         const action: RatchetAction = { type: 'WAITING', reason: prStateResult.reason };
         this.logWorkspaceRatchetingDecision(
