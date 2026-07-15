@@ -136,8 +136,11 @@ function shouldRefreshRatchetForPrSwitch(
     event.prUrl !== undefined &&
     event.prUrl !== null &&
     previousSnapshot.prUrl !== event.prUrl;
+  // The ratchet poll query excludes prState CLOSED, so a reopened PR needs an
+  // immediate check here to resume ratcheting as soon as the reopen is synced.
+  const prReopened = previousSnapshot.prState === 'CLOSED' && event.prState === 'OPEN';
 
-  return prNumberChanged || prUrlChanged;
+  return prNumberChanged || prUrlChanged || prReopened;
 }
 
 /**

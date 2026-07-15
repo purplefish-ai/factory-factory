@@ -644,6 +644,74 @@ describe('configureEventCollector', () => {
     expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
   });
 
+  it('triggers immediate ratchet recompute when a closed PR is reopened', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 42,
+      prUrl: 'https://github.com/org/repo/pull/42',
+      prState: 'CLOSED',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('does not trigger ratchet recompute when PR stays closed', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 42,
+      prUrl: 'https://github.com/org/repo/pull/42',
+      prState: 'CLOSED',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'CLOSED',
+      prCiStatus: 'UNKNOWN',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
+  });
+
   it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
     const existingSnapshot: { projectId: string; prNumber: number | null; prUrl: string | null } = {
       projectId: 'proj-1',
