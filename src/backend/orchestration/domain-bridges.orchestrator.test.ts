@@ -71,6 +71,7 @@ vi.mock('@/backend/services/github', () => ({
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
     getReviewComments: vi.fn(),
+    getResolvedReviewCommentIds: vi.fn(),
     computeCIStatus: vi.fn(),
     getAuthenticatedUsername: vi.fn(),
     fetchAndComputePRState: vi.fn(),

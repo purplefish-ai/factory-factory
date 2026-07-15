@@ -175,6 +175,46 @@ export const reviewRequestedPRGraphQLSchema = z.object({
   }),
 });
 
+export const resolvedReviewThreadsGraphQLSchema = z.object({
+  data: z.object({
+    repository: z
+      .object({
+        pullRequest: z
+          .object({
+            reviewThreads: z.object({
+              pageInfo: z.object({
+                hasNextPage: z.boolean(),
+                endCursor: z.string().nullable(),
+              }),
+              nodes: z.array(
+                z.object({
+                  isResolved: z.boolean(),
+                  comments: z.object({
+                    pageInfo: z.object({
+                      hasNextPage: z.boolean(),
+                    }),
+                    nodes: z.array(
+                      z.object({
+                        fullDatabaseId: z.coerce.number().nullable(),
+                      })
+                    ),
+                  }),
+                })
+              ),
+            }),
+          })
+          .nullable(),
+      })
+      .nullable(),
+  }),
+});
+
+export type ResolvedReviewThreadsPage = NonNullable<
+  NonNullable<
+    z.infer<typeof resolvedReviewThreadsGraphQLSchema>['data']['repository']
+  >['pullRequest']
+>['reviewThreads'];
+
 export const reviewCommentSchema = z.object({
   id: z.number(),
   user: z.object({

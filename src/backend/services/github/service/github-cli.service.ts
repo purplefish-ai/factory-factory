@@ -20,6 +20,8 @@ import {
   issueSchema,
   prListItemSchema,
   prStatusSchema,
+  type ResolvedReviewThreadsPage,
+  resolvedReviewThreadsGraphQLSchema,
   reviewCommentSchema,
   reviewRequestedPRGraphQLSchema,
 } from './github-cli/schemas';
@@ -37,6 +39,29 @@ const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
 type ExecResult = { stdout: string; stderr: string };
+
+function collectResolvedReviewCommentIds(
+  threads: ResolvedReviewThreadsPage['nodes'],
+  resolvedIds: Set<number>,
+  logContext: { repo: string; prNumber: number }
+): void {
+  for (const thread of threads) {
+    if (!thread.isResolved) {
+      continue;
+    }
+    if (thread.comments.pageInfo.hasNextPage) {
+      logger.warn(
+        'getResolvedReviewCommentIds: resolved thread has more than 100 comments; some resolved comments may not be filtered',
+        logContext
+      );
+    }
+    for (const comment of thread.comments.nodes) {
+      if (comment.fullDatabaseId !== null) {
+        resolvedIds.add(comment.fullDatabaseId);
+      }
+    }
+  }
+}
 
 /**
  * Service for interacting with GitHub via the `gh` CLI.
@@ -785,6 +810,109 @@ class GitHubCLIService {
 
       throw new Error(`Failed to fetch PR review comments: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Get the REST ids of review comments that belong to resolved review threads.
+   * Thread resolution state is only exposed via GraphQL, while getReviewComments
+   * uses the REST API — this returns the id set needed to join the two.
+   */
+  async getResolvedReviewCommentIds(repo: string, prNumber: number): Promise<Set<number>> {
+    const [owner, name] = repo.split('/');
+    if (!(owner && name)) {
+      throw new Error(`Invalid repo format for getResolvedReviewCommentIds: ${repo}`);
+    }
+
+    try {
+      const MAX_PAGES = 20;
+      const resolvedIds = new Set<number>();
+      let afterCursor: string | null = null;
+
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const reviewThreads = await this.fetchReviewThreadsPage(owner, name, prNumber, afterCursor);
+        if (!reviewThreads) {
+          logger.warn('getResolvedReviewCommentIds: repository or PR not found', {
+            repo,
+            prNumber,
+          });
+          return resolvedIds;
+        }
+
+        collectResolvedReviewCommentIds(reviewThreads.nodes, resolvedIds, { repo, prNumber });
+
+        if (!reviewThreads.pageInfo.hasNextPage) {
+          break;
+        }
+        afterCursor = reviewThreads.pageInfo.endCursor;
+        if (!afterCursor) {
+          logger.warn('getResolvedReviewCommentIds: review thread page is missing an end cursor', {
+            repo,
+            prNumber,
+          });
+          break;
+        }
+
+        if (page === MAX_PAGES) {
+          logger.warn(
+            'getResolvedReviewCommentIds: reached MAX_PAGES limit, results may be incomplete',
+            { repo, prNumber, totalResolved: resolvedIds.size, maxPages: MAX_PAGES }
+          );
+        }
+      }
+
+      return resolvedIds;
+    } catch (error) {
+      const errorType = classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch resolved review threads via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch resolved review threads: ${errorMessage}`);
+    }
+  }
+
+  private async fetchReviewThreadsPage(
+    owner: string,
+    name: string,
+    prNumber: number,
+    afterCursor: string | null
+  ): Promise<ResolvedReviewThreadsPage | null> {
+    const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
+    const query = `
+      query {
+        repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
+          pullRequest(number: ${prNumber}) {
+            reviewThreads(first: 100${afterClause}) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                isResolved
+                comments(first: 100) {
+                  pageInfo { hasNextPage }
+                  nodes { fullDatabaseId }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+      timeout: GH_TIMEOUT_MS.default,
+      maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+    });
+
+    const parsed = parseGhJson(
+      resolvedReviewThreadsGraphQLSchema,
+      stdout,
+      'getResolvedReviewCommentIds'
+    );
+    return parsed.data.repository?.pullRequest?.reviewThreads ?? null;
   }
 
   /**

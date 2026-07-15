@@ -155,6 +155,7 @@ describe('fetchPRState', () => {
       extractPRInfo: vi.fn(() => ({ owner: 'example', repo: 'repo', number: 123 })),
       getPRFullDetails: vi.fn(),
       getReviewComments: vi.fn(),
+      getResolvedReviewCommentIds: vi.fn(async () => new Set<number>()),
       computeCIStatus: vi.fn(),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
@@ -269,18 +270,20 @@ describe('computeCiSnapshotKey', () => {
 });
 
 describe('fetchPRState', () => {
-  it('fetches all inline review comments even after a prior review check', async () => {
-    const getReviewComments = vi.fn().mockResolvedValue([
-      {
-        author: { login: 'reviewer' },
-        body: 'Please handle this edge case.',
-        path: 'src/example.ts',
-        line: 42,
-        updatedAt: '2026-01-01T00:00:00Z',
-        url: 'https://github.com/example/repo/pull/123#discussion_r1',
-      },
-    ]);
-    const github = {
+  function makeReviewComment(id: number, updatedAt: string) {
+    return {
+      id,
+      author: { login: 'reviewer' },
+      body: `Comment ${id}`,
+      path: 'src/example.ts',
+      line: 42,
+      updatedAt,
+      url: `https://github.com/example/repo/pull/123#discussion_r${id}`,
+    };
+  }
+
+  function makeFetchGitHub(overrides: Partial<RatchetGitHubBridge> = {}): RatchetGitHubBridge {
+    return {
       extractPRInfo: vi.fn().mockReturnValue({ owner: 'example', repo: 'repo', number: 123 }),
       getPRFullDetails: vi.fn().mockResolvedValue({
         state: 'OPEN',
@@ -292,7 +295,8 @@ describe('fetchPRState', () => {
         comments: [],
         statusCheckRollup: null,
       }),
-      getReviewComments,
+      getReviewComments: vi.fn().mockResolvedValue([]),
+      getResolvedReviewCommentIds: vi.fn(async () => new Set<number>()),
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
@@ -300,9 +304,12 @@ describe('fetchPRState', () => {
       startFetch: vi.fn(),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
+      ...overrides,
     };
+  }
 
-    const result = await fetchPRState({
+  function makeFetchParams(github: RatchetGitHubBridge) {
+    return {
       workspace: {
         id: 'ws-1',
         prUrl: 'https://github.com/example/repo/pull/123',
@@ -318,22 +325,90 @@ describe('fetchPRState', () => {
         warn: vi.fn(),
         error: vi.fn(),
       } as never,
-    });
+    };
+  }
 
-    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
+  function expectPRStateInfo(result: Awaited<ReturnType<typeof fetchPRState>>): PRStateInfo {
     if (!result || 'skipped' in result) {
       throw new Error('Expected PR state fetch to return PR details');
     }
+    return result;
+  }
 
+  it('fetches all inline review comments even after a prior review check', async () => {
+    const getReviewComments = vi
+      .fn()
+      .mockResolvedValue([makeReviewComment(1, '2026-01-01T00:00:00Z')]);
+    const github = makeFetchGitHub({ getReviewComments });
+
+    const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
+
+    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
     expect(result.reviewComments).toEqual([
       {
         author: 'reviewer',
-        body: 'Please handle this edge case.',
+        body: 'Comment 1',
         path: 'src/example.ts',
         line: 42,
         url: 'https://github.com/example/repo/pull/123#discussion_r1',
       },
     ]);
+  });
+
+  it('filters comments in resolved threads out of the prompt payload', async () => {
+    const github = makeFetchGitHub({
+      getReviewComments: vi
+        .fn()
+        .mockResolvedValue([
+          makeReviewComment(1, '2026-01-01T00:00:00Z'),
+          makeReviewComment(2, '2026-01-03T00:00:00Z'),
+        ]),
+      getResolvedReviewCommentIds: vi.fn(async () => new Set([2])),
+    });
+
+    const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
+
+    expect(result.reviewComments.map((c) => c.body)).toEqual(['Comment 1']);
+    expect(github.getResolvedReviewCommentIds).toHaveBeenCalledWith('example/repo', 123);
+  });
+
+  it('keeps resolved comments in the review activity timestamp so the snapshot key stays stable', async () => {
+    const github = makeFetchGitHub({
+      getReviewComments: vi
+        .fn()
+        .mockResolvedValue([
+          makeReviewComment(1, '2026-01-01T00:00:00Z'),
+          makeReviewComment(2, '2026-01-03T00:00:00Z'),
+        ]),
+      getResolvedReviewCommentIds: vi.fn(async () => new Set([2])),
+    });
+
+    const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
+
+    expect(result.latestReviewActivityAtMs).toBe(Date.parse('2026-01-03T00:00:00Z'));
+    expect(result.snapshotKey).toContain(String(Date.parse('2026-01-03T00:00:00Z')));
+  });
+
+  it('includes all review comments when resolved thread lookup fails', async () => {
+    const github = makeFetchGitHub({
+      getReviewComments: vi
+        .fn()
+        .mockResolvedValue([
+          makeReviewComment(1, '2026-01-01T00:00:00Z'),
+          makeReviewComment(2, '2026-01-03T00:00:00Z'),
+        ]),
+      getResolvedReviewCommentIds: vi.fn(() => Promise.reject(new Error('GraphQL unavailable'))),
+    });
+    const handleError = vi.fn();
+    const params = {
+      ...makeFetchParams(github),
+      backoff: { handleError } as unknown as RateLimitBackoff,
+    };
+
+    const result = expectPRStateInfo(await fetchPRState(params));
+
+    expect(result.reviewComments.map((c) => c.body)).toEqual(['Comment 1', 'Comment 2']);
+    expect(handleError).not.toHaveBeenCalled();
   });
 });
 
