@@ -315,19 +315,6 @@ class RatchetService extends EventEmitter {
       return;
     }
 
-    const activeSessionId = workspace.ratchetActiveSessionId;
-    if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
-      try {
-        await this.session.stopSession(activeSessionId);
-      } catch (error) {
-        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
-          workspaceId,
-          sessionId: activeSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
     await workspaceAccessor.update(workspaceId, {
       ratchetEnabled: false,
       ratchetState: RatchetState.IDLE,
@@ -337,6 +324,8 @@ class RatchetService extends EventEmitter {
       ratchetDispatchRetryCount: 0,
     });
 
+    // Stops every running ratchet-workflow session, including the one the
+    // (now cleared) active-session pointer named.
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
 
     if (workspace.ratchetState !== RatchetState.IDLE) {
