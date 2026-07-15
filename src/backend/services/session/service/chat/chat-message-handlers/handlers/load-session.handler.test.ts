@@ -1340,7 +1340,7 @@ describe('createLoadSessionHandler', () => {
     });
   });
 
-  it('emits cached Claude commands plus a fresh workspace command scan on passive load', async () => {
+  it('prefers fresh workspace Claude commands over cached globals on passive load', async () => {
     const worktreePath = mkdtempSync(join(tmpdir(), 'ff-slash-commands-'));
     tempDirs.push(worktreePath);
     const commandsDir = join(worktreePath, '.claude', 'commands');
@@ -1364,7 +1364,7 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.getCachedCommands.mockResolvedValue([
       { name: '/global-only', description: 'Global only' },
-      { name: '/project:duplicate', description: 'Cached duplicate' },
+      { name: '/duplicate', description: 'Cached global duplicate' },
     ]);
 
     const handler = createLoadSessionHandler({
@@ -1383,9 +1383,9 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
       type: 'slash_commands',
       slashCommands: [
-        { name: '/global-only', description: 'Global only' },
-        { name: '/project:duplicate', description: 'Cached duplicate' },
+        { name: 'duplicate', description: 'Workspace duplicate' },
         { name: 'workspace-only', description: 'Workspace only' },
+        { name: '/global-only', description: 'Global only' },
       ],
     });
   });
