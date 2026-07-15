@@ -56,7 +56,7 @@ export const serviceRegistry = {
     ownsModels: [],
   },
   ratchet: {
-    dependsOn: ['session', 'workspace', 'settings', 'terminal', 'github'],
+    dependsOn: ['session', 'workspace', 'settings', 'github'],
     ownsModels: [],
   },
   'run-script': {

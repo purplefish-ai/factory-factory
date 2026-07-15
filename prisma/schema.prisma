@@ -249,7 +249,7 @@ model Workspace {
   ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
-  ratchetLastCiRunId      String?                         // Track which CI run we processed
+  ratchetLastCiRunId      String?                         // Misnomer (kept to avoid a migration): stores the full PR dispatch snapshot key (CI signature + review activity + merge conflict), not just a CI run id. Dedupes fixer dispatches.
 
   // Auto-iteration tracking
   mode                      WorkspaceMode         @default(STANDARD)

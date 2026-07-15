@@ -13,8 +13,6 @@ import type {
   RatchetCheckResult,
   RatchetDecision,
   RatchetDecisionContext,
-  ReviewPollResult,
-  ReviewPollTracker,
   WorkspaceRatchetResult,
   WorkspaceWithPR,
 } from './ratchet.types';
@@ -38,7 +36,6 @@ import {
   isPRStateFetchSkipped,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
-import { handleReviewCommentPoll as handleReviewCommentPollHelper } from './ratchet-review-poll.helpers';
 import { RatchetWorkspaceCheckCoordinator } from './ratchet-workspace-check-coordinator';
 
 const logger = createLogger('ratchet');
@@ -73,7 +70,6 @@ class RatchetService extends EventEmitter {
   );
   private cachedAuthenticatedUsername: AuthenticatedUsernameCache | null = null;
   private readonly backoff = new RateLimitBackoff();
-  private readonly reviewPollTrackers = new Map<string, ReviewPollTracker>();
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
@@ -136,8 +132,6 @@ class RatchetService extends EventEmitter {
       await this.monitorLoop;
       this.monitorLoop = null;
     }
-
-    this.reviewPollTrackers.clear();
 
     logger.info('Ratchet service stopped');
   }
@@ -236,7 +230,6 @@ class RatchetService extends EventEmitter {
 
     const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
     if (!workspace) {
-      this.clearWorkspaceState(workspaceId);
       return null;
     }
 
@@ -247,8 +240,30 @@ class RatchetService extends EventEmitter {
     await workspaceAccessor.clearRatchetActiveSession(workspaceId, sessionId);
   }
 
-  clearWorkspaceState(workspaceId: string): void {
-    this.reviewPollTrackers.delete(workspaceId);
+  /**
+   * Settle ratchet state for a workspace whose PR is closed (not merged).
+   * Closed PRs are excluded from the poll set, so the poll loop can no longer
+   * transition them to IDLE itself. Idempotent; no GitHub fetch.
+   */
+  async markPrClosed(workspaceId: string): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace || workspace.ratchetState === RatchetState.IDLE) {
+      return;
+    }
+
+    const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspaceId, {
+      ratchetState: RatchetState.IDLE,
+      ratchetLastCheckedAt: new Date(),
+    });
+    if (!updated) {
+      return;
+    }
+
+    this.emit(RATCHET_STATE_CHANGED, {
+      workspaceId,
+      fromState: workspace.ratchetState,
+      toState: RatchetState.IDLE,
+    } satisfies RatchetStateChangedEvent);
   }
 
   private async runWorkspaceCheckSafely(
@@ -311,7 +326,6 @@ class RatchetService extends EventEmitter {
     });
 
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
-    this.clearWorkspaceState(workspaceId);
 
     if (workspace.ratchetState !== RatchetState.IDLE) {
       this.emit(RATCHET_STATE_CHANGED, {
@@ -407,22 +421,6 @@ class RatchetService extends EventEmitter {
       const prStateInfo = prStateResult;
       const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
       const decision = this.decideRatchetAction(decisionContext);
-
-      if (prStateInfo.prState === 'MERGED') {
-        this.clearWorkspaceState(workspace.id);
-      } else if (decisionContext.isCleanPrWithNoNewReviewActivity) {
-        const pollDispatch = await this.processReviewCommentPoll(
-          workspace,
-          prStateInfo,
-          authenticatedUsername
-        );
-        if (pollDispatch) {
-          return pollDispatch;
-        }
-      } else {
-        this.clearWorkspaceState(workspace.id);
-      }
-
       const action = await this.applyRatchetDecision(decisionContext, decision);
 
       return await this.finishRatchetCheck(workspace, prStateInfo, action, decisionContext);
@@ -675,33 +673,6 @@ class RatchetService extends EventEmitter {
     return hasNewReviewActivitySinceLastDispatchHelper(workspace, prStateInfo, logger);
   }
 
-  private async processReviewCommentPoll(
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo,
-    authenticatedUsername: string | null
-  ): Promise<WorkspaceRatchetResult | null> {
-    const pollResult = await this.handleReviewCommentPoll(
-      workspace,
-      prStateInfo,
-      authenticatedUsername
-    );
-
-    if (pollResult.action !== 'comments-found') {
-      return null;
-    }
-
-    const freshContext = await this.buildRatchetDecisionContext(workspace, pollResult.freshPrState);
-    const freshDecision = this.decideRatchetAction(freshContext);
-    const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
-
-    return await this.finishRatchetCheck(
-      workspace,
-      pollResult.freshPrState,
-      freshAction,
-      freshContext
-    );
-  }
-
   private async finishRatchetCheck(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
@@ -742,25 +713,6 @@ class RatchetService extends EventEmitter {
       newState: resultState,
       action: resultAction,
     };
-  }
-
-  private async handleReviewCommentPoll(
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo,
-    authenticatedUsername: string | null
-  ): Promise<ReviewPollResult> {
-    return await handleReviewCommentPollHelper({
-      workspace,
-      prStateInfo,
-      authenticatedUsername,
-      reviewPollTrackers: this.reviewPollTrackers,
-      isShuttingDown: this.isShuttingDown,
-      fetchPRState: (workspaceArg, authenticatedUsernameArg) =>
-        this.fetchPRStateForReviewPoll(workspaceArg, authenticatedUsernameArg),
-      shouldSkipCleanPR: (workspaceArg, prStateInfoArg) =>
-        this.shouldSkipCleanPR(workspaceArg, prStateInfoArg),
-      logger,
-    });
   }
 
   private hasStateChangedSinceLastDispatch(
@@ -851,14 +803,6 @@ class RatchetService extends EventEmitter {
         ),
     });
     return result;
-  }
-
-  private async fetchPRStateForReviewPoll(
-    workspace: WorkspaceWithPR,
-    authenticatedUsername: string | null
-  ): Promise<PRStateInfo | null> {
-    const result = await this.fetchPRState(workspace, authenticatedUsername);
-    return isPRStateFetchSkipped(result) ? null : result;
   }
 
   private computeDispatchSnapshotKey(

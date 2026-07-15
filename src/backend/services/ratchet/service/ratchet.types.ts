@@ -36,16 +36,6 @@ export interface PRStateFetchSkipped {
 
 export type PRStateFetchResult = PRStateInfo | PRStateFetchSkipped | null;
 
-export interface ReviewPollTracker {
-  snapshotKey: string;
-  lastPolledAt: number;
-  pollCount: number;
-}
-
-export type ReviewPollResult =
-  | { action: 'waiting' }
-  | { action: 'comments-found'; freshPrState: PRStateInfo };
-
 export type RatchetAction =
   | { type: 'WAITING'; reason: string }
   | { type: 'FIXER_ACTIVE'; sessionId: string }

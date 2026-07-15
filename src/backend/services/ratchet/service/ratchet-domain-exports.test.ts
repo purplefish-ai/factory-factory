@@ -4,8 +4,6 @@ import {
   fixerSessionService,
   // Core ratchet
   ratchetService,
-  // Reconciliation
-  reconciliationService,
 } from './index';
 
 describe('Ratchet domain exports', () => {
@@ -15,9 +13,5 @@ describe('Ratchet domain exports', () => {
 
   it('exports fixerSessionService as an object', () => {
     expect(fixerSessionService).toBeDefined();
-  });
-
-  it('exports reconciliationService as an object', () => {
-    expect(reconciliationService).toBeDefined();
   });
 });

@@ -710,9 +710,12 @@ class WorkspaceAccessor {
       where: {
         status: 'READY',
         prUrl: { not: null },
-        // Skip disabled and terminal workspaces to avoid unnecessary GitHub API calls
+        // Skip disabled and terminal workspaces to avoid unnecessary GitHub API calls.
+        // Closed PRs are excluded via the cached prState (kept fresh by the scheduler
+        // PR sync, which also flips it back to OPEN if the PR is reopened).
         ratchetEnabled: true,
         ratchetState: { not: 'MERGED' },
+        prState: { not: 'CLOSED' },
       },
       select: {
         id: true,
