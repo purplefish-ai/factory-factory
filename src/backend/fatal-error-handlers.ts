@@ -45,10 +45,18 @@ export function registerFatalErrorHandlers({
   });
 
   process.on('unhandledRejection', async (reason) => {
-    const errorInfo =
-      reason instanceof Error
-        ? { message: reason.message, stack: reason.stack, name: reason.name }
-        : { reason: String(reason) };
+    let errorInfo: Record<string, unknown>;
+    if (reason instanceof Error) {
+      errorInfo = { message: reason.message, stack: reason.stack, name: reason.name };
+    } else {
+      let stringifiedReason = '[unstringifiable rejection reason]';
+      try {
+        stringifiedReason = String(reason);
+      } catch {
+        // Keep the fatal path reliable even when the rejection reason cannot be coerced.
+      }
+      errorInfo = { reason: stringifiedReason };
+    }
 
     logger.error('Unhandled rejection at promise', errorInfo);
     await shutdown();

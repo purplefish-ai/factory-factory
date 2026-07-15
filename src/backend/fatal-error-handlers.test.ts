@@ -65,6 +65,23 @@ describe('backend fatal error handlers', () => {
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 
+  it('shuts down when a non-Error rejection reason cannot be stringified', async () => {
+    const { getHandler, logger, process, server } = createHandlerHarness();
+    const reason = {
+      [Symbol.toPrimitive]() {
+        throw new Error('coercion failed');
+      },
+    };
+
+    await getHandler('unhandledRejection')(reason);
+
+    expect(logger.error).toHaveBeenCalledWith('Unhandled rejection at promise', {
+      reason: '[unstringifiable rejection reason]',
+    });
+    expect(server.stop).toHaveBeenCalledTimes(1);
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
   it('exits when server cleanup fails', async () => {
     const { getHandler, process, server } = createHandlerHarness();
     server.stop.mockRejectedValue(new Error('cleanup failed'));
