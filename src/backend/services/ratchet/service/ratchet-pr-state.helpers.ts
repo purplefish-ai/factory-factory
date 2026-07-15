@@ -341,6 +341,7 @@ export function resolveRatchetPrContext(
 export async function fetchPRState(params: {
   workspace: WorkspaceWithPR;
   authenticatedUsername: string | null;
+  signal?: AbortSignal;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
   logger: Logger;
@@ -363,6 +364,7 @@ export async function fetchPRState(params: {
   const {
     workspace,
     authenticatedUsername,
+    signal,
     github,
     backoff,
     logger,
@@ -374,6 +376,7 @@ export async function fetchPRState(params: {
   if (!prContext) {
     return null;
   }
+  signal?.throwIfAborted();
 
   if (github.isRecentlyFetched(workspace.id)) {
     logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
@@ -386,12 +389,14 @@ export async function fetchPRState(params: {
   try {
     // Claim this workspace as in-flight before the async fetch so concurrent
     // scheduler/ratchet calls see it and skip redundant fetches.
+    signal?.throwIfAborted();
     github.startFetch(workspace.id);
 
     const [prDetails, reviewComments] = await Promise.all([
-      github.getPRFullDetails(prContext.repo, prContext.prNumber),
-      github.getReviewComments(prContext.repo, prContext.prNumber),
+      github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
+      github.getReviewComments(prContext.repo, prContext.prNumber, undefined, signal),
     ]);
+    signal?.throwIfAborted();
 
     const statusCheckRollup =
       prDetails.statusCheckRollup?.map((check) => ({
@@ -434,6 +439,7 @@ export async function fetchPRState(params: {
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
+    signal?.throwIfAborted();
     github.registerFetch(workspace.id);
 
     return {
@@ -450,6 +456,7 @@ export async function fetchPRState(params: {
   } catch (error) {
     // Release the in-flight claim so the workspace is eligible for a future retry.
     github.cancelFetch(workspace.id);
+    signal?.throwIfAborted();
     backoff.handleError(
       error,
       logger,

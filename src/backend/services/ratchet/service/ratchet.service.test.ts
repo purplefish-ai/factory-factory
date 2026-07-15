@@ -1932,6 +1932,62 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
     });
+
+    it('does not continue to side effects after a timed-out await completes', async () => {
+      unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
+      const workspace = {
+        id: 'ws-zombie',
+        prUrl: 'https://github.com/example/repo/pull/1',
+        prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.FAILURE,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      };
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue([workspace] as never);
+      let releaseFetch!: () => void;
+      const fetchBarrier = new Promise<void>((resolve) => {
+        releaseFetch = resolve;
+      });
+      const finishSpy = vi.spyOn(
+        unsafeCoerce<{ finishRatchetCheck: (...args: unknown[]) => Promise<unknown> }>(
+          ratchetService
+        ),
+        'finishRatchetCheck'
+      );
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockImplementation(async () => {
+        await fetchBarrier;
+        return {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:1',
+          hasChangesRequested: false,
+          hasMergeConflict: false,
+          latestReviewActivityAtMs: null,
+          statusCheckRollup: [],
+          prState: 'OPEN',
+          prNumber: 1,
+          reviewComments: [],
+        };
+      });
+
+      const result = await ratchetService.checkAllWorkspaces();
+      expect(result.results[0]?.action.type).toBe('ERROR');
+      releaseFetch();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(finishSpy).not.toHaveBeenCalled();
+      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+    });
   });
 
   describe('checkWorkspaceById', () => {

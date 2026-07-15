@@ -285,7 +285,9 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR
   ): Promise<WorkspaceRatchetResult> {
     try {
-      return await this.checkCoordinator.run(workspace, () => this.processWorkspace(workspace));
+      return await this.checkCoordinator.run(workspace, (signal) =>
+        this.processWorkspace(workspace, signal)
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn('Ratchet workspace check failed', {
@@ -359,7 +361,11 @@ class RatchetService extends EventEmitter {
     } satisfies RatchetToggledEvent);
   }
 
-  private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {
+  private async processWorkspace(
+    workspace: WorkspaceWithPR,
+    signal: AbortSignal = new AbortController().signal
+  ): Promise<WorkspaceRatchetResult> {
+    signal.throwIfAborted();
     if (this.isShuttingDown) {
       return {
         workspaceId: workspace.id,
@@ -372,10 +378,12 @@ class RatchetService extends EventEmitter {
     if (!workspace.ratchetEnabled) {
       const action: RatchetAction = { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
       const newState = RatchetState.IDLE;
+      signal.throwIfAborted();
       await workspaceAccessor.update(workspace.id, {
         ratchetState: newState,
         ratchetLastCheckedAt: new Date(),
       });
+      signal.throwIfAborted();
       if (workspace.ratchetState !== newState) {
         this.emit(RATCHET_STATE_CHANGED, {
           workspaceId: workspace.id,
@@ -399,8 +407,11 @@ class RatchetService extends EventEmitter {
     }
 
     try {
+      signal.throwIfAborted();
       const authenticatedUsername = await this.getAuthenticatedUsernameCached();
-      const prStateResult = await this.fetchPRState(workspace, authenticatedUsername);
+      signal.throwIfAborted();
+      const prStateResult = await this.fetchPRState(workspace, authenticatedUsername, signal);
+      signal.throwIfAborted();
       if (isPRStateFetchSkipped(prStateResult)) {
         const action: RatchetAction = { type: 'WAITING', reason: prStateResult.reason };
         this.logWorkspaceRatchetingDecision(
@@ -436,12 +447,29 @@ class RatchetService extends EventEmitter {
       }
 
       const prStateInfo = prStateResult;
-      const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
+      signal.throwIfAborted();
+      const decisionContext = await this.buildRatchetDecisionContext(
+        workspace,
+        prStateInfo,
+        signal
+      );
+      signal.throwIfAborted();
       const decision = this.decideRatchetAction(decisionContext);
-      const action = await this.applyRatchetDecision(decisionContext, decision);
+      signal.throwIfAborted();
+      const action = await this.applyRatchetDecision(decisionContext, decision, signal);
+      signal.throwIfAborted();
 
-      return await this.finishRatchetCheck(workspace, prStateInfo, action, decisionContext);
+      const result = await this.finishRatchetCheck(
+        workspace,
+        prStateInfo,
+        action,
+        decisionContext,
+        signal
+      );
+      signal.throwIfAborted();
+      return result;
     } catch (error) {
+      signal.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error processing workspace in ratchet', toError(error), {
         workspaceId: workspace.id,
@@ -505,7 +533,8 @@ class RatchetService extends EventEmitter {
 
   private async buildRatchetDecisionContext(
     workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo
+    prStateInfo: PRStateInfo,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<RatchetDecisionContext> {
     const previousState = workspace.ratchetState;
     const newState = this.determineRatchetState(prStateInfo);
@@ -520,10 +549,12 @@ class RatchetService extends EventEmitter {
     );
     const isCleanPrWithNoNewReviewActivity = this.shouldSkipCleanPR(workspace, prStateInfo);
 
-    const activeFixerCheck: ActiveFixerCheckResult =
-      workspace.ratchetEnabled && prStateInfo.prState === 'OPEN'
-        ? await this.checkActiveFixerSession(workspace)
-        : { kind: 'none' };
+    let activeFixerCheck: ActiveFixerCheckResult = { kind: 'none' };
+    if (workspace.ratchetEnabled && prStateInfo.prState === 'OPEN') {
+      signal.throwIfAborted();
+      activeFixerCheck = await this.checkActiveFixerSession(workspace);
+      signal.throwIfAborted();
+    }
 
     // The check above may have just settled a RUNNING record (e.g. to DIED);
     // use the settled outcome rather than the row read at the start of the check.
@@ -533,17 +564,22 @@ class RatchetService extends EventEmitter {
         : workspace.ratchetDispatchOutcome;
     const dispatchRetryCount = workspace.ratchetDispatchRetryCount;
 
-    const hasOtherActiveSession = await this.collectHasOtherActiveSession({
-      workspace,
-      activeFixerCheck,
-      isCleanPrWithNoNewReviewActivity,
-      hasStateChangedSinceLastDispatch,
-      isRetryableDeath: this.isRetryableDeath(
+    signal.throwIfAborted();
+    const hasOtherActiveSession = await this.collectHasOtherActiveSession(
+      {
+        workspace,
+        activeFixerCheck,
+        isCleanPrWithNoNewReviewActivity,
         hasStateChangedSinceLastDispatch,
-        dispatchOutcome,
-        dispatchRetryCount
-      ),
-    });
+        isRetryableDeath: this.isRetryableDeath(
+          hasStateChangedSinceLastDispatch,
+          dispatchOutcome,
+          dispatchRetryCount
+        ),
+      },
+      signal
+    );
+    signal.throwIfAborted();
 
     return {
       workspace,
@@ -578,13 +614,16 @@ class RatchetService extends EventEmitter {
    * dispatch (mirrors the dispatch gates in decideRatchetAction to avoid a
    * DB query on the common no-op path).
    */
-  private async collectHasOtherActiveSession(params: {
-    workspace: WorkspaceWithPR;
-    activeFixerCheck: ActiveFixerCheckResult;
-    isCleanPrWithNoNewReviewActivity: boolean;
-    hasStateChangedSinceLastDispatch: boolean;
-    isRetryableDeath: boolean;
-  }): Promise<boolean> {
+  private async collectHasOtherActiveSession(
+    params: {
+      workspace: WorkspaceWithPR;
+      activeFixerCheck: ActiveFixerCheckResult;
+      isCleanPrWithNoNewReviewActivity: boolean;
+      hasStateChangedSinceLastDispatch: boolean;
+      isRetryableDeath: boolean;
+    },
+    signal: AbortSignal = new AbortController().signal
+  ): Promise<boolean> {
     if (params.activeFixerCheck.kind === 'active') {
       return false;
     }
@@ -598,7 +637,10 @@ class RatchetService extends EventEmitter {
       return false;
     }
 
-    return await this.hasActiveSession(params.workspace.id);
+    signal.throwIfAborted();
+    const hasActiveSession = await this.hasActiveSession(params.workspace.id);
+    signal.throwIfAborted();
+    return hasActiveSession;
   }
 
   private decideRatchetAction(context: RatchetDecisionContext): RatchetDecision {
@@ -707,13 +749,21 @@ class RatchetService extends EventEmitter {
 
   private async applyRatchetDecision(
     context: RatchetDecisionContext,
-    decision: RatchetDecision
+    decision: RatchetDecision,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<RatchetAction> {
     if (decision.type === 'RETURN_ACTION') {
       return decision.action;
     }
 
-    return await this.triggerFixer(context.workspace, context.prStateInfo, decision.retryCount);
+    signal.throwIfAborted();
+    const action = await this.triggerFixer(
+      context.workspace,
+      context.prStateInfo,
+      decision.retryCount
+    );
+    signal.throwIfAborted();
+    return action;
   }
 
   private hasActionableFixTrigger(prStateInfo: PRStateInfo): boolean {
@@ -743,14 +793,18 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
     action: RatchetAction,
-    decisionContext: RatchetDecisionContext
+    decisionContext: RatchetDecisionContext,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<WorkspaceRatchetResult> {
+    signal.throwIfAborted();
     const updateApplied = await this.updateWorkspaceAfterCheck(
       workspace,
       prStateInfo,
       action,
-      decisionContext.finalState
+      decisionContext.finalState,
+      signal
     );
+    signal.throwIfAborted();
     const resultAction: RatchetAction = updateApplied
       ? action
       : { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
@@ -792,32 +846,39 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
     action: RatchetAction,
-    nextState: RatchetState
+    nextState: RatchetState,
+    signal: AbortSignal = new AbortController().signal
   ): Promise<boolean> {
     const now = new Date();
     // The dispatch record itself (session pointer, snapshot key, outcome,
     // retry count) is written atomically inside triggerFixer.
     const dispatched = action.type === 'TRIGGERED_FIXER' && action.promptSent;
 
+    signal.throwIfAborted();
     const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspace.id, {
       ratchetState: nextState,
       ratchetLastCheckedAt: now,
     });
+    signal.throwIfAborted();
 
     if (!updated) {
       return false;
     }
 
     if (dispatched) {
+      signal.throwIfAborted();
       await this.snapshot.recordReviewCheck(workspace.id, now);
+      signal.throwIfAborted();
     }
 
     if (prStateInfo.ciStatus !== workspace.prCiStatus) {
+      signal.throwIfAborted();
       await this.snapshot.recordCIObservation({
         workspaceId: workspace.id,
         ciStatus: prStateInfo.ciStatus,
         observedAt: now,
       });
+      signal.throwIfAborted();
     }
 
     return true;
@@ -841,11 +902,13 @@ class RatchetService extends EventEmitter {
 
   private async fetchPRState(
     workspace: WorkspaceWithPR,
-    authenticatedUsername: string | null
+    authenticatedUsername: string | null,
+    signal?: AbortSignal
   ): Promise<PRStateFetchResult> {
     const result = await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
+      signal,
       github: this.github,
       backoff: this.backoff,
       logger,

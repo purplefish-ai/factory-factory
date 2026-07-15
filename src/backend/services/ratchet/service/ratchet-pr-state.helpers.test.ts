@@ -187,6 +187,46 @@ describe('fetchPRState', () => {
     expect(github.registerFetch).not.toHaveBeenCalled();
     expect(github.cancelFetch).not.toHaveBeenCalled();
   });
+
+  it('forwards cancellation, releases the fetch claim, and skips backoff', async () => {
+    const controller = new AbortController();
+    const timeoutError = new Error('Workspace check timed out after 1000ms');
+    const github = makeGitHub({
+      getPRFullDetails: vi.fn(async (_repo, _pr, signal) => {
+        await Promise.resolve();
+        controller.abort(timeoutError);
+        signal?.throwIfAborted();
+        throw new Error('unreachable');
+      }),
+      getReviewComments: vi.fn(
+        () =>
+          new Promise<never>(() => {
+            // Keep the sibling GitHub request pending until cancellation rejects Promise.all.
+          })
+      ),
+    });
+
+    await expect(
+      fetchPRState({
+        workspace: makeWorkspace(),
+        authenticatedUsername: null,
+        github,
+        backoff,
+        logger,
+        signal: controller.signal,
+      })
+    ).rejects.toBe(timeoutError);
+
+    expect(github.getPRFullDetails).toHaveBeenCalledWith('example/repo', 123, controller.signal);
+    expect(github.getReviewComments).toHaveBeenCalledWith(
+      'example/repo',
+      123,
+      undefined,
+      controller.signal
+    );
+    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1');
+    expect(backoff.handleError).not.toHaveBeenCalled();
+  });
 });
 
 describe('computeDispatchSnapshotKey', () => {
@@ -320,7 +360,7 @@ describe('fetchPRState', () => {
       } as never,
     });
 
-    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
+    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123, undefined, undefined]);
     if (!result || 'skipped' in result) {
       throw new Error('Expected PR state fetch to return PR details');
     }
