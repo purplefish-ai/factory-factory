@@ -15,7 +15,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('@/backend/services/ratchet', () => ({
-  ratchetService: { configure: vi.fn(), clearRatchetActiveSessionIfMatching: vi.fn() },
+  ratchetService: { configure: vi.fn(), recordSessionEnd: vi.fn() },
   fixerSessionService: {
     configure: vi.fn(),
     acquireAndDispatch: vi.fn(),
@@ -603,12 +603,12 @@ describe('configureDomainBridges', () => {
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
     });
 
-    it('sessionService workspace bridge delegates ratchet session cleanup', async () => {
+    it('sessionService workspace bridge delegates ratchet session end recording', async () => {
       configureDomainBridges();
       const bridge = getBridge(sessionService.configure);
 
-      await bridge.workspace.clearRatchetActiveSessionIfMatching('ws1', 's1');
-      expect(ratchetService.clearRatchetActiveSessionIfMatching).toHaveBeenCalledWith('ws1', 's1');
+      await bridge.workspace.recordRatchetSessionEnd('ws1', 's1', 'DIED');
+      expect(ratchetService.recordSessionEnd).toHaveBeenCalledWith('ws1', 's1', 'DIED');
     });
 
     it('sessionService message queue bridge delegates pending dispatch to chat handlers', async () => {

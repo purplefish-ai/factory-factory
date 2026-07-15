@@ -70,6 +70,8 @@ const workspaceFieldOwners = {
   ratchetLastCheckedAt: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
   ratchetActiveSessionId: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
   ratchetLastCiRunId: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
+  ratchetDispatchOutcome: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
+  ratchetDispatchRetryCount: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
@@ -189,11 +191,26 @@ const workspaceMutationRules = {
     ],
   },
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
-  clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
-  setRatchetActiveSessionIfEnabled: { type: 'static', fields: ['ratchetActiveSessionId'] },
+  recordRatchetSessionEnd: {
+    type: 'static',
+    fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
+  },
+  recordRatchetDispatchIfEnabled: {
+    type: 'static',
+    fields: [
+      'ratchetActiveSessionId',
+      'ratchetLastCiRunId',
+      'ratchetDispatchOutcome',
+      'ratchetDispatchRetryCount',
+    ],
+  },
+  adoptRatchetActiveSessionIfEnabled: {
+    type: 'static',
+    fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
+  },
   updateRatchetCheckIfEnabled: {
     type: 'static',
-    fields: ['ratchetState', 'ratchetLastCheckedAt', 'ratchetLastCiRunId'],
+    fields: ['ratchetState', 'ratchetLastCheckedAt'],
   },
   appendInitOutput: { type: 'static', fields: ['initOutput'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },

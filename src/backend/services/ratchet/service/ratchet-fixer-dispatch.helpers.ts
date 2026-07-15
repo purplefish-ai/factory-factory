@@ -13,13 +13,13 @@ const RATCHET_WORKFLOW = 'ratchet';
 async function recordActiveSessionOrDisable(params: {
   workspaceId: string;
   sessionId: string;
-  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  recordSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
   sessionBridge: RatchetSessionBridge;
   logger: Logger;
   logMessage: string;
 }): Promise<RatchetAction | null> {
-  const { workspaceId, sessionId, setActiveSession, sessionBridge, logger, logMessage } = params;
-  const recorded = await setActiveSession(workspaceId, sessionId);
+  const { workspaceId, sessionId, recordSession, sessionBridge, logger, logMessage } = params;
+  const recorded = await recordSession(workspaceId, sessionId);
   if (recorded) {
     return null;
   }
@@ -38,12 +38,11 @@ async function handleStartedFixerResult(params: {
   workspaceId: string;
   result: Extract<AcquireAndDispatchResult, { status: 'started' }>;
   sessionBridge: RatchetSessionBridge;
-  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  recordDispatch: (workspaceId: string, sessionId: string) => Promise<boolean>;
   clearActiveSession: (workspaceId: string) => Promise<void>;
   logger: Logger;
 }): Promise<RatchetAction> {
-  const { workspaceId, result, sessionBridge, setActiveSession, clearActiveSession, logger } =
-    params;
+  const { workspaceId, result, sessionBridge, recordDispatch, clearActiveSession, logger } = params;
   const promptSent = result.promptSent ?? true;
   if (!promptSent) {
     logger.warn('Ratchet session started but prompt delivery failed', {
@@ -60,7 +59,7 @@ async function handleStartedFixerResult(params: {
   const disabledAction = await recordActiveSessionOrDisable({
     workspaceId,
     sessionId: result.sessionId,
-    setActiveSession,
+    recordSession: recordDispatch,
     sessionBridge,
     logger,
     logMessage: 'Ratchet disabled before fixer session could be recorded',
@@ -80,14 +79,17 @@ async function handleAlreadyActiveFixerResult(params: {
   workspaceId: string;
   result: Extract<AcquireAndDispatchResult, { status: 'already_active' }>;
   sessionBridge: RatchetSessionBridge;
-  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  adoptActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
   logger: Logger;
 }): Promise<RatchetAction> {
-  const { workspaceId, result, sessionBridge, setActiveSession, logger } = params;
+  const { workspaceId, result, sessionBridge, adoptActiveSession, logger } = params;
+  // Adopt (pointer + RUNNING outcome) rather than record a full dispatch: the
+  // session is working on an earlier prompt, so the current snapshot key must
+  // not be marked as dispatched.
   const disabledAction = await recordActiveSessionOrDisable({
     workspaceId,
     sessionId: result.sessionId,
-    setActiveSession,
+    recordSession: adoptActiveSession,
     sessionBridge,
     logger,
     logMessage: 'Ratchet disabled before active fixer session could be recorded',
@@ -102,12 +104,20 @@ export async function triggerRatchetFixer(params: {
   workspace: WorkspaceWithPR;
   prStateInfo: PRStateInfo;
   sessionBridge: RatchetSessionBridge;
-  setActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  recordDispatch: (workspaceId: string, sessionId: string) => Promise<boolean>;
+  adoptActiveSession: (workspaceId: string, sessionId: string) => Promise<boolean>;
   clearActiveSession: (workspaceId: string) => Promise<void>;
   logger: Logger;
 }): Promise<RatchetAction> {
-  const { workspace, prStateInfo, sessionBridge, setActiveSession, clearActiveSession, logger } =
-    params;
+  const {
+    workspace,
+    prStateInfo,
+    sessionBridge,
+    recordDispatch,
+    adoptActiveSession,
+    clearActiveSession,
+    logger,
+  } = params;
 
   try {
     const userSettings = await userSettingsAccessor.get();
@@ -137,7 +147,7 @@ export async function triggerRatchetFixer(params: {
         workspaceId: workspace.id,
         result,
         sessionBridge,
-        setActiveSession,
+        recordDispatch,
         clearActiveSession,
         logger,
       });
@@ -148,7 +158,7 @@ export async function triggerRatchetFixer(params: {
         workspaceId: workspace.id,
         result,
         sessionBridge,
-        setActiveSession,
+        adoptActiveSession,
         logger,
       });
     }

@@ -109,24 +109,71 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('sets ratchet active session only when ratchet is enabled', async () => {
+  it('records ratchet dispatch only when ratchet is enabled', async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
 
     await expect(
-      workspaceAccessor.setRatchetActiveSessionIfEnabled('ws-1', 'session-1')
+      workspaceAccessor.recordRatchetDispatchIfEnabled('ws-1', {
+        sessionId: 'session-1',
+        snapshotKey: 'snapshot-1',
+        retryCount: 2,
+      })
     ).resolves.toBe(true);
 
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: { id: 'ws-1', ratchetEnabled: true },
-      data: { ratchetActiveSessionId: 'session-1' },
+      data: {
+        ratchetActiveSessionId: 'session-1',
+        ratchetLastCiRunId: 'snapshot-1',
+        ratchetDispatchOutcome: 'RUNNING',
+        ratchetDispatchRetryCount: 2,
+      },
     });
   });
 
-  it('returns false when ratchet active session conditional update affects no rows', async () => {
+  it('returns false when ratchet dispatch conditional update affects no rows', async () => {
     mockUpdateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      workspaceAccessor.setRatchetActiveSessionIfEnabled('ws-1', 'session-1')
+      workspaceAccessor.recordRatchetDispatchIfEnabled('ws-1', {
+        sessionId: 'session-1',
+        snapshotKey: 'snapshot-1',
+        retryCount: 0,
+      })
+    ).resolves.toBe(false);
+  });
+
+  it('adopts an already-running fixer session without touching the dispatch snapshot', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.adoptRatchetActiveSessionIfEnabled('ws-1', 'session-1')
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', ratchetEnabled: true },
+      data: { ratchetActiveSessionId: 'session-1', ratchetDispatchOutcome: 'RUNNING' },
+    });
+  });
+
+  it('settles ratchet session end only when the pointer still matches', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.recordRatchetSessionEnd('ws-1', 'session-1', 'DIED')
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', ratchetActiveSessionId: 'session-1' },
+      data: { ratchetActiveSessionId: null, ratchetDispatchOutcome: 'DIED' },
+    });
+  });
+
+  it('returns false when ratchet session end conditional update affects no rows', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      workspaceAccessor.recordRatchetSessionEnd('ws-1', 'session-1', 'COMPLETED')
     ).resolves.toBe(false);
   });
 
@@ -138,7 +185,6 @@ describe('workspaceAccessor', () => {
       workspaceAccessor.updateRatchetCheckIfEnabled('ws-1', {
         ratchetState: 'CI_FAILED',
         ratchetLastCheckedAt: checkedAt,
-        ratchetLastCiRunId: 'snapshot-1',
       })
     ).resolves.toBe(true);
 
@@ -147,7 +193,6 @@ describe('workspaceAccessor', () => {
       data: {
         ratchetState: 'CI_FAILED',
         ratchetLastCheckedAt: checkedAt,
-        ratchetLastCiRunId: 'snapshot-1',
       },
     });
   });
@@ -300,6 +345,8 @@ describe('workspaceAccessor', () => {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
+        ratchetDispatchOutcome: true,
+        ratchetDispatchRetryCount: true,
         prReviewLastCheckedAt: true,
       },
     });

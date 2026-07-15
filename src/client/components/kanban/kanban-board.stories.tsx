@@ -70,6 +70,8 @@ const baseWorkspace: WorkspaceWithKanban = {
   flowPhase: 'NO_PR',
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
+  ratchetDispatchOutcome: null,
+  ratchetDispatchRetryCount: 0,
   isArchived: false,
   mode: 'STANDARD' as const,
   autoIterationStatus: null,

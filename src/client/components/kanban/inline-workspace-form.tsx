@@ -167,6 +167,8 @@ function createOptimisticWorkingWorkspace(params: {
     ratchetLastCheckedAt: null,
     ratchetActiveSessionId: null,
     ratchetLastCiRunId: null,
+    ratchetDispatchOutcome: null,
+    ratchetDispatchRetryCount: 0,
     hasHadSessions: false,
     cachedKanbanColumn: 'WORKING',
     stateComputedAt: null,

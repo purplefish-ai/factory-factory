@@ -328,19 +328,31 @@ describe('resource accessors integration', () => {
       expect(reloaded.updatedAt.getTime()).toBeGreaterThan(staleUpdatedAt.getTime());
     });
 
-    it('clears ratchet active session only when session id matches', async () => {
+    it('settles ratchet session end only when session id matches', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
         ratchetActiveSessionId: 'session-1',
       });
 
-      await workspaceAccessor.clearRatchetActiveSession(workspace.id, 'different-session');
+      const mismatch = await workspaceAccessor.recordRatchetSessionEnd(
+        workspace.id,
+        'different-session',
+        'DIED'
+      );
+      expect(mismatch).toBe(false);
       const unchanged = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
       expect(unchanged.ratchetActiveSessionId).toBe('session-1');
+      expect(unchanged.ratchetDispatchOutcome).toBeNull();
 
-      await workspaceAccessor.clearRatchetActiveSession(workspace.id, 'session-1');
+      const settled = await workspaceAccessor.recordRatchetSessionEnd(
+        workspace.id,
+        'session-1',
+        'DIED'
+      );
+      expect(settled).toBe(true);
       const cleared = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
       expect(cleared.ratchetActiveSessionId).toBeNull();
+      expect(cleared.ratchetDispatchOutcome).toBe('DIED');
     });
 
     it('throws when mutually exclusive status filters are passed', async () => {

@@ -34,7 +34,7 @@ export const SERVICE_CACHE_TTL_MS = Object.freeze({
 
 export const SERVICE_THRESHOLDS = Object.freeze({
   schedulerStaleMinutes: 2,
-  ratchetReviewCheckStaleMs: 10 * 60_000, // 10min: treat prReviewLastCheckedAt as stale if no active session
+  ratchetDispatchMaxRetries: 3, // Max re-dispatches of a DIED fixer for an unchanged PR state
 } as const);
 
 export const SERVICE_TTL_SECONDS = Object.freeze({

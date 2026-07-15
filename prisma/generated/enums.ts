@@ -103,6 +103,15 @@ export const RatchetState = {
 export type RatchetState = (typeof RatchetState)[keyof typeof RatchetState]
 
 
+export const RatchetDispatchOutcome = {
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  DIED: 'DIED'
+} as const
+
+export type RatchetDispatchOutcome = (typeof RatchetDispatchOutcome)[keyof typeof RatchetDispatchOutcome]
+
+
 export const WorkspaceCreationSource = {
   MANUAL: 'MANUAL',
   RESUME_BRANCH: 'RESUME_BRANCH',

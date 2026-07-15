@@ -7,7 +7,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
-const mockClearRatchetActiveSessionIfMatching = vi.fn();
+const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -141,7 +141,7 @@ describe('SessionService', () => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    mockClearRatchetActiveSessionIfMatching.mockReset();
+    mockRecordRatchetSessionEnd.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
@@ -152,7 +152,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle: vi.fn(),
-        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
+        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       },
     });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
@@ -1014,7 +1014,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning,
         markSessionIdle,
-        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
+        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       },
     });
     const acpProcessor = getAcpProcessorState();
@@ -1308,7 +1308,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
+        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       },
     });
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -1349,7 +1349,7 @@ describe('SessionService', () => {
       [SessionStatus.RUNNING]
     );
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
-    expect(mockClearRatchetActiveSessionIfMatching).not.toHaveBeenCalled();
+    expect(mockRecordRatchetSessionEnd).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
@@ -1431,7 +1431,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
+        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       },
     });
 
@@ -1522,9 +1522,10 @@ describe('SessionService', () => {
     try {
       await sessionService.stopSession('session-1');
 
-      expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
+      expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
         'workspace-1',
-        'session-1'
+        'session-1',
+        'COMPLETED'
       );
       expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -1604,9 +1605,10 @@ describe('SessionService', () => {
       cleanupTransientRatchetSession: false,
     });
 
-    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
+    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
       'workspace-1',
-      'session-3'
+      'session-3',
+      'COMPLETED'
     );
     expect(closedSessionPersistenceService.persistClosedSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
@@ -1759,9 +1761,10 @@ describe('SessionService', () => {
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
     });
-    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
+    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
       'workspace-1',
-      'session-1'
+      'session-1',
+      'COMPLETED'
     );
     expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
   });
