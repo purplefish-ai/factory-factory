@@ -57,6 +57,11 @@ import {
   type RatchetToggledEvent,
   ratchetService,
 } from './ratchet.service';
+import {
+  computeDispatchSnapshotKey,
+  computeLatestReviewActivityAtMs,
+  determineRatchetState,
+} from './ratchet-pr-state.helpers';
 
 const mockSessionBridge: RatchetSessionBridge = {
   findSessionsByWorkspaceId: vi.fn(),
@@ -1364,16 +1369,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   it('ignores review activity authored by the authenticated user', () => {
-    const latestActivity = unsafeCoerce<{
-      computeLatestReviewActivityAtMs: (
-        prDetails: {
-          reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
-          comments: Array<{ updatedAt: string; author: { login: string } }>;
-        },
-        reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-        authenticatedUsername: string | null
-      ) => number | null;
-    }>(ratchetService).computeLatestReviewActivityAtMs(
+    const latestActivity = computeLatestReviewActivityAtMs(
       {
         reviews: [
           { submittedAt: '2026-01-02T00:00:00Z', author: { login: 'ratchet-bot' } },
@@ -1390,9 +1386,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('determineRatchetState', () => {
     const callDetermineRatchetState = (pr: unknown) =>
-      unsafeCoerce<{ determineRatchetState: (pr: unknown) => RatchetState }>(
-        ratchetService
-      ).determineRatchetState(pr);
+      determineRatchetState(pr as Parameters<typeof determineRatchetState>[0]);
 
     it('returns MERGED for merged PR', () => {
       expect(
@@ -1489,14 +1483,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       latestReviewActivityAtMs: number | null,
       statusChecks: StatusCheckItem[] | null
     ) =>
-      unsafeCoerce<{
-        computeDispatchSnapshotKey: (
-          ciStatus: CIStatus,
-          hasChangesRequested: boolean,
-          latestReviewActivityAtMs: number | null,
-          statusChecks: StatusCheckItem[] | null
-        ) => string;
-      }>(ratchetService).computeDispatchSnapshotKey(
+      computeDispatchSnapshotKey(
         ciStatus,
         hasChangesRequested,
         latestReviewActivityAtMs,
@@ -1561,18 +1548,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prDetails: PRDetails,
       reviewComments: ReviewComment[],
       authenticatedUsername: string | null
-    ) =>
-      unsafeCoerce<{
-        computeLatestReviewActivityAtMs: (
-          prDetails: PRDetails,
-          reviewComments: ReviewComment[],
-          authenticatedUsername: string | null
-        ) => number | null;
-      }>(ratchetService).computeLatestReviewActivityAtMs(
-        prDetails,
-        reviewComments,
-        authenticatedUsername
-      );
+    ) => computeLatestReviewActivityAtMs(prDetails, reviewComments, authenticatedUsername);
 
     it('returns null when there are no reviews or comments', () => {
       expect(callCompute({ reviews: [], comments: [] }, [], null)).toBeNull();

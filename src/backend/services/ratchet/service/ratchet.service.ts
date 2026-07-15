@@ -33,8 +33,6 @@ import {
 import { triggerRatchetFixer } from './ratchet-fixer-dispatch.helpers';
 import type { AuthenticatedUsernameCache } from './ratchet-pr-state.helpers';
 import {
-  computeDispatchSnapshotKey as computeDispatchSnapshotKeyHelper,
-  computeLatestReviewActivityAtMs as computeLatestReviewActivityAtMsHelper,
   determineRatchetState as determineRatchetStateHelper,
   fetchPRState as fetchPRStateHelper,
   getAuthenticatedUsernameCached as getAuthenticatedUsernameCachedHelper,
@@ -841,59 +839,16 @@ class RatchetService extends EventEmitter {
 
   private async fetchPRState(
     workspace: WorkspaceWithPR,
-    authenticatedUsername: string | null
+    authenticatedUsername: string | null,
+    opts?: { bypassRecentFetchCooldown?: boolean }
   ): Promise<PRStateFetchResult> {
-    const result = await fetchPRStateHelper({
+    return await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
       github: this.github,
       backoff: this.backoff,
-      logger,
-      computeLatestReviewActivityAtMs: (prDetails, reviewComments, authenticatedUsernameArg) =>
-        this.computeLatestReviewActivityAtMs(prDetails, reviewComments, authenticatedUsernameArg),
-      computeDispatchSnapshotKey: (
-        ciStatus,
-        hasChangesRequested,
-        latestReviewActivityAtMs,
-        statusChecks,
-        hasMergeConflict
-      ) =>
-        this.computeDispatchSnapshotKey(
-          ciStatus,
-          hasChangesRequested,
-          latestReviewActivityAtMs,
-          statusChecks,
-          hasMergeConflict
-        ),
+      bypassRecentFetchCooldown: opts?.bypassRecentFetchCooldown,
     });
-    return result;
-  }
-
-  private computeDispatchSnapshotKey(
-    ciStatus: CIStatus,
-    hasChangesRequested: boolean,
-    latestReviewActivityAtMs: number | null,
-    statusChecks: PRStateInfo['statusCheckRollup'],
-    hasMergeConflict?: boolean
-  ): string {
-    return computeDispatchSnapshotKeyHelper(
-      ciStatus,
-      hasChangesRequested,
-      latestReviewActivityAtMs,
-      statusChecks,
-      hasMergeConflict
-    );
-  }
-
-  private computeLatestReviewActivityAtMs(
-    prDetails: {
-      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
-      comments: Array<{ updatedAt: string; author: { login: string } }>;
-    },
-    reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-    authenticatedUsername: string | null
-  ): number | null {
-    return computeLatestReviewActivityAtMsHelper(prDetails, reviewComments, authenticatedUsername);
   }
 
   private async getAuthenticatedUsernameCached(): Promise<string | null> {

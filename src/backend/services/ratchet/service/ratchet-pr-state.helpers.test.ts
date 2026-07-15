@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
 import type { PRStateInfo } from './ratchet.types';
@@ -130,13 +140,6 @@ describe('shouldSkipCleanPR', () => {
 });
 
 describe('fetchPRState', () => {
-  const logger = {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as never;
-
   const backoff = {
     handleError: vi.fn(),
   } as unknown as RateLimitBackoff;
@@ -176,7 +179,6 @@ describe('fetchPRState', () => {
       authenticatedUsername: null,
       github,
       backoff,
-      logger,
     });
 
     expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
@@ -186,6 +188,40 @@ describe('fetchPRState', () => {
     expect(github.getReviewComments).not.toHaveBeenCalled();
     expect(github.registerFetch).not.toHaveBeenCalled();
     expect(github.cancelFetch).not.toHaveBeenCalled();
+  });
+
+  it('fetches despite a recent fetch when bypassRecentFetchCooldown is set', async () => {
+    const github = makeGitHub({
+      isRecentlyFetched: vi.fn(() => true),
+      getPRFullDetails: vi.fn().mockResolvedValue({
+        state: 'OPEN',
+        number: 123,
+        url: 'https://github.com/example/repo/pull/123',
+        reviewDecision: null,
+        mergeStateStatus: 'CLEAN',
+        reviews: [],
+        comments: [],
+        statusCheckRollup: null,
+      }),
+      getReviewComments: vi.fn().mockResolvedValue([]),
+      computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
+    });
+
+    const result = await fetchPRState({
+      workspace: makeWorkspace(),
+      authenticatedUsername: null,
+      github,
+      backoff,
+      bypassRecentFetchCooldown: true,
+    });
+
+    if (!result || 'skipped' in result) {
+      throw new Error('Expected PR state fetch to return PR details');
+    }
+    expect(result.prState).toBe('OPEN');
+    // The bypassed fetch still claims and registers in the dedup registry.
+    expect(github.startFetch).toHaveBeenCalledWith('ws-1');
+    expect(github.registerFetch).toHaveBeenCalledWith('ws-1');
   });
 });
 
@@ -312,12 +348,6 @@ describe('fetchPRState', () => {
       authenticatedUsername: null,
       github,
       backoff: { handleError: vi.fn() } as never,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      } as never,
     });
 
     expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
