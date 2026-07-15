@@ -56,6 +56,8 @@ describe('configService environment accessors', () => {
     expect(configService.getReposDir()).toBe('/Users/testuser/factory-factory/repos');
     expect(configService.getDatabasePath()).toBe('/Users/testuser/factory-factory/data.db');
     expect(configService.getMigrationsPath()).toBe('/Users/testuser/factory-factory/migrations');
+    expect(process.env.BASE_DIR).toBe('/Users/$USER/factory-factory');
+    expect(process.env.WORKTREE_BASE_DIR).toBe('$BASE_DIR/worktrees');
   });
 
   it('builds profile/configuration values from environment aliases and toggles', () => {

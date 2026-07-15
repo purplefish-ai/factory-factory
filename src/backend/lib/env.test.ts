@@ -75,5 +75,7 @@ describe('getDatabasePath', () => {
     process.env.DATABASE_PATH = '$BASE_DIR/data.db';
 
     expect(getDatabasePath()).toBe('/Users/testuser/factory-factory/data.db');
+    expect(process.env.BASE_DIR).toBe('/Users/$USER/factory-factory');
+    expect(process.env.DATABASE_PATH).toBe('$BASE_DIR/data.db');
   });
 });
