@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
+import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import {
   SERVICE_INTERVAL_MS,
@@ -45,6 +46,8 @@ import {
 import { RatchetWorkspaceCheckCoordinator } from './ratchet-workspace-check-coordinator';
 
 const logger = createLogger('ratchet');
+const RATCHET_WORKSPACE_CONCURRENCY = 3;
+const ratchetWorkspaceLimit = pLimit(RATCHET_WORKSPACE_CONCURRENCY);
 
 export type { RatchetAction, RatchetCheckResult, WorkspaceRatchetResult } from './ratchet.types';
 
@@ -212,7 +215,9 @@ class RatchetService extends EventEmitter {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.runWorkspaceCheckSafely(workspace))
+      workspaces.map((workspace) =>
+        ratchetWorkspaceLimit(() => this.runWorkspaceCheckSafely(workspace))
+      )
     );
 
     const stateChanges = results.filter((r) => r.previousState !== r.newState).length;

@@ -1839,6 +1839,62 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ])
       );
     });
+
+    it('runs at most three workspace checks concurrently', async () => {
+      const workspaces = Array.from({ length: 7 }, (_, index) => ({
+        id: `ws-${index}`,
+        prUrl: `https://github.com/example/repo/pull/${index + 1}`,
+        prNumber: index + 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      }));
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
+      let active = 0;
+      let maximumActive = 0;
+      let releaseChecks!: () => void;
+      const checkBarrier = new Promise<void>((resolve) => {
+        releaseChecks = resolve;
+      });
+      vi.spyOn(
+        unsafeCoerce<{
+          processWorkspace: (
+            workspace: (typeof workspaces)[number],
+            signal: AbortSignal
+          ) => Promise<unknown>;
+        }>(ratchetService),
+        'processWorkspace'
+      ).mockImplementation(async (workspace) => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await checkBarrier;
+        active -= 1;
+        return {
+          workspaceId: workspace.id,
+          previousState: RatchetState.IDLE,
+          newState: RatchetState.IDLE,
+          action: { type: 'WAITING', reason: 'noop' },
+        };
+      });
+
+      const resultPromise = ratchetService.checkAllWorkspaces();
+      await vi.waitFor(() => expect(active).toBe(3));
+      expect(maximumActive).toBe(3);
+      releaseChecks();
+      const result = await resultPromise;
+
+      expect(maximumActive).toBe(3);
+      expect(result.checked).toBe(7);
+      expect(result.results).toHaveLength(7);
+    });
   });
 
   describe('shutdown behavior', () => {
