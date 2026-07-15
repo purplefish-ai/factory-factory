@@ -1,4 +1,9 @@
-import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
+import type {
+  Prisma,
+  RatchetDispatchOutcome,
+  Workspace,
+  WorkspaceProviderSelection,
+} from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
   CIStatus,
@@ -81,6 +86,8 @@ interface UpdateWorkspaceInput {
   ratchetLastCheckedAt?: Date | null;
   ratchetActiveSessionId?: string | null;
   ratchetLastCiRunId?: string | null;
+  ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount?: number;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column
@@ -125,6 +132,8 @@ type WorkspaceForRatchet = {
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
   ratchetLastCiRunId: string | null;
+  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount: number;
   prReviewLastCheckedAt: Date | null;
 };
 
@@ -565,25 +574,58 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Clear ratchetActiveSessionId if it still points to the given session.
-   * Called on session exit to eagerly clean up stale fixer references.
+   * Settle the ratchet dispatch record when a fixer session ends. Conditional
+   * on the pointer still naming this session, so whichever of the session-end
+   * paths (lifecycle exit hook, deliberate stop, poll-check fallback) gets
+   * here first wins and the others no-op — a check racing a normal exit can
+   * never overwrite a COMPLETED outcome with DIED.
    */
-  async clearRatchetActiveSession(workspaceId: string, sessionId: string): Promise<void> {
-    await prisma.workspace.updateMany({
+  async recordRatchetSessionEnd(
+    workspaceId: string,
+    sessionId: string,
+    outcome: RatchetDispatchOutcome
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
       where: { id: workspaceId, ratchetActiveSessionId: sessionId },
-      data: { ratchetActiveSessionId: null },
+      data: { ratchetActiveSessionId: null, ratchetDispatchOutcome: outcome },
     });
+    return result.count > 0;
   }
 
   /**
-   * Record a ratchet fixer session only while ratcheting is still enabled.
+   * Record a ratchet fixer dispatch (session pointer, snapshot key, RUNNING
+   * outcome, retry count) atomically, only while ratcheting is still enabled.
    * The conditional update closes the disable-vs-dispatch race where an
    * in-flight ratchet check could repopulate the active session after disable.
    */
-  async setRatchetActiveSessionIfEnabled(workspaceId: string, sessionId: string): Promise<boolean> {
+  async recordRatchetDispatchIfEnabled(
+    workspaceId: string,
+    dispatch: { sessionId: string; snapshotKey: string; retryCount: number }
+  ): Promise<boolean> {
     const result = await prisma.workspace.updateMany({
       where: { id: workspaceId, ratchetEnabled: true },
-      data: { ratchetActiveSessionId: sessionId },
+      data: {
+        ratchetActiveSessionId: dispatch.sessionId,
+        ratchetLastCiRunId: dispatch.snapshotKey,
+        ratchetDispatchOutcome: 'RUNNING',
+        ratchetDispatchRetryCount: dispatch.retryCount,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Adopt an already-running fixer session as the active ratchet session
+   * without recording a new dispatch (the snapshot key and retry count are
+   * left untouched, since no prompt was sent for the current PR state).
+   */
+  async adoptRatchetActiveSessionIfEnabled(
+    workspaceId: string,
+    sessionId: string
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id: workspaceId, ratchetEnabled: true },
+      data: { ratchetActiveSessionId: sessionId, ratchetDispatchOutcome: 'RUNNING' },
     });
     return result.count > 0;
   }
@@ -594,7 +636,7 @@ class WorkspaceAccessor {
    */
   async updateRatchetCheckIfEnabled(
     workspaceId: string,
-    data: Pick<UpdateWorkspaceInput, 'ratchetState' | 'ratchetLastCheckedAt' | 'ratchetLastCiRunId'>
+    data: Pick<UpdateWorkspaceInput, 'ratchetState' | 'ratchetLastCheckedAt'>
   ): Promise<boolean> {
     const result = await prisma.workspace.updateMany({
       where: { id: workspaceId, ratchetEnabled: true },
@@ -729,6 +771,8 @@ class WorkspaceAccessor {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
+        ratchetDispatchOutcome: true,
+        ratchetDispatchRetryCount: true,
         prReviewLastCheckedAt: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
@@ -757,6 +801,8 @@ class WorkspaceAccessor {
         ratchetState: true,
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
+        ratchetDispatchOutcome: true,
+        ratchetDispatchRetryCount: true,
         prReviewLastCheckedAt: true,
       },
     }) as Promise<WorkspaceForRatchet | null>;

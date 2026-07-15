@@ -79,6 +79,12 @@ enum RatchetState {
   MERGED            // PR has been merged
 }
 
+enum RatchetDispatchOutcome {
+  RUNNING     // Fixer session dispatched and believed to be working
+  COMPLETED   // Fixer ended deliberately (finished its work or was stopped)
+  DIED        // Fixer ended unexpectedly (crash / non-zero exit); eligible for bounded retry
+}
+
 enum WorkspaceCreationSource {
   MANUAL          // Created manually by user
   RESUME_BRANCH   // Created from existing branch
@@ -250,6 +256,8 @@ model Workspace {
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
   ratchetLastCiRunId      String?                         // Misnomer (kept to avoid a migration): stores the full PR dispatch snapshot key (CI signature + review activity + merge conflict), not just a CI run id. Dedupes fixer dispatches.
+  ratchetDispatchOutcome  RatchetDispatchOutcome?         // Outcome of the last fixer dispatch for the snapshot key above (null = never dispatched)
+  ratchetDispatchRetryCount Int         @default(0)       // DIED re-dispatches consumed for the current snapshot key
 
   // Auto-iteration tracking
   mode                      WorkspaceMode         @default(STANDARD)

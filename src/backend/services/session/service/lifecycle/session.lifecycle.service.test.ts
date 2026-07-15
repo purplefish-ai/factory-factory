@@ -64,7 +64,7 @@ function createLifecycleService(options?: {
     workspace: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      clearRatchetActiveSessionIfMatching: vi.fn(async () => undefined),
+      recordRatchetSessionEnd: vi.fn(async () => undefined),
     },
     messageQueue: { tryDispatchNextMessage },
   });
@@ -745,7 +745,7 @@ function createStartableLifecycleService(options?: {
     workspace: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      clearRatchetActiveSessionIfMatching: vi.fn(async () => undefined),
+      recordRatchetSessionEnd: vi.fn(async () => undefined),
     },
     messageQueue: { tryDispatchNextMessage },
   });

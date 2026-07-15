@@ -10,6 +10,7 @@ import type {
 } from '@/backend/services/session/service/acp';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
+  RatchetSessionEndOutcome,
   SessionAutoIterationExitBridge,
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
@@ -458,7 +459,7 @@ export class SessionLifecycleService {
             status: persistedStatus,
           });
 
-          await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
+          await this.recordRatchetSessionEndOnExit(session.workspaceId, sid, exitCode);
           void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
           if (session.workflow === 'ratchet') {
             await this.persistRatchetTranscript(sid, session);
@@ -715,9 +716,11 @@ export class SessionLifecycleService {
     }
 
     try {
-      await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sessionId);
+      // A stop is deliberate, so the dispatch settles as COMPLETED (no retry).
+      // No-ops if another session-end path already settled the record.
+      await this.recordRatchetSessionEnd(session.workspaceId, sessionId, 'COMPLETED');
     } catch (error) {
-      logger.warn('Failed clearing ratchet active session pointer during stop', {
+      logger.warn('Failed settling ratchet dispatch record during stop', {
         sessionId,
         workspaceId: session.workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -740,15 +743,31 @@ export class SessionLifecycleService {
     }
   }
 
-  private async clearRatchetActiveSessionIfMatching(
+  private async recordRatchetSessionEnd(
     workspaceId: string,
-    sessionId: string
+    sessionId: string,
+    outcome: RatchetSessionEndOutcome
   ): Promise<void> {
     if (!this.workspaceBridge) {
       return;
     }
 
-    await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
+    await this.workspaceBridge.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
+  }
+
+  /**
+   * Deliberate stops (isStopInProgress) and clean exits settle the ratchet
+   * dispatch as COMPLETED; unexpected exits settle it as DIED so the ratchet
+   * can re-dispatch (bounded) for the same PR state.
+   */
+  private async recordRatchetSessionEndOnExit(
+    workspaceId: string,
+    sessionId: string,
+    exitCode: number | null
+  ): Promise<void> {
+    const outcome =
+      exitCode === 0 || this.runtimeManager.isStopInProgress(sessionId) ? 'COMPLETED' : 'DIED';
+    await this.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
   }
 
   private async maybeDiscoverPROnSessionEnd(workspaceId: string): Promise<void> {

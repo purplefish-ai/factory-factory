@@ -158,6 +158,8 @@ export const WorkspaceScalarFieldEnum = {
   ratchetLastCheckedAt: 'ratchetLastCheckedAt',
   ratchetActiveSessionId: 'ratchetActiveSessionId',
   ratchetLastCiRunId: 'ratchetLastCiRunId',
+  ratchetDispatchOutcome: 'ratchetDispatchOutcome',
+  ratchetDispatchRetryCount: 'ratchetDispatchRetryCount',
   mode: 'mode',
   autoIterationStatus: 'autoIterationStatus',
   autoIterationConfig: 'autoIterationConfig',

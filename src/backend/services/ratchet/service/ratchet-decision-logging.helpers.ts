@@ -43,21 +43,12 @@ export function buildRatchetingLogContext(params: {
   decisionContext: RatchetDecisionContext | null;
   logger: Logger;
 }) {
-  const {
-    workspace,
-    previousState,
-    newState,
-    action,
-    prStateInfo,
-    prNumber,
-    decisionContext,
-    logger,
-  } = params;
+  const { workspace, previousState, newState, action, prStateInfo, prNumber, decisionContext } =
+    params;
   const reviewDiagnostics = buildReviewTimestampDiagnostics(
     workspace,
     prStateInfo,
-    decisionContext,
-    logger
+    decisionContext
   );
   const snapshotDiagnostics = buildSnapshotDiagnostics(workspace, prStateInfo, decisionContext);
   const latestReviewActivityAt = reviewDiagnostics.latestReviewActivityAtMs;
@@ -78,6 +69,8 @@ export function buildRatchetingLogContext(params: {
     ratchetEnabled: workspace.ratchetEnabled,
     ratchetActiveSessionId: workspace.ratchetActiveSessionId,
     ratchetLastCiRunId: workspace.ratchetLastCiRunId,
+    dispatchOutcome: decisionContext?.dispatchOutcome ?? workspace.ratchetDispatchOutcome,
+    dispatchRetryCount: decisionContext?.dispatchRetryCount ?? workspace.ratchetDispatchRetryCount,
     ciStatusCheckRollup: prStateInfo?.statusCheckRollup ?? null,
     ciFailedChecks: buildFailedCheckDiagnostics(prStateInfo),
     prReviewLastCheckedAt: workspace.prReviewLastCheckedAt?.toISOString() ?? null,

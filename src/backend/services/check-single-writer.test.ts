@@ -69,13 +69,13 @@ describe('check-single-writer', () => {
     };
   }
 
-  it('flags unauthorized ratchet field writes via clearRatchetActiveSession mutator', () => {
+  it('flags unauthorized ratchet field writes via recordRatchetSessionEnd mutator', () => {
     const tempRoot = createTempBackend([
       {
         relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
         content: `
-          async function clearFromSession(workspaceAccessor) {
-            await workspaceAccessor.clearRatchetActiveSession('ws', 'session');
+          async function settleFromSession(workspaceAccessor) {
+            await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');
           }
         `,
       },
@@ -89,13 +89,13 @@ describe('check-single-writer', () => {
     );
   });
 
-  it('allows ratchet-owned clearRatchetActiveSession writes', () => {
+  it('allows ratchet-owned recordRatchetSessionEnd writes', () => {
     const tempRoot = createTempBackend([
       {
         relPath: 'src/backend/services/ratchet/service/ratchet.service.ts',
         content: `
-          async function clearFromRatchet(workspaceAccessor) {
-            await workspaceAccessor.clearRatchetActiveSession('ws', 'session');
+          async function settleFromRatchet(workspaceAccessor) {
+            await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');
           }
         `,
       },
@@ -137,7 +137,7 @@ describe('check-single-writer', () => {
             }
 
             async clear(workspaceId, sessionId) {
-              await this.workspaces.clearRatchetActiveSession(workspaceId, sessionId);
+              await this.workspaces.recordRatchetSessionEnd(workspaceId, sessionId, 'COMPLETED');
             }
           }
         `,

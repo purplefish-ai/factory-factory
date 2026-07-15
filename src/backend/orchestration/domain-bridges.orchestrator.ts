@@ -284,8 +284,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
       markSessionIdle: (wsId, sId, generation) =>
         workspaceActivityService.markSessionIdle(wsId, sId, generation),
-      clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
-        ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
+      recordRatchetSessionEnd: (workspaceId, sessionId, outcome) =>
+        ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
     },
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>

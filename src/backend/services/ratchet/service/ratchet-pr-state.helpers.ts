@@ -1,8 +1,4 @@
-import {
-  SERVICE_CACHE_TTL_MS,
-  SERVICE_INTERVAL_MS,
-  SERVICE_THRESHOLDS,
-} from '@/backend/services/constants';
+import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
@@ -214,8 +210,7 @@ export function buildReviewSummariesForPrompt(
 
 export function hasNewReviewActivitySinceLastDispatch(
   workspace: WorkspaceWithPR,
-  prStateInfo: PRStateInfo,
-  logger: Logger
+  prStateInfo: PRStateInfo
 ): boolean {
   if (prStateInfo.latestReviewActivityAtMs === null) {
     return false;
@@ -225,35 +220,10 @@ export function hasNewReviewActivitySinceLastDispatch(
     return true;
   }
 
-  if (prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime()) {
-    return true;
-  }
-
-  // Self-heal: if the review check timestamp is stale and there's no active fixer session,
-  // treat as new activity so the ratchet re-evaluates. This catches edge cases where a
-  // dispatch was recorded but the session died through an unanticipated path.
-  if (!workspace.ratchetActiveSessionId) {
-    const age = Date.now() - workspace.prReviewLastCheckedAt.getTime();
-    if (age > SERVICE_THRESHOLDS.ratchetReviewCheckStaleMs) {
-      logger.info(
-        'Review check timestamp is stale with no active session, treating as new activity',
-        {
-          workspaceId: workspace.id,
-          checkedAtAge: Math.round(age / 1000),
-        }
-      );
-      return true;
-    }
-  }
-
-  return false;
+  return prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
 }
 
-export function shouldSkipCleanPR(
-  workspace: WorkspaceWithPR,
-  prStateInfo: PRStateInfo,
-  logger: Logger
-): boolean {
+export function shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
   if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
     return false;
   }
@@ -262,7 +232,7 @@ export function shouldSkipCleanPR(
     return false;
   }
 
-  return !hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo, logger);
+  return !hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo);
 }
 
 export function buildSnapshotDiagnostics(
@@ -292,8 +262,7 @@ export function buildSnapshotDiagnostics(
 export function buildReviewTimestampDiagnostics(
   workspace: WorkspaceWithPR,
   prStateInfo: PRStateInfo | null,
-  decisionContext: RatchetDecisionContext | null,
-  logger: Logger
+  decisionContext: RatchetDecisionContext | null
 ) {
   const latestReviewActivityAtMs = prStateInfo?.latestReviewActivityAtMs ?? null;
   const prReviewLastCheckedAtMs = workspace.prReviewLastCheckedAt?.getTime() ?? null;
@@ -321,7 +290,7 @@ export function buildReviewTimestampDiagnostics(
       hasNewReviewActivitySinceLastDispatch:
         decisionContext?.hasNewReviewActivitySinceLastDispatch !== undefined
           ? decisionContext.hasNewReviewActivitySinceLastDispatch
-          : hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo, logger),
+          : hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo),
     },
   };
 }

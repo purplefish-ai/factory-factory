@@ -85,13 +85,6 @@ describe('determineRatchetState', () => {
 });
 
 describe('shouldSkipCleanPR', () => {
-  const logger = {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as never;
-
   function makeWorkspace(
     overrides: { ratchetActiveSessionId: string | null } = { ratchetActiveSessionId: null }
   ) {
@@ -104,31 +97,35 @@ describe('shouldSkipCleanPR', () => {
 
   it('does not skip a PR with merge conflicts even when CI passes', () => {
     const prState = makePRState({ hasMergeConflict: true });
-    expect(shouldSkipCleanPR(makeWorkspace(), prState, logger)).toBe(false);
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
   });
 
   it('skips a clean PR with no new review activity', () => {
-    // ratchetActiveSessionId is non-null to suppress the self-heal stale-check path
     const prState = makePRState({
       latestReviewActivityAtMs: new Date('2025-12-31T00:00:00Z').getTime(),
     });
     expect(
-      shouldSkipCleanPR(
-        makeWorkspace({ ratchetActiveSessionId: 'active-session' }),
-        prState,
-        logger
-      )
+      shouldSkipCleanPR(makeWorkspace({ ratchetActiveSessionId: 'active-session' }), prState)
     ).toBe(true);
+  });
+
+  it('skips a clean PR with stale review activity even when no fixer is active', () => {
+    // The deleted 10-minute self-heal used to flip this case to "new activity";
+    // dead fixers are now retried via the explicit DIED dispatch outcome instead.
+    const prState = makePRState({
+      latestReviewActivityAtMs: new Date('2025-12-31T00:00:00Z').getTime(),
+    });
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(true);
   });
 
   it('does not skip when CI is not passing', () => {
     const prState = makePRState({ ciStatus: CIStatus.FAILURE });
-    expect(shouldSkipCleanPR(makeWorkspace(), prState, logger)).toBe(false);
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
   });
 
   it('does not skip when changes are requested', () => {
     const prState = makePRState({ hasChangesRequested: true });
-    expect(shouldSkipCleanPR(makeWorkspace(), prState, logger)).toBe(false);
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
   });
 });
 

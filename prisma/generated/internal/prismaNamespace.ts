@@ -1271,6 +1271,8 @@ export const WorkspaceScalarFieldEnum = {
   ratchetLastCheckedAt: 'ratchetLastCheckedAt',
   ratchetActiveSessionId: 'ratchetActiveSessionId',
   ratchetLastCiRunId: 'ratchetLastCiRunId',
+  ratchetDispatchOutcome: 'ratchetDispatchOutcome',
+  ratchetDispatchRetryCount: 'ratchetDispatchRetryCount',
   mode: 'mode',
   autoIterationStatus: 'autoIterationStatus',
   autoIterationConfig: 'autoIterationConfig',
@@ -1550,6 +1552,13 @@ export type EnumCIStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
  * Reference to a field of type 'RatchetState'
  */
 export type EnumRatchetStateFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetState'>
+    
+
+
+/**
+ * Reference to a field of type 'RatchetDispatchOutcome'
+ */
+export type EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetDispatchOutcome'>
     
 
 

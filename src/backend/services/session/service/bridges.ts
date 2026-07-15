@@ -19,11 +19,22 @@ export interface SessionWorkspaceBridge {
   ): void;
 }
 
+/**
+ * Outcome of a ratchet fixer session that has ended, as observed by the
+ * session lifecycle: COMPLETED for deliberate stops / clean exits, DIED for
+ * unexpected exits (which makes the dispatch eligible for a bounded retry).
+ */
+export type RatchetSessionEndOutcome = 'COMPLETED' | 'DIED';
+
 /** Workspace callbacks needed by session lifecycle service */
 export interface SessionLifecycleWorkspaceBridge {
   markSessionRunning(workspaceId: string, sessionId: string): number;
   markSessionIdle(workspaceId: string, sessionId: string, generation?: number): void;
-  clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void>;
+  recordRatchetSessionEnd(
+    workspaceId: string,
+    sessionId: string,
+    outcome: RatchetSessionEndOutcome
+  ): Promise<void>;
 }
 
 /** Queued message dispatch callback needed by session lifecycle service */
