@@ -24,6 +24,7 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
+import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
@@ -35,7 +36,6 @@ import type { ClientCreator } from './chat-message-handlers/types';
 const logger = createLogger('chat-message-handlers');
 const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
 const TURN_IN_PROGRESS_RETRY_MAX_MS = 30_000;
-const WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX = 'workspace-notification-';
 
 // ============================================================================
 // Types
