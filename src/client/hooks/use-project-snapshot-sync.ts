@@ -1,9 +1,16 @@
 /**
- * React hook that syncs /snapshots WebSocket messages into both the
+ * React hook that syncs /snapshots WebSocket messages into the
  * getProjectSummaryState (sidebar), listWithKanbanState (kanban), and
  * workspace.get (detail header/session runtime) React Query cache entries.
- * Also invalidates the workspace.list and workspace.listWithRuntimeState caches
- * so table/list views refetch with fresh data on every snapshot event.
+ *
+ * Merge strategy — one strategy per cache per message:
+ * - snapshot_changed / snapshot_removed deltas are pure setData patches;
+ *   they never trigger invalidation refetches.
+ * - snapshot_full is the (re)connect baseline. After a disconnect the
+ *   staleTime: Infinity workspace caches may hold state whose deltas were
+ *   dropped (queuePolicy: 'drop'), and snapshot entries don't carry every
+ *   DB-backed field, so the first baseline after a disconnect additionally
+ *   invalidates the workspace caches to let them self-heal.
  *
  * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
@@ -11,6 +18,7 @@
 
 import { useCallback, useRef } from 'react';
 import type { z } from 'zod';
+import { overridePendingRatchetToggle } from '@/client/lib/ratchet-toggle-cache';
 import { mapSnapshotEntryToKanbanWorkspace } from '@/client/lib/snapshot-to-kanban';
 import {
   mapSnapshotEntryToServerWorkspace,
@@ -148,9 +156,18 @@ function triggerWorkspaceAttention(workspaceId: string): void {
   }
 }
 
-function invalidateWorkspaceListCaches(utils: TrpcUtils, projectId: string): void {
+/**
+ * Invalidates the workspace caches after the first snapshot_full baseline
+ * that follows a disconnect. The snapshot patches keep the UI instant; the
+ * refetches restore DB-backed fields the snapshot doesn't carry (issue
+ * links, etc.) and drop workspace.get entries for workspaces that were
+ * archived while disconnected.
+ */
+function healWorkspaceCachesAfterReconnect(utils: TrpcUtils, projectId: string): void {
+  utils.workspace.get.invalidate();
   utils.workspace.list.invalidate({ projectId });
-  utils.workspace.listWithRuntimeState.invalidate({ projectId });
+  utils.workspace.getProjectSummaryState.invalidate({ projectId });
+  utils.workspace.listWithKanbanState.invalidate({ projectId });
 }
 
 function seedPendingRequests(
@@ -181,7 +198,9 @@ function applySnapshotFullMessage(
   message: SnapshotFullMessage,
   pendingRequests: Map<string, PendingRequestType>
 ): void {
-  seedPendingRequests(pendingRequests, message.entries);
+  const entries = message.entries.map(overridePendingRatchetToggle);
+
+  seedPendingRequests(pendingRequests, entries);
 
   const { setData } = utils.workspace.getProjectSummaryState;
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
@@ -195,7 +214,7 @@ function applySnapshotFullMessage(
       }
     }
     return {
-      workspaces: message.entries.map((e) =>
+      workspaces: entries.map((e) =>
         mapSnapshotEntryToServerWorkspace(e, existingById.get(e.workspaceId))
       ),
       reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
@@ -203,14 +222,12 @@ function applySnapshotFullMessage(
   }) as never);
 
   setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
-    buildKanbanCacheFromFull(message.entries, prev)) as never);
+    buildKanbanCacheFromFull(entries, prev)) as never);
 
-  for (const entry of message.entries) {
+  for (const entry of entries) {
     setWorkspaceDetailData({ id: entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
       mergeWorkspaceDetailFromSnapshot(prev, entry)) as never);
   }
-
-  invalidateWorkspaceListCaches(utils, message.projectId);
 }
 
 function applySnapshotChangedMessage(
@@ -219,7 +236,9 @@ function applySnapshotChangedMessage(
   message: SnapshotChangedMessage,
   pendingRequests: Map<string, PendingRequestType>
 ): void {
-  maybeTriggerPendingRequestAttention(pendingRequests, message.entry);
+  const entry = overridePendingRatchetToggle(message.entry);
+
+  maybeTriggerPendingRequestAttention(pendingRequests, entry);
 
   const { setData } = utils.workspace.getProjectSummaryState;
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
@@ -228,13 +247,13 @@ function applySnapshotChangedMessage(
   setData({ projectId }, ((prev: CacheData | undefined) => {
     if (!prev) {
       return {
-        workspaces: [mapSnapshotEntryToServerWorkspace(message.entry)],
+        workspaces: [mapSnapshotEntryToServerWorkspace(entry)],
         reviewCount: message.reviewCount ?? 0,
       };
     }
 
-    const existingEntry = prev.workspaces.find((w) => w.id === message.entry.workspaceId);
-    const mapped = mapSnapshotEntryToServerWorkspace(message.entry, existingEntry);
+    const existingEntry = prev.workspaces.find((w) => w.id === entry.workspaceId);
+    const mapped = mapSnapshotEntryToServerWorkspace(entry, existingEntry);
     const existingIndex = prev.workspaces.findIndex((w) => w.id === mapped.id);
     const workspaces = [...prev.workspaces];
 
@@ -248,12 +267,10 @@ function applySnapshotChangedMessage(
   }) as never);
 
   setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
-    upsertKanbanCacheEntry(message.entry, prev)) as never);
+    upsertKanbanCacheEntry(entry, prev)) as never);
 
-  setWorkspaceDetailData({ id: message.entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
-    mergeWorkspaceDetailFromSnapshot(prev, message.entry)) as never);
-
-  invalidateWorkspaceListCaches(utils, projectId);
+  setWorkspaceDetailData({ id: entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
+    mergeWorkspaceDetailFromSnapshot(prev, entry)) as never);
 }
 
 function applySnapshotRemovedMessage(
@@ -282,8 +299,6 @@ function applySnapshotRemovedMessage(
     removeFromKanbanCache(message.workspaceId, prev)) as never);
 
   setWorkspaceDetailData({ id: message.workspaceId }, undefined as never);
-
-  invalidateWorkspaceListCaches(utils, projectId);
 }
 
 // =============================================================================
@@ -302,14 +317,25 @@ function applySnapshotRemovedMessage(
 export function useProjectSnapshotSync(projectId: string | undefined): void {
   const utils = trpc.useUtils();
   const previousPendingRequestsRef = useRef<Map<string, PendingRequestType>>(new Map());
+  // Deltas may have been dropped while disconnected, so the next snapshot_full
+  // baseline must also refetch-heal the staleTime: Infinity workspace caches.
+  const staleSinceDisconnectRef = useRef(false);
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
+
+  const handleDisconnected = useCallback(() => {
+    staleSinceDisconnectRef.current = true;
+  }, []);
 
   const handleMessage = useCallback(
     (message: z.infer<typeof SnapshotServerMessageSchema>) => {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
+          if (staleSinceDisconnectRef.current) {
+            staleSinceDisconnectRef.current = false;
+            healWorkspaceCachesAfterReconnect(utils, message.projectId);
+          }
           break;
         }
 
@@ -347,6 +373,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     url,
     schema: SnapshotServerMessageSchema,
     onMessage: handleMessage,
+    onDisconnected: handleDisconnected,
     queuePolicy: 'drop',
   });
 }
