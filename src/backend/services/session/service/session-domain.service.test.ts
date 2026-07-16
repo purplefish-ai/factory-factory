@@ -1,22 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 
-vi.mock('@/backend/services/session/service/chat/chat-connection.service', () => ({
-  chatConnectionService: {
-    forwardToSession: vi.fn(),
-    values: vi.fn(() => [][Symbol.iterator]()),
-  },
-}));
+// Global test setup restores all mocks after each test, so the spy must be
+// re-created per test.
+let publishToSessionMock: ReturnType<typeof spyOnPublishToSession>;
 
-const mockedConnectionService = vi.mocked(chatConnectionService);
+function spyOnPublishToSession() {
+  return vi.spyOn(sessionEventBus, 'publishToSession').mockImplementation(() => undefined);
+}
+
+beforeEach(() => {
+  publishToSessionMock = spyOnPublishToSession();
+});
 
 function getLatestReplayBatch(): {
   type?: string;
   loadRequestId?: string;
   replayEvents?: Record<string, unknown>[];
 } {
-  const latest = mockedConnectionService.forwardToSession.mock.calls
+  const latest = publishToSessionMock.mock.calls
     .map(
       ([, payload]) =>
         payload as {
@@ -53,12 +56,12 @@ describe('SessionDomainService', () => {
       loadRequestId: 'load-1',
     });
 
-    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(2);
-    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
+    expect(publishToSessionMock).toHaveBeenCalledTimes(2);
+    expect(publishToSessionMock.mock.calls[0]?.[1]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'load-1',
     });
-    expect(mockedConnectionService.forwardToSession.mock.calls[1]?.[1]).toMatchObject({
+    expect(publishToSessionMock.mock.calls[1]?.[1]).toMatchObject({
       type: 'session_delta',
       data: expect.objectContaining({ type: 'session_runtime_updated' }),
     });
@@ -171,7 +174,7 @@ describe('SessionDomainService', () => {
     sessionDomainService.injectCommittedUserMessage('s1', 'before-exit');
     sessionDomainService.markProcessExit('s1', 1);
 
-    const latestSnapshotPayload = mockedConnectionService.forwardToSession.mock.calls
+    const latestSnapshotPayload = publishToSessionMock.mock.calls
       .map(
         ([, payload]) =>
           payload as { type?: string; sessionRuntime?: { phase?: string }; messages?: unknown[] }
@@ -249,12 +252,12 @@ describe('SessionDomainService', () => {
       },
     });
 
-    mockedConnectionService.forwardToSession.mockClear();
+    publishToSessionMock.mockClear();
     const removed = sessionDomainService.removeTranscriptMessageById('s1', 'u1');
 
     expect(removed).toBe(true);
     expect(sessionDomainService.getTranscriptSnapshot('s1')).toEqual([]);
-    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
+    expect(publishToSessionMock).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
         type: 'session_snapshot',
@@ -309,7 +312,7 @@ describe('SessionDomainService additional behavior', () => {
     expect(sessionDomainService.removeQueuedMessage('s1', 'missing')).toBe(false);
 
     sessionDomainService.emitSessionSnapshot('s1', 'load-2');
-    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
+    expect(publishToSessionMock).toHaveBeenCalledWith(
       's1',
       expect.objectContaining({
         type: 'session_snapshot',

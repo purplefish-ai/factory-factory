@@ -23,7 +23,6 @@ import {
   type AcpTraceLogger,
   acpRuntimeManager,
   acpTraceLogger,
-  chatConnectionService,
   chatEventForwarderService,
   chatMessageHandlerService,
   createSessionService,
@@ -37,7 +36,6 @@ import { kanbanStateService, workspaceStateMachine } from './services/workspace'
 
 export type AppServices = {
   acpRuntimeManager: typeof acpRuntimeManager;
-  chatConnectionService: typeof chatConnectionService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
   cliHealthService: typeof cliHealthService;
@@ -96,7 +94,6 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
 
   const services: AppServices = {
     acpRuntimeManager: resolvedAcpRuntimeManager,
-    chatConnectionService,
     chatEventForwarderService,
     chatMessageHandlerService,
     cliHealthService,

@@ -1,5 +1,5 @@
-import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';
@@ -43,7 +43,7 @@ export class SessionPublisher {
       });
     }
 
-    chatConnectionService.forwardToSession(store.sessionId, payload);
+    sessionEventBus.publishToSession(store.sessionId, payload);
   }
 
   forwardReplayBatch(
@@ -66,7 +66,7 @@ export class SessionPublisher {
       });
     }
 
-    chatConnectionService.forwardToSession(store.sessionId, payload);
+    sessionEventBus.publishToSession(store.sessionId, payload);
   }
 
   emitDelta(sessionId: string, event: SessionDeltaEvent): void {
@@ -74,6 +74,6 @@ export class SessionPublisher {
       type: 'session_delta',
       data: event,
     };
-    chatConnectionService.forwardToSession(sessionId, payload);
+    sessionEventBus.publishToSession(sessionId, payload);
   }
 }

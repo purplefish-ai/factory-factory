@@ -97,45 +97,6 @@ export function markWebSocketAlive(ws: WebSocket, wsAliveMap: WeakMap<WebSocket,
   ws.on('pong', () => wsAliveMap.set(ws, true));
 }
 
-export function getOrCreateConnectionSet<TKey>(
-  map: Map<TKey, Set<WebSocket>>,
-  key: TKey
-): Set<WebSocket> {
-  const existing = map.get(key);
-  if (existing) {
-    return existing;
-  }
-
-  const created = new Set<WebSocket>();
-  map.set(key, created);
-  return created;
-}
-
-/**
- * Add a socket to the connection set for `key` and return a disposer that
- * removes it again, dropping the key (and firing `onEmpty`) once the last
- * socket for that key is gone.
- */
-export function trackConnection<TKey>(
-  map: Map<TKey, Set<WebSocket>>,
-  key: TKey,
-  ws: WebSocket,
-  onEmpty?: () => void
-): () => void {
-  getOrCreateConnectionSet(map, key).add(ws);
-
-  return () => {
-    const connections = map.get(key);
-    if (!connections?.delete(ws)) {
-      return;
-    }
-    if (connections.size === 0) {
-      map.delete(key);
-      onEmpty?.();
-    }
-  };
-}
-
 export type WebSocketUpgradeHandler = (
   request: IncomingMessage,
   socket: Duplex,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -1287,16 +1287,13 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
     const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
 
-    const connectionId = 'conn-active-session';
-    chatConnectionService.register(connectionId, {
-      ws: {} as never,
-      dbSessionId: 'session-active',
-      workingDir: null,
-    });
+    sessionEventBus.registerViewerCountProvider((sessionId) =>
+      sessionId === 'session-active' ? 1 : 0
+    );
     try {
       await sessionService.stopSession('session-active');
     } finally {
-      chatConnectionService.unregister(connectionId);
+      sessionEventBus.registerViewerCountProvider(null);
     }
 
     expect(clearSessionSpy).not.toHaveBeenCalled();

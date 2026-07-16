@@ -6,19 +6,15 @@
  * stream new output until the socket closes.
  */
 
-import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
+import type { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend, sendStreamOutput } from '@/backend/lib/websocket-send';
-import {
-  createWebSocketUpgradeHandler,
-  trackConnection,
-  type WebSocketUpgradeHandler,
-} from './upgrade-utils';
+import { createWebSocketUpgradeHandler, type WebSocketUpgradeHandler } from './upgrade-utils';
 
 export interface PushChannelOptions {
   loggerName: string;
   connectionName: string;
-  connections: Map<string, Set<WebSocket>>;
+  connections: TopicBroadcaster<string>;
   getOutputBuffer: (workspaceId: string) => string;
   subscribeToOutput: (workspaceId: string, onData: (data: string) => void) => () => void;
 }
@@ -40,7 +36,7 @@ export function createPushChannelUpgradeHandler(
       const { workspaceId } = params;
       logger.info(`${connectionName} connection established`, { workspaceId });
 
-      const untrack = trackConnection(connections, workspaceId, ws, () => {
+      const untrack = connections.subscribe(workspaceId, ws, () => {
         logger.info(`All ${connectionName} connections closed for workspace`, { workspaceId });
       });
 

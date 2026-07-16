@@ -15,9 +15,9 @@ import type {
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
-import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
@@ -866,7 +866,7 @@ export class SessionLifecycleService {
   ): void {
     if (
       this.runtimeManager.isSessionRunning(sessionId) ||
-      chatConnectionService.countConnectionsViewingSession(sessionId) > 0
+      sessionEventBus.countViewers(sessionId) > 0
     ) {
       return;
     }

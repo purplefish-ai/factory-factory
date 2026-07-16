@@ -10,27 +10,24 @@ import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
+import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
+import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { parseWebSocketMessage, sendJsonError } from './message-utils';
-import { createWebSocketUpgradeHandler, sendBadRequest, trackConnection } from './upgrade-utils';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Map of workspace ID to set of WebSocket connections
- */
-export type TerminalConnectionsMap = Map<string, Set<WebSocket>>;
+import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // State
 // ============================================================================
 
-export const terminalConnections: TerminalConnectionsMap = new Map();
+/** Terminal WebSocket connections, keyed by workspace ID. */
+export const terminalConnections = new TopicBroadcaster<string>(
+  createLogger('terminal-handler'),
+  'terminal message'
+);
 
 const terminalListenerCleanup = new WeakMap<WebSocket, Map<string, (() => void)[]>>();
 
@@ -407,7 +404,7 @@ function initializeTerminalWebSocket({
 }): void {
   logger.info('Terminal WebSocket connection established', { workspaceId });
 
-  const untrack = trackConnection(terminalConnections, workspaceId, ws, () => {
+  const untrack = terminalConnections.subscribe(workspaceId, ws, () => {
     logger.info('All WebSocket connections closed for workspace', {
       workspaceId,
       message: 'Terminals will persist until explicitly closed or workspace is archived/deleted',

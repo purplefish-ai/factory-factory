@@ -9,6 +9,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { createChatUpgradeHandler } from './chat.handler';
+import { chatConnectionRegistry } from './chat-connection-registry';
 
 const allowedOrigin = 'http://localhost:3000';
 
@@ -29,42 +30,9 @@ function createLogger() {
 
 function createTestContext(worktreeBaseDir: string) {
   const logger = createLogger();
-  const connections = new Map<
-    string,
-    { ws: MockWebSocket; dbSessionId: string | null; workingDir: string | null }
-  >();
-
-  const chatConnectionService = {
-    values: vi.fn(() => connections.values()),
-    countConnectionsViewingSession: vi.fn((dbSessionId: string | null) => {
-      if (!dbSessionId) {
-        return 0;
-      }
-      let count = 0;
-      for (const info of connections.values()) {
-        if (info.dbSessionId === dbSessionId) {
-          count++;
-        }
-      }
-      return count;
-    }),
-    get: vi.fn((connectionId: string) => connections.get(connectionId)),
-    register: vi.fn(
-      (
-        connectionId: string,
-        info: { ws: MockWebSocket; dbSessionId: string | null; workingDir: string | null }
-      ) => {
-        connections.set(connectionId, info);
-      }
-    ),
-    unregister: vi.fn((connectionId: string) => {
-      connections.delete(connectionId);
-    }),
-  };
 
   const appContext = {
     services: {
-      chatConnectionService,
       chatEventForwarderService: {
         setupClientEvents: vi.fn(),
         setupWorkspaceNotifications: vi.fn(),
@@ -99,14 +67,12 @@ function createTestContext(worktreeBaseDir: string) {
 
   return {
     appContext,
-    chatConnectionService,
     chatMessageHandlerService: appContext.services.chatMessageHandlerService,
     chatEventForwarderService: appContext.services.chatEventForwarderService,
     logger,
     sessionFileLogger: appContext.services.sessionFileLogger,
     sessionDomainService: appContext.services.sessionDomainService,
     sessionService: appContext.services.sessionService,
-    connections,
   };
 }
 
@@ -115,9 +81,11 @@ describe('createChatUpgradeHandler', () => {
 
   beforeEach(() => {
     tempRootDir = mkdtempSync(join(tmpdir(), 'chat-handler-test-'));
+    chatConnectionRegistry.clear();
   });
 
   afterEach(() => {
+    chatConnectionRegistry.clear();
     vi.restoreAllMocks();
   });
 
@@ -211,13 +179,8 @@ describe('createChatUpgradeHandler', () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
 
-    const {
-      appContext,
-      chatMessageHandlerService,
-      chatEventForwarderService,
-      chatConnectionService,
-      sessionFileLogger,
-    } = createTestContext(tempRootDir);
+    const { appContext, chatMessageHandlerService, chatEventForwarderService, sessionFileLogger } =
+      createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const ws = new MockWebSocket();
@@ -245,10 +208,8 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
     expect(chatEventForwarderService.setupWorkspaceNotifications).toHaveBeenCalledTimes(1);
     expect(sessionFileLogger.initSession).toHaveBeenCalledWith('session-1');
-    expect(chatConnectionService.register).toHaveBeenCalledWith(
-      'conn-1',
-      expect.objectContaining({ dbSessionId: 'session-1' })
-    );
+    expect(chatConnectionRegistry.get('conn-1')).toMatchObject({ dbSessionId: 'session-1' });
+    expect(chatConnectionRegistry.countViewers('session-1')).toBe(1);
 
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
     await Promise.resolve();
@@ -265,13 +226,13 @@ describe('createChatUpgradeHandler', () => {
     });
 
     ws.emit('close');
-    expect(chatConnectionService.unregister).toHaveBeenCalledWith('conn-1');
+    expect(chatConnectionRegistry.has('conn-1')).toBe(false);
+    expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
   });
 
   it('clears in-memory state when the last viewer disconnects from a stopped session', () => {
-    const { appContext, chatConnectionService, sessionDomainService, sessionService } =
-      createTestContext(tempRootDir);
+    const { appContext, sessionDomainService, sessionService } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
 
@@ -296,10 +257,7 @@ describe('createChatUpgradeHandler', () => {
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
-    expect(chatConnectionService.register).toHaveBeenCalledWith(
-      'conn-1',
-      expect.objectContaining({ dbSessionId: 'session-1' })
-    );
+    expect(chatConnectionRegistry.get('conn-1')).toMatchObject({ dbSessionId: 'session-1' });
 
     ws.emit('close');
 
@@ -390,17 +348,16 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {
-    const {
-      appContext,
-      connections,
-      chatConnectionService,
-      chatMessageHandlerService,
-      sessionFileLogger,
-    } = createTestContext(tempRootDir);
+    const { appContext, chatMessageHandlerService, sessionFileLogger } =
+      createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const existingWs = new MockWebSocket();
-    connections.set('conn-1', { ws: existingWs, dbSessionId: 'old', workingDir: null });
+    chatConnectionRegistry.register('conn-1', {
+      ws: existingWs as unknown as WebSocket,
+      dbSessionId: 'old',
+      workingDir: null,
+    });
 
     const ws = new MockWebSocket();
     const newerWs = new MockWebSocket();
@@ -426,17 +383,19 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
     expect(existingWs.close).toHaveBeenCalledWith(1000, 'New connection replacing old one');
-    expect(chatConnectionService.register).toHaveBeenCalledWith(
-      'conn-1',
-      expect.objectContaining({ ws })
-    );
+    expect(chatConnectionRegistry.get('conn-1')?.ws).toBe(ws as unknown as WebSocket);
+    expect(chatConnectionRegistry.countViewers('old')).toBe(0);
     expect(chatMessageHandlerService.setClientCreator).toHaveBeenCalledTimes(1);
 
     // Simulate a newer connection replacing this one before close event fires.
-    connections.set('conn-1', { ws: newerWs, dbSessionId: 'session-1', workingDir: null });
+    chatConnectionRegistry.register('conn-1', {
+      ws: newerWs as unknown as WebSocket,
+      dbSessionId: 'session-1',
+      workingDir: null,
+    });
     ws.emit('close');
 
-    expect(chatConnectionService.unregister).not.toHaveBeenCalled();
+    expect(chatConnectionRegistry.get('conn-1')?.ws).toBe(newerWs as unknown as WebSocket);
     expect(sessionFileLogger.closeSession).not.toHaveBeenCalled();
   });
 

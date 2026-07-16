@@ -250,7 +250,9 @@ describe('createPostRunLogsUpgradeHandler', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'output', data: 'buffered post-run logs\n' })
     );
-    expect(postRunLogsConnections.get(workspaceId)?.has(ws as unknown as WebSocket)).toBe(true);
+    expect(postRunLogsConnections.subscribers(workspaceId).has(ws as unknown as WebSocket)).toBe(
+      true
+    );
 
     if (!outputCallback) {
       throw new Error('Expected output callback to be registered');
@@ -275,7 +277,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
 
     ws.emit('close');
     expect(unsubscribe).toHaveBeenCalledTimes(1);
-    expect(postRunLogsConnections.has(workspaceId)).toBe(false);
+    expect(postRunLogsConnections.hasSubscribers(workspaceId)).toBe(false);
   });
 
   it('tracks multiple connections and only deletes workspace entry after the last close', () => {
@@ -319,14 +321,14 @@ describe('createPostRunLogsUpgradeHandler', () => {
     expect(runScriptService.getPostRunOutputBuffer).toHaveBeenCalledTimes(2);
     expect(ws1.send).not.toHaveBeenCalled();
     expect(ws2.send).not.toHaveBeenCalled();
-    expect(postRunLogsConnections.get(workspaceId)?.size).toBe(2);
+    expect(postRunLogsConnections.subscriberCount(workspaceId)).toBe(2);
 
     ws1.emit('close');
     expect(unsubscribeFirst).toHaveBeenCalledTimes(1);
-    expect(postRunLogsConnections.get(workspaceId)?.size).toBe(1);
+    expect(postRunLogsConnections.subscriberCount(workspaceId)).toBe(1);
 
     ws2.emit('close');
     expect(unsubscribeSecond).toHaveBeenCalledTimes(1);
-    expect(postRunLogsConnections.has(workspaceId)).toBe(false);
+    expect(postRunLogsConnections.hasSubscribers(workspaceId)).toBe(false);
   });
 });
