@@ -41,6 +41,7 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let snapshotConnections: typeof import('./snapshots.handler').snapshotConnections;
+let chatConnectionRegistry: typeof import('./chat-connection-registry').chatConnectionRegistry;
 let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
 
 let counter = 0;
@@ -63,6 +64,9 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
     await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
+  ({ chatConnectionRegistry } = await vi.importActual<typeof import('./chat-connection-registry')>(
+    './chat-connection-registry'
+  ));
   ({ workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace-snapshot-store.service')
   >('@/backend/services/workspace-snapshot-store.service'));
@@ -81,6 +85,7 @@ afterEach(async () => {
 
   terminalConnections.clear();
   snapshotConnections.clear();
+  chatConnectionRegistry.clear();
   workspaceSnapshotStore.clear();
 
   await clearIntegrationDatabase(prisma);
@@ -200,26 +205,8 @@ function createConfigService() {
 }
 
 function createChatAppContext(worktreeBaseDir: string) {
-  const connections = new Map<
-    string,
-    { dbSessionId: string | null; workingDir: string | null; ws: WebSocket }
-  >();
-
   const appContext = unsafeCoerce<AppContext>({
     services: {
-      chatConnectionService: {
-        values: () => connections.values(),
-        get: (connectionId: string) => connections.get(connectionId),
-        register: (
-          connectionId: string,
-          connectionInfo: { ws: WebSocket; dbSessionId: string | null; workingDir: string | null }
-        ) => {
-          connections.set(connectionId, connectionInfo);
-        },
-        unregister: (connectionId: string) => {
-          connections.delete(connectionId);
-        },
-      },
       chatEventForwarderService: {
         setupClientEvents: vi.fn(),
         setupWorkspaceNotifications: vi.fn(),

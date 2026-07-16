@@ -628,13 +628,13 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, ws, 'proj-1');
 
-    expect(snapshotConnections.get('proj-1')?.has(ws as unknown as WebSocket)).toBe(true);
+    expect(snapshotConnections.subscribers('proj-1').has(ws as unknown as WebSocket)).toBe(true);
 
     // Emit close event
     ws.emit('close');
 
     // Connection should be removed
-    expect(snapshotConnections.has('proj-1')).toBe(false);
+    expect(snapshotConnections.hasSubscribers('proj-1')).toBe(false);
   });
 
   it('retains project entry when other connections remain after close', () => {
@@ -645,13 +645,13 @@ describe('createSnapshotsUpgradeHandler', () => {
     callHandler(handler, ws1, 'proj-1');
     callHandler(handler, ws2, 'proj-1');
 
-    expect(snapshotConnections.get('proj-1')?.size).toBe(2);
+    expect(snapshotConnections.subscriberCount('proj-1')).toBe(2);
 
     // Close first connection
     ws1.emit('close');
 
     // Project entry should remain with one connection
-    expect(snapshotConnections.get('proj-1')?.size).toBe(1);
-    expect(snapshotConnections.get('proj-1')?.has(ws2 as unknown as WebSocket)).toBe(true);
+    expect(snapshotConnections.subscriberCount('proj-1')).toBe(1);
+    expect(snapshotConnections.subscribers('proj-1').has(ws2 as unknown as WebSocket)).toBe(true);
   });
 });

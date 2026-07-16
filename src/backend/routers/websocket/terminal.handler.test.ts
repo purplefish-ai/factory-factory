@@ -418,7 +418,7 @@ describe('createTerminalUpgradeHandler', () => {
     });
     expect(ws1.send).not.toHaveBeenCalled();
     expect(ws2.send).toHaveBeenCalledWith(outputMessage, expect.any(Function));
-    expect(terminalConnections.get(workspaceId)?.size).toBe(2);
+    expect(terminalConnections.subscriberCount(workspaceId)).toBe(2);
   });
 
   it('drops live terminal output while the socket is congested and resumes after drain', async () => {

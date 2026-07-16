@@ -1,0 +1,184 @@
+/**
+ * Chat Connection Registry (WebSocket adapter)
+ *
+ * Transport-side counterpart of the session domain's `sessionEventBus`
+ * (ARCH-02: domain emits events, the adapter owns sockets). Responsible for:
+ * - Tracking chat WebSocket connections by connection ID
+ * - Maintaining a per-session topic index so fan-out is O(viewers), not
+ *   O(all connections)
+ * - Serializing and delivering session-scoped payloads published by the
+ *   session domain, including OUT_TO_CLIENT session file logging
+ * - Answering viewer-count queries from the domain via the event bus
+ */
+
+import type { WebSocket } from 'ws';
+import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
+import { safeSend } from '@/backend/lib/websocket-send';
+import { configService } from '@/backend/services/config.service';
+import { createLogger } from '@/backend/services/logger.service';
+import {
+  CHAT_BROADCAST_EVENT,
+  type ChatBroadcastEvent,
+  SESSION_OUTBOUND_EVENT,
+  type SessionOutboundEvent,
+  sessionEventBus,
+  sessionFileLogger,
+} from '@/backend/services/session';
+import type { WebSocketMessage } from '@/shared/acp-protocol';
+
+const logger = createLogger('chat-connection');
+
+const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ConnectionInfo {
+  readonly ws: WebSocket;
+  readonly dbSessionId: string | null;
+  readonly workingDir: string | null;
+}
+
+interface ConnectionEntry {
+  info: ConnectionInfo;
+  /** Disposer for the per-session topic subscription; null when no session. */
+  unsubscribe: (() => void) | null;
+}
+
+// ============================================================================
+// Registry
+// ============================================================================
+
+export class ChatConnectionRegistry {
+  private readonly connections = new Map<string, ConnectionEntry>();
+  /** Per-session socket index; topics are DB session ids. */
+  private readonly broadcaster = new TopicBroadcaster<string>(logger, 'chat session message');
+
+  private chatWsMsgCounter = 0;
+
+  /**
+   * Register a WebSocket connection. Re-registering an existing connection ID
+   * (client reconnect) replaces the previous entry and its session
+   * subscription.
+   */
+  register(connectionId: string, info: ConnectionInfo): void {
+    this.connections.get(connectionId)?.unsubscribe?.();
+    this.connections.set(connectionId, {
+      info,
+      unsubscribe: info.dbSessionId ? this.broadcaster.subscribe(info.dbSessionId, info.ws) : null,
+    });
+  }
+
+  unregister(connectionId: string): void {
+    const entry = this.connections.get(connectionId);
+    if (!entry) {
+      return;
+    }
+    entry.unsubscribe?.();
+    this.connections.delete(connectionId);
+  }
+
+  get(connectionId: string): ConnectionInfo | undefined {
+    return this.connections.get(connectionId)?.info;
+  }
+
+  has(connectionId: string): boolean {
+    return this.connections.has(connectionId);
+  }
+
+  /** Count connections currently viewing a specific DB session. */
+  countViewers(dbSessionId: string | null): number {
+    if (!dbSessionId) {
+      return 0;
+    }
+    return this.broadcaster.subscriberCount(dbSessionId);
+  }
+
+  /**
+   * Forward a payload to all connections viewing a session. OUT_TO_CLIENT
+   * file logging happens only when the payload actually reached a client.
+   */
+  broadcastToSession(dbSessionId: string, payload: WebSocketMessage): void {
+    this.chatWsMsgCounter++;
+    const msgNum = this.chatWsMsgCounter;
+
+    const sent = this.broadcaster.broadcast(dbSessionId, payload);
+    if (sent === 0) {
+      if (DEBUG_CHAT_WS) {
+        logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
+      }
+      return;
+    }
+
+    if (DEBUG_CHAT_WS) {
+      const delta = payload.type === 'session_delta' ? payload.data : undefined;
+      logger.info(`[Chat WS #${msgNum}] Sent to ${sent} connection(s)`, {
+        dbSessionId,
+        type: payload.type,
+        innerType: delta?.type,
+        uuid: delta?.uuid,
+      });
+    }
+
+    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', payload);
+  }
+
+  /**
+   * Send a payload to every chat connection, regardless of session. Iterates
+   * the connection map (not the topic index) because connections without a
+   * selected session are not subscribed to any topic.
+   */
+  broadcastToAll(payload: Record<string, unknown>): void {
+    const message = JSON.stringify(payload);
+    for (const entry of this.connections.values()) {
+      safeSend(entry.info.ws, message, logger, 'workspace notification');
+    }
+  }
+
+  /** Drop all connections and subscriptions. Intended for tests. */
+  clear(): void {
+    for (const entry of this.connections.values()) {
+      entry.unsubscribe?.();
+    }
+    this.connections.clear();
+  }
+}
+
+export const chatConnectionRegistry = new ChatConnectionRegistry();
+
+// ============================================================================
+// Event Bus Wiring
+// ============================================================================
+
+let transportAttached = false;
+
+/**
+ * Subscribe the singleton registry to the session domain's outbound event bus
+ * and register the viewer-count provider. Idempotent; called during chat
+ * upgrade handler creation at server startup.
+ */
+export function attachChatTransport(): void {
+  if (transportAttached) {
+    return;
+  }
+  transportAttached = true;
+
+  sessionEventBus.on(SESSION_OUTBOUND_EVENT, (event: SessionOutboundEvent) => {
+    chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
+  });
+  sessionEventBus.on(CHAT_BROADCAST_EVENT, (event: ChatBroadcastEvent) => {
+    chatConnectionRegistry.broadcastToAll(event.payload);
+  });
+  sessionEventBus.registerViewerCountProvider((sessionId) =>
+    chatConnectionRegistry.countViewers(sessionId)
+  );
+}
+
+export function detachChatTransportForTests(): void {
+  sessionEventBus.removeAllListeners(SESSION_OUTBOUND_EVENT);
+  sessionEventBus.removeAllListeners(CHAT_BROADCAST_EVENT);
+  sessionEventBus.registerViewerCountProvider(null);
+  transportAttached = false;
+  chatConnectionRegistry.clear();
+}

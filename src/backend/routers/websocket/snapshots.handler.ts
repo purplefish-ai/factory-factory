@@ -9,8 +9,10 @@
 import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
 import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
+import { createLogger } from '@/backend/services/logger.service';
 import { workspaceQueryService } from '@/backend/services/workspace';
 import {
   SNAPSHOT_CHANGED,
@@ -20,22 +22,17 @@ import {
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
 import { WorkspaceStatus } from '@/shared/core';
-import { createWebSocketUpgradeHandler, trackConnection } from './upgrade-utils';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Map of project ID to set of WebSocket connections
- */
-export type SnapshotConnectionsMap = Map<string, Set<WebSocket>>;
+import { createWebSocketUpgradeHandler } from './upgrade-utils';
 
 // ============================================================================
 // State
 // ============================================================================
 
-export const snapshotConnections: SnapshotConnectionsMap = new Map();
+/** Snapshot WebSocket connections, keyed by project ID. */
+export const snapshotConnections = new TopicBroadcaster<string>(
+  createLogger('snapshots-handler'),
+  'snapshot message'
+);
 
 /**
  * Deltas that arrive for a socket before its snapshot_full baseline has been
@@ -57,7 +54,7 @@ class SnapshotStoreSubscriptionState {
     null;
 
   ensure(
-    connections: SnapshotConnectionsMap,
+    connections: TopicBroadcaster<string>,
     logger: ReturnType<AppContext['services']['createLogger']>
   ): void {
     if (this.active) {
@@ -72,8 +69,8 @@ class SnapshotStoreSubscriptionState {
       payload: Record<string, unknown>,
       description: string
     ) => {
-      const projectClients = connections.get(projectId);
-      if (!projectClients || projectClients.size === 0) {
+      const projectClients = connections.subscribers(projectId);
+      if (projectClients.size === 0) {
         return;
       }
 
@@ -180,7 +177,7 @@ export function resetSnapshotsHandlerStateForTests(): void {
 export function createSnapshotsUpgradeHandler(
   appContext: AppContext,
   options: {
-    connections?: SnapshotConnectionsMap;
+    connections?: TopicBroadcaster<string>;
     subscriptionState?: SnapshotStoreSubscriptionState;
   } = {}
 ) {
@@ -204,7 +201,7 @@ export function createSnapshotsUpgradeHandler(
       // Add to connection set FIRST so we don't miss any delta events during
       // the optional reconciliation wait below. Deltas that arrive before the
       // snapshot_full baseline are buffered and flushed after it.
-      const untrack = trackConnection(connections, projectId, ws);
+      const untrack = connections.subscribe(projectId, ws);
       pendingDeltaBuffers.set(ws, []);
 
       // If a startup reconciliation is in progress and the store has no entries

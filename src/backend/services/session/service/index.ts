@@ -15,9 +15,7 @@ export {
 } from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
-export type { ConnectionInfo } from './chat/chat-connection.service';
 // Chat services
-export { chatConnectionService } from './chat/chat-connection.service';
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export { chatMessageHandlerService } from './chat/chat-message-handlers.service';
@@ -39,6 +37,17 @@ export type {
   RuntimeCreatedCallback,
   RuntimeEventHandlers,
 } from './runtime';
-
 // Core domain service (in-memory state management)
 export { sessionDomainService } from './session-domain.service';
+// Transport-free outbound event surface (consumed by the WebSocket adapter)
+export type {
+  ChatBroadcastEvent,
+  SessionOutboundEvent,
+  SessionViewerCountProvider,
+} from './session-event-bus';
+export {
+  CHAT_BROADCAST_EVENT,
+  SESSION_OUTBOUND_EVENT,
+  SessionEventBus,
+  sessionEventBus,
+} from './session-event-bus';

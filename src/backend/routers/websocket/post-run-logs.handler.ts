@@ -4,16 +4,16 @@
  * Handles WebSocket connections for streaming postRun script logs (e.g., cloudflared tunnel).
  */
 
-import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
+import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
+import { createLogger } from '@/backend/services/logger.service';
 import { createPushChannelUpgradeHandler } from './push-channel.handler';
 
-/**
- * Map of workspace ID to set of WebSocket connections
- */
-export type PostRunLogsConnectionsMap = Map<string, Set<WebSocket>>;
-
-export const postRunLogsConnections: PostRunLogsConnectionsMap = new Map();
+/** Post-run logs WebSocket connections, keyed by workspace ID. */
+export const postRunLogsConnections = new TopicBroadcaster<string>(
+  createLogger('post-run-logs-handler'),
+  'log output'
+);
 
 export function createPostRunLogsUpgradeHandler(appContext: AppContext) {
   const { runScriptService } = appContext.services;

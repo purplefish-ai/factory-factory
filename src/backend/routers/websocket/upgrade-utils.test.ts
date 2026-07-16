@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import {
   createWebSocketUpgradeHandler,
-  trackConnection,
   validateTrustedLocalWebSocketRequest,
   validateWebSocketOrigin,
 } from './upgrade-utils';
@@ -187,54 +186,6 @@ describe('validateTrustedLocalWebSocketRequest', () => {
     expect(isValid).toBe(true);
     expect(socket.write).not.toHaveBeenCalled();
     expect(socket.destroy).not.toHaveBeenCalled();
-  });
-});
-
-describe('trackConnection', () => {
-  const wsA = {} as WebSocket;
-  const wsB = {} as WebSocket;
-
-  it('adds the socket to the connection set for the key', () => {
-    const map = new Map<string, Set<WebSocket>>();
-
-    trackConnection(map, 'workspace-1', wsA);
-
-    expect(map.get('workspace-1')).toEqual(new Set([wsA]));
-  });
-
-  it('removes the socket and drops the empty key on dispose', () => {
-    const map = new Map<string, Set<WebSocket>>();
-    const onEmpty = vi.fn();
-
-    const untrack = trackConnection(map, 'workspace-1', wsA, onEmpty);
-    untrack();
-
-    expect(map.has('workspace-1')).toBe(false);
-    expect(onEmpty).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the key while other sockets remain', () => {
-    const map = new Map<string, Set<WebSocket>>();
-    const onEmpty = vi.fn();
-
-    const untrackA = trackConnection(map, 'workspace-1', wsA, onEmpty);
-    trackConnection(map, 'workspace-1', wsB, onEmpty);
-    untrackA();
-
-    expect(map.get('workspace-1')).toEqual(new Set([wsB]));
-    expect(onEmpty).not.toHaveBeenCalled();
-  });
-
-  it('is safe to dispose twice', () => {
-    const map = new Map<string, Set<WebSocket>>();
-    const onEmpty = vi.fn();
-
-    const untrack = trackConnection(map, 'workspace-1', wsA, onEmpty);
-    untrack();
-    untrack();
-
-    expect(map.has('workspace-1')).toBe(false);
-    expect(onEmpty).toHaveBeenCalledTimes(1);
   });
 });
 
