@@ -1,4 +1,4 @@
-import { ArrowDownToLine } from 'lucide-react';
+import { DownloadSimple } from '@phosphor-icons/react';
 import { memo } from 'react';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ export const ParentWorkspaceUpdateRenderer = memo(function ParentWorkspaceUpdate
       )}
     >
       <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-        <ArrowDownToLine className="h-3 w-3 shrink-0" />
+        <DownloadSimple className="h-3 w-3 shrink-0" />
         <span>
           {parentWorkspaceName ?? 'Parent workspace'}
           {parentProjectName && (

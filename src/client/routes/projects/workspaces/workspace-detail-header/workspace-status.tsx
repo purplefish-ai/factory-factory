@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDot, GitPullRequest, XCircle } from 'lucide-react';
+import { CheckCircle, DotOutline, GitPullRequest, XCircle } from '@phosphor-icons/react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export function WorkspacePrChip({
       )}
     >
       <GitPullRequest className="h-3 w-3" />#{prNumber}
-      {isMerged && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      {isMerged && <CheckCircle className="h-3 w-3 text-green-500" />}
       {isClosed && <XCircle className="h-3 w-3 text-slate-500" />}
     </a>
   );
@@ -102,7 +102,7 @@ export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWo
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <CircleDot className="h-3 w-3 text-violet-500" />
+        <DotOutline className="h-3 w-3 text-violet-500" />
         {workspace.linearIssueIdentifier}
       </a>
     );
@@ -116,7 +116,7 @@ export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWo
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <CircleDot className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
+        <DotOutline className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
       </a>
     );
   }

@@ -1,4 +1,4 @@
-import { Network } from 'lucide-react';
+import { TreeStructure } from '@phosphor-icons/react';
 import { memo } from 'react';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ export const ChildWorkspaceUpdateRenderer = memo(function ChildWorkspaceUpdateRe
       )}
     >
       <div className="flex items-center gap-1.5 text-[11px] font-medium text-violet-700 dark:text-violet-400">
-        <Network className="h-3 w-3 shrink-0" />
+        <TreeStructure className="h-3 w-3 shrink-0" />
         <span>
           {childWorkspaceName ?? 'Child workspace'}
           {childProjectName && (

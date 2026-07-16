@@ -1,4 +1,4 @@
-import { Settings } from 'lucide-react';
+import { Gear } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
@@ -76,7 +76,7 @@ export function ProjectSettingsDialog({
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon">
-              <Settings className="h-4 w-4" />
+              <Gear className="h-4 w-4" />
             </Button>
           </DialogTrigger>
         </TooltipTrigger>

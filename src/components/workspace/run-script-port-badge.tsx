@@ -1,4 +1,4 @@
-import { Server } from 'lucide-react';
+import { HardDrives } from '@phosphor-icons/react';
 import { useRunScriptLaunch } from './use-run-script-launch';
 
 interface RunScriptPortBadgeProps {
@@ -23,7 +23,7 @@ export function RunScriptPortBadge({ workspaceId }: RunScriptPortBadgeProps) {
           : `Dev server running on port ${launchInfo.port}`
       }
     >
-      <Server className="h-4 w-4" />
+      <HardDrives className="h-4 w-4" />
       <span>:{launchInfo.port}</span>
     </a>
   );

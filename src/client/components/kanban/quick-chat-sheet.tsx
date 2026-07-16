@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { SpinnerGap } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import type { SessionData } from '@/components/chat/session-tab-bar';
 import { SessionTabBar } from '@/components/chat/session-tab-bar';
@@ -105,7 +105,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
             />
           ) : workspaceId ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              <SpinnerGap className="h-5 w-5 animate-spin mr-2" />
               Loading sessions...
             </div>
           ) : null}

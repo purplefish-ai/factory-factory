@@ -1,5 +1,5 @@
+import { Archive, Chat, Clock } from '@phosphor-icons/react';
 import { formatDistanceToNow } from 'date-fns';
-import { Archive, Clock, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -90,7 +90,7 @@ export function ClosedSessionsDropdown({
                 }}
                 className="flex items-start gap-2 px-3 py-2 cursor-pointer"
               >
-                <MessageSquare className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                <Chat className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {session.name || `${session.workflow} session`}

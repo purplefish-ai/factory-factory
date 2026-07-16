@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { Desktop, Moon, Sun } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
@@ -47,7 +47,7 @@ export function ThemeToggle() {
           Dark
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme('system')}>
-          <Monitor className="mr-2 h-4 w-4" />
+          <Desktop className="mr-2 h-4 w-4" />
           System
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -1,4 +1,4 @@
-import { File, Folder } from 'lucide-react';
+import { File, Folder } from '@phosphor-icons/react';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import {
   Command,

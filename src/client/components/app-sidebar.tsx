@@ -1,4 +1,4 @@
-import { CircleDot, GitPullRequest, Plus, Settings, X } from 'lucide-react';
+import { DotOutline, Gear, GitPullRequest, Plus, X } from '@phosphor-icons/react';
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
@@ -99,7 +99,7 @@ function SidebarIssueItem({ issue }: { issue: NormalizedIssue }) {
       <SidebarMenuButton asChild className="h-auto py-1.5 px-2">
         <a href={issue.url} target="_blank" rel="noopener noreferrer">
           <div className="flex items-center gap-2 min-w-0">
-            <CircleDot className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <DotOutline className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="truncate text-sm">{issue.title}</span>
             <span className="text-xs font-medium text-muted-foreground shrink-0 ml-auto">
               {issue.displayId}
@@ -317,7 +317,7 @@ function SidebarInner({
                 className="flex-1"
               >
                 <Link to="/admin" onClick={onNavigate}>
-                  <Settings className="h-4 w-4" />
+                  <Gear className="h-4 w-4" />
                   <span>Settings</span>
                 </Link>
               </SidebarMenuButton>

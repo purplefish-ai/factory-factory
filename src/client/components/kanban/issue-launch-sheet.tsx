@@ -1,4 +1,4 @@
-import { ExternalLink, Play } from 'lucide-react';
+import { ArrowSquareOut, Play } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
@@ -294,7 +294,7 @@ export function IssueLaunchSheet({
               </Label>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
                 <a href={issue.url} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <ArrowSquareOut className="h-3.5 w-3.5" />
                   {issueProviderLabel}
                 </a>
               </Button>

@@ -1,4 +1,4 @@
-import { AppWindow, Loader2 } from 'lucide-react';
+import { AppWindow, SpinnerGap } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,7 +35,7 @@ export function OpenInIdeAction({
         disabled={disabled}
       >
         {openInIde.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <SpinnerGap className="h-4 w-4 animate-spin" />
         ) : (
           <AppWindow className="h-4 w-4" />
         )}
@@ -55,7 +55,7 @@ export function OpenInIdeAction({
           disabled={disabled}
         >
           {openInIde.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <SpinnerGap className="h-4 w-4 animate-spin" />
           ) : (
             <AppWindow className="h-4 w-4" />
           )}

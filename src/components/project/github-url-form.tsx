@@ -1,4 +1,4 @@
-import { AlertTriangleIcon, CheckCircle2Icon, TerminalIcon } from 'lucide-react';
+import { CheckCircle, Terminal, Warning } from '@phosphor-icons/react';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ function AuthStatusSection({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-          <CheckCircle2Icon className="h-4 w-4" />
+          <CheckCircle className="h-4 w-4" />
           <span>Authenticated{authStatus.user ? ` as ${authStatus.user}` : ''}</span>
         </div>
       </div>
@@ -44,11 +44,11 @@ function AuthStatusSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
-        <AlertTriangleIcon className="h-4 w-4" />
+        <Warning className="h-4 w-4" />
         <span>Not authenticated — private repos will fail to clone</span>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
-        <TerminalIcon className="mr-2 h-4 w-4" />
+        <Terminal className="mr-2 h-4 w-4" />
         Open Terminal to Login
       </Button>
     </div>

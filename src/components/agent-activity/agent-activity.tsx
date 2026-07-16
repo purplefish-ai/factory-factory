@@ -1,4 +1,4 @@
-import { Copy, RotateCcw, X } from 'lucide-react';
+import { ArrowCounterClockwise, Copy, X } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
@@ -133,7 +133,7 @@ export const MessageItem = memo(function MessageItem({
                 type="button"
                 aria-label="Rewind files to before this message"
               >
-                <RotateCcw className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
+                <ArrowCounterClockwise className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400" />
               </button>
             )}
             {/* Cancel button for queued messages */}

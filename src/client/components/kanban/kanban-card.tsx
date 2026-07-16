@@ -1,15 +1,15 @@
-import type { Workspace } from '@prisma-gen/browser';
 import {
-  AlertTriangle,
   Archive,
+  ArrowsClockwise,
+  Chat,
   GitBranch,
   GitPullRequest,
-  MessageSquare,
-  Network,
   Pencil,
   Play,
-  RefreshCw,
-} from 'lucide-react';
+  TreeStructure,
+  Warning,
+} from '@phosphor-icons/react';
+import type { Workspace } from '@prisma-gen/browser';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { trpc } from '@/client/lib/trpc';
@@ -246,7 +246,7 @@ function CardTitleIcons({
                 onOpenQuickChat(workspace.id);
               }}
             >
-              <MessageSquare className="h-3 w-3" />
+              <Chat className="h-3 w-3" />
               {workspace.pendingRequestType && (
                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
               )}
@@ -280,7 +280,7 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <AlertTriangle className="h-3 w-3 text-amber-500" />
+              <Warning className="h-3 w-3 text-amber-500" />
             </span>
           </TooltipTrigger>
           <TooltipContent>{sessionRuntimeError}</TooltipContent>
@@ -352,7 +352,7 @@ function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="flex items-center gap-1.5 text-[11px] text-primary/80">
-          <RefreshCw className={cn('h-3 w-3', isRunning && 'animate-spin')} />
+          <ArrowsClockwise className={cn('h-3 w-3', isRunning && 'animate-spin')} />
           <span className="font-mono">
             Iter {current}/{maxLabel}
           </span>
@@ -508,13 +508,13 @@ export function KanbanCard({
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
             {workspace.creationSource === 'CHILD_WORKSPACE' && (
               <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
-                <Network className="h-3 w-3" />
+                <TreeStructure className="h-3 w-3" />
                 <span>Child workspace</span>
               </div>
             )}
             {sessionRuntimeError && (
               <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <Warning className="h-3 w-3 shrink-0" />
                 <span className="truncate">{sessionRuntimeError}</span>
               </div>
             )}

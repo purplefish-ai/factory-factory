@@ -1,5 +1,5 @@
+import { Check, Eye, Lightning, Play } from '@phosphor-icons/react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { Check, Eye, Play, Zap } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { fn } from 'storybook/test';
 import { Button } from '@/components/ui/button';
@@ -58,7 +58,7 @@ function MockQuickActionsMenu({
     check: Check,
     eye: Eye,
     play: Play,
-    zap: Zap,
+    zap: Lightning,
   };
 
   const hasActions = actions.length > 0;
@@ -74,7 +74,7 @@ function MockQuickActionsMenu({
               className="h-8 w-8"
               disabled={disabled || isLoading || !hasActions}
             >
-              <Zap className="h-4 w-4" />
+              <Lightning className="h-4 w-4" />
               <span className="sr-only">Quick Actions</span>
             </Button>
           </DropdownMenuTrigger>
@@ -84,7 +84,7 @@ function MockQuickActionsMenu({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
         {actions.map((action) => {
-          const Icon = iconMap[action.icon || 'zap'] || Zap;
+          const Icon = iconMap[action.icon || 'zap'] || Lightning;
           return (
             <DropdownMenuItem
               key={action.id}

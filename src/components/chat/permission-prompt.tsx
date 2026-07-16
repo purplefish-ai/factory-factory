@@ -1,4 +1,4 @@
-import { FileText, ShieldCheck, ShieldX, Terminal } from 'lucide-react';
+import { FileText, ShieldCheck, ShieldSlash, Terminal } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -109,7 +109,7 @@ function PermissionDecisionActions({
   return (
     <>
       <Button variant="outline" size="sm" onClick={onDeny} className="gap-1.5">
-        <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
+        <ShieldSlash className="h-3.5 w-3.5" aria-hidden="true" />
         Deny
       </Button>
       <Button ref={allowButtonRef} size="sm" onClick={onAllow} className="gap-1.5">
@@ -183,9 +183,9 @@ function getPermissionOptionStyle(kind: PermissionOption['kind']) {
     case 'allow_always':
       return { variant: 'default' as const, icon: ShieldCheck };
     case 'reject_once':
-      return { variant: 'outline' as const, icon: ShieldX };
+      return { variant: 'outline' as const, icon: ShieldSlash };
     case 'reject_always':
-      return { variant: 'destructive' as const, icon: ShieldX };
+      return { variant: 'destructive' as const, icon: ShieldSlash };
     default:
       return { variant: 'outline' as const, icon: ShieldCheck };
   }

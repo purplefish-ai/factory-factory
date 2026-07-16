@@ -1,4 +1,4 @@
-import { GitPullRequest, Info, Pencil } from 'lucide-react';
+import { GitPullRequest, Info, Pencil } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {

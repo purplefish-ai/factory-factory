@@ -1,5 +1,5 @@
+import { Eye, FileCode, SpinnerGap, Warning, WarningCircle } from '@phosphor-icons/react';
 import type { inferRouterOutputs } from '@trpc/server';
-import { AlertCircle, AlertTriangle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
 import { Component, useRef, useState } from 'react';
@@ -53,7 +53,7 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -61,7 +61,7 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <WarningCircle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-lg font-medium text-destructive">Failed to load file</p>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
       </div>
@@ -137,7 +137,7 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
     <>
       {truncated && (
         <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20">
-          <AlertTriangle className="h-4 w-4 text-warning" />
+          <Warning className="h-4 w-4 text-warning" />
           <span className="text-sm text-warning">
             File truncated to 1MB. Actual size: {fileSizeLabel}
           </span>
@@ -146,7 +146,7 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
 
       {isBinary && (
         <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-b">
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          <Warning className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Binary file cannot be displayed</span>
         </div>
       )}
@@ -171,7 +171,7 @@ class MarkdownPreviewErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+          <WarningCircle className="h-4 w-4 shrink-0" />
           <span>Failed to render preview.</span>
         </div>
       );

@@ -1,4 +1,4 @@
-import { AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { Clock, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -27,18 +27,18 @@ const statusConfig: Record<Exclude<WorkspaceStatus, 'READY' | 'ARCHIVED'>, Statu
     variant: 'outline',
   },
   PROVISIONING: {
-    icon: Loader2,
+    icon: SpinnerGap,
     label: 'Setting up',
     variant: 'secondary',
     iconClassName: 'animate-spin',
   },
   FAILED: {
-    icon: AlertCircle,
+    icon: WarningCircle,
     label: 'Setup failed',
     variant: 'destructive',
   },
   ARCHIVING: {
-    icon: Loader2,
+    icon: SpinnerGap,
     label: 'Archiving',
     variant: 'secondary',
     iconClassName: 'animate-spin',

@@ -1,4 +1,4 @@
-import { Terminal } from 'lucide-react';
+import { Terminal } from '@phosphor-icons/react';
 import {
   forwardRef,
   lazy,

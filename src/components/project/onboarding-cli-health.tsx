@@ -1,10 +1,10 @@
 import {
-  AlertTriangleIcon,
-  CheckCircle2Icon,
-  CircleDashedIcon,
-  RefreshCwIcon,
-  TerminalIcon,
-} from 'lucide-react';
+  ArrowsClockwise,
+  CheckCircle,
+  CircleDashed,
+  Terminal,
+  Warning,
+} from '@phosphor-icons/react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -23,12 +23,12 @@ interface StatusItem {
 
 function StatusIcon({ status }: { status: ItemStatus }) {
   if (status === 'ok') {
-    return <CheckCircle2Icon className="h-4 w-4 text-green-600 dark:text-green-400" />;
+    return <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />;
   }
   if (status === 'warning') {
-    return <AlertTriangleIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
+    return <Warning className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
   }
-  return <CircleDashedIcon className="h-4 w-4 text-muted-foreground" />;
+  return <CircleDashed className="h-4 w-4 text-muted-foreground" />;
 }
 
 function buildItems(health: {
@@ -119,7 +119,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
           onClick={() => refetch()}
           disabled={isRefetching}
         >
-          <RefreshCwIcon className={`mr-1 h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
+          <ArrowsClockwise className={`mr-1 h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
           Recheck
         </Button>
       </div>
@@ -136,7 +136,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
 
       {hasIssues && (
         <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
-          <TerminalIcon className="mr-2 h-4 w-4" />
+          <Terminal className="mr-2 h-4 w-4" />
           Open Terminal to Log In
         </Button>
       )}

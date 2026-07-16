@@ -1,4 +1,4 @@
-import { ExternalLink, Network, Plus } from 'lucide-react';
+import { ArrowSquareOut, Plus, TreeStructure } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -191,7 +191,7 @@ export function ChildWorkspacesPanel({ workspaceId }: ChildWorkspacesPanelProps)
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
         <div className="flex items-center gap-1.5">
-          <Network className="h-3.5 w-3.5 text-muted-foreground" />
+          <TreeStructure className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-medium">Child Workspaces</span>
           {children && children.length > 0 && (
             <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
@@ -219,7 +219,7 @@ export function ChildWorkspacesPanel({ workspaceId }: ChildWorkspacesPanelProps)
         )}
         {!isLoading && children?.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-4">
-            <Network className="h-8 w-8 text-muted-foreground/40" />
+            <TreeStructure className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No child workspaces yet.</p>
             <Button
               variant="outline"
@@ -261,7 +261,7 @@ export function ChildWorkspacesPanel({ workspaceId }: ChildWorkspacesPanelProps)
                       )}
                     </p>
                   </div>
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground shrink-0 mt-0.5" />
+                  <ArrowSquareOut className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground shrink-0 mt-0.5" />
                 </Link>
               </li>
             ))}

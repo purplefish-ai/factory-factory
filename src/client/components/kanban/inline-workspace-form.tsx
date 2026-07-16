@@ -1,5 +1,5 @@
+import { ArrowsClockwise, Calendar, CaretDown, Paperclip, SpinnerGap } from '@phosphor-icons/react';
 import type { inferRouterOutputs } from '@trpc/server';
-import { Calendar, ChevronDown, Loader2, Paperclip, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -251,7 +251,7 @@ function ModeConfigPanel({
     return (
       <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
         <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-          <RefreshCw className="h-3 w-3" />
+          <ArrowsClockwise className="h-3 w-3" />
           Auto-iteration config
         </div>
         <div className="space-y-1.5">
@@ -803,7 +803,7 @@ export function InlineWorkspaceForm({
                 onClick={() => handleLaunch(mode)}
                 disabled={isLaunchDisabled}
               >
-                {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                {isCreating ? <SpinnerGap className="h-3 w-3 animate-spin mr-1" /> : null}
                 {launchButtonLabels[mode]}
               </Button>
               <DropdownMenu>
@@ -813,7 +813,7 @@ export function InlineWorkspaceForm({
                     className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
                     disabled={isLaunchDisabled}
                   >
-                    <ChevronDown className="h-3 w-3" />
+                    <CaretDown className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="text-xs">
@@ -821,7 +821,7 @@ export function InlineWorkspaceForm({
                     Launch as Standard Workspace
                   </DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
-                    <RefreshCw className="mr-1.5 h-3 w-3" />
+                    <ArrowsClockwise className="mr-1.5 h-3 w-3" />
                     Launch as Auto-Iteration Workspace
                   </DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>

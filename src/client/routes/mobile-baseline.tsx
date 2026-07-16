@@ -1,4 +1,4 @@
-import { GitBranch, List, Plus } from 'lucide-react';
+import { GitBranch, List, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { PageHeader } from '@/client/components/page-header';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';

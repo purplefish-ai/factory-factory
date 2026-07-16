@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { SpinnerGap, Warning } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { CompactBoundaryIndicator } from '@/components/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -165,7 +165,7 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
       )}
     >
       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <Loader2 className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
+        <SpinnerGap className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
         <span>Thinking</span>
       </div>
       <MarkdownRenderer
@@ -203,7 +203,7 @@ export const ErrorRenderer = memo(function ErrorRenderer({
         className
       )}
     >
-      <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+      <Warning className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
       <div className="text-sm text-destructive">{errorText}</div>
     </div>
   );

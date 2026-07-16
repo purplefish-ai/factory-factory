@@ -1,4 +1,4 @@
-import { FileJson, Loader2, Play } from 'lucide-react';
+import { FileCode, Play, SpinnerGap } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -210,7 +210,7 @@ export function DevServerSetupPanel({
           {/* Preview */}
           <div className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-2">
-              <FileJson className="h-4 w-4" />
+              <FileCode className="h-4 w-4" />
               Configuration Preview
             </Label>
             <Textarea
@@ -245,12 +245,12 @@ export function DevServerSetupPanel({
             >
               {isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <SpinnerGap className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <FileJson className="mr-2 h-4 w-4" />
+                  <FileCode className="mr-2 h-4 w-4" />
                   {isEditing ? 'Save Configuration' : 'Create Configuration'}
                 </>
               )}

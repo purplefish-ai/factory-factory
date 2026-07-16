@@ -1,4 +1,4 @@
-import { GitPullRequest, MessageSquareText, Sparkles } from 'lucide-react';
+import { ChatText, GitPullRequest, Sparkle } from '@phosphor-icons/react';
 
 /**
  * Predefined quick actions that send messages to Claude.
@@ -14,14 +14,14 @@ export const QUICK_ACTIONS = [
   {
     id: 'address-pr-comments',
     label: 'Address PR Comments',
-    icon: MessageSquareText,
+    icon: ChatText,
     message:
       'Fetch the comments on the current pull request using the GitHub CLI (gh) and address any feedback or requested changes.',
   },
   {
     id: 'simplify-code',
     label: 'Simplify Code',
-    icon: Sparkles,
+    icon: Sparkle,
     message:
       'Use the code-simplifier agent to review and simplify the recent changes. Focus on improving clarity, consistency, and maintainability while preserving all functionality.',
   },

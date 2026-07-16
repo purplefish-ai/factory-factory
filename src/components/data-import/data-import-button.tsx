@@ -1,4 +1,4 @@
-import { Upload } from 'lucide-react';
+import { Upload } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';

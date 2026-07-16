@@ -1,4 +1,4 @@
-import { ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { CaretRight, CaretUpDown } from '@phosphor-icons/react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,7 @@ export function ProjectSelectorDropdown({
     <div className="flex min-w-0 items-center gap-0.5">
       {showLeadingSlash ? (
         <span className="hidden text-muted-foreground md:inline-flex" aria-hidden>
-          <ChevronRight className="h-3.5 w-3.5" />
+          <CaretRight className="h-3.5 w-3.5" />
         </span>
       ) : null}
       <button
@@ -106,7 +106,7 @@ export function ProjectSelectorDropdown({
         >
           <span className="sr-only">Open project menu</span>
           <span className="inline-flex items-center text-current" aria-hidden>
-            <ChevronsUpDown className="h-3 w-3 opacity-70 md:h-3.5 md:w-3.5" />
+            <CaretUpDown className="h-3 w-3 opacity-70 md:h-3.5 md:w-3.5" />
           </span>
         </SelectTrigger>
         <SelectContent>
@@ -136,7 +136,7 @@ export function ProjectSelectorDropdown({
           {trailingSeparatorType === 'slash' ? (
             <span className="text-xs">/</span>
           ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
+            <CaretRight className="h-3.5 w-3.5" />
           )}
         </span>
       ) : null}

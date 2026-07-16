@@ -1,4 +1,4 @@
-import { Scissors } from 'lucide-react';
+import { Scissors } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 

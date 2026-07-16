@@ -1,4 +1,4 @@
-import { CircleDot, Clock, GitBranch, GitPullRequest, Network } from 'lucide-react';
+import { Clock, DotOutline, GitBranch, GitPullRequest, TreeStructure } from '@phosphor-icons/react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
@@ -8,7 +8,7 @@ function CreationSourceIcon({ creationSource }: { creationSource?: string | null
     return <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />;
   }
   if (creationSource === 'CHILD_WORKSPACE') {
-    return <Network className="h-3 w-3 shrink-0 text-violet-500" />;
+    return <TreeStructure className="h-3 w-3 shrink-0 text-violet-500" />;
   }
   return null;
 }
@@ -117,12 +117,12 @@ export function WorkspaceItemContent({
                 onOpenIssue();
               }}
             >
-              <CircleDot className="h-2.5 w-2.5" />
+              <DotOutline className="h-2.5 w-2.5" />
               {issueLabel}
             </button>
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <CircleDot className="h-2.5 w-2.5" />
+              <DotOutline className="h-2.5 w-2.5" />
               {issueLabel}
             </span>
           )}

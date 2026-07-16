@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Circle, type LucideIcon, XCircle } from 'lucide-react';
+import { CheckCircle, Circle, type Icon, Warning, XCircle } from '@phosphor-icons/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { PRState } from '@/shared/core';
@@ -17,13 +17,13 @@ interface CiStatusChipProps {
 
 function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
   className: string;
-  Icon: LucideIcon;
+  Icon: Icon;
 } {
   switch (ciState) {
     case 'PASSING':
       return {
         className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-        Icon: CheckCircle2,
+        Icon: CheckCircle,
       };
     case 'FAILING':
       return {
@@ -48,12 +48,12 @@ function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
     case 'MERGED':
       return {
         className: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
-        Icon: CheckCircle2,
+        Icon: CheckCircle,
       };
     case 'CONFLICT':
       return {
         className: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
-        Icon: AlertTriangle,
+        Icon: Warning,
       };
     case 'NONE':
       return {

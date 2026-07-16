@@ -1,4 +1,4 @@
-import { Plus, RefreshCw } from 'lucide-react';
+import { ArrowsClockwise, Plus } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
@@ -32,7 +32,7 @@ export function KanbanControls() {
           disabled={isSyncing}
           aria-label="Refresh workspaces"
         >
-          <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+          <ArrowsClockwise className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
         </Button>
       </TooltipTrigger>
       <TooltipContent>Refresh workspaces</TooltipContent>
@@ -173,7 +173,7 @@ export function KanbanBoard() {
           Failed to load workspaces: {error?.message ?? 'Unknown error'}
         </p>
         <Button variant="outline" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <ArrowsClockwise className="h-4 w-4 mr-2" />
           Retry
         </Button>
       </div>

@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { WarningCircle } from '@phosphor-icons/react';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -87,7 +87,7 @@ export function getPartialDataWarning(params: {
 function NoMergeBaseState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <AlertCircle className="h-8 w-8 text-warning mb-2" />
+      <WarningCircle className="h-8 w-8 text-warning mb-2" />
       <p className="text-sm font-medium text-muted-foreground">No common history with main</p>
       <p className="text-xs text-muted-foreground/70 mt-1">
         This branch doesn't share history with the main branch
@@ -119,13 +119,13 @@ function ChangesDecorators({
     <div className="space-y-2">
       {partialDataWarning && (
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          <WarningCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
           <span>{partialDataWarning}</span>
         </div>
       )}
       {noMergeBase && (
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          <WarningCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
           <span>No common history with main. Not-pushed detection may be incomplete.</span>
         </div>
       )}

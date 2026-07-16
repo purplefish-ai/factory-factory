@@ -1,4 +1,4 @@
-import { Circle } from 'lucide-react';
+import { Circle } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import type { WorkspaceStatus } from '@/shared/core';
 

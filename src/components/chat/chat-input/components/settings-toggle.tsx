@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+import type { Icon } from '@phosphor-icons/react';
 
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -8,7 +8,7 @@ interface SettingsToggleProps {
   pressed: boolean;
   onPressedChange: (pressed: boolean) => void;
   disabled?: boolean;
-  icon: LucideIcon;
+  icon: Icon;
   label: string;
   ariaLabel: string;
   shortcut?: string;

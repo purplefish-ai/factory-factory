@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, FolderOpenIcon } from 'lucide-react';
+import { CheckCircle, FolderOpen } from '@phosphor-icons/react';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -69,13 +69,13 @@ export function ProjectRepoForm({
           />
           {isElectron && (
             <Button type="button" variant="outline" onClick={handleBrowse}>
-              <FolderOpenIcon className="h-4 w-4" />
+              <FolderOpen className="h-4 w-4" />
             </Button>
           )}
         </div>
         {factoryConfigExists && repoPath.trim() && (
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-            <CheckCircle2Icon className="h-4 w-4" />
+            <CheckCircle className="h-4 w-4" />
             <span>factory-factory.json detected</span>
           </div>
         )}

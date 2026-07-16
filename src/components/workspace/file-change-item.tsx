@@ -1,4 +1,4 @@
-import { FileCode, FileMinus, FilePlus, FileQuestion } from 'lucide-react';
+import { FileCode, FileDashed, FileMinus, FilePlus } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -39,7 +39,7 @@ function getStatusIcon(kind: FileChangeKind) {
     case 'deleted':
       return <FileMinus className="h-4 w-4" />;
     case 'untracked':
-      return <FileQuestion className="h-4 w-4" />;
+      return <FileDashed className="h-4 w-4" />;
   }
 }
 

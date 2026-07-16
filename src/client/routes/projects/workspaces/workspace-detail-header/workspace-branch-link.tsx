@@ -1,4 +1,4 @@
-import { Github } from 'lucide-react';
+import { GithubLogo } from '@phosphor-icons/react';
 import { trpc } from '@/client/lib/trpc';
 import { encodeGitHubTreeRef } from '@/client/routes/projects/workspaces/github-branch-url';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ export function WorkspaceBranchLink({
     return (
       <DropdownMenuItem asChild>
         <a href={branchUrl} target="_blank" rel="noopener noreferrer">
-          <Github className="h-4 w-4" />
+          <GithubLogo className="h-4 w-4" />
           Open branch on GitHub
         </a>
       </DropdownMenuItem>
@@ -48,7 +48,7 @@ export function WorkspaceBranchLink({
             rel="noopener noreferrer"
             aria-label="Open branch on GitHub"
           >
-            <Github className="h-4 w-4" />
+            <GithubLogo className="h-4 w-4" />
           </a>
         </Button>
       </TooltipTrigger>

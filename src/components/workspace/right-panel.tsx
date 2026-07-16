@@ -1,14 +1,14 @@
 import {
+  ArrowsClockwise,
   Calendar,
   Camera,
-  FileQuestion,
+  FileDashed,
   Files,
-  ListTodo,
-  Network,
+  ListChecks,
   Plus,
-  RefreshCw,
   Terminal,
-} from 'lucide-react';
+  TreeStructure,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -157,7 +157,7 @@ function TopPanelArea({
       <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
         <TabButton
           label="Changes"
-          icon={<FileQuestion className="h-3.5 w-3.5" />}
+          icon={<FileDashed className="h-3.5 w-3.5" />}
           isActive={showChanges}
           onSelect={() => onTopTabChange('changes')}
         />
@@ -169,14 +169,14 @@ function TopPanelArea({
         />
         <TabButton
           label="Tasks"
-          icon={<ListTodo className="h-3.5 w-3.5" />}
+          icon={<ListChecks className="h-3.5 w-3.5" />}
           isActive={showTasks}
           onSelect={() => onTopTabChange('tasks')}
         />
         {isAutoIteration && (
           <TabButton
             label="Iterations"
-            icon={<RefreshCw className="h-3.5 w-3.5" />}
+            icon={<ArrowsClockwise className="h-3.5 w-3.5" />}
             isActive={showAutoIteration}
             onSelect={() => onTopTabChange('auto-iteration')}
           />
@@ -192,7 +192,7 @@ function TopPanelArea({
         {isParentWorkspace && (
           <TabButton
             label="Children"
-            icon={<Network className="h-3.5 w-3.5" />}
+            icon={<TreeStructure className="h-3.5 w-3.5" />}
             isActive={showChildWorkspaces}
             onSelect={() => onTopTabChange('child-workspaces')}
           />

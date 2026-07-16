@@ -1,4 +1,4 @@
-import { Archive, Plus } from 'lucide-react';
+import { Archive, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAppHeader } from '@/client/components/app-header-context';

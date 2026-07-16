@@ -1,4 +1,4 @@
-import { CheckCircle, ChevronRight, Loader2, Pause, XCircle } from 'lucide-react';
+import { CaretRight, CheckCircle, Pause, SpinnerGap, XCircle } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -84,7 +84,7 @@ function StagesStepper({ currentStage }: { currentStage: Stage | null }) {
       {STAGE_ORDER.map((stage, i) => (
         <div key={stage} className="flex items-center gap-1">
           {i > 0 && (
-            <ChevronRight
+            <CaretRight
               className={cn(
                 'h-3 w-3 flex-shrink-0',
                 stepStates[STAGE_ORDER[i - 1] as Stage] === 'completed'
@@ -290,7 +290,7 @@ function RunningBanner({
   if (currentIteration === 0) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b text-xs">
-        <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+        <SpinnerGap className="h-3 w-3 animate-spin text-primary shrink-0" />
         <span className="text-muted-foreground">Running baseline measurement...</span>
       </div>
     );

@@ -1,4 +1,4 @@
-import { ExternalLink, FileCode } from 'lucide-react';
+import { ArrowSquareOut, FileCode } from '@phosphor-icons/react';
 import mermaid from 'mermaid';
 import {
   type ComponentPropsWithoutRef,
@@ -154,7 +154,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
           >
             {children}
-            <ExternalLink className="h-3 w-3 shrink-0" />
+            <ArrowSquareOut className="h-3 w-3 shrink-0" />
           </a>
         );
       },

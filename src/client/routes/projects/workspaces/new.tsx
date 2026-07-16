@@ -1,5 +1,5 @@
+import { ArrowLeft } from '@phosphor-icons/react';
 import type { Workspace } from '@prisma-gen/browser';
-import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Loading } from '@/client/components/loading';

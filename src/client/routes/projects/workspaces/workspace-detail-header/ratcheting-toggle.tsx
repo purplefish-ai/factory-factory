@@ -1,4 +1,4 @@
-import { Loader2, Zap } from 'lucide-react';
+import { Lightning, SpinnerGap } from '@phosphor-icons/react';
 import {
   applyRatchetToggleState,
   updateWorkspaceRatchetState,
@@ -66,9 +66,9 @@ export function RatchetingToggle({
         disabled={toggleRatcheting.isPending}
       >
         {toggleRatcheting.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <SpinnerGap className="h-4 w-4 animate-spin" />
         ) : (
-          <Zap className="h-4 w-4" />
+          <Lightning className="h-4 w-4" />
         )}
         {workspaceRatchetEnabled ? 'Turn off Ratchet' : 'Turn on Ratchet'}
       </DropdownMenuItem>

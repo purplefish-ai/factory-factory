@@ -1,4 +1,4 @@
-import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
+import { Eye, FileCode, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
 import { useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -53,7 +53,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   if (isLoadingFile) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -61,7 +61,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   if (fileError) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <WarningCircle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-lg font-medium text-destructive">Failed to load file</p>
         <p className="text-sm text-muted-foreground mt-2">{fileError.message}</p>
       </div>
@@ -209,7 +209,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -217,7 +217,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <WarningCircle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-lg font-medium text-destructive">Failed to load diff</p>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
       </div>

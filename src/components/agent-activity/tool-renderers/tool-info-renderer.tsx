@@ -1,11 +1,11 @@
 import {
-  AlertCircle,
+  CaretDown,
+  CaretRight,
   CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
+  SpinnerGap,
   Terminal,
-} from 'lucide-react';
+  WarningCircle,
+} from '@phosphor-icons/react';
 import * as React from 'react';
 import { memo } from 'react';
 import type { ToolCallInfo } from '@/components/agent-activity/types';
@@ -76,12 +76,12 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
           <CollapsibleTrigger asChild>
             <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
               {isOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
               {isPending ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                <SpinnerGap className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
               ) : (
                 <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
@@ -127,12 +127,12 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
           <CollapsibleTrigger asChild>
             <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
               {isOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
               {resultInfo.isError ? (
-                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                <WarningCircle className="h-4 w-4 shrink-0 text-destructive" />
               ) : (
                 <CheckCircle className="h-4 w-4 shrink-0 text-success" />
               )}
@@ -271,13 +271,13 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
           )}
           {statusCounts.error > 0 && (
             <span className="flex items-center gap-0.5" title={`${statusCounts.error} failed`}>
-              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+              <WarningCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
               <span className="text-[10px] text-destructive">{statusCounts.error}</span>
             </span>
           )}
           {statusCounts.pending > 0 && (
             <span className="flex items-center gap-0.5" title={`${statusCounts.pending} pending`}>
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+              <SpinnerGap className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
               <span className="text-[10px] text-muted-foreground">{statusCounts.pending}</span>
             </span>
           )}
@@ -298,13 +298,13 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         case 'error':
           return (
             <span key={key} title="Error">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+              <WarningCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
             </span>
           );
         case 'pending':
           return (
             <span key={key} title="Pending">
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+              <SpinnerGap className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
             </span>
           );
       }
@@ -342,9 +342,9 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
             <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="text-xs min-w-0 flex-1 truncate">
@@ -429,14 +429,14 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
             {isPending ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              <SpinnerGap className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
             ) : isError ? (
-              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              <WarningCircle className="h-4 w-4 shrink-0 text-destructive" />
             ) : (
               <CheckCircle className="h-4 w-4 shrink-0 text-success" />
             )}
@@ -521,9 +521,9 @@ export const ToolCallGroupRenderer = memo(function ToolCallGroupRenderer({
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/50 transition-colors">
             {isOpen ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
             <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="text-xs">{toolCalls.length} tool calls</span>
@@ -576,9 +576,9 @@ const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps)
       <CollapsibleTrigger asChild>
         <button className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-muted/30 transition-colors">
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <CaretDown className="h-4 w-4 shrink-0 text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
           <span className="font-mono text-xs flex-1 min-w-0 truncate" title={toolCall.name}>
             {displayName}
@@ -586,7 +586,7 @@ const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps)
           {toolCall.result && (
             <span className="ml-auto">
               {toolCall.result.isError ? (
-                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                <WarningCircle className="h-4 w-4 shrink-0 text-destructive" />
               ) : (
                 <CheckCircle className="h-4 w-4 shrink-0 text-success" />
               )}

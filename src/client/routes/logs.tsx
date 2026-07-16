@@ -1,14 +1,14 @@
-import { keepPreviousData } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import {
   ArrowLeft,
-  CalendarIcon,
-  ChevronDown,
-  ChevronRight,
+  Calendar,
+  CaretDown,
+  CaretRight,
   Download,
-  Search,
+  MagnifyingGlass,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
+import { keepPreviousData } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAppHeader } from '@/client/components/app-header-context';
@@ -18,7 +18,7 @@ import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
+import { Calendar as DatePickerCalendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -93,12 +93,12 @@ function DatePicker({
               !date && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <Calendar className="mr-2 h-4 w-4 shrink-0" />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
+          <DatePickerCalendar
             mode="single"
             selected={date}
             onSelect={(d) => {
@@ -277,7 +277,7 @@ export default function LogsPage() {
         {/* Controls */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative w-full sm:min-w-[200px] sm:max-w-sm sm:flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlass className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search messages or components..."
               value={search}
@@ -404,9 +404,9 @@ export default function LogsPage() {
                       <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           {isExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                            <CaretDown className="w-3.5 h-3.5 shrink-0" />
                           ) : (
-                            <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                            <CaretRight className="w-3.5 h-3.5 shrink-0" />
                           )}
                           {new Date(entry.timestamp).toLocaleString()}
                         </div>

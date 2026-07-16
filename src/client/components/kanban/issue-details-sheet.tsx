@@ -1,4 +1,4 @@
-import { CircleDot, ExternalLink, Play, User } from 'lucide-react';
+import { ArrowSquareOut, DotOutline, Play, User } from '@phosphor-icons/react';
 import { useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
@@ -94,7 +94,7 @@ function IssueDetailsContent({
               <SheetTitle className="text-xl leading-tight pr-8">{issue.title}</SheetTitle>
               <SheetDescription className="flex items-center gap-2 text-xs mt-2">
                 <span className="inline-flex items-center gap-1">
-                  <CircleDot className="h-3 w-3 text-green-500" />
+                  <DotOutline className="h-3 w-3 text-green-500" />
                   <span>{issue.displayId}</span>
                 </span>
                 <span>•</span>
@@ -135,7 +135,7 @@ function IssueDetailsContent({
             onClick={() => window.open(issue.url, '_blank', 'noopener,noreferrer')}
             variant="outline"
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
+            <ArrowSquareOut className="h-4 w-4 mr-2" />
             {externalLabel}
           </Button>
           <Button onClick={() => setLaunchSheetOpen(true)} className="flex-1">

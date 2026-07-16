@@ -1,4 +1,4 @@
-import { CheckSquare, Circle, Square } from 'lucide-react';
+import { CheckSquare, Circle, Square } from '@phosphor-icons/react';
 import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
 import { cn } from '@/lib/utils';

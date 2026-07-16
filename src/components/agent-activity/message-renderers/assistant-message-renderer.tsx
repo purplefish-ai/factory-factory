@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { SpinnerGap } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
 import type { AgentMessage } from '@/lib/chat-protocol';
@@ -221,7 +221,7 @@ export const LoadingIndicator = memo(function LoadingIndicator({
   const loadingText = getLoadingText(latestReasoning);
   return (
     <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
-      <Loader2 className="h-4 w-4 animate-spin shrink-0 mt-0.5" />
+      <SpinnerGap className="h-4 w-4 animate-spin shrink-0 mt-0.5" />
       <span className="min-w-0 flex-1 text-sm leading-normal break-words">{loadingText}</span>
     </div>
   );

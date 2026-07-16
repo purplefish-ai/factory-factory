@@ -1,11 +1,11 @@
 import {
-  ArrowRightLeft,
+  ArrowsLeftRight,
   FileCode,
+  FileDashed,
   FileMinus,
   FilePlus,
-  FileQuestion,
-  type LucideIcon,
-} from 'lucide-react';
+  type Icon,
+} from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type {
@@ -41,7 +41,7 @@ function getKindLabel(kind: CodexFileChangeKind): string {
 }
 
 function getKindMeta(kind: CodexFileChangeKind): {
-  icon: LucideIcon;
+  icon: Icon;
   className: string;
   iconColorClass: string;
 } {
@@ -66,13 +66,13 @@ function getKindMeta(kind: CodexFileChangeKind): {
       };
     case 'move':
       return {
-        icon: ArrowRightLeft,
+        icon: ArrowsLeftRight,
         className: 'text-sky-600 border-sky-500/40 bg-sky-500/10',
         iconColorClass: 'text-sky-600',
       };
     case 'unknown':
       return {
-        icon: FileQuestion,
+        icon: FileDashed,
         className: 'text-muted-foreground border-border bg-muted/50',
         iconColorClass: 'text-muted-foreground',
       };
@@ -189,7 +189,7 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
                 </div>
                 {change.movePath && (
                   <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                    <ArrowsLeftRight className="h-3 w-3 shrink-0" />
                     <span className="font-mono truncate" title={change.movePath}>
                       {change.movePath}
                     </span>

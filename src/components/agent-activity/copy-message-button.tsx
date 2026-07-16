@@ -1,4 +1,4 @@
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy } from '@phosphor-icons/react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 

@@ -1,4 +1,4 @@
-import { Wrench } from 'lucide-react';
+import { Wrench } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { getRatchetVisualState } from './ratchet-state';
 

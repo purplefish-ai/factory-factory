@@ -1,16 +1,16 @@
 import {
-  CheckCircle2,
+  ArrowSquareOut,
+  ArrowsClockwise,
+  CheckCircle,
   Download,
-  ExternalLink,
-  FileJson,
+  FileCode,
   FileText,
-  Link2,
+  Link,
   Pencil,
-  RefreshCw,
   Terminal,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link as RouterLink } from 'react-router';
 import { toast } from 'sonner';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
@@ -130,12 +130,12 @@ function ProjectFactoryConfigCard({
             <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {factoryConfig ? (
               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                <CheckCircle2 className="w-3 h-3 mr-1" />
+                <CheckCircle className="w-3 h-3 mr-1" />
                 Configured
               </Badge>
             ) : (
               <Badge variant="secondary" className="bg-muted">
-                <FileJson className="w-3 h-3 mr-1" />
+                <FileCode className="w-3 h-3 mr-1" />
                 Not configured
               </Badge>
             )}
@@ -155,7 +155,9 @@ function ProjectFactoryConfigCard({
             disabled={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
+            <ArrowsClockwise
+              className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`}
+            />
             Refresh Workspaces
           </Button>
         </div>
@@ -240,7 +242,7 @@ function ProjectSettingsSection({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileJson className="w-5 h-5" />
+            <FileCode className="w-5 h-5" />
             Factory Configuration
           </CardTitle>
           <CardDescription>
@@ -269,7 +271,7 @@ function ProjectSettingsSection({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Link2 className="w-5 h-5" />
+            <Link className="w-5 h-5" />
             Issue Tracking
           </CardTitle>
           <CardDescription>Configure the issue provider (GitHub Issues or Linear)</CardDescription>
@@ -782,7 +784,7 @@ function AppInfoSection() {
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             GitHub
-            <ExternalLink className="h-3.5 w-3.5" />
+            <ArrowSquareOut className="h-3.5 w-3.5" />
           </a>
         </div>
         <div className="space-y-2">
@@ -947,12 +949,12 @@ function RatchetSettingsSection() {
             >
               {triggerRatchetCheck.isPending ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <ArrowsClockwise className="w-4 h-4 mr-2 animate-spin" />
                   Checking...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <ArrowsClockwise className="w-4 h-4 mr-2" />
                   Check All PRs Now
                 </>
               )}
@@ -994,7 +996,7 @@ function DataBackupSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileJson className="w-5 h-5" />
+          <FileCode className="w-5 h-5" />
           Data Backup
         </CardTitle>
         <CardDescription>
@@ -1036,11 +1038,11 @@ function ServerLogsSection() {
         <CardDescription>View and search structured server log entries</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <Link to="/logs">
+        <RouterLink to="/logs">
           <Button variant="outline" className="w-full sm:w-auto">
             View Logs
           </Button>
-        </Link>
+        </RouterLink>
         <Button
           variant="outline"
           onClick={download}

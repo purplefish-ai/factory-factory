@@ -1,14 +1,14 @@
 import {
-  Activity,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
+  CaretLeft,
+  CaretRight,
+  CheckCircle,
   Circle,
   PauseCircle,
   Plus,
+  Pulse,
   X,
   XCircle,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -53,7 +53,7 @@ function getSessionDisplayName(session: SessionData, index: number): string {
 
 function getStatusIcon(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
-    return Activity;
+    return Pulse;
   }
   if (status === 'IDLE') {
     return Circle;
@@ -62,7 +62,7 @@ function getStatusIcon(status: SessionStatus, isRunning: boolean) {
     return PauseCircle;
   }
   if (status === 'COMPLETED') {
-    return CheckCircle2;
+    return CheckCircle;
   }
   return XCircle;
 }
@@ -262,7 +262,7 @@ export function SessionTabBar({
           onClick={scrollLeft}
           disabled={disabled}
         >
-          <ChevronLeft className="h-4 w-4" />
+          <CaretLeft className="h-4 w-4" />
         </Button>
       )}
 
@@ -307,7 +307,7 @@ export function SessionTabBar({
           onClick={scrollRight}
           disabled={disabled}
         >
-          <ChevronRight className="h-4 w-4" />
+          <CaretRight className="h-4 w-4" />
         </Button>
       )}
 

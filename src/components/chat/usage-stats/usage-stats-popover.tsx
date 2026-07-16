@@ -1,4 +1,4 @@
-import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
+import { Clock, Coins, Database, Globe, Lightning, Stack } from '@phosphor-icons/react';
 
 import { Progress } from '@/components/ui/progress';
 import type { TokenStats } from '@/lib/chat-protocol';
@@ -127,12 +127,12 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
       <div className="space-y-0.5">
         {/* Token Breakdown */}
         <StatRow
-          icon={<Layers className="h-3 w-3" />}
+          icon={<Stack className="h-3 w-3" />}
           label="Input tokens"
           value={formatTokenCount(tokenStats.inputTokens)}
         />
         <StatRow
-          icon={<Layers className="h-3 w-3" />}
+          icon={<Stack className="h-3 w-3" />}
           label="Output tokens"
           value={formatTokenCount(tokenStats.outputTokens)}
         />
@@ -164,7 +164,11 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
         />
 
         {tokenStats.turnCount > 0 && (
-          <StatRow icon={<Zap className="h-3 w-3" />} label="Turns" value={tokenStats.turnCount} />
+          <StatRow
+            icon={<Lightning className="h-3 w-3" />}
+            label="Turns"
+            value={tokenStats.turnCount}
+          />
         )}
 
         {tokenStats.totalDurationMs > 0 && (
@@ -196,7 +200,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
           <>
             <div className="my-1.5 border-t" />
             <StatRow
-              icon={<Zap className="h-3 w-3" />}
+              icon={<Lightning className="h-3 w-3" />}
               label="Service tier"
               value={tokenStats.serviceTier}
             />

@@ -1,19 +1,18 @@
 import {
+  ArrowsClockwise,
+  CaretDown,
+  CaretRight,
   CheckCircle,
-  ChevronDown,
-  ChevronRight,
+  FloppyDisk,
   Lightbulb,
   List,
-  Loader2,
-  OctagonX,
   Pause,
   Play,
-  RefreshCw,
-  Save,
+  SpinnerGap,
   Square,
   Terminal,
   XCircle,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -98,7 +97,7 @@ const ENTRY_STATUS_CONFIG: Record<
   accepted: { icon: CheckCircle, label: 'Accepted', color: 'text-green-500' },
   rejected_regression: { icon: XCircle, label: 'Rejected (regression)', color: 'text-orange-500' },
   rejected_critique: { icon: XCircle, label: 'Rejected (critique)', color: 'text-amber-500' },
-  crashed: { icon: OctagonX, label: 'Crashed', color: 'text-red-500' },
+  crashed: { icon: XCircle, label: 'Crashed', color: 'text-red-500' },
 };
 
 function TestOutputBlock({ output, maxLines = 30 }: { output: string; maxLines?: number }) {
@@ -138,9 +137,9 @@ function IterationEntry({ entry }: { entry: LogbookEntry }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         )}
         <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', config.color)} />
         <div className="min-w-0 flex-1">
@@ -210,9 +209,9 @@ function PhaseIndicator({ phase }: { phase: string }) {
       )}
     >
       {isActive ? (
-        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+        <SpinnerGap className="h-3 w-3 animate-spin shrink-0" />
       ) : (
-        <RefreshCw className="h-3 w-3 shrink-0" />
+        <ArrowsClockwise className="h-3 w-3 shrink-0" />
       )}
       <span>{label}</span>
     </div>
@@ -258,11 +257,11 @@ function BaselineSection({ baseline }: { baseline: LogbookData['baseline'] }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         )}
-        <RefreshCw className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+        <ArrowsClockwise className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="font-medium">Baseline</span>
@@ -318,7 +317,7 @@ function ProgressSummary({
     <div className="space-y-2 p-3 border-b">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <RefreshCw
+          <ArrowsClockwise
             className={cn(
               'h-3.5 w-3.5',
               status === 'RUNNING' && 'animate-spin text-primary',
@@ -476,7 +475,9 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => startMutation.mutate({ workspaceId })}
               disabled={startMutation.isPending}
             >
-              <RefreshCw className={cn('h-3.5 w-3.5', startMutation.isPending && 'animate-spin')} />
+              <ArrowsClockwise
+                className={cn('h-3.5 w-3.5', startMutation.isPending && 'animate-spin')}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Restart auto-iteration</TooltipContent>
@@ -523,7 +524,7 @@ function InsightsEditor({ workspaceId }: { workspaceId: string }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center flex-1">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -541,7 +542,7 @@ function InsightsEditor({ workspaceId }: { workspaceId: string }) {
           onClick={handleSave}
           disabled={!dirty || saveMutation.isPending}
         >
-          <Save className="h-3 w-3" />
+          <FloppyDisk className="h-3 w-3" />
           {dirty ? 'Save' : 'Saved'}
         </Button>
       </div>
@@ -627,7 +628,7 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   if (statusLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }

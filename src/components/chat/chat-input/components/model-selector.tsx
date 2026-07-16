@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { CaretDown } from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +34,7 @@ export function ModelSelector({ selectedModel, options, onChange, disabled }: Mo
           className="h-6 max-w-[12rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
           <span className="truncate">{displayName}</span>
-          <ChevronDown className="h-3 w-3 shrink-0" />
+          <CaretDown className="h-3 w-3 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">

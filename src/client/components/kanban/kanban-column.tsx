@@ -1,4 +1,4 @@
-import { Archive } from 'lucide-react';
+import { Archive } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';

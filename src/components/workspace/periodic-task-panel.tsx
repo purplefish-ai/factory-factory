@@ -1,4 +1,4 @@
-import { Calendar, ExternalLink } from 'lucide-react';
+import { ArrowSquareOut, Calendar } from '@phosphor-icons/react';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -130,7 +130,7 @@ function ExecutionRow({
             className="flex items-center gap-1 text-primary hover:underline shrink-0"
           >
             PR #{execution.prNumber}
-            <ExternalLink className="h-3 w-3" />
+            <ArrowSquareOut className="h-3 w-3" />
           </a>
         )}
       </div>

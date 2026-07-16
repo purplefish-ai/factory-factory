@@ -1,4 +1,12 @@
-import { Brain, ImagePlus, Loader2, MapIcon, Send, SlidersHorizontal, Square } from 'lucide-react';
+import {
+  Brain,
+  Image,
+  MapTrifold,
+  PaperPlaneTilt,
+  SlidersHorizontal,
+  SpinnerGap,
+  Square,
+} from '@phosphor-icons/react';
 import { memo, useState } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import type { AcpConfigOption } from '@/components/chat/reducer';
@@ -73,7 +81,7 @@ const FileUploadButton = memo(function FileUploadButton({
               className="h-6 w-6 p-0"
               aria-label="Upload image"
             >
-              <ImagePlus className="h-3.5 w-3.5" />
+              <Image className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">
@@ -242,7 +250,7 @@ const ModeToggles = memo(function ModeToggles({
           pressed={settings?.planModeEnabled ?? false}
           onPressedChange={onPlanModeChange}
           disabled={running}
-          icon={MapIcon}
+          icon={MapTrifold}
           label="Planning mode"
           ariaLabel="Toggle planning mode"
           shortcut={`${modLabel}+Shift+P`}
@@ -436,7 +444,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
                     pressed={settings?.planModeEnabled ?? false}
                     onPressedChange={onPlanModeChange}
                     disabled={running}
-                    icon={MapIcon}
+                    icon={MapTrifold}
                     label="Planning mode"
                     ariaLabel="Toggle planning mode"
                   />
@@ -715,7 +723,7 @@ export const RightControls = memo(function RightControls({
     <div className="ml-auto flex shrink-0 items-center gap-1">
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <SpinnerGap className="h-3 w-3 animate-spin" />
           <span>Sending...</span>
         </div>
       )}
@@ -729,7 +737,7 @@ export const RightControls = memo(function RightControls({
           aria-label={stopping ? 'Stopping...' : 'Stop agent'}
         >
           {stopping ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <SpinnerGap className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
             <Square className="h-3 w-3 fill-current" />
           )}
@@ -741,7 +749,7 @@ export const RightControls = memo(function RightControls({
         size="icon-sm"
         aria-label={running ? 'Queue message' : 'Send message'}
       >
-        <Send className="h-4 w-4" />
+        <PaperPlaneTilt className="h-4 w-4" />
       </InputGroupButton>
     </div>
   );

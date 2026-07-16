@@ -1,4 +1,4 @@
-import { CheckCircle2, FileJson } from 'lucide-react';
+import { CheckCircle, FileCode } from '@phosphor-icons/react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
@@ -24,11 +24,11 @@ export function FactoryConfigScripts({
   if (variant === 'alert') {
     return (
       <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-        <FileJson className="h-4 w-4 text-green-600 dark:text-green-400" />
+        <FileCode className="h-4 w-4 text-green-600 dark:text-green-400" />
         <AlertDescription>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               <span className="font-medium text-green-900 dark:text-green-100">
                 factory-factory.json detected
               </span>
@@ -81,7 +81,7 @@ export function FactoryConfigScripts({
   return (
     <div className="rounded-md border bg-muted/50 p-4 space-y-3">
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
+        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
         <div className="space-y-1 flex-1">
           <p className="font-medium text-sm">Configuration Found</p>
           <p className="text-xs text-muted-foreground">

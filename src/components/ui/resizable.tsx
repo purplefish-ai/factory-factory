@@ -1,4 +1,4 @@
-import { GripVertical } from 'lucide-react';
+import { DotsSixVertical } from '@phosphor-icons/react';
 import type { ComponentProps } from 'react';
 import { useCallback, useMemo } from 'react';
 import type { Layout } from 'react-resizable-panels';
@@ -127,7 +127,7 @@ const ResizableHandle = ({ withHandle, className, direction, ...props }: Resizab
             isHorizontalHandle ? 'h-3 w-4 rotate-90' : 'h-4 w-3'
           )}
         >
-          <GripVertical className="h-2.5 w-2.5" />
+          <DotsSixVertical className="h-2.5 w-2.5" />
         </div>
       )}
     </Separator>

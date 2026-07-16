@@ -1,4 +1,4 @@
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown } from '@phosphor-icons/react';
 import { useCallback, useMemo } from 'react';
 import {
   ChatInput,

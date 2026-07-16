@@ -1,5 +1,5 @@
+import { Robot, Terminal, XCircle } from '@phosphor-icons/react';
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, Terminal, XCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -252,7 +252,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         {hasAgentProcesses && (
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Bot className="w-4 h-4" />
+              <Robot className="w-4 h-4" />
               Agent Sessions ({processes.agent.length})
             </h4>
             {isMobile ? (

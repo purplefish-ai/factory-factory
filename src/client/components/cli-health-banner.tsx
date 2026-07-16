@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { ArrowSquareOut, ArrowsClockwise, Warning, X } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -141,7 +141,7 @@ function renderIssueActions(
           className="inline-flex items-center gap-1 text-warning underline hover:text-warning/80"
         >
           {issue.linkLabel ?? 'Install'}
-          <ExternalLink className="h-3 w-3" />
+          <ArrowSquareOut className="h-3 w-3" />
         </a>
       )}
       {issue.upgradeProvider && (
@@ -182,10 +182,10 @@ export function CLIHealthBannerContent({
     <div className="border-b border-warning/20 bg-warning/10 py-2 pl-3 pr-2 sm:px-4 sm:py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-          <AlertTriangle className="mt-0.5 hidden h-5 w-5 shrink-0 text-warning sm:block" />
+          <Warning className="mt-0.5 hidden h-5 w-5 shrink-0 text-warning sm:block" />
           <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
             <div className="flex items-center gap-2 sm:hidden">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <Warning className="h-4 w-4 shrink-0 text-warning" />
               <p className="min-w-0 flex-1 text-xs font-medium text-warning-foreground dark:text-warning">
                 Some features require additional setup
               </p>
@@ -197,7 +197,9 @@ export function CLIHealthBannerContent({
                   disabled={isRefetching || isUpgrading}
                   className="h-7 px-2 text-warning hover:bg-warning/20"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+                  <ArrowsClockwise
+                    className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`}
+                  />
                   <span className="sr-only">Recheck</span>
                 </Button>
                 <Button
@@ -243,7 +245,7 @@ export function CLIHealthBannerContent({
             disabled={isRefetching || isUpgrading}
             className="h-8 px-2 text-warning hover:bg-warning/20"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+            <ArrowsClockwise className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
             <span className="ml-1.5">Recheck</span>
           </Button>
           <Button

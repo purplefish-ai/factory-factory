@@ -1,4 +1,4 @@
-import { Bell, X } from 'lucide-react';
+import { Bell, X } from '@phosphor-icons/react';
 import { memo, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';

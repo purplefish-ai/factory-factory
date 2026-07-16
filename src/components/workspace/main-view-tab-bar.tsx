@@ -1,4 +1,4 @@
-import { Archive, Camera, FileCode, FileDiff, Plus, RefreshCw } from 'lucide-react';
+import { Archive, ArrowsClockwise, Camera, FileCode, GitDiff, Plus } from '@phosphor-icons/react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
@@ -43,7 +43,7 @@ function getTabIcon(type: MainViewTab['type']) {
     case 'file':
       return FileCode;
     case 'diff':
-      return FileDiff;
+      return GitDiff;
     case 'screenshot':
       return Camera;
     case 'closed-session':
@@ -361,7 +361,7 @@ export function MainViewTabBar({
                 )}
                 aria-label="Restart agent"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <ArrowsClockwise className="h-3.5 w-3.5" />
                 Restart
               </button>
             </TooltipTrigger>

@@ -1,4 +1,4 @@
-import { Plus, Terminal, X } from 'lucide-react';
+import { Plus, Terminal, X } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';

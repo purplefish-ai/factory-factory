@@ -1,4 +1,4 @@
-import { Camera, Loader2, X } from 'lucide-react';
+import { Camera, SpinnerGap, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <SpinnerGap className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -81,7 +81,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
           )}
         </div>
         {isTaking ? (
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <SpinnerGap className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : (
           onTakeScreenshots && (
             <Button variant="outline" size="sm" onClick={handleTakeScreenshots} className="gap-1.5">
@@ -149,7 +149,7 @@ function ScreenshotThumbnail({
     >
       {isLoading ? (
         <div className="flex items-center justify-center h-full">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <SpinnerGap className="h-4 w-4 animate-spin text-muted-foreground" />
         </div>
       ) : data ? (
         <img

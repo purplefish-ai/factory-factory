@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Play, Square } from 'lucide-react';
+import { Pencil, Play, SpinnerGap, Square } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -133,7 +133,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <Loader2 className="h-3 w-3 animate-spin md:h-4 md:w-4" />
+                    <SpinnerGap className="h-3 w-3 animate-spin md:h-4 md:w-4" />
                   ) : isRunning ? (
                     <Square className="h-3 w-3 text-destructive fill-destructive md:h-4 md:w-4" />
                   ) : (

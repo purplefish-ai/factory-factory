@@ -1,12 +1,12 @@
 import {
-  Activity,
-  CheckCircle2,
+  CheckCircle,
   Circle,
-  CircleSlash,
-  Loader2,
-  type LucideIcon,
+  type Icon,
+  Prohibit,
+  Pulse,
+  SpinnerGap,
   XCircle,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   getSessionSummaryErrorMessage,
@@ -22,7 +22,7 @@ export interface SessionTabRuntimeInfo {
   spin: boolean;
   label: string;
   description: string;
-  icon: LucideIcon;
+  icon: Icon;
   isRunning: boolean;
 }
 
@@ -44,7 +44,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Running',
       description: 'Processing your request',
-      icon: Activity,
+      icon: Pulse,
       isRunning: true,
     };
   }
@@ -56,7 +56,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Paused',
       description: 'Session paused',
-      icon: CircleSlash,
+      icon: Prohibit,
       isRunning: false,
     };
   }
@@ -68,7 +68,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Completed',
       description: 'Session finished',
-      icon: CheckCircle2,
+      icon: CheckCircle,
       isRunning: false,
     };
   }
@@ -103,7 +103,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Loading',
       description: 'Loading session...',
-      icon: Loader2,
+      icon: SpinnerGap,
       isRunning: false,
     };
   }
@@ -115,7 +115,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Starting',
       description: 'Launching agent...',
-      icon: Loader2,
+      icon: SpinnerGap,
       isRunning: false,
     };
   }
@@ -127,7 +127,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Stopping',
       description: 'Finishing current request...',
-      icon: Loader2,
+      icon: SpinnerGap,
       isRunning: false,
     };
   }
@@ -167,7 +167,7 @@ export function deriveSessionTabRuntime(
       spin: false,
       label: 'Stopped',
       description: 'Send a message to start',
-      icon: CircleSlash,
+      icon: Prohibit,
       isRunning: false,
     };
   }
@@ -179,7 +179,7 @@ export function deriveSessionTabRuntime(
       spin: false,
       label: 'Running',
       description: 'Processing your request',
-      icon: Activity,
+      icon: Pulse,
       isRunning: true,
     };
   }
