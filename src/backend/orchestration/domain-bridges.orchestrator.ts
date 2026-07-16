@@ -199,6 +199,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
     getPRFullDetails: (repo, pr) => githubCLIService.getPRFullDetails(repo, pr),
     getReviewComments: (repo, pr, since) => githubCLIService.getReviewComments(repo, pr, since),
+    getResolvedReviewCommentIds: (repo, pr) =>
+      githubCLIService.getResolvedReviewCommentIds(repo, pr),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null

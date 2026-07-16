@@ -79,6 +79,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   extractPRInfo: vi.fn(),
   getPRFullDetails: vi.fn(),
   getReviewComments: vi.fn(),
+  getResolvedReviewCommentIds: vi.fn(),
   computeCIStatus: vi.fn(),
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
@@ -113,6 +114,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
+    vi.mocked(mockGitHubBridge.getResolvedReviewCommentIds).mockResolvedValue(new Set());
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
       id: 'settings-1',

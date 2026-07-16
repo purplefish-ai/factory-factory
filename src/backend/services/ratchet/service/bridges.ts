@@ -62,6 +62,7 @@ export interface RatchetPRFullDetails {
 
 /** Review comment as returned by the GitHub bridge */
 export interface RatchetReviewComment {
+  id: number;
   author: { login: string };
   body: string;
   path: string;
@@ -106,6 +107,8 @@ export interface RatchetGitHubBridge {
   extractPRInfo(prUrl: string): { owner: string; repo: string; number?: number } | null;
   getPRFullDetails(repo: string, prNumber: number): Promise<RatchetPRFullDetails>;
   getReviewComments(repo: string, prNumber: number, since?: Date): Promise<RatchetReviewComment[]>;
+  /** REST ids of review comments that belong to resolved review threads. */
+  getResolvedReviewCommentIds(repo: string, prNumber: number): Promise<Set<number>>;
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
   getAuthenticatedUsername(): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;

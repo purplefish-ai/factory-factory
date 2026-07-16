@@ -373,9 +373,19 @@ export async function fetchPRState(params: {
     // scheduler/ratchet calls see it and skip redundant fetches.
     github.startFetch(workspace.id);
 
-    const [prDetails, reviewComments] = await Promise.all([
+    const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber),
       github.getReviewComments(prContext.repo, prContext.prNumber),
+      // Degrade gracefully: without resolution data, fall back to including
+      // all review comments (pre-filtering behavior) rather than failing the check.
+      github.getResolvedReviewCommentIds(prContext.repo, prContext.prNumber).catch((error) => {
+        logger.warn('Failed to fetch resolved review threads; including all review comments', {
+          workspaceId: workspace.id,
+          prUrl: workspace.prUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return new Set<number>();
+      }),
     ]);
 
     const statusCheckRollup =
@@ -394,6 +404,11 @@ export async function fetchPRState(params: {
 
     const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
     const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
+    // Review activity (and thus the dispatch snapshot key) is computed over ALL
+    // review comments, resolved or not. Resolving a thread does not touch the
+    // comments' timestamps, so this keeps the snapshot key stable when threads
+    // get resolved; excluding resolved comments would change the key on every
+    // resolution and re-trigger dispatches.
     const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
       prDetails,
       reviewComments,
@@ -407,8 +422,17 @@ export async function fetchPRState(params: {
       hasMergeConflict
     );
 
+    // Resolved threads are settled feedback: drop them from the fixer prompt
+    // and from the actionable-trigger count so they cannot re-trigger or
+    // re-litigate dispatches.
     const filteredReviewComments = reviewComments
-      .filter((c) => !isIgnoredReviewAuthor(c.author.login, authenticatedUsername))
+      .filter(
+        (c) =>
+          !(
+            resolvedReviewCommentIds.has(c.id) ||
+            isIgnoredReviewAuthor(c.author.login, authenticatedUsername)
+          )
+      )
       .map((c) => ({
         author: c.author.login,
         body: c.body,
@@ -416,6 +440,14 @@ export async function fetchPRState(params: {
         line: c.line,
         url: c.url,
       }));
+    if (filteredReviewComments.length < reviewComments.length) {
+      logger.debug('Filtered review comments for ratchet dispatch', {
+        workspaceId: workspace.id,
+        totalComments: reviewComments.length,
+        includedComments: filteredReviewComments.length,
+        resolvedThreadCommentIds: resolvedReviewCommentIds.size,
+      });
+    }
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
