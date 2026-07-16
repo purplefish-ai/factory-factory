@@ -396,6 +396,16 @@ describe('useWebSocketTransport replay queue', () => {
     await flushEffects();
     expect(harness.transportRef.current?.gaveUp).toBe(false);
 
+    // Restoring the URL must grant a fresh attempt budget: the first failure
+    // schedules a retry instead of immediately giving up again.
+    harness.rerenderUrl('ws://localhost:3000/chat');
+    await vi.advanceTimersByTimeAsync(0);
+    await flushEffects();
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
     harness.cleanup();
   });
 
