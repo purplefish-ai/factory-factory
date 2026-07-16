@@ -45,6 +45,14 @@ export type SnapshotConnectionsMap = Map<string, Set<WebSocket>>;
 
 export const snapshotConnections: SnapshotConnectionsMap = new Map();
 
+/**
+ * Deltas that arrive for a socket before its snapshot_full baseline has been
+ * sent. Entries exist only between connection setup and the baseline send;
+ * flushing after snapshot_full may replay deltas already reflected in the
+ * baseline, which is safe because clients upsert by workspaceId.
+ */
+const pendingDeltaBuffers = new WeakMap<WebSocket, string[]>();
+
 // ============================================================================
 // Store Event Fan-Out
 // ============================================================================
@@ -64,31 +72,47 @@ class SnapshotStoreSubscriptionState {
       return;
     }
 
+    // Buffered replays omit reviewCount: it is computed before the
+    // snapshot_full baseline, and clients keep their current count when the
+    // field is absent, so replaying it would regress the baseline's count.
+    const fanOut = (
+      projectClients: Set<WebSocket>,
+      payload: Record<string, unknown>,
+      description: string
+    ) => {
+      const reviewCount = getSnapshotReviewCount(logger);
+      const message = JSON.stringify({ ...payload, reviewCount });
+      let bufferedMessage: string | null = null;
+
+      for (const ws of projectClients) {
+        const pendingDeltas = pendingDeltaBuffers.get(ws);
+        if (pendingDeltas) {
+          bufferedMessage ??= JSON.stringify(payload);
+          pendingDeltas.push(bufferedMessage);
+        } else {
+          safeSend(ws, message, logger, description);
+        }
+      }
+    };
+
     const changedListener = (event: SnapshotChangedEvent) => {
       const projectClients = connections.get(event.projectId);
       if (!projectClients || projectClients.size === 0) {
         return;
       }
 
-      const reviewCount = getSnapshotReviewCount(logger);
-      const message = JSON.stringify(
-        isHiddenWorkspaceStatus(event.entry.status)
-          ? {
-              type: 'snapshot_removed',
-              workspaceId: event.workspaceId,
-              reviewCount,
-            }
-          : {
-              type: 'snapshot_changed',
-              workspaceId: event.workspaceId,
-              entry: event.entry,
-              reviewCount,
-            }
-      );
+      const payload = isHiddenWorkspaceStatus(event.entry.status)
+        ? {
+            type: 'snapshot_removed',
+            workspaceId: event.workspaceId,
+          }
+        : {
+            type: 'snapshot_changed',
+            workspaceId: event.workspaceId,
+            entry: event.entry,
+          };
 
-      for (const ws of projectClients) {
-        safeSend(ws, message, logger, 'snapshot delta');
-      }
+      fanOut(projectClients, payload, 'snapshot delta');
     };
 
     const removedListener = (event: SnapshotRemovedEvent) => {
@@ -97,16 +121,14 @@ class SnapshotStoreSubscriptionState {
         return;
       }
 
-      const reviewCount = getSnapshotReviewCount(logger);
-      const message = JSON.stringify({
-        type: 'snapshot_removed',
-        workspaceId: event.workspaceId,
-        reviewCount,
-      });
-
-      for (const ws of projectClients) {
-        safeSend(ws, message, logger, 'snapshot removal');
-      }
+      fanOut(
+        projectClients,
+        {
+          type: 'snapshot_removed',
+          workspaceId: event.workspaceId,
+        },
+        'snapshot removal'
+      );
     };
 
     workspaceSnapshotStore.on(SNAPSHOT_CHANGED, changedListener);
@@ -228,21 +250,24 @@ export function createSnapshotsUpgradeHandler(
       markWebSocketAlive(ws, wsAliveMap);
 
       // Add to connection set FIRST so we don't miss any delta events during
-      // the optional reconciliation wait below.
+      // the optional reconciliation wait below. Deltas that arrive before the
+      // snapshot_full baseline are buffered and flushed after it.
       getOrCreateConnectionSet(connections, projectId).add(ws);
+      pendingDeltaBuffers.set(ws, []);
 
       // If a startup reconciliation is in progress and the store has no entries
       // yet for this project, wait for it before sending snapshot_full so the
       // client receives populated data rather than an empty array.
       const sendSnapshot = () => {
         if (ws.readyState !== WS_READY_STATE.OPEN) {
+          // Keep buffering; the close handler cleans the buffer up.
           return;
         }
         const reviewCount = getSnapshotReviewCount(logger);
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-        safeSend(
+        const baselineSent = safeSend(
           ws,
           JSON.stringify({
             type: 'snapshot_full',
@@ -253,6 +278,15 @@ export function createSnapshotsUpgradeHandler(
           logger,
           'full snapshot'
         );
+        if (!baselineSent) {
+          // The client has no baseline, so deltas must not start flowing.
+          return;
+        }
+        const pendingDeltas = pendingDeltaBuffers.get(ws) ?? [];
+        pendingDeltaBuffers.delete(ws);
+        for (const delta of pendingDeltas) {
+          safeSend(ws, delta, logger, 'buffered snapshot delta');
+        }
       };
 
       const storeHasEntries = workspaceSnapshotStore.getByProjectId(projectId).length > 0;
@@ -268,6 +302,7 @@ export function createSnapshotsUpgradeHandler(
       ws.on('close', () => {
         logger.info('Snapshots WebSocket connection closed', { projectId });
 
+        pendingDeltaBuffers.delete(ws);
         const projectConnections = connections.get(projectId);
         if (projectConnections) {
           projectConnections.delete(ws);

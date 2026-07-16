@@ -19,6 +19,7 @@ const TerminalMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('created'),
     terminalId: z.string().optional(),
     requestId: z.string().optional(),
+    outputBuffer: z.string().optional(),
   }),
   z.object({
     type: z.literal('exit'),
@@ -45,7 +46,7 @@ type TerminalMessage = z.infer<typeof TerminalMessageSchema>;
 interface UseTerminalWebSocketOptions {
   workspaceId: string;
   onOutput?: (terminalId: string, data: string) => void;
-  onCreated?: (terminalId: string, requestId?: string) => void;
+  onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
   onError?: (message: string, requestId?: string) => void;
   onTerminalList?: (
@@ -55,6 +56,9 @@ interface UseTerminalWebSocketOptions {
 
 interface UseTerminalWebSocketReturn {
   connected: boolean;
+  /** True when automatic reconnection has stopped; call reconnect() to retry. */
+  gaveUp: boolean;
+  reconnect: () => void;
   create: (requestId: string, cols?: number, rows?: number) => void;
   sendInput: (terminalId: string, data: string) => void;
   resize: (terminalId: string, cols: number, rows: number) => void;
@@ -68,7 +72,7 @@ interface UseTerminalWebSocketReturn {
 
 interface MessageHandlerCallbacks {
   onOutput?: (terminalId: string, data: string) => void;
-  onCreated?: (terminalId: string, requestId?: string) => void;
+  onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
   onError?: (message: string, requestId?: string) => void;
   onTerminalList?: (
@@ -87,7 +91,7 @@ function handleTerminalMessage(message: TerminalMessage, callbacks: MessageHandl
       break;
     case 'created':
       if (message.terminalId) {
-        onCreated?.(message.terminalId, message.requestId);
+        onCreated?.(message.terminalId, message.requestId, message.outputBuffer);
       }
       break;
     case 'exit':
@@ -134,7 +138,7 @@ export function useTerminalWebSocket({
     [onOutput, onCreated, onExit, onError, onTerminalList]
   );
 
-  const { connected, send } = useWebSocketTransport({
+  const { connected, gaveUp, send, reconnect } = useWebSocketTransport({
     url,
     onMessage: handleMessage,
     queuePolicy: 'drop',
@@ -177,6 +181,8 @@ export function useTerminalWebSocket({
 
   return {
     connected,
+    gaveUp,
+    reconnect,
     create,
     sendInput,
     resize,

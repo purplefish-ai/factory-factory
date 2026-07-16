@@ -180,10 +180,21 @@ async function handleCreateMessage(
   }
 
   const cleanupMap = terminalListenerCleanup.get(ws);
+  // Snapshot output buffered during the DB write BEFORE attaching listeners
+  // (same synchronous block), so early bytes are delivered exactly once:
+  // buffered output via `created`, later output via the live listener.
+  const outputBuffer = terminalService.getTerminal(workspaceId, terminalId)?.outputBuffer ?? '';
   attachTerminalListeners(ws, workspaceId, terminalId, terminalService, logger, cleanupMap);
 
   logger.info('Sending created message to client', { terminalId, requestId: message.requestId });
-  ws.send(JSON.stringify({ type: 'created', terminalId, requestId: message.requestId }));
+  ws.send(
+    JSON.stringify({
+      type: 'created',
+      terminalId,
+      requestId: message.requestId,
+      ...(outputBuffer.length > 0 ? { outputBuffer } : {}),
+    })
+  );
 }
 
 function attachTerminalListeners(

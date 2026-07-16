@@ -63,6 +63,7 @@ function createTerminalService() {
 
   const terminalService = {
     getTerminalsForWorkspace: vi.fn(() => [] as MockTerminalDescriptor[]),
+    getTerminal: vi.fn(() => null as { outputBuffer: string } | null),
     onOutput: vi.fn((id: string, callback: (output: string) => void) => {
       const listeners = outputListeners.get(id) ?? new Set();
       listeners.add(callback);
@@ -514,6 +515,62 @@ describe('createTerminalUpgradeHandler', () => {
     ws.emit('message', JSON.stringify({ type: 'destroy', terminalId: 'terminal-1' }));
     await Promise.resolve();
     expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
+  });
+
+  it('includes output buffered before listeners attach in the created message', async () => {
+    const workspaceId = 'workspace-1';
+    const { terminalService } = createTerminalService();
+    terminalService.getTerminal.mockReturnValue({ outputBuffer: 'early prompt $ ' });
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+
+    const handler = createTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+
+    handler(
+      createRequest(),
+      socket,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    await vi.waitFor(() => {
+      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    });
+
+    ws.emit('message', JSON.stringify({ type: 'create', requestId: 'request-1' }));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'created',
+          terminalId: 'terminal-1',
+          requestId: 'request-1',
+          outputBuffer: 'early prompt $ ',
+        })
+      );
+    });
+
+    // The buffer snapshot must be taken before the live output listener
+    // attaches so bytes emitted during the DB write are not duplicated.
+    const getTerminalOrder = terminalService.getTerminal.mock.invocationCallOrder[0];
+    const onOutputOrder = terminalService.onOutput.mock.invocationCallOrder[0];
+    expect(getTerminalOrder).toBeDefined();
+    expect(onOutputOrder).toBeDefined();
+    expect(getTerminalOrder!).toBeLessThan(onOutputOrder!);
   });
 
   it('echoes create request ids when terminal creations resolve out of order', async () => {

@@ -130,6 +130,7 @@ class FakeTerminalService {
   );
 
   destroyTerminal = vi.fn();
+  getTerminal = vi.fn(() => null as { outputBuffer: string } | null);
   getTerminalsForWorkspace = vi.fn(
     () => [] as Array<{ id: string; createdAt: Date; outputBuffer: string }>
   );
