@@ -22,8 +22,12 @@ export default defineConfig({
         'src/backend/**/bridges.ts',
         'src/backend/**/constants.ts',
       ],
-      // Thresholds disabled for now since unit tests use mocks
-      // Enable as integration tests are added and coverage grows
+      thresholds: {
+        lines: 82,
+        statements: 82,
+        functions: 84,
+        branches: 72,
+      },
     },
     setupFiles: ['./src/backend/testing/setup.ts'],
   },
