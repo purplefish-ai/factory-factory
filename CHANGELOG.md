@@ -5,6 +5,50 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-16
+
+### Added
+
+- Add child workspaces with cross-project spawning, live and persisted messaging, UI management, and archive safeguards (#1706, #1708, #1713, #1718, #1892)
+- Add Fable to the default Claude model options (#1845, #1846)
+- Add project default branch detection (#1824)
+- Add WebSocket output backpressure handling (#1882)
+
+### Changed
+
+- Consolidate WebSocket consumers and handlers around shared transport and topic broadcasting (#1879, #1881, #1883)
+- Strengthen ratchet dispatch and reconciliation with explicit dispatch records, resolved-thread filtering, bounded checks, and compare-and-set transitions (#1857, #1858, #1863, #1864, #1865, #1866, #1894)
+- Bound resource-intensive searches, pagination, output buffers, and shell execution (#1776, #1782, #1784, #1786, #1797, #1800, #1802, #1805, #1806, #1850)
+- Migrate the interface icon set to Phosphor (#1878)
+- Enforce test coverage minimums (#1880)
+
+### Fixed
+
+- Harden session startup, shutdown, recovery, and failed-exit persistence (#1740, #1791, #1794, #1826, #1829, #1830, #1831, #1832, #1833, #1835)
+- Preserve run-script exit state and retry terminal process cleanup (#1767, #1855, #1856)
+- Prevent lost periodic-task dispatches and overlapping terminal resource scans (#1798, #1799)
+- Keep workspace, Kanban, pull-request, review-badge, and snapshot state synchronized across concurrent transitions (#1783, #1789, #1790, #1803, #1828, #1891, #1893)
+- Make branch rename metadata atomic and clear stale automatic-rename state (#1775, #1804, #1822, #1849)
+- Fix workspace slash-command isolation, precedence, and non-file command filtering (#1719, #1834, #1848)
+- Fix workspace cleanup, deletion, and archive rollback behavior (#1787, #1793, #1825)
+- Fix chat hydration, attachment autosave warnings, rejected-message replay, and empty tool-result history (#1788, #1792, #1823, #1829)
+- Fix CORS and port binding for explicit, wildcard, and all-interface hosts (#1721, #1795, #1827, #1854)
+- Make the first user-settings read atomic (#1781)
+- Resolve nested configuration path variables (#1852)
+- Deduplicate persisted workspace notifications (#1851)
+- Shut down cleanly on unhandled rejections (#1853)
+- Prevent parent/child workspace messages from being lost during delivery (#1892)
+
+### Security
+
+- Restrict executable tRPC mutations and authorize terminal WebSocket replay (#1779, #1796)
+- Harden issue-start and branch-rename prompt context and worktree cleanup paths (#1775, #1777, #1778)
+- Apply trusted-local validation and guarded fan-out sends across WebSocket channels (#1875, #1876, #1877)
+
+### Documentation
+
+- Update child-workspace, session lifecycle, service ownership, dependency, and CI documentation (#1696, #1704, #1705, #1708, #1837, #1838, #1839, #1847)
+
 ## [0.3.21] - 2026-06-22
 
 ### Added
