@@ -56,6 +56,13 @@ export interface UseChatWebSocketReturn {
   processStatus: ReturnType<typeof useChatState>['processStatus'];
   // Authoritative runtime snapshot for the selected session
   sessionRuntime: SessionRuntimeState;
+  /**
+   * The dbSessionId the current reducer state was hydrated for, or null
+   * before the first hydration. Stays on the previous session during a
+   * session switch until the new session's hydration batch arrives, so
+   * consumers can tell whether sessionRuntime describes dbSessionId yet.
+   */
+  runtimeSessionId: string | null;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -311,6 +318,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     // State from chat
     messages: chat.messages,
     connected: transport.connected,
+    runtimeSessionId: hydratedSessionIdRef.current,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,

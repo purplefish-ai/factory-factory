@@ -101,6 +101,7 @@ export function WorkspaceDetailContainer() {
     sessionStatus,
     processStatus,
     sessionRuntime,
+    runtimeSessionId,
     pendingRequest,
     chatSettings,
     chatCapabilities,
@@ -151,9 +152,17 @@ export function WorkspaceDetailContainer() {
         sessions,
         selectedSessionId: selectedDbSessionId,
         liveRuntime: sessionRuntime,
+        runtimeSessionId,
         chatConnected: connected,
       }),
-    [workspace?.sessionSummaries, sessions, selectedDbSessionId, sessionRuntime, connected]
+    [
+      workspace?.sessionSummaries,
+      sessions,
+      selectedDbSessionId,
+      sessionRuntime,
+      runtimeSessionId,
+      connected,
+    ]
   );
   const workspaceRunning = useMemo(
     () =>

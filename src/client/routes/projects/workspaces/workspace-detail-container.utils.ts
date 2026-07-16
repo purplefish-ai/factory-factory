@@ -18,6 +18,8 @@ export interface BuildSessionSummariesOptions {
   sessions: SessionForRuntimeOverlay[] | undefined;
   selectedSessionId: string | null;
   liveRuntime: SessionRuntimeState;
+  /** The session the live runtime was hydrated for (null before hydration). */
+  runtimeSessionId: string | null;
   chatConnected: boolean;
 }
 
@@ -26,8 +28,12 @@ export interface BuildSessionSummariesOptions {
  * snapshot `sessionSummaries` are the base for every session, and the chat
  * WebSocket runtime overlays only the currently selected session while the
  * chat socket is connected (it is the direct authority for that session).
- * All other sessions stay on snapshot data, which the /snapshots channel
- * keeps live — no timestamp reconciliation needed.
+ * The overlay additionally requires the runtime to have been hydrated for
+ * the selected session — during a session switch the reducer still holds the
+ * previous session's runtime for a render or two, and overlaying it would
+ * paint the wrong session's status onto the new tab. All other sessions stay
+ * on snapshot data, which the /snapshots channel keeps live — no timestamp
+ * reconciliation needed.
  */
 export function buildSessionSummariesById(
   options: BuildSessionSummariesOptions
@@ -38,7 +44,7 @@ export function buildSessionSummariesById(
     (workspaceSummaries ?? []).map((summary) => [summary.sessionId, summary])
   );
 
-  if (!(selectedSessionId && chatConnected)) {
+  if (!(selectedSessionId && chatConnected && options.runtimeSessionId === selectedSessionId)) {
     return summaries;
   }
 

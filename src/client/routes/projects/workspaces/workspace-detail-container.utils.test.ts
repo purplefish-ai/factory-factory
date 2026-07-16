@@ -84,6 +84,7 @@ describe('buildSessionSummariesById', () => {
       sessions: [makeSession()],
       selectedSessionId: null,
       liveRuntime: makeLiveRuntime(),
+      runtimeSessionId: null,
       chatConnected: true,
     });
 
@@ -97,6 +98,7 @@ describe('buildSessionSummariesById', () => {
       sessions: [makeSession()],
       selectedSessionId: 'session-1',
       liveRuntime: makeLiveRuntime({ phase: 'stopping', activity: 'IDLE' }),
+      runtimeSessionId: 'session-1',
       chatConnected: true,
     });
 
@@ -109,12 +111,42 @@ describe('buildSessionSummariesById', () => {
     expect(merged?.persistedStatus).toBe('RUNNING');
   });
 
+  it('does not overlay while the runtime still describes a previous session', () => {
+    // During a session switch the reducer holds the old session's runtime for
+    // a render or two; overlaying it would paint the wrong session's status
+    // onto the newly selected tab.
+    const result = buildSessionSummariesById({
+      workspaceSummaries: [makeSummary(), makeSummary({ sessionId: 'session-2' })],
+      sessions: [makeSession(), makeSession({ id: 'session-2' })],
+      selectedSessionId: 'session-2',
+      liveRuntime: makeLiveRuntime({ phase: 'running', activity: 'WORKING' }),
+      runtimeSessionId: 'session-1',
+      chatConnected: true,
+    });
+
+    expect(result.get('session-2')).toEqual(makeSummary({ sessionId: 'session-2' }));
+  });
+
+  it('does not overlay before the first hydration', () => {
+    const result = buildSessionSummariesById({
+      workspaceSummaries: [makeSummary()],
+      sessions: [makeSession()],
+      selectedSessionId: 'session-1',
+      liveRuntime: makeLiveRuntime({ phase: 'running' }),
+      runtimeSessionId: null,
+      chatConnected: true,
+    });
+
+    expect(result.get('session-1')).toEqual(makeSummary());
+  });
+
   it('does not overlay when the chat socket is disconnected', () => {
     const result = buildSessionSummariesById({
       workspaceSummaries: [makeSummary()],
       sessions: [makeSession()],
       selectedSessionId: 'session-1',
       liveRuntime: makeLiveRuntime({ phase: 'stopping' }),
+      runtimeSessionId: 'session-1',
       chatConnected: false,
     });
 
@@ -127,6 +159,7 @@ describe('buildSessionSummariesById', () => {
       sessions: [makeSession(), makeSession({ id: 'session-2' })],
       selectedSessionId: 'session-1',
       liveRuntime: makeLiveRuntime({ phase: 'error' }),
+      runtimeSessionId: 'session-1',
       chatConnected: true,
     });
 
@@ -139,6 +172,7 @@ describe('buildSessionSummariesById', () => {
       sessions: [makeSession()],
       selectedSessionId: 'session-gone',
       liveRuntime: makeLiveRuntime(),
+      runtimeSessionId: 'session-gone',
       chatConnected: true,
     });
 
@@ -151,6 +185,7 @@ describe('buildSessionSummariesById', () => {
       sessions: [makeSession({ id: 'session-new', name: 'Fresh chat', status: 'IDLE' })],
       selectedSessionId: 'session-new',
       liveRuntime: makeLiveRuntime({ phase: 'starting' }),
+      runtimeSessionId: 'session-new',
       chatConnected: true,
     });
 
