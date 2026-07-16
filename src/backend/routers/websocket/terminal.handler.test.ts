@@ -403,6 +403,10 @@ describe('createTerminalUpgradeHandler', () => {
     const listeners = outputListeners.get(terminalId);
     expect(listeners?.size).toBe(2);
 
+    ws1.send.mockClear();
+    ws2.send.mockClear();
+    ws1.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
+
     for (const listener of listeners ?? []) {
       listener('live output');
     }
@@ -412,7 +416,7 @@ describe('createTerminalUpgradeHandler', () => {
       terminalId,
       data: 'live output',
     });
-    expect(ws1.send).toHaveBeenCalledWith(outputMessage, expect.any(Function));
+    expect(ws1.send).not.toHaveBeenCalled();
     expect(ws2.send).toHaveBeenCalledWith(outputMessage, expect.any(Function));
     expect(terminalConnections.get(workspaceId)?.size).toBe(2);
   });
