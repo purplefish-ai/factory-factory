@@ -9,6 +9,7 @@
 
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { safeSend } from '@/backend/lib/websocket-send';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
@@ -134,12 +135,8 @@ export class ChatConnectionService {
 
     const json = JSON.stringify(data);
     for (const info of this.connections.values()) {
-      if (
-        info.dbSessionId === dbSessionId &&
-        info.ws.readyState === WS_READY_STATE.OPEN &&
-        info.ws !== exclude
-      ) {
-        info.ws.send(json);
+      if (info.dbSessionId === dbSessionId && info.ws !== exclude) {
+        safeSend(info.ws, json, logger, 'chat session message');
       }
     }
   }

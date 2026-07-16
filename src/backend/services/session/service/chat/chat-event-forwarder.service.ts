@@ -10,8 +10,7 @@
  * This service retains the workspace notification and pending request management responsibilities.
  */
 
-import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { toError } from '@/backend/lib/error-utils';
+import { safeSend } from '@/backend/lib/websocket-send';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -112,13 +111,7 @@ class ChatEventForwarderService {
       });
 
       for (const info of chatConnectionService.values()) {
-        if (info.ws.readyState === WS_READY_STATE.OPEN) {
-          try {
-            info.ws.send(message);
-          } catch (error) {
-            logger.error('Failed to send workspace notification', toError(error));
-          }
-        }
+        safeSend(info.ws, message, logger, 'workspace notification');
       }
     });
   }
