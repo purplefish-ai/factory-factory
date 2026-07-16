@@ -478,6 +478,14 @@ class ChatMessageHandlerService {
     client: unknown,
     stopGeneration: number
   ): Promise<void> {
+    if (await this.isWorkspaceNotificationAlreadyDelivered(dbSessionId, msg.id)) {
+      logger.info('[Chat WS] Dropping already-delivered workspace notification', {
+        dbSessionId,
+        messageId: msg.id,
+      });
+      return;
+    }
+
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
@@ -553,6 +561,46 @@ class ChatMessageHandlerService {
         messageId: msg.id,
         remainingInQueue: sessionDomainService.getQueueLength(dbSessionId),
       });
+    }
+  }
+
+  /**
+   * Persist-first delivery can enqueue the same workspace notification twice
+   * (a live send racing session-startup delivery). Dispatch is serialized per
+   * session, so dropping duplicates here — already committed to this session's
+   * transcript, or already marked delivered by another session — guarantees the
+   * agent sees each notification at most once.
+   */
+  private async isWorkspaceNotificationAlreadyDelivered(
+    dbSessionId: string,
+    messageId: string
+  ): Promise<boolean> {
+    if (!messageId.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
+      return false;
+    }
+    const notificationId = messageId.slice(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX.length);
+    if (!notificationId) {
+      return false;
+    }
+
+    const alreadyCommitted = sessionDomainService
+      .getTranscriptSnapshot(dbSessionId)
+      .some((entry) => entry.source === 'user' && entry.id === messageId);
+    if (alreadyCommitted) {
+      return true;
+    }
+
+    try {
+      const notification = await workspaceNotificationAccessor.findById(notificationId);
+      return notification?.deliveredAt != null;
+    } catch (error) {
+      logger.warn('[Chat WS] Failed to check workspace notification delivery state', {
+        dbSessionId,
+        messageId,
+        error: this.formatDispatchError(error),
+      });
+      // Fail open: a duplicate delivery is better than a lost message.
+      return false;
     }
   }
 

@@ -19,6 +19,7 @@ const {
     commitSentUserMessageAtOrder: vi.fn(),
     removeTranscriptMessageById: vi.fn(),
     getQueueLength: vi.fn(),
+    getTranscriptSnapshot: vi.fn(),
   },
   mockSessionService: {
     getClient: vi.fn(),
@@ -37,6 +38,7 @@ const {
   },
   mockWorkspaceNotificationAccessor: {
     markDelivered: vi.fn(),
+    findById: vi.fn(),
   },
 }));
 
@@ -92,6 +94,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.setSessionReasoningEffort.mockResolvedValue(undefined);
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
     mockWorkspaceNotificationAccessor.markDelivered.mockResolvedValue(undefined);
+    mockWorkspaceNotificationAccessor.findById.mockResolvedValue(null);
+    mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
@@ -280,6 +284,82 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+  });
+
+  it('drops a workspace notification already committed to the transcript', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+    mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([
+      { source: 'user', id: 'workspace-notification-notif-parent', text: 'hello' },
+    ]);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
+  });
+
+  it('drops a workspace notification whose row is already marked delivered', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+      id: 'notif-parent',
+      deliveredAt: new Date('2026-02-01T00:00:00.000Z'),
+    });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockWorkspaceNotificationAccessor.findById).toHaveBeenCalledWith('notif-parent');
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
+  });
+
+  it('dispatches a workspace notification whose row is still pending', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+      id: 'notif-parent',
+      deliveredAt: null,
+    });
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
