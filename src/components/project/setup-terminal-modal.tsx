@@ -1,5 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { z } from 'zod';
+import { lazy, Suspense } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,17 +6,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { buildWebSocketUrl } from '@/lib/websocket-config';
+import { useSetupTerminal } from './use-setup-terminal';
 
 const TerminalInstance = lazy(() =>
   import('@/components/workspace/terminal-instance').then((m) => ({ default: m.TerminalInstance }))
 );
-
-const SetupTerminalMessageSchema = z.object({
-  type: z.string(),
-  data: z.string().optional(),
-  message: z.string().optional(),
-});
 
 interface SetupTerminalModalProps {
   open: boolean;
@@ -25,78 +18,7 @@ interface SetupTerminalModalProps {
 }
 
 export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const [output, setOutput] = useState('');
-  const [connected, setConnected] = useState(false);
-  const colsRef = useRef(80);
-  const rowsRef = useRef(24);
-
-  // Connect WebSocket when modal opens
-  useEffect(() => {
-    if (!open) {
-      // Clean up when closed
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      setOutput('');
-      setConnected(false);
-      return;
-    }
-
-    const url = buildWebSocketUrl('/setup-terminal', {});
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-      // Request terminal creation
-      ws.send(
-        JSON.stringify({
-          type: 'create',
-          cols: colsRef.current,
-          rows: rowsRef.current,
-        })
-      );
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const parsed: unknown = JSON.parse(String(event.data));
-        const msg = SetupTerminalMessageSchema.parse(parsed);
-
-        if (msg.type === 'output' && msg.data) {
-          setOutput((prev) => prev + msg.data);
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      wsRef.current = null;
-    };
-
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [open]);
-
-  const handleData = useCallback((data: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data }));
-    }
-  }, []);
-
-  const handleResize = useCallback((cols: number, rows: number) => {
-    colsRef.current = cols;
-    rowsRef.current = rows;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
-    }
-  }, []);
+  const { connected, showTerminal, output, handleData, handleResize } = useSetupTerminal(open);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -118,8 +40,8 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
             </span>
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
-          {connected && (
+        <div className="relative flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
+          {showTerminal && (
             <Suspense fallback={null}>
               <TerminalInstance
                 onData={handleData}
@@ -128,6 +50,11 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
                 isActive={open}
               />
             </Suspense>
+          )}
+          {showTerminal && !connected && (
+            <div className="absolute top-2 right-2 rounded bg-yellow-600/90 px-2 py-0.5 text-xs text-white">
+              Reconnecting…
+            </div>
           )}
         </div>
       </DialogContent>

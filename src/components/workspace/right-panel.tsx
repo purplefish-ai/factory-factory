@@ -28,8 +28,7 @@ import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
-import { useDevLogs } from './use-dev-logs';
-import { usePostRunLogs } from './use-post-run-logs';
+import { useLogStream } from './use-log-stream';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -250,8 +249,8 @@ export function RightPanel({
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
-  const devLogs = useDevLogs(workspaceId);
-  const postRunLogs = usePostRunLogs(workspaceId);
+  const devLogs = useLogStream('/dev-logs', workspaceId);
+  const postRunLogs = useLogStream('/post-run-logs', workspaceId);
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
