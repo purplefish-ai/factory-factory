@@ -246,6 +246,50 @@ describe('fetchPRState', () => {
     expect(github.startFetch).not.toHaveBeenCalled();
     expect(github.getPRFullDetails).not.toHaveBeenCalled();
   });
+
+  it('forwards cancellation, releases the fetch claim, and skips backoff', async () => {
+    const controller = new AbortController();
+    const timeoutError = new Error('Workspace check timed out after 1000ms');
+    const github = makeGitHub({
+      getPRFullDetails: vi.fn(async (_repo, _pr, signal) => {
+        await Promise.resolve();
+        controller.abort(timeoutError);
+        signal?.throwIfAborted();
+        throw new Error('unreachable');
+      }),
+      getReviewComments: vi.fn(
+        () =>
+          new Promise<never>(() => {
+            // Keep the sibling request pending until Promise.all observes cancellation.
+          })
+      ),
+    });
+
+    await expect(
+      fetchPRState({
+        workspace: makeWorkspace(),
+        authenticatedUsername: null,
+        github,
+        backoff,
+        signal: controller.signal,
+      })
+    ).rejects.toBe(timeoutError);
+
+    expect(github.getPRFullDetails).toHaveBeenCalledWith('example/repo', 123, controller.signal);
+    expect(github.getReviewComments).toHaveBeenCalledWith(
+      'example/repo',
+      123,
+      undefined,
+      controller.signal
+    );
+    expect(github.getResolvedReviewCommentIds).toHaveBeenCalledWith(
+      'example/repo',
+      123,
+      controller.signal
+    );
+    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1');
+    expect(backoff.handleError).not.toHaveBeenCalled();
+  });
 });
 
 describe('computeDispatchSnapshotKey', () => {
@@ -396,7 +440,7 @@ describe('fetchPRState', () => {
 
     const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
 
-    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123]);
+    expect(getReviewComments.mock.calls[0]).toEqual(['example/repo', 123, undefined, undefined]);
     expect(result.reviewComments).toEqual([
       {
         author: 'reviewer',
@@ -422,7 +466,7 @@ describe('fetchPRState', () => {
     const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
 
     expect(result.reviewComments.map((c) => c.body)).toEqual(['Comment 1']);
-    expect(github.getResolvedReviewCommentIds).toHaveBeenCalledWith('example/repo', 123);
+    expect(github.getResolvedReviewCommentIds).toHaveBeenCalledWith('example/repo', 123, undefined);
   });
 
   it('keeps resolved comments in the review activity timestamp so the snapshot key stays stable', async () => {

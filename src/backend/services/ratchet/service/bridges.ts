@@ -105,12 +105,25 @@ export interface RatchetPRSnapshotBridge {
 /** GitHub capabilities needed by ratchet domain */
 export interface RatchetGitHubBridge {
   extractPRInfo(prUrl: string): { owner: string; repo: string; number?: number } | null;
-  getPRFullDetails(repo: string, prNumber: number): Promise<RatchetPRFullDetails>;
-  getReviewComments(repo: string, prNumber: number, since?: Date): Promise<RatchetReviewComment[]>;
+  getPRFullDetails(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<RatchetPRFullDetails>;
+  getReviewComments(
+    repo: string,
+    prNumber: number,
+    since?: Date,
+    signal?: AbortSignal
+  ): Promise<RatchetReviewComment[]>;
   /** REST ids of review comments that belong to resolved review threads. */
-  getResolvedReviewCommentIds(repo: string, prNumber: number): Promise<Set<number>>;
+  getResolvedReviewCommentIds(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<Set<number>>;
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
-  getAuthenticatedUsername(): Promise<string | null>;
+  getAuthenticatedUsername(signal?: AbortSignal): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
   /** True when another service has an in-flight or recent PR fetch for this workspace. */
   isRecentlyFetched(workspaceId: string): boolean;

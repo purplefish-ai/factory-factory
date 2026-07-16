@@ -14,11 +14,15 @@ async function safeStopSession(params: {
   sessionId: string;
   warningMessage: string;
   warningContext: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<void> {
-  const { sessionBridge, sessionId, warningMessage, warningContext } = params;
+  const { sessionBridge, sessionId, warningMessage, warningContext, signal } = params;
   try {
+    signal?.throwIfAborted();
     await sessionBridge.stopSession(sessionId);
+    signal?.throwIfAborted();
   } catch (error) {
+    signal?.throwIfAborted();
     logger.warn(warningMessage, {
       ...warningContext,
       error: error instanceof Error ? error.message : String(error),
@@ -30,6 +34,7 @@ async function stopCompletedRatchetSession(params: {
   workspaceId: string;
   sessionId: string;
   sessionBridge: RatchetSessionBridge;
+  signal?: AbortSignal;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -39,6 +44,7 @@ async function stopCompletedRatchetSession(params: {
       workspaceId: params.workspaceId,
       sessionId: params.sessionId,
     },
+    signal: params.signal,
   });
 }
 
@@ -48,6 +54,7 @@ async function stopSessionForProviderMismatch(params: {
   expectedProvider: SessionProvider;
   actualProvider: SessionProvider;
   sessionBridge: RatchetSessionBridge;
+  signal?: AbortSignal;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -59,6 +66,7 @@ async function stopSessionForProviderMismatch(params: {
       expectedProvider: params.expectedProvider,
       actualProvider: params.actualProvider,
     },
+    signal: params.signal,
   });
 }
 
@@ -72,8 +80,10 @@ async function stopSessionForProviderMismatch(params: {
 export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
+  signal?: AbortSignal;
 }): Promise<ActiveFixerCheckResult> {
-  const { workspace, sessionBridge } = params;
+  const { workspace, sessionBridge, signal } = params;
+  signal?.throwIfAborted();
 
   const sessionId = workspace.ratchetActiveSessionId;
   if (!sessionId) {
@@ -84,11 +94,13 @@ export async function checkActiveFixerSession(params: {
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>,
     reason: string
   ): Promise<ActiveFixerCheckResult> => {
+    signal?.throwIfAborted();
     const settled = await workspaceAccessor.recordRatchetSessionEnd(
       workspace.id,
       sessionId,
       outcome
     );
+    signal?.throwIfAborted();
     if (!settled) {
       logger.debug('Ratchet dispatch record was settled concurrently', {
         workspaceId: workspace.id,
@@ -106,11 +118,14 @@ export async function checkActiveFixerSession(params: {
     return { kind: 'settled', outcome };
   };
 
+  signal?.throwIfAborted();
   const resolvedRatchetProvider = await ratchetProviderResolverService.resolveRatchetProvider({
     workspaceId: workspace.id,
     workspace,
   });
+  signal?.throwIfAborted();
   const session = await agentSessionAccessor.findById(sessionId);
+  signal?.throwIfAborted();
   if (!session) {
     // Transient ratchet session rows are deleted on normal exit, so a missing
     // row is ambiguous — the conditional settle disambiguates: if the exit
@@ -129,6 +144,7 @@ export async function checkActiveFixerSession(params: {
       expectedProvider: resolvedRatchetProvider,
       actualProvider: session.provider,
       sessionBridge,
+      signal,
     });
     return result;
   }
@@ -152,6 +168,7 @@ export async function checkActiveFixerSession(params: {
       workspaceId: workspace.id,
       sessionId: session.id,
       sessionBridge,
+      signal,
     });
     return result;
   }
@@ -161,8 +178,11 @@ export async function checkActiveFixerSession(params: {
 
 export async function hasActiveSession(
   workspaceId: string,
-  sessionBridge: RatchetSessionBridge
+  sessionBridge: RatchetSessionBridge,
+  signal?: AbortSignal
 ): Promise<boolean> {
+  signal?.throwIfAborted();
   const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
+  signal?.throwIfAborted();
   return sessions.some((session) => sessionBridge.isSessionWorking(session.id));
 }

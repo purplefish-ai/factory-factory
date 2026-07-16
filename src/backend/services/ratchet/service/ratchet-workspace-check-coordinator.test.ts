@@ -38,4 +38,122 @@ describe('RatchetWorkspaceCheckCoordinator', () => {
     await firstExpectation;
     await secondExpectation;
   });
+
+  it('aborts the shared runner when a workspace check times out', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-abort' } as WorkspaceWithPR;
+    let receivedSignal: AbortSignal | undefined;
+    const runner = vi.fn((signal?: AbortSignal) => {
+      receivedSignal = signal;
+      return new Promise<WorkspaceRatchetResult>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const firstRun = coordinator.run(workspace, runner);
+    const secondRun = coordinator.run(workspace, runner);
+    const firstExpectation = expect(firstRun).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+    const secondExpectation = expect(secondRun).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await firstExpectation;
+    await secondExpectation;
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(receivedSignal?.reason).toEqual(new Error('Workspace check timed out after 1000ms'));
+  });
+
+  it('keeps sharing an aborted runner until its cleanup settles', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-cleanup' } as WorkspaceWithPR;
+    let finishCleanup!: () => void;
+    const cleanupBarrier = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const runner = vi.fn(async (signal: AbortSignal) => {
+      await new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      await cleanupBarrier;
+      signal.throwIfAborted();
+      throw new Error('unreachable');
+    });
+
+    const first = coordinator.run(workspace, runner);
+    const firstExpectation = expect(first).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await firstExpectation;
+
+    const joinedDuringCleanup = coordinator.run(workspace, runner);
+    expect(runner).toHaveBeenCalledTimes(1);
+    finishCleanup();
+
+    await expect(joinedDuringCleanup).rejects.toThrow('Workspace check timed out after 1000ms');
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the timeout only after the scheduler starts the runner', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-queued' } as WorkspaceWithPR;
+    let startScheduledRunner!: () => void;
+    const schedule = vi.fn(
+      (task: () => Promise<WorkspaceRatchetResult>) =>
+        new Promise<WorkspaceRatchetResult>((resolve, reject) => {
+          startScheduledRunner = () => {
+            task().then(resolve, reject);
+          };
+        })
+    );
+    const runner = vi.fn(
+      (signal: AbortSignal) =>
+        new Promise<WorkspaceRatchetResult>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        })
+    );
+
+    const result = coordinator.run(workspace, runner, schedule);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(runner).not.toHaveBeenCalled();
+    startScheduledRunner();
+    const expectation = expect(result).rejects.toThrow('Workspace check timed out after 1000ms');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expectation;
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a committed side-effect phase finish after the timeout budget', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-committed' } as WorkspaceWithPR;
+    let finishCommit!: () => void;
+    const commitBarrier = new Promise<void>((resolve) => {
+      finishCommit = resolve;
+    });
+    const expected = {
+      workspaceId: workspace.id,
+      previousState: 'IDLE',
+      newState: 'IDLE',
+      action: { type: 'WAITING', reason: 'committed' },
+    } as WorkspaceRatchetResult;
+
+    const result = coordinator.run(workspace, async (signal, commitSideEffects) => {
+      signal.throwIfAborted();
+      commitSideEffects();
+      await commitBarrier;
+      signal.throwIfAborted();
+      return expected;
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    finishCommit();
+
+    await expect(result).resolves.toEqual(expected);
+  });
 });

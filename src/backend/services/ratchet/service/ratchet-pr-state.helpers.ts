@@ -342,6 +342,7 @@ export async function fetchPRState(params: {
   authenticatedUsername: string | null;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
+  signal?: AbortSignal;
   /**
    * Skip the completed-fetch cooldown. Used by event-driven checks that fire
    * right after another service's fetch registered the workspace in the dedup
@@ -351,7 +352,8 @@ export async function fetchPRState(params: {
    */
   bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
-  const { workspace, authenticatedUsername, github, backoff } = params;
+  const { workspace, authenticatedUsername, github, backoff, signal } = params;
+  signal?.throwIfAborted();
   const prContext = resolveRatchetPrContext(workspace, github);
   if (!prContext) {
     return null;
@@ -371,22 +373,27 @@ export async function fetchPRState(params: {
   try {
     // Claim this workspace as in-flight before the async fetch so concurrent
     // scheduler/ratchet calls see it and skip redundant fetches.
+    signal?.throwIfAborted();
     github.startFetch(workspace.id);
 
     const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
-      github.getPRFullDetails(prContext.repo, prContext.prNumber),
-      github.getReviewComments(prContext.repo, prContext.prNumber),
+      github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
+      github.getReviewComments(prContext.repo, prContext.prNumber, undefined, signal),
       // Degrade gracefully: without resolution data, fall back to including
       // all review comments (pre-filtering behavior) rather than failing the check.
-      github.getResolvedReviewCommentIds(prContext.repo, prContext.prNumber).catch((error) => {
-        logger.warn('Failed to fetch resolved review threads; including all review comments', {
-          workspaceId: workspace.id,
-          prUrl: workspace.prUrl,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return new Set<number>();
-      }),
+      github
+        .getResolvedReviewCommentIds(prContext.repo, prContext.prNumber, signal)
+        .catch((error) => {
+          signal?.throwIfAborted();
+          logger.warn('Failed to fetch resolved review threads; including all review comments', {
+            workspaceId: workspace.id,
+            prUrl: workspace.prUrl,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return new Set<number>();
+        }),
     ]);
+    signal?.throwIfAborted();
 
     const statusCheckRollup =
       prDetails.statusCheckRollup?.map((check) => ({
@@ -451,6 +458,7 @@ export async function fetchPRState(params: {
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
+    signal?.throwIfAborted();
     github.registerFetch(workspace.id);
 
     return {
@@ -467,6 +475,7 @@ export async function fetchPRState(params: {
   } catch (error) {
     // Release the in-flight claim so the workspace is eligible for a future retry.
     github.cancelFetch(workspace.id);
+    signal?.throwIfAborted();
     backoff.handleError(
       error,
       logger,
@@ -481,7 +490,9 @@ export async function fetchPRState(params: {
 export async function getAuthenticatedUsernameCached(params: {
   cachedValue: AuthenticatedUsernameCache | null;
   github: RatchetGitHubBridge;
+  signal?: AbortSignal;
 }): Promise<{ username: string | null; cache: AuthenticatedUsernameCache }> {
+  params.signal?.throwIfAborted();
   const nowMs = Date.now();
   if (params.cachedValue && params.cachedValue.expiresAtMs > nowMs) {
     return {
@@ -490,7 +501,9 @@ export async function getAuthenticatedUsernameCached(params: {
     };
   }
 
-  const username = await params.github.getAuthenticatedUsername();
+  params.signal?.throwIfAborted();
+  const username = await params.github.getAuthenticatedUsername(params.signal);
+  params.signal?.throwIfAborted();
   return {
     username,
     cache: {

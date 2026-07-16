@@ -41,6 +41,7 @@ const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
 type ExecResult = { stdout: string; stderr: string };
+type ReadExecOptions = { timeout?: number; maxBuffer?: number; signal?: AbortSignal };
 
 interface TruncatedResolvedThread {
   threadId: string;
@@ -118,27 +119,20 @@ class GitHubCLIService {
    * Fast-fails immediately when a rate limit was detected recently, preventing
    * calls from piling up in the queue and blocking user-facing requests.
    */
-  private exec(
-    args: string[],
-    options?: { timeout?: number; maxBuffer?: number }
-  ): Promise<ExecResult> {
+  private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
     if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
       return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
     }
 
-    const key = args.join('\0');
-    const existing = this.inflight.get(key);
-    if (existing) {
-      return existing;
-    }
-
-    const promise = this.execLimit(() =>
-      execFileAsync('gh', args, {
-        timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
-        ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
-      })
-    )
-      .then(
+    const execute = () =>
+      this.execLimit(() => {
+        options?.signal?.throwIfAborted();
+        return execFileAsync('gh', args, {
+          timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
+          ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
+          ...(options?.signal ? { signal: options.signal } : {}),
+        });
+      }).then(
         (result) => result,
         (err: unknown) => {
           const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -147,11 +141,21 @@ class GitHubCLIService {
           }
           throw err;
         }
-      )
-      .finally(() => {
-        this.inflight.delete(key);
-      });
+      );
 
+    if (options?.signal) {
+      return execute();
+    }
+
+    const key = args.join('\0');
+    const existing = this.inflight.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = execute().finally(() => {
+      this.inflight.delete(key);
+    });
     this.inflight.set(key, promise);
     return promise;
   }
@@ -191,13 +195,15 @@ class GitHubCLIService {
    * Get the authenticated user's GitHub username.
    * Returns null if not authenticated or gh CLI is not available.
    */
-  async getAuthenticatedUsername(): Promise<string | null> {
+  async getAuthenticatedUsername(signal?: AbortSignal): Promise<string | null> {
     try {
       const { stdout } = await this.exec(['api', 'user', '--jq', '.login'], {
         timeout: GH_TIMEOUT_MS.userLookup,
+        signal,
       });
       return stdout.trim() || null;
     } catch {
+      signal?.throwIfAborted();
       return null;
     }
   }
@@ -511,7 +517,11 @@ class GitHubCLIService {
   /**
    * Get full PR details including reviews, comments, labels, and CI status.
    */
-  async getPRFullDetails(repo: string, prNumber: number): Promise<PRWithFullDetails> {
+  async getPRFullDetails(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<PRWithFullDetails> {
     const fields = [
       'number',
       'title',
@@ -537,7 +547,7 @@ class GitHubCLIService {
     try {
       const { stdout } = await this.exec(
         ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
-        { timeout: GH_TIMEOUT_MS.default }
+        { timeout: GH_TIMEOUT_MS.default, signal }
       );
 
       const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
@@ -570,6 +580,7 @@ class GitHubCLIService {
         mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
       };
     } catch (error) {
+      signal?.throwIfAborted();
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -738,7 +749,8 @@ class GitHubCLIService {
   async getReviewComments(
     repo: string,
     prNumber: number,
-    since?: Date
+    since?: Date,
+    signal?: AbortSignal
   ): Promise<
     Array<{
       id: number;
@@ -769,13 +781,16 @@ class GitHubCLIService {
       }> = [];
 
       for (let page = 1; page <= MAX_PAGES; page++) {
+        signal?.throwIfAborted();
         const sinceParam = since ? `&since=${since.toISOString()}` : '';
         const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}`;
 
         const { stdout } = await this.exec(['api', path], {
           timeout: GH_TIMEOUT_MS.default,
           maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+          signal,
         });
+        signal?.throwIfAborted();
 
         if (!stdout.trim()) {
           break;
@@ -811,6 +826,7 @@ class GitHubCLIService {
 
       return allComments;
     } catch (error) {
+      signal?.throwIfAborted();
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -830,17 +846,28 @@ class GitHubCLIService {
    * Thread resolution state is only exposed via GraphQL, while getReviewComments
    * uses the REST API — this returns the id set needed to join the two.
    */
-  async getResolvedReviewCommentIds(repo: string, prNumber: number): Promise<Set<number>> {
+  async getResolvedReviewCommentIds(
+    repo: string,
+    prNumber: number,
+    signal?: AbortSignal
+  ): Promise<Set<number>> {
     const [owner, name] = repo.split('/');
     if (!(owner && name)) {
       throw new Error(`Invalid repo format for getResolvedReviewCommentIds: ${repo}`);
     }
 
     try {
+      signal?.throwIfAborted();
       const resolvedIds = new Set<number>();
-      await this.collectResolvedIdsFromThreadPages({ owner, name, repo, prNumber }, resolvedIds);
+      await this.collectResolvedIdsFromThreadPages(
+        { owner, name, repo, prNumber },
+        resolvedIds,
+        signal
+      );
+      signal?.throwIfAborted();
       return resolvedIds;
     } catch (error) {
+      signal?.throwIfAborted();
       const errorType = classifyError(error);
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -857,18 +884,21 @@ class GitHubCLIService {
 
   private async collectResolvedIdsFromThreadPages(
     ctx: { owner: string; name: string; repo: string; prNumber: number },
-    resolvedIds: Set<number>
+    resolvedIds: Set<number>,
+    signal?: AbortSignal
   ): Promise<void> {
     const MAX_PAGES = 20;
     const logContext = { repo: ctx.repo, prNumber: ctx.prNumber };
     let afterCursor: string | null = null;
 
     for (let page = 1; page <= MAX_PAGES; page++) {
+      signal?.throwIfAborted();
       const reviewThreads = await this.fetchReviewThreadsPage(
         ctx.owner,
         ctx.name,
         ctx.prNumber,
-        afterCursor
+        afterCursor,
+        signal
       );
       if (!reviewThreads) {
         logger.warn('getResolvedReviewCommentIds: repository or PR not found', logContext);
@@ -877,7 +907,7 @@ class GitHubCLIService {
 
       const truncatedThreads = collectResolvedReviewCommentIds(reviewThreads.nodes, resolvedIds);
       for (const thread of truncatedThreads) {
-        await this.collectResolvedThreadCommentTail(thread, resolvedIds, logContext);
+        await this.collectResolvedThreadCommentTail(thread, resolvedIds, logContext, signal);
       }
 
       if (!reviewThreads.pageInfo.hasNextPage) {
@@ -904,7 +934,8 @@ class GitHubCLIService {
     owner: string,
     name: string,
     prNumber: number,
-    afterCursor: string | null
+    afterCursor: string | null,
+    signal?: AbortSignal
   ): Promise<ResolvedReviewThreadsPage | null> {
     const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
     const query = `
@@ -930,7 +961,9 @@ class GitHubCLIService {
     const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
       timeout: GH_TIMEOUT_MS.default,
       maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+      signal,
     });
+    signal?.throwIfAborted();
 
     const parsed = parseGhJson(
       resolvedReviewThreadsGraphQLSchema,
@@ -947,12 +980,14 @@ class GitHubCLIService {
   private async collectResolvedThreadCommentTail(
     thread: TruncatedResolvedThread,
     resolvedIds: Set<number>,
-    logContext: { repo: string; prNumber: number }
+    logContext: { repo: string; prNumber: number },
+    signal?: AbortSignal
   ): Promise<void> {
     const MAX_PAGES = 20;
     let afterCursor = thread.afterCursor;
 
     for (let page = 1; page <= MAX_PAGES; page++) {
+      signal?.throwIfAborted();
       if (!afterCursor) {
         logger.warn(
           'getResolvedReviewCommentIds: truncated thread comments are missing an end cursor',
@@ -961,7 +996,7 @@ class GitHubCLIService {
         return;
       }
 
-      const comments = await this.fetchThreadCommentsPage(thread.threadId, afterCursor);
+      const comments = await this.fetchThreadCommentsPage(thread.threadId, afterCursor, signal);
       if (!comments) {
         logger.warn('getResolvedReviewCommentIds: review thread not found while paging comments', {
           ...logContext,
@@ -990,7 +1025,8 @@ class GitHubCLIService {
 
   private async fetchThreadCommentsPage(
     threadId: string,
-    afterCursor: string
+    afterCursor: string,
+    signal?: AbortSignal
   ): Promise<ReviewThreadCommentsConnection | null> {
     const query = `
       query {
@@ -1008,7 +1044,9 @@ class GitHubCLIService {
     const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
       timeout: GH_TIMEOUT_MS.default,
       maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments,
+      signal,
     });
+    signal?.throwIfAborted();
 
     const parsed = parseGhJson(
       reviewThreadCommentsGraphQLSchema,

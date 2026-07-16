@@ -197,15 +197,16 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
 
   const ratchetGithubBridge: RatchetGitHubBridge = {
     extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
-    getPRFullDetails: (repo, pr) => githubCLIService.getPRFullDetails(repo, pr),
-    getReviewComments: (repo, pr, since) => githubCLIService.getReviewComments(repo, pr, since),
-    getResolvedReviewCommentIds: (repo, pr) =>
-      githubCLIService.getResolvedReviewCommentIds(repo, pr),
+    getPRFullDetails: (repo, pr, signal) => githubCLIService.getPRFullDetails(repo, pr, signal),
+    getReviewComments: (repo, pr, since, signal) =>
+      githubCLIService.getReviewComments(repo, pr, since, signal),
+    getResolvedReviewCommentIds: (repo, pr, signal) =>
+      githubCLIService.getResolvedReviewCommentIds(repo, pr, signal),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
       ),
-    getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
+    getAuthenticatedUsername: (signal) => githubCLIService.getAuthenticatedUsername(signal),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
     isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
     isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
