@@ -22,7 +22,12 @@ import { toError } from '@/backend/lib/error-utils';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import type { ConnectionInfo } from '@/backend/services/session';
 import { toMessageString } from './message-utils';
-import { markWebSocketAlive, sendBadRequest, validateWebSocketOrigin } from './upgrade-utils';
+import {
+  markWebSocketAlive,
+  sendBadRequest,
+  validateTrustedLocalWebSocketRequest,
+  validateWebSocketOrigin,
+} from './upgrade-utils';
 
 // ============================================================================
 // Chat Upgrade Handler Factory
@@ -171,6 +176,18 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
     if (
       !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'chat WebSocket',
+      })
+    ) {
+      return;
+    }
+
+    if (
+      !validateTrustedLocalWebSocketRequest({
         request,
         socket,
         configService,

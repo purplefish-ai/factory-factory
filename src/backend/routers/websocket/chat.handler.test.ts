@@ -125,7 +125,10 @@ describe('createChatUpgradeHandler', () => {
     const { appContext, chatMessageHandlerService } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -160,6 +163,50 @@ describe('createChatUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
+  it('rejects untrusted remote addresses before opening a WebSocket', () => {
+    const { appContext } = createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '203.0.113.10' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
+  it('rejects forwarded local upgrades before opening a WebSocket', () => {
+    const { appContext } = createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+
+    const request = {
+      headers: { origin: allowedOrigin, 'x-forwarded-for': '203.0.113.10' },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.stringContaining('Forwarded WebSocket upgrades are not trusted')
+    );
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('registers a connection, dispatches valid messages, and cleans up on close', async () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
@@ -185,7 +232,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL(
@@ -237,7 +287,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -270,7 +323,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -307,7 +363,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -356,7 +415,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -395,7 +457,10 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');

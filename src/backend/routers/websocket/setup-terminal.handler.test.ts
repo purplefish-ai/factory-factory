@@ -154,6 +154,82 @@ describe('createSetupTerminalUpgradeHandler', () => {
     );
   });
 
+  it('rejects untrusted remote addresses before opening a WebSocket', () => {
+    const logger = createLogger();
+    const configService = {
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+    };
+    const appContext = {
+      services: {
+        createLogger: vi.fn(() => logger),
+        configService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createSetupTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '203.0.113.10' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/setup-terminal'),
+      wss,
+      wsAliveMap
+    );
+
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects forwarded local upgrades before opening a WebSocket', () => {
+    const logger = createLogger();
+    const configService = {
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+    };
+    const appContext = {
+      services: {
+        createLogger: vi.fn(() => logger),
+        configService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createSetupTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {
+      headers: { origin: allowedOrigin, 'x-forwarded-for': '203.0.113.10' },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/setup-terminal'),
+      wss,
+      wsAliveMap
+    );
+
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.stringContaining('Forwarded WebSocket upgrades are not trusted')
+    );
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts upgrades from configured allowed origins', () => {
     const logger = createLogger();
     const configService = {
@@ -173,7 +249,8 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const wss = createWss(ws);
     const request = {
       headers: { origin: allowedOrigin },
-    } as IncomingMessage;
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -210,7 +287,8 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const wss = createWss(ws);
     const request = {
       headers: { origin: allowedOrigin },
-    } as IncomingMessage;
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -286,7 +364,8 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const wss = createWss(ws);
     const request = {
       headers: { origin: allowedOrigin },
-    } as IncomingMessage;
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -328,7 +407,8 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const wss = createWss(ws);
     const request = {
       headers: { origin: allowedOrigin },
-    } as IncomingMessage;
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 

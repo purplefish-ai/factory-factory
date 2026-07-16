@@ -25,6 +25,7 @@ import {
   getOrCreateConnectionSet,
   markWebSocketAlive,
   sendBadRequest,
+  validateTrustedLocalWebSocketRequest,
   validateWebSocketOrigin,
 } from './upgrade-utils';
 
@@ -192,6 +193,18 @@ export function createSnapshotsUpgradeHandler(
   ): void {
     if (
       !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'snapshots WebSocket',
+      })
+    ) {
+      return;
+    }
+
+    if (
+      !validateTrustedLocalWebSocketRequest({
         request,
         socket,
         configService,
