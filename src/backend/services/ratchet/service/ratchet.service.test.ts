@@ -2790,6 +2790,56 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
     });
 
+    it('cleans up a started fixer when dispatch persistence fails', async () => {
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'unrecorded-session',
+        promptSent: true,
+      });
+      vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockRejectedValue(
+        new Error('dispatch record write failed')
+      );
+      vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockRejectedValue(
+        new Error('dispatch cleanup write failed')
+      );
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      const commitSideEffects = vi.fn();
+
+      const result = await unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-unrecorded-dispatch',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        new AbortController().signal,
+        commitSideEffects
+      );
+
+      expect(result).toMatchObject({ type: 'ERROR', error: 'dispatch record write failed' });
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+        'ws-unrecorded-dispatch',
+        'unrecorded-session',
+        'COMPLETED'
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('unrecorded-session');
+    });
+
     it('handles acquireAndDispatch throwing an error', async () => {
       const workspace = {
         id: 'ws-trigger-fail',

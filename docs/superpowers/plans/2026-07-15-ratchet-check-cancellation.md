@@ -42,7 +42,7 @@
 
 **Interfaces:**
 - Consumes: `WorkspaceWithPR`, `WorkspaceRatchetResult`, configured timeout supplier.
-- Produces: `run(workspace, runner: (signal: AbortSignal) => Promise<WorkspaceRatchetResult>): Promise<WorkspaceRatchetResult>`.
+- Produces: `run(workspace, runner: (signal: AbortSignal, commitSideEffects: () => void) => Promise<WorkspaceRatchetResult>, schedule?): Promise<WorkspaceRatchetResult>`.
 
 - [ ] **Step 1: Write a failing coordinator cancellation test**
 

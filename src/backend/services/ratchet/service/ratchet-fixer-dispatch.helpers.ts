@@ -123,7 +123,7 @@ async function handleAlreadyActiveFixerResult(params: {
   return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
 }
 
-async function cleanUpStartedFixerAfterAbort(params: {
+async function cleanUpUnrecordedStartedFixer(params: {
   workspaceId: string;
   sessionId: string;
   sessionBridge: RatchetSessionBridge;
@@ -131,11 +131,20 @@ async function cleanUpStartedFixerAfterAbort(params: {
   const { workspaceId, sessionId, sessionBridge } = params;
   try {
     await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, 'COMPLETED');
+  } catch (error) {
+    logger.warn('Failed to settle unrecorded ratchet fixer during cleanup', {
+      workspaceId,
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  try {
     if (sessionBridge.isSessionRunning(sessionId)) {
       await sessionBridge.stopSession(sessionId);
     }
   } catch (error) {
-    logger.warn('Failed to fully clean up ratchet fixer after cancellation', {
+    logger.warn('Failed to stop unrecorded ratchet fixer during cleanup', {
       workspaceId,
       sessionId,
       error: error instanceof Error ? error.message : String(error),
@@ -224,8 +233,8 @@ export async function triggerRatchetFixer(params: {
 
     return { type: 'ERROR', error: result.error };
   } catch (error) {
-    if (signal?.aborted && result?.status === 'started' && !startedFixerRecorded) {
-      await cleanUpStartedFixerAfterAbort({
+    if (result?.status === 'started' && !startedFixerRecorded) {
+      await cleanUpUnrecordedStartedFixer({
         workspaceId: workspace.id,
         sessionId: result.sessionId,
         sessionBridge,
