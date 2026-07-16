@@ -10,7 +10,8 @@ vi.mock('@/backend/services/workspace', () => ({
     findWithPRsForRatchet: vi.fn(),
     findForRatchetById: vi.fn(),
     update: vi.fn(),
-    updateRatchetCheckIfEnabled: vi.fn(),
+    transitionRatchetStateIfEnabled: vi.fn(),
+    settleRatchetIdleWhileDisabled: vi.fn(),
     recordRatchetDispatchIfEnabled: vi.fn(),
     adoptRatchetActiveSessionIfEnabled: vi.fn(),
     recordRatchetSessionEnd: vi.fn(),
@@ -108,7 +109,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       github: mockGitHubBridge,
       snapshot: mockSnapshotBridge,
     });
-    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(true);
+    vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(true);
+    vi.mocked(workspaceAccessor.settleRatchetIdleWhileDisabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.adoptRatchetActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(true);
@@ -213,6 +215,90 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       newState: RatchetState.IDLE,
     });
+    expect(workspaceAccessor.settleRatchetIdleWhileDisabled).toHaveBeenCalledWith(
+      'ws-disabled',
+      RatchetState.IDLE
+    );
+  });
+
+  it('settles a disabled workspace to IDLE via CAS and emits an accurate fromState', async () => {
+    const workspace = {
+      id: 'ws-disabled-settle',
+      prUrl: 'https://github.com/example/repo/pull/2',
+      prNumber: 2,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: false,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+      prReviewLastCheckedAt: null,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.mocked(workspaceAccessor.settleRatchetIdleWhileDisabled).mockResolvedValue(true);
+
+    const events: RatchetStateChangedEvent[] = [];
+    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+      events.push(event);
+    });
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(workspaceAccessor.settleRatchetIdleWhileDisabled).toHaveBeenCalledWith(
+      'ws-disabled-settle',
+      RatchetState.CI_FAILED
+    );
+    expect(result).toMatchObject({
+      previousState: RatchetState.CI_FAILED,
+      newState: RatchetState.IDLE,
+      action: { type: 'DISABLED' },
+    });
+    expect(events).toEqual([
+      {
+        workspaceId: 'ws-disabled-settle',
+        fromState: RatchetState.CI_FAILED,
+        toState: RatchetState.IDLE,
+      },
+    ]);
+    ratchetService.removeAllListeners();
+  });
+
+  it('does not emit for a disabled workspace when the settle CAS loses', async () => {
+    const workspace = {
+      id: 'ws-disabled-settle-race',
+      prUrl: 'https://github.com/example/repo/pull/2',
+      prNumber: 2,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: false,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+      prReviewLastCheckedAt: null,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.mocked(workspaceAccessor.settleRatchetIdleWhileDisabled).mockResolvedValue(false);
+
+    const events: RatchetStateChangedEvent[] = [];
+    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+      events.push(event);
+    });
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'DISABLED' },
+    });
+    expect(events).toEqual([]);
+    ratchetService.removeAllListeners();
   });
 
   it('does not dispatch when workspace is not idle', async () => {
@@ -327,8 +413,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       retryCount: 0,
     });
     const finalUpdatePayload = vi
-      .mocked(workspaceAccessor.updateRatchetCheckIfEnabled)
-      .mock.calls.at(-1)?.[1] as Record<string, unknown>;
+      .mocked(workspaceAccessor.transitionRatchetStateIfEnabled)
+      .mock.calls.at(-1)?.[2] as Record<string, unknown>;
     expect(finalUpdatePayload).not.toHaveProperty('ratchetLastCiRunId');
     expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
     expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
@@ -373,7 +459,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       promptSent: true,
     } as never);
     vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockResolvedValue(false);
-    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+      id: 'ws-disable-race-dispatch',
+      ratchetEnabled: false,
+    } as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
 
     const result = await unsafeCoerce<{
@@ -873,7 +963,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prState: 'OPEN',
       prNumber: 41,
     });
-    vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+      id: 'ws-disable-race-state',
+      ratchetEnabled: false,
+    } as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
 
     const events: RatchetStateChangedEvent[] = [];
@@ -890,6 +984,70 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
     });
     expect(events).toHaveLength(0);
+    ratchetService.removeAllListeners();
+  });
+
+  it('reports a concurrent state change without emitting when the check loses the CAS while still enabled', async () => {
+    const recentCheck = new Date();
+    const workspace = {
+      id: 'ws-superseded',
+      prUrl: 'https://github.com/example/repo/pull/42',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_RUNNING,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      prReviewLastCheckedAt: recentCheck,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'new-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: recentCheck.getTime() - 1000,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 42,
+    });
+    // The CAS on fromState loses (e.g. markPrClosed settled the workspace to
+    // IDLE mid-check) while ratcheting remains enabled.
+    vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+      id: 'ws-superseded',
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+    } as never);
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+    const events: RatchetStateChangedEvent[] = [];
+    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+      events.push(event);
+    });
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      previousState: RatchetState.CI_RUNNING,
+      newState: RatchetState.CI_RUNNING,
+      action: {
+        type: 'WAITING',
+        reason: 'Ratchet state changed concurrently during this check; re-evaluating next cycle',
+      },
+    });
+    expect(events).toHaveLength(0);
+    expect(mockSnapshotBridge.recordCIObservation).not.toHaveBeenCalled();
+    expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
     ratchetService.removeAllListeners();
   });
 
@@ -2046,13 +2204,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetService.removeAllListeners();
     });
 
-    it('resets ratchet state to IDLE and emits a state change', async () => {
+    it('resets ratchet state to IDLE via CAS on fromState and emits a state change', async () => {
       vi.mocked(workspaceAccessor.findById).mockResolvedValue({
         id: 'ws-closed',
         ratchetEnabled: true,
         ratchetState: RatchetState.CI_FAILED,
       } as never);
-      vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(true);
+      vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(true);
 
       const stateEvents: RatchetStateChangedEvent[] = [];
       ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
@@ -2061,14 +2219,62 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await ratchetService.markPrClosed('ws-closed');
 
-      expect(workspaceAccessor.updateRatchetCheckIfEnabled).toHaveBeenCalledWith('ws-closed', {
-        ratchetState: RatchetState.IDLE,
-        ratchetLastCheckedAt: expect.any(Date),
-      });
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).toHaveBeenCalledWith(
+        'ws-closed',
+        RatchetState.CI_FAILED,
+        {
+          ratchetState: RatchetState.IDLE,
+          ratchetLastCheckedAt: expect.any(Date),
+        }
+      );
       expect(stateEvents).toEqual([
         {
           workspaceId: 'ws-closed',
           fromState: RatchetState.CI_FAILED,
+          toState: RatchetState.IDLE,
+        },
+      ]);
+    });
+
+    it('emits the fromState that actually won the compare-and-swap after losing a race', async () => {
+      vi.mocked(workspaceAccessor.findById)
+        .mockResolvedValueOnce({
+          id: 'ws-closed',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.CI_FAILED,
+        } as never)
+        .mockResolvedValueOnce({
+          id: 'ws-closed',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.CI_RUNNING,
+        } as never);
+      vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      const stateEvents: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        stateEvents.push(event);
+      });
+
+      await ratchetService.markPrClosed('ws-closed');
+
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).toHaveBeenNthCalledWith(
+        1,
+        'ws-closed',
+        RatchetState.CI_FAILED,
+        expect.objectContaining({ ratchetState: RatchetState.IDLE })
+      );
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).toHaveBeenNthCalledWith(
+        2,
+        'ws-closed',
+        RatchetState.CI_RUNNING,
+        expect.objectContaining({ ratchetState: RatchetState.IDLE })
+      );
+      expect(stateEvents).toEqual([
+        {
+          workspaceId: 'ws-closed',
+          fromState: RatchetState.CI_RUNNING,
           toState: RatchetState.IDLE,
         },
       ]);
@@ -2083,16 +2289,22 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await ratchetService.markPrClosed('ws-closed');
 
-      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).not.toHaveBeenCalled();
     });
 
     it('does not emit when ratcheting was disabled concurrently', async () => {
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
-        id: 'ws-closed',
-        ratchetEnabled: true,
-        ratchetState: RatchetState.CI_FAILED,
-      } as never);
-      vi.mocked(workspaceAccessor.updateRatchetCheckIfEnabled).mockResolvedValue(false);
+      vi.mocked(workspaceAccessor.findById)
+        .mockResolvedValueOnce({
+          id: 'ws-closed',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.CI_FAILED,
+        } as never)
+        .mockResolvedValueOnce({
+          id: 'ws-closed',
+          ratchetEnabled: false,
+          ratchetState: RatchetState.IDLE,
+        } as never);
+      vi.mocked(workspaceAccessor.transitionRatchetStateIfEnabled).mockResolvedValue(false);
 
       const stateEvents: RatchetStateChangedEvent[] = [];
       ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
@@ -2109,7 +2321,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await ratchetService.markPrClosed('ws-missing');
 
-      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).not.toHaveBeenCalled();
     });
 
     it('does not continue to side effects after a timed-out await completes', async () => {
@@ -2165,7 +2377,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(finishSpy).not.toHaveBeenCalled();
-      expect(workspaceAccessor.updateRatchetCheckIfEnabled).not.toHaveBeenCalled();
+      expect(workspaceAccessor.transitionRatchetStateIfEnabled).not.toHaveBeenCalled();
     });
   });
 

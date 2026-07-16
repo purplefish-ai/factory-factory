@@ -222,7 +222,11 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
   },
-  updateRatchetCheckIfEnabled: {
+  transitionRatchetStateIfEnabled: {
+    type: 'static',
+    fields: ['ratchetState', 'ratchetLastCheckedAt'],
+  },
+  settleRatchetIdleWhileDisabled: {
     type: 'static',
     fields: ['ratchetState', 'ratchetLastCheckedAt'],
   },

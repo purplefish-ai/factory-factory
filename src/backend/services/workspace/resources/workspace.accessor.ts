@@ -631,16 +631,39 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Persist ratchet check output only while ratcheting remains enabled.
-   * This prevents stale in-flight checks from overwriting the disabled state.
+   * Compare-and-swap ratchet state transition, mirroring transitionWithCas.
+   * Persists only while ratcheting remains enabled AND the state still matches
+   * the fromState the caller observed, so stale in-flight checks can neither
+   * overwrite the disabled state nor a concurrent transition, and emitted
+   * fromState values are accurate by construction. Transition validity is
+   * checked by the caller against RATCHET_VALID_TRANSITIONS (see
+   * ratchet-state-machine.ts).
    */
-  async updateRatchetCheckIfEnabled(
+  async transitionRatchetStateIfEnabled(
     workspaceId: string,
+    fromState: RatchetState,
     data: Pick<UpdateWorkspaceInput, 'ratchetState' | 'ratchetLastCheckedAt'>
   ): Promise<boolean> {
     const result = await prisma.workspace.updateMany({
-      where: { id: workspaceId, ratchetEnabled: true },
+      where: { id: workspaceId, ratchetEnabled: true, ratchetState: fromState },
       data,
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Settle ratchet state to IDLE for a workspace whose ratcheting is disabled,
+   * CAS on the fromState the caller observed. The disabled condition keeps
+   * this write from clobbering a concurrent re-enable, and the fromState
+   * condition keeps the emitted transition accurate.
+   */
+  async settleRatchetIdleWhileDisabled(
+    workspaceId: string,
+    fromState: RatchetState
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id: workspaceId, ratchetEnabled: false, ratchetState: fromState },
+      data: { ratchetState: 'IDLE', ratchetLastCheckedAt: new Date() },
     });
     return result.count > 0;
   }
