@@ -10,6 +10,7 @@ import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
+import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -177,9 +178,12 @@ function attachTerminalListeners(
   cleanupMap?.set(terminalId, unsubscribers);
 
   const unsubOutput = terminalService.onOutput(terminalId, (output) => {
-    if (ws.readyState === WS_READY_STATE.OPEN) {
-      ws.send(JSON.stringify({ type: 'output', terminalId, data: output }));
-    }
+    sendStreamOutput(
+      ws,
+      JSON.stringify({ type: 'output', terminalId, data: output }),
+      logger,
+      'terminal output'
+    );
   });
   unsubscribers.push(unsubOutput);
 

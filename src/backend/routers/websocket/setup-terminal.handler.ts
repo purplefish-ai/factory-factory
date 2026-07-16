@@ -13,6 +13,7 @@ import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
+import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import {
   type SetupTerminalMessageInput,
   SetupTerminalMessageSchema,
@@ -66,9 +67,12 @@ function handleCreate(
   });
 
   state.pty.onData((output: string) => {
-    if (ws.readyState === WS_READY_STATE.OPEN) {
-      ws.send(JSON.stringify({ type: 'output', data: output }));
-    }
+    sendStreamOutput(
+      ws,
+      JSON.stringify({ type: 'output', data: output }),
+      logger,
+      'setup terminal output'
+    );
   });
 
   state.pty.onExit(({ exitCode }: { exitCode: number }) => {

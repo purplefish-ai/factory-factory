@@ -8,7 +8,7 @@
 
 import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
-import { safeSend } from '@/backend/lib/websocket-send';
+import { safeSend, sendStreamOutput } from '@/backend/lib/websocket-send';
 import {
   createWebSocketUpgradeHandler,
   trackConnection,
@@ -54,7 +54,7 @@ export function createPushChannelUpgradeHandler(
       }
 
       const unsubscribe = subscribeToOutput(workspaceId, (data) => {
-        safeSend(ws, JSON.stringify({ type: 'output', data }), logger, 'log output');
+        sendStreamOutput(ws, JSON.stringify({ type: 'output', data }), logger, 'log output');
       });
 
       ws.on('close', () => {
