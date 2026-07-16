@@ -68,11 +68,21 @@ describe('SetupTerminalModal', () => {
 
     const retry = findRetryButton();
     expect(retry).not.toBeNull();
+    expect(document.body.textContent).toContain('Connection failed.');
 
     void act(() => {
       retry?.click();
     });
     expect(setupTerminalState.reconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the connection was lost when an established terminal gives up', () => {
+    setupTerminalState.gaveUp = true;
+    setupTerminalState.showTerminal = true;
+    render();
+
+    expect(document.body.textContent).toContain('Connection lost.');
+    expect(findRetryButton()).not.toBeNull();
   });
 
   it('shows the reconnecting status while a previous session reconnects', () => {

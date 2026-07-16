@@ -60,7 +60,7 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
             >
               {gaveUp ? (
                 <>
-                  <span>Connection failed.</span>
+                  <span>{showTerminal ? 'Connection lost.' : 'Connection failed.'}</span>
                   <button type="button" className="underline" onClick={reconnect}>
                     Retry
                   </button>
