@@ -206,6 +206,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
     isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
+    isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
     startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
     registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
     cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),

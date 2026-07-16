@@ -83,6 +83,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
   isRecentlyFetched: vi.fn(),
+  isFetchInFlight: vi.fn(),
   startFetch: vi.fn(),
   registerFetch: vi.fn(),
   cancelFetch: vi.fn(),
@@ -1985,6 +1986,87 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(mockGitHubBridge.getPRFullDetails).toHaveBeenCalledWith('example/repo', 9);
       expect(result?.newState).toBe(RatchetState.READY);
       expect(result?.action).not.toEqual({ type: 'WAITING', reason: 'recently_fetched' });
+    });
+
+    it('reruns a bypassed check once when the first attempt was dedup-skipped', async () => {
+      const workspace = {
+        id: 'ws-rerun',
+        prUrl: 'https://github.com/example/repo/pull/9',
+        prNumber: 9,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      };
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspace as never);
+      vi.mocked(mockGitHubBridge.extractPRInfo).mockReturnValue({
+        owner: 'example',
+        repo: 'repo',
+        number: 9,
+      });
+      // A concurrent fetch is in flight during the first attempt and has
+      // settled by the rerun.
+      vi.mocked(mockGitHubBridge.isFetchInFlight).mockReturnValueOnce(true).mockReturnValue(false);
+      vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
+        state: 'OPEN',
+        number: 9,
+        url: 'https://github.com/example/repo/pull/9',
+        reviewDecision: null,
+        mergeStateStatus: 'CLEAN',
+        reviews: [],
+        comments: [],
+        statusCheckRollup: null,
+      });
+      vi.mocked(mockGitHubBridge.getReviewComments).mockResolvedValue([]);
+      vi.mocked(mockGitHubBridge.computeCIStatus).mockReturnValue(CIStatus.SUCCESS);
+
+      const result = await ratchetService.checkWorkspaceById('ws-rerun', {
+        bypassPrFetchCooldown: true,
+      });
+
+      expect(mockGitHubBridge.getPRFullDetails).toHaveBeenCalledTimes(1);
+      expect(result?.newState).toBe(RatchetState.READY);
+      expect(result?.action).not.toEqual({ type: 'WAITING', reason: 'recently_fetched' });
+    });
+
+    it('does not rerun a bypassed check more than once', async () => {
+      const workspace = {
+        id: 'ws-rerun-cap',
+        prUrl: 'https://github.com/example/repo/pull/9',
+        prNumber: 9,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      };
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspace as never);
+      vi.mocked(mockGitHubBridge.extractPRInfo).mockReturnValue({
+        owner: 'example',
+        repo: 'repo',
+        number: 9,
+      });
+      // The concurrent fetch never settles: both attempts skip, no third try.
+      vi.mocked(mockGitHubBridge.isFetchInFlight).mockReturnValue(true);
+
+      const result = await ratchetService.checkWorkspaceById('ws-rerun-cap', {
+        bypassPrFetchCooldown: true,
+      });
+
+      expect(result?.action).toEqual({ type: 'WAITING', reason: 'recently_fetched' });
+      expect(mockGitHubBridge.isFetchInFlight).toHaveBeenCalledTimes(2);
+      expect(mockGitHubBridge.getPRFullDetails).not.toHaveBeenCalled();
     });
 
     it('deduplicates concurrent checks for the same workspace', async () => {

@@ -79,6 +79,7 @@ vi.mock('@/backend/services/github', () => ({
   },
   prFetchRegistry: {
     isRecentlyFetched: vi.fn(),
+    isFetchInFlight: vi.fn(),
     register: vi.fn(),
     startFetch: vi.fn(),
     cancelFetch: vi.fn(),

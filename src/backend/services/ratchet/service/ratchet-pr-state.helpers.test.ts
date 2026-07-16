@@ -162,6 +162,7 @@ describe('fetchPRState', () => {
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
+      isFetchInFlight: vi.fn(() => false),
       startFetch: vi.fn(),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
@@ -222,6 +223,25 @@ describe('fetchPRState', () => {
     // The bypassed fetch still claims and registers in the dedup registry.
     expect(github.startFetch).toHaveBeenCalledWith('ws-1');
     expect(github.registerFetch).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('still skips a bypassed fetch while another fetch is actively in flight', async () => {
+    const github = makeGitHub({
+      isRecentlyFetched: vi.fn(() => true),
+      isFetchInFlight: vi.fn(() => true),
+    });
+
+    const result = await fetchPRState({
+      workspace: makeWorkspace(),
+      authenticatedUsername: null,
+      github,
+      backoff,
+      bypassRecentFetchCooldown: true,
+    });
+
+    expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
+    expect(github.startFetch).not.toHaveBeenCalled();
+    expect(github.getPRFullDetails).not.toHaveBeenCalled();
   });
 });
 
@@ -333,6 +353,7 @@ describe('fetchPRState', () => {
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
+      isFetchInFlight: vi.fn(() => false),
       startFetch: vi.fn(),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),

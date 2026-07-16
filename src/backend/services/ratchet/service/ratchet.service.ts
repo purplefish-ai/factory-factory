@@ -14,6 +14,7 @@ import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge
 import type {
   ActiveFixerCheckResult,
   PRStateFetchResult,
+  PRStateFetchSkipped,
   PRStateInfo,
   RatchetAction,
   RatchetCheckResult,
@@ -40,6 +41,12 @@ import {
 import { RatchetWorkspaceCheckCoordinator } from './ratchet-workspace-check-coordinator';
 
 const logger = createLogger('ratchet');
+
+const RECENTLY_FETCHED_REASON: PRStateFetchSkipped['reason'] = 'recently_fetched';
+
+function isRecentlyFetchedWaitResult(result: WorkspaceRatchetResult): boolean {
+  return result.action.type === 'WAITING' && result.action.reason === RECENTLY_FETCHED_REASON;
+}
 
 export type { RatchetAction, RatchetCheckResult, WorkspaceRatchetResult } from './ratchet.types';
 
@@ -248,7 +255,21 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    return this.runWorkspaceCheckSafely(workspace, opts);
+    const result = await this.runWorkspaceCheckSafely(workspace, opts);
+
+    // A bypassed check can still come back dedup-skipped: the coordinator may
+    // have joined a normal check that was already in flight, or another
+    // service's fetch was actively in flight. Rerun once now that the
+    // concurrent work has settled so the bypass actually applies.
+    if (opts?.bypassPrFetchCooldown && isRecentlyFetchedWaitResult(result)) {
+      const freshWorkspace = await workspaceAccessor.findForRatchetById(workspaceId);
+      if (!freshWorkspace) {
+        return result;
+      }
+      return this.runWorkspaceCheckSafely(freshWorkspace, opts);
+    }
+
+    return result;
   }
 
   /**

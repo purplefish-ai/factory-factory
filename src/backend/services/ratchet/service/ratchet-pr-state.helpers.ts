@@ -343,9 +343,11 @@ export async function fetchPRState(params: {
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
   /**
-   * Skip the recently-fetched dedup check. Used by event-driven checks that
-   * fire right after another service's fetch claimed the workspace in the
-   * dedup registry — the whole point of those checks is to recompute now.
+   * Skip the completed-fetch cooldown. Used by event-driven checks that fire
+   * right after another service's fetch registered the workspace in the dedup
+   * registry — the whole point of those checks is to recompute now. An
+   * actively in-flight fetch is still honored, so the bypass never issues a
+   * duplicate concurrent GitHub call.
    */
   bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
@@ -355,7 +357,10 @@ export async function fetchPRState(params: {
     return null;
   }
 
-  if (!params.bypassRecentFetchCooldown && github.isRecentlyFetched(workspace.id)) {
+  const dedupSkip = params.bypassRecentFetchCooldown
+    ? github.isFetchInFlight(workspace.id)
+    : github.isRecentlyFetched(workspace.id);
+  if (dedupSkip) {
     logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
       workspaceId: workspace.id,
       prUrl: workspace.prUrl,
