@@ -12,22 +12,15 @@
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
-import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
-import type { Duplex } from 'node:stream';
-import type { WebSocket, WebSocketServer } from 'ws';
+import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
-import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
+import { ChatMessageSchema } from '@/backend/schemas/websocket';
 import type { ConnectionInfo } from '@/backend/services/session';
-import { toMessageString } from './message-utils';
-import {
-  markWebSocketAlive,
-  sendBadRequest,
-  validateTrustedLocalWebSocketRequest,
-  validateWebSocketOrigin,
-} from './upgrade-utils';
+import { parseWebSocketMessage } from './message-utils';
+import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // Chat Upgrade Handler Factory
@@ -131,21 +124,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return realPath;
   }
 
-  function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
-    const rawMessage: unknown = JSON.parse(toMessageString(data));
-    const parseResult = ChatMessageSchema.safeParse(rawMessage);
-
-    if (!parseResult.success) {
-      logger.warn('Invalid chat message format', {
-        errors: parseResult.error.issues,
-        connectionId,
-      });
-      return null;
-    }
-
-    return parseResult.data;
-  }
-
   function sendChatError(ws: WebSocket, dbSessionId: string | null, message: string): void {
     const errorResponse = { type: 'error', message };
     if (dbSessionId) {
@@ -162,50 +140,27 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
   ensureInitialized();
 
-  return function handleChatUpgrade(
-    request: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-    url: URL,
-    wss: WebSocketServer,
-    wsAliveMap: WeakMap<WebSocket, boolean>
-  ): void {
-    const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
-    const dbSessionId = url.searchParams.get('sessionId') || null;
-    const rawWorkingDir = url.searchParams.get('workingDir');
+  return createWebSocketUpgradeHandler({
+    connectionName: 'chat WebSocket',
+    configService,
+    logger,
+    authorize: ({ url, socket }) => {
+      const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
+      const dbSessionId = url.searchParams.get('sessionId') || null;
+      const rawWorkingDir = url.searchParams.get('workingDir');
 
-    if (
-      !validateWebSocketOrigin({
-        request,
-        socket,
-        configService,
-        logger,
-        connectionName: 'chat WebSocket',
-      })
-    ) {
-      return;
-    }
+      const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
+      if (rawWorkingDir && !workingDir) {
+        logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
+        sendBadRequest(socket, 'Invalid workingDir');
+        return null;
+      }
 
-    if (
-      !validateTrustedLocalWebSocketRequest({
-        request,
-        socket,
-        configService,
-        logger,
-        connectionName: 'chat WebSocket',
-      })
-    ) {
-      return;
-    }
+      return { connectionId, dbSessionId, workingDir };
+    },
+    onOpen: (ws, { auth }) => {
+      const { connectionId, dbSessionId, workingDir } = auth;
 
-    const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
-    if (rawWorkingDir && !workingDir) {
-      logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
-      sendBadRequest(socket, 'Invalid workingDir');
-      return;
-    }
-
-    wss.handleUpgrade(request, socket, head, (ws) => {
       logger.info('Chat WebSocket connection established', {
         connectionId,
         dbSessionId,
@@ -213,8 +168,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
       // Set up workspace notification forwarding (idempotent)
       chatEventForwarderService.setupWorkspaceNotifications();
-
-      markWebSocketAlive(ws, wsAliveMap);
 
       // Only initialize file logging if we have a session
       if (dbSessionId) {
@@ -273,7 +226,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       ws.on('message', async (data) => {
         inFlightMessageCount += 1;
         try {
-          const message = parseChatMessage(connectionId, data);
+          const message = parseWebSocketMessage(ChatMessageSchema, data, logger, 'chat message', {
+            connectionId,
+          });
           if (!message) {
             sendChatError(ws, dbSessionId, 'Invalid message format');
             return;
@@ -322,8 +277,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           });
         }
       });
-    });
-  };
+    },
+  });
 }
 
 export type { ChatMessageInput } from '@/backend/schemas/websocket';

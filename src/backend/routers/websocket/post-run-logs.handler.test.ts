@@ -81,7 +81,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    expect(logger.warn).toHaveBeenCalledWith('Post-run logs WebSocket missing workspaceId');
+    expect(logger.warn).toHaveBeenCalledWith('post-run logs WebSocket missing workspaceId');
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
     expect(socket.destroy).toHaveBeenCalledTimes(1);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
     );
 
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
-    expect(logger.warn).not.toHaveBeenCalledWith('Post-run logs WebSocket missing workspaceId');
+    expect(logger.warn).not.toHaveBeenCalledWith('post-run logs WebSocket missing workspaceId');
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
@@ -265,7 +265,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
 
     ws.emit('error', new Error('post-run socket failed'));
     expect(logger.error).toHaveBeenCalledWith(
-      'Post-run logs WebSocket error',
+      'post-run logs WebSocket error',
       expect.objectContaining({ message: 'post-run socket failed' })
     );
 

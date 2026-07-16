@@ -6,9 +6,7 @@
  * full project snapshot. On subsequent changes, pushes per-workspace deltas.
  */
 
-import type { IncomingMessage } from 'node:http';
-import type { Duplex } from 'node:stream';
-import type { WebSocket, WebSocketServer } from 'ws';
+import type { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { safeSend } from '@/backend/lib/websocket-send';
@@ -22,13 +20,7 @@ import {
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
 import { WorkspaceStatus } from '@/shared/core';
-import {
-  getOrCreateConnectionSet,
-  markWebSocketAlive,
-  sendBadRequest,
-  validateTrustedLocalWebSocketRequest,
-  validateWebSocketOrigin,
-} from './upgrade-utils';
+import { createWebSocketUpgradeHandler, trackConnection } from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -75,11 +67,16 @@ class SnapshotStoreSubscriptionState {
     // Buffered replays omit reviewCount: it is computed before the
     // snapshot_full baseline, and clients keep their current count when the
     // field is absent, so replaying it would regress the baseline's count.
-    const fanOut = (
-      projectClients: Set<WebSocket>,
+    const fanOutToProject = (
+      projectId: string,
       payload: Record<string, unknown>,
       description: string
     ) => {
+      const projectClients = connections.get(projectId);
+      if (!projectClients || projectClients.size === 0) {
+        return;
+      }
+
       const reviewCount = getSnapshotReviewCount(logger);
       const message = JSON.stringify({ ...payload, reviewCount });
       let bufferedMessage: string | null = null;
@@ -96,11 +93,6 @@ class SnapshotStoreSubscriptionState {
     };
 
     const changedListener = (event: SnapshotChangedEvent) => {
-      const projectClients = connections.get(event.projectId);
-      if (!projectClients || projectClients.size === 0) {
-        return;
-      }
-
       const payload = isHiddenWorkspaceStatus(event.entry.status)
         ? {
             type: 'snapshot_removed',
@@ -112,17 +104,12 @@ class SnapshotStoreSubscriptionState {
             entry: event.entry,
           };
 
-      fanOut(projectClients, payload, 'snapshot delta');
+      fanOutToProject(event.projectId, payload, 'snapshot delta');
     };
 
     const removedListener = (event: SnapshotRemovedEvent) => {
-      const projectClients = connections.get(event.projectId);
-      if (!projectClients || projectClients.size === 0) {
-        return;
-      }
-
-      fanOut(
-        projectClients,
+      fanOutToProject(
+        event.projectId,
         {
           type: 'snapshot_removed',
           workspaceId: event.workspaceId,
@@ -202,57 +189,22 @@ export function createSnapshotsUpgradeHandler(
   const connections = options.connections ?? snapshotConnections;
   const subscriptionState = options.subscriptionState ?? defaultSnapshotStoreSubscriptionState;
 
-  return function handleSnapshotsUpgrade(
-    request: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-    url: URL,
-    wss: WebSocketServer,
-    wsAliveMap: WeakMap<WebSocket, boolean>
-  ): void {
-    if (
-      !validateWebSocketOrigin({
-        request,
-        socket,
-        configService,
-        logger,
-        connectionName: 'snapshots WebSocket',
-      })
-    ) {
-      return;
-    }
+  return createWebSocketUpgradeHandler({
+    connectionName: 'snapshots WebSocket',
+    configService,
+    logger,
+    requiredParams: ['projectId'],
+    onOpen: (ws, { params }) => {
+      const { projectId } = params;
 
-    if (
-      !validateTrustedLocalWebSocketRequest({
-        request,
-        socket,
-        configService,
-        logger,
-        connectionName: 'snapshots WebSocket',
-      })
-    ) {
-      return;
-    }
+      subscriptionState.ensure(connections, logger);
 
-    subscriptionState.ensure(connections, logger);
-
-    const projectId = url.searchParams.get('projectId');
-
-    if (!projectId) {
-      logger.warn('Snapshots WebSocket missing projectId');
-      sendBadRequest(socket);
-      return;
-    }
-
-    wss.handleUpgrade(request, socket, head, (ws) => {
       logger.info('Snapshots WebSocket connection established', { projectId });
-
-      markWebSocketAlive(ws, wsAliveMap);
 
       // Add to connection set FIRST so we don't miss any delta events during
       // the optional reconciliation wait below. Deltas that arrive before the
       // snapshot_full baseline are buffered and flushed after it.
-      getOrCreateConnectionSet(connections, projectId).add(ws);
+      const untrack = trackConnection(connections, projectId, ws);
       pendingDeltaBuffers.set(ws, []);
 
       // If a startup reconciliation is in progress and the store has no entries
@@ -303,18 +255,12 @@ export function createSnapshotsUpgradeHandler(
         logger.info('Snapshots WebSocket connection closed', { projectId });
 
         pendingDeltaBuffers.delete(ws);
-        const projectConnections = connections.get(projectId);
-        if (projectConnections) {
-          projectConnections.delete(ws);
-          if (projectConnections.size === 0) {
-            connections.delete(projectId);
-          }
-        }
+        untrack();
       });
 
       ws.on('error', (error) => {
         logger.error('Snapshots WebSocket error', error);
       });
-    });
-  };
+    },
+  });
 }

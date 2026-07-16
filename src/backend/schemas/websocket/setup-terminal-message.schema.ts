@@ -20,9 +20,6 @@ export const SetupTerminalMessageSchema = z.discriminatedUnion('type', [
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
   }),
-  z.object({
-    type: z.literal('ping'),
-  }),
 ]);
 
 export type SetupTerminalMessageInput = z.infer<typeof SetupTerminalMessageSchema>;
