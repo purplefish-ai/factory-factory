@@ -130,6 +130,7 @@ function SingleQuestionLayout({
       role="form"
       label="Question from Claude"
       hideIconOnMobile
+      iconSlot="question-prompt-icon"
       actions={
         <div className="flex self-stretch justify-end sm:self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
@@ -189,6 +190,7 @@ function MultiQuestionLayout({
       role="form"
       label="Questions from Claude"
       hideIconOnMobile
+      iconSlot="question-prompt-icon"
       actions={
         <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
           <Button

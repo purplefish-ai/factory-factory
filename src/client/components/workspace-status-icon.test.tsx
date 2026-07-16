@@ -11,8 +11,8 @@ describe('WorkspaceStatusIcon', () => {
       />
     );
 
-    expect(markup).toContain('lucide-shield-alert');
-    expect(markup).not.toContain('lucide-triangle-alert');
+    expect(markup).toContain('data-icon="permission-request"');
+    expect(markup).not.toContain('data-icon="runtime-error"');
   });
 
   it('shows runtime error icon when there is no pending request', () => {
@@ -20,6 +20,6 @@ describe('WorkspaceStatusIcon', () => {
       <WorkspaceStatusIcon sessionRuntimeErrorMessage="runtime failed" />
     );
 
-    expect(markup).toContain('lucide-triangle-alert');
+    expect(markup).toContain('data-icon="runtime-error"');
   });
 });

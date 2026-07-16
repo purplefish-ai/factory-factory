@@ -7,6 +7,7 @@ const repositoryRoot = process.cwd();
 const thisFile = 'src/lib/icon-library.test.ts';
 const lucidePackage = ['lucide', 'react'].join('-');
 const lucideClassPrefix = ['lucide', ''].join('-');
+const lucideIconType = ['Lucide', 'Icon'].join('');
 const packageJsonSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
 });
@@ -35,7 +36,7 @@ describe('icon library', () => {
       .flatMap((path) => {
         const source = readFileSync(path, 'utf8');
         return source.includes(lucidePackage) ||
-          source.includes('LucideIcon') ||
+          source.includes(lucideIconType) ||
           source.includes(lucideClassPrefix)
           ? [relative(repositoryRoot, path)]
           : [];

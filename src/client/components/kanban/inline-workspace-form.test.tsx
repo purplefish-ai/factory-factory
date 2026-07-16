@@ -21,12 +21,12 @@ const mocks = vi.hoisted(() => ({
   kanbanCache: undefined as unknown[] | undefined,
 }));
 
-vi.mock('lucide-react', () => ({
+vi.mock('@phosphor-icons/react', () => ({
+  ArrowsClockwise: () => null,
   Calendar: () => null,
-  ChevronDown: () => null,
-  Loader2: () => null,
+  CaretDown: () => null,
   Paperclip: () => null,
-  RefreshCw: () => null,
+  SpinnerGap: () => null,
 }));
 
 vi.mock('sonner', () => ({

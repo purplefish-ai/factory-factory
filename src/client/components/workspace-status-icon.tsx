@@ -14,16 +14,31 @@ export function WorkspaceStatusIcon({
   if (pendingRequestType) {
     switch (pendingRequestType) {
       case 'permission_request':
-        return <ShieldWarning className="h-3.5 w-3.5 shrink-0 text-orange-500" />;
+        return (
+          <ShieldWarning
+            data-icon="permission-request"
+            className="h-3.5 w-3.5 shrink-0 text-orange-500"
+          />
+        );
       case 'plan_approval':
-        return <ClipboardText className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+        return (
+          <ClipboardText
+            data-icon="plan-approval"
+            className="h-3.5 w-3.5 shrink-0 text-amber-500"
+          />
+        );
       case 'user_question':
-        return <ChatCircleDots className="h-3.5 w-3.5 shrink-0 text-blue-500" />;
+        return (
+          <ChatCircleDots
+            data-icon="user-question"
+            className="h-3.5 w-3.5 shrink-0 text-blue-500"
+          />
+        );
     }
   }
 
   if (sessionRuntimeErrorMessage) {
-    return <Warning className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+    return <Warning data-icon="runtime-error" className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
   }
 
   if (isWorking) {

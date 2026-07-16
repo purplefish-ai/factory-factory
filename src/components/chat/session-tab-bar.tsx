@@ -261,6 +261,7 @@ export function SessionTabBar({
           className="h-7 w-7 shrink-0"
           onClick={scrollLeft}
           disabled={disabled}
+          aria-label="Scroll session tabs left"
         >
           <CaretLeft className="h-4 w-4" />
         </Button>
@@ -306,6 +307,7 @@ export function SessionTabBar({
           className="h-7 w-7 shrink-0"
           onClick={scrollRight}
           disabled={disabled}
+          aria-label="Scroll session tabs right"
         >
           <CaretRight className="h-4 w-4" />
         </Button>

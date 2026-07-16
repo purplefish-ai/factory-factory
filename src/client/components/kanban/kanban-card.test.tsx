@@ -6,15 +6,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
-vi.mock('lucide-react', () => ({
-  AlertTriangle: () => null,
+vi.mock('@phosphor-icons/react', () => ({
   Archive: () => null,
+  ArrowsClockwise: () => null,
+  Chat: () => null,
   GitBranch: () => null,
   GitPullRequest: () => null,
-  MessageSquare: () => null,
   Pencil: () => null,
   Play: () => null,
-  RefreshCw: () => null,
+  TreeStructure: () => null,
+  Warning: () => null,
 }));
 
 vi.mock('react-router', () => ({

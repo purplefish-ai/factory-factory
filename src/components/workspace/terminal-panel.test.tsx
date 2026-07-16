@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   } | null,
 }));
 
-vi.mock('lucide-react', () => ({
+vi.mock('@phosphor-icons/react', () => ({
   Terminal: () => null,
 }));
 
