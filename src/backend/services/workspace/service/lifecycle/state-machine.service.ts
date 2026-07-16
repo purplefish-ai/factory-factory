@@ -73,6 +73,13 @@ export interface WorkspaceStateChangedEvent {
   workspaceId: string;
   fromStatus: WorkspaceStatus;
   toStatus: WorkspaceStatus;
+  /**
+   * The workspace row re-read after the transition committed. Carries fields
+   * co-updated with the status (e.g. branchName) so consumers don't have to
+   * wait for the next reconciliation pass. Null only if the re-read found no
+   * row (workspace deleted concurrently).
+   */
+  workspace: Workspace | null;
 }
 
 export interface StartProvisioningOptions {
@@ -223,6 +230,7 @@ class WorkspaceStateMachineService extends EventEmitter {
       workspaceId,
       fromStatus: currentStatus,
       toStatus: targetStatus,
+      workspace: updated,
     } satisfies WorkspaceStateChangedEvent);
 
     logger.debug('Workspace status transitioned', {
@@ -283,6 +291,7 @@ class WorkspaceStateMachineService extends EventEmitter {
         workspaceId,
         fromStatus: 'FAILED' as WorkspaceStatus,
         toStatus: 'PROVISIONING' as WorkspaceStatus,
+        workspace: updated,
       } satisfies WorkspaceStateChangedEvent);
 
       logger.debug('Workspace retry started', {
@@ -360,6 +369,7 @@ class WorkspaceStateMachineService extends EventEmitter {
       workspaceId,
       fromStatus: currentStatus,
       toStatus: 'ARCHIVING',
+      workspace: updated,
     } satisfies WorkspaceStateChangedEvent);
 
     logger.debug('Workspace status transitioned', {
@@ -443,6 +453,7 @@ class WorkspaceStateMachineService extends EventEmitter {
       workspaceId,
       fromStatus: 'READY' as WorkspaceStatus,
       toStatus: 'PROVISIONING' as WorkspaceStatus,
+      workspace: updated,
     } satisfies WorkspaceStateChangedEvent);
 
     logger.debug('Workspace setup script retry started from READY+warning', {
@@ -492,6 +503,7 @@ class WorkspaceStateMachineService extends EventEmitter {
       workspaceId,
       fromStatus: 'FAILED' as WorkspaceStatus,
       toStatus: 'NEW' as WorkspaceStatus,
+      workspace: updated,
     } satisfies WorkspaceStateChangedEvent);
 
     logger.debug('Workspace reset to NEW for retry', {
