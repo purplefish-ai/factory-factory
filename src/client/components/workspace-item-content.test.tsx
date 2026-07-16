@@ -7,11 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from './workspace-item-content';
 
-vi.mock('lucide-react', () => ({
-  CircleDot: () => null,
-  Clock: () => null,
-  GitBranch: () => null,
-  GitPullRequest: () => null,
+vi.mock('@phosphor-icons/react', () => ({
+  ClockIcon: () => null,
+  DotOutlineIcon: () => null,
+  GitBranchIcon: () => null,
+  GitPullRequestIcon: () => null,
+  TreeStructureIcon: () => null,
 }));
 
 vi.mock('@/client/components/workspace-status-icon', () => ({

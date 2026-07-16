@@ -1,4 +1,9 @@
-import { CheckCircle2, CircleDot, GitPullRequest, XCircle } from 'lucide-react';
+import {
+  CheckCircleIcon,
+  DotOutlineIcon,
+  GitPullRequestIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { Button } from '@/components/ui/button';
@@ -39,9 +44,9 @@ export function WorkspacePrChip({
         className
       )}
     >
-      <GitPullRequest className="h-3 w-3" />#{prNumber}
-      {isMerged && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-      {isClosed && <XCircle className="h-3 w-3 text-slate-500" />}
+      <GitPullRequestIcon className="h-3 w-3" />#{prNumber}
+      {isMerged && <CheckCircleIcon className="h-3 w-3 text-green-500" />}
+      {isClosed && <XCircleIcon className="h-3 w-3 text-slate-500" />}
     </a>
   );
 }
@@ -69,7 +74,7 @@ export function WorkspacePrAction({
               )
             }
           >
-            <GitPullRequest className="h-3 w-3" />
+            <GitPullRequestIcon className="h-3 w-3" />
             Create PR
           </Button>
         </TooltipTrigger>
@@ -102,7 +107,7 @@ export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWo
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <CircleDot className="h-3 w-3 text-violet-500" />
+        <DotOutlineIcon className="h-3 w-3 text-violet-500" />
         {workspace.linearIssueIdentifier}
       </a>
     );
@@ -116,7 +121,7 @@ export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWo
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
       >
-        <CircleDot className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
+        <DotOutlineIcon className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
       </a>
     );
   }

@@ -1,4 +1,4 @@
-import { Menu, PanelLeft } from 'lucide-react';
+import { ListIcon, SidebarSimpleIcon } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -19,7 +19,7 @@ function SidebarToggleButton() {
           aria-label="Toggle sidebar"
           onClick={toggleSidebar}
         >
-          {isMobile ? <Menu className="h-5 w-5" /> : <PanelLeft className="h-4 w-4" />}
+          {isMobile ? <ListIcon className="h-5 w-5" /> : <SidebarSimpleIcon className="h-4 w-4" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right">Toggle sidebar</TooltipContent>

@@ -1,4 +1,4 @@
-import { FileText, X } from 'lucide-react';
+import { FileTextIcon, XIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -71,7 +71,7 @@ export function AttachmentPreview({
               <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded flex items-center justify-center">
                 {isText ? (
                   <div className="h-full w-full bg-muted flex items-center justify-center">
-                    <FileText className="h-6 w-6 text-muted-foreground" />
+                    <FileTextIcon className="h-6 w-6 text-muted-foreground" />
                   </div>
                 ) : (
                   <img
@@ -101,7 +101,7 @@ export function AttachmentPreview({
                   className="h-5 w-5 rounded-full hover:bg-destructive/20 hover:text-destructive ml-1"
                   aria-label="Remove attachment"
                 >
-                  <X className="h-3 w-3" />
+                  <XIcon className="h-3 w-3" />
                 </Button>
               )}
             </AttachmentContainer>

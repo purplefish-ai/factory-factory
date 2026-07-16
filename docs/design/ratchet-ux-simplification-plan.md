@@ -39,7 +39,7 @@ Create one reusable component for ratchet status + toggle behavior.
   - `isProcessing` (active state machine work),
   - `onToggle`,
   - optional compact/full variants if needed.
-- Standardize iconography to hammer (`lucide-react` Hammer).
+- Standardize iconography to the Phosphor `HammerIcon` component.
 - Implement three visual states:
   - Off: muted/gray icon and neutral border.
   - On idle: active icon + static dashed border.

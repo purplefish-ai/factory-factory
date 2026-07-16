@@ -1,4 +1,4 @@
-import { Info, MoreHorizontal, Pencil, Settings2 } from 'lucide-react';
+import { DotsThreeIcon, GearSixIcon, InfoIcon, PencilIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -174,7 +174,7 @@ export function WorkspaceHeaderOverflowMenu({
                 className="h-6 w-6 md:h-9 md:w-9"
                 aria-label="More actions"
               >
-                <MoreHorizontal className="h-3 w-3 md:h-4 md:w-4" />
+                <DotsThreeIcon className="h-3 w-3 md:h-4 md:w-4" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -190,7 +190,7 @@ export function WorkspaceHeaderOverflowMenu({
               });
             }}
           >
-            <Info className="h-4 w-4" />
+            <InfoIcon className="h-4 w-4" />
             View details
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -201,7 +201,7 @@ export function WorkspaceHeaderOverflowMenu({
               });
             }}
           >
-            <Pencil className="h-4 w-4" />
+            <PencilIcon className="h-4 w-4" />
             Rename workspace
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -212,7 +212,7 @@ export function WorkspaceHeaderOverflowMenu({
               });
             }}
           >
-            <Settings2 className="h-4 w-4" />
+            <GearSixIcon className="h-4 w-4" />
             Provider settings
           </DropdownMenuItem>
           <RatchetingToggle workspace={workspace} workspaceId={workspaceId} renderAsMenuItem />

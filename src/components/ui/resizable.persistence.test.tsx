@@ -16,8 +16,8 @@ vi.mock('react-resizable-panels', () => ({
   Separator: (props: { children?: ReactNode }) => createElement('div', null, props.children),
 }));
 
-vi.mock('lucide-react', () => ({
-  GripVertical: () => createElement('svg'),
+vi.mock('@phosphor-icons/react', () => ({
+  DotsSixVerticalIcon: () => createElement('svg'),
 }));
 
 import { ResizablePanelGroup } from './resizable';

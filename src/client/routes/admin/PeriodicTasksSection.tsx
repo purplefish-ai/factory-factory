@@ -1,4 +1,4 @@
-import { Calendar, Pencil, Trash2 } from 'lucide-react';
+import { CalendarIcon, PencilIcon, TrashIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
@@ -139,7 +139,7 @@ function PeriodicTaskList({ projectId }: { projectId: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
+            <CalendarIcon className="w-5 h-5" />
             Periodic Tasks
           </CardTitle>
         </CardHeader>
@@ -154,7 +154,7 @@ function PeriodicTaskList({ projectId }: { projectId: string }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
+          <CalendarIcon className="w-5 h-5" />
           Periodic Tasks
         </CardTitle>
         <CardDescription>Recurring tasks that create workspaces on a schedule</CardDescription>
@@ -329,7 +329,7 @@ function PeriodicTaskRow({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleEdit}>
-            <Pencil className="h-3.5 w-3.5" />
+            <PencilIcon className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
@@ -337,7 +337,7 @@ function PeriodicTaskRow({
             className="h-7 w-7 text-destructive hover:text-destructive"
             onClick={onDelete}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>

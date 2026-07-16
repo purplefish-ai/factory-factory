@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+import { PulseIcon } from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -57,7 +57,7 @@ export function ContextWindowIndicator({ tokenStats, className }: ContextWindowI
           className={cn('h-6 gap-1.5 px-2 text-xs', colorClass, className)}
           aria-label="View usage statistics"
         >
-          <Activity className="h-3 w-3" />
+          <PulseIcon className="h-3 w-3" />
           <div className="flex items-center gap-1.5">
             <span>{formatTokenCount(usedTokens)}</span>
             {tokenStats.contextWindow && (

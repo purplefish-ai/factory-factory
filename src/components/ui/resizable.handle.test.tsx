@@ -16,8 +16,8 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('lucide-react', () => ({
-  GripVertical: () => createElement('svg'),
+vi.mock('@phosphor-icons/react', () => ({
+  DotsSixVerticalIcon: () => createElement('svg'),
 }));
 
 import { ResizableHandle } from './resizable';

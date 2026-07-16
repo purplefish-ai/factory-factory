@@ -1,15 +1,15 @@
-import type { inferRouterOutputs } from '@trpc/server';
 import {
-  Camera,
-  Check,
-  Eye,
-  GitBranch,
-  type LucideIcon,
-  Play,
-  Sparkles,
-  Terminal,
-  Zap,
-} from 'lucide-react';
+  CameraIcon,
+  CheckIcon,
+  EyeIcon,
+  GitBranchIcon,
+  type Icon,
+  LightningIcon,
+  PlayIcon,
+  SparkleIcon,
+  TerminalIcon,
+} from '@phosphor-icons/react';
+import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -38,19 +38,19 @@ interface QuickActionsMenuProps {
 // Icon Mapping
 // =============================================================================
 
-const ICON_MAP: Record<string, LucideIcon> = {
-  zap: Zap,
-  sparkles: Sparkles,
-  eye: Eye,
-  play: Play,
-  terminal: Terminal,
-  check: Check,
-  camera: Camera,
-  'git-branch': GitBranch,
+const ICON_MAP: Record<string, Icon> = {
+  zap: LightningIcon,
+  sparkles: SparkleIcon,
+  eye: EyeIcon,
+  play: PlayIcon,
+  terminal: TerminalIcon,
+  check: CheckIcon,
+  camera: CameraIcon,
+  'git-branch': GitBranchIcon,
 };
 
-function getActionIcon(iconName?: string | null): LucideIcon {
-  return (iconName && ICON_MAP[iconName]) || Zap;
+function getActionIcon(iconName?: string | null): Icon {
+  return (iconName && ICON_MAP[iconName]) || LightningIcon;
 }
 
 // =============================================================================
@@ -76,7 +76,7 @@ export function QuickActionsMenu({ onExecuteAgent, disabled = false }: QuickActi
               className="h-8 w-8"
               disabled={disabled || isLoading || !hasActions}
             >
-              <Zap className="h-4 w-4" />
+              <LightningIcon className="h-4 w-4" />
               <span className="sr-only">Quick Actions</span>
             </Button>
           </DropdownMenuTrigger>

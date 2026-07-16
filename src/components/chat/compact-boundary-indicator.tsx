@@ -1,4 +1,4 @@
-import { Scissors } from 'lucide-react';
+import { ScissorsIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -21,7 +21,7 @@ export const CompactBoundaryIndicator = memo(function CompactBoundaryIndicator({
         className
       )}
     >
-      <Scissors className="h-4 w-4 text-muted-foreground" />
+      <ScissorsIcon className="h-4 w-4 text-muted-foreground" />
       <span className="text-xs text-muted-foreground">
         Context compacted - earlier messages may be summarized
       </span>

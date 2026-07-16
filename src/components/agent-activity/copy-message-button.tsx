@@ -1,4 +1,4 @@
-import { Check, Copy } from 'lucide-react';
+import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
@@ -71,9 +71,9 @@ export function CopyMessageButton({ textContent, className }: CopyMessageButtonP
       aria-label="Copy message to clipboard"
     >
       {isCopied ? (
-        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+        <CheckIcon className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
       ) : (
-        <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+        <CopyIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
       )}
     </button>
   );

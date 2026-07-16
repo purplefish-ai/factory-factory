@@ -1,4 +1,4 @@
-import { Calendar, ExternalLink } from 'lucide-react';
+import { ArrowSquareOutIcon, CalendarIcon } from '@phosphor-icons/react';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,7 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
       {/* Header */}
       <div className="px-3 py-2 border-b bg-muted/30 space-y-1">
         <div className="flex items-center gap-2">
-          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="font-medium text-sm truncate">{task.name}</span>
           <Badge variant="secondary" className="text-[10px] shrink-0">
             {cadenceLabel}
@@ -130,7 +130,7 @@ function ExecutionRow({
             className="flex items-center gap-1 text-primary hover:underline shrink-0"
           >
             PR #{execution.prNumber}
-            <ExternalLink className="h-3 w-3" />
+            <ArrowSquareOutIcon className="h-3 w-3" />
           </a>
         )}
       </div>

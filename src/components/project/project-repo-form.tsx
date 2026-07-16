@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, FolderOpenIcon } from 'lucide-react';
+import { CheckCircleIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,7 @@ export function ProjectRepoForm({
         </div>
         {factoryConfigExists && repoPath.trim() && (
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-            <CheckCircle2Icon className="h-4 w-4" />
+            <CheckCircleIcon className="h-4 w-4" />
             <span>factory-factory.json detected</span>
           </div>
         )}

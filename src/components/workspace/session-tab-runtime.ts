@@ -1,12 +1,12 @@
 import {
-  Activity,
-  CheckCircle2,
-  Circle,
-  CircleSlash,
-  Loader2,
-  type LucideIcon,
-  XCircle,
-} from 'lucide-react';
+  CheckCircleIcon,
+  CircleIcon,
+  type Icon,
+  ProhibitIcon,
+  PulseIcon,
+  SpinnerGapIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   getSessionSummaryErrorMessage,
@@ -22,7 +22,7 @@ export interface SessionTabRuntimeInfo {
   spin: boolean;
   label: string;
   description: string;
-  icon: LucideIcon;
+  icon: Icon;
   isRunning: boolean;
 }
 
@@ -32,7 +32,7 @@ const IDLE_STATUS: SessionTabRuntimeInfo = {
   spin: false,
   label: 'Idle',
   description: 'Ready for input',
-  icon: Circle,
+  icon: CircleIcon,
   isRunning: false,
 };
 
@@ -44,7 +44,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Running',
       description: 'Processing your request',
-      icon: Activity,
+      icon: PulseIcon,
       isRunning: true,
     };
   }
@@ -56,7 +56,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Paused',
       description: 'Session paused',
-      icon: CircleSlash,
+      icon: ProhibitIcon,
       isRunning: false,
     };
   }
@@ -68,7 +68,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Completed',
       description: 'Session finished',
-      icon: CheckCircle2,
+      icon: CheckCircleIcon,
       isRunning: false,
     };
   }
@@ -80,7 +80,7 @@ function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRun
       spin: false,
       label: 'Failed',
       description: 'Session failed',
-      icon: XCircle,
+      icon: XCircleIcon,
       isRunning: false,
     };
   }
@@ -103,7 +103,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Loading',
       description: 'Loading session...',
-      icon: Loader2,
+      icon: SpinnerGapIcon,
       isRunning: false,
     };
   }
@@ -115,7 +115,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Starting',
       description: 'Launching agent...',
-      icon: Loader2,
+      icon: SpinnerGapIcon,
       isRunning: false,
     };
   }
@@ -127,7 +127,7 @@ export function deriveSessionTabRuntime(
       spin: true,
       label: 'Stopping',
       description: 'Finishing current request...',
-      icon: Loader2,
+      icon: SpinnerGapIcon,
       isRunning: false,
     };
   }
@@ -140,7 +140,7 @@ export function deriveSessionTabRuntime(
       spin: false,
       label: 'Error',
       description: runtimeError ?? 'Session entered an error state',
-      icon: XCircle,
+      icon: XCircleIcon,
       isRunning: false,
     };
   }
@@ -156,7 +156,7 @@ export function deriveSessionTabRuntime(
         description:
           runtimeError ??
           `Exited unexpectedly${summary.lastExit.code !== null ? ` (code ${summary.lastExit.code})` : ''}`,
-        icon: XCircle,
+        icon: XCircleIcon,
         isRunning: false,
       };
     }
@@ -167,7 +167,7 @@ export function deriveSessionTabRuntime(
       spin: false,
       label: 'Stopped',
       description: 'Send a message to start',
-      icon: CircleSlash,
+      icon: ProhibitIcon,
       isRunning: false,
     };
   }
@@ -179,7 +179,7 @@ export function deriveSessionTabRuntime(
       spin: false,
       label: 'Running',
       description: 'Processing your request',
-      icon: Activity,
+      icon: PulseIcon,
       isRunning: true,
     };
   }

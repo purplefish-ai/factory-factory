@@ -1,4 +1,11 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react';
+import {
+  ArrowsClockwiseIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  SpinnerGapIcon,
+  WarningIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -45,7 +52,7 @@ export function InitializationOverlay({
         {isFailed ? (
           <>
             <div className="rounded-full bg-destructive/10 p-3">
-              <AlertTriangle className="h-8 w-8 text-destructive" />
+              <WarningIcon className="h-8 w-8 text-destructive" />
             </div>
             <div className="space-y-2">
               <h2 className="text-lg font-semibold">Workspace Setup Failed</h2>
@@ -82,12 +89,12 @@ export function InitializationOverlay({
           <Button onClick={retry} disabled={retryInit.isPending}>
             {retryInit.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <SpinnerGapIcon className="h-4 w-4 mr-2 animate-spin" />
                 Retrying...
               </>
             ) : (
               <>
-                <RefreshCw className="h-4 w-4 mr-2" />
+                <ArrowsClockwiseIcon className="h-4 w-4 mr-2" />
                 Retry Setup
               </>
             )}
@@ -125,9 +132,9 @@ export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunn
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? (
-              <ChevronDown className="h-3 w-3 mr-1" />
+              <CaretDownIcon className="h-3 w-3 mr-1" />
             ) : (
-              <ChevronRight className="h-3 w-3 mr-1" />
+              <CaretRightIcon className="h-3 w-3 mr-1" />
             )}
             {expanded ? 'Hide output' : 'Show output'}
           </Button>
@@ -171,7 +178,7 @@ export function ScriptFailedBanner({
     <div className="border-b bg-destructive/10 px-4 py-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-2 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <WarningIcon className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words whitespace-normal">
             Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}
           </span>
@@ -185,9 +192,9 @@ export function ScriptFailedBanner({
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? (
-                <ChevronDown className="h-3 w-3 mr-1" />
+                <CaretDownIcon className="h-3 w-3 mr-1" />
               ) : (
-                <ChevronRight className="h-3 w-3 mr-1" />
+                <CaretRightIcon className="h-3 w-3 mr-1" />
               )}
               {expanded ? 'Hide output' : 'Show output'}
             </Button>
@@ -201,12 +208,12 @@ export function ScriptFailedBanner({
           >
             {retryInit.isPending ? (
               <>
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                <SpinnerGapIcon className="h-3 w-3 mr-1 animate-spin" />
                 Retrying...
               </>
             ) : (
               <>
-                <RefreshCw className="h-3 w-3 mr-1" />
+                <ArrowsClockwiseIcon className="h-3 w-3 mr-1" />
                 Retry
               </>
             )}
@@ -219,7 +226,7 @@ export function ScriptFailedBanner({
               onClick={onDismiss}
               aria-label="Dismiss"
             >
-              <X className="h-3 w-3" />
+              <XIcon className="h-3 w-3" />
             </Button>
           )}
         </div>

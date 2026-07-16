@@ -1,4 +1,4 @@
-import { CheckSquare, Circle, Square } from 'lucide-react';
+import { CheckSquareIcon, CircleIcon, SquareIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,11 @@ export interface TodoItemProps {
  */
 export const TodoItem = memo(function TodoItem({ todo }: TodoItemProps) {
   const StatusIcon =
-    todo.status === 'completed' ? CheckSquare : todo.status === 'in_progress' ? Circle : Square;
+    todo.status === 'completed'
+      ? CheckSquareIcon
+      : todo.status === 'in_progress'
+        ? CircleIcon
+        : SquareIcon;
 
   const statusColor =
     todo.status === 'completed'

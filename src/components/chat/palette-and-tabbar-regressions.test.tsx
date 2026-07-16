@@ -132,7 +132,7 @@ describe('session-tab-bar regression coverage', () => {
       flushSync(() => {
         window.dispatchEvent(new Event('resize'));
       });
-      expect(container.querySelector('.lucide-chevron-right')).toBeNull();
+      expect(container.querySelector('[aria-label="Scroll session tabs right"]')).toBeNull();
 
       defineReadonlyLayout(tablist as HTMLElement, {
         scrollLeft: 0,
@@ -155,7 +155,7 @@ describe('session-tab-bar regression coverage', () => {
         );
       });
 
-      expect(container.querySelector('.lucide-chevron-right')).not.toBeNull();
+      expect(container.querySelector('[aria-label="Scroll session tabs right"]')).not.toBeNull();
     });
 
     cleanup();

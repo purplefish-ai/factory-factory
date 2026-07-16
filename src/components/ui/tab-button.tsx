@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { XIcon } from '@phosphor-icons/react';
 import { useCallback } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -127,7 +127,7 @@ export function TabButton({
           )}
           aria-label={`Close ${label}`}
         >
-          <X className="h-3 w-3" />
+          <XIcon className="h-3 w-3" />
         </button>
       )}
     </div>

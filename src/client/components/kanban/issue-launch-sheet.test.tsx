@@ -25,9 +25,9 @@ const mocks = vi.hoisted(() => ({
   toastErrorMock: vi.fn(),
 }));
 
-vi.mock('lucide-react', () => ({
-  ExternalLink: () => null,
-  Play: () => null,
+vi.mock('@phosphor-icons/react', () => ({
+  ArrowSquareOutIcon: () => null,
+  PlayIcon: () => null,
 }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({

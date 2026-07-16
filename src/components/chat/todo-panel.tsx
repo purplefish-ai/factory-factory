@@ -1,4 +1,4 @@
-import { CheckCircle, ListTodo } from 'lucide-react';
+import { CheckCircleIcon, ListChecksIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { TodoItem } from '@/components/shared';
 import type { TodoState } from './use-todo-tracker';
@@ -25,7 +25,7 @@ export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ListTodo className="h-4 w-4 text-muted-foreground" />
+            <ListChecksIcon className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Tasks</span>
           </div>
           <div className="flex items-center gap-2">
@@ -33,7 +33,7 @@ export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) 
               {completedCount}/{totalCount}
             </span>
             <div className="flex items-center gap-0.5">
-              <CheckCircle className="h-3 w-3 text-success" />
+              <CheckCircleIcon className="h-3 w-3 text-success" />
               <span className="text-xs font-medium">{progressPercent}%</span>
             </div>
           </div>

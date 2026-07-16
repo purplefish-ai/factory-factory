@@ -1,4 +1,4 @@
-import { Plus, RefreshCw } from 'lucide-react';
+import { ArrowsClockwiseIcon, PlusIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
@@ -32,7 +32,7 @@ export function KanbanControls() {
           disabled={isSyncing}
           aria-label="Refresh workspaces"
         >
-          <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+          <ArrowsClockwiseIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
         </Button>
       </TooltipTrigger>
       <TooltipContent>Refresh workspaces</TooltipContent>
@@ -173,7 +173,7 @@ export function KanbanBoard() {
           Failed to load workspaces: {error?.message ?? 'Unknown error'}
         </p>
         <Button variant="outline" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <ArrowsClockwiseIcon className="h-4 w-4 mr-2" />
           Retry
         </Button>
       </div>
@@ -226,7 +226,7 @@ export function KanbanBoard() {
           className="h-8 shrink-0 w-full"
           onClick={handleMobileNewTaskClick}
         >
-          <Plus className="h-4 w-4" />
+          <PlusIcon className="h-4 w-4" />
           New Task
         </Button>
 
@@ -373,7 +373,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
               onClick={() => setShowInlineForm(true)}
               className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-card px-3 py-5 text-sm text-primary hover:border-primary/70 hover:text-primary transition-colors cursor-pointer"
             >
-              <Plus className="h-4 w-4" />
+              <PlusIcon className="h-4 w-4" />
               New Workspace
             </button>
           ) : null}

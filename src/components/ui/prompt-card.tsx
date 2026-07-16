@@ -19,6 +19,8 @@ interface PromptCardProps {
   className?: string;
   /** Hide the icon on mobile breakpoints while keeping it on sm+ */
   hideIconOnMobile?: boolean;
+  /** Application-owned selector for the icon wrapper */
+  iconSlot?: string;
 }
 
 // =============================================================================
@@ -38,13 +40,19 @@ export function PromptCard({
   label,
   className,
   hideIconOnMobile = false,
+  iconSlot,
 }: PromptCardProps) {
   return (
     <div className={cn('border-b bg-muted/50 p-3', className)} role={role}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         {label && <span className="sr-only">{label}</span>}
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <div className={cn('mt-0.5 shrink-0', hideIconOnMobile && 'hidden sm:block')}>{icon}</div>
+          <div
+            data-slot={iconSlot}
+            className={cn('mt-0.5 shrink-0', hideIconOnMobile && 'hidden sm:block')}
+          >
+            {icon}
+          </div>
           <div className="min-w-0 flex-1">{children}</div>
         </div>
         {actions && (

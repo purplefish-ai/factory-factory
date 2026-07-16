@@ -1,4 +1,4 @@
-import { Upload } from 'lucide-react';
+import { UploadIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -134,7 +134,7 @@ export function DataImportButton({
         variant={variant}
         className={className}
       >
-        <Upload className="w-4 h-4 mr-2" />
+        <UploadIcon className="w-4 h-4 mr-2" />
         {importData.isPending ? 'Importing...' : children || 'Import Data'}
       </Button>
       <input

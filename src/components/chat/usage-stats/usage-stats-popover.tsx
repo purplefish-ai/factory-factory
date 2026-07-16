@@ -1,4 +1,11 @@
-import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
+import {
+  ClockIcon,
+  CoinsIcon,
+  DatabaseIcon,
+  GlobeIcon,
+  LightningIcon,
+  StackIcon,
+} from '@phosphor-icons/react';
 
 import { Progress } from '@/components/ui/progress';
 import type { TokenStats } from '@/lib/chat-protocol';
@@ -127,12 +134,12 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
       <div className="space-y-0.5">
         {/* Token Breakdown */}
         <StatRow
-          icon={<Layers className="h-3 w-3" />}
+          icon={<StackIcon className="h-3 w-3" />}
           label="Input tokens"
           value={formatTokenCount(tokenStats.inputTokens)}
         />
         <StatRow
-          icon={<Layers className="h-3 w-3" />}
+          icon={<StackIcon className="h-3 w-3" />}
           label="Output tokens"
           value={formatTokenCount(tokenStats.outputTokens)}
         />
@@ -142,13 +149,13 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
           <>
             <div className="my-1.5 border-t" />
             <StatRow
-              icon={<Database className="h-3 w-3" />}
+              icon={<DatabaseIcon className="h-3 w-3" />}
               label="Cache read"
               value={formatTokenCount(tokenStats.cacheReadInputTokens)}
               subValue={cacheHitRate > 0 ? `(${cacheHitRate.toFixed(0)}% hit)` : undefined}
             />
             <StatRow
-              icon={<Database className="h-3 w-3" />}
+              icon={<DatabaseIcon className="h-3 w-3" />}
               label="Cache created"
               value={formatTokenCount(tokenStats.cacheCreationInputTokens)}
             />
@@ -158,18 +165,22 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
         {/* Cost and Performance */}
         <div className="my-1.5 border-t" />
         <StatRow
-          icon={<Coins className="h-3 w-3" />}
+          icon={<CoinsIcon className="h-3 w-3" />}
           label="Cost"
           value={formatCost(tokenStats.totalCostUsd)}
         />
 
         {tokenStats.turnCount > 0 && (
-          <StatRow icon={<Zap className="h-3 w-3" />} label="Turns" value={tokenStats.turnCount} />
+          <StatRow
+            icon={<LightningIcon className="h-3 w-3" />}
+            label="Turns"
+            value={tokenStats.turnCount}
+          />
         )}
 
         {tokenStats.totalDurationMs > 0 && (
           <StatRow
-            icon={<Clock className="h-3 w-3" />}
+            icon={<ClockIcon className="h-3 w-3" />}
             label="Total time"
             value={formatDuration(tokenStats.totalDurationMs)}
           />
@@ -177,7 +188,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
 
         {tokenStats.totalDurationApiMs > 0 && (
           <StatRow
-            icon={<Clock className="h-3 w-3" />}
+            icon={<ClockIcon className="h-3 w-3" />}
             label="API time"
             value={formatDuration(tokenStats.totalDurationApiMs)}
           />
@@ -185,7 +196,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
 
         {tokenStats.webSearchRequests > 0 && (
           <StatRow
-            icon={<Globe className="h-3 w-3" />}
+            icon={<GlobeIcon className="h-3 w-3" />}
             label="Web searches"
             value={tokenStats.webSearchRequests}
           />
@@ -196,7 +207,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
           <>
             <div className="my-1.5 border-t" />
             <StatRow
-              icon={<Zap className="h-3 w-3" />}
+              icon={<LightningIcon className="h-3 w-3" />}
               label="Service tier"
               value={tokenStats.serviceTier}
             />

@@ -1,4 +1,9 @@
-import { AlertTriangle, FileCheck, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
+import {
+  ChatCircleDotsIcon,
+  ClipboardTextIcon,
+  ShieldWarningIcon,
+  WarningIcon,
+} from '@phosphor-icons/react';
 
 interface WorkspaceStatusIconProps {
   pendingRequestType?: 'permission_request' | 'plan_approval' | 'user_question' | null;
@@ -14,16 +19,33 @@ export function WorkspaceStatusIcon({
   if (pendingRequestType) {
     switch (pendingRequestType) {
       case 'permission_request':
-        return <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-500" />;
+        return (
+          <ShieldWarningIcon
+            data-icon="permission-request"
+            className="h-3.5 w-3.5 shrink-0 text-orange-500"
+          />
+        );
       case 'plan_approval':
-        return <FileCheck className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+        return (
+          <ClipboardTextIcon
+            data-icon="plan-approval"
+            className="h-3.5 w-3.5 shrink-0 text-amber-500"
+          />
+        );
       case 'user_question':
-        return <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-blue-500" />;
+        return (
+          <ChatCircleDotsIcon
+            data-icon="user-question"
+            className="h-3.5 w-3.5 shrink-0 text-blue-500"
+          />
+        );
     }
   }
 
   if (sessionRuntimeErrorMessage) {
-    return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+    return (
+      <WarningIcon data-icon="runtime-error" className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+    );
   }
 
   if (isWorking) {

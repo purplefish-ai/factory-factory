@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { CaretDownIcon, CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react';
 import * as React from 'react';
 import { type DayButton, DayPicker, getDefaultClassNames } from 'react-day-picker';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -107,14 +107,14 @@ function Calendar({
         },
         Chevron: ({ className, orientation, ...props }) => {
           if (orientation === 'left') {
-            return <ChevronLeftIcon className={cn('size-4', className)} {...props} />;
+            return <CaretLeftIcon className={cn('size-4', className)} {...props} />;
           }
 
           if (orientation === 'right') {
-            return <ChevronRightIcon className={cn('size-4', className)} {...props} />;
+            return <CaretRightIcon className={cn('size-4', className)} {...props} />;
           }
 
-          return <ChevronDownIcon className={cn('size-4', className)} {...props} />;
+          return <CaretDownIcon className={cn('size-4', className)} {...props} />;
         },
         DayButton: CalendarDayButton,
         WeekNumber: ({ children, ...props }) => {

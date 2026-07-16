@@ -1,4 +1,4 @@
-import { ChevronsUpDown } from 'lucide-react';
+import { CaretUpDownIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
@@ -85,7 +85,7 @@ export function WorkspaceSwitcherDropdown({
           </span>
         </span>
         <span className="ml-0.5 inline-flex shrink-0 items-center text-current md:ml-2" aria-hidden>
-          <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5" />
+          <CaretUpDownIcon className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5" />
         </span>
       </SelectTrigger>
       <SelectContent className="w-[min(95vw,34rem)]">

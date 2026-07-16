@@ -1,4 +1,4 @@
-import { AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { ClockIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ interface WorkspaceStatusBadgeProps {
 }
 
 interface StatusConfig {
-  icon: typeof Clock;
+  icon: typeof ClockIcon;
   label: string;
   variant: 'outline' | 'secondary' | 'destructive';
   iconClassName?: string;
@@ -22,23 +22,23 @@ interface StatusConfig {
 // Only include statuses that are actually rendered (READY/ARCHIVED return null)
 const statusConfig: Record<Exclude<WorkspaceStatus, 'READY' | 'ARCHIVED'>, StatusConfig> = {
   NEW: {
-    icon: Clock,
+    icon: ClockIcon,
     label: 'Pending',
     variant: 'outline',
   },
   PROVISIONING: {
-    icon: Loader2,
+    icon: SpinnerGapIcon,
     label: 'Setting up',
     variant: 'secondary',
     iconClassName: 'animate-spin',
   },
   FAILED: {
-    icon: AlertCircle,
+    icon: WarningCircleIcon,
     label: 'Setup failed',
     variant: 'destructive',
   },
   ARCHIVING: {
-    icon: Loader2,
+    icon: SpinnerGapIcon,
     label: 'Archiving',
     variant: 'secondary',
     iconClassName: 'animate-spin',

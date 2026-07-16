@@ -1,5 +1,5 @@
+import { CaretRightIcon, CheckIcon, CircleIcon } from '@phosphor-icons/react';
 import * as MenubarPrimitive from '@radix-ui/react-menubar';
-import { Check, ChevronRight, Circle } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -70,7 +70,7 @@ const MenubarSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto h-4 w-4" />
+    <CaretRightIcon className="ml-auto h-4 w-4" />
   </MenubarPrimitive.SubTrigger>
 ));
 MenubarSubTrigger.displayName = MenubarPrimitive.SubTrigger.displayName;
@@ -143,7 +143,7 @@ const MenubarCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <MenubarPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <CheckIcon className="h-4 w-4" />
       </MenubarPrimitive.ItemIndicator>
     </span>
     {children}
@@ -165,7 +165,7 @@ const MenubarRadioItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <MenubarPrimitive.ItemIndicator>
-        <Circle className="h-4 w-4 fill-current" />
+        <CircleIcon className="h-4 w-4" weight="fill" />
       </MenubarPrimitive.ItemIndicator>
     </span>
     {children}

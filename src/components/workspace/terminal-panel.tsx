@@ -1,4 +1,4 @@
-import { Terminal } from 'lucide-react';
+import { TerminalIcon } from '@phosphor-icons/react';
 import {
   forwardRef,
   lazy,
@@ -405,7 +405,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
             className
           )}
         >
-          <Terminal className="h-10 w-10 text-zinc-500 mb-3" />
+          <TerminalIcon className="h-10 w-10 text-zinc-500 mb-3" />
           <p className="text-sm font-medium text-zinc-400">No terminal open</p>
           <p className="text-xs text-zinc-500 mt-1">
             {connected

@@ -1,4 +1,4 @@
-import { FileCode, FileMinus, FilePlus, FileQuestion } from 'lucide-react';
+import { FileCodeIcon, FileDashedIcon, FileMinusIcon, FilePlusIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -33,13 +33,13 @@ export function fileChangeKindFromDiffStatus(
 function getStatusIcon(kind: FileChangeKind) {
   switch (kind) {
     case 'modified':
-      return <FileCode className="h-4 w-4" />;
+      return <FileCodeIcon className="h-4 w-4" />;
     case 'added':
-      return <FilePlus className="h-4 w-4" />;
+      return <FilePlusIcon className="h-4 w-4" />;
     case 'deleted':
-      return <FileMinus className="h-4 w-4" />;
+      return <FileMinusIcon className="h-4 w-4" />;
     case 'untracked':
-      return <FileQuestion className="h-4 w-4" />;
+      return <FileDashedIcon className="h-4 w-4" />;
   }
 }
 

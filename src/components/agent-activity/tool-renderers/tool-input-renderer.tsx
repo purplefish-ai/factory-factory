@@ -1,4 +1,4 @@
-import { FileCode, Zap } from 'lucide-react';
+import { FileCodeIcon, LightningIcon } from '@phosphor-icons/react';
 import type { ReactElement } from 'react';
 import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
@@ -48,7 +48,7 @@ export const FilePathDisplay = memo(function FilePathDisplay({ path }: { path: s
 
   return (
     <div className="flex items-center gap-1 text-sm min-w-0">
-      <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <FileCodeIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="text-muted-foreground truncate">{directory}/</span>
       <span className="font-medium shrink-0">{filename}</span>
     </div>
@@ -74,7 +74,7 @@ const TaskToolRenderer = memo(function TaskToolRenderer({
   return (
     <div className="space-y-2 w-0 min-w-full">
       <div className="flex items-center gap-1.5">
-        <Zap className="h-4 w-4 shrink-0 text-primary" />
+        <LightningIcon className="h-4 w-4 shrink-0 text-primary" />
         <span className="font-semibold text-sm">
           {subagentType ? `${subagentType} Agent` : 'Subagent'}
         </span>

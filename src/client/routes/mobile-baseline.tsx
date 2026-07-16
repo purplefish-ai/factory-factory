@@ -1,4 +1,4 @@
-import { GitBranch, List, Plus } from 'lucide-react';
+import { GitBranchIcon, ListIcon, PlusIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { PageHeader } from '@/client/components/page-header';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
@@ -163,14 +163,14 @@ export default function MobileBaselinePage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm">
-            <List className="h-4 w-4" />
+            <ListIcon className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm">
-            <GitBranch className="h-4 w-4 mr-2" />
+            <GitBranchIcon className="h-4 w-4 mr-2" />
             Resume branch
           </Button>
           <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
+            <PlusIcon className="h-4 w-4 mr-2" />
             New Workspace
           </Button>
         </PageHeader>

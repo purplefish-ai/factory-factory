@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronRight, File, FileCode, Folder, Loader2 } from 'lucide-react';
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  FileCodeIcon,
+  FileIcon,
+  FolderIcon,
+  SpinnerGapIcon,
+} from '@phosphor-icons/react';
 import { memo, useCallback } from 'react';
 
 import { trpc } from '@/client/lib/trpc';
@@ -58,9 +65,9 @@ function getFileIcon(name: string) {
   ];
 
   if (ext && codeExtensions.includes(ext)) {
-    return <FileCode className="h-4 w-4" />;
+    return <FileCodeIcon className="h-4 w-4" />;
   }
-  return <File className="h-4 w-4" />;
+  return <FileIcon className="h-4 w-4" />;
 }
 
 // =============================================================================
@@ -100,11 +107,11 @@ const DirectoryNode = memo(function DirectoryNode({
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
         {isExpanded ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <CaretDownIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <CaretRightIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         )}
-        <Folder className="h-4 w-4 text-brand flex-shrink-0" />
+        <FolderIcon className="h-4 w-4 text-brand flex-shrink-0" />
         <span className="truncate">{entry.name}</span>
       </button>
 
@@ -174,7 +181,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
         className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         <span>Loading...</span>
       </div>
     );

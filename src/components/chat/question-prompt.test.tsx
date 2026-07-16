@@ -67,7 +67,7 @@ describe('QuestionPrompt', () => {
     const optionContainer = optionLabel?.closest('label');
     expect(optionContainer?.className).toContain('p-1.5');
 
-    const iconWrapper = container.querySelector('svg.lucide-circle-question-mark')?.parentElement;
+    const iconWrapper = container.querySelector('[data-slot="question-prompt-icon"]');
     expect(iconWrapper?.className).toContain('hidden');
     expect(iconWrapper?.className).toContain('sm:block');
 

@@ -1,19 +1,18 @@
 import {
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  Lightbulb,
-  List,
-  Loader2,
-  OctagonX,
-  Pause,
-  Play,
-  RefreshCw,
-  Save,
-  Square,
-  Terminal,
-  XCircle,
-} from 'lucide-react';
+  ArrowsClockwiseIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  CheckCircleIcon,
+  FloppyDiskIcon,
+  LightbulbIcon,
+  ListIcon,
+  PauseIcon,
+  PlayIcon,
+  SpinnerGapIcon,
+  SquareIcon,
+  TerminalIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -93,12 +92,16 @@ const PHASE_LABELS: Record<string, string> = {
 
 const ENTRY_STATUS_CONFIG: Record<
   LogbookEntry['status'],
-  { icon: typeof CheckCircle; label: string; color: string }
+  { icon: typeof CheckCircleIcon; label: string; color: string }
 > = {
-  accepted: { icon: CheckCircle, label: 'Accepted', color: 'text-green-500' },
-  rejected_regression: { icon: XCircle, label: 'Rejected (regression)', color: 'text-orange-500' },
-  rejected_critique: { icon: XCircle, label: 'Rejected (critique)', color: 'text-amber-500' },
-  crashed: { icon: OctagonX, label: 'Crashed', color: 'text-red-500' },
+  accepted: { icon: CheckCircleIcon, label: 'Accepted', color: 'text-green-500' },
+  rejected_regression: {
+    icon: XCircleIcon,
+    label: 'Rejected (regression)',
+    color: 'text-orange-500',
+  },
+  rejected_critique: { icon: XCircleIcon, label: 'Rejected (critique)', color: 'text-amber-500' },
+  crashed: { icon: XCircleIcon, label: 'Crashed', color: 'text-red-500' },
 };
 
 function TestOutputBlock({ output, maxLines = 30 }: { output: string; maxLines?: number }) {
@@ -138,9 +141,9 @@ function IterationEntry({ entry }: { entry: LogbookEntry }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretDownIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretRightIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         )}
         <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', config.color)} />
         <div className="min-w-0 flex-1">
@@ -186,7 +189,7 @@ function IterationEntry({ entry }: { entry: LogbookEntry }) {
           {entry.testOutput && (
             <div className="mt-1">
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5">
-                <Terminal className="h-2.5 w-2.5" />
+                <TerminalIcon className="h-2.5 w-2.5" />
                 Test output
               </div>
               <TestOutputBlock output={entry.testOutput} />
@@ -210,9 +213,9 @@ function PhaseIndicator({ phase }: { phase: string }) {
       )}
     >
       {isActive ? (
-        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+        <SpinnerGapIcon className="h-3 w-3 animate-spin shrink-0" />
       ) : (
-        <RefreshCw className="h-3 w-3 shrink-0" />
+        <ArrowsClockwiseIcon className="h-3 w-3 shrink-0" />
       )}
       <span>{label}</span>
     </div>
@@ -230,7 +233,7 @@ function LiveTestOutput({ output }: { output: string }) {
   return (
     <div className="border-b">
       <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-muted-foreground bg-muted/20">
-        <Terminal className="h-2.5 w-2.5" />
+        <TerminalIcon className="h-2.5 w-2.5" />
         Latest test output
       </div>
       <pre
@@ -258,11 +261,11 @@ function BaselineSection({ baseline }: { baseline: LogbookData['baseline'] }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretDownIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+          <CaretRightIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
         )}
-        <RefreshCw className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+        <ArrowsClockwiseIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="font-medium">Baseline</span>
@@ -273,7 +276,7 @@ function BaselineSection({ baseline }: { baseline: LogbookData['baseline'] }) {
       {expanded && baseline.testOutput && (
         <div className="px-8 pb-2">
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5">
-            <Terminal className="h-2.5 w-2.5" />
+            <TerminalIcon className="h-2.5 w-2.5" />
             Baseline test output
           </div>
           <TestOutputBlock output={baseline.testOutput} />
@@ -318,7 +321,7 @@ function ProgressSummary({
     <div className="space-y-2 p-3 border-b">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <RefreshCw
+          <ArrowsClockwiseIcon
             className={cn(
               'h-3.5 w-3.5',
               status === 'RUNNING' && 'animate-spin text-primary',
@@ -412,7 +415,7 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => pauseMutation.mutate({ workspaceId })}
               disabled={pauseMutation.isPending}
             >
-              <Pause className="h-3.5 w-3.5" />
+              <PauseIcon className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Pause after current iteration</TooltipContent>
@@ -428,7 +431,7 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => resumeMutation.mutate({ workspaceId })}
               disabled={resumeMutation.isPending}
             >
-              <Play className="h-3.5 w-3.5" />
+              <PlayIcon className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Resume iteration</TooltipContent>
@@ -444,7 +447,7 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => stopMutation.mutate({ workspaceId })}
               disabled={stopMutation.isPending}
             >
-              <Square className="h-3.5 w-3.5" />
+              <SquareIcon className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Stop iteration</TooltipContent>
@@ -460,7 +463,7 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => resumeMutation.mutate({ workspaceId })}
               disabled={resumeMutation.isPending}
             >
-              <Play className="h-3.5 w-3.5" />
+              <PlayIcon className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Resume from where it left off</TooltipContent>
@@ -476,7 +479,9 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
               onClick={() => startMutation.mutate({ workspaceId })}
               disabled={startMutation.isPending}
             >
-              <RefreshCw className={cn('h-3.5 w-3.5', startMutation.isPending && 'animate-spin')} />
+              <ArrowsClockwiseIcon
+                className={cn('h-3.5 w-3.5', startMutation.isPending && 'animate-spin')}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Restart auto-iteration</TooltipContent>
@@ -523,7 +528,7 @@ function InsightsEditor({ workspaceId }: { workspaceId: string }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center flex-1">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -541,7 +546,7 @@ function InsightsEditor({ workspaceId }: { workspaceId: string }) {
           onClick={handleSave}
           disabled={!dirty || saveMutation.isPending}
         >
-          <Save className="h-3 w-3" />
+          <FloppyDiskIcon className="h-3 w-3" />
           {dirty ? 'Save' : 'Saved'}
         </Button>
       </div>
@@ -572,7 +577,7 @@ function TabBar({ active, onChange }: { active: PanelTab; onChange: (t: PanelTab
         )}
         onClick={() => onChange('log')}
       >
-        <List className="h-3 w-3" />
+        <ListIcon className="h-3 w-3" />
         Log
       </button>
       <button
@@ -585,7 +590,7 @@ function TabBar({ active, onChange }: { active: PanelTab; onChange: (t: PanelTab
         )}
         onClick={() => onChange('insights')}
       >
-        <Lightbulb className="h-3 w-3" />
+        <LightbulbIcon className="h-3 w-3" />
         Insights
       </button>
     </div>
@@ -627,7 +632,7 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   if (statusLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }

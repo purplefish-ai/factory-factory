@@ -1,4 +1,10 @@
-import { AlertTriangle, ArrowDown, Loader2, Play, RefreshCw } from 'lucide-react';
+import {
+  ArrowDownIcon,
+  ArrowsClockwiseIcon,
+  PlayIcon,
+  SpinnerGapIcon,
+  WarningIcon,
+} from '@phosphor-icons/react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
@@ -145,9 +151,9 @@ const InitStatusBanner = memo(function InitStatusBanner({
         ].join(' ')}
       >
         {banner.kind === 'info' ? (
-          <Loader2 className="h-4 w-4 mt-0.5 shrink-0 animate-spin" />
+          <SpinnerGapIcon className="h-4 w-4 mt-0.5 shrink-0 animate-spin" />
         ) : (
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
         )}
         <div className="min-w-0 flex-1">
           <p>{banner.message}</p>
@@ -155,13 +161,13 @@ const InitStatusBanner = memo(function InitStatusBanner({
             <div className="mt-2 flex items-center gap-2">
               {banner.showRetry && (
                 <Button size="sm" variant="outline" disabled={retryPending} onClick={onRetry}>
-                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
                   Retry setup
                 </Button>
               )}
               {banner.showPlay && (
                 <Button size="sm" onClick={onPlay}>
-                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  <PlayIcon className="h-3.5 w-3.5 mr-1.5" />
                   Dispatch queued messages
                 </Button>
               )}
@@ -289,7 +295,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             onClick={props.scrollToBottom}
             className="rounded-full shadow-lg"
           >
-            <ArrowDown className="h-4 w-4 mr-1" />
+            <ArrowDownIcon className="h-4 w-4 mr-1" />
             Scroll to bottom
           </Button>
         </div>

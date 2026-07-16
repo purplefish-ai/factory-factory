@@ -1,4 +1,4 @@
-import { CircleDot, Play, User } from 'lucide-react';
+import { DotOutlineIcon, PlayIcon, UserIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Button } from '@/components/ui/button';
@@ -39,11 +39,11 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
               <span className="inline-flex items-center gap-1 shrink-0">
-                <CircleDot className="h-3 w-3 text-green-500" />
+                <DotOutlineIcon className="h-3 w-3 text-green-500" />
                 <span>{issue.displayId}</span>
               </span>
               <span className="inline-flex items-center gap-1 truncate">
-                <User className="h-3 w-3 shrink-0" />
+                <UserIcon className="h-3 w-3 shrink-0" />
                 {issue.author}
               </span>
             </div>
@@ -53,7 +53,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
               className="h-6 px-2 text-xs shrink-0"
               onClick={handleStart}
             >
-              <Play className="h-3 w-3 mr-1" />
+              <PlayIcon className="h-3 w-3 mr-1" />
               Start
             </Button>
           </div>

@@ -1,4 +1,4 @@
-import { File, Folder } from 'lucide-react';
+import { FileIcon, FolderIcon } from '@phosphor-icons/react';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import {
   Command,
@@ -59,10 +59,10 @@ function getFileIcon(filePath: string): React.ReactNode {
   // For now, simple folder/file distinction
   // Could be enhanced with more specific icons based on file type
   if (filePath.includes('/')) {
-    return <Folder className="h-3.5 w-3.5 text-muted-foreground" />;
+    return <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />;
   }
 
-  return <File className="h-3.5 w-3.5 text-muted-foreground" />;
+  return <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
 /**

@@ -1,11 +1,11 @@
 import {
-  ArrowRightLeft,
-  FileCode,
-  FileMinus,
-  FilePlus,
-  FileQuestion,
-  type LucideIcon,
-} from 'lucide-react';
+  ArrowsLeftRightIcon,
+  FileCodeIcon,
+  FileDashedIcon,
+  FileMinusIcon,
+  FilePlusIcon,
+  type Icon,
+} from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type {
@@ -41,38 +41,38 @@ function getKindLabel(kind: CodexFileChangeKind): string {
 }
 
 function getKindMeta(kind: CodexFileChangeKind): {
-  icon: LucideIcon;
+  icon: Icon;
   className: string;
   iconColorClass: string;
 } {
   switch (kind) {
     case 'create':
       return {
-        icon: FilePlus,
+        icon: FilePlusIcon,
         className: 'text-success border-success/40 bg-success/10',
         iconColorClass: 'text-success',
       };
     case 'update':
       return {
-        icon: FileCode,
+        icon: FileCodeIcon,
         className: 'text-yellow-600 border-yellow-500/40 bg-yellow-500/10',
         iconColorClass: 'text-yellow-600',
       };
     case 'delete':
       return {
-        icon: FileMinus,
+        icon: FileMinusIcon,
         className: 'text-destructive border-destructive/40 bg-destructive/10',
         iconColorClass: 'text-destructive',
       };
     case 'move':
       return {
-        icon: ArrowRightLeft,
+        icon: ArrowsLeftRightIcon,
         className: 'text-sky-600 border-sky-500/40 bg-sky-500/10',
         iconColorClass: 'text-sky-600',
       };
     case 'unknown':
       return {
-        icon: FileQuestion,
+        icon: FileDashedIcon,
         className: 'text-muted-foreground border-border bg-muted/50',
         iconColorClass: 'text-muted-foreground',
       };
@@ -120,7 +120,7 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
     <div className="space-y-2 w-0 min-w-full">
       <div className="space-y-1">
         <div className="flex items-center gap-1.5 text-xs">
-          <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <FileCodeIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="font-medium">
             {payload.changes.length} file {payload.changes.length === 1 ? 'change' : 'changes'}
           </span>
@@ -189,7 +189,7 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
                 </div>
                 {change.movePath && (
                   <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                    <ArrowsLeftRightIcon className="h-3 w-3 shrink-0" />
                     <span className="font-mono truncate" title={change.movePath}>
                       {change.movePath}
                     </span>
