@@ -172,6 +172,18 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
   const hydratedSessionIdRef = useRef<string | null>(null);
 
+  // Drop the hydration marker when the selected session moves away from the
+  // hydrated one. Without this, switching A -> B -> back to A before B
+  // hydrates would leave the marker claiming A is hydrated while the reducer
+  // state was reset by the switches, and consumers of runtimeSessionId would
+  // treat the reset runtime as authoritative for A. Same-session reconnects
+  // keep the marker so hydrated state isn't spuriously reported as loading.
+  useEffect(() => {
+    if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
+      hydratedSessionIdRef.current = null;
+    }
+  }, [dbSessionId]);
+
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
