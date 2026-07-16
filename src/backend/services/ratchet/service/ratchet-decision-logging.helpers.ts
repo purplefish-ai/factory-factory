@@ -1,4 +1,4 @@
-import type { createLogger } from '@/backend/services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type { RatchetState } from '@/shared/core';
 import type {
   PRStateInfo,
@@ -12,7 +12,7 @@ import {
   buildSnapshotDiagnostics,
 } from './ratchet-pr-state.helpers';
 
-type Logger = ReturnType<typeof createLogger>;
+const logger = createLogger('ratchet');
 
 function describeNonRatchetingReason(
   action: Exclude<RatchetAction, { type: 'TRIGGERED_FIXER' }>
@@ -41,7 +41,6 @@ export function buildRatchetingLogContext(params: {
   prStateInfo: PRStateInfo | null;
   prNumber: number | null;
   decisionContext: RatchetDecisionContext | null;
-  logger: Logger;
 }) {
   const { workspace, previousState, newState, action, prStateInfo, prNumber, decisionContext } =
     params;
@@ -89,9 +88,8 @@ export function logWorkspaceRatchetingDecision(params: {
   action: RatchetAction;
   prStateInfo: PRStateInfo | null;
   decisionContext?: RatchetDecisionContext | null;
-  logger: Logger;
 }): void {
-  const { workspace, previousState, newState, action, prStateInfo, logger } = params;
+  const { workspace, previousState, newState, action, prStateInfo } = params;
   const decisionContext = params.decisionContext ?? null;
   const prNumber = prStateInfo?.prNumber ?? workspace.prNumber;
   const prNumberLabel = prNumber ?? 'unknown';
@@ -104,7 +102,6 @@ export function logWorkspaceRatchetingDecision(params: {
     prStateInfo,
     prNumber,
     decisionContext,
-    logger,
   });
 
   if (action.type === 'TRIGGERED_FIXER') {

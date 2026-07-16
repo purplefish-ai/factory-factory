@@ -1,5 +1,5 @@
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
-import type { createLogger } from '@/backend/services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
@@ -12,7 +12,7 @@ import type {
   WorkspaceWithPR,
 } from './ratchet.types';
 
-type Logger = ReturnType<typeof createLogger>;
+const logger = createLogger('ratchet');
 
 export interface AuthenticatedUsernameCache {
   value: string | null;
@@ -314,8 +314,7 @@ export function buildFailedCheckDiagnostics(prStateInfo: PRStateInfo | null) {
 
 export function resolveRatchetPrContext(
   workspace: WorkspaceWithPR,
-  github: RatchetGitHubBridge,
-  logger: Logger
+  github: RatchetGitHubBridge
 ): { repo: string; prNumber: number } | null {
   const prInfo = github.extractPRInfo(workspace.prUrl);
   if (!prInfo) {
@@ -343,39 +342,25 @@ export async function fetchPRState(params: {
   authenticatedUsername: string | null;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
-  logger: Logger;
-  computeLatestReviewActivityAtMs?: (
-    prDetails: {
-      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
-      comments: Array<{ updatedAt: string; author: { login: string } }>;
-    },
-    reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-    authenticatedUsername: string | null
-  ) => number | null;
-  computeDispatchSnapshotKey?: (
-    ciStatus: CIStatus,
-    hasChangesRequested: boolean,
-    latestReviewActivityAtMs: number | null,
-    statusChecks: RatchetStatusCheckRollupItem[] | null,
-    hasMergeConflict?: boolean
-  ) => string;
+  /**
+   * Skip the completed-fetch cooldown. Used by event-driven checks that fire
+   * right after another service's fetch registered the workspace in the dedup
+   * registry — the whole point of those checks is to recompute now. An
+   * actively in-flight fetch is still honored, so the bypass never issues a
+   * duplicate concurrent GitHub call.
+   */
+  bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
-  const {
-    workspace,
-    authenticatedUsername,
-    github,
-    backoff,
-    logger,
-    computeLatestReviewActivityAtMs:
-      computeLatestReviewActivityAtMsFn = computeLatestReviewActivityAtMs,
-    computeDispatchSnapshotKey: computeDispatchSnapshotKeyFn = computeDispatchSnapshotKey,
-  } = params;
-  const prContext = resolveRatchetPrContext(workspace, github, logger);
+  const { workspace, authenticatedUsername, github, backoff } = params;
+  const prContext = resolveRatchetPrContext(workspace, github);
   if (!prContext) {
     return null;
   }
 
-  if (github.isRecentlyFetched(workspace.id)) {
+  const dedupSkip = params.bypassRecentFetchCooldown
+    ? github.isFetchInFlight(workspace.id)
+    : github.isRecentlyFetched(workspace.id);
+  if (dedupSkip) {
     logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
       workspaceId: workspace.id,
       prUrl: workspace.prUrl,
@@ -424,12 +409,12 @@ export async function fetchPRState(params: {
     // comments' timestamps, so this keeps the snapshot key stable when threads
     // get resolved; excluding resolved comments would change the key on every
     // resolution and re-trigger dispatches.
-    const latestReviewActivityAtMs = computeLatestReviewActivityAtMsFn(
+    const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
       prDetails,
       reviewComments,
       authenticatedUsername
     );
-    const snapshotKey = computeDispatchSnapshotKeyFn(
+    const snapshotKey = computeDispatchSnapshotKey(
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,

@@ -1,21 +1,21 @@
 import type { RatchetDispatchOutcome, SessionProvider } from '@prisma-gen/client';
-import type { createLogger } from '@/backend/services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { agentSessionAccessor } from '@/backend/services/session';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import type { ActiveFixerCheckResult, WorkspaceWithPR } from './ratchet.types';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
-type Logger = ReturnType<typeof createLogger>;
+const logger = createLogger('ratchet');
 
 async function safeStopSession(params: {
   sessionBridge: RatchetSessionBridge;
   sessionId: string;
   warningMessage: string;
   warningContext: Record<string, unknown>;
-  logger: Logger;
 }): Promise<void> {
-  const { sessionBridge, sessionId, warningMessage, warningContext, logger } = params;
+  const { sessionBridge, sessionId, warningMessage, warningContext } = params;
   try {
     await sessionBridge.stopSession(sessionId);
   } catch (error) {
@@ -30,7 +30,6 @@ async function stopCompletedRatchetSession(params: {
   workspaceId: string;
   sessionId: string;
   sessionBridge: RatchetSessionBridge;
-  logger: Logger;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -40,7 +39,6 @@ async function stopCompletedRatchetSession(params: {
       workspaceId: params.workspaceId,
       sessionId: params.sessionId,
     },
-    logger: params.logger,
   });
 }
 
@@ -50,7 +48,6 @@ async function stopSessionForProviderMismatch(params: {
   expectedProvider: SessionProvider;
   actualProvider: SessionProvider;
   sessionBridge: RatchetSessionBridge;
-  logger: Logger;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -62,7 +59,6 @@ async function stopSessionForProviderMismatch(params: {
       expectedProvider: params.expectedProvider,
       actualProvider: params.actualProvider,
     },
-    logger: params.logger,
   });
 }
 
@@ -76,14 +72,8 @@ async function stopSessionForProviderMismatch(params: {
 export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
-  recordSessionEnd: (
-    workspaceId: string,
-    sessionId: string,
-    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
-  ) => Promise<boolean>;
-  logger: Logger;
 }): Promise<ActiveFixerCheckResult> {
-  const { workspace, sessionBridge, recordSessionEnd, logger } = params;
+  const { workspace, sessionBridge } = params;
 
   const sessionId = workspace.ratchetActiveSessionId;
   if (!sessionId) {
@@ -94,7 +84,11 @@ export async function checkActiveFixerSession(params: {
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>,
     reason: string
   ): Promise<ActiveFixerCheckResult> => {
-    const settled = await recordSessionEnd(workspace.id, sessionId, outcome);
+    const settled = await workspaceAccessor.recordRatchetSessionEnd(
+      workspace.id,
+      sessionId,
+      outcome
+    );
     if (!settled) {
       logger.debug('Ratchet dispatch record was settled concurrently', {
         workspaceId: workspace.id,
@@ -135,7 +129,6 @@ export async function checkActiveFixerSession(params: {
       expectedProvider: resolvedRatchetProvider,
       actualProvider: session.provider,
       sessionBridge,
-      logger,
     });
     return result;
   }
@@ -159,7 +152,6 @@ export async function checkActiveFixerSession(params: {
       workspaceId: workspace.id,
       sessionId: session.id,
       sessionBridge,
-      logger,
     });
     return result;
   }

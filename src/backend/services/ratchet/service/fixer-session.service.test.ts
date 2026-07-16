@@ -87,27 +87,6 @@ describe('FixerSessionService', () => {
     });
   });
 
-  it('skips before acquisition when workspace ratcheting is disabled', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({
-      worktreePath: '/tmp/w',
-      ratchetEnabled: false,
-    } as never);
-
-    const result = await fixerSessionService.acquireAndDispatch({
-      workspaceId: 'w1',
-      workflow: 'ci-fix',
-      sessionName: 'CI Fixing',
-      runningIdleAction: 'send_message',
-      buildPrompt: () => 'hello',
-    });
-
-    expect(result).toEqual({
-      status: 'skipped',
-      reason: 'Workspace ratcheting disabled',
-    });
-    expect(agentSessionAccessor.acquireFixerSession).not.toHaveBeenCalled();
-  });
-
   it('returns already_active when existing session is actively working', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
     vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({

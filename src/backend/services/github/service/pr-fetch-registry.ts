@@ -62,6 +62,15 @@ class PRFetchRegistry {
   }
 
   /**
+   * Returns true only while a fetch is actively in flight for this workspace.
+   * Callers that bypass the completed-fetch cooldown must still honor this to
+   * avoid issuing a duplicate concurrent GitHub call.
+   */
+  isFetchInFlight(workspaceId: string): boolean {
+    return this.inFlight.has(workspaceId);
+  }
+
+  /**
    * Clear all entries. Useful in tests.
    */
   clear(): void {
