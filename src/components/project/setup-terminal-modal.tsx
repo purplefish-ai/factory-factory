@@ -18,7 +18,8 @@ interface SetupTerminalModalProps {
 }
 
 export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
-  const { connected, showTerminal, output, handleData, handleResize } = useSetupTerminal(open);
+  const { connected, gaveUp, reconnect, showTerminal, output, handleData, handleResize } =
+    useSetupTerminal(open);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -52,9 +53,22 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
             </Suspense>
           )}
           {showTerminal && !connected && (
-            <div className="absolute top-2 right-2 rounded bg-yellow-600/90 px-2 py-0.5 text-xs text-white">
-              Reconnecting…
-            </div>
+            <output
+              className={`absolute top-2 right-2 flex items-center gap-2 rounded px-2 py-0.5 text-xs text-white ${
+                gaveUp ? 'bg-red-600/90' : 'bg-yellow-600/90'
+              }`}
+            >
+              {gaveUp ? (
+                <>
+                  <span>Connection lost.</span>
+                  <button type="button" className="underline" onClick={reconnect}>
+                    Retry
+                  </button>
+                </>
+              ) : (
+                'Reconnecting… input is paused'
+              )}
+            </output>
           )}
         </div>
       </DialogContent>

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
+import {
+  appendToRollingOutput,
+  TERMINAL_OUTPUT_MAX_CHARS,
+  TERMINAL_TRUNCATION_MARKER,
+} from '@/components/workspace/rolling-output';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
@@ -11,9 +16,18 @@ const SetupTerminalMessageSchema = z.object({
 
 const RECONNECT_NOTE = '\r\n\x1b[33m[Connection lost — starting a new shell]\x1b[0m\r\n';
 
+const TERMINAL_ROLLING_OUTPUT_OPTIONS = {
+  maxChars: TERMINAL_OUTPUT_MAX_CHARS,
+  truncationMarker: TERMINAL_TRUNCATION_MARKER,
+};
+
 export interface UseSetupTerminalResult {
   /** Whether the WebSocket is currently connected. */
   connected: boolean;
+  /** Whether automatic reconnection has stopped; call reconnect() to retry. */
+  gaveUp: boolean;
+  /** Manually restart the connection after automatic retries gave up. */
+  reconnect: () => void;
   /**
    * Whether the terminal should be rendered. Stays true across transient
    * disconnects (unlike `connected`) so the terminal doesn't vanish while
@@ -45,11 +59,13 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
 
   const handleMessage = useCallback((message: z.infer<typeof SetupTerminalMessageSchema>) => {
     if (message.type === 'output' && message.data) {
-      setOutput((prev) => prev + message.data);
+      setOutput((prev) =>
+        appendToRollingOutput(prev, message.data ?? '', TERMINAL_ROLLING_OUTPUT_OPTIONS)
+      );
     }
   }, []);
 
-  const { connected, send } = useWebSocketChannel({
+  const { connected, gaveUp, send, reconnect } = useWebSocketChannel({
     url: open ? buildWebSocketUrl('/setup-terminal', {}) : null,
     schema: SetupTerminalMessageSchema,
     onMessage: handleMessage,
@@ -66,18 +82,22 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
   }, [open]);
 
   // Request a terminal on every (re)connect: the server-side PTY is
-  // per-connection, so a reconnect needs a fresh create.
+  // per-connection, so a reconnect needs a fresh create. The `open` guard
+  // covers a connect landing in the same render pass as the modal closing,
+  // which would otherwise undo the reset above.
   useEffect(() => {
-    if (!connected) {
+    if (!(open && connected)) {
       return;
     }
     if (hasConnectedRef.current) {
-      setOutput((prev) => prev + RECONNECT_NOTE);
+      setOutput((prev) =>
+        appendToRollingOutput(prev, RECONNECT_NOTE, TERMINAL_ROLLING_OUTPUT_OPTIONS)
+      );
     }
     hasConnectedRef.current = true;
     setShowTerminal(true);
     send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
-  }, [connected, send]);
+  }, [open, connected, send]);
 
   const handleData = useCallback(
     (data: string) => {
@@ -95,5 +115,5 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     [send]
   );
 
-  return { connected, showTerminal, output, handleData, handleResize };
+  return { connected, gaveUp, reconnect, showTerminal, output, handleData, handleResize };
 }

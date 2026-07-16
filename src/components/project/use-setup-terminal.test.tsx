@@ -3,12 +3,17 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  TERMINAL_OUTPUT_MAX_CHARS,
+  TERMINAL_TRUNCATION_MARKER,
+} from '@/components/workspace/rolling-output';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { type UseSetupTerminalResult, useSetupTerminal } from './use-setup-terminal';
 
 let capturedOptions: UseWebSocketTransportOptions | null = null;
 const send = vi.fn();
-const transportState = { connected: false };
+const reconnect = vi.fn();
+const transportState = { connected: false, gaveUp: false };
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   configurable: true,
@@ -19,7 +24,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (opts: UseWebSocketTransportOptions) => {
     capturedOptions = opts;
-    return { connected: transportState.connected, gaveUp: false, send, reconnect: vi.fn() };
+    return { connected: transportState.connected, gaveUp: transportState.gaveUp, send, reconnect };
   },
 }));
 
@@ -64,7 +69,9 @@ describe('useSetupTerminal', () => {
     capturedOptions = null;
     resultRef.current = null;
     send.mockReset();
+    reconnect.mockReset();
     transportState.connected = false;
+    transportState.gaveUp = false;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -139,6 +146,54 @@ describe('useSetupTerminal', () => {
     connect();
 
     expect(send).toHaveBeenCalledWith({ type: 'create', cols: 120, rows: 40 });
+  });
+
+  it('ignores a connect that lands in the same render as the modal closing', () => {
+    render(true);
+    connect();
+    disconnect();
+
+    // Close the modal in the same render pass as the transport reporting a
+    // (re)connect: the connect effect must not run for a closed modal.
+    send.mockClear();
+    transportState.connected = true;
+    render(false);
+    expect(send).not.toHaveBeenCalled();
+
+    transportState.connected = false;
+    render(false);
+
+    render(true);
+    connect();
+    expect(resultRef.current?.output).not.toContain('starting a new shell');
+  });
+
+  it('exposes the transport gave-up state and manual reconnect', () => {
+    render(true);
+    expect(resultRef.current?.gaveUp).toBe(false);
+
+    transportState.gaveUp = true;
+    render(true);
+    expect(resultRef.current?.gaveUp).toBe(true);
+
+    resultRef.current?.reconnect();
+    expect(reconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps accumulated output with the terminal rolling buffer', () => {
+    render(true);
+    connect();
+
+    void act(() => {
+      capturedOptions?.onMessage?.({
+        type: 'output',
+        data: 'x'.repeat(TERMINAL_OUTPUT_MAX_CHARS + 1024),
+      });
+    });
+
+    const output = resultRef.current?.output ?? '';
+    expect(output.length).toBeLessThanOrEqual(TERMINAL_OUTPUT_MAX_CHARS);
+    expect(output).toContain(TERMINAL_TRUNCATION_MARKER.trim());
   });
 
   it('resets output and terminal visibility when the modal closes', () => {
