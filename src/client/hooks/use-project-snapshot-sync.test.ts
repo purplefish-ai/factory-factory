@@ -748,6 +748,11 @@ describe('useProjectSnapshotSync', () => {
       const onMessage = capturedOptions!.onMessage!;
       const onDisconnected = capturedOptions!.onDisconnected!;
 
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [],
+      });
       onDisconnected();
       onMessage({
         type: 'snapshot_full',
@@ -764,6 +769,23 @@ describe('useProjectSnapshotSync', () => {
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockSummaryInvalidate).toHaveBeenCalledTimes(1);
       expect(mockKanbanInvalidate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not heal when connection attempts fail before the first baseline', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const onDisconnected = capturedOptions!.onDisconnected!;
+
+      // Failed connection attempts fire onDisconnected without any baseline.
+      onDisconnected();
+      onDisconnected();
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+
+      expectNoInvalidations();
     });
   });
 

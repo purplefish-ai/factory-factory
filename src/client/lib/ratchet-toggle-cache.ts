@@ -69,14 +69,24 @@ export function applyRatchetToggleState<T extends Omit<RatchetToggleCacheShape, 
 // in-flight value per workspace so the snapshot sync hook can keep entries
 // consistent with the pending toggle until the mutation settles.
 
-const pendingRatchetToggles = new Map<string, boolean>();
+const pendingRatchetToggles = new Map<string, { enabled: boolean; token: number }>();
+let nextPendingRatchetToggleToken = 0;
 
-export function setPendingRatchetToggle(workspaceId: string, enabled: boolean): void {
-  pendingRatchetToggles.set(workspaceId, enabled);
+/**
+ * Registers an in-flight toggle and returns a token identifying it. A newer
+ * toggle for the same workspace replaces the previous registration, and the
+ * older mutation's clear (with its stale token) becomes a no-op.
+ */
+export function setPendingRatchetToggle(workspaceId: string, enabled: boolean): number {
+  nextPendingRatchetToggleToken += 1;
+  pendingRatchetToggles.set(workspaceId, { enabled, token: nextPendingRatchetToggleToken });
+  return nextPendingRatchetToggleToken;
 }
 
-export function clearPendingRatchetToggle(workspaceId: string): void {
-  pendingRatchetToggles.delete(workspaceId);
+export function clearPendingRatchetToggle(workspaceId: string, token: number): void {
+  if (pendingRatchetToggles.get(workspaceId)?.token === token) {
+    pendingRatchetToggles.delete(workspaceId);
+  }
 }
 
 export function resetPendingRatchetTogglesForTests(): void {
@@ -92,10 +102,10 @@ export function overridePendingRatchetToggle<
   T extends Omit<RatchetToggleCacheShape, 'id'> & { workspaceId: string },
 >(entry: T): T {
   const pending = pendingRatchetToggles.get(entry.workspaceId);
-  if (pending === undefined || pending === entry.ratchetEnabled) {
+  if (pending === undefined || pending.enabled === entry.ratchetEnabled) {
     return entry;
   }
-  return applyRatchetToggleState(entry, pending);
+  return applyRatchetToggleState(entry, pending.enabled);
 }
 
 export function updateWorkspaceRatchetState<T extends RatchetToggleCacheShape>(

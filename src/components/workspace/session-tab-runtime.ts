@@ -176,7 +176,9 @@ export function deriveSessionTabRuntime(
         isRunning: true,
       };
 
-    default:
+    // No default: the declared return type makes this switch exhaustive, so
+    // adding a SessionUiStatusKind fails to compile until it is handled here.
+    case 'idle':
       return IDLE_STATUS;
   }
 }

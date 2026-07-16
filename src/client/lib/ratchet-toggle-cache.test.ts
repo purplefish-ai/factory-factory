@@ -94,9 +94,21 @@ describe('pending ratchet toggle override', () => {
   });
 
   it('stops overriding after the toggle is cleared', () => {
-    setPendingRatchetToggle('ws-1', false);
-    clearPendingRatchetToggle('ws-1');
+    const token = setPendingRatchetToggle('ws-1', false);
+    clearPendingRatchetToggle('ws-1', token);
     const entry = makeEntry(true);
     expect(overridePendingRatchetToggle(entry)).toBe(entry);
+  });
+
+  it('keeps the newer toggle when an older mutation settles late', () => {
+    const firstToken = setPendingRatchetToggle('ws-1', true);
+    setPendingRatchetToggle('ws-1', false);
+
+    // The first mutation settles after the second was registered; its clear
+    // must not remove the second mutation's pending value.
+    clearPendingRatchetToggle('ws-1', firstToken);
+
+    const overridden = overridePendingRatchetToggle(makeEntry(true));
+    expect(overridden.ratchetEnabled).toBe(false);
   });
 });

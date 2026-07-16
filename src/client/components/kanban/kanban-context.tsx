@@ -204,6 +204,9 @@ export function KanbanProvider({
       // Optimistic cache updates and settle-time invalidation live in the
       // shared useToggleRatcheting hook.
       await toggleRatchetingMutation.mutateAsync({ workspaceId, enabled });
+    } catch {
+      // Error feedback is surfaced by useToggleRatcheting's onError toast;
+      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setTogglingWorkspaceId(null);
     }

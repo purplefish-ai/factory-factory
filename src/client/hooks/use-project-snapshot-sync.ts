@@ -319,12 +319,17 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   const previousPendingRequestsRef = useRef<Map<string, PendingRequestType>>(new Map());
   // Deltas may have been dropped while disconnected, so the next snapshot_full
   // baseline must also refetch-heal the staleTime: Infinity workspace caches.
+  // Failed attempts before the first baseline don't count: nothing has been
+  // patched yet, so the initial hydration stays refetch-free.
   const staleSinceDisconnectRef = useRef(false);
+  const hasReceivedBaselineRef = useRef(false);
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleDisconnected = useCallback(() => {
-    staleSinceDisconnectRef.current = true;
+    if (hasReceivedBaselineRef.current) {
+      staleSinceDisconnectRef.current = true;
+    }
   }, []);
 
   const handleMessage = useCallback(
@@ -332,6 +337,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
+          hasReceivedBaselineRef.current = true;
           if (staleSinceDisconnectRef.current) {
             staleSinceDisconnectRef.current = false;
             healWorkspaceCachesAfterReconnect(utils, message.projectId);

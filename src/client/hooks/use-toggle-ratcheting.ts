@@ -7,6 +7,7 @@
  * overridePendingRatchetToggle), and reconciles with the server on settle.
  */
 
+import { toast } from 'sonner';
 import {
   applyRatchetToggleState,
   clearPendingRatchetToggle,
@@ -32,7 +33,7 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
 
   return trpc.workspace.toggleRatcheting.useMutation({
     onMutate: ({ workspaceId, enabled }) => {
-      setPendingRatchetToggle(workspaceId, enabled);
+      const pendingToggleToken = setPendingRatchetToggle(workspaceId, enabled);
 
       utils.workspace.get.setData({ id: workspaceId }, (old) => {
         if (!old) {
@@ -55,9 +56,16 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
           workspaces: updateWorkspaceRatchetState(old.workspaces, workspaceId, enabled),
         };
       });
+
+      return { pendingToggleToken };
     },
-    onSettled: (_data, _error, { workspaceId }) => {
-      clearPendingRatchetToggle(workspaceId);
+    onError: (error) => {
+      toast.error(`Failed to toggle ratchet: ${error.message}`);
+    },
+    onSettled: (_data, _error, { workspaceId }, context) => {
+      if (context) {
+        clearPendingRatchetToggle(workspaceId, context.pendingToggleToken);
+      }
       utils.workspace.get.invalidate({ id: workspaceId });
       utils.workspace.listWithKanbanState.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });

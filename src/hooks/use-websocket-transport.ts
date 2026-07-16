@@ -345,6 +345,11 @@ export function useWebSocketTransport(
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
+        // The closing socket's onclose is ignored once wsRef is cleared, so
+        // reflect the closed state here. Otherwise a URL change leaves
+        // consumers reading connected=true while the replacement socket is
+        // still connecting.
+        setConnected(false);
       }
     };
   }, [url, connect]);
