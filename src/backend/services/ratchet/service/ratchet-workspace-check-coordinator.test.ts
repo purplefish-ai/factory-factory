@@ -129,4 +129,31 @@ describe('RatchetWorkspaceCheckCoordinator', () => {
     await expectation;
     expect(runner).toHaveBeenCalledTimes(1);
   });
+
+  it('lets a committed side-effect phase finish after the timeout budget', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-committed' } as WorkspaceWithPR;
+    let finishCommit!: () => void;
+    const commitBarrier = new Promise<void>((resolve) => {
+      finishCommit = resolve;
+    });
+    const expected = {
+      workspaceId: workspace.id,
+      previousState: 'IDLE',
+      newState: 'IDLE',
+      action: { type: 'WAITING', reason: 'committed' },
+    } as WorkspaceRatchetResult;
+
+    const result = coordinator.run(workspace, async (signal, commitSideEffects) => {
+      signal.throwIfAborted();
+      commitSideEffects();
+      await commitBarrier;
+      signal.throwIfAborted();
+      return expected;
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    finishCommit();
+
+    await expect(result).resolves.toEqual(expected);
+  });
 });

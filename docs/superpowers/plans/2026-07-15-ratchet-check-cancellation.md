@@ -98,8 +98,9 @@ Replace the promise-only map and runner plumbing with:
 ```ts
 interface InFlightWorkspaceCheck {
   controller: AbortController;
-  promise: Promise<WorkspaceRatchetResult>;
+  promise: Promise<WorkspaceRatchetResult> | null;
   started: Promise<void>;
+  timeoutDisabled: boolean;
 }
 
 type WorkspaceCheckScheduler = (
@@ -115,7 +116,10 @@ export class RatchetWorkspaceCheckCoordinator {
 
   run(
     workspace: WorkspaceWithPR,
-    runner: (signal: AbortSignal) => Promise<WorkspaceRatchetResult>,
+    runner: (
+      signal: AbortSignal,
+      commitSideEffects: () => void
+    ) => Promise<WorkspaceRatchetResult>,
     schedule: WorkspaceCheckScheduler = runImmediately
   ): Promise<WorkspaceRatchetResult> {
     const existing = this.inFlightWorkspaceChecks.get(workspace.id);
@@ -128,17 +132,24 @@ export class RatchetWorkspaceCheckCoordinator {
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
-    let entry!: InFlightWorkspaceCheck;
+    const entry: InFlightWorkspaceCheck = {
+      controller,
+      promise: null,
+      started,
+      timeoutDisabled: false,
+    };
     const promise = schedule(async () => {
       markStarted();
       controller.signal.throwIfAborted();
-      return await runner(controller.signal);
+      return await runner(controller.signal, () => {
+        entry.timeoutDisabled = true;
+      });
     }).finally(() => {
       if (this.inFlightWorkspaceChecks.get(workspace.id) === entry) {
         this.inFlightWorkspaceChecks.delete(workspace.id);
       }
     });
-    entry = { controller, promise, started };
+    entry.promise = promise;
     this.inFlightWorkspaceChecks.set(workspace.id, entry);
     return this.withTimeout(entry);
   }
@@ -147,16 +158,23 @@ export class RatchetWorkspaceCheckCoordinator {
     entry: InFlightWorkspaceCheck
   ): Promise<WorkspaceRatchetResult> {
     await entry.started;
+    const promise = entry.promise;
+    if (!promise) {
+      throw new Error('Workspace check started without a scheduled promise');
+    }
     const timeoutMs = this.getTimeoutMs();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        if (entry.timeoutDisabled) {
+          return;
+        }
         const timeoutError = new Error(`Workspace check timed out after ${timeoutMs}ms`);
         entry.controller.abort(timeoutError);
         reject(timeoutError);
       }, timeoutMs);
       timeout.unref?.();
 
-      entry.promise.then(resolve, reject).finally(() => {
+      promise.then(resolve, reject).finally(() => {
         clearTimeout(timeout);
       });
     });
@@ -974,13 +992,19 @@ finished cleanup:
 ```ts
 return await this.checkCoordinator.run(
   workspace,
-  (signal) => {
+  (signal, commitSideEffects) => {
     signal.throwIfAborted();
-    return this.processWorkspace(workspace, opts, signal);
+    return this.processWorkspace(workspace, opts, signal, commitSideEffects);
   },
   (task) => ratchetWorkspaceLimit(task)
 );
 ```
+
+Thread `commitSideEffects` through the decision/dispatch path. The fixer
+dispatch helper calls it synchronously after its last abort check and
+immediately before persisting or adopting a session. Once that commit boundary
+is crossed, the coordinator no longer aborts the check, allowing dispatch,
+workspace state, and snapshot writes to finish consistently.
 
 - [ ] **Step 4: Run service and full targeted tests and verify GREEN**
 

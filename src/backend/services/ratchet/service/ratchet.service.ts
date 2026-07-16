@@ -321,9 +321,9 @@ class RatchetService extends EventEmitter {
     try {
       return await this.checkCoordinator.run(
         workspace,
-        (signal) => {
+        (signal, commitSideEffects) => {
           signal.throwIfAborted();
-          return this.processWorkspace(workspace, opts, signal);
+          return this.processWorkspace(workspace, opts, signal, commitSideEffects);
         },
         (task) => ratchetWorkspaceLimit(task)
       );
@@ -392,7 +392,10 @@ class RatchetService extends EventEmitter {
   private async processWorkspace(
     workspace: WorkspaceWithPR,
     opts?: RatchetCheckOptions,
-    signal: AbortSignal = new AbortController().signal
+    signal: AbortSignal = new AbortController().signal,
+    commitSideEffects: () => void = () => {
+      // Direct private-method callers do not have a coordinator timeout to disable.
+    }
   ): Promise<WorkspaceRatchetResult> {
     signal.throwIfAborted();
     if (this.isShuttingDown) {
@@ -492,7 +495,12 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
       const decision = await this.decideRatchetAction(decisionContext, signal);
       signal.throwIfAborted();
-      const action = await this.applyRatchetDecision(decisionContext, decision, signal);
+      const action = await this.applyRatchetDecision(
+        decisionContext,
+        decision,
+        signal,
+        commitSideEffects
+      );
       signal.throwIfAborted();
 
       return await this.finishRatchetCheck(workspace, prStateInfo, action, decisionContext, signal);
@@ -694,7 +702,10 @@ class RatchetService extends EventEmitter {
   private async applyRatchetDecision(
     context: RatchetDecisionContext,
     decision: RatchetDecision,
-    signal: AbortSignal = new AbortController().signal
+    signal: AbortSignal = new AbortController().signal,
+    commitSideEffects: () => void = () => {
+      // Direct private-method callers do not have a coordinator timeout to disable.
+    }
   ): Promise<RatchetAction> {
     if (decision.type === 'RETURN_ACTION') {
       return decision.action;
@@ -705,7 +716,8 @@ class RatchetService extends EventEmitter {
       context.workspace,
       context.prStateInfo,
       decision.retryCount,
-      signal
+      signal,
+      commitSideEffects
     );
     signal.throwIfAborted();
     return action;
@@ -887,7 +899,10 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
     retryCount: number,
-    signal: AbortSignal = new AbortController().signal
+    signal: AbortSignal = new AbortController().signal,
+    commitSideEffects: () => void = () => {
+      // Direct private-method callers do not have a coordinator timeout to disable.
+    }
   ): Promise<RatchetAction> {
     return await triggerRatchetFixer({
       workspace,
@@ -895,6 +910,7 @@ class RatchetService extends EventEmitter {
       retryCount,
       sessionBridge: this.session,
       signal,
+      commitSideEffects,
     });
   }
 

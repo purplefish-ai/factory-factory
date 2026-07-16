@@ -1858,11 +1858,59 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(processWorkspaceSpy).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'ws-queued-timeout-3' }),
         undefined,
-        expect.any(AbortSignal)
+        expect.any(AbortSignal),
+        expect.any(Function)
       );
       expect(result.results[3]).toMatchObject({
         workspaceId: 'ws-queued-timeout-3',
         action: { type: 'WAITING', reason: 'ran after queue' },
+      });
+    });
+
+    it('lets a committed dispatch finish instead of reporting a timeout error', async () => {
+      unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
+      const workspace = {
+        id: 'ws-committed-dispatch',
+        prUrl: 'https://github.com/example/repo/pull/1',
+        prNumber: 1,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+      };
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue([workspace] as never);
+      let finishCommit!: () => void;
+      const commitBarrier = new Promise<void>((resolve) => {
+        finishCommit = resolve;
+      });
+      vi.spyOn(
+        unsafeCoerce<{
+          processWorkspace: (
+            workspaceArg: typeof workspace,
+            opts: unknown,
+            signal: AbortSignal,
+            commitSideEffects: () => void
+          ) => Promise<WorkspaceRatchetResult>;
+        }>(ratchetService),
+        'processWorkspace'
+      ).mockImplementation(async (workspaceArg, _opts, signal, commitSideEffects) => {
+        commitSideEffects();
+        await commitBarrier;
+        signal.throwIfAborted();
+        return {
+          workspaceId: workspaceArg.id,
+          previousState: RatchetState.IDLE,
+          newState: RatchetState.IDLE,
+          action: { type: 'TRIGGERED_FIXER', sessionId: 'session-1', promptSent: true },
+        };
+      });
+
+      const resultPromise = ratchetService.checkAllWorkspaces();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      finishCommit();
+      const result = await resultPromise;
+
+      expect(result.results[0]).toMatchObject({
+        workspaceId: workspace.id,
+        action: { type: 'TRIGGERED_FIXER', sessionId: 'session-1' },
       });
     });
 
@@ -2688,7 +2736,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   describe('triggerFixer error handling', () => {
-    it('cleans up a started fixer when cancellation wins dispatch persistence', async () => {
+    it('does not clean up a fixer after its dispatch record is persisted', async () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');
       let finishRecord!: (value: boolean) => void;
@@ -2704,13 +2752,15 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           })
       );
       vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      const commitSideEffects = vi.fn();
 
       const trigger = unsafeCoerce<{
         triggerFixer: (
           w: unknown,
           prStateInfo: unknown,
           retryCount: number,
-          signal: AbortSignal
+          signal: AbortSignal,
+          commitSideEffects: () => void
         ) => Promise<unknown>;
       }>(ratchetService).triggerFixer(
         {
@@ -2725,7 +2775,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           hasMergeConflict: false,
         },
         0,
-        controller.signal
+        controller.signal,
+        commitSideEffects
       );
       await vi.waitFor(() =>
         expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalled()
@@ -2734,12 +2785,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       finishRecord(true);
 
       await expect(trigger).rejects.toBe(timeoutError);
-      expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
-        'ws-cancelled-dispatch',
-        'cancelled-session',
-        'COMPLETED'
-      );
-      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('cancelled-session');
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
+      expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
     });
 
     it('handles acquireAndDispatch throwing an error', async () => {

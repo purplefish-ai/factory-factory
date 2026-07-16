@@ -40,8 +40,19 @@ async function handleStartedFixerResult(params: {
   result: Extract<AcquireAndDispatchResult, { status: 'started' }>;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
+  commitSideEffects: () => void;
+  onRecorded: () => void;
 }): Promise<RatchetAction> {
-  const { workspace, prStateInfo, retryCount, result, sessionBridge, signal } = params;
+  const {
+    workspace,
+    prStateInfo,
+    retryCount,
+    result,
+    sessionBridge,
+    signal,
+    commitSideEffects,
+    onRecorded,
+  } = params;
   signal?.throwIfAborted();
   const promptSent = result.promptSent ?? true;
   if (!promptSent) {
@@ -57,11 +68,15 @@ async function handleStartedFixerResult(params: {
   }
 
   signal?.throwIfAborted();
+  commitSideEffects();
   const recorded = await workspaceAccessor.recordRatchetDispatchIfEnabled(workspace.id, {
     sessionId: result.sessionId,
     snapshotKey: prStateInfo.snapshotKey,
     retryCount,
   });
+  if (recorded) {
+    onRecorded();
+  }
   signal?.throwIfAborted();
   if (!recorded) {
     return await stopUnrecordedFixerSession({
@@ -84,12 +99,14 @@ async function handleAlreadyActiveFixerResult(params: {
   result: Extract<AcquireAndDispatchResult, { status: 'already_active' }>;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
+  commitSideEffects: () => void;
 }): Promise<RatchetAction> {
-  const { workspace, result, sessionBridge, signal } = params;
+  const { workspace, result, sessionBridge, signal, commitSideEffects } = params;
   // Adopt (pointer + RUNNING outcome) rather than record a full dispatch: the
   // session is working on an earlier prompt, so the current snapshot key must
   // not be marked as dispatched.
   signal?.throwIfAborted();
+  commitSideEffects();
   const adopted = await workspaceAccessor.adoptRatchetActiveSessionIfEnabled(
     workspace.id,
     result.sessionId
@@ -132,9 +149,20 @@ export async function triggerRatchetFixer(params: {
   retryCount: number;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
+  commitSideEffects?: () => void;
 }): Promise<RatchetAction> {
-  const { workspace, prStateInfo, retryCount, sessionBridge, signal } = params;
+  const {
+    workspace,
+    prStateInfo,
+    retryCount,
+    sessionBridge,
+    signal,
+    commitSideEffects = () => {
+      // Direct helper callers do not have a coordinator timeout to disable.
+    },
+  } = params;
   let result: AcquireAndDispatchResult | undefined;
+  let startedFixerRecorded = false;
 
   try {
     signal?.throwIfAborted();
@@ -171,6 +199,10 @@ export async function triggerRatchetFixer(params: {
         result,
         sessionBridge,
         signal,
+        commitSideEffects,
+        onRecorded: () => {
+          startedFixerRecorded = true;
+        },
       });
       signal?.throwIfAborted();
       return action;
@@ -182,6 +214,7 @@ export async function triggerRatchetFixer(params: {
         result,
         sessionBridge,
         signal,
+        commitSideEffects,
       });
     }
 
@@ -191,7 +224,7 @@ export async function triggerRatchetFixer(params: {
 
     return { type: 'ERROR', error: result.error };
   } catch (error) {
-    if (signal?.aborted && result?.status === 'started') {
+    if (signal?.aborted && result?.status === 'started' && !startedFixerRecorded) {
       await cleanUpStartedFixerAfterAbort({
         workspaceId: workspace.id,
         sessionId: result.sessionId,
