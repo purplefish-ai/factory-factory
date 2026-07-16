@@ -739,7 +739,7 @@ export const RightControls = memo(function RightControls({
           {stopping ? (
             <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
-            <SquareIcon className="h-3 w-3 fill-current" />
+            <SquareIcon className="h-3 w-3" weight="fill" />
           )}
         </Button>
       )}

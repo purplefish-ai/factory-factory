@@ -62,6 +62,32 @@ describe('icon library', () => {
 
     expect(deprecatedPhosphorImports).toEqual([]);
 
+    const legacyFillClasses = sourceFiles(join(repositoryRoot, 'src')).flatMap((path) => {
+      const source = readFileSync(path, 'utf8');
+      const importedIconNames = [...source.matchAll(phosphorImportPattern)].flatMap((match) =>
+        (match[1] ?? '')
+          .split(',')
+          .map((name) =>
+            name
+              .trim()
+              .replace(/^type\s+/, '')
+              .split(/\s+as\s+/)
+              .at(-1)
+          )
+          .filter((name): name is string => Boolean(name && name !== 'Icon'))
+      );
+
+      return importedIconNames.flatMap((name) => {
+        const iconPattern = new RegExp(`<${name}\\b[\\s\\S]*?\\/>`, 'g');
+        return [...source.matchAll(iconPattern)]
+          .map((match) => match[0])
+          .filter((icon) => /\bfill-[\w-]+/.test(icon) && !/weight=["']fill["']/.test(icon))
+          .map(() => `${relative(repositoryRoot, path)}: ${name}`);
+      });
+    });
+
+    expect(legacyFillClasses).toEqual([]);
+
     const iconGuidance = readFileSync(
       join(repositoryRoot, 'docs/design/ratchet-ux-simplification-plan.md'),
       'utf8'

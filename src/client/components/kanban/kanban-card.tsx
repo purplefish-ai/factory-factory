@@ -270,7 +270,7 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <PlayIcon className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+              <PlayIcon className="h-3 w-3 text-green-500 animate-pulse" weight="fill" />
             </span>
           </TooltipTrigger>
           <TooltipContent>Dev server running</TooltipContent>
