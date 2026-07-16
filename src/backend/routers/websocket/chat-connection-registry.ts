@@ -20,6 +20,7 @@ import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
   SESSION_OUTBOUND_EVENT,
+  type SessionFileLogger,
   type SessionOutboundEvent,
   sessionEventBus,
   sessionFileLogger,
@@ -96,10 +97,10 @@ export class ChatConnectionRegistry {
   }
 
   /**
-   * Forward a payload to all connections viewing a session. OUT_TO_CLIENT
-   * file logging happens only when the payload actually reached a client.
+   * Forward a payload to all connections viewing a session. Returns the
+   * number of sockets the payload was successfully handed to.
    */
-  broadcastToSession(dbSessionId: string, payload: WebSocketMessage): void {
+  broadcastToSession(dbSessionId: string, payload: WebSocketMessage): number {
     this.chatWsMsgCounter++;
     const msgNum = this.chatWsMsgCounter;
 
@@ -108,7 +109,7 @@ export class ChatConnectionRegistry {
       if (DEBUG_CHAT_WS) {
         logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
       }
-      return;
+      return 0;
     }
 
     if (DEBUG_CHAT_WS) {
@@ -121,7 +122,7 @@ export class ChatConnectionRegistry {
       });
     }
 
-    sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', payload);
+    return sent;
   }
 
   /**
@@ -151,34 +152,51 @@ export const chatConnectionRegistry = new ChatConnectionRegistry();
 // Event Bus Wiring
 // ============================================================================
 
-let transportAttached = false;
+let sessionOutboundListener: ((event: SessionOutboundEvent) => void) | null = null;
+let chatBroadcastListener: ((event: ChatBroadcastEvent) => void) | null = null;
 
 /**
  * Subscribe the singleton registry to the session domain's outbound event bus
- * and register the viewer-count provider. Idempotent; called during chat
- * upgrade handler creation at server startup.
+ * and register the viewer-count provider. Idempotent (first caller's
+ * dependencies win); called during chat upgrade handler creation at server
+ * startup.
+ *
+ * OUT_TO_CLIENT session file logging lives here rather than in the registry
+ * so it uses the app context's `sessionFileLogger`; it records only payloads
+ * that actually reached at least one client.
  */
-export function attachChatTransport(): void {
-  if (transportAttached) {
+export function attachChatTransport(deps: { sessionFileLogger?: SessionFileLogger } = {}): void {
+  if (sessionOutboundListener) {
     return;
   }
-  transportAttached = true;
+  const fileLogger = deps.sessionFileLogger ?? sessionFileLogger;
 
-  sessionEventBus.on(SESSION_OUTBOUND_EVENT, (event: SessionOutboundEvent) => {
-    chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
-  });
-  sessionEventBus.on(CHAT_BROADCAST_EVENT, (event: ChatBroadcastEvent) => {
+  sessionOutboundListener = (event: SessionOutboundEvent) => {
+    const sent = chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
+    if (sent > 0) {
+      fileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+    }
+  };
+  chatBroadcastListener = (event: ChatBroadcastEvent) => {
     chatConnectionRegistry.broadcastToAll(event.payload);
-  });
+  };
+
+  sessionEventBus.on(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
+  sessionEventBus.on(CHAT_BROADCAST_EVENT, chatBroadcastListener);
   sessionEventBus.registerViewerCountProvider((sessionId) =>
     chatConnectionRegistry.countViewers(sessionId)
   );
 }
 
 export function detachChatTransportForTests(): void {
-  sessionEventBus.removeAllListeners(SESSION_OUTBOUND_EVENT);
-  sessionEventBus.removeAllListeners(CHAT_BROADCAST_EVENT);
+  if (sessionOutboundListener) {
+    sessionEventBus.off(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
+    sessionOutboundListener = null;
+  }
+  if (chatBroadcastListener) {
+    sessionEventBus.off(CHAT_BROADCAST_EVENT, chatBroadcastListener);
+    chatBroadcastListener = null;
+  }
   sessionEventBus.registerViewerCountProvider(null);
-  transportAttached = false;
   chatConnectionRegistry.clear();
 }

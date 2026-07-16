@@ -9,7 +9,11 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE, type WsReadyState } from '@/backend/constants/websocket';
-import { sessionEventBus } from '@/backend/services/session';
+import {
+  SESSION_OUTBOUND_EVENT,
+  type SessionFileLogger,
+  sessionEventBus,
+} from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 import {
   attachChatTransport,
@@ -291,5 +295,41 @@ describe('attachChatTransport', () => {
     );
 
     expect(ws.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs OUT_TO_CLIENT via the injected sessionFileLogger only when a client received the payload', () => {
+    const fileLogger = { log: vi.fn() };
+    attachChatTransport({ sessionFileLogger: fileLogger as unknown as SessionFileLogger });
+
+    const payload = asMessage({ type: 'session_delta', data: { type: 'noop' } });
+    sessionEventBus.publishToSession('s1', payload);
+    expect(fileLogger.log).not.toHaveBeenCalled();
+
+    chatConnectionRegistry.register('conn-1', {
+      ws: asWs(new MockWebSocket()),
+      dbSessionId: 's1',
+      workingDir: null,
+    });
+    sessionEventBus.publishToSession('s1', payload);
+
+    expect(fileLogger.log).toHaveBeenCalledWith('s1', 'OUT_TO_CLIENT', payload);
+  });
+
+  it('detach removes only its own bus listeners', () => {
+    const unrelatedListener = vi.fn();
+    sessionEventBus.on(SESSION_OUTBOUND_EVENT, unrelatedListener);
+    try {
+      attachChatTransport();
+      detachChatTransportForTests();
+
+      sessionEventBus.publishToSession(
+        's1',
+        asMessage({ type: 'session_delta', data: { type: 'noop' } })
+      );
+
+      expect(unrelatedListener).toHaveBeenCalledTimes(1);
+    } finally {
+      sessionEventBus.off(SESSION_OUTBOUND_EVENT, unrelatedListener);
+    }
   });
 });
