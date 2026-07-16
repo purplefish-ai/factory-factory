@@ -739,6 +739,58 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
   });
 
+  it('routes an aborted prompt-failure path through orphan cleanup', async () => {
+    const controller = new AbortController();
+    const timeoutError = new Error('Workspace check timed out');
+    let finishPointerClear!: () => void;
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'aborted-prompt-session',
+      promptSent: false,
+    });
+    vi.mocked(workspaceAccessor.update).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPointerClear = () => resolve({} as never);
+        })
+    );
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+    const trigger = unsafeCoerce<{
+      triggerFixer: (
+        w: unknown,
+        prStateInfo: unknown,
+        retryCount: number,
+        signal: AbortSignal
+      ) => Promise<unknown>;
+    }>(ratchetService).triggerFixer(
+      {
+        id: 'ws-aborted-prompt',
+        prUrl: 'https://github.com/example/repo/pull/7',
+      },
+      {
+        ciStatus: CIStatus.FAILURE,
+        snapshotKey: 'failed:7',
+        prNumber: 7,
+        reviewComments: [],
+        hasMergeConflict: false,
+      },
+      0,
+      controller.signal
+    );
+    await vi.waitFor(() => expect(workspaceAccessor.update).toHaveBeenCalled());
+    controller.abort(timeoutError);
+    finishPointerClear();
+
+    await expect(trigger).rejects.toBe(timeoutError);
+    expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'ws-aborted-prompt',
+      'aborted-prompt-session',
+      'COMPLETED'
+    );
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('aborted-prompt-session');
+  });
+
   it('does not dispatch on a clean PR with no new review activity', async () => {
     const recentCheck = new Date(); // Recent check — not stale
     const workspace = {
@@ -2358,9 +2410,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetEnabled: true,
         ratchetState: RatchetState.IDLE,
       });
-      vi.mocked(workspaceAccessor.findForRatchetById).mockImplementation(async (id) =>
-        unsafeCoerce(makeWorkspace(id))
-      );
+      const workspaces = [
+        makeWorkspace('blocker-1'),
+        makeWorkspace('blocker-2'),
+        makeWorkspace('blocker-3'),
+        makeWorkspace('queued-target'),
+      ];
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspaces[3] as never);
       let releaseBlockers!: () => void;
       const blockerBarrier = new Promise<void>((resolve) => {
         releaseBlockers = resolve;
@@ -2387,19 +2444,17 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         };
       });
 
-      const blockers = [1, 2, 3].map((id) => ratchetService.checkWorkspaceById(`blocker-${id}`));
+      const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeBlockers).toBe(3));
-      const first = ratchetService.checkWorkspaceById('queued-target');
-      const second = ratchetService.checkWorkspaceById('queued-target');
+      const direct = ratchetService.checkWorkspaceById('queued-target');
       await Promise.resolve();
       expect(targetRuns).toBe(0);
 
       releaseBlockers();
-      await Promise.all(blockers);
-      const [firstResult, secondResult] = await Promise.all([first, second]);
+      const [batchResult, directResult] = await Promise.all([batch, direct]);
 
       expect(targetRuns).toBe(1);
-      expect(firstResult).toEqual(secondResult);
+      expect(directResult).toEqual(batchResult.results[3]);
     });
 
     it('keeps a limiter slot occupied until a timed-out runner finishes cleanup', async () => {
@@ -2411,9 +2466,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetEnabled: true,
         ratchetState: RatchetState.IDLE,
       });
-      vi.mocked(workspaceAccessor.findForRatchetById).mockImplementation(async (id) =>
-        unsafeCoerce(makeWorkspace(id))
-      );
+      const workspaces = [
+        makeWorkspace('timed-out-1'),
+        makeWorkspace('timed-out-2'),
+        makeWorkspace('timed-out-3'),
+        makeWorkspace('after-timeouts'),
+      ];
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
       let finishCleanup!: () => void;
       const cleanupBarrier = new Promise<void>((resolve) => {
         finishCleanup = resolve;
@@ -2447,19 +2506,69 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         };
       });
 
-      const timedOut = [1, 2, 3].map((id) => ratchetService.checkWorkspaceById(`timed-out-${id}`));
+      const batch = ratchetService.checkAllWorkspaces();
       await vi.waitFor(() => expect(activeTimedOutChecks).toBe(3));
-      await Promise.all(timedOut);
-
-      unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs =
-        1000;
-      const target = ratchetService.checkWorkspaceById('after-timeouts');
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(targetRuns).toBe(0);
 
       finishCleanup();
-      await target;
+      await batch;
       expect(targetRuns).toBe(1);
+    });
+
+    it('runs a direct workspace check without waiting for the batch limiter', async () => {
+      const makeWorkspace = (id: string) => ({
+        id,
+        prUrl: `https://github.com/example/repo/pull/${id}`,
+        prNumber: 1,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+      });
+      const batchWorkspaces = [
+        makeWorkspace('batch-blocker-1'),
+        makeWorkspace('batch-blocker-2'),
+        makeWorkspace('batch-blocker-3'),
+      ];
+      const directWorkspace = makeWorkspace('direct-target');
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(
+        batchWorkspaces as never
+      );
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(directWorkspace as never);
+      let releaseBatch!: () => void;
+      const batchBarrier = new Promise<void>((resolve) => {
+        releaseBatch = resolve;
+      });
+      let activeBatchChecks = 0;
+      let directRuns = 0;
+      vi.spyOn(
+        unsafeCoerce<{
+          processWorkspace: (workspace: { id: string }) => Promise<WorkspaceRatchetResult>;
+        }>(ratchetService),
+        'processWorkspace'
+      ).mockImplementation(async (workspace) => {
+        if (workspace.id.startsWith('batch-blocker-')) {
+          activeBatchChecks += 1;
+          await batchBarrier;
+        } else {
+          directRuns += 1;
+        }
+        return {
+          workspaceId: workspace.id,
+          previousState: RatchetState.IDLE,
+          newState: RatchetState.IDLE,
+          action: { type: 'WAITING', reason: 'noop' },
+        };
+      });
+
+      const batch = ratchetService.checkAllWorkspaces();
+      await vi.waitFor(() => expect(activeBatchChecks).toBe(3));
+
+      const directResult = await ratchetService.checkWorkspaceById(directWorkspace.id);
+      expect(directRuns).toBe(1);
+      expect(directResult?.workspaceId).toBe(directWorkspace.id);
+
+      releaseBatch();
+      await batch;
     });
   });
 

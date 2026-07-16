@@ -7,7 +7,7 @@ interface InFlightWorkspaceCheck {
   timeoutDisabled: boolean;
 }
 
-type WorkspaceCheckScheduler = (
+export type WorkspaceCheckScheduler = (
   task: () => Promise<WorkspaceRatchetResult>
 ) => Promise<WorkspaceRatchetResult>;
 

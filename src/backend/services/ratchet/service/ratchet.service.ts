@@ -39,11 +39,15 @@ import {
   isPRStateFetchSkipped,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
-import { RatchetWorkspaceCheckCoordinator } from './ratchet-workspace-check-coordinator';
+import {
+  RatchetWorkspaceCheckCoordinator,
+  type WorkspaceCheckScheduler,
+} from './ratchet-workspace-check-coordinator';
 
 const logger = createLogger('ratchet');
 const RATCHET_WORKSPACE_CONCURRENCY = 3;
 const ratchetWorkspaceLimit = pLimit(RATCHET_WORKSPACE_CONCURRENCY);
+const scheduleRatchetBatchCheck: WorkspaceCheckScheduler = (task) => ratchetWorkspaceLimit(task);
 
 const RECENTLY_FETCHED_REASON: PRStateFetchSkipped['reason'] = 'recently_fetched';
 
@@ -228,7 +232,9 @@ class RatchetService extends EventEmitter {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.runWorkspaceCheckSafely(workspace))
+      workspaces.map((workspace) =>
+        this.runWorkspaceCheckSafely(workspace, undefined, scheduleRatchetBatchCheck)
+      )
     );
 
     const stateChanges = results.filter((r) => r.previousState !== r.newState).length;
@@ -316,7 +322,8 @@ class RatchetService extends EventEmitter {
 
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR,
-    opts?: RatchetCheckOptions
+    opts?: RatchetCheckOptions,
+    schedule?: WorkspaceCheckScheduler
   ): Promise<WorkspaceRatchetResult> {
     try {
       return await this.checkCoordinator.run(
@@ -325,7 +332,7 @@ class RatchetService extends EventEmitter {
           signal.throwIfAborted();
           return this.processWorkspace(workspace, opts, signal, commitSideEffects);
         },
-        (task) => ratchetWorkspaceLimit(task)
+        schedule
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

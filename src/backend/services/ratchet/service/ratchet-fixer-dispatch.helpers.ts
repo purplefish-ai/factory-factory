@@ -42,6 +42,7 @@ async function handleStartedFixerResult(params: {
   signal?: AbortSignal;
   commitSideEffects: () => void;
   onRecorded: () => void;
+  onCleaned: () => void;
 }): Promise<RatchetAction> {
   const {
     workspace,
@@ -52,6 +53,7 @@ async function handleStartedFixerResult(params: {
     signal,
     commitSideEffects,
     onRecorded,
+    onCleaned,
   } = params;
   signal?.throwIfAborted();
   const promptSent = result.promptSent ?? true;
@@ -60,9 +62,16 @@ async function handleStartedFixerResult(params: {
       workspaceId: workspace.id,
       sessionId: result.sessionId,
     });
+    signal?.throwIfAborted();
     await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+    signal?.throwIfAborted();
     if (sessionBridge.isSessionRunning(result.sessionId)) {
+      signal?.throwIfAborted();
       await sessionBridge.stopSession(result.sessionId);
+      onCleaned();
+      signal?.throwIfAborted();
+    } else {
+      onCleaned();
     }
     return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
   }
@@ -172,6 +181,7 @@ export async function triggerRatchetFixer(params: {
   } = params;
   let result: AcquireAndDispatchResult | undefined;
   let startedFixerRecorded = false;
+  let startedFixerCleaned = false;
 
   try {
     signal?.throwIfAborted();
@@ -212,6 +222,9 @@ export async function triggerRatchetFixer(params: {
         onRecorded: () => {
           startedFixerRecorded = true;
         },
+        onCleaned: () => {
+          startedFixerCleaned = true;
+        },
       });
       signal?.throwIfAborted();
       return action;
@@ -233,7 +246,7 @@ export async function triggerRatchetFixer(params: {
 
     return { type: 'ERROR', error: result.error };
   } catch (error) {
-    if (result?.status === 'started' && !startedFixerRecorded) {
+    if (result?.status === 'started' && !(startedFixerRecorded || startedFixerCleaned)) {
       await cleanUpUnrecordedStartedFixer({
         workspaceId: workspace.id,
         sessionId: result.sessionId,

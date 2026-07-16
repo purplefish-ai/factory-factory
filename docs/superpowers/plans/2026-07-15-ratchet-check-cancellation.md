@@ -976,11 +976,14 @@ const RATCHET_WORKSPACE_CONCURRENCY = 3;
 const ratchetWorkspaceLimit = pLimit(RATCHET_WORKSPACE_CONCURRENCY);
 ```
 
-Leave the batch mapping unchanged so the coordinator claims the workspace before queueing:
+Pass the batch scheduler only from `checkAllWorkspaces`; direct by-id checks
+continue to use the coordinator's immediate default scheduler:
 
 ```ts
 const results = await Promise.all(
-  workspaces.map((workspace) => this.runWorkspaceCheckSafely(workspace))
+  workspaces.map((workspace) =>
+    this.runWorkspaceCheckSafely(workspace, undefined, scheduleRatchetBatchCheck)
+  )
 );
 ```
 
@@ -996,7 +999,7 @@ return await this.checkCoordinator.run(
     signal.throwIfAborted();
     return this.processWorkspace(workspace, opts, signal, commitSideEffects);
   },
-  (task) => ratchetWorkspaceLimit(task)
+  schedule
 );
 ```
 
