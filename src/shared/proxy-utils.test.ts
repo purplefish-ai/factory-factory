@@ -92,7 +92,7 @@ describe('proxy-utils', () => {
     const serverSockets: import('node:net').Socket[] = [];
     const server = createNetServer((socket) => {
       serverSockets.push(socket);
-      socket.on('data', (chunk) => received.push(chunk));
+      socket.on('data', (chunk) => received.push(Buffer.from(chunk)));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const upstreamPort = (server.address() as AddressInfo).port;
