@@ -45,6 +45,10 @@ import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
+import {
+  buildWorkspaceNotificationMessageText,
+  workspaceNotificationMessageId,
+} from '@/shared/workspace-notifications';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
@@ -573,7 +577,7 @@ export const workspaceRouter = router({
         message: z.string().min(1),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
@@ -590,6 +594,17 @@ export const workspaceRouter = router({
 
       const parentWorkspaceId = child.parentWorkspaceId;
 
+      // Persist first so the message survives if live delivery races a dying
+      // session; successful dispatch marks the row delivered.
+      const notification = await persistChildNotification({
+        parentWorkspaceId,
+        sourceWorkspaceId: input.childWorkspaceId,
+        message: input.message,
+      });
+      if (!notification) {
+        return { delivered: false };
+      }
+
       // Try to find an active/idle session on the parent workspace to inject into.
       // Use the most recently created active session so we target the current one.
       const parentSessions = await agentSessionAccessor.findByWorkspaceId(parentWorkspaceId);
@@ -597,49 +612,57 @@ export const workspaceRouter = router({
         .reverse()
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
 
-      if (activeSession) {
-        // Show notification card in parent's UI
-        const claudeMessage = {
-          type: 'child_workspace_update' as const,
-          childWorkspaceId: input.childWorkspaceId,
-          childWorkspaceName: child.name,
-          childProjectName: child.project.name,
-          text: input.message,
-          timestamp: new Date().toISOString(),
-        };
-        const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
-        sessionDomainService.emitDelta(activeSession.id, {
-          type: 'agent_message',
-          data: claudeMessage,
-          order,
-        } as SessionDeltaEvent & { order: number });
-        // Enqueue as a user message so the parent agent acts on it
-        const msgId = `child-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        const enqueueText = `[Message from child workspace "${child.name}"]: ${input.message}`;
-        sessionDomainService.enqueue(activeSession.id, {
-          id: msgId,
-          text: enqueueText,
-          timestamp: new Date().toISOString(),
-          settings: {
-            selectedModel: null,
-            reasoningEffort: null,
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          },
-        });
-        await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
-      }
-
-      // Only persist if there is no active session to receive it live
       if (!activeSession) {
-        await persistChildNotification({
-          parentWorkspaceId,
-          sourceWorkspaceId: input.childWorkspaceId,
-          message: input.message,
-        });
+        return { delivered: false };
       }
 
-      return { delivered: Boolean(activeSession) };
+      // Session startup delivery may have already queued this notification
+      // (persist above races deliverPendingChildNotifications on a starting session).
+      const messageId = workspaceNotificationMessageId(notification.id);
+      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
+        return { delivered: true };
+      }
+
+      // Enqueue as a user message so the parent agent acts on it
+      const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
+        id: messageId,
+        text: buildWorkspaceNotificationMessageText(notification),
+        timestamp: new Date().toISOString(),
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      });
+      if ('error' in enqueueResult) {
+        // Leave the notification pending; it is delivered at next session start.
+        getLogger(ctx).warn('sendMessageToParent: live enqueue failed, left pending', {
+          notificationId: notification.id,
+          sessionId: activeSession.id,
+          error: enqueueResult.error,
+        });
+        return { delivered: false };
+      }
+
+      // Show notification card in parent's UI
+      const claudeMessage = {
+        type: 'child_workspace_update' as const,
+        childWorkspaceId: input.childWorkspaceId,
+        childWorkspaceName: child.name,
+        childProjectName: child.project.name,
+        text: input.message,
+        timestamp: new Date().toISOString(),
+      };
+      const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
+      sessionDomainService.emitDelta(activeSession.id, {
+        type: 'agent_message',
+        data: claudeMessage,
+        order,
+      } as SessionDeltaEvent & { order: number });
+      await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
+
+      return { delivered: true };
     }),
 
   // Send a message from a parent workspace to a child's active session (or queue it)
@@ -651,7 +674,7 @@ export const workspaceRouter = router({
         message: z.string().min(1),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
@@ -668,52 +691,73 @@ export const workspaceRouter = router({
 
       const parent = await workspaceAccessor.findByIdWithProject(input.parentWorkspaceId);
 
+      // Persist first so the message survives if live delivery races a dying
+      // session; successful dispatch marks the row delivered.
+      const notification = await persistParentNotification({
+        parentWorkspaceId: input.parentWorkspaceId,
+        targetChildWorkspaceId: input.childWorkspaceId,
+        message: input.message,
+      });
+      if (!notification) {
+        return { delivered: false };
+      }
+
       const childSessions = await agentSessionAccessor.findByWorkspaceId(input.childWorkspaceId);
       const activeSession = [...childSessions]
         .reverse()
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
 
-      if (activeSession) {
-        // Show notification card in child's UI
-        const claudeMessage = {
-          type: 'parent_workspace_update' as const,
-          parentWorkspaceId: input.parentWorkspaceId,
-          parentWorkspaceName: parent?.name,
-          parentProjectName: parent?.project.name,
-          text: input.message,
-          timestamp: new Date().toISOString(),
-        };
-        const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
-        sessionDomainService.emitDelta(activeSession.id, {
-          type: 'agent_message',
-          data: claudeMessage,
-          order,
-        } as SessionDeltaEvent & { order: number });
-        // Enqueue as a user message so the child agent acts on it
-        const msgId = `parent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        const parentLabel = parent?.name ?? 'parent workspace';
-        const enqueueText = `[Message from parent workspace "${parentLabel}"]: ${input.message}`;
-        sessionDomainService.enqueue(activeSession.id, {
-          id: msgId,
-          text: enqueueText,
-          timestamp: new Date().toISOString(),
-          settings: {
-            selectedModel: null,
-            reasoningEffort: null,
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          },
-        });
-        await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
-      } else {
-        await persistParentNotification({
-          parentWorkspaceId: input.parentWorkspaceId,
-          targetChildWorkspaceId: input.childWorkspaceId,
-          message: input.message,
-        });
+      if (!activeSession) {
+        return { delivered: false };
       }
 
-      return { delivered: Boolean(activeSession) };
+      // Session startup delivery may have already queued this notification
+      // (persist above races deliverPendingChildNotifications on a starting session).
+      const messageId = workspaceNotificationMessageId(notification.id);
+      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
+        return { delivered: true };
+      }
+
+      // Enqueue as a user message so the child agent acts on it
+      const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
+        id: messageId,
+        text: buildWorkspaceNotificationMessageText(notification),
+        timestamp: new Date().toISOString(),
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      });
+      if ('error' in enqueueResult) {
+        // Leave the notification pending; it is delivered at next session start.
+        getLogger(ctx).warn('sendMessageToChild: live enqueue failed, left pending', {
+          notificationId: notification.id,
+          sessionId: activeSession.id,
+          error: enqueueResult.error,
+        });
+        return { delivered: false };
+      }
+
+      // Show notification card in child's UI
+      const claudeMessage = {
+        type: 'parent_workspace_update' as const,
+        parentWorkspaceId: input.parentWorkspaceId,
+        parentWorkspaceName: parent?.name,
+        parentProjectName: parent?.project.name,
+        text: input.message,
+        timestamp: new Date().toISOString(),
+      };
+      const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
+      sessionDomainService.emitDelta(activeSession.id, {
+        type: 'agent_message',
+        data: claudeMessage,
+        order,
+      } as SessionDeltaEvent & { order: number });
+      await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
+
+      return { delivered: true };
     }),
 
   // Archive a child workspace on behalf of the parent

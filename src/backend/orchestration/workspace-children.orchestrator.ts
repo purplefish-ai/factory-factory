@@ -1,3 +1,4 @@
+import type { WorkspaceNotification } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { createLogger } from '@/backend/services/logger.service';
@@ -77,17 +78,19 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
 }
 
 /**
- * Deliver a notification from a child workspace to the parent.
+ * Persist a notification from a child workspace to the parent.
  *
- * If the parent workspace has an active/idle agent session the notification will be
- * injected live by the caller (tRPC sendMessageToParent). If it does not, this
- * persists the notification so it is delivered when the parent's next session starts.
+ * Always writes a WorkspaceNotification row so the message survives even if a
+ * live delivery attempt races a dying session. Callers that deliver live mark
+ * the row delivered after a successful dispatch; otherwise it is delivered when
+ * the parent's next session starts. Returns the created row, or null if either
+ * workspace no longer exists.
  */
 export async function persistChildNotification(input: {
   parentWorkspaceId: string;
   sourceWorkspaceId: string;
   message: string;
-}): Promise<void> {
+}): Promise<WorkspaceNotification | null> {
   const [sourceWorkspace, parentWorkspace] = await Promise.all([
     workspaceAccessor.findByIdWithProject(input.sourceWorkspaceId),
     workspaceAccessor.findRawById(input.parentWorkspaceId),
@@ -95,10 +98,10 @@ export async function persistChildNotification(input: {
 
   if (!(sourceWorkspace && parentWorkspace)) {
     logger.warn('persistChildNotification: workspace not found', input);
-    return;
+    return null;
   }
 
-  await workspaceNotificationAccessor.create({
+  return workspaceNotificationAccessor.create({
     workspaceId: input.parentWorkspaceId,
     sourceWorkspaceId: input.sourceWorkspaceId,
     sourceWorkspaceName: sourceWorkspace.name,
@@ -108,17 +111,19 @@ export async function persistChildNotification(input: {
 }
 
 /**
- * Deliver a notification from a parent workspace to a specific child.
+ * Persist a notification from a parent workspace to a specific child.
  *
- * If the child workspace has an active/idle agent session the notification will be
- * injected live by the caller (tRPC sendMessageToChild). If it does not, this
- * persists the notification so it is delivered when the child's next session starts.
+ * Always writes a WorkspaceNotification row so the message survives even if a
+ * live delivery attempt races a dying session. Callers that deliver live mark
+ * the row delivered after a successful dispatch; otherwise it is delivered when
+ * the child's next session starts. Returns the created row, or null if either
+ * workspace no longer exists.
  */
 export async function persistParentNotification(input: {
   parentWorkspaceId: string;
   targetChildWorkspaceId: string;
   message: string;
-}): Promise<void> {
+}): Promise<WorkspaceNotification | null> {
   const [parentWorkspace, childWorkspace] = await Promise.all([
     workspaceAccessor.findByIdWithProject(input.parentWorkspaceId),
     workspaceAccessor.findRawById(input.targetChildWorkspaceId),
@@ -126,10 +131,10 @@ export async function persistParentNotification(input: {
 
   if (!(parentWorkspace && childWorkspace)) {
     logger.warn('persistParentNotification: workspace not found', input);
-    return;
+    return null;
   }
 
-  await workspaceNotificationAccessor.create({
+  return workspaceNotificationAccessor.create({
     workspaceId: input.targetChildWorkspaceId,
     sourceWorkspaceId: input.parentWorkspaceId,
     sourceWorkspaceName: parentWorkspace.name,

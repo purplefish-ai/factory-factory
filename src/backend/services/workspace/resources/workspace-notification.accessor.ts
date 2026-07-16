@@ -18,6 +18,10 @@ class WorkspaceNotificationAccessor {
     });
   }
 
+  findById(id: string): Promise<WorkspaceNotification | null> {
+    return prisma.workspaceNotification.findUnique({ where: { id } });
+  }
+
   /**
    * Find all undelivered notifications for a workspace, ordered oldest-first
    * so they are delivered in the order they were sent.

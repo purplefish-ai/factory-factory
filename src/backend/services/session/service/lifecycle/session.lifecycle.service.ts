@@ -27,6 +27,11 @@ import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
+import {
+  buildWorkspaceNotificationMessageText,
+  WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX,
+  workspaceNotificationMessageId,
+} from '@/shared/workspace-notifications';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import type {
@@ -1116,12 +1121,11 @@ export class SessionLifecycleService {
       for (const notification of pending) {
         this.assertStartupAllowed(sessionId, stopGeneration);
         const timestamp = notification.createdAt.toISOString();
-        const messageId = `workspace-notification-${notification.id}`;
+        const messageId = workspaceNotificationMessageId(notification.id);
         if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
           dispatchableCount += 1;
           continue;
         }
-        let enqueueText: string;
         let claudeMessage: AgentMessage;
         if (notification.direction === 'PARENT_TO_CHILD') {
           claudeMessage = {
@@ -1132,7 +1136,6 @@ export class SessionLifecycleService {
             text: notification.message,
             timestamp,
           };
-          enqueueText = `[Message from parent workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         } else {
           claudeMessage = {
             type: 'child_workspace_update' as const,
@@ -1142,9 +1145,8 @@ export class SessionLifecycleService {
             text: notification.message,
             timestamp,
           };
-          enqueueText = `[Message from child workspace "${notification.sourceWorkspaceName}"]: ${notification.message}`;
         }
-        enqueueText = `${enqueueText}\n\n<!-- factory-factory-workspace-notification:${notification.id} -->`;
+        const enqueueText = buildWorkspaceNotificationMessageText(notification);
         const alreadyDelivered = await this.markDeliveredIfTranscriptMatch(
           sessionId,
           workspaceId,
@@ -1222,7 +1224,7 @@ export class SessionLifecycleService {
     }
     const contentMatch = userEntries.find(
       (entry) =>
-        !entry.id.startsWith('workspace-notification-') &&
+        !entry.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX) &&
         entry.text === messageText &&
         !consumedContentMatchIds.has(entry.id)
     );
