@@ -22,11 +22,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
-  ArrowsClockwise: () => null,
-  Calendar: () => null,
-  CaretDown: () => null,
-  Paperclip: () => null,
-  SpinnerGap: () => null,
+  ArrowsClockwiseIcon: () => null,
+  CalendarIcon: () => null,
+  CaretDownIcon: () => null,
+  PaperclipIcon: () => null,
+  SpinnerGapIcon: () => null,
 }));
 
 vi.mock('sonner', () => ({

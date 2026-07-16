@@ -1,4 +1,4 @@
-import { Minus } from '@phosphor-icons/react';
+import { MinusIcon } from '@phosphor-icons/react';
 import { OTPInput, OTPInputContext } from 'input-otp';
 import * as React from 'react';
 
@@ -65,7 +65,7 @@ const InputOTPSeparator = React.forwardRef<
   React.ComponentPropsWithoutRef<'div'>
 >(({ ...props }, ref) => (
   <div ref={ref} role="presentation" aria-hidden="true" {...props}>
-    <Minus />
+    <MinusIcon />
   </div>
 ));
 InputOTPSeparator.displayName = 'InputOTPSeparator';

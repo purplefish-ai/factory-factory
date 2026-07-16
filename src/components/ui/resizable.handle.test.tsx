@@ -17,7 +17,7 @@ vi.mock('react-resizable-panels', () => ({
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
-  DotsSixVertical: () => createElement('svg'),
+  DotsSixVerticalIcon: () => createElement('svg'),
 }));
 
 import { ResizableHandle } from './resizable';

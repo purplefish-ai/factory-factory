@@ -1,4 +1,4 @@
-import { Bell, X } from '@phosphor-icons/react';
+import { BellIcon, XIcon } from '@phosphor-icons/react';
 import { memo, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
@@ -48,7 +48,7 @@ const NotificationItem = memo(function NotificationItem({
           onClick={onDismiss}
           aria-label="Dismiss notification"
         >
-          <X className="h-3 w-3" />
+          <XIcon className="h-3 w-3" />
         </Button>
       )}
     </div>
@@ -92,7 +92,7 @@ export const TaskNotificationsPanel = memo(function TaskNotificationsPanel({
           {/* Header */}
           <div className="flex items-center justify-between px-2 py-1">
             <div className="flex items-center gap-2">
-              <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+              <BellIcon className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">
                 Notifications ({notifications.length})
               </span>

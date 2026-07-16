@@ -1,4 +1,4 @@
-import { HardDrives } from '@phosphor-icons/react';
+import { HardDrivesIcon } from '@phosphor-icons/react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useRunScriptLaunch } from '@/components/workspace';
 
@@ -18,7 +18,7 @@ export function OpenDevAppAction({
     return (
       <DropdownMenuItem asChild>
         <a href={launchInfo.href} target="_blank" rel="noopener noreferrer">
-          <HardDrives className="h-4 w-4" />
+          <HardDrivesIcon className="h-4 w-4" />
           Open dev app
         </a>
       </DropdownMenuItem>

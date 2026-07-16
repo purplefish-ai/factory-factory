@@ -1,4 +1,4 @@
-import { CheckCircle, Link } from '@phosphor-icons/react';
+import { CheckCircleIcon, LinkIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -87,7 +87,7 @@ function LinearConfigFields({
             <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
             {isValidated && (
               <span className="flex items-center gap-1 text-xs text-green-600">
-                <CheckCircle className="w-3 h-3" />
+                <CheckCircleIcon className="w-3 h-3" />
                 Connected as {viewerName}
               </span>
             )}
@@ -199,7 +199,7 @@ export function ProjectIssueTrackingCard({
           <h3 className="font-semibold text-sm">{projectName}</h3>
           {isConfigured && (
             <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-              <CheckCircle className="w-3 h-3 mr-1" />
+              <CheckCircleIcon className="w-3 h-3 mr-1" />
               {isLinear ? 'Linear' : 'GitHub'}
             </Badge>
           )}
@@ -253,7 +253,7 @@ export function IssueTrackingSection({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Link className="w-5 h-5" />
+          <LinkIcon className="w-5 h-5" />
           Issue Tracking
         </CardTitle>
         <CardDescription>

@@ -1,14 +1,20 @@
-import { Clock, DotOutline, GitBranch, GitPullRequest, TreeStructure } from '@phosphor-icons/react';
+import {
+  ClockIcon,
+  DotOutlineIcon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  TreeStructureIcon,
+} from '@phosphor-icons/react';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
 import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
 function CreationSourceIcon({ creationSource }: { creationSource?: string | null }) {
   if (creationSource === 'PERIODIC_TASK') {
-    return <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />;
+    return <ClockIcon className="h-3 w-3 shrink-0 text-muted-foreground" />;
   }
   if (creationSource === 'CHILD_WORKSPACE') {
-    return <TreeStructure className="h-3 w-3 shrink-0 text-violet-500" />;
+    return <TreeStructureIcon className="h-3 w-3 shrink-0 text-violet-500" />;
   }
   return null;
 }
@@ -16,7 +22,7 @@ function CreationSourceIcon({ creationSource }: { creationSource?: string | null
 function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => void }) {
   const content = (
     <>
-      <GitPullRequest className="h-2.5 w-2.5" />
+      <GitPullRequestIcon className="h-2.5 w-2.5" />
       <span>#{prNumber}</span>
     </>
   );
@@ -80,7 +86,7 @@ export function WorkspaceItemContent({
           <span className="flex items-center gap-1 min-w-0 truncate">
             {showBranch && (
               <>
-                <GitBranch className="h-2.5 w-2.5 shrink-0" />
+                <GitBranchIcon className="h-2.5 w-2.5 shrink-0" />
                 <span className="font-mono truncate">{workspace.branchName}</span>
               </>
             )}
@@ -117,12 +123,12 @@ export function WorkspaceItemContent({
                 onOpenIssue();
               }}
             >
-              <DotOutline className="h-2.5 w-2.5" />
+              <DotOutlineIcon className="h-2.5 w-2.5" />
               {issueLabel}
             </button>
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <DotOutline className="h-2.5 w-2.5" />
+              <DotOutlineIcon className="h-2.5 w-2.5" />
               {issueLabel}
             </span>
           )}

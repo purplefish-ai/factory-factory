@@ -1,4 +1,4 @@
-import { Archive, SpinnerGap } from '@phosphor-icons/react';
+import { ArchiveIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -34,9 +34,9 @@ export function ArchiveActionButton({
         )}
       >
         {archivePending ? (
-          <SpinnerGap className="h-4 w-4 animate-spin" />
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
-          <Archive className="h-4 w-4" />
+          <ArchiveIcon className="h-4 w-4" />
         )}
         {archivePending ? 'Archiving...' : 'Archive workspace'}
       </DropdownMenuItem>
@@ -57,9 +57,9 @@ export function ArchiveActionButton({
           disabled={archivePending}
         >
           {archivePending ? (
-            <SpinnerGap className="h-4 w-4 animate-spin" />
+            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
           ) : (
-            <Archive className="h-4 w-4" />
+            <ArchiveIcon className="h-4 w-4" />
           )}
         </Button>
       </TooltipTrigger>

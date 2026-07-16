@@ -1,4 +1,4 @@
-import { Plus, Terminal, X } from '@phosphor-icons/react';
+import { PlusIcon, TerminalIcon, XIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -56,7 +56,7 @@ export function TerminalTabBar({
               className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
               onClick={() => onSelectTab(tab.id)}
             >
-              <Terminal className="h-3 w-3 flex-shrink-0" />
+              <TerminalIcon className="h-3 w-3 flex-shrink-0" />
               <span>{tab.label}</span>
             </button>
             <button
@@ -68,7 +68,7 @@ export function TerminalTabBar({
                 activeTabId === tab.id && 'opacity-100'
               )}
             >
-              <X className="h-3 w-3" />
+              <XIcon className="h-3 w-3" />
             </button>
           </div>
         ))}
@@ -85,7 +85,7 @@ export function TerminalTabBar({
             className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
             title="New terminal"
           >
-            <Plus className="h-3 w-3" />
+            <PlusIcon className="h-3 w-3" />
           </button>
         ))}
     </div>

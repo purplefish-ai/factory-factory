@@ -1,13 +1,13 @@
 import {
-  ArrowSquareOut,
-  ArrowsClockwise,
-  CheckCircle,
-  Download,
-  FileCode,
-  FileText,
-  Link,
-  Pencil,
-  Terminal,
+  ArrowSquareOutIcon,
+  ArrowsClockwiseIcon,
+  CheckCircleIcon,
+  DownloadIcon,
+  FileCodeIcon,
+  FileTextIcon,
+  LinkIcon,
+  PencilIcon,
+  TerminalIcon,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router';
@@ -130,12 +130,12 @@ function ProjectFactoryConfigCard({
             <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {factoryConfig ? (
               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                <CheckCircle className="w-3 h-3 mr-1" />
+                <CheckCircleIcon className="w-3 h-3 mr-1" />
                 Configured
               </Badge>
             ) : (
               <Badge variant="secondary" className="bg-muted">
-                <FileCode className="w-3 h-3 mr-1" />
+                <FileCodeIcon className="w-3 h-3 mr-1" />
                 Not configured
               </Badge>
             )}
@@ -145,7 +145,7 @@ function ProjectFactoryConfigCard({
               className="h-7 w-7"
               onClick={() => setEditPanelOpen(true)}
             >
-              <Pencil className="w-3.5 h-3.5" />
+              <PencilIcon className="w-3.5 h-3.5" />
             </Button>
           </div>
           <Button
@@ -155,7 +155,7 @@ function ProjectFactoryConfigCard({
             disabled={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            <ArrowsClockwise
+            <ArrowsClockwiseIcon
               className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`}
             />
             Refresh Workspaces
@@ -242,7 +242,7 @@ function ProjectSettingsSection({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileCode className="w-5 h-5" />
+            <FileCodeIcon className="w-5 h-5" />
             Factory Configuration
           </CardTitle>
           <CardDescription>
@@ -271,7 +271,7 @@ function ProjectSettingsSection({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Link className="w-5 h-5" />
+            <LinkIcon className="w-5 h-5" />
             Issue Tracking
           </CardTitle>
           <CardDescription>Configure the issue provider (GitHub Issues or Linear)</CardDescription>
@@ -730,7 +730,7 @@ function CliAuthSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Terminal className="w-5 h-5" />
+          <TerminalIcon className="w-5 h-5" />
           CLI Authentication
         </CardTitle>
         <CardDescription>
@@ -784,7 +784,7 @@ function AppInfoSection() {
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             GitHub
-            <ArrowSquareOut className="h-3.5 w-3.5" />
+            <ArrowSquareOutIcon className="h-3.5 w-3.5" />
           </a>
         </div>
         <div className="space-y-2">
@@ -949,12 +949,12 @@ function RatchetSettingsSection() {
             >
               {triggerRatchetCheck.isPending ? (
                 <>
-                  <ArrowsClockwise className="w-4 h-4 mr-2 animate-spin" />
+                  <ArrowsClockwiseIcon className="w-4 h-4 mr-2 animate-spin" />
                   Checking...
                 </>
               ) : (
                 <>
-                  <ArrowsClockwise className="w-4 h-4 mr-2" />
+                  <ArrowsClockwiseIcon className="w-4 h-4 mr-2" />
                   Check All PRs Now
                 </>
               )}
@@ -996,7 +996,7 @@ function DataBackupSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileCode className="w-5 h-5" />
+          <FileCodeIcon className="w-5 h-5" />
           Data Backup
         </CardTitle>
         <CardDescription>
@@ -1011,7 +1011,7 @@ function DataBackupSection() {
             variant="outline"
             className="w-full sm:w-auto"
           >
-            <Download className="w-4 h-4 mr-2" />
+            <DownloadIcon className="w-4 h-4 mr-2" />
             {isExporting ? 'Exporting...' : 'Export Data'}
           </Button>
           <DataImportButton variant="outline" className="w-full sm:w-auto" />
@@ -1032,7 +1032,7 @@ function ServerLogsSection() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5" />
+          <FileTextIcon className="w-5 h-5" />
           Server Logs
         </CardTitle>
         <CardDescription>View and search structured server log entries</CardDescription>
@@ -1049,7 +1049,7 @@ function ServerLogsSection() {
           disabled={isDownloading}
           className="w-full sm:w-auto"
         >
-          <Download className="w-4 h-4 mr-2" />
+          <DownloadIcon className="w-4 h-4 mr-2" />
           {isDownloading ? 'Downloading...' : 'Download Log File'}
         </Button>
       </CardContent>

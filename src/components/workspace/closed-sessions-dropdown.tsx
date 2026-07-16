@@ -1,4 +1,4 @@
-import { Archive, Chat, Clock } from '@phosphor-icons/react';
+import { ArchiveIcon, ChatIcon, ClockIcon } from '@phosphor-icons/react';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
@@ -55,7 +55,7 @@ export function ClosedSessionsDropdown({
                 'border border-input bg-background hover:bg-sidebar-accent'
               )}
             >
-              <Archive className="h-3.5 w-3.5" />
+              <ArchiveIcon className="h-3.5 w-3.5" />
               <span>Closed</span>
             </Button>
           </DropdownMenuTrigger>
@@ -90,13 +90,13 @@ export function ClosedSessionsDropdown({
                 }}
                 className="flex items-start gap-2 px-3 py-2 cursor-pointer"
               >
-                <Chat className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                <ChatIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {session.name || `${session.workflow} session`}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3 shrink-0" />
+                    <ClockIcon className="h-3 w-3 shrink-0" />
                     <span>
                       {formatDistanceToNow(new Date(session.completedAt), { addSuffix: true })}
                     </span>

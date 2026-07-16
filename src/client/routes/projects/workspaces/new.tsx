@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@phosphor-icons/react';
+import { ArrowLeftIcon } from '@phosphor-icons/react';
 import type { Workspace } from '@prisma-gen/browser';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -82,7 +82,7 @@ export default function NewWorkspacePage() {
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to={`/projects/${slug}/workspaces`}>
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeftIcon className="h-5 w-5" />
           </Link>
         </Button>
         <div>

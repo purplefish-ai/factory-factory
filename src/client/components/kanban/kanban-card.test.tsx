@@ -7,15 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 vi.mock('@phosphor-icons/react', () => ({
-  Archive: () => null,
-  ArrowsClockwise: () => null,
-  Chat: () => null,
-  GitBranch: () => null,
-  GitPullRequest: () => null,
-  Pencil: () => null,
-  Play: () => null,
-  TreeStructure: () => null,
-  Warning: () => null,
+  ArchiveIcon: () => null,
+  ArrowsClockwiseIcon: () => null,
+  ChatIcon: () => null,
+  GitBranchIcon: () => null,
+  GitPullRequestIcon: () => null,
+  PencilIcon: () => null,
+  PlayIcon: () => null,
+  TreeStructureIcon: () => null,
+  WarningIcon: () => null,
 }));
 
 vi.mock('react-router', () => ({

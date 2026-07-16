@@ -1,4 +1,9 @@
-import { ChatCircleDots, ClipboardText, ShieldWarning, Warning } from '@phosphor-icons/react';
+import {
+  ChatCircleDotsIcon,
+  ClipboardTextIcon,
+  ShieldWarningIcon,
+  WarningIcon,
+} from '@phosphor-icons/react';
 
 interface WorkspaceStatusIconProps {
   pendingRequestType?: 'permission_request' | 'plan_approval' | 'user_question' | null;
@@ -15,21 +20,21 @@ export function WorkspaceStatusIcon({
     switch (pendingRequestType) {
       case 'permission_request':
         return (
-          <ShieldWarning
+          <ShieldWarningIcon
             data-icon="permission-request"
             className="h-3.5 w-3.5 shrink-0 text-orange-500"
           />
         );
       case 'plan_approval':
         return (
-          <ClipboardText
+          <ClipboardTextIcon
             data-icon="plan-approval"
             className="h-3.5 w-3.5 shrink-0 text-amber-500"
           />
         );
       case 'user_question':
         return (
-          <ChatCircleDots
+          <ChatCircleDotsIcon
             data-icon="user-question"
             className="h-3.5 w-3.5 shrink-0 text-blue-500"
           />
@@ -38,7 +43,9 @@ export function WorkspaceStatusIcon({
   }
 
   if (sessionRuntimeErrorMessage) {
-    return <Warning data-icon="runtime-error" className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+    return (
+      <WarningIcon data-icon="runtime-error" className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+    );
   }
 
   if (isWorking) {

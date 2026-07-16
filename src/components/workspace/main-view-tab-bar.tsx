@@ -1,4 +1,11 @@
-import { Archive, ArrowsClockwise, Camera, FileCode, GitDiff, Plus } from '@phosphor-icons/react';
+import {
+  ArchiveIcon,
+  ArrowsClockwiseIcon,
+  CameraIcon,
+  FileCodeIcon,
+  GitDiffIcon,
+  PlusIcon,
+} from '@phosphor-icons/react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
@@ -41,13 +48,13 @@ function getTabIcon(type: MainViewTab['type']) {
   switch (type) {
     case 'chat':
     case 'file':
-      return FileCode;
+      return FileCodeIcon;
     case 'diff':
-      return GitDiff;
+      return GitDiffIcon;
     case 'screenshot':
-      return Camera;
+      return CameraIcon;
     case 'closed-session':
-      return Archive;
+      return ArchiveIcon;
   }
 }
 
@@ -295,7 +302,7 @@ export function MainViewTabBar({
                   )}
                   aria-label={`New ${providerTriggerLabel} session`}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <PlusIcon className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>
@@ -361,7 +368,7 @@ export function MainViewTabBar({
                 )}
                 aria-label="Restart agent"
               >
-                <ArrowsClockwise className="h-3.5 w-3.5" />
+                <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
                 Restart
               </button>
             </TooltipTrigger>

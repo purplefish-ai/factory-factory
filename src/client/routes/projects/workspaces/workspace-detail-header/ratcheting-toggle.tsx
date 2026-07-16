@@ -1,4 +1,4 @@
-import { Lightning, SpinnerGap } from '@phosphor-icons/react';
+import { LightningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import {
   applyRatchetToggleState,
   updateWorkspaceRatchetState,
@@ -66,9 +66,9 @@ export function RatchetingToggle({
         disabled={toggleRatcheting.isPending}
       >
         {toggleRatcheting.isPending ? (
-          <SpinnerGap className="h-4 w-4 animate-spin" />
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
-          <Lightning className="h-4 w-4" />
+          <LightningIcon className="h-4 w-4" />
         )}
         {workspaceRatchetEnabled ? 'Turn off Ratchet' : 'Turn on Ratchet'}
       </DropdownMenuItem>

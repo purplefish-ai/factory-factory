@@ -26,8 +26,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
-  ArrowSquareOut: () => null,
-  Play: () => null,
+  ArrowSquareOutIcon: () => null,
+  PlayIcon: () => null,
 }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({

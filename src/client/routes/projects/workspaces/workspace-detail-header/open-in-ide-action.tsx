@@ -1,4 +1,4 @@
-import { AppWindow, SpinnerGap } from '@phosphor-icons/react';
+import { AppWindowIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,9 +35,9 @@ export function OpenInIdeAction({
         disabled={disabled}
       >
         {openInIde.isPending ? (
-          <SpinnerGap className="h-4 w-4 animate-spin" />
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
-          <AppWindow className="h-4 w-4" />
+          <AppWindowIcon className="h-4 w-4" />
         )}
         Open in {preferredIdeName}
       </DropdownMenuItem>
@@ -55,9 +55,9 @@ export function OpenInIdeAction({
           disabled={disabled}
         >
           {openInIde.isPending ? (
-            <SpinnerGap className="h-4 w-4 animate-spin" />
+            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
           ) : (
-            <AppWindow className="h-4 w-4" />
+            <AppWindowIcon className="h-4 w-4" />
           )}
         </Button>
       </TooltipTrigger>

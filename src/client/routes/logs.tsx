@@ -1,11 +1,11 @@
 import {
-  ArrowLeft,
-  Calendar,
-  CaretDown,
-  CaretRight,
-  Download,
-  MagnifyingGlass,
-  X,
+  ArrowLeftIcon,
+  CalendarIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  DownloadIcon,
+  MagnifyingGlassIcon,
+  XIcon,
 } from '@phosphor-icons/react';
 import { keepPreviousData } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -93,7 +93,7 @@ function DatePicker({
               !date && 'text-muted-foreground'
             )}
           >
-            <Calendar className="mr-2 h-4 w-4 shrink-0" />
+            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
@@ -268,7 +268,7 @@ export default function LogsPage() {
         <PageHeader title="Server Logs" description={data?.filePath}>
           <Link to="/admin">
             <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-1" />
+              <ArrowLeftIcon className="w-4 h-4 mr-1" />
               Settings
             </Button>
           </Link>
@@ -277,7 +277,7 @@ export default function LogsPage() {
         {/* Controls */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative w-full sm:min-w-[200px] sm:max-w-sm sm:flex-1">
-            <MagnifyingGlass className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlassIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search messages or components..."
               value={search}
@@ -318,7 +318,7 @@ export default function LogsPage() {
             disabled={isDownloading}
             className="w-full sm:w-auto"
           >
-            <Download className="w-4 h-4 mr-1" />
+            <DownloadIcon className="w-4 h-4 mr-1" />
             {isDownloading ? 'Downloading...' : 'Download'}
           </Button>
         </div>
@@ -349,7 +349,7 @@ export default function LogsPage() {
               {(sinceDate || untilDate) && (
                 <div className="flex h-9 items-center">
                   <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                    <X className="w-3.5 h-3.5 mr-1" />
+                    <XIcon className="w-3.5 h-3.5 mr-1" />
                     Clear
                   </Button>
                 </div>
@@ -404,9 +404,9 @@ export default function LogsPage() {
                       <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           {isExpanded ? (
-                            <CaretDown className="w-3.5 h-3.5 shrink-0" />
+                            <CaretDownIcon className="w-3.5 h-3.5 shrink-0" />
                           ) : (
-                            <CaretRight className="w-3.5 h-3.5 shrink-0" />
+                            <CaretRightIcon className="w-3.5 h-3.5 shrink-0" />
                           )}
                           {new Date(entry.timestamp).toLocaleString()}
                         </div>

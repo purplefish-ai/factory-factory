@@ -1,4 +1,9 @@
-import { FileText, ShieldCheck, ShieldSlash, Terminal } from '@phosphor-icons/react';
+import {
+  FileTextIcon,
+  ShieldCheckIcon,
+  ShieldSlashIcon,
+  TerminalIcon,
+} from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -109,11 +114,11 @@ function PermissionDecisionActions({
   return (
     <>
       <Button variant="outline" size="sm" onClick={onDeny} className="gap-1.5">
-        <ShieldSlash className="h-3.5 w-3.5" aria-hidden="true" />
+        <ShieldSlashIcon className="h-3.5 w-3.5" aria-hidden="true" />
         Deny
       </Button>
       <Button ref={allowButtonRef} size="sm" onClick={onAllow} className="gap-1.5">
-        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        <ShieldCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
         Allow
       </Button>
     </>
@@ -130,7 +135,7 @@ function PermissionDecisionCard({
 }: PermissionDecisionCardProps) {
   return (
     <PromptCard
-      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+      icon={<TerminalIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
       label={`Permission request for ${toolName}`}
       className={className}
       actions={
@@ -179,15 +184,15 @@ function resolvePlanContent(permission: PermissionRequest): string | null {
 function getPermissionOptionStyle(kind: PermissionOption['kind']) {
   switch (kind) {
     case 'allow_once':
-      return { variant: 'outline' as const, icon: ShieldCheck };
+      return { variant: 'outline' as const, icon: ShieldCheckIcon };
     case 'allow_always':
-      return { variant: 'default' as const, icon: ShieldCheck };
+      return { variant: 'default' as const, icon: ShieldCheckIcon };
     case 'reject_once':
-      return { variant: 'outline' as const, icon: ShieldSlash };
+      return { variant: 'outline' as const, icon: ShieldSlashIcon };
     case 'reject_always':
-      return { variant: 'destructive' as const, icon: ShieldSlash };
+      return { variant: 'destructive' as const, icon: ShieldSlashIcon };
     default:
-      return { variant: 'outline' as const, icon: ShieldCheck };
+      return { variant: 'outline' as const, icon: ShieldCheckIcon };
   }
 }
 
@@ -277,7 +282,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
+            <FileTextIcon className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
             <span className="text-sm font-medium">Review Plan</span>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -381,7 +386,7 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
 
   return (
     <PromptCard
-      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+      icon={<TerminalIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
       label={`Permission request for ${toolName}`}
       className={className}
       actions={

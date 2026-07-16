@@ -1,4 +1,4 @@
-import { Pencil, Play, SpinnerGap, Square } from '@phosphor-icons/react';
+import { PencilIcon, PlayIcon, SpinnerGapIcon, SquareIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -78,7 +78,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
               className="h-6 w-6 md:h-8 md:w-8"
               onClick={() => setSetupPanelOpen(true)}
             >
-              <Play className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
+              <PlayIcon className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Setup dev server</TooltipContent>
@@ -133,11 +133,11 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <SpinnerGap className="h-3 w-3 animate-spin md:h-4 md:w-4" />
+                    <SpinnerGapIcon className="h-3 w-3 animate-spin md:h-4 md:w-4" />
                   ) : isRunning ? (
-                    <Square className="h-3 w-3 text-destructive fill-destructive md:h-4 md:w-4" />
+                    <SquareIcon className="h-3 w-3 text-destructive fill-destructive md:h-4 md:w-4" />
                   ) : (
-                    <Play className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
+                    <PlayIcon className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -147,7 +147,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => setSetupPanelOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
+            <PencilIcon className="mr-2 h-4 w-4" />
             Edit dev server configuration
           </ContextMenuItem>
         </ContextMenuContent>

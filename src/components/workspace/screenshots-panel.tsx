@@ -1,4 +1,4 @@
-import { Camera, SpinnerGap, X } from '@phosphor-icons/react';
+import { CameraIcon, SpinnerGapIcon, XIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <SpinnerGap className="h-6 w-6 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -62,7 +62,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
   if (screenshots.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4 gap-3">
-        <Camera className="h-8 w-8 text-muted-foreground" />
+        <CameraIcon className="h-8 w-8 text-muted-foreground" />
         <div>
           {isTaking ? (
             <>
@@ -81,11 +81,11 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
           )}
         </div>
         {isTaking ? (
-          <SpinnerGap className="h-5 w-5 animate-spin text-muted-foreground" />
+          <SpinnerGapIcon className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : (
           onTakeScreenshots && (
             <Button variant="outline" size="sm" onClick={handleTakeScreenshots} className="gap-1.5">
-              <Camera className="h-3.5 w-3.5" />
+              <CameraIcon className="h-3.5 w-3.5" />
               Take Screenshots
             </Button>
           )
@@ -149,7 +149,7 @@ function ScreenshotThumbnail({
     >
       {isLoading ? (
         <div className="flex items-center justify-center h-full">
-          <SpinnerGap className="h-4 w-4 animate-spin text-muted-foreground" />
+          <SpinnerGapIcon className="h-4 w-4 animate-spin text-muted-foreground" />
         </div>
       ) : data ? (
         <img
@@ -164,7 +164,7 @@ function ScreenshotThumbnail({
           onClick={handleDelete}
           className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
         >
-          <X className="h-3 w-3" />
+          <XIcon className="h-3 w-3" />
         </button>
       </div>
       <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">

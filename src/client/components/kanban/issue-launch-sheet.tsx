@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Play } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon, PlayIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
@@ -294,7 +294,7 @@ export function IssueLaunchSheet({
               </Label>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
                 <a href={issue.url} target="_blank" rel="noreferrer">
-                  <ArrowSquareOut className="h-3.5 w-3.5" />
+                  <ArrowSquareOutIcon className="h-3.5 w-3.5" />
                   {issueProviderLabel}
                 </a>
               </Button>
@@ -321,7 +321,7 @@ export function IssueLaunchSheet({
             }
             className="w-full sm:w-auto"
           >
-            <Play className="h-4 w-4 mr-2" />
+            <PlayIcon className="h-4 w-4 mr-2" />
             {createWorkspaceMutation.isPending ? 'Starting...' : 'Start'}
           </Button>
         </SheetFooter>

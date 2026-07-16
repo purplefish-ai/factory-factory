@@ -1,4 +1,4 @@
-import { Circle } from '@phosphor-icons/react';
+import { CircleIcon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import type { WorkspaceStatus } from '@/shared/core';
 
@@ -24,7 +24,7 @@ export function SetupStatusChip({ status, size = 'sm', className }: SetupStatusC
         className
       )}
     >
-      <Circle className={cn(iconSize, 'animate-pulse')} />
+      <CircleIcon className={cn(iconSize, 'animate-pulse')} />
       Setting up
     </span>
   );

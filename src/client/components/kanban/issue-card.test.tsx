@@ -17,11 +17,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
-  ArrowSquareOut: () => null,
-  DotOutline: () => null,
-  Play: () => null,
-  User: () => null,
-  X: () => null,
+  ArrowSquareOutIcon: () => null,
+  DotOutlineIcon: () => null,
+  PlayIcon: () => null,
+  UserIcon: () => null,
+  XIcon: () => null,
 }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({

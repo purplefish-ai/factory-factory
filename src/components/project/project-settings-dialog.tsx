@@ -1,4 +1,4 @@
-import { Gear } from '@phosphor-icons/react';
+import { GearIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
@@ -76,7 +76,7 @@ export function ProjectSettingsDialog({
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <Button variant="ghost" size="icon">
-              <Gear className="h-4 w-4" />
+              <GearIcon className="h-4 w-4" />
             </Button>
           </DialogTrigger>
         </TooltipTrigger>

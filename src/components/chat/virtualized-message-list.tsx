@@ -1,4 +1,4 @@
-import { SpinnerGap } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
@@ -458,7 +458,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
         {showingInitSpinner && (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <SpinnerGap className="h-4 w-4 animate-spin" />
+            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
             <span className="text-sm">{initBanner?.message}</span>
           </div>
         )}
@@ -540,7 +540,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
         {initBanner && initBanner.kind === 'info' && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
-            <SpinnerGap className="h-4 w-4 animate-spin" />
+            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
             <span className="text-sm">{initBanner.message}</span>
           </div>
         )}
@@ -548,7 +548,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Agent starting spinner */}
         {startingSession && !running && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
-            <SpinnerGap className="h-4 w-4 animate-spin" />
+            <SpinnerGapIcon className="h-4 w-4 animate-spin" />
             <span className="text-sm">{startingLabel}</span>
           </div>
         )}

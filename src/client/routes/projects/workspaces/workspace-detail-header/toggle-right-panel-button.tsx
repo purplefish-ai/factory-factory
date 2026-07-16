@@ -1,4 +1,4 @@
-import { SidebarSimple } from '@phosphor-icons/react';
+import { SidebarSimpleIcon } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useWorkspacePanel } from '@/components/workspace';
@@ -16,7 +16,7 @@ export function ToggleRightPanelButton() {
           onClick={toggleRightPanel}
           className="h-6 w-6 md:h-8 md:w-8"
         >
-          <SidebarSimple
+          <SidebarSimpleIcon
             mirrored
             className={cn('h-3 w-3 md:h-4 md:w-4', rightPanelVisible && 'text-primary')}
           />

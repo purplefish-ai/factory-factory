@@ -134,61 +134,61 @@ Use unchanged names directly when Phosphor exports the same name. Apply these re
 
 | Lucide export | Phosphor export |
 |---|---|
-| `Activity` | `Pulse` |
-| `AlertCircle` | `WarningCircle` |
-| `AlertTriangle`, `AlertTriangleIcon` | `Warning` |
-| `ArrowDownToLine` | `DownloadSimple` |
-| `ArrowRightLeft` | `ArrowsLeftRight` |
-| `Bot` | `Robot` |
-| `CalendarIcon` | `Calendar` |
-| `CheckCircle2`, `CheckCircle2Icon` | `CheckCircle` |
-| `ChevronDown`, `ChevronDownIcon` | `CaretDown` |
-| `ChevronLeft`, `ChevronLeftIcon` | `CaretLeft` |
-| `ChevronRight`, `ChevronRightIcon` | `CaretRight` |
-| `ChevronUp` | `CaretUp` |
-| `ChevronsUpDown` | `CaretUpDown` |
-| `CircleDashedIcon` | `CircleDashed` |
-| `CircleDot` | `DotOutline` |
-| `CircleSlash` | `Prohibit` |
-| `ExternalLink` | `ArrowSquareOut` |
-| `FileCheck` | `ClipboardText` |
-| `FileDiff` | `GitDiff` |
-| `FileJson` | `FileCode` |
-| `FileQuestion` | `FileDashed` |
-| `FolderOpenIcon` | `FolderOpen` |
-| `Github` | `GithubLogo` |
-| `GripVertical` | `DotsSixVertical` |
-| `HelpCircle` | `Question` |
-| `ImagePlus` | `Image` |
-| `Layers` | `Stack` |
-| `Link2` | `Link` |
-| `ListTodo` | `ListChecks` |
-| `Loader2`, `Loader2Icon` | `SpinnerGap` |
+| `Activity` | `PulseIcon` |
+| `AlertCircle` | `WarningCircleIcon` |
+| `AlertTriangle`, `AlertTriangleIcon` | `WarningIcon` |
+| `ArrowDownToLine` | `DownloadSimpleIcon` |
+| `ArrowRightLeft` | `ArrowsLeftRightIcon` |
+| `Bot` | `RobotIcon` |
+| `CalendarIcon` | `CalendarIcon` |
+| `CheckCircle2`, `CheckCircle2Icon` | `CheckCircleIcon` |
+| `ChevronDown`, `ChevronDownIcon` | `CaretDownIcon` |
+| `ChevronLeft`, `ChevronLeftIcon` | `CaretLeftIcon` |
+| `ChevronRight`, `ChevronRightIcon` | `CaretRightIcon` |
+| `ChevronUp` | `CaretUpIcon` |
+| `ChevronsUpDown` | `CaretUpDownIcon` |
+| `CircleDashedIcon` | `CircleDashedIcon` |
+| `CircleDot` | `DotOutlineIcon` |
+| `CircleSlash` | `ProhibitIcon` |
+| `ExternalLink` | `ArrowSquareOutIcon` |
+| `FileCheck` | `ClipboardTextIcon` |
+| `FileDiff` | `GitDiffIcon` |
+| `FileJson` | `FileCodeIcon` |
+| `FileQuestion` | `FileDashedIcon` |
+| `FolderOpenIcon` | `FolderOpenIcon` |
+| `Github` | `GithubLogoIcon` |
+| `GripVertical` | `DotsSixVerticalIcon` |
+| `HelpCircle` | `QuestionIcon` |
+| `ImagePlus` | `ImageIcon` |
+| `Layers` | `StackIcon` |
+| `Link2` | `LinkIcon` |
+| `ListTodo` | `ListChecksIcon` |
+| `Loader2`, `Loader2Icon` | `SpinnerGapIcon` |
 | `LucideIcon` | `Icon` |
-| `MapIcon` | `MapTrifold` |
-| `Menu` | `List` |
-| `MessageCircleQuestion` | `ChatCircleDots` |
-| `MessageSquare` | `Chat` |
-| `MessageSquareText` | `ChatText` |
-| `Monitor` | `Desktop` |
-| `MoreHorizontal` | `DotsThree` |
-| `Network` | `TreeStructure` |
-| `OctagonX` | `XCircle` |
-| `PanelLeft`, `PanelRight` | `SidebarSimple` |
-| `RefreshCw`, `RefreshCwIcon` | `ArrowsClockwise` |
-| `RotateCcw` | `ArrowCounterClockwise` |
-| `Save` | `FloppyDisk` |
-| `Search` | `MagnifyingGlass` |
-| `Send` | `PaperPlaneTilt` |
-| `Server` | `HardDrives` |
-| `Settings` | `Gear` |
-| `Settings2` | `GearSix` |
-| `ShieldAlert` | `ShieldWarning` |
-| `ShieldX` | `ShieldSlash` |
-| `Sparkles` | `Sparkle` |
-| `TerminalIcon` | `Terminal` |
-| `Trash2` | `Trash` |
-| `Zap` | `Lightning` |
+| `MapIcon` | `MapTrifoldIcon` |
+| `Menu` | `ListIcon` |
+| `MessageCircleQuestion` | `ChatCircleDotsIcon` |
+| `MessageSquare` | `ChatIcon` |
+| `MessageSquareText` | `ChatTextIcon` |
+| `Monitor` | `DesktopIcon` |
+| `MoreHorizontal` | `DotsThreeIcon` |
+| `Network` | `TreeStructureIcon` |
+| `OctagonX` | `XCircleIcon` |
+| `PanelLeft`, `PanelRight` | `SidebarSimpleIcon` |
+| `RefreshCw`, `RefreshCwIcon` | `ArrowsClockwiseIcon` |
+| `RotateCcw` | `ArrowCounterClockwiseIcon` |
+| `Save` | `FloppyDiskIcon` |
+| `Search` | `MagnifyingGlassIcon` |
+| `Send` | `PaperPlaneTiltIcon` |
+| `Server` | `HardDrivesIcon` |
+| `Settings` | `GearIcon` |
+| `Settings2` | `GearSixIcon` |
+| `ShieldAlert` | `ShieldWarningIcon` |
+| `ShieldX` | `ShieldSlashIcon` |
+| `Sparkles` | `SparkleIcon` |
+| `TerminalIcon` | `TerminalIcon` |
+| `Trash2` | `TrashIcon` |
+| `Zap` | `LightningIcon` |
 
 For each source file:
 
@@ -265,7 +265,7 @@ with the corresponding Phosphor name:
 
 ```ts
 vi.mock('@phosphor-icons/react', () => ({
-  DotsSixVertical: () => createElement('svg'),
+  DotsSixVerticalIcon: () => createElement('svg'),
 }));
 ```
 
@@ -276,10 +276,10 @@ Apply the same mapping table from Task 2 to every mocked export in the listed te
 Update `src/client/components/workspace-status-icon.tsx` so each returned icon has an application-owned marker:
 
 ```tsx
-<ShieldWarning data-icon="permission-request" ... />
-<ClipboardText data-icon="plan-approval" ... />
-<ChatCircleDots data-icon="user-question" ... />
-<Warning data-icon="runtime-error" ... />
+<ShieldWarningIcon data-icon="permission-request" ... />
+<ClipboardTextIcon data-icon="plan-approval" ... />
+<ChatCircleDotsIcon data-icon="user-question" ... />
+<WarningIcon data-icon="runtime-error" ... />
 ```
 
 Update `src/client/components/workspace-status-icon.test.tsx`:
@@ -376,7 +376,7 @@ Replace:
 with:
 
 ```md
-- Standardize iconography to the Phosphor `Hammer` icon.
+- Standardize iconography to the Phosphor `HammerIcon` component.
 ```
 
 - [ ] **Step 2: Run cleanup searches**

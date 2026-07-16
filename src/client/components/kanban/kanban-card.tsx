@@ -1,13 +1,13 @@
 import {
-  Archive,
-  ArrowsClockwise,
-  Chat,
-  GitBranch,
-  GitPullRequest,
-  Pencil,
-  Play,
-  TreeStructure,
-  Warning,
+  ArchiveIcon,
+  ArrowsClockwiseIcon,
+  ChatIcon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  PencilIcon,
+  PlayIcon,
+  TreeStructureIcon,
+  WarningIcon,
 } from '@phosphor-icons/react';
 import type { Workspace } from '@prisma-gen/browser';
 import { useRef, useState } from 'react';
@@ -90,7 +90,7 @@ function PullRequestRow({
         }}
         className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
       >
-        <GitPullRequest className="h-3 w-3 shrink-0" />
+        <GitPullRequestIcon className="h-3 w-3 shrink-0" />
         <span>#{workspace.prNumber}</span>
       </button>
     </div>
@@ -104,7 +104,7 @@ function BranchRow({ branchName }: { branchName: string | null }) {
 
   return (
     <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-      <GitBranch className="h-3 w-3 shrink-0" />
+      <GitBranchIcon className="h-3 w-3 shrink-0" />
       <span className="font-mono truncate">{branchName}</span>
     </div>
   );
@@ -164,7 +164,7 @@ function CardArchiveButton({
             )}
             onClick={handleClick}
           >
-            <Archive className="h-3 w-3" />
+            <ArchiveIcon className="h-3 w-3" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Archive workspace</TooltipContent>
@@ -223,7 +223,7 @@ function CardTitleIcons({
                 onStartEdit();
               }}
             >
-              <Pencil className="h-3 w-3" />
+              <PencilIcon className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Rename workspace</TooltipContent>
@@ -246,7 +246,7 @@ function CardTitleIcons({
                 onOpenQuickChat(workspace.id);
               }}
             >
-              <Chat className="h-3 w-3" />
+              <ChatIcon className="h-3 w-3" />
               {workspace.pendingRequestType && (
                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
               )}
@@ -270,7 +270,7 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+              <PlayIcon className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
             </span>
           </TooltipTrigger>
           <TooltipContent>Dev server running</TooltipContent>
@@ -280,7 +280,7 @@ function CardTitleIcons({
         <Tooltip>
           <TooltipTrigger asChild>
             <span>
-              <Warning className="h-3 w-3 text-amber-500" />
+              <WarningIcon className="h-3 w-3 text-amber-500" />
             </span>
           </TooltipTrigger>
           <TooltipContent>{sessionRuntimeError}</TooltipContent>
@@ -352,7 +352,7 @@ function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="flex items-center gap-1.5 text-[11px] text-primary/80">
-          <ArrowsClockwise className={cn('h-3 w-3', isRunning && 'animate-spin')} />
+          <ArrowsClockwiseIcon className={cn('h-3 w-3', isRunning && 'animate-spin')} />
           <span className="font-mono">
             Iter {current}/{maxLabel}
           </span>
@@ -508,13 +508,13 @@ export function KanbanCard({
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
             {workspace.creationSource === 'CHILD_WORKSPACE' && (
               <div className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
-                <TreeStructure className="h-3 w-3" />
+                <TreeStructureIcon className="h-3 w-3" />
                 <span>Child workspace</span>
               </div>
             )}
             {sessionRuntimeError && (
               <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
-                <Warning className="h-3 w-3 shrink-0" />
+                <WarningIcon className="h-3 w-3 shrink-0" />
                 <span className="truncate">{sessionRuntimeError}</span>
               </div>
             )}

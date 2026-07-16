@@ -1,4 +1,4 @@
-import { CaretLeft, CaretRight, Question } from '@phosphor-icons/react';
+import { CaretLeftIcon, CaretRightIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -126,7 +126,7 @@ function SingleQuestionLayout({
 }: SingleQuestionLayoutProps) {
   return (
     <PromptCard
-      icon={<Question className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Question from Claude"
       hideIconOnMobile
@@ -186,7 +186,7 @@ function MultiQuestionLayout({
 
   return (
     <PromptCard
-      icon={<Question className="h-5 w-5 text-blue-500" aria-hidden="true" />}
+      icon={<QuestionIcon className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Questions from Claude"
       hideIconOnMobile
@@ -201,7 +201,7 @@ function MultiQuestionLayout({
             className="h-8 w-8 p-0"
             aria-label="Previous question"
           >
-            <CaretLeft className="h-4 w-4" />
+            <CaretLeftIcon className="h-4 w-4" />
           </Button>
 
           {isLastQuestion ? (
@@ -226,7 +226,7 @@ function MultiQuestionLayout({
               className="h-8 w-8 p-0"
               aria-label="Next question"
             >
-              <CaretRight className="h-4 w-4" />
+              <CaretRightIcon className="h-4 w-4" />
             </Button>
           )}
         </div>

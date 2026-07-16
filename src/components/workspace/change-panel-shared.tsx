@@ -1,10 +1,10 @@
 import {
-  CaretDown,
-  CaretRight,
-  FileCode,
-  Folder,
-  SpinnerGap,
-  WarningCircle,
+  CaretDownIcon,
+  CaretRightIcon,
+  FileCodeIcon,
+  FolderIcon,
+  SpinnerGapIcon,
+  WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
@@ -166,7 +166,7 @@ export function useOpenDiffTab() {
 export function PanelLoadingState() {
   return (
     <div className="flex items-center justify-center h-full">
-      <SpinnerGap className="h-6 w-6 animate-spin text-muted-foreground" />
+      <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   );
 }
@@ -179,7 +179,7 @@ interface PanelErrorStateProps {
 export function PanelErrorState({ title, errorMessage }: PanelErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <WarningCircle className="h-8 w-8 text-destructive mb-2" />
+      <WarningCircleIcon className="h-8 w-8 text-destructive mb-2" />
       <p className="text-sm text-destructive">{title}</p>
       {errorMessage && <p className="text-xs text-muted-foreground mt-1">{errorMessage}</p>}
     </div>
@@ -194,7 +194,7 @@ interface PanelEmptyStateProps {
 export function PanelEmptyState({ title, description }: PanelEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <FileCode className="h-8 w-8 text-muted-foreground mb-2" />
+      <FileCodeIcon className="h-8 w-8 text-muted-foreground mb-2" />
       <p className="text-sm font-medium text-muted-foreground">{title}</p>
       <p className="text-xs text-muted-foreground/70 mt-1">{description}</p>
     </div>
@@ -349,7 +349,7 @@ function UntrackedDirContents({
         className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        <SpinnerGap className="h-3 w-3 animate-spin" />
+        <SpinnerGapIcon className="h-3 w-3 animate-spin" />
         <span>Loading…</span>
       </div>
     );
@@ -361,7 +361,7 @@ function UntrackedDirContents({
         className="flex items-center gap-2 px-3 py-1 text-xs text-destructive"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        <WarningCircle className="h-3 w-3 shrink-0" />
+        <WarningCircleIcon className="h-3 w-3 shrink-0" />
         <span>Failed to load directory contents</span>
       </div>
     );
@@ -425,11 +425,11 @@ function UntrackedSubDir({
         title={`Untracked: ${dirPath}`}
       >
         {isExpanded ? (
-          <CaretDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         ) : (
-          <CaretRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         )}
-        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate font-medium">{name}</span>
       </button>
       {isExpanded && (
@@ -472,11 +472,11 @@ const GitReportedDirRow = memo(function GitReportedDirRow({
         title={`Untracked: ${node.path}`}
       >
         {isExpanded ? (
-          <CaretDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         ) : (
-          <CaretRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         )}
-        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="flex-1 truncate font-medium">{node.name}</span>
         {node.entry && (
           <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -558,11 +558,11 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
       title={node.path}
     >
       {isExpanded ? (
-        <CaretDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       ) : (
-        <CaretRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       )}
-      <Folder className="h-4 w-4 shrink-0 text-brand" />
+      <FolderIcon className="h-4 w-4 shrink-0 text-brand" />
       <span className="flex-1 truncate font-medium">{node.name}</span>
     </button>
   );

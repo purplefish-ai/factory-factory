@@ -1,4 +1,4 @@
-import { FileCode, Play, SpinnerGap } from '@phosphor-icons/react';
+import { FileCodeIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,7 +69,7 @@ export function DevServerSetupPanel({
       <SheetContent className="w-full sm:max-w-2xl flex flex-col overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Play className="h-5 w-5 text-green-600" />
+            <PlayIcon className="h-5 w-5 text-green-600" />
             {isEditing ? 'Edit Dev Server' : 'Setup Dev Server'}
           </SheetTitle>
           <SheetDescription>
@@ -210,7 +210,7 @@ export function DevServerSetupPanel({
           {/* Preview */}
           <div className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-2">
-              <FileCode className="h-4 w-4" />
+              <FileCodeIcon className="h-4 w-4" />
               Configuration Preview
             </Label>
             <Textarea
@@ -245,12 +245,12 @@ export function DevServerSetupPanel({
             >
               {isPending ? (
                 <>
-                  <SpinnerGap className="mr-2 h-4 w-4 animate-spin" />
+                  <SpinnerGapIcon className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <FileCode className="mr-2 h-4 w-4" />
+                  <FileCodeIcon className="mr-2 h-4 w-4" />
                   {isEditing ? 'Save Configuration' : 'Create Configuration'}
                 </>
               )}

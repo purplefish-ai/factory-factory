@@ -1,4 +1,4 @@
-import { Check, Eye, Lightning, Play } from '@phosphor-icons/react';
+import { CheckIcon, EyeIcon, LightningIcon, PlayIcon } from '@phosphor-icons/react';
 import type { Meta, StoryObj } from '@storybook/react';
 import type { ComponentType } from 'react';
 import { fn } from 'storybook/test';
@@ -55,10 +55,10 @@ function MockQuickActionsMenu({
   isLoading?: boolean;
 }) {
   const iconMap: Record<string, ComponentType<{ className?: string }>> = {
-    check: Check,
-    eye: Eye,
-    play: Play,
-    zap: Lightning,
+    check: CheckIcon,
+    eye: EyeIcon,
+    play: PlayIcon,
+    zap: LightningIcon,
   };
 
   const hasActions = actions.length > 0;
@@ -74,7 +74,7 @@ function MockQuickActionsMenu({
               className="h-8 w-8"
               disabled={disabled || isLoading || !hasActions}
             >
-              <Lightning className="h-4 w-4" />
+              <LightningIcon className="h-4 w-4" />
               <span className="sr-only">Quick Actions</span>
             </Button>
           </DropdownMenuTrigger>
@@ -84,7 +84,7 @@ function MockQuickActionsMenu({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
         {actions.map((action) => {
-          const Icon = iconMap[action.icon || 'zap'] || Lightning;
+          const Icon = iconMap[action.icon || 'zap'] || LightningIcon;
           return (
             <DropdownMenuItem
               key={action.id}

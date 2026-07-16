@@ -8,11 +8,11 @@ import type { ServerWorkspace } from '@/client/components/use-workspace-list-sta
 import { WorkspaceItemContent } from './workspace-item-content';
 
 vi.mock('@phosphor-icons/react', () => ({
-  Clock: () => null,
-  DotOutline: () => null,
-  GitBranch: () => null,
-  GitPullRequest: () => null,
-  TreeStructure: () => null,
+  ClockIcon: () => null,
+  DotOutlineIcon: () => null,
+  GitBranchIcon: () => null,
+  GitPullRequestIcon: () => null,
+  TreeStructureIcon: () => null,
 }));
 
 vi.mock('@/client/components/workspace-status-icon', () => ({

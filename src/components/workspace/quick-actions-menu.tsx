@@ -1,13 +1,13 @@
 import {
-  Camera,
-  Check,
-  Eye,
-  GitBranch,
+  CameraIcon,
+  CheckIcon,
+  EyeIcon,
+  GitBranchIcon,
   type Icon,
-  Lightning,
-  Play,
-  Sparkle,
-  Terminal,
+  LightningIcon,
+  PlayIcon,
+  SparkleIcon,
+  TerminalIcon,
 } from '@phosphor-icons/react';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -39,18 +39,18 @@ interface QuickActionsMenuProps {
 // =============================================================================
 
 const ICON_MAP: Record<string, Icon> = {
-  zap: Lightning,
-  sparkles: Sparkle,
-  eye: Eye,
-  play: Play,
-  terminal: Terminal,
-  check: Check,
-  camera: Camera,
-  'git-branch': GitBranch,
+  zap: LightningIcon,
+  sparkles: SparkleIcon,
+  eye: EyeIcon,
+  play: PlayIcon,
+  terminal: TerminalIcon,
+  check: CheckIcon,
+  camera: CameraIcon,
+  'git-branch': GitBranchIcon,
 };
 
 function getActionIcon(iconName?: string | null): Icon {
-  return (iconName && ICON_MAP[iconName]) || Lightning;
+  return (iconName && ICON_MAP[iconName]) || LightningIcon;
 }
 
 // =============================================================================
@@ -76,7 +76,7 @@ export function QuickActionsMenu({ onExecuteAgent, disabled = false }: QuickActi
               className="h-8 w-8"
               disabled={disabled || isLoading || !hasActions}
             >
-              <Lightning className="h-4 w-4" />
+              <LightningIcon className="h-4 w-4" />
               <span className="sr-only">Quick Actions</span>
             </Button>
           </DropdownMenuTrigger>

@@ -1,4 +1,4 @@
-import { GearSix } from '@phosphor-icons/react';
+import { GearSixIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { trpc } from '@/client/lib/trpc';
@@ -105,7 +105,7 @@ export function WorkspaceProviderSettings({
                 className="h-9 w-9 md:h-8 md:w-8"
                 aria-label="Provider settings"
               >
-                <GearSix className="h-4 w-4" />
+                <GearSixIcon className="h-4 w-4" />
               </Button>
             </DialogTrigger>
           </TooltipTrigger>

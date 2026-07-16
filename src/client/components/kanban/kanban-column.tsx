@@ -1,4 +1,4 @@
-import { Archive } from '@phosphor-icons/react';
+import { ArchiveIcon } from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -85,7 +85,7 @@ export function KanbanColumn({
                 disabled={isBulkArchiving}
                 className="h-7 px-2"
               >
-                <Archive className="h-4 w-4" />
+                <ArchiveIcon className="h-4 w-4" />
                 <span className="ml-1 text-xs">Archive All</span>
               </Button>
             </TooltipTrigger>

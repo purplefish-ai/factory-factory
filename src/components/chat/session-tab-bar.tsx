@@ -1,13 +1,13 @@
 import {
-  CaretLeft,
-  CaretRight,
-  CheckCircle,
-  Circle,
-  PauseCircle,
-  Plus,
-  Pulse,
-  X,
-  XCircle,
+  CaretLeftIcon,
+  CaretRightIcon,
+  CheckCircleIcon,
+  CircleIcon,
+  PauseCircleIcon,
+  PlusIcon,
+  PulseIcon,
+  XCircleIcon,
+  XIcon,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -53,18 +53,18 @@ function getSessionDisplayName(session: SessionData, index: number): string {
 
 function getStatusIcon(status: SessionStatus, isRunning: boolean) {
   if (isRunning || status === 'RUNNING') {
-    return Pulse;
+    return PulseIcon;
   }
   if (status === 'IDLE') {
-    return Circle;
+    return CircleIcon;
   }
   if (status === 'PAUSED') {
-    return PauseCircle;
+    return PauseCircleIcon;
   }
   if (status === 'COMPLETED') {
-    return CheckCircle;
+    return CheckCircleIcon;
   }
-  return XCircle;
+  return XCircleIcon;
 }
 
 function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
@@ -172,7 +172,7 @@ function SessionTab({
           )}
           aria-label={`Close ${displayName}`}
         >
-          <X className="h-3 w-3" />
+          <XIcon className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -263,7 +263,7 @@ export function SessionTabBar({
           disabled={disabled}
           aria-label="Scroll session tabs left"
         >
-          <CaretLeft className="h-4 w-4" />
+          <CaretLeftIcon className="h-4 w-4" />
         </Button>
       )}
 
@@ -309,7 +309,7 @@ export function SessionTabBar({
           disabled={disabled}
           aria-label="Scroll session tabs right"
         >
-          <CaretRight className="h-4 w-4" />
+          <CaretRightIcon className="h-4 w-4" />
         </Button>
       )}
 
@@ -322,7 +322,7 @@ export function SessionTabBar({
           title="New Session"
           className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
         >
-          <Plus className="h-4 w-4" />
+          <PlusIcon className="h-4 w-4" />
         </button>
       )}
     </div>

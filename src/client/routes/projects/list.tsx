@@ -1,4 +1,4 @@
-import { Archive, Plus } from '@phosphor-icons/react';
+import { ArchiveIcon, PlusIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAppHeader } from '@/client/components/app-header-context';
@@ -51,7 +51,7 @@ function ProjectActions({
             disabled={archivePending}
             className="hover:bg-destructive/10 hover:text-destructive"
           >
-            {archivePending ? <Spinner className="size-4" /> : <Archive className="size-4" />}
+            {archivePending ? <Spinner className="size-4" /> : <ArchiveIcon className="size-4" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent>Archive</TooltipContent>
@@ -97,7 +97,7 @@ export default function ProjectsListPage() {
         </div>
         <Button asChild size={isMobile ? 'sm' : 'default'}>
           <Link to="/projects/new">
-            <Plus className="size-5" />
+            <PlusIcon className="size-5" />
             New Project
           </Link>
         </Button>

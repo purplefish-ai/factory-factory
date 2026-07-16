@@ -1,4 +1,10 @@
-import { CheckCircle, Circle, type Icon, Warning, XCircle } from '@phosphor-icons/react';
+import {
+  CheckCircleIcon,
+  CircleIcon,
+  type Icon,
+  WarningIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { PRState } from '@/shared/core';
@@ -23,42 +29,42 @@ function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
     case 'PASSING':
       return {
         className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-        Icon: CheckCircle,
+        Icon: CheckCircleIcon,
       };
     case 'FAILING':
       return {
         className: 'bg-red-500/15 text-red-700 dark:text-red-300',
-        Icon: XCircle,
+        Icon: XCircleIcon,
       };
     case 'RUNNING':
       return {
         className: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300',
-        Icon: Circle,
+        Icon: CircleIcon,
       };
     case 'UNKNOWN':
       return {
         className: 'bg-muted text-muted-foreground',
-        Icon: Circle,
+        Icon: CircleIcon,
       };
     case 'CLOSED':
       return {
         className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-        Icon: XCircle,
+        Icon: XCircleIcon,
       };
     case 'MERGED':
       return {
         className: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
-        Icon: CheckCircle,
+        Icon: CheckCircleIcon,
       };
     case 'CONFLICT':
       return {
         className: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
-        Icon: Warning,
+        Icon: WarningIcon,
       };
     case 'NONE':
       return {
         className: 'bg-transparent text-muted-foreground',
-        Icon: Circle,
+        Icon: CircleIcon,
       };
   }
 }

@@ -1,13 +1,13 @@
 import {
-  ArrowsClockwise,
-  Calendar,
-  Camera,
-  FileDashed,
-  Files,
-  ListChecks,
-  Plus,
-  Terminal,
-  TreeStructure,
+  ArrowsClockwiseIcon,
+  CalendarIcon,
+  CameraIcon,
+  FileDashedIcon,
+  FilesIcon,
+  ListChecksIcon,
+  PlusIcon,
+  TerminalIcon,
+  TreeStructureIcon,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
@@ -157,26 +157,26 @@ function TopPanelArea({
       <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
         <TabButton
           label="Changes"
-          icon={<FileDashed className="h-3.5 w-3.5" />}
+          icon={<FileDashedIcon className="h-3.5 w-3.5" />}
           isActive={showChanges}
           onSelect={() => onTopTabChange('changes')}
         />
         <TabButton
           label="Files"
-          icon={<Files className="h-3.5 w-3.5" />}
+          icon={<FilesIcon className="h-3.5 w-3.5" />}
           isActive={showFiles}
           onSelect={() => onTopTabChange('files')}
         />
         <TabButton
           label="Tasks"
-          icon={<ListChecks className="h-3.5 w-3.5" />}
+          icon={<ListChecksIcon className="h-3.5 w-3.5" />}
           isActive={showTasks}
           onSelect={() => onTopTabChange('tasks')}
         />
         {isAutoIteration && (
           <TabButton
             label="Iterations"
-            icon={<ArrowsClockwise className="h-3.5 w-3.5" />}
+            icon={<ArrowsClockwiseIcon className="h-3.5 w-3.5" />}
             isActive={showAutoIteration}
             onSelect={() => onTopTabChange('auto-iteration')}
           />
@@ -184,7 +184,7 @@ function TopPanelArea({
         {periodicTaskId && (
           <TabButton
             label="Periodic Task"
-            icon={<Calendar className="h-3.5 w-3.5" />}
+            icon={<CalendarIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
           />
@@ -192,7 +192,7 @@ function TopPanelArea({
         {isParentWorkspace && (
           <TabButton
             label="Children"
-            icon={<TreeStructure className="h-3.5 w-3.5" />}
+            icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
             isActive={showChildWorkspaces}
             onSelect={() => onTopTabChange('child-workspaces')}
           />
@@ -209,7 +209,7 @@ function TopPanelArea({
                 className={screenshotsButtonClassName}
                 aria-label="Screenshots"
               >
-                <Camera className="h-3.5 w-3.5" />
+                <CameraIcon className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent>
@@ -457,7 +457,7 @@ export function RightPanel({
               <>
                 <TabButton
                   label="Terminal"
-                  icon={<Terminal className="h-3.5 w-3.5" />}
+                  icon={<TerminalIcon className="h-3.5 w-3.5" />}
                   isActive={activeBottomTab === 'terminal'}
                   onSelect={() => handleBottomTabChange('terminal')}
                 />
@@ -628,7 +628,7 @@ function NewTerminalButton({ onNewTab }: NewTerminalButtonProps) {
             onClick={onNewTab}
             className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
           >
-            <Plus className="h-3 w-3" />
+            <PlusIcon className="h-3 w-3" />
           </button>
         </TooltipTrigger>
         <TooltipContent>

@@ -1,4 +1,4 @@
-import { SpinnerGap } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react';
 
 import { trpc } from '@/client/lib/trpc';
 
@@ -17,7 +17,7 @@ export function ScreenshotViewerTab({ workspaceId, screenshotPath }: ScreenshotV
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <SpinnerGap className="h-6 w-6 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }

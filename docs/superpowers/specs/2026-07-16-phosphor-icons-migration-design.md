@@ -14,18 +14,18 @@ Replace `lucide-react` with `@phosphor-icons/react` across the application so th
 
 ## Import and Naming Strategy
 
-Components will import icons directly from `@phosphor-icons/react`. The migration will use Phosphor's native icon names rather than aliasing them to Lucide names, and it will not add a local compatibility barrel.
+Components will import icons directly from `@phosphor-icons/react`. The migration will use Phosphor's current native component exports, which use the `*Icon` suffix, rather than aliasing them to Lucide names, and it will not add a local compatibility barrel.
 
 Each Lucide icon will be replaced with the closest semantic Phosphor equivalent. Examples include:
 
-- `Loader2` → `SpinnerGap`
-- `RefreshCw` → `ArrowsClockwise`
-- `AlertTriangle` → `Warning`
-- `CheckCircle2` → `CheckCircle`
-- `XCircle` → `XCircle`
-- `MoreHorizontal` → `DotsThree`
-- `Github` → `GithubLogo`
-- `PanelLeft` / `PanelRight` → `SidebarSimple` with the appropriate direction or mirroring
+- `Loader2` → `SpinnerGapIcon`
+- `RefreshCw` → `ArrowsClockwiseIcon`
+- `AlertTriangle` → `WarningIcon`
+- `CheckCircle2` → `CheckCircleIcon`
+- `XCircle` → `XCircleIcon`
+- `MoreHorizontal` → `DotsThreeIcon`
+- `Github` → `GithubLogoIcon`
+- `PanelLeft` / `PanelRight` → `SidebarSimpleIcon` with the appropriate direction or mirroring
 
 When no exact shape match exists, semantic meaning takes precedence over visual similarity.
 

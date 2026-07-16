@@ -11,6 +11,7 @@ const lucideIconType = ['Lucide', 'Icon'].join('');
 const packageJsonSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
 });
+const phosphorImportPattern = /import\s*{([\s\S]*?)}\s*from\s*['"]@phosphor-icons\/react['"]/g;
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -43,6 +44,23 @@ describe('icon library', () => {
       });
 
     expect(violations).toEqual([]);
+
+    const deprecatedPhosphorImports = sourceFiles(join(repositoryRoot, 'src')).flatMap((path) => {
+      const source = readFileSync(path, 'utf8');
+      return [...source.matchAll(phosphorImportPattern)].flatMap((match) => {
+        const importedNames = match[1];
+        return importedNames
+          ? importedNames
+              .split(',')
+              .map((name) => name.trim().replace(/^type\s+/, ''))
+              .filter(Boolean)
+              .filter((name) => name !== 'Icon' && !name.endsWith('Icon'))
+              .map((name) => `${relative(repositoryRoot, path)}: ${name}`)
+          : [];
+      });
+    });
+
+    expect(deprecatedPhosphorImports).toEqual([]);
 
     const iconGuidance = readFileSync(
       join(repositoryRoot, 'docs/design/ratchet-ux-simplification-plan.md'),

@@ -1,4 +1,4 @@
-import { Plus, SpinnerGap } from '@phosphor-icons/react';
+import { PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -23,9 +23,9 @@ export function NewWorkspaceButton({
         disabled={isCreating}
       >
         {isCreating ? (
-          <SpinnerGap className="h-4 w-4 animate-spin" />
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
         ) : (
-          <Plus className="h-4 w-4" />
+          <PlusIcon className="h-4 w-4" />
         )}
       </Button>
     );
@@ -34,9 +34,9 @@ export function NewWorkspaceButton({
   return (
     <Button size="sm" variant="ghost" onClick={() => onClick()} disabled={isCreating}>
       {isCreating ? (
-        <SpinnerGap className="h-4 w-4 mr-1 animate-spin" />
+        <SpinnerGapIcon className="h-4 w-4 mr-1 animate-spin" />
       ) : (
-        <Plus className="h-4 w-4 mr-1" />
+        <PlusIcon className="h-4 w-4 mr-1" />
       )}
       {children}
     </Button>

@@ -1,4 +1,10 @@
-import { CaretRight, CheckCircle, Pause, SpinnerGap, XCircle } from '@phosphor-icons/react';
+import {
+  CaretRightIcon,
+  CheckCircleIcon,
+  PauseIcon,
+  SpinnerGapIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react';
 import { useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
@@ -84,7 +90,7 @@ function StagesStepper({ currentStage }: { currentStage: Stage | null }) {
       {STAGE_ORDER.map((stage, i) => (
         <div key={stage} className="flex items-center gap-1">
           {i > 0 && (
-            <CaretRight
+            <CaretRightIcon
               className={cn(
                 'h-3 w-3 flex-shrink-0',
                 stepStates[STAGE_ORDER[i - 1] as Stage] === 'completed'
@@ -197,9 +203,9 @@ function TerminalBanner({
     <div className="flex items-center gap-2.5 px-3 py-2 bg-muted/30 border-b text-xs">
       <div className="flex items-center gap-1.5 shrink-0">
         {status === 'COMPLETED' ? (
-          <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+          <CheckCircleIcon className="h-3.5 w-3.5 text-green-500" />
         ) : status === 'FAILED' ? (
-          <XCircle className="h-3.5 w-3.5 text-destructive" />
+          <XCircleIcon className="h-3.5 w-3.5 text-destructive" />
         ) : (
           <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/50" />
         )}
@@ -255,7 +261,7 @@ function PausedBanner({
   return (
     <div className="flex items-center gap-2.5 px-3 py-2 bg-amber-500/5 border-b border-amber-500/20 text-xs">
       <div className="flex items-center gap-1.5 shrink-0 text-amber-600">
-        <Pause className="h-3 w-3" />
+        <PauseIcon className="h-3 w-3" />
         <span className="font-medium">Paused</span>
       </div>
       {progress && (
@@ -290,7 +296,7 @@ function RunningBanner({
   if (currentIteration === 0) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b text-xs">
-        <SpinnerGap className="h-3 w-3 animate-spin text-primary shrink-0" />
+        <SpinnerGapIcon className="h-3 w-3 animate-spin text-primary shrink-0" />
         <span className="text-muted-foreground">Running baseline measurement...</span>
       </div>
     );

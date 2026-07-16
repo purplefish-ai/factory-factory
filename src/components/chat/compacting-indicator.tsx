@@ -1,4 +1,4 @@
-import { SpinnerGap } from '@phosphor-icons/react';
+import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +38,7 @@ export const CompactingIndicator = memo(function CompactingIndicator({
       )}
     >
       <div className="flex items-center gap-2">
-        <SpinnerGap className="h-3 w-3 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-3 w-3 animate-spin text-muted-foreground" />
         <span className="text-xs font-medium text-muted-foreground">Compacting context...</span>
       </div>
     </div>

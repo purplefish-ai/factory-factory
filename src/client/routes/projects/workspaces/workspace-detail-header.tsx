@@ -1,4 +1,4 @@
-import { GitPullRequest, Info, Pencil } from '@phosphor-icons/react';
+import { GitPullRequestIcon, InfoIcon, PencilIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -154,7 +154,7 @@ export function WorkspaceDetailHeaderSlot({
                   onClick={handleStartEdit}
                   aria-label="Rename workspace"
                 >
-                  <Pencil className="h-3 w-3" />
+                  <PencilIcon className="h-3 w-3" />
                 </Button>
               )}
               <Button
@@ -164,7 +164,7 @@ export function WorkspaceDetailHeaderSlot({
                 onClick={() => setDetailsOpen(true)}
                 aria-label="View workspace details"
               >
-                <Info className="h-3 w-3" />
+                <InfoIcon className="h-3 w-3" />
               </Button>
               {!isArchived && (
                 <Button
@@ -174,7 +174,7 @@ export function WorkspaceDetailHeaderSlot({
                   onClick={() => setAttachPrOpen(true)}
                   aria-label={workspace.prUrl ? 'Edit associated PR' : 'Associate a PR'}
                 >
-                  <GitPullRequest className="h-3 w-3" />
+                  <GitPullRequestIcon className="h-3 w-3" />
                 </Button>
               )}
             </div>

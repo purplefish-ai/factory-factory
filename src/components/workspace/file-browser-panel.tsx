@@ -1,4 +1,4 @@
-import { ArrowsClockwise } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
 import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
             className="h-6 w-6"
             title="Refresh file tree"
           >
-            <ArrowsClockwise className="h-3.5 w-3.5" />
+            <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
 

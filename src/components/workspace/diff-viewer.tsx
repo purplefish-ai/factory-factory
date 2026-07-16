@@ -1,4 +1,4 @@
-import { Eye, FileCode, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
+import { EyeIcon, FileCodeIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
 import { useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -53,7 +53,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   if (isLoadingFile) {
     return (
       <div className="flex items-center justify-center h-full">
-        <SpinnerGap className="h-8 w-8 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -61,7 +61,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   if (fileError) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <WarningCircle className="h-12 w-12 text-destructive mb-4" />
+        <WarningCircleIcon className="h-12 w-12 text-destructive mb-4" />
         <p className="text-lg font-medium text-destructive">Failed to load file</p>
         <p className="text-sm text-muted-foreground mt-2">{fileError.message}</p>
       </div>
@@ -209,7 +209,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <SpinnerGap className="h-8 w-8 animate-spin text-muted-foreground" />
+        <SpinnerGapIcon className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -217,7 +217,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <WarningCircle className="h-12 w-12 text-destructive mb-4" />
+        <WarningCircleIcon className="h-12 w-12 text-destructive mb-4" />
         <p className="text-lg font-medium text-destructive">Failed to load diff</p>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
       </div>
@@ -227,7 +227,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   if (!data?.diff || parsedDiff.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <FileCode className="h-12 w-12 text-muted-foreground mb-4" />
+        <FileCodeIcon className="h-12 w-12 text-muted-foreground mb-4" />
         <p className="text-lg font-medium text-muted-foreground">No changes</p>
         <p className="text-sm text-muted-foreground/70 mt-2">{filePath}</p>
       </div>
@@ -239,7 +239,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-muted/30">
         <div className="flex items-center gap-2 min-w-0">
-          <FileCode className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <FileCodeIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-mono text-foreground truncate">{filePath}</span>
         </div>
         {isMarkdown && (
@@ -249,7 +249,11 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
             onClick={() => setShowPreview(!showPreview)}
             className="h-7 gap-1.5 flex-shrink-0"
           >
-            {showPreview ? <FileCode className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showPreview ? (
+              <FileCodeIcon className="h-3.5 w-3.5" />
+            ) : (
+              <EyeIcon className="h-3.5 w-3.5" />
+            )}
             {showPreview ? 'Diff' : 'Preview'}
           </Button>
         )}

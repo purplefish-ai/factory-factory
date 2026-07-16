@@ -1,4 +1,4 @@
-import { Clock, X } from '@phosphor-icons/react';
+import { ClockIcon, XIcon } from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/lib/chat-protocol';
@@ -20,7 +20,7 @@ export function QueuedMessages({ messages, onRemove }: QueuedMessagesProps) {
   return (
     <div className="border-t border-dashed px-4 py-2 bg-muted/30">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Clock className="h-3 w-3" />
+        <ClockIcon className="h-3 w-3" />
         <span>Queued ({messages.length})</span>
       </div>
       <div className="space-y-1">
@@ -36,7 +36,7 @@ export function QueuedMessages({ messages, onRemove }: QueuedMessagesProps) {
               onClick={() => onRemove(msg.id)}
               aria-label="Remove queued message"
             >
-              <X className="h-3 w-3" />
+              <XIcon className="h-3 w-3" />
             </Button>
           </div>
         ))}

@@ -1,4 +1,4 @@
-import { Robot, Terminal, XCircle } from '@phosphor-icons/react';
+import { RobotIcon, TerminalIcon, XCircleIcon } from '@phosphor-icons/react';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
@@ -99,7 +99,7 @@ function AgentProcessCard({
           disabled={isStopping || process.status === 'COMPLETED' || process.status === 'FAILED'}
           title="Stop session"
         >
-          <XCircle className="w-4 h-4" />
+          <XCircleIcon className="w-4 h-4" />
         </Button>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -252,7 +252,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         {hasAgentProcesses && (
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Robot className="w-4 h-4" />
+              <RobotIcon className="w-4 h-4" />
               Agent Sessions ({processes.agent.length})
             </h4>
             {isMobile ? (
@@ -330,7 +330,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                             }
                             title="Stop session"
                           >
-                            <XCircle className="w-4 h-4" />
+                            <XCircleIcon className="w-4 h-4" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -345,7 +345,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         {hasTerminalProcesses && (
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Terminal className="w-4 h-4" />
+              <TerminalIcon className="w-4 h-4" />
               Terminal Processes ({processes.terminal.length})
             </h4>
             {isMobile ? (

@@ -1,4 +1,4 @@
-import { Lightning } from '@phosphor-icons/react';
+import { LightningIcon } from '@phosphor-icons/react';
 import { QUICK_ACTIONS } from '@/components/chat/chat-input/constants';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,7 +43,7 @@ export function QuickActionsDropdown({
                 className="h-6 w-6 p-0"
                 aria-label="Quick actions"
               >
-                <Lightning className="h-3.5 w-3.5" />
+                <LightningIcon className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
