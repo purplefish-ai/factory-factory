@@ -302,8 +302,12 @@ class RatchetService extends EventEmitter {
    *
    * The transition is CAS'd on the fromState just read, so the emitted event
    * carries the state that was actually replaced. Losing the CAS means an
-   * in-flight check wrote a fresh state concurrently; retry so a closed PR
-   * cannot end up stuck in a non-IDLE state (it will never be polled again).
+   * in-flight check wrote a fresh state concurrently; retry so that racing
+   * check does not leave the closed PR parked in a non-IDLE state (it will
+   * never be polled again). Closed PRs leave the poll set, so at most one
+   * such check can be in flight and the bounded retries are expected to
+   * always suffice; if they are ever exhausted anyway, this logs a warning
+   * and leaves the stale state for a manual ratchet toggle to clear.
    */
   async markPrClosed(workspaceId: string): Promise<void> {
     const maxCasAttempts = 3;
@@ -454,11 +458,14 @@ class RatchetService extends EventEmitter {
           toState: newState,
         } satisfies RatchetStateChangedEvent);
       }
-      this.logWorkspaceRatchetingDecision(workspace, fromState, newState, action, null);
+      // A lost settle persisted nothing, so report the state unchanged rather
+      // than a transition this check never committed.
+      const reportedState = settled ? newState : fromState;
+      this.logWorkspaceRatchetingDecision(workspace, fromState, reportedState, action, null);
       return {
         workspaceId: workspace.id,
         previousState: fromState,
-        newState,
+        newState: reportedState,
         action,
       };
     }

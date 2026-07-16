@@ -143,6 +143,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
+  afterEach(() => {
+    // Listener-registering tests must not leak into later tests even when an
+    // assertion fails before their inline cleanup.
+    ratchetService.removeAllListeners();
+  });
+
   it('checks workspaces and processes each', async () => {
     vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue([
       {
@@ -264,7 +270,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         toState: RatchetState.IDLE,
       },
     ]);
-    ratchetService.removeAllListeners();
   });
 
   it('does not emit for a disabled workspace when the settle CAS loses', async () => {
@@ -294,11 +299,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
+    // The settle did not persist, so the result must not report a state
+    // change this check never committed.
     expect(result).toMatchObject({
+      previousState: RatchetState.CI_FAILED,
+      newState: RatchetState.CI_FAILED,
       action: { type: 'DISABLED' },
     });
     expect(events).toEqual([]);
-    ratchetService.removeAllListeners();
   });
 
   it('does not dispatch when workspace is not idle', async () => {
@@ -1037,6 +1045,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
+    expect(workspaceAccessor.transitionRatchetStateIfEnabled).toHaveBeenCalledWith(
+      'ws-superseded',
+      RatchetState.CI_RUNNING,
+      expect.objectContaining({ ratchetState: RatchetState.READY })
+    );
     expect(result).toMatchObject({
       previousState: RatchetState.CI_RUNNING,
       newState: RatchetState.CI_RUNNING,
@@ -1048,7 +1061,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(events).toHaveLength(0);
     expect(mockSnapshotBridge.recordCIObservation).not.toHaveBeenCalled();
     expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
-    ratchetService.removeAllListeners();
   });
 
   it('redispatches with an incremented retry count when the previous fixer died', async () => {
