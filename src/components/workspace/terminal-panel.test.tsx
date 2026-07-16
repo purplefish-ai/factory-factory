@@ -13,9 +13,12 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn(),
   destroy: vi.fn(),
   setActive: vi.fn(),
+  reconnect: vi.fn(),
+  connected: true,
+  gaveUp: false,
   renderedOutput: '',
   options: null as {
-    onCreated?: (terminalId: string, requestId?: string) => void;
+    onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
     onOutput?: (terminalId: string, data: string) => void;
     onError?: (message: string, requestId?: string) => void;
     onTerminalList?: (
@@ -43,12 +46,14 @@ vi.mock('./use-terminal-websocket', () => ({
   useTerminalWebSocket: (options: typeof mocks.options) => {
     mocks.options = options;
     return {
-      connected: true,
+      connected: mocks.connected,
+      gaveUp: mocks.gaveUp,
       create: mocks.create,
       sendInput: mocks.sendInput,
       resize: mocks.resize,
       destroy: mocks.destroy,
       setActive: mocks.setActive,
+      reconnect: mocks.reconnect,
     };
   },
 }));
@@ -60,6 +65,9 @@ describe('TerminalPanel', () => {
     mocks.resize.mockReset();
     mocks.destroy.mockReset();
     mocks.setActive.mockReset();
+    mocks.reconnect.mockReset();
+    mocks.connected = true;
+    mocks.gaveUp = false;
     mocks.renderedOutput = '';
     mocks.options = null;
   });
@@ -130,6 +138,76 @@ describe('TerminalPanel', () => {
     root.unmount();
   });
 
+  it('shows a disconnected notice while the transport is reconnecting', async () => {
+    mocks.connected = false;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+    });
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+    await vi.dynamicImportSettled();
+
+    expect(container.textContent).toContain('disconnected');
+    expect(container.textContent).not.toContain('Reconnect connection');
+
+    root.unmount();
+  });
+
+  it('offers a manual reconnect once the transport gives up', async () => {
+    mocks.connected = false;
+    mocks.gaveUp = true;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+    });
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+    await vi.dynamicImportSettled();
+
+    const reconnectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Reconnect')
+    );
+    expect(reconnectButton).toBeDefined();
+
+    flushSync(() => {
+      reconnectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.reconnect).toHaveBeenCalledTimes(1);
+
+    root.unmount();
+  });
+
+  it('hides the disconnected notice while connected', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+    });
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+    await vi.dynamicImportSettled();
+
+    expect(container.textContent).not.toContain('disconnected');
+
+    root.unmount();
+  });
+
   it('bounds live terminal output for associated tabs', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -155,6 +233,33 @@ describe('TerminalPanel', () => {
     expect(mocks.renderedOutput.length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
     expect(mocks.renderedOutput.startsWith(TERMINAL_TRUNCATION_MARKER)).toBe(true);
     expect(mocks.renderedOutput.endsWith('a'.repeat(100))).toBe(true);
+
+    root.unmount();
+  });
+
+  it('renders the created output buffer before client-buffered output', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+    });
+
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+
+    const requestId = mocks.create.mock.calls[0]?.[0] as string;
+
+    flushSync(() => {
+      mocks.options?.onOutput?.('terminal-a', 'live output');
+      mocks.options?.onCreated?.('terminal-a', requestId, 'early prompt $ ');
+    });
+    await vi.dynamicImportSettled();
+
+    expect(mocks.renderedOutput).toBe('early prompt $ live output');
 
     root.unmount();
   });

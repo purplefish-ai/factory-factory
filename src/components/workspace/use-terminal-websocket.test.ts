@@ -49,7 +49,21 @@ describe('useTerminalWebSocket', () => {
       requestId: 'request-1',
     });
 
-    expect(onCreated).toHaveBeenCalledWith('terminal-1', 'request-1');
+    expect(onCreated).toHaveBeenCalledWith('terminal-1', 'request-1', undefined);
+  });
+
+  it('passes created response output buffers to consumers', () => {
+    const onCreated = vi.fn();
+    useTerminalWebSocket({ workspaceId: 'workspace-1', onCreated });
+
+    capturedOptions?.onMessage?.({
+      type: 'created',
+      terminalId: 'terminal-1',
+      requestId: 'request-1',
+      outputBuffer: 'early prompt $ ',
+    });
+
+    expect(onCreated).toHaveBeenCalledWith('terminal-1', 'request-1', 'early prompt $ ');
   });
 
   it('passes create error request ids to consumers', () => {

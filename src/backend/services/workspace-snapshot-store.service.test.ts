@@ -258,6 +258,50 @@ describe('WorkspaceSnapshotStore', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Removal tombstones: stale reconcile passes must not resurrect entries
+  // -------------------------------------------------------------------------
+  describe('Removal tombstones', () => {
+    it('ignores upserts whose timestamp predates the removal', () => {
+      store.upsert('ws-1', makeUpdate(), 'test', 100);
+      store.remove('ws-1', 200);
+
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      // A reconcile pass that read the DB before the archive committed
+      // upserts with its poll-start timestamp, which is older than removal.
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 150);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('accepts upserts newer than the removal and clears the tombstone', () => {
+      store.upsert('ws-1', makeUpdate(), 'test', 100);
+      store.remove('ws-1', 200);
+
+      store.upsert('ws-1', makeUpdate({ name: 'Recreated' }), 'test', 300);
+
+      expect(store.getByWorkspaceId('ws-1')?.name).toBe('Recreated');
+
+      // Tombstone is gone: older-than-removal timestamps merge normally again
+      // (still subject to regular field-group timestamp rules).
+      store.remove('ws-1', 250);
+      store.upsert('ws-1', makeUpdate(), 'test', 260);
+      expect(store.getByWorkspaceId('ws-1')).toBeDefined();
+    });
+
+    it('clear drops tombstones', () => {
+      store.upsert('ws-1', makeUpdate(), 'test', 100);
+      store.remove('ws-1', 200);
+      store.clear();
+
+      store.upsert('ws-1', makeUpdate(), 'test', 150);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // STORE-06: Field-level timestamps for concurrent update safety
   // -------------------------------------------------------------------------
   describe('STORE-06: Field-level timestamps for concurrent update safety', () => {

@@ -36,12 +36,20 @@ const {
   mockGetCachedReviewCount,
   mockRefreshReviewCountIfStale,
   mockSendBadRequest,
+  mockWaitForInProgress,
 } = vi.hoisted(() => ({
   storeListeners: new Map<string, (event: unknown) => unknown>(),
   mockGetByProjectId: vi.fn(() => []),
   mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
   mockRefreshReviewCountIfStale: vi.fn(),
   mockSendBadRequest: vi.fn(),
+  mockWaitForInProgress: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+}));
+
+vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
+  snapshotReconciliationService: {
+    waitForInProgress: mockWaitForInProgress,
+  },
 }));
 
 vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
@@ -186,6 +194,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     storeListeners.clear();
     vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
     vi.mocked(validateTrustedLocalWebSocketRequest).mockReturnValue(true);
+    mockWaitForInProgress.mockImplementation(() => Promise.resolve());
   });
 
   it('sends full snapshot with review count on connect', async () => {
@@ -417,6 +426,54 @@ describe('createSnapshotsUpgradeHandler', () => {
       JSON.stringify({
         type: 'snapshot_removed',
         workspaceId: 'ws-1',
+        reviewCount: 5,
+      })
+    );
+  });
+
+  it('buffers deltas emitted before snapshot_full and flushes them after it', async () => {
+    let resolveWait: (() => void) | undefined;
+    mockWaitForInProgress.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveWait = resolve;
+      })
+    );
+    mockGetByProjectId.mockReturnValue([] as never);
+
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    callHandler(handler, ws, 'proj-1');
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    const event: SnapshotChangedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Early',
+        status: 'READY',
+      } as never,
+    };
+    await changedListener!(event);
+
+    // The client has no baseline yet, so the delta must not be sent.
+    expect(ws.send).not.toHaveBeenCalled();
+
+    resolveWait?.();
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledTimes(2);
+    });
+
+    expect(ws.send.mock.calls[0]?.[0]).toContain('"type":"snapshot_full"');
+    expect(ws.send.mock.calls[1]?.[0]).toBe(
+      JSON.stringify({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: event.entry,
         reviewCount: 5,
       })
     );

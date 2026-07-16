@@ -330,6 +330,42 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('exposes gaveUp after exhausting reconnect attempts and resets on manual reconnect', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const harness = createHarness();
+    await flushEffects();
+
+    flushSync(() => {
+      getLastSocket().simulateOpen();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    // Each close schedules one reconnect until the attempt budget is spent.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      flushSync(() => {
+        getLastSocket().close();
+      });
+      expect(harness.transportRef.current?.gaveUp).toBe(false);
+      await vi.advanceTimersByTimeAsync(40_000);
+      await flushEffects();
+    }
+
+    // The budget is exhausted, so this close must surface the give-up state.
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(true);
+
+    flushSync(() => {
+      harness.transportRef.current?.reconnect();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    harness.cleanup();
+  });
+
   it('ignores open events from sockets superseded by a URL change', async () => {
     let connectedCount = 0;
     const harness = createHarness({

@@ -133,10 +133,11 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     // Handle terminal created - associate server terminalId with its requested tab
     const handleCreated = useCallback(
-      (terminalId: string, requestId?: string) => {
+      (terminalId: string, requestId?: string, outputBuffer?: string) => {
         const pendingTabId = claimPendingTerminalTab(pendingTabIdsByRequestRef.current, requestId);
         if (pendingTabId) {
-          // Get any buffered output for this terminal
+          // Combine output captured server-side before listeners attached with
+          // any live output buffered client-side before this message arrived.
           const bufferedOutput = outputBufferRef.current.get(terminalId) ?? '';
           outputBufferRef.current.delete(terminalId);
 
@@ -146,7 +147,10 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
                 ? {
                     ...tab,
                     terminalId,
-                    output: trimRollingOutput(bufferedOutput, TERMINAL_ROLLING_OUTPUT_OPTIONS),
+                    output: trimRollingOutput(
+                      (outputBuffer ?? '') + bufferedOutput,
+                      TERMINAL_ROLLING_OUTPUT_OPTIONS
+                    ),
                   }
                 : tab
             )
@@ -256,14 +260,15 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       [setActiveTabId, updateTabs]
     );
 
-    const { connected, create, sendInput, resize, destroy, setActive } = useTerminalWebSocket({
-      workspaceId,
-      onOutput: handleOutput,
-      onCreated: handleCreated,
-      onExit: handleExit,
-      onError: handleError,
-      onTerminalList: handleTerminalList,
-    });
+    const { connected, gaveUp, reconnect, create, sendInput, resize, destroy, setActive } =
+      useTerminalWebSocket({
+        workspaceId,
+        onOutput: handleOutput,
+        onCreated: handleCreated,
+        onExit: handleExit,
+        onError: handleError,
+        onTerminalList: handleTerminalList,
+      });
 
     // Update ref so callbacks can access setActive
     setActiveRef.current = setActive;
@@ -403,14 +408,46 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           <Terminal className="h-10 w-10 text-zinc-500 mb-3" />
           <p className="text-sm font-medium text-zinc-400">No terminal open</p>
           <p className="text-xs text-zinc-500 mt-1">
-            {connected ? 'Click + to open a new terminal' : 'Connecting...'}
+            {connected
+              ? 'Click + to open a new terminal'
+              : gaveUp
+                ? 'Disconnected'
+                : 'Connecting...'}
           </p>
+          {gaveUp && (
+            <button
+              type="button"
+              onClick={reconnect}
+              className="mt-2 px-2 py-1 text-xs rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Reconnect
+            </button>
+          )}
         </div>
       );
     }
 
     return (
       <div className={cn('h-full flex flex-col', className)}>
+        {/* Input sent while disconnected is dropped, so make the gap visible */}
+        {!connected && (
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-amber-950/70 border-b border-amber-900">
+            <p className="text-xs text-amber-200">
+              {gaveUp
+                ? 'Terminal disconnected. Input will not be delivered until you reconnect.'
+                : 'Terminal disconnected — reconnecting... Input typed now will not be delivered.'}
+            </p>
+            {gaveUp && (
+              <button
+                type="button"
+                onClick={reconnect}
+                className="shrink-0 px-2 py-0.5 text-xs rounded border border-amber-700 text-amber-200 hover:bg-amber-900"
+              >
+                Reconnect
+              </button>
+            )}
+          </div>
+        )}
         {/* Terminal tabs row - only show if not hidden */}
         {!hideHeader && (
           <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border-b border-zinc-800">

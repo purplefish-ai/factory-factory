@@ -269,6 +269,12 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private projectIndex = new Map<string, Set<string>>();
   private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
   private deriveFns: SnapshotDerivationFns | null = null;
+  /**
+   * Removal timestamps per workspace. An upsert whose timestamp is not newer
+   * than the removal is ignored, so a reconcile pass that read the DB before
+   * an archive committed cannot momentarily resurrect the removed entry.
+   */
+  private removalTimestamps = new Map<string, number>();
 
   private assignField<K extends SnapshotField>(
     entry: WorkspaceSnapshotEntry,
@@ -453,6 +459,19 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     timestamp?: number
   ): void {
     const ts = timestamp ?? Date.now();
+
+    const removedAt = this.removalTimestamps.get(workspaceId);
+    if (removedAt !== undefined) {
+      if (ts <= removedAt) {
+        logger.debug('Snapshot update ignored (workspace removed after update was computed)', {
+          workspaceId,
+          source,
+        });
+        return;
+      }
+      this.removalTimestamps.delete(workspaceId);
+    }
+
     let entry = this.entries.get(workspaceId);
     const isNewEntry = entry === undefined;
     const oldProjectId = entry?.projectId;
@@ -499,12 +518,17 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   /**
    * Remove a workspace snapshot entry.
    * Used when a workspace is archived or deleted.
+   *
+   * Records a removal timestamp so in-flight updates computed before the
+   * removal (e.g. a concurrent reconcile pass) cannot re-insert the entry.
    */
-  remove(workspaceId: string): boolean {
+  remove(workspaceId: string, timestamp?: number): boolean {
     const entry = this.entries.get(workspaceId);
     if (!entry) {
       return false;
     }
+
+    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
 
     // Delete from entries map
     this.entries.delete(workspaceId);
@@ -580,6 +604,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     this.entries.clear();
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
+    this.removalTimestamps.clear();
     logger.info('Snapshot store cleared');
   }
 }
