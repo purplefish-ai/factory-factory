@@ -714,10 +714,9 @@ describe('useProjectSnapshotSync', () => {
       expectNoInvalidations();
     });
 
-    it('the first snapshot_full after a disconnect heals the workspace caches', () => {
+    it('heals the workspace caches on every baseline after a project&apos;s first', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
-      const onDisconnected = capturedOptions!.onDisconnected!;
 
       onMessage({
         type: 'snapshot_full',
@@ -726,7 +725,8 @@ describe('useProjectSnapshotSync', () => {
       });
       expectNoInvalidations();
 
-      onDisconnected();
+      // A later baseline follows a gap (reconnect or project switch) during
+      // which deltas were dropped, so it must heal.
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-1',
@@ -741,50 +741,27 @@ describe('useProjectSnapshotSync', () => {
       expect(mockSummaryInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
       expect(mockKanbanInvalidate).toHaveBeenCalledTimes(1);
       expect(mockKanbanInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(2);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
     });
 
-    it('heals only once per disconnect', () => {
+    it('tracks the first baseline per project', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
-      const onDisconnected = capturedOptions!.onDisconnected!;
 
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-1',
         entries: [],
       });
-      onDisconnected();
-      onMessage({
-        type: 'snapshot_full',
-        projectId: 'proj-1',
-        entries: [],
-      });
-      onMessage({
-        type: 'snapshot_full',
-        projectId: 'proj-1',
-        entries: [],
-      });
 
-      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockSummaryInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockKanbanInvalidate).toHaveBeenCalledTimes(1);
-    });
-
-    it('keeps the heal scoped to the project that disconnected', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-      const onDisconnected = capturedOptions!.onDisconnected!;
-
-      onMessage({
-        type: 'snapshot_full',
-        projectId: 'proj-1',
-        entries: [],
-      });
-      onDisconnected();
-
-      // A baseline for a different project must neither heal nor consume
-      // proj-1's pending heal.
+      // Another project's first baseline neither heals nor counts as proj-1's.
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-2',
@@ -792,6 +769,7 @@ describe('useProjectSnapshotSync', () => {
       });
       expectNoInvalidations();
 
+      // Returning to proj-1 (its second baseline) heals proj-1 only.
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-1',
@@ -800,23 +778,6 @@ describe('useProjectSnapshotSync', () => {
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
       expect(mockKanbanInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
-    });
-
-    it('does not heal when connection attempts fail before the first baseline', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-      const onDisconnected = capturedOptions!.onDisconnected!;
-
-      // Failed connection attempts fire onDisconnected without any baseline.
-      onDisconnected();
-      onDisconnected();
-      onMessage({
-        type: 'snapshot_full',
-        projectId: 'proj-1',
-        entries: [makeEntry()],
-      });
-
-      expectNoInvalidations();
     });
   });
 

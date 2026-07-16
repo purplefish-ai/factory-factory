@@ -6,11 +6,11 @@
  * Merge strategy — one strategy per cache per message:
  * - snapshot_changed / snapshot_removed deltas are pure setData patches;
  *   they never trigger invalidation refetches.
- * - snapshot_full is the (re)connect baseline. After a disconnect the
- *   staleTime: Infinity workspace caches may hold state whose deltas were
- *   dropped (queuePolicy: 'drop'), and snapshot entries don't carry every
- *   DB-backed field, so the first baseline after a disconnect additionally
- *   invalidates the workspace caches to let them self-heal.
+ * - snapshot_full is the (re)connect baseline. Any baseline after a
+ *   project's first follows a gap (network reconnect, or a switch away and
+ *   back) during which deltas were dropped, and snapshot entries don't carry
+ *   every DB-backed field, so those baselines additionally invalidate the
+ *   workspace caches to let them self-heal.
  *
  * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
@@ -157,11 +157,11 @@ function triggerWorkspaceAttention(workspaceId: string): void {
 }
 
 /**
- * Invalidates the workspace caches after the first snapshot_full baseline
- * that follows a disconnect. The snapshot patches keep the UI instant; the
- * refetches restore DB-backed fields the snapshot doesn't carry (issue
- * links, etc.) and drop workspace.get entries for workspaces that were
- * archived while disconnected.
+ * Invalidates the workspace caches after any snapshot_full baseline past a
+ * project's first. The snapshot patches keep the UI instant; the refetches
+ * restore DB-backed fields the snapshot doesn't carry (issue links, etc.)
+ * and drop workspace.get entries for workspaces that were archived while
+ * no socket for the project was connected.
  */
 function healWorkspaceCachesAfterReconnect(utils: TrpcUtils, projectId: string): void {
   utils.workspace.get.invalidate();
@@ -317,31 +317,25 @@ function applySnapshotRemovedMessage(
 export function useProjectSnapshotSync(projectId: string | undefined): void {
   const utils = trpc.useUtils();
   const previousPendingRequestsRef = useRef<Map<string, PendingRequestType>>(new Map());
-  // Deltas may have been dropped while disconnected, so the next snapshot_full
-  // baseline must also refetch-heal the staleTime: Infinity workspace caches.
-  // Failed attempts before the first baseline don't count: nothing has been
-  // patched yet, so the initial hydration stays refetch-free. Both sets are
-  // keyed by projectId — the hook survives project switches, so a disconnect
-  // on one project must not consume (or grant) another project's heal.
-  const staleProjectsRef = useRef<Set<string>>(new Set());
+  // A project's first snapshot_full arrives alongside its initial query
+  // fetches, so it needs no refetch. Every later baseline for that project
+  // follows a gap — a network reconnect or a switch away and back — during
+  // which deltas were dropped, so it must also refetch-heal the
+  // staleTime: Infinity workspace caches. Keyed per project because the hook
+  // survives project switches.
   const baselineProjectsRef = useRef<Set<string>>(new Set());
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
-
-  const handleDisconnected = useCallback(() => {
-    if (projectId && baselineProjectsRef.current.has(projectId)) {
-      staleProjectsRef.current.add(projectId);
-    }
-  }, [projectId]);
 
   const handleMessage = useCallback(
     (message: z.infer<typeof SnapshotServerMessageSchema>) => {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
-          baselineProjectsRef.current.add(message.projectId);
-          if (staleProjectsRef.current.delete(message.projectId)) {
+          if (baselineProjectsRef.current.has(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
+          } else {
+            baselineProjectsRef.current.add(message.projectId);
           }
           break;
         }
@@ -380,7 +374,6 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     url,
     schema: SnapshotServerMessageSchema,
     onMessage: handleMessage,
-    onDisconnected: handleDisconnected,
     queuePolicy: 'drop',
   });
 }
