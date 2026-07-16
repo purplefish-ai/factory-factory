@@ -320,26 +320,27 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   // Deltas may have been dropped while disconnected, so the next snapshot_full
   // baseline must also refetch-heal the staleTime: Infinity workspace caches.
   // Failed attempts before the first baseline don't count: nothing has been
-  // patched yet, so the initial hydration stays refetch-free.
-  const staleSinceDisconnectRef = useRef(false);
-  const hasReceivedBaselineRef = useRef(false);
+  // patched yet, so the initial hydration stays refetch-free. Both sets are
+  // keyed by projectId — the hook survives project switches, so a disconnect
+  // on one project must not consume (or grant) another project's heal.
+  const staleProjectsRef = useRef<Set<string>>(new Set());
+  const baselineProjectsRef = useRef<Set<string>>(new Set());
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleDisconnected = useCallback(() => {
-    if (hasReceivedBaselineRef.current) {
-      staleSinceDisconnectRef.current = true;
+    if (projectId && baselineProjectsRef.current.has(projectId)) {
+      staleProjectsRef.current.add(projectId);
     }
-  }, []);
+  }, [projectId]);
 
   const handleMessage = useCallback(
     (message: z.infer<typeof SnapshotServerMessageSchema>) => {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
-          hasReceivedBaselineRef.current = true;
-          if (staleSinceDisconnectRef.current) {
-            staleSinceDisconnectRef.current = false;
+          baselineProjectsRef.current.add(message.projectId);
+          if (staleProjectsRef.current.delete(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
           }
           break;
