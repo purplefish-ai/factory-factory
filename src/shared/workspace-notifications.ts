@@ -9,6 +9,9 @@
 
 export const WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX = 'workspace-notification-';
 
+/** Mirrors the Prisma NotificationDirection enum. */
+export type WorkspaceNotificationDirection = 'CHILD_TO_PARENT' | 'PARENT_TO_CHILD';
+
 export function workspaceNotificationMessageId(notificationId: string): string {
   return `${WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX}${notificationId}`;
 }
@@ -20,7 +23,7 @@ export function workspaceNotificationMessageId(notificationId: string): string {
  */
 export function buildWorkspaceNotificationMessageText(notification: {
   id: string;
-  direction: string;
+  direction: WorkspaceNotificationDirection;
   sourceWorkspaceName: string;
   message: string;
 }): string {
