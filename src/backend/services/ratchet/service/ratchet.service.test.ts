@@ -1810,6 +1810,62 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       );
     });
 
+    it('does not count concurrency queue wait toward the workspace timeout', async () => {
+      unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
+      const workspaces = Array.from({ length: 4 }, (_, index) => ({
+        id: `ws-queued-timeout-${index}`,
+        prUrl: `https://github.com/example/repo/pull/${index + 1}`,
+        prNumber: index + 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      }));
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
+      const processWorkspaceSpy = vi.spyOn(
+        unsafeCoerce<{
+          processWorkspace: (
+            workspace: (typeof workspaces)[number],
+            opts: unknown,
+            signal: AbortSignal
+          ) => Promise<WorkspaceRatchetResult>;
+        }>(ratchetService),
+        'processWorkspace'
+      );
+      processWorkspaceSpy.mockImplementation((workspace, _opts, signal) => {
+        if (workspace.id !== 'ws-queued-timeout-3') {
+          return new Promise<WorkspaceRatchetResult>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        }
+        return Promise.resolve({
+          workspaceId: workspace.id,
+          previousState: RatchetState.IDLE,
+          newState: RatchetState.IDLE,
+          action: { type: 'WAITING', reason: 'ran after queue' },
+        });
+      });
+
+      const result = await ratchetService.checkAllWorkspaces();
+
+      expect(processWorkspaceSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'ws-queued-timeout-3' }),
+        undefined,
+        expect.any(AbortSignal)
+      );
+      expect(result.results[3]).toMatchObject({
+        workspaceId: 'ws-queued-timeout-3',
+        action: { type: 'WAITING', reason: 'ran after queue' },
+      });
+    });
+
     it('runs at most three workspace checks concurrently', async () => {
       const workspaces = Array.from({ length: 7 }, (_, index) => ({
         id: `ws-${index}`,

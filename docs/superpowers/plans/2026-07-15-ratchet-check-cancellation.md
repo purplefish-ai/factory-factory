@@ -99,7 +99,14 @@ Replace the promise-only map and runner plumbing with:
 interface InFlightWorkspaceCheck {
   controller: AbortController;
   promise: Promise<WorkspaceRatchetResult>;
+  started: Promise<void>;
 }
+
+type WorkspaceCheckScheduler = (
+  task: () => Promise<WorkspaceRatchetResult>
+) => Promise<WorkspaceRatchetResult>;
+
+const runImmediately: WorkspaceCheckScheduler = (task) => task();
 
 export class RatchetWorkspaceCheckCoordinator {
   private readonly inFlightWorkspaceChecks = new Map<string, InFlightWorkspaceCheck>();
@@ -108,7 +115,8 @@ export class RatchetWorkspaceCheckCoordinator {
 
   run(
     workspace: WorkspaceWithPR,
-    runner: (signal: AbortSignal) => Promise<WorkspaceRatchetResult>
+    runner: (signal: AbortSignal) => Promise<WorkspaceRatchetResult>,
+    schedule: WorkspaceCheckScheduler = runImmediately
   ): Promise<WorkspaceRatchetResult> {
     const existing = this.inFlightWorkspaceChecks.get(workspace.id);
     if (existing) {
@@ -116,18 +124,29 @@ export class RatchetWorkspaceCheckCoordinator {
     }
 
     const controller = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     let entry!: InFlightWorkspaceCheck;
-    const promise = runner(controller.signal).finally(() => {
+    const promise = schedule(async () => {
+      markStarted();
+      controller.signal.throwIfAborted();
+      return await runner(controller.signal);
+    }).finally(() => {
       if (this.inFlightWorkspaceChecks.get(workspace.id) === entry) {
         this.inFlightWorkspaceChecks.delete(workspace.id);
       }
     });
-    entry = { controller, promise };
+    entry = { controller, promise, started };
     this.inFlightWorkspaceChecks.set(workspace.id, entry);
     return this.withTimeout(entry);
   }
 
-  private withTimeout(entry: InFlightWorkspaceCheck): Promise<WorkspaceRatchetResult> {
+  private async withTimeout(
+    entry: InFlightWorkspaceCheck
+  ): Promise<WorkspaceRatchetResult> {
+    await entry.started;
     const timeoutMs = this.getTimeoutMs();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -947,16 +966,19 @@ const results = await Promise.all(
 );
 ```
 
-Apply the limiter inside the coordinator runner. This preserves same-workspace
-singleflight while keeping a limiter slot occupied until an aborted runner has
-actually finished cleanup:
+Pass the limiter to the coordinator as its scheduler. This preserves
+same-workspace singleflight, starts the timeout only after a limiter slot is
+granted, and keeps that slot occupied until an aborted runner has actually
+finished cleanup:
 
 ```ts
-return await this.checkCoordinator.run(workspace, (signal) =>
-  ratchetWorkspaceLimit(() => {
+return await this.checkCoordinator.run(
+  workspace,
+  (signal) => {
     signal.throwIfAborted();
     return this.processWorkspace(workspace, opts, signal);
-  })
+  },
+  (task) => ratchetWorkspaceLimit(task)
 );
 ```
 

@@ -98,4 +98,35 @@ describe('RatchetWorkspaceCheckCoordinator', () => {
     await expect(joinedDuringCleanup).rejects.toThrow('Workspace check timed out after 1000ms');
     expect(runner).toHaveBeenCalledTimes(1);
   });
+
+  it('starts the timeout only after the scheduler starts the runner', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-queued' } as WorkspaceWithPR;
+    let startScheduledRunner!: () => void;
+    const schedule = vi.fn(
+      (task: () => Promise<WorkspaceRatchetResult>) =>
+        new Promise<WorkspaceRatchetResult>((resolve, reject) => {
+          startScheduledRunner = () => {
+            task().then(resolve, reject);
+          };
+        })
+    );
+    const runner = vi.fn(
+      (signal: AbortSignal) =>
+        new Promise<WorkspaceRatchetResult>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        })
+    );
+
+    const result = coordinator.run(workspace, runner, schedule);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(runner).not.toHaveBeenCalled();
+    startScheduledRunner();
+    const expectation = expect(result).rejects.toThrow('Workspace check timed out after 1000ms');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expectation;
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
 });

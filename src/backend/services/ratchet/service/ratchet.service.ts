@@ -319,11 +319,13 @@ class RatchetService extends EventEmitter {
     opts?: RatchetCheckOptions
   ): Promise<WorkspaceRatchetResult> {
     try {
-      return await this.checkCoordinator.run(workspace, (signal) =>
-        ratchetWorkspaceLimit(() => {
+      return await this.checkCoordinator.run(
+        workspace,
+        (signal) => {
           signal.throwIfAborted();
           return this.processWorkspace(workspace, opts, signal);
-        })
+        },
+        (task) => ratchetWorkspaceLimit(task)
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
