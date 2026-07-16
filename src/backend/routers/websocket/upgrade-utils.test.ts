@@ -482,8 +482,28 @@ describe('createWebSocketUpgradeHandler', () => {
     await vi.waitFor(() => {
       expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
     });
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to authorize test WebSocket upgrade',
+      expect.objectContaining({ message: 'authorize hook returned undefined' })
+    );
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('rejects hooks that can return undefined at the type level', () => {
+    // Compile-time contract check (verified by `pnpm typecheck`): the
+    // NonNullable return type rejects hooks with undefined-returning paths.
+    const defineHandler = () =>
+      createWebSocketUpgradeHandler({
+        connectionName: 'test WebSocket',
+        configService: createConfigService(['http://localhost:3000']),
+        logger: createFullLogger(),
+        // @ts-expect-error authorize must not be able to return undefined
+        authorize: async () => (Math.random() > 0.5 ? { id: 'a' } : undefined),
+        onOpen: vi.fn(),
+      });
+
+    expect(defineHandler).toBeDefined();
   });
 
   it('rejects with 400 when a synchronous authorize throws', () => {

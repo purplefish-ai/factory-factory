@@ -230,12 +230,15 @@ export function createWebSocketUpgradeHandler<
   configService: WebSocketOriginConfigService;
   logger: WebSocketUpgradeLogger;
   requiredParams?: readonly TParam[];
+  // NonNullable in the return position makes a hook that can return
+  // `undefined` a compile-time error; runAuthorize still fails closed at
+  // runtime for hooks that bypass the types.
   authorize?: (context: {
     params: Record<TParam, string>;
     url: URL;
     request: IncomingMessage;
     socket: Duplex;
-  }) => TAuth | null | Promise<TAuth | null>;
+  }) => NonNullable<TAuth> | null | Promise<NonNullable<TAuth> | null>;
   onOpen: (ws: WebSocket, context: WebSocketUpgradeOpenContext<TAuth, TParam>) => void;
 }): WebSocketUpgradeHandler {
   const { connectionName, configService, logger, requiredParams, authorize, onOpen } = options;
