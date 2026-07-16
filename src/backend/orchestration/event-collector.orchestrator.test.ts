@@ -537,14 +537,30 @@ describe('configureEventCollector', () => {
       workspaceId: string;
       fromStatus: string;
       toStatus: string;
+      workspace: {
+        projectId: string;
+        name: string;
+        branchName: string | null;
+        createdAt: Date;
+      };
     }) => void;
 
-    handler({ workspaceId: 'ws-1', fromStatus: 'NEW', toStatus: 'READY' });
+    handler({
+      workspaceId: 'ws-1',
+      fromStatus: 'NEW',
+      toStatus: 'READY',
+      workspace: {
+        projectId: 'proj-1',
+        name: 'ws',
+        branchName: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { status: 'READY' },
+      expect.objectContaining({ status: 'READY' }),
       'event:workspace_state_changed'
     );
   });
@@ -971,12 +987,24 @@ describe('configureEventCollector', () => {
       workspaceId: string;
       fromStatus: string;
       toStatus: string;
+      workspace: {
+        projectId: string;
+        name: string;
+        branchName: string | null;
+        createdAt: Date;
+      };
     }) => void;
 
     handler({
       workspaceId: 'ws-1',
       fromStatus: 'NEW',
       toStatus: 'READY',
+      workspace: {
+        projectId: 'proj-1',
+        name: 'ws',
+        branchName: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
     });
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
@@ -987,7 +1015,7 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { status: 'READY' },
+      expect.objectContaining({ status: 'READY' }),
       'event:workspace_state_changed'
     );
   });
