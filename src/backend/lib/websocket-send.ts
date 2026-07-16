@@ -62,7 +62,7 @@ export function sendStreamOutput(
     return false;
   }
 
-  if (ws.bufferedAmount > MAX_WEBSOCKET_STREAM_BUFFERED_BYTES) {
+  if (ws.bufferedAmount + Buffer.byteLength(message) > MAX_WEBSOCKET_STREAM_BUFFERED_BYTES) {
     if (!congestedStreamSockets.has(ws)) {
       congestedStreamSockets.add(ws);
       logger.warn(`Dropping ${description} because WebSocket send buffer is congested`, {

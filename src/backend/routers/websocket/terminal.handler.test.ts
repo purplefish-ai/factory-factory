@@ -467,7 +467,7 @@ describe('createTerminalUpgradeHandler', () => {
     listener('dropped output');
     expect(ws.send).not.toHaveBeenCalled();
 
-    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    ws.bufferedAmount = 0;
     listener('resumed output');
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({

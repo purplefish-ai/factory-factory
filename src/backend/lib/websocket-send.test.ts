@@ -56,16 +56,33 @@ describe('safeSend', () => {
 });
 
 describe('sendStreamOutput', () => {
-  it('sends stream output with a callback at or below the threshold', () => {
-    const ws = createMockWs(WS_READY_STATE.OPEN, MAX_WEBSOCKET_STREAM_BUFFERED_BYTES);
+  it('sends stream output when the projected buffer is at the threshold', () => {
+    const message = 'output';
+    const ws = createMockWs(
+      WS_READY_STATE.OPEN,
+      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength(message)
+    );
     const logger = createMockLogger();
 
-    expect(sendStreamOutput(ws as unknown as WebSocket, 'output', logger, 'terminal output')).toBe(
+    expect(sendStreamOutput(ws as unknown as WebSocket, message, logger, 'terminal output')).toBe(
       true
     );
 
-    expect(ws.send).toHaveBeenCalledWith('output', expect.any(Function));
+    expect(ws.send).toHaveBeenCalledWith(message, expect.any(Function));
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('drops output when its UTF-8 bytes would push the buffer above the threshold', () => {
+    const message = 'éé';
+    const ws = createMockWs(
+      WS_READY_STATE.OPEN,
+      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength(message) + 1
+    );
+    const logger = createMockLogger();
+
+    expect(sendStreamOutput(ws as unknown as WebSocket, message, logger, 'log output')).toBe(false);
+
+    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('drops output and warns once while a socket remains congested', () => {
@@ -93,7 +110,7 @@ describe('sendStreamOutput', () => {
     const logger = createMockLogger();
 
     sendStreamOutput(ws as unknown as WebSocket, 'dropped', logger);
-    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength('resumed');
     expect(sendStreamOutput(ws as unknown as WebSocket, 'resumed', logger)).toBe(true);
 
     ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;

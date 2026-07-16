@@ -4,15 +4,15 @@
 
 **Goal:** Bound queued WebSocket data for high-volume terminal and log output and log asynchronous send failures.
 
-**Architecture:** Extend the existing `websocket-send` utility with a stream-specific sender that drops output above a 1 MiB `bufferedAmount` threshold and tracks per-socket congestion warnings in a `WeakSet`. Route only live output callbacks through this helper; leave replay and low-volume control messages on their existing paths.
+**Architecture:** Extend the existing `websocket-send` utility with a stream-specific sender that drops output when the current `bufferedAmount` plus the UTF-8 message size would exceed 1 MiB, and tracks per-socket congestion warnings in a `WeakSet`. Route only live output callbacks through this helper; leave replay and low-volume control messages on their existing paths.
 
 **Tech Stack:** TypeScript, `ws`, Vitest, Express WebSocket handlers
 
 ## Global Constraints
 
 - Apply backpressure only to live workspace-terminal, setup-terminal, dev-log, and post-run-log output.
-- Use a fixed 1 MiB threshold and drop chunks only when `ws.bufferedAmount` is greater than the threshold.
-- Emit at most one warning per socket congestion window and resume sends when the queued amount returns to the threshold or below.
+- Use a fixed 1 MiB threshold and drop chunks when `ws.bufferedAmount + Buffer.byteLength(message)` is greater than the threshold.
+- Emit at most one warning per socket congestion window and resume sends when the current buffer has enough capacity for the next message.
 - Use the `ws.send` callback to log asynchronous send failures.
 - Do not add an application-level output queue or pause shared PTYs.
 - Do not introduce `TopicBroadcaster` or change the browser WebSocket protocol.
@@ -27,7 +27,7 @@
 - Test: `src/backend/lib/websocket-send.test.ts`
 
 **Interfaces:**
-- Consumes: `WebSocket.readyState`, `WebSocket.bufferedAmount`, and `WebSocket.send(data, callback)` from `ws`
+- Consumes: `WebSocket.readyState`, `WebSocket.bufferedAmount`, `WebSocket.send(data, callback)` from `ws`, and `Buffer.byteLength(message)` for UTF-8 payload size
 - Produces: `MAX_WEBSOCKET_STREAM_BUFFERED_BYTES: number` and `sendStreamOutput(ws, message, logger, description?): boolean`
 
 - [ ] **Step 1: Add failing tests for threshold, recovery, and send errors**
@@ -61,24 +61,39 @@ Add these tests:
 
 ```ts
 describe('sendStreamOutput', () => {
-  it('sends stream output with a callback at or below the threshold', () => {
+  it('sends stream output when the projected buffer is at the threshold', () => {
+    const message = 'output';
     const ws = createMockWs(
       WS_READY_STATE.OPEN,
-      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES
+      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength(message)
     );
     const logger = createMockLogger();
 
     expect(
       sendStreamOutput(
         ws as unknown as WebSocket,
-        'output',
+        message,
         logger,
         'terminal output'
       )
     ).toBe(true);
 
-    expect(ws.send).toHaveBeenCalledWith('output', expect.any(Function));
+    expect(ws.send).toHaveBeenCalledWith(message, expect.any(Function));
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('drops output when its UTF-8 bytes would push the buffer above the threshold', () => {
+    const message = 'éé';
+    const ws = createMockWs(
+      WS_READY_STATE.OPEN,
+      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength(message) + 1
+    );
+    const logger = createMockLogger();
+
+    expect(
+      sendStreamOutput(ws as unknown as WebSocket, message, logger, 'log output')
+    ).toBe(false);
+    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('drops output and warns once while a socket remains congested', () => {
@@ -114,7 +129,8 @@ describe('sendStreamOutput', () => {
     const logger = createMockLogger();
 
     sendStreamOutput(ws as unknown as WebSocket, 'dropped', logger);
-    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    ws.bufferedAmount =
+      MAX_WEBSOCKET_STREAM_BUFFERED_BYTES - Buffer.byteLength('resumed');
     expect(
       sendStreamOutput(ws as unknown as WebSocket, 'resumed', logger)
     ).toBe(true);
@@ -214,7 +230,10 @@ export function sendStreamOutput(
     return false;
   }
 
-  if (ws.bufferedAmount > MAX_WEBSOCKET_STREAM_BUFFERED_BYTES) {
+  if (
+    ws.bufferedAmount + Buffer.byteLength(message) >
+    MAX_WEBSOCKET_STREAM_BUFFERED_BYTES
+  ) {
     if (!congestedStreamSockets.has(ws)) {
       congestedStreamSockets.add(ws);
       logger.warn(`Dropping ${description} because WebSocket send buffer is congested`, {
@@ -296,7 +315,7 @@ ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
 outputSubscriber('dropped logs\n');
 expect(ws.send).not.toHaveBeenCalled();
 
-ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+ws.bufferedAmount = 0;
 outputSubscriber('resumed logs\n');
 expect(ws.send).toHaveBeenCalledWith(
   JSON.stringify({ type: 'output', data: 'resumed logs\n' }),
@@ -361,7 +380,7 @@ it('drops live terminal output while the socket is congested and resumes after d
   listener('dropped output');
   expect(ws.send).not.toHaveBeenCalled();
 
-  ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+  ws.bufferedAmount = 0;
   listener('resumed output');
   expect(ws.send).toHaveBeenCalledWith(
     JSON.stringify({
@@ -390,7 +409,7 @@ ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
 onDataCallback?.('dropped shell output');
 expect(ws.send).not.toHaveBeenCalled();
 
-ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+ws.bufferedAmount = 0;
 onDataCallback?.('hello from shell');
 expect(ws.send).toHaveBeenCalledWith(
   JSON.stringify({ type: 'output', data: 'hello from shell' }),

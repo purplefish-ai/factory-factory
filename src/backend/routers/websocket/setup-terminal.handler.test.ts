@@ -326,7 +326,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
     onDataCallback?.('dropped shell output');
     expect(ws.send).not.toHaveBeenCalled();
 
-    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    ws.bufferedAmount = 0;
     onDataCallback?.('hello from shell');
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'output', data: 'hello from shell' }),

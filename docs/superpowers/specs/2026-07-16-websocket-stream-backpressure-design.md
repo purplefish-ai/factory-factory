@@ -22,10 +22,11 @@ larger `TopicBroadcaster` abstraction proposed in issue #1872.
 ## Design
 
 Extend the shared WebSocket send utilities with a high-volume stream sender.
-Before sending, the helper checks that the socket is open and compares
-`ws.bufferedAmount` with a fixed 1 MiB threshold. If the queued amount is above
-the threshold, the new output chunk is dropped instead of being added to the
-socket's send queue.
+Before sending, the helper checks that the socket is open and compares the
+projected queued bytes (`ws.bufferedAmount` plus the UTF-8 message byte length)
+with a fixed 1 MiB threshold. If the projected amount is above the threshold,
+the new output chunk is dropped instead of being added to the socket's send
+queue.
 
 Dropping is tracked per socket as a congestion window. The helper logs one
 warning when it first begins dropping chunks, suppresses repeated warnings
@@ -55,8 +56,9 @@ The server does not build a second application-level queue for dropped output:
   client may miss output while congested. This is preferable to unbounded
   process memory growth for an auxiliary setup flow.
 
-The helper resumes live streaming automatically once `bufferedAmount` returns
-to the threshold or below. No browser protocol changes are required.
+The helper resumes live streaming automatically once the current buffer has
+enough capacity for the next output message. No browser protocol changes are
+required.
 
 ## Error Handling
 
@@ -72,7 +74,7 @@ to the threshold or below. No browser protocol changes are required.
 Add unit tests for the shared helper that verify:
 
 - normal stream output is sent with a callback
-- output is dropped above 1 MiB
+- output is dropped when its UTF-8 bytes would push the queue above 1 MiB
 - only one warning is emitted during a congestion window
 - sending resumes after the socket drains
 - synchronous and callback send errors are logged
