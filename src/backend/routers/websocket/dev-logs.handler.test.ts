@@ -5,12 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
 import { createDevLogsUpgradeHandler } from './dev-logs.handler';
 
 const allowedOrigin = 'http://localhost:3000';
 
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
   send = vi.fn();
   close = vi.fn();
   terminate = vi.fn();
@@ -205,8 +207,17 @@ describe('createDevLogsUpgradeHandler', () => {
     if (!outputSubscriber) {
       throw new Error('Expected subscribeToOutput callback to be registered');
     }
-    outputSubscriber('live logs\n');
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'output', data: 'live logs\n' }));
+    ws.send.mockClear();
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
+    outputSubscriber('dropped logs\n');
+    expect(ws.send).not.toHaveBeenCalled();
+
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    outputSubscriber('resumed logs\n');
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'output', data: 'resumed logs\n' }),
+      expect.any(Function)
+    );
 
     const callsBeforeClosed = ws.send.mock.calls.length;
     ws.readyState = WS_READY_STATE.CLOSED;

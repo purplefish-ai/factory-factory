@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
 
 const mockPtyWrite = vi.fn();
 const mockPtyResize = vi.fn();
@@ -30,6 +31,7 @@ import { createSetupTerminalUpgradeHandler } from './setup-terminal.handler';
 
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
   send = vi.fn();
 }
 
@@ -319,9 +321,16 @@ describe('createSetupTerminalUpgradeHandler', () => {
     );
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'created' }));
 
+    ws.send.mockClear();
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
+    onDataCallback?.('dropped shell output');
+    expect(ws.send).not.toHaveBeenCalled();
+
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
     onDataCallback?.('hello from shell');
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'output', data: 'hello from shell' })
+      JSON.stringify({ type: 'output', data: 'hello from shell' }),
+      expect.any(Function)
     );
 
     ws.emit('message', JSON.stringify({ type: 'input', data: 'echo hi\n' }));

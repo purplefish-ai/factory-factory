@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
@@ -43,6 +44,7 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
 
 class MockWebSocket extends EventEmitter {
   readyState = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
   send = vi.fn();
   close = vi.fn();
   terminate = vi.fn();
@@ -410,9 +412,67 @@ describe('createTerminalUpgradeHandler', () => {
       terminalId,
       data: 'live output',
     });
-    expect(ws1.send).toHaveBeenCalledWith(outputMessage);
-    expect(ws2.send).toHaveBeenCalledWith(outputMessage);
+    expect(ws1.send).toHaveBeenCalledWith(outputMessage, expect.any(Function));
+    expect(ws2.send).toHaveBeenCalledWith(outputMessage, expect.any(Function));
     expect(terminalConnections.get(workspaceId)?.size).toBe(2);
+  });
+
+  it('drops live terminal output while the socket is congested and resumes after drain', async () => {
+    const workspaceId = 'workspace-1';
+    const terminalId = 'terminal-1';
+    const { terminalService, outputListeners } = createTerminalService();
+    terminalService.getTerminalsForWorkspace.mockReturnValue([
+      {
+        id: terminalId,
+        createdAt: new Date('2026-07-16T00:00:00.000Z'),
+        outputBuffer: '',
+      },
+    ]);
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const ws = new MockWebSocket();
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    handler(
+      createRequest(),
+      { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      createWss(ws),
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    await vi.waitFor(() => {
+      expect(outputListeners.get(terminalId)?.size).toBe(1);
+    });
+    const listener = Array.from(outputListeners.get(terminalId) ?? [])[0];
+    if (!listener) {
+      throw new Error('Expected terminal output listener');
+    }
+
+    ws.send.mockClear();
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES + 1;
+    listener('dropped output');
+    expect(ws.send).not.toHaveBeenCalled();
+
+    ws.bufferedAmount = MAX_WEBSOCKET_STREAM_BUFFERED_BYTES;
+    listener('resumed output');
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'output',
+        terminalId,
+        data: 'resumed output',
+      }),
+      expect.any(Function)
+    );
   });
 
   it('creates terminals, persists sessions, and routes message types', async () => {
@@ -503,7 +563,8 @@ describe('createTerminalUpgradeHandler', () => {
     }
     await Promise.resolve();
     expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'output', terminalId: 'terminal-1', data: 'stdout' })
+      JSON.stringify({ type: 'output', terminalId: 'terminal-1', data: 'stdout' }),
+      expect.any(Function)
     );
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'exit', terminalId: 'terminal-1', exitCode: 0 })

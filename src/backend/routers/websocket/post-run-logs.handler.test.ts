@@ -11,6 +11,7 @@ const allowedOrigin = 'http://localhost:3000';
 
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
+  bufferedAmount = 0;
   send = vi.fn();
 }
 
@@ -256,7 +257,10 @@ describe('createPostRunLogsUpgradeHandler', () => {
     }
 
     outputCallback('live output');
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'output', data: 'live output' }));
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'output', data: 'live output' }),
+      expect.any(Function)
+    );
 
     const sendsBeforeClosed = ws.send.mock.calls.length;
     ws.readyState = WS_READY_STATE.CLOSED;
