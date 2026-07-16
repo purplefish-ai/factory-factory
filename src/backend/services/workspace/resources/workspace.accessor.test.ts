@@ -177,19 +177,19 @@ describe('workspaceAccessor', () => {
     ).resolves.toBe(false);
   });
 
-  it('updates ratchet check state only when ratchet is enabled', async () => {
+  it('transitions ratchet state only when enabled and fromState still matches', async () => {
     const checkedAt = new Date('2026-01-01T00:00:00.000Z');
     mockUpdateMany.mockResolvedValue({ count: 1 });
 
     await expect(
-      workspaceAccessor.updateRatchetCheckIfEnabled('ws-1', {
+      workspaceAccessor.transitionRatchetStateIfEnabled('ws-1', 'CI_RUNNING', {
         ratchetState: 'CI_FAILED',
         ratchetLastCheckedAt: checkedAt,
       })
     ).resolves.toBe(true);
 
     expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'ws-1', ratchetEnabled: true },
+      where: { id: 'ws-1', ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
       data: {
         ratchetState: 'CI_FAILED',
         ratchetLastCheckedAt: checkedAt,
@@ -197,14 +197,38 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('returns false when ratchet check conditional update affects no rows', async () => {
+  it('returns false when ratchet state transition loses the compare-and-swap', async () => {
     mockUpdateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      workspaceAccessor.updateRatchetCheckIfEnabled('ws-1', {
+      workspaceAccessor.transitionRatchetStateIfEnabled('ws-1', 'CI_RUNNING', {
         ratchetState: 'READY',
         ratchetLastCheckedAt: new Date('2026-01-01T00:00:00.000Z'),
       })
+    ).resolves.toBe(false);
+  });
+
+  it('settles ratchet state to IDLE only while disabled and fromState still matches', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.settleRatchetIdleWhileDisabled('ws-1', 'CI_FAILED')
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', ratchetEnabled: false, ratchetState: 'CI_FAILED' },
+      data: {
+        ratchetState: 'IDLE',
+        ratchetLastCheckedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('returns false when the disabled-settle compare-and-swap affects no rows', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      workspaceAccessor.settleRatchetIdleWhileDisabled('ws-1', 'CI_FAILED')
     ).resolves.toBe(false);
   });
 

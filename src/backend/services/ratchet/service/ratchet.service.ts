@@ -39,6 +39,7 @@ import {
   isPRStateFetchSkipped,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
+import { assertValidRatchetTransition } from './ratchet-state-machine';
 import {
   RatchetWorkspaceCheckCoordinator,
   type WorkspaceCheckScheduler,
@@ -298,26 +299,48 @@ class RatchetService extends EventEmitter {
    * Settle ratchet state for a workspace whose PR is closed (not merged).
    * Closed PRs are excluded from the poll set, so the poll loop can no longer
    * transition them to IDLE itself. Idempotent; no GitHub fetch.
+   *
+   * The transition is CAS'd on the fromState just read, so the emitted event
+   * carries the state that was actually replaced. Losing the CAS means an
+   * in-flight check wrote a fresh state concurrently; retry so that racing
+   * check does not leave the closed PR parked in a non-IDLE state (it will
+   * never be polled again). Closed PRs leave the poll set, so at most one
+   * such check can be in flight and the bounded retries are expected to
+   * always suffice; if they are ever exhausted anyway, this logs a warning
+   * and leaves the stale state for a manual ratchet toggle to clear.
    */
   async markPrClosed(workspaceId: string): Promise<void> {
-    const workspace = await workspaceAccessor.findById(workspaceId);
-    if (!workspace || workspace.ratchetState === RatchetState.IDLE) {
-      return;
+    const maxCasAttempts = 3;
+    for (let attempt = 0; attempt < maxCasAttempts; attempt++) {
+      const workspace = await workspaceAccessor.findById(workspaceId);
+      if (!workspace?.ratchetEnabled || workspace.ratchetState === RatchetState.IDLE) {
+        return;
+      }
+
+      const fromState = workspace.ratchetState;
+      assertValidRatchetTransition(workspaceId, fromState, RatchetState.IDLE);
+      const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+        workspaceId,
+        fromState,
+        {
+          ratchetState: RatchetState.IDLE,
+          ratchetLastCheckedAt: new Date(),
+        }
+      );
+      if (updated) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId,
+          fromState,
+          toState: RatchetState.IDLE,
+        } satisfies RatchetStateChangedEvent);
+        return;
+      }
     }
 
-    const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspaceId, {
-      ratchetState: RatchetState.IDLE,
-      ratchetLastCheckedAt: new Date(),
-    });
-    if (!updated) {
-      return;
-    }
-
-    this.emit(RATCHET_STATE_CHANGED, {
+    logger.warn('markPrClosed gave up after losing repeated state CAS races', {
       workspaceId,
-      fromState: workspace.ratchetState,
-      toState: RatchetState.IDLE,
-    } satisfies RatchetStateChangedEvent);
+      attempts: maxCasAttempts,
+    });
   }
 
   private async runWorkspaceCheckSafely(
@@ -416,31 +439,33 @@ class RatchetService extends EventEmitter {
 
     if (!workspace.ratchetEnabled) {
       const action: RatchetAction = { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
+      const fromState = workspace.ratchetState;
       const newState = RatchetState.IDLE;
       signal.throwIfAborted();
-      await workspaceAccessor.update(workspace.id, {
-        ratchetState: newState,
-        ratchetLastCheckedAt: new Date(),
-      });
+      assertValidRatchetTransition(workspace.id, fromState, newState);
+      // CAS on the pre-read fromState: a lost swap means another path already
+      // settled (or re-enabled) the workspace, and that path emitted its own
+      // event, so emitting here with this fromState would be stale.
+      const settled = await workspaceAccessor.settleRatchetIdleWhileDisabled(
+        workspace.id,
+        fromState
+      );
       signal.throwIfAborted();
-      if (workspace.ratchetState !== newState) {
+      if (settled && fromState !== newState) {
         this.emit(RATCHET_STATE_CHANGED, {
           workspaceId: workspace.id,
-          fromState: workspace.ratchetState,
+          fromState,
           toState: newState,
         } satisfies RatchetStateChangedEvent);
       }
-      this.logWorkspaceRatchetingDecision(
-        workspace,
-        workspace.ratchetState,
-        newState,
-        action,
-        null
-      );
+      // A lost settle persisted nothing, so report the state unchanged rather
+      // than a transition this check never committed.
+      const reportedState = settled ? newState : fromState;
+      this.logWorkspaceRatchetingDecision(workspace, fromState, reportedState, action, null);
       return {
         workspaceId: workspace.id,
-        previousState: workspace.ratchetState,
-        newState,
+        previousState: fromState,
+        newState: reportedState,
         action,
       };
     }
@@ -750,7 +775,7 @@ class RatchetService extends EventEmitter {
     signal: AbortSignal = new AbortController().signal
   ): Promise<WorkspaceRatchetResult> {
     signal.throwIfAborted();
-    const updateApplied = await this.updateWorkspaceAfterCheck(
+    const updateResult = await this.updateWorkspaceAfterCheck(
       workspace,
       prStateInfo,
       action,
@@ -762,7 +787,7 @@ class RatchetService extends EventEmitter {
     // The conditional update refused to persist: ratcheting was disabled while
     // this check was in flight. Report DISABLED and emit nothing — the disable
     // path already settled the workspace to IDLE.
-    if (!updateApplied) {
+    if (updateResult === 'disabled') {
       const disabledAction: RatchetAction = {
         type: 'DISABLED',
         reason: 'Workspace ratcheting disabled',
@@ -780,6 +805,31 @@ class RatchetService extends EventEmitter {
         previousState: decisionContext.previousState,
         newState: RatchetState.IDLE,
         action: disabledAction,
+      };
+    }
+
+    // The CAS on fromState lost while ratcheting stayed enabled: another path
+    // (e.g. markPrClosed) transitioned the state mid-check and emitted its own
+    // event. This check's result is stale, so persist and emit nothing; the
+    // next cycle re-evaluates from the fresh state.
+    if (updateResult === 'superseded') {
+      const supersededAction: RatchetAction = {
+        type: 'WAITING',
+        reason: 'Ratchet state changed concurrently during this check; re-evaluating next cycle',
+      };
+      this.logWorkspaceRatchetingDecision(
+        workspace,
+        decisionContext.previousState,
+        decisionContext.previousState,
+        supersededAction,
+        prStateInfo,
+        decisionContext
+      );
+      return {
+        workspaceId: workspace.id,
+        previousState: decisionContext.previousState,
+        newState: decisionContext.previousState,
+        action: supersededAction,
       };
     }
 
@@ -822,21 +872,31 @@ class RatchetService extends EventEmitter {
     action: RatchetAction,
     nextState: RatchetState,
     signal: AbortSignal = new AbortController().signal
-  ): Promise<boolean> {
+  ): Promise<'applied' | 'disabled' | 'superseded'> {
     const now = new Date();
     // The dispatch record itself (session pointer, snapshot key, outcome,
     // retry count) is written atomically inside triggerFixer.
     const dispatched = action.type === 'TRIGGERED_FIXER' && action.promptSent;
 
     signal.throwIfAborted();
-    const updated = await workspaceAccessor.updateRatchetCheckIfEnabled(workspace.id, {
-      ratchetState: nextState,
-      ratchetLastCheckedAt: now,
-    });
+    assertValidRatchetTransition(workspace.id, workspace.ratchetState, nextState);
+    const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+      workspace.id,
+      workspace.ratchetState,
+      {
+        ratchetState: nextState,
+        ratchetLastCheckedAt: now,
+      }
+    );
     signal.throwIfAborted();
 
     if (!updated) {
-      return false;
+      // The CAS refused the write: either ratcheting was disabled mid-check,
+      // or another path (markPrClosed, disable+re-enable) transitioned the
+      // state away from the one this check ran against.
+      const fresh = await workspaceAccessor.findById(workspace.id);
+      signal.throwIfAborted();
+      return fresh?.ratchetEnabled ? 'superseded' : 'disabled';
     }
 
     if (dispatched) {
@@ -855,7 +915,7 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
     }
 
-    return true;
+    return 'applied';
   }
 
   private async checkActiveFixerSession(
