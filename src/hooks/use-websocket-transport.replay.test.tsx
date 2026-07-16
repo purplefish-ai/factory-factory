@@ -366,6 +366,49 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('resets gaveUp when the url becomes null so consumers never see stale give-up state', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const harness = createHarness();
+    await flushEffects();
+
+    flushSync(() => {
+      getLastSocket().simulateOpen();
+    });
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      flushSync(() => {
+        getLastSocket().close();
+      });
+      await vi.advanceTimersByTimeAsync(40_000);
+      await flushEffects();
+    }
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(true);
+
+    // Dropping the URL means no connection is desired, so there is nothing
+    // to have given up on; a later reconnect starts a fresh attempt budget.
+    harness.rerenderUrl(null);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushEffects();
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    // Restoring the URL must grant a fresh attempt budget: the first failure
+    // schedules a retry instead of immediately giving up again.
+    harness.rerenderUrl('ws://localhost:3000/chat');
+    await vi.advanceTimersByTimeAsync(0);
+    await flushEffects();
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    harness.cleanup();
+  });
+
   it('ignores open events from sockets superseded by a URL change', async () => {
     let connectedCount = 0;
     const harness = createHarness({

@@ -320,7 +320,10 @@ export function useWebSocketTransport(
     if (url) {
       connect();
     } else {
-      // URL became null - disconnect and clear queue
+      // URL became null - disconnect and clear queue. With no connection
+      // desired there is nothing to have given up on, so clear gaveUp and
+      // the attempt budget too; otherwise a consumer that restores the URL
+      // sees stale give-up state or re-gives-up on its first failure.
       intentionalCloseRef.current = true;
       messageQueueRef.current = [];
       if (wsRef.current) {
@@ -328,6 +331,8 @@ export function useWebSocketTransport(
         wsRef.current = null;
       }
       setConnected(false);
+      setGaveUp(false);
+      reconnectAttemptsRef.current = 0;
     }
 
     return () => {

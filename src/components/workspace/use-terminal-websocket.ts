@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { z } from 'zod';
-import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
+import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 const TerminalDescriptorSchema = z.object({
@@ -127,19 +127,15 @@ export function useTerminalWebSocket({
   const url = buildWebSocketUrl('/terminal', { workspaceId });
 
   const handleMessage = useCallback(
-    (data: unknown) => {
-      const parsed = TerminalMessageSchema.safeParse(data);
-      if (!parsed.success) {
-        return;
-      }
-      const message: TerminalMessage = parsed.data;
+    (message: TerminalMessage) => {
       handleTerminalMessage(message, { onOutput, onCreated, onExit, onError, onTerminalList });
     },
     [onOutput, onCreated, onExit, onError, onTerminalList]
   );
 
-  const { connected, gaveUp, send, reconnect } = useWebSocketTransport({
+  const { connected, gaveUp, send, reconnect } = useWebSocketChannel({
     url,
+    schema: TerminalMessageSchema,
     onMessage: handleMessage,
     queuePolicy: 'drop',
   });

@@ -5,11 +5,12 @@
  * Also invalidates the workspace.list and workspace.listWithRuntimeState caches
  * so table/list views refetch with fresh data on every snapshot event.
  *
- * Follows the use-dev-logs.ts pattern: receive-only WebSocket hook with
+ * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
 
 import { useCallback, useRef } from 'react';
+import type { z } from 'zod';
 import { mapSnapshotEntryToKanbanWorkspace } from '@/client/lib/snapshot-to-kanban';
 import {
   mapSnapshotEntryToServerWorkspace,
@@ -20,7 +21,7 @@ import {
   type WorkspaceSnapshotEntry,
 } from '@/client/lib/snapshot-to-sidebar';
 import { trpc } from '@/client/lib/trpc';
-import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
+import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 type CacheWorkspace = ReturnType<typeof mapSnapshotEntryToServerWorkspace>;
@@ -305,13 +306,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleMessage = useCallback(
-    (data: unknown) => {
-      const parsed = SnapshotServerMessageSchema.safeParse(data);
-      if (!parsed.success) {
-        return;
-      }
-      const message = parsed.data;
-
+    (message: z.infer<typeof SnapshotServerMessageSchema>) => {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
@@ -348,8 +343,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     [projectId, utils]
   );
 
-  useWebSocketTransport({
+  useWebSocketChannel({
     url,
+    schema: SnapshotServerMessageSchema,
     onMessage: handleMessage,
     queuePolicy: 'drop',
   });
