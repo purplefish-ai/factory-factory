@@ -290,6 +290,17 @@ describe('WorkspaceSnapshotStore', () => {
       expect(store.getByWorkspaceId('ws-1')).toBeDefined();
     });
 
+    it('records a tombstone even when the store has no entry for the workspace', () => {
+      // Archive event can arrive before reconciliation ever populated the
+      // entry (e.g. right after startup); a stale reconcile pass must still
+      // be blocked from inserting it.
+      expect(store.remove('ws-1', 200)).toBe(false);
+
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 150);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+    });
+
     it('clear drops tombstones', () => {
       store.upsert('ws-1', makeUpdate(), 'test', 100);
       store.remove('ws-1', 200);

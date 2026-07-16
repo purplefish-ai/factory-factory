@@ -154,7 +154,8 @@ describe('TerminalPanel', () => {
     await vi.dynamicImportSettled();
 
     expect(container.textContent).toContain('disconnected');
-    expect(container.textContent).not.toContain('Reconnect connection');
+    // The manual Reconnect button must only appear once the transport gave up.
+    expect(container.textContent).not.toContain('Reconnect');
 
     root.unmount();
   });

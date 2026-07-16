@@ -521,14 +521,17 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    *
    * Records a removal timestamp so in-flight updates computed before the
    * removal (e.g. a concurrent reconcile pass) cannot re-insert the entry.
+   * The tombstone is recorded even when the store has no entry yet: the
+   * workspace may exist in a reconcile pass's DB read despite never having
+   * been upserted here.
    */
   remove(workspaceId: string, timestamp?: number): boolean {
+    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
+
     const entry = this.entries.get(workspaceId);
     if (!entry) {
       return false;
     }
-
-    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
 
     // Delete from entries map
     this.entries.delete(workspaceId);

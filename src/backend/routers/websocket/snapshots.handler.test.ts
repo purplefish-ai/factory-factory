@@ -469,12 +469,13 @@ describe('createSnapshotsUpgradeHandler', () => {
     });
 
     expect(ws.send.mock.calls[0]?.[0]).toContain('"type":"snapshot_full"');
+    // Replayed deltas omit reviewCount so a count computed before the
+    // baseline cannot overwrite the newer one carried by snapshot_full.
     expect(ws.send.mock.calls[1]?.[0]).toBe(
       JSON.stringify({
         type: 'snapshot_changed',
         workspaceId: 'ws-1',
         entry: event.entry,
-        reviewCount: 5,
       })
     );
   });

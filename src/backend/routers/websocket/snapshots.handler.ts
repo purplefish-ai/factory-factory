@@ -72,36 +72,47 @@ class SnapshotStoreSubscriptionState {
       return;
     }
 
+    // Buffered replays omit reviewCount: it is computed before the
+    // snapshot_full baseline, and clients keep their current count when the
+    // field is absent, so replaying it would regress the baseline's count.
+    const fanOut = (
+      projectClients: Set<WebSocket>,
+      payload: Record<string, unknown>,
+      description: string
+    ) => {
+      const reviewCount = getSnapshotReviewCount(logger);
+      const message = JSON.stringify({ ...payload, reviewCount });
+      let bufferedMessage: string | null = null;
+
+      for (const ws of projectClients) {
+        const pendingDeltas = pendingDeltaBuffers.get(ws);
+        if (pendingDeltas) {
+          bufferedMessage ??= JSON.stringify(payload);
+          pendingDeltas.push(bufferedMessage);
+        } else {
+          safeSend(ws, message, logger, description);
+        }
+      }
+    };
+
     const changedListener = (event: SnapshotChangedEvent) => {
       const projectClients = connections.get(event.projectId);
       if (!projectClients || projectClients.size === 0) {
         return;
       }
 
-      const reviewCount = getSnapshotReviewCount(logger);
-      const message = JSON.stringify(
-        isHiddenWorkspaceStatus(event.entry.status)
-          ? {
-              type: 'snapshot_removed',
-              workspaceId: event.workspaceId,
-              reviewCount,
-            }
-          : {
-              type: 'snapshot_changed',
-              workspaceId: event.workspaceId,
-              entry: event.entry,
-              reviewCount,
-            }
-      );
+      const payload = isHiddenWorkspaceStatus(event.entry.status)
+        ? {
+            type: 'snapshot_removed',
+            workspaceId: event.workspaceId,
+          }
+        : {
+            type: 'snapshot_changed',
+            workspaceId: event.workspaceId,
+            entry: event.entry,
+          };
 
-      for (const ws of projectClients) {
-        const pendingDeltas = pendingDeltaBuffers.get(ws);
-        if (pendingDeltas) {
-          pendingDeltas.push(message);
-        } else {
-          safeSend(ws, message, logger, 'snapshot delta');
-        }
-      }
+      fanOut(projectClients, payload, 'snapshot delta');
     };
 
     const removedListener = (event: SnapshotRemovedEvent) => {
@@ -110,21 +121,14 @@ class SnapshotStoreSubscriptionState {
         return;
       }
 
-      const reviewCount = getSnapshotReviewCount(logger);
-      const message = JSON.stringify({
-        type: 'snapshot_removed',
-        workspaceId: event.workspaceId,
-        reviewCount,
-      });
-
-      for (const ws of projectClients) {
-        const pendingDeltas = pendingDeltaBuffers.get(ws);
-        if (pendingDeltas) {
-          pendingDeltas.push(message);
-        } else {
-          safeSend(ws, message, logger, 'snapshot removal');
-        }
-      }
+      fanOut(
+        projectClients,
+        {
+          type: 'snapshot_removed',
+          workspaceId: event.workspaceId,
+        },
+        'snapshot removal'
+      );
     };
 
     workspaceSnapshotStore.on(SNAPSHOT_CHANGED, changedListener);
