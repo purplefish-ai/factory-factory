@@ -23,7 +23,19 @@ function sourceFiles(directory: string): string[] {
   });
 }
 
+function hasFillWeight(icon: string): boolean {
+  return /weight\s*=\s*(?:["']fill["']|\{\s*["']fill["']\s*\})/.test(icon);
+}
+
 describe('icon library', () => {
+  it('recognizes literal and expression forms of the Phosphor fill weight', () => {
+    expect(hasFillWeight('<CircleIcon weight="fill" />')).toBe(true);
+    expect(hasFillWeight("<CircleIcon weight='fill' />")).toBe(true);
+    expect(hasFillWeight("<CircleIcon weight={'fill'} />")).toBe(true);
+    expect(hasFillWeight('<CircleIcon weight={"fill"} />')).toBe(true);
+    expect(hasFillWeight('<CircleIcon weight="regular" />')).toBe(false);
+  });
+
   it('uses Phosphor without active Lucide references', () => {
     const packageJson = packageJsonSchema.parse(
       JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'))
@@ -81,7 +93,7 @@ describe('icon library', () => {
         const iconPattern = new RegExp(`<${name}\\b[\\s\\S]*?\\/>`, 'g');
         return [...source.matchAll(iconPattern)]
           .map((match) => match[0])
-          .filter((icon) => /\bfill-[\w-]+/.test(icon) && !/weight=["']fill["']/.test(icon))
+          .filter((icon) => /\bfill-[\w-]+/.test(icon) && !hasFillWeight(icon))
           .map(() => `${relative(repositoryRoot, path)}: ${name}`);
       });
     });
