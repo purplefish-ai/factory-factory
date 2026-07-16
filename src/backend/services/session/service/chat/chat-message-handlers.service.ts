@@ -95,12 +95,14 @@ class ChatMessageHandlerService {
   private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnInProgressRetryAttempts = new Map<string, number>();
   /**
-   * Workspace notifications currently being delivered by some session. Claimed
-   * synchronously before dispatch so a concurrent dispatch of a duplicate copy
-   * (persist-first delivery can enqueue the same notification on two sessions)
-   * drops instead of double-sending. Released once the send settles.
+   * Workspace notifications currently being delivered, keyed by notification id
+   * with the owning session as value. Claimed synchronously before dispatch so a
+   * concurrent dispatch of a duplicate copy (persist-first delivery can enqueue
+   * the same notification on two sessions) drops instead of double-sending.
+   * Released once the send settles, or when the owning session is reset — a hung
+   * send must not block redelivery of a still-pending notification forever.
    */
-  private inFlightNotificationDeliveries = new Set<string>();
+  private inFlightNotificationDeliveries = new Map<string, string>();
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
@@ -152,6 +154,11 @@ class ChatMessageHandlerService {
   resetDispatchState(sessionId: string): void {
     this.dispatchInProgress.delete(sessionId);
     this.clearTurnInProgressRetry(sessionId);
+    for (const [notificationId, ownerSessionId] of this.inFlightNotificationDeliveries) {
+      if (ownerSessionId === sessionId) {
+        this.inFlightNotificationDeliveries.delete(notificationId);
+      }
+    }
   }
 
   private isDispatchInProgress(dbSessionId: string): boolean {
@@ -250,8 +257,19 @@ class ChatMessageHandlerService {
       return 'done';
     } finally {
       if (claim.status === 'claimed') {
-        this.inFlightNotificationDeliveries.delete(claim.notificationId);
+        this.releaseNotificationClaim(dbSessionId, claim.notificationId);
       }
+    }
+  }
+
+  /**
+   * Release a notification claim, but only if this session still owns it — a
+   * reset may have transferred the claim to another session's retry while a
+   * stale dispatch was hung in send.
+   */
+  private releaseNotificationClaim(dbSessionId: string, notificationId: string): void {
+    if (this.inFlightNotificationDeliveries.get(notificationId) === dbSessionId) {
+      this.inFlightNotificationDeliveries.delete(notificationId);
     }
   }
 
@@ -275,7 +293,7 @@ class ChatMessageHandlerService {
     ) {
       return { status: 'duplicate' };
     }
-    this.inFlightNotificationDeliveries.add(notificationId);
+    this.inFlightNotificationDeliveries.set(notificationId, dbSessionId);
     return { status: 'claimed', notificationId };
   }
 

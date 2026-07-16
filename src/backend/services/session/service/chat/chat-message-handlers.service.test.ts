@@ -413,6 +413,134 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
+  it('retries a pending notification on another session after the claiming session is reset', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    chatMessageHandlerService.resetDispatchState('s2');
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+      id: 'notif-parent',
+      deliveredAt: null,
+    });
+    const sendResolvers: Array<() => void> = [];
+    mockSessionService.sendSessionMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          sendResolvers.push(() => resolve());
+        })
+    );
+    const queues: Record<string, QueuedMessage[]> = {
+      s1: [notificationMessage],
+      s2: [notificationMessage],
+    };
+    mockSessionDomainService.peekNextMessage.mockImplementation(
+      (sessionId: string) => queues[sessionId]?.[0]
+    );
+    mockSessionDomainService.dequeueNext.mockImplementation((sessionId: string) =>
+      queues[sessionId]?.shift()
+    );
+    mockSessionDomainService.removeQueuedMessage.mockImplementation((sessionId: string) => {
+      queues[sessionId]?.shift();
+      return true;
+    });
+
+    // Session 1 starts delivering and hangs in send.
+    const hungDispatch = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+    });
+
+    // The session is stopped/reset while the send is still hung.
+    chatMessageHandlerService.resetDispatchState('s1');
+
+    // A later session must be able to deliver the still-pending notification.
+    const retryDispatch = chatMessageHandlerService.tryDispatchNextMessage('s2');
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+    });
+
+    for (const resolveSend of sendResolvers) {
+      resolveSend();
+    }
+    await Promise.all([hungDispatch, retryDispatch]);
+  });
+
+  it('does not release another session claim when a stale dispatch settles', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    chatMessageHandlerService.resetDispatchState('s2');
+    chatMessageHandlerService.resetDispatchState('s3');
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+      id: 'notif-parent',
+      deliveredAt: null,
+    });
+    const sendSettlers: Array<{ reject: (error: Error) => void; resolve: () => void }> = [];
+    mockSessionService.sendSessionMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          sendSettlers.push({ resolve: () => resolve(), reject });
+        })
+    );
+    const queues: Record<string, QueuedMessage[]> = {
+      s1: [notificationMessage],
+      s2: [notificationMessage],
+      s3: [notificationMessage],
+    };
+    mockSessionDomainService.peekNextMessage.mockImplementation(
+      (sessionId: string) => queues[sessionId]?.[0]
+    );
+    mockSessionDomainService.dequeueNext.mockImplementation((sessionId: string) =>
+      queues[sessionId]?.shift()
+    );
+    mockSessionDomainService.removeQueuedMessage.mockImplementation((sessionId: string) => {
+      queues[sessionId]?.shift();
+      return true;
+    });
+
+    // Session 1 hangs in send, then gets reset; session 2 claims the retry.
+    const staleDispatch = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+    });
+    chatMessageHandlerService.resetDispatchState('s1');
+    const retryDispatch = chatMessageHandlerService.tryDispatchNextMessage('s2');
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+    });
+
+    // The stale session-1 send settles; it must not evict session 2's claim.
+    sendSettlers[0]?.reject(new Error('session stopped'));
+    await staleDispatch;
+
+    // Session 3 holds a duplicate copy; session 2 is still delivering, so it drops.
+    await chatMessageHandlerService.tryDispatchNextMessage('s3');
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+    expect(mockSessionDomainService.removeQueuedMessage).toHaveBeenCalledWith(
+      's3',
+      'workspace-notification-notif-parent'
+    );
+
+    sendSettlers[1]?.resolve();
+    await retryDispatch;
+  });
+
   it('dispatches a workspace notification whose row is still pending', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
