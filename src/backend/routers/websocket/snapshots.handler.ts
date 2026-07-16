@@ -259,16 +259,15 @@ export function createSnapshotsUpgradeHandler(
       // yet for this project, wait for it before sending snapshot_full so the
       // client receives populated data rather than an empty array.
       const sendSnapshot = () => {
-        const pendingDeltas = pendingDeltaBuffers.get(ws) ?? [];
-        pendingDeltaBuffers.delete(ws);
         if (ws.readyState !== WS_READY_STATE.OPEN) {
+          // Keep buffering; the close handler cleans the buffer up.
           return;
         }
         const reviewCount = getSnapshotReviewCount(logger);
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-        safeSend(
+        const baselineSent = safeSend(
           ws,
           JSON.stringify({
             type: 'snapshot_full',
@@ -279,6 +278,12 @@ export function createSnapshotsUpgradeHandler(
           logger,
           'full snapshot'
         );
+        if (!baselineSent) {
+          // The client has no baseline, so deltas must not start flowing.
+          return;
+        }
+        const pendingDeltas = pendingDeltaBuffers.get(ws) ?? [];
+        pendingDeltaBuffers.delete(ws);
         for (const delta of pendingDeltas) {
           safeSend(ws, delta, logger, 'buffered snapshot delta');
         }

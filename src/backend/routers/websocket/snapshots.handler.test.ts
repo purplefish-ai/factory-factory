@@ -480,6 +480,46 @@ describe('createSnapshotsUpgradeHandler', () => {
     );
   });
 
+  it('keeps buffering deltas when the snapshot_full send fails', async () => {
+    mockGetByProjectId.mockReturnValue([
+      {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Visible',
+        status: 'READY',
+      },
+    ] as never);
+
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    ws.send.mockImplementation(() => {
+      throw new Error('socket closing');
+    });
+
+    callHandler(handler, ws, 'proj-1');
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    await changedListener!({
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Updated',
+        status: 'READY',
+      } as never,
+    });
+
+    // The baseline never reached the client, so deltas must stay buffered
+    // rather than being sent (or flushed) without a snapshot_full first.
+    expect(ws.send).toHaveBeenCalledTimes(1);
+  });
+
   it('does not send to non-OPEN sockets', async () => {
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
