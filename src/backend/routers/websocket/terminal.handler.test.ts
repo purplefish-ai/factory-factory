@@ -484,7 +484,6 @@ describe('createTerminalUpgradeHandler', () => {
       JSON.stringify({ type: 'resize', terminalId: 'terminal-1', cols: 100, rows: 30 })
     );
     ws.emit('message', JSON.stringify({ type: 'set_active', terminalId: 'terminal-1' }));
-    ws.emit('message', JSON.stringify({ type: 'ping' }));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -495,7 +494,6 @@ describe('createTerminalUpgradeHandler', () => {
     );
     expect(terminalService.resizeTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1', 100, 30);
     expect(terminalService.setActiveTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'pong' }));
 
     for (const callback of outputListeners.get('terminal-1') ?? []) {
       callback('stdout');

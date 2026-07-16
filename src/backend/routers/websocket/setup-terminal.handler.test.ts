@@ -330,9 +330,6 @@ describe('createSetupTerminalUpgradeHandler', () => {
     ws.emit('message', JSON.stringify({ type: 'resize', cols: 150, rows: 50 }));
     expect(mockPtyResize).toHaveBeenCalledWith(150, 50);
 
-    ws.emit('message', JSON.stringify({ type: 'ping' }));
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'pong' }));
-
     ws.emit('message', JSON.stringify({ type: 'create' }));
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Terminal already exists' })
@@ -422,9 +419,12 @@ describe('createSetupTerminalUpgradeHandler', () => {
     );
 
     ws.emit('message', '{');
-    expect(logger.error).toHaveBeenCalledWith('Error in setup terminal', expect.any(SyntaxError));
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid setup terminal message format',
+      expect.objectContaining({ error: expect.any(String) })
+    );
     expect(ws.send).toHaveBeenCalledWith(
-      expect.stringMatching(/^{"type":"error","message":".+"}$/)
+      JSON.stringify({ type: 'error', message: 'Invalid message format' })
     );
 
     mockPtySpawn.mockImplementationOnce(() => {
@@ -451,7 +451,6 @@ describe('createSetupTerminalUpgradeHandler', () => {
 
     ws.readyState = WS_READY_STATE.CLOSED;
     const sentBeforeClosed = ws.send.mock.calls.length;
-    ws.emit('message', JSON.stringify({ type: 'ping' }));
     ws.emit('message', JSON.stringify({ type: 'resize', cols: '120', rows: 40 }));
     onDataCallback?.('ignored output');
     expect(ws.send).toHaveBeenCalledTimes(sentBeforeClosed);

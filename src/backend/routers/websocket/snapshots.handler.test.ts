@@ -14,7 +14,6 @@ import {
   resetSnapshotsHandlerStateForTests,
   snapshotConnections,
 } from './snapshots.handler';
-import { validateTrustedLocalWebSocketRequest, validateWebSocketOrigin } from './upgrade-utils';
 
 const allowedOrigin = 'http://localhost:3000';
 
@@ -35,14 +34,12 @@ const {
   mockGetByProjectId,
   mockGetCachedReviewCount,
   mockRefreshReviewCountIfStale,
-  mockSendBadRequest,
   mockWaitForInProgress,
 } = vi.hoisted(() => ({
   storeListeners: new Map<string, (event: unknown) => unknown>(),
   mockGetByProjectId: vi.fn(() => []),
   mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
   mockRefreshReviewCountIfStale: vi.fn(),
-  mockSendBadRequest: vi.fn(),
   mockWaitForInProgress: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 }));
 
@@ -86,24 +83,6 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
     },
   };
 });
-
-vi.mock('./upgrade-utils', () => ({
-  getOrCreateConnectionSet: vi.fn(
-    (map: Map<string, Set<WebSocket>>, key: string): Set<WebSocket> => {
-      const existing = map.get(key);
-      if (existing) {
-        return existing;
-      }
-      const created = new Set<WebSocket>();
-      map.set(key, created);
-      return created;
-    }
-  ),
-  markWebSocketAlive: vi.fn(),
-  sendBadRequest: mockSendBadRequest,
-  validateWebSocketOrigin: vi.fn(() => true),
-  validateTrustedLocalWebSocketRequest: vi.fn(() => true),
-}));
 
 vi.mock('@/backend/app-context', () => ({
   createAppContext: vi.fn(() => ({
@@ -157,10 +136,14 @@ function createWssMock(ws: MockWebSocket): WebSocketServer {
 function callHandler(
   handler: ReturnType<typeof createSnapshotsUpgradeHandler>,
   ws: MockWebSocket,
-  projectId?: string
+  projectId?: string,
+  requestOverrides: { origin?: string; remoteAddress?: string } = {}
 ) {
   const wss = createWssMock(ws);
-  const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+  const request = {
+    headers: { origin: requestOverrides.origin ?? allowedOrigin },
+    socket: { remoteAddress: requestOverrides.remoteAddress ?? '127.0.0.1' },
+  } as unknown as IncomingMessage;
   const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
   const wsAliveMap = new WeakMap<WebSocket, boolean>();
   const urlStr = projectId
@@ -192,8 +175,6 @@ describe('createSnapshotsUpgradeHandler', () => {
     snapshotConnections.clear();
     resetSnapshotsHandlerStateForTests();
     storeListeners.clear();
-    vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
-    vi.mocked(validateTrustedLocalWebSocketRequest).mockReturnValue(true);
     mockWaitForInProgress.mockImplementation(() => Promise.resolve());
   });
 
@@ -269,29 +250,32 @@ describe('createSnapshotsUpgradeHandler', () => {
     const ws = new MockWebSocket();
     const { socket } = callHandler(handler, ws);
 
-    expect(mockSendBadRequest).toHaveBeenCalledWith(socket);
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
     expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('rejects unauthorized origins before subscription setup and projectId checks', () => {
-    vi.mocked(validateWebSocketOrigin).mockReturnValueOnce(false);
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
-    const { wss } = callHandler(handler, ws);
+    const { wss, socket } = callHandler(handler, ws, undefined, {
+      origin: 'https://attacker.example',
+    });
 
     expect(storeListeners.size).toBe(0);
-    expect(mockSendBadRequest).not.toHaveBeenCalled();
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('rejects untrusted local requests before subscription setup', () => {
-    vi.mocked(validateTrustedLocalWebSocketRequest).mockReturnValueOnce(false);
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
-    const { wss } = callHandler(handler, ws, 'proj-1');
+    const { wss, socket } = callHandler(handler, ws, 'proj-1', {
+      remoteAddress: '203.0.113.10',
+    });
 
     expect(storeListeners.size).toBe(0);
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });

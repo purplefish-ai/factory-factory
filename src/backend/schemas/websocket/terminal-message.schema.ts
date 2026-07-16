@@ -44,9 +44,6 @@ export const TerminalMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('set_active'),
     terminalId: z.string(),
   }),
-
-  // Ping (keepalive)
-  z.object({ type: z.literal('ping') }),
 ]);
 
 // ============================================================================
