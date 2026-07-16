@@ -11,6 +11,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { safeSend } from '@/backend/lib/websocket-send';
 import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import { workspaceQueryService } from '@/backend/services/workspace';
 import {
@@ -85,9 +86,7 @@ class SnapshotStoreSubscriptionState {
       );
 
       for (const ws of projectClients) {
-        if (ws.readyState === WS_READY_STATE.OPEN) {
-          ws.send(message);
-        }
+        safeSend(ws, message, logger, 'snapshot delta');
       }
     };
 
@@ -105,9 +104,7 @@ class SnapshotStoreSubscriptionState {
       });
 
       for (const ws of projectClients) {
-        if (ws.readyState === WS_READY_STATE.OPEN) {
-          ws.send(message);
-        }
+        safeSend(ws, message, logger, 'snapshot removal');
       }
     };
 
@@ -232,13 +229,16 @@ export function createSnapshotsUpgradeHandler(
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-        ws.send(
+        safeSend(
+          ws,
           JSON.stringify({
             type: 'snapshot_full',
             projectId,
             entries,
             reviewCount,
-          })
+          }),
+          logger,
+          'full snapshot'
         );
       };
 

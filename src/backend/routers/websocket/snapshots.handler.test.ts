@@ -59,6 +59,10 @@ vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
         originalOn(event, listener);
         return emitter;
       }),
+      off: vi.fn((event: string, listener: (event: unknown) => unknown) => {
+        emitter.off(event, listener);
+        return emitter;
+      }),
     },
   };
 });
@@ -424,6 +428,103 @@ describe('createSnapshotsUpgradeHandler', () => {
     });
 
     expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('continues snapshot_changed fan-out when one client send throws', async () => {
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const throwingWs = new MockWebSocket();
+    const healthyWs = new MockWebSocket();
+
+    callHandler(handler, throwingWs, 'proj-1');
+    callHandler(handler, healthyWs, 'proj-1');
+
+    await waitForInitialSnapshot(throwingWs);
+    await waitForInitialSnapshot(healthyWs);
+    throwingWs.send.mockClear();
+    healthyWs.send.mockClear();
+
+    throwingWs.send.mockImplementation(() => {
+      throw new Error('socket closing');
+    });
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    const event: SnapshotChangedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Updated',
+        status: 'READY',
+      } as never,
+    };
+    expect(() => changedListener!(event)).not.toThrow();
+
+    expect(healthyWs.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: event.entry,
+        reviewCount: 5,
+      })
+    );
+  });
+
+  it('continues snapshot_removed fan-out when one client send throws', async () => {
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const throwingWs = new MockWebSocket();
+    const healthyWs = new MockWebSocket();
+
+    callHandler(handler, throwingWs, 'proj-1');
+    callHandler(handler, healthyWs, 'proj-1');
+
+    await waitForInitialSnapshot(throwingWs);
+    await waitForInitialSnapshot(healthyWs);
+    throwingWs.send.mockClear();
+    healthyWs.send.mockClear();
+
+    throwingWs.send.mockImplementation(() => {
+      throw new Error('socket closing');
+    });
+
+    const removedListener = storeListeners.get('snapshot_removed');
+    expect(removedListener).toBeDefined();
+
+    const event: SnapshotRemovedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+    };
+    expect(() => removedListener!(event)).not.toThrow();
+
+    expect(healthyWs.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+        reviewCount: 5,
+      })
+    );
+  });
+
+  it('does not throw out of the upgrade callback when the initial snapshot send throws', () => {
+    mockGetByProjectId.mockReturnValue([
+      {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Visible',
+        status: 'READY',
+      },
+    ] as never);
+
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    ws.send.mockImplementation(() => {
+      throw new Error('socket closing');
+    });
+
+    expect(() => callHandler(handler, ws, 'proj-1')).not.toThrow();
+    expect(ws.send).toHaveBeenCalled();
   });
 
   it('cleans up connection set on close', () => {

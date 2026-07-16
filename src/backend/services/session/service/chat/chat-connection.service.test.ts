@@ -232,6 +232,33 @@ describe('ChatConnectionService', () => {
       expect(mockWs.send).not.toHaveBeenCalled();
     });
 
+    it('should continue forwarding to remaining connections when a send throws', () => {
+      const throwingWs = new MockWebSocket();
+      throwingWs.send.mockImplementation(() => {
+        throw new Error('socket closing');
+      });
+      const healthyWs = new MockWebSocket();
+      const dbSessionId = 'session-456';
+
+      chatConnectionService.register('conn-1', {
+        ws: throwingWs as unknown as WebSocket,
+        dbSessionId,
+        workingDir: '/test/dir',
+      });
+
+      chatConnectionService.register('conn-2', {
+        ws: healthyWs as unknown as WebSocket,
+        dbSessionId,
+        workingDir: '/test/dir',
+      });
+
+      const message = { type: 'test', data: 'hello' };
+      expect(() => chatConnectionService.forwardToSession(dbSessionId, message)).not.toThrow();
+
+      expect(throwingWs.send).toHaveBeenCalled();
+      expect(healthyWs.send).toHaveBeenCalledWith(JSON.stringify(message));
+    });
+
     it('should exclude specified websocket from forwarding', () => {
       const ws1 = new MockWebSocket() as unknown as WebSocket;
       const ws2 = new MockWebSocket() as unknown as WebSocket;
