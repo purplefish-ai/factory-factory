@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  resetPendingRatchetTogglesForTests,
+  setPendingRatchetToggle,
+} from '@/client/lib/ratchet-toggle-cache';
 import type { WorkspaceSnapshotEntry } from '@/client/lib/snapshot-to-sidebar';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
@@ -31,7 +35,9 @@ const mockSetData = vi.fn();
 const mockKanbanSetData = vi.fn();
 const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
-const mockListWithRuntimeStateInvalidate = vi.fn();
+const mockWorkspaceGetInvalidate = vi.fn();
+const mockSummaryInvalidate = vi.fn();
+const mockKanbanInvalidate = vi.fn();
 const mockGlobalDispatchEvent = vi.fn();
 
 vi.mock('@/client/lib/trpc', () => ({
@@ -40,18 +46,18 @@ vi.mock('@/client/lib/trpc', () => ({
       workspace: {
         getProjectSummaryState: {
           setData: mockSetData,
+          invalidate: mockSummaryInvalidate,
         },
         listWithKanbanState: {
           setData: mockKanbanSetData,
+          invalidate: mockKanbanInvalidate,
         },
         get: {
           setData: mockWorkspaceGetSetData,
+          invalidate: mockWorkspaceGetInvalidate,
         },
         list: {
           invalidate: mockListInvalidate,
-        },
-        listWithRuntimeState: {
-          invalidate: mockListWithRuntimeStateInvalidate,
         },
       },
     }),
@@ -121,8 +127,11 @@ describe('useProjectSnapshotSync', () => {
     mockKanbanSetData.mockReset();
     mockWorkspaceGetSetData.mockReset();
     mockListInvalidate.mockClear();
-    mockListWithRuntimeStateInvalidate.mockClear();
+    mockWorkspaceGetInvalidate.mockClear();
+    mockSummaryInvalidate.mockClear();
+    mockKanbanInvalidate.mockClear();
     mockGlobalDispatchEvent.mockClear();
+    resetPendingRatchetTogglesForTests();
     vi.stubGlobal('dispatchEvent', mockGlobalDispatchEvent);
   });
 
@@ -664,11 +673,35 @@ describe('useProjectSnapshotSync', () => {
   });
 
   // ===========================================================================
-  // workspace.list cache invalidation tests
+  // Merge strategy: deltas are pure patches, reconnect baseline heals
   // ===========================================================================
 
-  describe('workspace.list cache invalidation', () => {
-    it('snapshot_full invalidates workspace.list cache', () => {
+  function expectNoInvalidations(): void {
+    expect(mockListInvalidate).not.toHaveBeenCalled();
+    expect(mockWorkspaceGetInvalidate).not.toHaveBeenCalled();
+    expect(mockSummaryInvalidate).not.toHaveBeenCalled();
+    expect(mockKanbanInvalidate).not.toHaveBeenCalled();
+  }
+
+  describe('cache invalidation strategy', () => {
+    it('snapshot_changed and snapshot_removed never invalidate caches', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry(),
+      });
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      });
+
+      expectNoInvalidations();
+    });
+
+    it('the initial snapshot_full baseline does not invalidate caches', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -678,41 +711,132 @@ describe('useProjectSnapshotSync', () => {
         entries: [makeEntry()],
       });
 
-      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expectNoInvalidations();
     });
 
-    it('snapshot_changed invalidates workspace.list cache', () => {
+    it('heals the workspace caches on every baseline after a project&apos;s first', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+      expectNoInvalidations();
+
+      // A later baseline follows a gap (reconnect or project switch) during
+      // which deltas were dropped, so it must heal.
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+
+      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledWith();
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockSummaryInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockSummaryInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockKanbanInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockKanbanInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+      expect(mockWorkspaceGetInvalidate).toHaveBeenCalledTimes(2);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+    });
+
+    it('tracks the first baseline per project', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [],
+      });
+
+      // Another project's first baseline neither heals nor counts as proj-1's.
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-2',
+        entries: [],
+      });
+      expectNoInvalidations();
+
+      // Returning to proj-1 (its second baseline) heals proj-1 only.
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [],
+      });
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockKanbanInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+    });
+  });
+
+  // ===========================================================================
+  // In-flight ratchet toggle overrides
+  // ===========================================================================
+
+  describe('pending ratchet toggle override', () => {
+    it('snapshot_changed entries are overridden while a toggle is in flight', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      setPendingRatchetToggle('ws-1', false);
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', ratchetEnabled: true, ratchetState: 'READY' }),
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result.workspaces[0].ratchetEnabled).toBe(false);
+      expect(result.workspaces[0].ratchetState).toBe('IDLE');
+
+      const [, detailUpdater] = mockWorkspaceGetSetData.mock.calls[0]!;
+      const detail = detailUpdater({ id: 'ws-1' });
+      expect(detail.ratchetEnabled).toBe(false);
+    });
+
+    it('snapshot_full entries are overridden while a toggle is in flight', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      setPendingRatchetToggle('ws-1', true);
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', ratchetEnabled: false })],
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result.workspaces[0].ratchetEnabled).toBe(true);
+    });
+
+    it('entries pass through untouched when no toggle is pending', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
       onMessage({
         type: 'snapshot_changed',
         workspaceId: 'ws-1',
-        entry: makeEntry(),
+        entry: makeEntry({ workspaceId: 'ws-1', ratchetEnabled: true, ratchetState: 'READY' }),
       });
 
-      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
-    });
-
-    it('snapshot_removed invalidates workspace.list cache', () => {
-      useProjectSnapshotSync('proj-1');
-      const onMessage = capturedOptions!.onMessage!;
-
-      onMessage({
-        type: 'snapshot_removed',
-        workspaceId: 'ws-1',
-      });
-
-      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result.workspaces[0].ratchetEnabled).toBe(true);
+      expect(result.workspaces[0].ratchetState).toBe('READY');
     });
   });
 

@@ -56,6 +56,13 @@ export interface UseChatWebSocketReturn {
   processStatus: ReturnType<typeof useChatState>['processStatus'];
   // Authoritative runtime snapshot for the selected session
   sessionRuntime: SessionRuntimeState;
+  /**
+   * The dbSessionId the current reducer state was hydrated for, or null
+   * before the first hydration. Stays on the previous session during a
+   * session switch until the new session's hydration batch arrives, so
+   * consumers can tell whether sessionRuntime describes dbSessionId yet.
+   */
+  runtimeSessionId: string | null;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -164,6 +171,18 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
   const hydratedSessionIdRef = useRef<string | null>(null);
+
+  // Drop the hydration marker when the selected session moves away from the
+  // hydrated one. Without this, switching A -> B -> back to A before B
+  // hydrates would leave the marker claiming A is hydrated while the reducer
+  // state was reset by the switches, and consumers of runtimeSessionId would
+  // treat the reset runtime as authoritative for A. Same-session reconnects
+  // keep the marker so hydrated state isn't spuriously reported as loading.
+  useEffect(() => {
+    if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
+      hydratedSessionIdRef.current = null;
+    }
+  }, [dbSessionId]);
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
@@ -311,6 +330,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     // State from chat
     messages: chat.messages,
     connected: transport.connected,
+    runtimeSessionId: hydratedSessionIdRef.current,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,

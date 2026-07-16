@@ -1,23 +1,17 @@
 import { createSessionSwitchResetState } from '@/components/chat/reducer/state';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
+import { deriveSessionUiStatusKind } from '@/shared/session-runtime';
 
 function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['sessionStatus'] {
-  switch (runtime.phase) {
+  switch (deriveSessionUiStatusKind(runtime)) {
     case 'loading':
       return { phase: 'loading' };
     case 'starting':
       return { phase: 'starting' };
     case 'stopping':
       return { phase: 'stopping' };
-    case 'running':
-      // If process is stopped, show ready instead of running
-      if (runtime.processState === 'stopped') {
-        return { phase: 'ready' };
-      }
+    case 'working':
       return { phase: 'running' };
-    case 'idle':
-    case 'error':
-      return { phase: 'ready' };
     default:
       return { phase: 'ready' };
   }

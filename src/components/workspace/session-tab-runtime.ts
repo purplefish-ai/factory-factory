@@ -10,8 +10,8 @@ import {
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   getSessionSummaryErrorMessage,
-  isSessionSummaryWorking,
   type SessionSummary,
+  sessionUiStatusKindFromSummary,
 } from '@/shared/session-runtime';
 
 export type WorkspaceSessionRuntimeSummary = SessionSummary;
@@ -96,93 +96,89 @@ export function deriveSessionTabRuntime(
     return getFallbackStatusInfo(persistedStatus);
   }
 
-  if (summary.runtimePhase === 'loading') {
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: true,
-      label: 'Loading',
-      description: 'Loading session...',
-      icon: SpinnerGapIcon,
-      isRunning: false,
-    };
-  }
+  switch (sessionUiStatusKindFromSummary(summary)) {
+    case 'loading':
+      return {
+        color: 'text-muted-foreground',
+        pulse: false,
+        spin: true,
+        label: 'Loading',
+        description: 'Loading session...',
+        icon: SpinnerGapIcon,
+        isRunning: false,
+      };
 
-  if (summary.runtimePhase === 'starting') {
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: true,
-      label: 'Starting',
-      description: 'Launching agent...',
-      icon: SpinnerGapIcon,
-      isRunning: false,
-    };
-  }
+    case 'starting':
+      return {
+        color: 'text-muted-foreground',
+        pulse: false,
+        spin: true,
+        label: 'Starting',
+        description: 'Launching agent...',
+        icon: SpinnerGapIcon,
+        isRunning: false,
+      };
 
-  if (summary.runtimePhase === 'stopping') {
-    return {
-      color: 'text-brand',
-      pulse: false,
-      spin: true,
-      label: 'Stopping',
-      description: 'Finishing current request...',
-      icon: SpinnerGapIcon,
-      isRunning: false,
-    };
-  }
+    case 'stopping':
+      return {
+        color: 'text-brand',
+        pulse: false,
+        spin: true,
+        label: 'Stopping',
+        description: 'Finishing current request...',
+        icon: SpinnerGapIcon,
+        isRunning: false,
+      };
 
-  if (summary.runtimePhase === 'error') {
-    const runtimeError = getSessionSummaryErrorMessage(summary);
-    return {
-      color: 'text-destructive',
-      pulse: false,
-      spin: false,
-      label: 'Error',
-      description: runtimeError ?? 'Session entered an error state',
-      icon: XCircleIcon,
-      isRunning: false,
-    };
-  }
+    case 'error':
+      return {
+        color: 'text-destructive',
+        pulse: false,
+        spin: false,
+        label: 'Error',
+        description: getSessionSummaryErrorMessage(summary) ?? 'Session entered an error state',
+        icon: XCircleIcon,
+        isRunning: false,
+      };
 
-  if (summary.processState === 'stopped') {
-    if (summary.lastExit?.unexpected) {
-      const runtimeError = getSessionSummaryErrorMessage(summary);
+    case 'unexpected-exit':
       return {
         color: 'text-destructive',
         pulse: false,
         spin: false,
         label: 'Error',
         description:
-          runtimeError ??
-          `Exited unexpectedly${summary.lastExit.code !== null ? ` (code ${summary.lastExit.code})` : ''}`,
+          getSessionSummaryErrorMessage(summary) ??
+          `Exited unexpectedly${summary.lastExit?.code != null ? ` (code ${summary.lastExit.code})` : ''}`,
         icon: XCircleIcon,
         isRunning: false,
       };
-    }
 
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: false,
-      label: 'Stopped',
-      description: 'Send a message to start',
-      icon: ProhibitIcon,
-      isRunning: false,
-    };
+    case 'stopped':
+      return {
+        color: 'text-muted-foreground',
+        pulse: false,
+        spin: false,
+        label: 'Stopped',
+        description: 'Send a message to start',
+        icon: ProhibitIcon,
+        isRunning: false,
+      };
+
+    case 'working':
+      return {
+        color: 'text-brand',
+        pulse: true,
+        spin: false,
+        label: 'Running',
+        description: 'Processing your request',
+        icon: PulseIcon,
+        isRunning: true,
+      };
+
+    // No default: the declared return type makes this switch exhaustive, so
+    // adding a SessionUiStatusKind fails to compile until it is handled here.
+    case 'idle':
+      return IDLE_STATUS;
   }
-
-  if (isSessionSummaryWorking(summary)) {
-    return {
-      color: 'text-brand',
-      pulse: true,
-      spin: false,
-      label: 'Running',
-      description: 'Processing your request',
-      icon: PulseIcon,
-      isRunning: true,
-    };
-  }
-
-  return IDLE_STATUS;
 }

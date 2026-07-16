@@ -330,6 +330,35 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('reports disconnected while a URL-change replacement socket is still connecting', async () => {
+    const harness = createHarness({ initialUrl: 'ws://localhost:3000/chat?sessionId=one' });
+    await flushEffects();
+
+    const firstSocket = getLastSocket();
+    flushSync(() => {
+      firstSocket.simulateOpen();
+    });
+    expect(harness.transportRef.current?.connected).toBe(true);
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await flushEffects();
+
+    // The old socket is closed and the new one has not opened yet. The state
+    // update from the effect cleanup lands on the next scheduler tick.
+    await vi.waitFor(() => {
+      expect(harness.transportRef.current?.connected).toBe(false);
+    });
+
+    const secondSocket = getLastSocket();
+    expect(secondSocket).not.toBe(firstSocket);
+    flushSync(() => {
+      secondSocket.simulateOpen();
+    });
+    expect(harness.transportRef.current?.connected).toBe(true);
+
+    harness.cleanup();
+  });
+
   it('exposes gaveUp after exhausting reconnect attempts and resets on manual reconnect', async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);

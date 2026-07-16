@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
+import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import {
   shouldSyncGitHubCLIHealthFromIssuesResponse,
   syncGitHubCLIHealth,
@@ -170,7 +171,7 @@ export function KanbanProvider({
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
     onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
   });
-  const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
+  const toggleRatchetingMutation = useToggleRatcheting(projectId);
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
@@ -200,12 +201,12 @@ export function KanbanProvider({
   const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
     setTogglingWorkspaceId(workspaceId);
     try {
+      // Optimistic cache updates and settle-time invalidation live in the
+      // shared useToggleRatcheting hook.
       await toggleRatchetingMutation.mutateAsync({ workspaceId, enabled });
-      await Promise.all([
-        refetchWorkspaces(),
-        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
-        utils.workspace.get.invalidate({ id: workspaceId }),
-      ]);
+    } catch {
+      // Error feedback is surfaced by useToggleRatcheting's onError toast;
+      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setTogglingWorkspaceId(null);
     }

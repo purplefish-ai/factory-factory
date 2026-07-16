@@ -42,6 +42,56 @@ export interface SessionRuntimeState {
   updatedAt: string;
 }
 
+/**
+ * Canonical UI-facing session status, derived from the runtime signals in a
+ * fixed precedence order. Both the chat reducer (composer status) and the
+ * session tab presenter derive from this single function so their semantics
+ * cannot drift apart.
+ */
+export type SessionUiStatusKind =
+  | 'loading'
+  | 'starting'
+  | 'stopping'
+  | 'error'
+  | 'unexpected-exit'
+  | 'stopped'
+  | 'working'
+  | 'idle';
+
+export interface SessionUiStatusInput {
+  phase: SessionRuntimePhase;
+  processState: SessionRuntimeProcessState;
+  activity: SessionRuntimeActivity;
+  lastExit?: SessionRuntimeLastExit | null;
+}
+
+export function deriveSessionUiStatusKind(input: SessionUiStatusInput): SessionUiStatusKind {
+  if (input.phase === 'loading' || input.phase === 'starting' || input.phase === 'stopping') {
+    return input.phase;
+  }
+  if (input.phase === 'error') {
+    return 'error';
+  }
+  if (input.processState === 'stopped') {
+    return input.lastExit?.unexpected ? 'unexpected-exit' : 'stopped';
+  }
+  if (input.activity === 'WORKING' || input.phase === 'running') {
+    return 'working';
+  }
+  return 'idle';
+}
+
+export function sessionUiStatusKindFromSummary(
+  summary: Pick<SessionSummary, 'runtimePhase' | 'processState' | 'activity' | 'lastExit'>
+): SessionUiStatusKind {
+  return deriveSessionUiStatusKind({
+    phase: summary.runtimePhase,
+    processState: summary.processState,
+    activity: summary.activity,
+    lastExit: summary.lastExit,
+  });
+}
+
 export function createInitialSessionRuntimeState(): SessionRuntimeState {
   return {
     phase: 'idle',
