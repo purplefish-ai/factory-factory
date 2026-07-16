@@ -94,6 +94,13 @@ class ChatMessageHandlerService {
   /** Retry timers for provider-side busy responses that are not reflected locally yet. */
   private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnInProgressRetryAttempts = new Map<string, number>();
+  /**
+   * Workspace notifications currently being delivered by some session. Claimed
+   * synchronously before dispatch so a concurrent dispatch of a duplicate copy
+   * (persist-first delivery can enqueue the same notification on two sessions)
+   * drops instead of double-sending. Released once the send settles.
+   */
+  private inFlightNotificationDeliveries = new Set<string>();
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
@@ -201,45 +208,111 @@ class ChatMessageHandlerService {
     const dispatchToken = this.reserveDispatchToken(dbSessionId);
 
     try {
-      // Peek first — message stays in queue (visible in snapshots during auto-start).
-      const peeked = sessionDomainService.peekNextMessage(dbSessionId);
-      if (!peeked) {
-        this.turnInProgressRetryAttempts.delete(dbSessionId);
-        return;
-      }
-
-      const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
-      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-        return;
-      }
-      if (dispatchGate.policy !== 'allowed') {
-        this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
-        return;
-      }
-
-      const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
-      if (!clientResult) {
-        return;
-      }
-
-      if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-        return;
-      }
-
-      // NOW dequeue — client is ready, we're about to dispatch.
-      const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
-      if (!msg) {
-        return;
-      }
-
-      try {
-        await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
-        this.turnInProgressRetryAttempts.delete(dbSessionId);
-      } catch (error) {
-        this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
+      // Loop: a dropped duplicate notification advances to the next queued message.
+      let outcome: 'continue' | 'done' = 'continue';
+      while (outcome === 'continue') {
+        outcome = await this.dispatchHeadOfQueue(dbSessionId, stopGeneration);
       }
     } finally {
       this.releaseDispatchToken(dbSessionId, dispatchToken);
+    }
+  }
+
+  /**
+   * Examine the head of the queue: drop it if it is a duplicate workspace
+   * notification ('continue' — caller should examine the new head), otherwise
+   * dispatch it ('done').
+   */
+  private async dispatchHeadOfQueue(
+    dbSessionId: string,
+    stopGeneration: number
+  ): Promise<'continue' | 'done'> {
+    // Peek first — message stays in queue (visible in snapshots during auto-start).
+    const peeked = sessionDomainService.peekNextMessage(dbSessionId);
+    if (!peeked) {
+      this.turnInProgressRetryAttempts.delete(dbSessionId);
+      return 'done';
+    }
+
+    const claim = this.claimNotificationForDispatch(dbSessionId, peeked.id);
+    if (claim.status === 'duplicate') {
+      return this.dropDuplicateNotification(dbSessionId, peeked.id) ? 'continue' : 'done';
+    }
+
+    try {
+      if (
+        claim.status === 'claimed' &&
+        (await this.isNotificationRowDelivered(claim.notificationId))
+      ) {
+        return this.dropDuplicateNotification(dbSessionId, peeked.id) ? 'continue' : 'done';
+      }
+      await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
+      return 'done';
+    } finally {
+      if (claim.status === 'claimed') {
+        this.inFlightNotificationDeliveries.delete(claim.notificationId);
+      }
+    }
+  }
+
+  /**
+   * Persist-first delivery can enqueue the same workspace notification twice
+   * (a live send racing session-startup delivery). Claim the notification
+   * synchronously — no awaits between the duplicate checks and the claim —
+   * so concurrent dispatches on other sessions see it as in flight.
+   */
+  private claimNotificationForDispatch(
+    dbSessionId: string,
+    messageId: string
+  ): { status: 'none' } | { status: 'duplicate' } | { status: 'claimed'; notificationId: string } {
+    const notificationId = this.getWorkspaceNotificationId(messageId);
+    if (!notificationId) {
+      return { status: 'none' };
+    }
+    if (
+      this.inFlightNotificationDeliveries.has(notificationId) ||
+      this.isNotificationCommittedToTranscript(dbSessionId, messageId)
+    ) {
+      return { status: 'duplicate' };
+    }
+    this.inFlightNotificationDeliveries.add(notificationId);
+    return { status: 'claimed', notificationId };
+  }
+
+  private async dispatchPeekedMessage(
+    dbSessionId: string,
+    peeked: QueuedMessage,
+    stopGeneration: number
+  ): Promise<void> {
+    const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      return;
+    }
+    if (dispatchGate.policy !== 'allowed') {
+      this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
+      return;
+    }
+
+    const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
+    if (!clientResult) {
+      return;
+    }
+
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      return;
+    }
+
+    // NOW dequeue — client is ready, we're about to dispatch.
+    const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
+    if (!msg) {
+      return;
+    }
+
+    try {
+      await this.dispatchMessage(dbSessionId, msg, clientResult.client, stopGeneration);
+      this.turnInProgressRetryAttempts.delete(dbSessionId);
+    } catch (error) {
+      this.handleDispatchError(dbSessionId, msg, error, stopGeneration);
     }
   }
 
@@ -478,14 +551,6 @@ class ChatMessageHandlerService {
     client: unknown,
     stopGeneration: number
   ): Promise<void> {
-    if (await this.isWorkspaceNotificationAlreadyDelivered(dbSessionId, msg.id)) {
-      logger.info('[Chat WS] Dropping already-delivered workspace notification', {
-        dbSessionId,
-        messageId: msg.id,
-      });
-      return;
-    }
-
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
@@ -564,39 +629,27 @@ class ChatMessageHandlerService {
     }
   }
 
-  /**
-   * Persist-first delivery can enqueue the same workspace notification twice
-   * (a live send racing session-startup delivery). Dispatch is serialized per
-   * session, so dropping duplicates here — already committed to this session's
-   * transcript, or already marked delivered by another session — guarantees the
-   * agent sees each notification at most once.
-   */
-  private async isWorkspaceNotificationAlreadyDelivered(
-    dbSessionId: string,
-    messageId: string
-  ): Promise<boolean> {
+  private getWorkspaceNotificationId(messageId: string): string | null {
     if (!messageId.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
-      return false;
+      return null;
     }
     const notificationId = messageId.slice(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX.length);
-    if (!notificationId) {
-      return false;
-    }
+    return notificationId || null;
+  }
 
-    const alreadyCommitted = sessionDomainService
+  private isNotificationCommittedToTranscript(dbSessionId: string, messageId: string): boolean {
+    return sessionDomainService
       .getTranscriptSnapshot(dbSessionId)
       .some((entry) => entry.source === 'user' && entry.id === messageId);
-    if (alreadyCommitted) {
-      return true;
-    }
+  }
 
+  private async isNotificationRowDelivered(notificationId: string): Promise<boolean> {
     try {
       const notification = await workspaceNotificationAccessor.findById(notificationId);
       return notification?.deliveredAt != null;
     } catch (error) {
       logger.warn('[Chat WS] Failed to check workspace notification delivery state', {
-        dbSessionId,
-        messageId,
+        notificationId,
         error: this.formatDispatchError(error),
       });
       // Fail open: a duplicate delivery is better than a lost message.
@@ -604,12 +657,21 @@ class ChatMessageHandlerService {
     }
   }
 
-  private async markWorkspaceNotificationDeliveredIfNeeded(messageId: string): Promise<void> {
-    if (!messageId.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
-      return;
-    }
+  /**
+   * Remove a duplicate workspace notification from the queue, emitting a queue
+   * snapshot so the UI does not keep a phantom queued card. Returns false if the
+   * message was unexpectedly absent (caller should stop looping).
+   */
+  private dropDuplicateNotification(dbSessionId: string, messageId: string): boolean {
+    logger.info('[Chat WS] Dropping already-delivered workspace notification', {
+      dbSessionId,
+      messageId,
+    });
+    return sessionDomainService.removeQueuedMessage(dbSessionId, messageId);
+  }
 
-    const notificationId = messageId.slice(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX.length);
+  private async markWorkspaceNotificationDeliveredIfNeeded(messageId: string): Promise<void> {
+    const notificationId = this.getWorkspaceNotificationId(messageId);
     if (!notificationId) {
       return;
     }
