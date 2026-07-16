@@ -616,9 +616,16 @@ export const workspaceRouter = router({
         return { delivered: false };
       }
 
+      // Session startup delivery may have already queued this notification
+      // (persist above races deliverPendingChildNotifications on a starting session).
+      const messageId = workspaceNotificationMessageId(notification.id);
+      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
+        return { delivered: true };
+      }
+
       // Enqueue as a user message so the parent agent acts on it
       const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
-        id: workspaceNotificationMessageId(notification.id),
+        id: messageId,
         text: buildWorkspaceNotificationMessageText(notification),
         timestamp: new Date().toISOString(),
         settings: {
@@ -704,9 +711,16 @@ export const workspaceRouter = router({
         return { delivered: false };
       }
 
+      // Session startup delivery may have already queued this notification
+      // (persist above races deliverPendingChildNotifications on a starting session).
+      const messageId = workspaceNotificationMessageId(notification.id);
+      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
+        return { delivered: true };
+      }
+
       // Enqueue as a user message so the child agent acts on it
       const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
-        id: workspaceNotificationMessageId(notification.id),
+        id: messageId,
         text: buildWorkspaceNotificationMessageText(notification),
         timestamp: new Date().toISOString(),
         settings: {

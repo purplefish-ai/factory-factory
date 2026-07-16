@@ -43,6 +43,7 @@ const mockFindSessionsByWorkspaceId = vi.hoisted(() => vi.fn());
 const mockAppendClaudeEvent = vi.hoisted(() => vi.fn());
 const mockEmitDelta = vi.hoisted(() => vi.fn());
 const mockEnqueue = vi.hoisted(() => vi.fn());
+const mockHasQueuedMessage = vi.hoisted(() => vi.fn());
 const mockTryDispatchNextMessage = vi.hoisted(() => vi.fn());
 const mockPersistChildNotification = vi.hoisted(() => vi.fn());
 const mockPersistParentNotification = vi.hoisted(() => vi.fn());
@@ -73,6 +74,7 @@ vi.mock('@/backend/services/session', () => ({
     appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
     emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
     enqueue: (...args: unknown[]) => mockEnqueue(...args),
+    hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
   },
   sessionDataService: {
     createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
@@ -680,6 +682,7 @@ describe('workspaceRouter', () => {
       });
       mockAppendClaudeEvent.mockReturnValue(1);
       mockEnqueue.mockReturnValue({ position: 0 });
+      mockHasQueuedMessage.mockReturnValue(false);
       mockTryDispatchNextMessage.mockResolvedValue(undefined);
     });
 
@@ -741,6 +744,21 @@ describe('workspaceRouter', () => {
       expect(mockPersistChildNotification).toHaveBeenCalled();
       expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
     });
+
+    it('skips enqueue when session startup already queued the notification', async () => {
+      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-1', status: 'RUNNING' }]);
+      mockHasQueuedMessage.mockReturnValue(true);
+
+      const { caller } = createCaller();
+      await expect(
+        caller.sendMessageToParent({ childWorkspaceId: 'child-1', message: 'hello' })
+      ).resolves.toEqual({ delivered: true });
+
+      expect(mockHasQueuedMessage).toHaveBeenCalledWith('sess-1', 'workspace-notification-notif-1');
+      expect(mockEnqueue).not.toHaveBeenCalled();
+      expect(mockAppendClaudeEvent).not.toHaveBeenCalled();
+      expect(mockEmitDelta).not.toHaveBeenCalled();
+    });
   });
 
   describe('sendMessageToChild', () => {
@@ -769,6 +787,7 @@ describe('workspaceRouter', () => {
       });
       mockAppendClaudeEvent.mockReturnValue(1);
       mockEnqueue.mockReturnValue({ position: 0 });
+      mockHasQueuedMessage.mockReturnValue(false);
       mockTryDispatchNextMessage.mockResolvedValue(undefined);
     });
 
@@ -824,6 +843,25 @@ describe('workspaceRouter', () => {
       });
       expect(mockEnqueue).not.toHaveBeenCalled();
       expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
+    });
+
+    it('skips enqueue when session startup already queued the notification', async () => {
+      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-2', status: 'IDLE' }]);
+      mockHasQueuedMessage.mockReturnValue(true);
+
+      const { caller } = createCaller();
+      await expect(
+        caller.sendMessageToChild({
+          parentWorkspaceId: 'parent-1',
+          childWorkspaceId: 'child-1',
+          message: 'do this',
+        })
+      ).resolves.toEqual({ delivered: true });
+
+      expect(mockHasQueuedMessage).toHaveBeenCalledWith('sess-2', 'workspace-notification-notif-2');
+      expect(mockEnqueue).not.toHaveBeenCalled();
+      expect(mockAppendClaudeEvent).not.toHaveBeenCalled();
+      expect(mockEmitDelta).not.toHaveBeenCalled();
     });
   });
 });
