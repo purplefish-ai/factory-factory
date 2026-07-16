@@ -14,7 +14,7 @@ import {
   resetSnapshotsHandlerStateForTests,
   snapshotConnections,
 } from './snapshots.handler';
-import { validateWebSocketOrigin } from './upgrade-utils';
+import { validateTrustedLocalWebSocketRequest, validateWebSocketOrigin } from './upgrade-utils';
 
 const allowedOrigin = 'http://localhost:3000';
 
@@ -94,6 +94,7 @@ vi.mock('./upgrade-utils', () => ({
   markWebSocketAlive: vi.fn(),
   sendBadRequest: mockSendBadRequest,
   validateWebSocketOrigin: vi.fn(() => true),
+  validateTrustedLocalWebSocketRequest: vi.fn(() => true),
 }));
 
 vi.mock('@/backend/app-context', () => ({
@@ -184,6 +185,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     resetSnapshotsHandlerStateForTests();
     storeListeners.clear();
     vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
+    vi.mocked(validateTrustedLocalWebSocketRequest).mockReturnValue(true);
   });
 
   it('sends full snapshot with review count on connect', async () => {
@@ -270,6 +272,17 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     expect(storeListeners.size).toBe(0);
     expect(mockSendBadRequest).not.toHaveBeenCalled();
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects untrusted local requests before subscription setup', () => {
+    vi.mocked(validateTrustedLocalWebSocketRequest).mockReturnValueOnce(false);
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    const { wss } = callHandler(handler, ws, 'proj-1');
+
+    expect(storeListeners.size).toBe(0);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });

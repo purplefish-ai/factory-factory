@@ -65,7 +65,10 @@ describe('createPostRunLogsUpgradeHandler', () => {
     } as unknown as AppContext;
 
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -119,6 +122,84 @@ describe('createPostRunLogsUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
+  it('rejects untrusted remote addresses before opening a WebSocket', () => {
+    const logger = createLogger();
+    const runScriptService = {
+      getPostRunOutputBuffer: vi.fn(() => ''),
+      subscribeToPostRunOutput: vi.fn(),
+    };
+    const appContext = {
+      services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+        },
+        createLogger: vi.fn(() => logger),
+        runScriptService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createPostRunLogsUpgradeHandler(appContext);
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '203.0.113.10' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/post-run-logs?workspaceId=workspace-1'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
+  it('rejects forwarded local upgrades before opening a WebSocket', () => {
+    const logger = createLogger();
+    const runScriptService = {
+      getPostRunOutputBuffer: vi.fn(() => ''),
+      subscribeToPostRunOutput: vi.fn(),
+    };
+    const appContext = {
+      services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
+        },
+        createLogger: vi.fn(() => logger),
+        runScriptService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createPostRunLogsUpgradeHandler(appContext);
+    const request = {
+      headers: { origin: allowedOrigin, 'x-forwarded-for': '203.0.113.10' },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/post-run-logs?workspaceId=workspace-1'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(
+      expect.stringContaining('Forwarded WebSocket upgrades are not trusted')
+    );
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('streams buffered/live output and cleans up subscription on close', () => {
     const workspaceId = 'workspace-1';
     const logger = createLogger();
@@ -143,7 +224,10 @@ describe('createPostRunLogsUpgradeHandler', () => {
 
     const ws = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -216,7 +300,10 @@ describe('createPostRunLogsUpgradeHandler', () => {
     const ws1 = new MockWebSocket();
     const ws2 = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws1, ws2]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();

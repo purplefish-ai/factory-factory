@@ -13,6 +13,7 @@ import {
   getOrCreateConnectionSet,
   markWebSocketAlive,
   sendBadRequest,
+  validateTrustedLocalWebSocketRequest,
   validateWebSocketOrigin,
 } from './upgrade-utils';
 
@@ -52,6 +53,18 @@ export function createPostRunLogsUpgradeHandler(appContext: AppContext) {
   ): void {
     if (
       !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'post-run logs WebSocket',
+      })
+    ) {
+      return;
+    }
+
+    if (
+      !validateTrustedLocalWebSocketRequest({
         request,
         socket,
         configService,

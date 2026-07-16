@@ -20,7 +20,11 @@ import {
   SetupTerminalMessageSchema,
 } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
-import { markWebSocketAlive, validateWebSocketOrigin } from './upgrade-utils';
+import {
+  markWebSocketAlive,
+  validateTrustedLocalWebSocketRequest,
+  validateWebSocketOrigin,
+} from './upgrade-utils';
 
 const require = createRequire(import.meta.url);
 
@@ -145,6 +149,18 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
   ): void {
     if (
       !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'setup terminal',
+      })
+    ) {
+      return;
+    }
+
+    if (
+      !validateTrustedLocalWebSocketRequest({
         request,
         socket,
         configService,
