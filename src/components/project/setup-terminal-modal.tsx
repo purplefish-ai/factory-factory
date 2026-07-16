@@ -52,7 +52,7 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
               />
             </Suspense>
           )}
-          {showTerminal && !connected && (
+          {!connected && (showTerminal || gaveUp) && (
             <output
               className={`absolute top-2 right-2 flex items-center gap-2 rounded px-2 py-0.5 text-xs text-white ${
                 gaveUp ? 'bg-red-600/90' : 'bg-yellow-600/90'
@@ -60,7 +60,7 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
             >
               {gaveUp ? (
                 <>
-                  <span>Connection lost.</span>
+                  <span>Connection failed.</span>
                   <button type="button" className="underline" onClick={reconnect}>
                     Retry
                   </button>
