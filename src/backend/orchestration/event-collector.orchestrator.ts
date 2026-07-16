@@ -365,6 +365,27 @@ async function refreshWorkspaceSessionSummariesForSession(
   }
 }
 
+/**
+ * Build the snapshot update for a workspace state change. Beyond the status,
+ * forward the snapshot-relevant fields co-updated in the transition (e.g.
+ * branchName on READY) from the re-read row, so they don't wait for the next
+ * reconciliation pass. Carrying projectId also lets the coalescer seed
+ * workspaces the store doesn't know yet; the state machine suppresses
+ * superseded events, so this cannot re-seed an entry a newer ARCHIVED event
+ * removed. hasHadSessions is deliberately excluded: the session-activity path
+ * sets it optimistically in the store and a lagging DB row must not
+ * downgrade it.
+ */
+function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): SnapshotUpdateInput {
+  return {
+    status: event.toStatus,
+    projectId: event.workspace.projectId,
+    name: event.workspace.name,
+    branchName: event.workspace.branchName,
+    createdAt: event.workspace.createdAt.toISOString(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Linear state sync on PR merge
 // ---------------------------------------------------------------------------
@@ -482,7 +503,7 @@ function configureEventCollectorWithState(
     }
     coalescer.enqueue(
       event.workspaceId,
-      { status: event.toStatus },
+      buildWorkspaceStateChangeFields(event),
       'event:workspace_state_changed',
       { immediate: true }
     );

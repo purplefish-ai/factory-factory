@@ -73,6 +73,14 @@ export interface WorkspaceStateChangedEvent {
   workspaceId: string;
   fromStatus: WorkspaceStatus;
   toStatus: WorkspaceStatus;
+  /**
+   * The workspace row re-read after the transition committed, guaranteed to
+   * still reflect toStatus. Carries fields co-updated with the status (e.g.
+   * branchName) so consumers don't have to wait for the next reconciliation
+   * pass. Emission is suppressed entirely when the re-read shows the row was
+   * deleted or superseded by a later transition (which announces itself).
+   */
+  workspace: Workspace;
 }
 
 export interface StartProvisioningOptions {
@@ -169,6 +177,38 @@ class WorkspaceStateMachineService extends EventEmitter {
   }
 
   /**
+   * Emit WORKSPACE_STATE_CHANGED only when the re-read row still reflects the
+   * committed transition. If the row is gone (deleted concurrently) or already
+   * shows a later transition's status, this event is stale: the superseding
+   * transition emits its own event with the newer state, and emitting here
+   * could resurrect snapshot state that the newer event already cleared
+   * (e.g. re-seeding a snapshot entry removed by an ARCHIVED event).
+   */
+  private emitStateChanged(
+    workspaceId: string,
+    fromStatus: WorkspaceStatus,
+    toStatus: WorkspaceStatus,
+    workspace: Workspace | null
+  ): void {
+    if (!workspace || workspace.status !== toStatus) {
+      logger.debug('Suppressing superseded workspace_state_changed emit', {
+        workspaceId,
+        fromStatus,
+        toStatus,
+        rereadStatus: workspace?.status ?? null,
+      });
+      return;
+    }
+
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus,
+      toStatus,
+      workspace,
+    } satisfies WorkspaceStateChangedEvent);
+  }
+
+  /**
    * Transition a workspace to a new status with validation.
    * Uses compare-and-swap to prevent race conditions.
    *
@@ -219,11 +259,7 @@ class WorkspaceStateMachineService extends EventEmitter {
     // Re-read workspace after successful CAS update
     const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
-    this.emit(WORKSPACE_STATE_CHANGED, {
-      workspaceId,
-      fromStatus: currentStatus,
-      toStatus: targetStatus,
-    } satisfies WorkspaceStateChangedEvent);
+    this.emitStateChanged(workspaceId, currentStatus, targetStatus, updated);
 
     logger.debug('Workspace status transitioned', {
       workspaceId,
@@ -279,11 +315,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
       const updated = await workspaceAccessor.findRawById(workspaceId);
 
-      this.emit(WORKSPACE_STATE_CHANGED, {
-        workspaceId,
-        fromStatus: 'FAILED' as WorkspaceStatus,
-        toStatus: 'PROVISIONING' as WorkspaceStatus,
-      } satisfies WorkspaceStateChangedEvent);
+      this.emitStateChanged(workspaceId, 'FAILED', 'PROVISIONING', updated);
 
       logger.debug('Workspace retry started', {
         workspaceId,
@@ -356,11 +388,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
-    this.emit(WORKSPACE_STATE_CHANGED, {
-      workspaceId,
-      fromStatus: currentStatus,
-      toStatus: 'ARCHIVING',
-    } satisfies WorkspaceStateChangedEvent);
+    this.emitStateChanged(workspaceId, currentStatus, 'ARCHIVING', updated);
 
     logger.debug('Workspace status transitioned', {
       workspaceId,
@@ -439,11 +467,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const updated = await workspaceAccessor.findRawById(workspaceId);
 
-    this.emit(WORKSPACE_STATE_CHANGED, {
-      workspaceId,
-      fromStatus: 'READY' as WorkspaceStatus,
-      toStatus: 'PROVISIONING' as WorkspaceStatus,
-    } satisfies WorkspaceStateChangedEvent);
+    this.emitStateChanged(workspaceId, 'READY', 'PROVISIONING', updated);
 
     logger.debug('Workspace setup script retry started from READY+warning', {
       workspaceId,
@@ -488,11 +512,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const updated = await workspaceAccessor.findRawById(workspaceId);
 
-    this.emit(WORKSPACE_STATE_CHANGED, {
-      workspaceId,
-      fromStatus: 'FAILED' as WorkspaceStatus,
-      toStatus: 'NEW' as WorkspaceStatus,
-    } satisfies WorkspaceStateChangedEvent);
+    this.emitStateChanged(workspaceId, 'FAILED', 'NEW', updated);
 
     logger.debug('Workspace reset to NEW for retry', {
       workspaceId,
