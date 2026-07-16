@@ -112,34 +112,26 @@ export class RatchetWorkspaceCheckCoordinator {
   ): Promise<WorkspaceRatchetResult> {
     const existing = this.inFlightWorkspaceChecks.get(workspace.id);
     if (existing) {
-      return this.withTimeout(workspace, existing);
+      return this.withTimeout(existing);
     }
 
     const controller = new AbortController();
     let entry!: InFlightWorkspaceCheck;
-    const promise = Promise.resolve()
-      .then(() => runner(controller.signal))
-      .finally(() => {
+    const promise = runner(controller.signal).finally(() => {
       if (this.inFlightWorkspaceChecks.get(workspace.id) === entry) {
         this.inFlightWorkspaceChecks.delete(workspace.id);
       }
     });
     entry = { controller, promise };
     this.inFlightWorkspaceChecks.set(workspace.id, entry);
-    return this.withTimeout(workspace, entry);
+    return this.withTimeout(entry);
   }
 
-  private withTimeout(
-    workspace: WorkspaceWithPR,
-    entry: InFlightWorkspaceCheck
-  ): Promise<WorkspaceRatchetResult> {
+  private withTimeout(entry: InFlightWorkspaceCheck): Promise<WorkspaceRatchetResult> {
     const timeoutMs = this.getTimeoutMs();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         const timeoutError = new Error(`Workspace check timed out after ${timeoutMs}ms`);
-        if (this.inFlightWorkspaceChecks.get(workspace.id) === entry) {
-          this.inFlightWorkspaceChecks.delete(workspace.id);
-        }
         entry.controller.abort(timeoutError);
         reject(timeoutError);
       }, timeoutMs);
@@ -715,7 +707,7 @@ In the enabled branch, add abort checks after the username and PR-state awaits, 
 
 ```ts
   try {
-    const authenticatedUsername = await this.getAuthenticatedUsernameCached();
+    const authenticatedUsername = await this.getAuthenticatedUsernameCached(signal);
     signal.throwIfAborted();
     const prStateResult = await this.fetchPRState(workspace, authenticatedUsername, signal);
     signal.throwIfAborted();
@@ -754,13 +746,23 @@ In the enabled branch, add abort checks after the username and PR-state awaits, 
       };
     }
 
-    const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateResult);
+    const decisionContext = await this.buildRatchetDecisionContext(
+      workspace,
+      prStateResult,
+      signal
+    );
     signal.throwIfAborted();
-    const decision = this.decideRatchetAction(decisionContext);
+    const decision = await this.decideRatchetAction(decisionContext, signal);
     signal.throwIfAborted();
-    const action = await this.applyRatchetDecision(decisionContext, decision);
+    const action = await this.applyRatchetDecision(decisionContext, decision, signal);
     signal.throwIfAborted();
-    return await this.finishRatchetCheck(workspace, prStateResult, action, decisionContext);
+    return await this.finishRatchetCheck(
+      workspace,
+      prStateResult,
+      action,
+      decisionContext,
+      signal
+    );
   } catch (error) {
     signal.throwIfAborted();
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -937,13 +939,24 @@ const RATCHET_WORKSPACE_CONCURRENCY = 3;
 const ratchetWorkspaceLimit = pLimit(RATCHET_WORKSPACE_CONCURRENCY);
 ```
 
-Change only the batch mapping:
+Leave the batch mapping unchanged so the coordinator claims the workspace before queueing:
 
 ```ts
 const results = await Promise.all(
-  workspaces.map((workspace) =>
-    ratchetWorkspaceLimit(() => this.runWorkspaceCheckSafely(workspace))
-  )
+  workspaces.map((workspace) => this.runWorkspaceCheckSafely(workspace))
+);
+```
+
+Apply the limiter inside the coordinator runner. This preserves same-workspace
+singleflight while keeping a limiter slot occupied until an aborted runner has
+actually finished cleanup:
+
+```ts
+return await this.checkCoordinator.run(workspace, (signal) =>
+  ratchetWorkspaceLimit(() => {
+    signal.throwIfAborted();
+    return this.processWorkspace(workspace, opts, signal);
+  })
 );
 ```
 

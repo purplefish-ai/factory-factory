@@ -16,7 +16,7 @@ export class RatchetWorkspaceCheckCoordinator {
   ): Promise<WorkspaceRatchetResult> {
     const existing = this.inFlightWorkspaceChecks.get(workspace.id);
     if (existing) {
-      return this.withTimeout(workspace, existing);
+      return this.withTimeout(existing);
     }
 
     const controller = new AbortController();
@@ -28,20 +28,14 @@ export class RatchetWorkspaceCheckCoordinator {
     });
     inFlight = { controller, promise };
     this.inFlightWorkspaceChecks.set(workspace.id, inFlight);
-    return this.withTimeout(workspace, inFlight);
+    return this.withTimeout(inFlight);
   }
 
-  private withTimeout(
-    workspace: WorkspaceWithPR,
-    inFlight: InFlightWorkspaceCheck
-  ): Promise<WorkspaceRatchetResult> {
+  private withTimeout(inFlight: InFlightWorkspaceCheck): Promise<WorkspaceRatchetResult> {
     const timeoutMs = this.getTimeoutMs();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         const timeoutError = new Error(`Workspace check timed out after ${timeoutMs}ms`);
-        if (this.inFlightWorkspaceChecks.get(workspace.id) === inFlight) {
-          this.inFlightWorkspaceChecks.delete(workspace.id);
-        }
         inFlight.controller.abort(timeoutError);
         reject(timeoutError);
       }, timeoutMs);

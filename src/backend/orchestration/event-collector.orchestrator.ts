@@ -504,12 +504,17 @@ function configureEventCollectorWithState(
     });
 
     if (shouldRefreshRatchet) {
-      void ratchetService.checkWorkspaceById(event.workspaceId).catch((error) => {
-        logger.warn('Failed immediate ratchet refresh after PR switch', {
-          workspaceId: event.workspaceId,
-          error: error instanceof Error ? error.message : String(error),
+      // Bypass the PR-fetch cooldown: this event was emitted by a sync that
+      // just registered its own fetch, so a plain check would be deduped into
+      // a no-op and the "immediate" refresh would wait for the next poll.
+      void ratchetService
+        .checkWorkspaceById(event.workspaceId, { bypassPrFetchCooldown: true })
+        .catch((error) => {
+          logger.warn('Failed immediate ratchet refresh after PR switch', {
+            workspaceId: event.workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
-      });
     }
 
     // Closed PRs are excluded from the ratchet poll set, so the poll loop can no

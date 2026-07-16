@@ -200,13 +200,16 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     getPRFullDetails: (repo, pr, signal) => githubCLIService.getPRFullDetails(repo, pr, signal),
     getReviewComments: (repo, pr, since, signal) =>
       githubCLIService.getReviewComments(repo, pr, since, signal),
+    getResolvedReviewCommentIds: (repo, pr, signal) =>
+      githubCLIService.getResolvedReviewCommentIds(repo, pr, signal),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
         checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
       ),
-    getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
+    getAuthenticatedUsername: (signal) => githubCLIService.getAuthenticatedUsername(signal),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
     isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
+    isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
     startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
     registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
     cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),

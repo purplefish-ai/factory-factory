@@ -1,5 +1,5 @@
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
-import type { createLogger } from '@/backend/services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
@@ -12,7 +12,7 @@ import type {
   WorkspaceWithPR,
 } from './ratchet.types';
 
-type Logger = ReturnType<typeof createLogger>;
+const logger = createLogger('ratchet');
 
 export interface AuthenticatedUsernameCache {
   value: string | null;
@@ -314,8 +314,7 @@ export function buildFailedCheckDiagnostics(prStateInfo: PRStateInfo | null) {
 
 export function resolveRatchetPrContext(
   workspace: WorkspaceWithPR,
-  github: RatchetGitHubBridge,
-  logger: Logger
+  github: RatchetGitHubBridge
 ): { repo: string; prNumber: number } | null {
   const prInfo = github.extractPRInfo(workspace.prUrl);
   if (!prInfo) {
@@ -341,44 +340,29 @@ export function resolveRatchetPrContext(
 export async function fetchPRState(params: {
   workspace: WorkspaceWithPR;
   authenticatedUsername: string | null;
-  signal?: AbortSignal;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
-  logger: Logger;
-  computeLatestReviewActivityAtMs?: (
-    prDetails: {
-      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
-      comments: Array<{ updatedAt: string; author: { login: string } }>;
-    },
-    reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-    authenticatedUsername: string | null
-  ) => number | null;
-  computeDispatchSnapshotKey?: (
-    ciStatus: CIStatus,
-    hasChangesRequested: boolean,
-    latestReviewActivityAtMs: number | null,
-    statusChecks: RatchetStatusCheckRollupItem[] | null,
-    hasMergeConflict?: boolean
-  ) => string;
+  signal?: AbortSignal;
+  /**
+   * Skip the completed-fetch cooldown. Used by event-driven checks that fire
+   * right after another service's fetch registered the workspace in the dedup
+   * registry — the whole point of those checks is to recompute now. An
+   * actively in-flight fetch is still honored, so the bypass never issues a
+   * duplicate concurrent GitHub call.
+   */
+  bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
-  const {
-    workspace,
-    authenticatedUsername,
-    signal,
-    github,
-    backoff,
-    logger,
-    computeLatestReviewActivityAtMs:
-      computeLatestReviewActivityAtMsFn = computeLatestReviewActivityAtMs,
-    computeDispatchSnapshotKey: computeDispatchSnapshotKeyFn = computeDispatchSnapshotKey,
-  } = params;
-  const prContext = resolveRatchetPrContext(workspace, github, logger);
+  const { workspace, authenticatedUsername, github, backoff, signal } = params;
+  signal?.throwIfAborted();
+  const prContext = resolveRatchetPrContext(workspace, github);
   if (!prContext) {
     return null;
   }
-  signal?.throwIfAborted();
 
-  if (github.isRecentlyFetched(workspace.id)) {
+  const dedupSkip = params.bypassRecentFetchCooldown
+    ? github.isFetchInFlight(workspace.id)
+    : github.isRecentlyFetched(workspace.id);
+  if (dedupSkip) {
     logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
       workspaceId: workspace.id,
       prUrl: workspace.prUrl,
@@ -392,9 +376,22 @@ export async function fetchPRState(params: {
     signal?.throwIfAborted();
     github.startFetch(workspace.id);
 
-    const [prDetails, reviewComments] = await Promise.all([
+    const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
       github.getReviewComments(prContext.repo, prContext.prNumber, undefined, signal),
+      // Degrade gracefully: without resolution data, fall back to including
+      // all review comments (pre-filtering behavior) rather than failing the check.
+      github
+        .getResolvedReviewCommentIds(prContext.repo, prContext.prNumber, signal)
+        .catch((error) => {
+          signal?.throwIfAborted();
+          logger.warn('Failed to fetch resolved review threads; including all review comments', {
+            workspaceId: workspace.id,
+            prUrl: workspace.prUrl,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return new Set<number>();
+        }),
     ]);
     signal?.throwIfAborted();
 
@@ -414,12 +411,17 @@ export async function fetchPRState(params: {
 
     const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
     const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
-    const latestReviewActivityAtMs = computeLatestReviewActivityAtMsFn(
+    // Review activity (and thus the dispatch snapshot key) is computed over ALL
+    // review comments, resolved or not. Resolving a thread does not touch the
+    // comments' timestamps, so this keeps the snapshot key stable when threads
+    // get resolved; excluding resolved comments would change the key on every
+    // resolution and re-trigger dispatches.
+    const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
       prDetails,
       reviewComments,
       authenticatedUsername
     );
-    const snapshotKey = computeDispatchSnapshotKeyFn(
+    const snapshotKey = computeDispatchSnapshotKey(
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,
@@ -427,8 +429,17 @@ export async function fetchPRState(params: {
       hasMergeConflict
     );
 
+    // Resolved threads are settled feedback: drop them from the fixer prompt
+    // and from the actionable-trigger count so they cannot re-trigger or
+    // re-litigate dispatches.
     const filteredReviewComments = reviewComments
-      .filter((c) => !isIgnoredReviewAuthor(c.author.login, authenticatedUsername))
+      .filter(
+        (c) =>
+          !(
+            resolvedReviewCommentIds.has(c.id) ||
+            isIgnoredReviewAuthor(c.author.login, authenticatedUsername)
+          )
+      )
       .map((c) => ({
         author: c.author.login,
         body: c.body,
@@ -436,6 +447,14 @@ export async function fetchPRState(params: {
         line: c.line,
         url: c.url,
       }));
+    if (filteredReviewComments.length < reviewComments.length) {
+      logger.debug('Filtered review comments for ratchet dispatch', {
+        workspaceId: workspace.id,
+        totalComments: reviewComments.length,
+        includedComments: filteredReviewComments.length,
+        resolvedThreadCommentIds: resolvedReviewCommentIds.size,
+      });
+    }
     const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
@@ -471,7 +490,9 @@ export async function fetchPRState(params: {
 export async function getAuthenticatedUsernameCached(params: {
   cachedValue: AuthenticatedUsernameCache | null;
   github: RatchetGitHubBridge;
+  signal?: AbortSignal;
 }): Promise<{ username: string | null; cache: AuthenticatedUsernameCache }> {
+  params.signal?.throwIfAborted();
   const nowMs = Date.now();
   if (params.cachedValue && params.cachedValue.expiresAtMs > nowMs) {
     return {
@@ -480,7 +501,9 @@ export async function getAuthenticatedUsernameCached(params: {
     };
   }
 
-  const username = await params.github.getAuthenticatedUsername();
+  params.signal?.throwIfAborted();
+  const username = await params.github.getAuthenticatedUsername(params.signal);
+  params.signal?.throwIfAborted();
   return {
     username,
     cache: {

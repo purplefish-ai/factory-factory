@@ -67,4 +67,35 @@ describe('RatchetWorkspaceCheckCoordinator', () => {
     expect(receivedSignal?.aborted).toBe(true);
     expect(receivedSignal?.reason).toEqual(new Error('Workspace check timed out after 1000ms'));
   });
+
+  it('keeps sharing an aborted runner until its cleanup settles', async () => {
+    const coordinator = new RatchetWorkspaceCheckCoordinator(() => 1000);
+    const workspace = { id: 'workspace-cleanup' } as WorkspaceWithPR;
+    let finishCleanup!: () => void;
+    const cleanupBarrier = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const runner = vi.fn(async (signal: AbortSignal) => {
+      await new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      await cleanupBarrier;
+      signal.throwIfAborted();
+      throw new Error('unreachable');
+    });
+
+    const first = coordinator.run(workspace, runner);
+    const firstExpectation = expect(first).rejects.toThrow(
+      'Workspace check timed out after 1000ms'
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await firstExpectation;
+
+    const joinedDuringCleanup = coordinator.run(workspace, runner);
+    expect(runner).toHaveBeenCalledTimes(1);
+    finishCleanup();
+
+    await expect(joinedDuringCleanup).rejects.toThrow('Workspace check timed out after 1000ms');
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
 });

@@ -71,6 +71,7 @@ vi.mock('@/backend/services/github', () => ({
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
     getReviewComments: vi.fn(),
+    getResolvedReviewCommentIds: vi.fn(),
     computeCIStatus: vi.fn(),
     getAuthenticatedUsername: vi.fn(),
     fetchAndComputePRState: vi.fn(),
@@ -79,6 +80,7 @@ vi.mock('@/backend/services/github', () => ({
   },
   prFetchRegistry: {
     isRecentlyFetched: vi.fn(),
+    isFetchInFlight: vi.fn(),
     register: vi.fn(),
     startFetch: vi.fn(),
     cancelFetch: vi.fn(),
@@ -247,6 +249,8 @@ describe('configureDomainBridges', () => {
 
       await bridge.github.getPRFullDetails('owner/repo', 42, controller.signal);
       await bridge.github.getReviewComments('owner/repo', 42, undefined, controller.signal);
+      await bridge.github.getResolvedReviewCommentIds('owner/repo', 42, controller.signal);
+      await bridge.github.getAuthenticatedUsername(controller.signal);
 
       expect(githubCLIService.getPRFullDetails).toHaveBeenCalledWith(
         'owner/repo',
@@ -259,6 +263,12 @@ describe('configureDomainBridges', () => {
         undefined,
         controller.signal
       );
+      expect(githubCLIService.getResolvedReviewCommentIds).toHaveBeenCalledWith(
+        'owner/repo',
+        42,
+        controller.signal
+      );
+      expect(githubCLIService.getAuthenticatedUsername).toHaveBeenCalledWith(controller.signal);
     });
 
     it('github bridge delegates computeCIStatus with null input', () => {
@@ -295,6 +305,15 @@ describe('configureDomainBridges', () => {
 
       expect(bridge.github.isRecentlyFetched('ws1')).toBe(true);
       expect(prFetchRegistry.isRecentlyFetched).toHaveBeenCalledWith('ws1');
+    });
+
+    it('github bridge delegates isFetchInFlight to prFetchRegistry', () => {
+      vi.mocked(prFetchRegistry.isFetchInFlight).mockReturnValue(true);
+      configureDomainBridges();
+      const bridge = getBridge(ratchetService.configure);
+
+      expect(bridge.github.isFetchInFlight('ws1')).toBe(true);
+      expect(prFetchRegistry.isFetchInFlight).toHaveBeenCalledWith('ws1');
     });
 
     it('github bridge delegates registerFetch to prFetchRegistry', () => {

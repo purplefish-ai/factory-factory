@@ -1075,6 +1075,163 @@ describe('GitHubCLIService', () => {
     });
   });
 
+  describe('getResolvedReviewCommentIds', () => {
+    function makeCommentsConnection(
+      commentIds: Array<number | null>,
+      pageInfo: { hasNextPage: boolean; endCursor: string | null } = {
+        hasNextPage: false,
+        endCursor: null,
+      }
+    ) {
+      return {
+        pageInfo,
+        nodes: commentIds.map((id) => ({
+          fullDatabaseId: id === null ? null : String(id),
+        })),
+      };
+    }
+
+    function makeReviewThreadsResponse(
+      threads: Array<{
+        isResolved: boolean;
+        commentIds: Array<number | null>;
+        commentsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
+      }>,
+      pageInfo: { hasNextPage: boolean; endCursor: string | null } = {
+        hasNextPage: false,
+        endCursor: null,
+      }
+    ) {
+      return {
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                pageInfo,
+                nodes: threads.map((thread, index) => ({
+                  id: `thread-${index}`,
+                  isResolved: thread.isResolved,
+                  comments: makeCommentsConnection(thread.commentIds, thread.commentsPageInfo),
+                })),
+              },
+            },
+          },
+        },
+      };
+    }
+
+    it('returns comment ids from resolved threads only', async () => {
+      mockExecFile.mockResolvedValue({
+        stdout: JSON.stringify(
+          makeReviewThreadsResponse([
+            { isResolved: true, commentIds: [1, 2] },
+            { isResolved: false, commentIds: [3] },
+            { isResolved: true, commentIds: [3_590_714_831, null] },
+          ])
+        ),
+        stderr: '',
+      });
+
+      const result = await githubCLIService.getResolvedReviewCommentIds('owner/repo', 123);
+      expect(result).toEqual(new Set([1, 2, 3_590_714_831]));
+    });
+
+    it('paginates review threads until hasNextPage is false', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify(
+            makeReviewThreadsResponse([{ isResolved: true, commentIds: [1] }], {
+              hasNextPage: true,
+              endCursor: 'cursor-1',
+            })
+          ),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify(
+            makeReviewThreadsResponse([{ isResolved: true, commentIds: [2] }])
+          ),
+          stderr: '',
+        });
+
+      const result = await githubCLIService.getResolvedReviewCommentIds('owner/repo', 123);
+      expect(result).toEqual(new Set([1, 2]));
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+      const secondQuery = mockExecFile.mock.calls[1]?.[1]?.join(' ');
+      expect(secondQuery).toContain('after: "cursor-1"');
+    });
+
+    it('pages through a resolved thread with more than one page of comments', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify(
+            makeReviewThreadsResponse([
+              {
+                isResolved: true,
+                commentIds: [1],
+                commentsPageInfo: { hasNextPage: true, endCursor: 'comment-cursor-1' },
+              },
+              { isResolved: false, commentIds: [2] },
+            ])
+          ),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: {
+              node: {
+                comments: makeCommentsConnection([3], {
+                  hasNextPage: true,
+                  endCursor: 'comment-cursor-2',
+                }),
+              },
+            },
+          }),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            data: { node: { comments: makeCommentsConnection([4]) } },
+          }),
+          stderr: '',
+        });
+
+      const result = await githubCLIService.getResolvedReviewCommentIds('owner/repo', 123);
+      expect(result).toEqual(new Set([1, 3, 4]));
+      expect(mockExecFile).toHaveBeenCalledTimes(3);
+      const tailQuery = mockExecFile.mock.calls[1]?.[1]?.join(' ');
+      expect(tailQuery).toContain('node(id: "thread-0")');
+      expect(tailQuery).toContain('after: "comment-cursor-1"');
+      const secondTailQuery = mockExecFile.mock.calls[2]?.[1]?.join(' ');
+      expect(secondTailQuery).toContain('after: "comment-cursor-2"');
+    });
+
+    it('returns an empty set when the PR is not found', async () => {
+      mockExecFile.mockResolvedValue({
+        stdout: JSON.stringify({ data: { repository: { pullRequest: null } } }),
+        stderr: '',
+      });
+
+      const result = await githubCLIService.getResolvedReviewCommentIds('owner/repo', 123);
+      expect(result).toEqual(new Set());
+    });
+
+    it('throws when the gh CLI call fails', async () => {
+      mockExecFile.mockRejectedValue(new Error('network down'));
+
+      await expect(githubCLIService.getResolvedReviewCommentIds('owner/repo', 123)).rejects.toThrow(
+        'Failed to fetch resolved review threads: network down'
+      );
+    });
+
+    it('throws on an invalid repo format', async () => {
+      await expect(githubCLIService.getResolvedReviewCommentIds('bad-repo', 123)).rejects.toThrow(
+        'Invalid repo format'
+      );
+      expect(mockExecFile).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkHealth edge cases', () => {
     it('should return generic error for non-installation failures', async () => {
       mockExecFile.mockRejectedValue(new Error('something weird'));
@@ -1503,6 +1660,21 @@ describe('GitHubCLIService', () => {
   });
 
   describe('centralized exec - singleflight dedup', () => {
+    it('passes abort signals to authenticated-user lookups', async () => {
+      const controller = new AbortController();
+      mockExecFile.mockResolvedValue({ stdout: 'octocat\n', stderr: '' });
+
+      await expect(githubCLIService.getAuthenticatedUsername(controller.signal)).resolves.toBe(
+        'octocat'
+      );
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        ['api', 'user', '--jq', '.login'],
+        expect.objectContaining({ signal: controller.signal })
+      );
+    });
+
     it('passes abort signals to PR detail child processes', async () => {
       const controller = new AbortController();
       mockExecFile.mockResolvedValue({
@@ -1584,6 +1756,57 @@ describe('GitHubCLIService', () => {
       ]);
 
       expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not spawn a signal-bound read that is cancelled while queued', async () => {
+      const prDetails = {
+        number: 42,
+        title: 'PR',
+        url: 'https://github.com/owner/repo/pull/42',
+        author: { login: 'author' },
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        isDraft: false,
+        state: 'OPEN',
+        reviewDecision: null,
+        statusCheckRollup: [],
+        reviews: [],
+        comments: [],
+        labels: [],
+        additions: 0,
+        deletions: 0,
+        changedFiles: 0,
+        headRefName: 'feature',
+        baseRefName: 'main',
+        mergeStateStatus: 'CLEAN',
+      };
+      const releases: Array<() => void> = [];
+      mockExecFile.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            releases.push(() => resolve({ stdout: JSON.stringify(prDetails), stderr: '' }));
+          })
+      );
+
+      const blockers = Array.from({ length: 5 }, (_, index) => {
+        const controller = new AbortController();
+        return githubCLIService.getPRFullDetails('owner/repo', index + 1, controller.signal);
+      });
+      await vi.waitFor(() => expect(mockExecFile).toHaveBeenCalledTimes(5));
+
+      const queuedController = new AbortController();
+      const abortReason = new Error('queued request cancelled');
+      const queued = githubCLIService.getPRFullDetails('owner/repo', 99, queuedController.signal);
+      queuedController.abort(abortReason);
+      releases.shift()?.();
+
+      await expect(queued).rejects.toBe(abortReason);
+      expect(mockExecFile).toHaveBeenCalledTimes(5);
+
+      for (const release of releases) {
+        release();
+      }
+      await Promise.all(blockers);
     });
 
     it('deduplicates identical concurrent read calls', async () => {

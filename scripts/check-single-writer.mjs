@@ -68,10 +68,24 @@ const workspaceFieldOwners = {
   ratchetEnabled: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
   ratchetState: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
   ratchetLastCheckedAt: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetActiveSessionId: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetLastCiRunId: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetDispatchOutcome: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetDispatchRetryCount: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
+  ratchetActiveSessionId: new Set([
+    'src/backend/services/ratchet/service/ratchet.service.ts',
+    'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
+    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+  ]),
+  ratchetLastCiRunId: new Set([
+    'src/backend/services/ratchet/service/ratchet.service.ts',
+    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+  ]),
+  ratchetDispatchOutcome: new Set([
+    'src/backend/services/ratchet/service/ratchet.service.ts',
+    'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
+    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+  ]),
+  ratchetDispatchRetryCount: new Set([
+    'src/backend/services/ratchet/service/ratchet.service.ts',
+    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+  ]),
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
