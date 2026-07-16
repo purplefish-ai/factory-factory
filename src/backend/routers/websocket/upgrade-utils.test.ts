@@ -463,6 +463,29 @@ describe('createWebSocketUpgradeHandler', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('fails closed when authorize returns undefined', async () => {
+    const socket = createSocket();
+    const logger = createFullLogger();
+    const onOpen = vi.fn();
+    const { wss } = createWss();
+
+    const handler = createWebSocketUpgradeHandler({
+      connectionName: 'test WebSocket',
+      configService: createConfigService(['http://localhost:3000']),
+      logger,
+      authorize: async () => undefined as unknown as null,
+      onOpen,
+    });
+
+    invoke(handler, { socket, wss });
+
+    await vi.waitFor(() => {
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
+    });
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('rejects with 400 when a synchronous authorize throws', () => {
     const socket = createSocket();
     const logger = createFullLogger();

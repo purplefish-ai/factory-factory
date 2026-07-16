@@ -188,6 +188,11 @@ function extractRequiredParams<TParam extends string>(
  * Run an authorize hook, invoking `onAuthorized` with its non-null result.
  * Synchronous hooks resolve synchronously so the upgrade completes before the
  * caller returns; only genuine promises defer it.
+ *
+ * `undefined` results fail closed: `null` means the hook rejected and already
+ * wrote a response, so an accidental `undefined` (e.g. an implicit-return
+ * code path) is treated as an error rather than an authorization. Hooks that
+ * need no context value should return `{}`.
  */
 function runAuthorize<TAuth>(
   authorize: () => TAuth | null | Promise<TAuth | null>,
@@ -195,9 +200,14 @@ function runAuthorize<TAuth>(
   onError: (error: unknown) => void
 ): void {
   const handleResult = (auth: TAuth | null): void => {
-    if (auth !== null) {
-      onAuthorized(auth);
+    if (auth === null) {
+      return;
     }
+    if (auth === undefined) {
+      onError(new Error('authorize hook returned undefined'));
+      return;
+    }
+    onAuthorized(auth);
   };
 
   try {
