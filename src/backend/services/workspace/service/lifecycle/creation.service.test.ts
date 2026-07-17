@@ -4,9 +4,9 @@ import type { createLogger } from '@/backend/services/logger.service';
 import * as userSettingsAccessorModule from '@/backend/services/settings';
 import * as projectAccessorModule from '@/backend/services/workspace/resources/project.accessor';
 import * as workspaceAccessorModule from '@/backend/services/workspace/resources/workspace.accessor';
+import * as gitOpsServiceModule from '@/backend/services/workspace/service/worktree/git-ops.service';
 import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import * as gitOpsServiceModule from '../worktree/git-ops.service';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -15,7 +15,7 @@ type Logger = ReturnType<typeof createLogger>;
 vi.mock('@/backend/services/workspace/resources/project.accessor');
 vi.mock('@/backend/services/workspace/resources/workspace.accessor');
 vi.mock('@/backend/services/settings');
-vi.mock('../worktree/git-ops.service');
+vi.mock('@/backend/services/workspace/service/worktree/git-ops.service');
 vi.mock('@/backend/services/workspace/service/worktree/worktree-lifecycle.service');
 
 describe('WorkspaceCreationService', () => {

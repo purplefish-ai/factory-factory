@@ -5,10 +5,10 @@ import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
-import { gitOpsService } from '../worktree/git-ops.service';
 
 type Logger = ReturnType<typeof createLogger>;
 

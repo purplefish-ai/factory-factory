@@ -5,11 +5,11 @@ import type {
   WorkspaceQuerySessionBridge,
   WorkspaceSessionBridge,
 } from '@/backend/services/workspace/service/bridges';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { CIStatus, PRState, RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { WorkspaceSnapshotStore } from '../snapshot/workspace-snapshot-store.service';
 import { workspaceQueryService } from './workspace-query.service';
 
 const mockFindByProjectIdWithSessions = vi.fn();
@@ -37,7 +37,7 @@ vi.mock('@/backend/services/workspace/service/state/workspace-runtime-state', ()
   deriveWorkspaceRuntimeState: (...args: unknown[]) => mockDeriveWorkspaceRuntimeState(...args),
 }));
 
-vi.mock('../worktree/git-ops.service', () => ({
+vi.mock('@/backend/services/workspace/service/worktree/git-ops.service', () => ({
   gitOpsService: {
     getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
   },

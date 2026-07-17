@@ -16,10 +16,10 @@ import type {
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
+import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { gitOpsService } from '../worktree/git-ops.service';
 
 const logger = createLogger('workspace-query');
 
