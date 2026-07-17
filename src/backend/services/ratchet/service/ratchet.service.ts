@@ -768,6 +768,10 @@ class RatchetService extends EventEmitter {
       return true;
     }
 
+    if (prStateInfo.hasChangesRequested) {
+      return true;
+    }
+
     return (prStateInfo.reviewComments?.length ?? 0) > 0;
   }
 

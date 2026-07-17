@@ -654,7 +654,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it('does not dispatch for CHANGES_REQUESTED when there are no PR review comments', async () => {
+  it('dispatches for CHANGES_REQUESTED when there are no PR review comments', async () => {
     const workspace = {
       id: 'ws-review-no-comments',
       prUrl: 'https://github.com/example/repo/pull/56',
@@ -687,6 +687,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-session',
+      promptSent: true,
+    });
     const triggerSpy = vi.spyOn(
       unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
@@ -696,12 +701,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
     }>(ratchetService).processWorkspace(workspace);
 
-    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(triggerSpy).toHaveBeenCalled();
     expect(result).toMatchObject({
-      action: {
-        type: 'WAITING',
-        reason: 'No CI failures or PR review comments to address',
-      },
+      action: { type: 'TRIGGERED_FIXER' },
     });
   });
 
