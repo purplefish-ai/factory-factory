@@ -5,12 +5,10 @@ import ts from 'typescript';
 export const REPOSITORY_ROOT = process.cwd();
 
 export function isProductionTypeScriptFile(fileName: string): boolean {
-  return (
-    fileName.endsWith('.ts') &&
-    !fileName.endsWith('.test.ts') &&
-    !fileName.endsWith('.spec.ts') &&
-    !fileName.endsWith('.d.ts')
-  );
+  const isTypeScript = /\.(?:[cm]?ts|tsx)$/.test(fileName);
+  const isTest = /\.(?:test|spec)\.(?:[cm]?ts|tsx)$/.test(fileName);
+  const isDeclaration = /\.d\.(?:[cm]?ts|tsx)$/.test(fileName);
+  return isTypeScript && !isTest && !isDeclaration;
 }
 
 export function discoverProductionTypeScriptFiles(root: string): string[] {
@@ -49,12 +47,13 @@ export function parseTypeScriptImports(
   readonly sourceFile: ts.SourceFile;
   readonly importDeclarations: readonly ts.ImportDeclaration[];
 } {
+  const scriptKind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(
     fileName,
     source,
     ts.ScriptTarget.Latest,
     true,
-    ts.ScriptKind.TS
+    scriptKind
   );
   return {
     sourceFile,

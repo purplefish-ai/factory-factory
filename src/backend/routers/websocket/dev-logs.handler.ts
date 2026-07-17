@@ -12,9 +12,31 @@ let broadcasterLogger: Pick<ReturnType<AppContext['services']['createLogger']>, 
   error: () => undefined,
 };
 
+function proxyBroadcasterError(message: string, context?: Record<string, unknown>): void;
+function proxyBroadcasterError(
+  message: string,
+  error: Error,
+  context?: Record<string, unknown>
+): void;
+function proxyBroadcasterError(
+  message: string,
+  errorOrContext?: Error | Record<string, unknown>,
+  context?: Record<string, unknown>
+): void {
+  if (errorOrContext instanceof Error) {
+    broadcasterLogger.error(message, errorOrContext, context);
+    return;
+  }
+  broadcasterLogger.error(message, errorOrContext);
+}
+
+const broadcasterLoggerProxy: typeof broadcasterLogger = {
+  error: proxyBroadcasterError,
+};
+
 /** Dev-logs WebSocket connections, keyed by workspace ID. */
 export const devLogsConnections = new TopicBroadcaster<string>(
-  { error: (...args) => broadcasterLogger.error(...args) },
+  broadcasterLoggerProxy,
   'log output'
 );
 

@@ -303,10 +303,16 @@ export function createApplication(
   lifecycle.eventCollector.start();
 
   return Object.freeze({
-    services: Object.freeze({ ...services }),
-    lifecycle: Object.freeze({ ...lifecycle }),
+    services: Object.freeze(services),
+    lifecycle: Object.freeze(lifecycle),
     config: services.configService.getSystemConfig(),
   });
+}
+
+export async function disposeApplication(application: Application): Promise<void> {
+  application.lifecycle.eventCollector.stop();
+  await application.lifecycle.snapshotReconciliation.stop();
+  application.services.workspaceGitStateService.stop();
 }
 
 export type AppContext = Application;

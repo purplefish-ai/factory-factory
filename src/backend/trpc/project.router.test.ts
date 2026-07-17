@@ -504,7 +504,7 @@ describe('projectRouter', () => {
 
   it('handles factory config checks and saveFactoryConfig writes the config file', async () => {
     const caller = createCaller();
-    mockReadConfig.mockRejectedValueOnce(new Error('missing'));
+    mockReadConfig.mockResolvedValueOnce(null);
     await expect(caller.checkFactoryConfig({ repoPath: '/repo/path' })).resolves.toEqual({
       exists: false,
     });
@@ -523,6 +523,15 @@ describe('projectRouter', () => {
 
     const written = readFileSync(join(tempDir, 'factory-factory.json'), 'utf-8');
     expect(written).toContain('"run": "pnpm test"');
+  });
+
+  it('propagates invalid factory config errors', async () => {
+    const caller = createCaller();
+    mockReadConfig.mockRejectedValueOnce(new Error('Invalid factory-factory.json'));
+
+    await expect(caller.checkFactoryConfig({ repoPath: '/repo/path' })).rejects.toThrow(
+      'Invalid factory-factory.json'
+    );
   });
 
   it('returns exists=true for checkFactoryConfig and throws when save target is missing', async () => {

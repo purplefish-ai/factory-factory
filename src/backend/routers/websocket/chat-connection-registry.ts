@@ -163,6 +163,15 @@ export class ChatConnectionRegistry {
     }
     this.connections.clear();
   }
+
+  /** Close all registered sockets before dropping transport-owned references. */
+  dispose(): void {
+    for (const entry of this.connections.values()) {
+      entry.unsubscribe?.();
+      entry.info.ws.close();
+    }
+    this.connections.clear();
+  }
 }
 
 const applicationChatConnectionRegistries = new WeakMap<Application, ChatConnectionRegistry>();
@@ -199,7 +208,7 @@ const chatTransportAttachments = new WeakMap<ChatConnectionRegistry, ChatTranspo
 export function detachChatTransport(registry: ChatConnectionRegistry): void {
   const attachment = chatTransportAttachments.get(registry);
   if (!attachment) {
-    registry.clear();
+    registry.dispose();
     return;
   }
   const { sessionEventBus } = attachment.deps;
@@ -207,7 +216,7 @@ export function detachChatTransport(registry: ChatConnectionRegistry): void {
   sessionEventBus.off(CHAT_BROADCAST_EVENT, attachment.chatBroadcastListener);
   sessionEventBus.registerViewerCountProvider(null);
   chatTransportAttachments.delete(registry);
-  registry.clear();
+  registry.dispose();
 }
 
 /**

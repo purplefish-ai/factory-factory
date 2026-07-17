@@ -289,6 +289,7 @@ export interface FakeApplicationGraph extends ApplicationDependencies {
 
 export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph {
   let graphEventCollector: EventCollectorOrchestrator | null = null;
+  const graphSystemConfig = structuredClone(fakeSystemConfig);
   const graphAcpRuntimeManager = Object.assign({}, acpRuntimeManager, {
     setAcpStartupTimeoutMs: vi.fn(),
     configureEnvironment: vi.fn(),
@@ -297,10 +298,10 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     getAcpStartupTimeoutMs: vi.fn(() => 4321),
     isProduction: vi.fn(() => false),
     getChildProcessEnv: vi.fn(() => ({ APPLICATION_LABEL: label })),
-    getSystemConfig: vi.fn(() => fakeSystemConfig),
-    getWorktreeBaseDir: vi.fn(() => fakeSystemConfig.worktreeBaseDir),
-    getMaxSessionsPerWorkspace: vi.fn(() => fakeSystemConfig.maxSessionsPerWorkspace),
-    getCorsConfig: vi.fn(() => fakeSystemConfig.cors),
+    getSystemConfig: vi.fn(() => graphSystemConfig),
+    getWorktreeBaseDir: vi.fn(() => graphSystemConfig.worktreeBaseDir),
+    getMaxSessionsPerWorkspace: vi.fn(() => graphSystemConfig.maxSessionsPerWorkspace),
+    getCorsConfig: vi.fn(() => graphSystemConfig.cors),
   }) satisfies typeof configService;
   const graphSessionService = Object.assign({}, sessionService, {
     getRuntimeSnapshot: vi.fn(),
@@ -409,5 +410,5 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     recoverStaleArchivingWorkspaces,
   } satisfies ApplicationLifecycle;
 
-  return { services, lifecycle, config: fakeSystemConfig };
+  return { services, lifecycle, config: graphSystemConfig };
 }

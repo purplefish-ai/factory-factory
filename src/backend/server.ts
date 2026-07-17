@@ -41,7 +41,7 @@ import {
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
-export { createApplication } from './app-context';
+export { createApplication, disposeApplication } from './app-context';
 export type { ServerInstance };
 
 /**

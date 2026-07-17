@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import {
   discoverProductionTypeScriptFiles,
+  isProductionTypeScriptFile,
   parseTypeScriptImports,
   REPOSITORY_ROOT,
   resolveRepositoryModule,
@@ -95,6 +96,21 @@ function findForbiddenBackendImports(
 }
 
 describe('tRPC context dependencies', () => {
+  it('discovers every supported production TypeScript extension', () => {
+    expect(
+      ['router.ts', 'router.tsx', 'router.mts', 'router.cts'].every(isProductionTypeScriptFile)
+    ).toBe(true);
+    expect(
+      ['router.test.ts', 'router.spec.tsx', 'router.d.ts'].some(isProductionTypeScriptFile)
+    ).toBe(false);
+
+    const parsed = parseTypeScriptImports(
+      "import { z } from 'zod'; export const element = <div />;",
+      'runtime.tsx'
+    );
+    expect(parsed.importDeclarations).toHaveLength(1);
+  });
+
   it('discovers all production tRPC modules and helpers', () => {
     expect(TRPC_RUNTIME_FILES).toEqual(
       expect.arrayContaining([

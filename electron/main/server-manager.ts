@@ -112,12 +112,14 @@ export class ServerManager {
       const serverModule = await this.dynamicImport<{
         createApplication: () => Application;
         createServer: (application: Application) => ServerInstance;
+        disposeApplication: (application: Application) => Promise<void>;
       }>(this.toModuleImportSpecifier(serverPath));
       const application = serverModule.createApplication();
-      const serverInstance = serverModule.createServer(application);
-      application.services.serverInstanceService.setInstance(serverInstance);
+      let serverInstance: ServerInstance | null = null;
 
       try {
+        serverInstance = serverModule.createServer(application);
+        application.services.serverInstanceService.setInstance(serverInstance);
         const url = await serverInstance.start();
         this.serverInstance = serverInstance;
         this.serverUrl = url;
@@ -125,7 +127,11 @@ export class ServerManager {
         return url;
       } catch (error) {
         try {
-          await serverInstance.stop();
+          if (serverInstance) {
+            await serverInstance.stop();
+          } else {
+            await serverModule.disposeApplication(application);
+          }
         } catch (stopError) {
           console.error('[electron] Failed to cleanup server after start error:', stopError);
         }

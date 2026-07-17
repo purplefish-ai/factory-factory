@@ -358,8 +358,9 @@ describe('attachChatTransport', () => {
     const applicationRegistry = getChatConnectionRegistryForApplication(application);
     const initialListenerCount = sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT);
     attachChatTransport(createTransportDeps(), applicationRegistry);
+    const ws = new MockWebSocket();
     applicationRegistry.register('conn-1', {
-      ws: asWs(new MockWebSocket()),
+      ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
     });
@@ -372,6 +373,7 @@ describe('attachChatTransport', () => {
 
     expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount);
     expect(sessionEventBus.countViewers('s1')).toBe(0);
+    expect(ws.close).toHaveBeenCalledOnce();
     const restartedRegistry = getChatConnectionRegistryForApplication(application);
     expect(restartedRegistry).not.toBe(applicationRegistry);
 

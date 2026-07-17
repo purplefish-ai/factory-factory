@@ -383,14 +383,8 @@ export const projectRouter = router({
   checkFactoryConfig: publicProcedure
     .input(z.object({ repoPath: z.string() }))
     .query(async ({ ctx, input }) => {
-      try {
-        const config = await ctx.appContext.services.factoryConfigService.readConfig(
-          input.repoPath
-        );
-        return { exists: config !== null };
-      } catch {
-        return { exists: false };
-      }
+      const config = await ctx.appContext.services.factoryConfigService.readConfig(input.repoPath);
+      return { exists: config !== null };
     }),
 
   // Save factory-factory.json to the project repo
