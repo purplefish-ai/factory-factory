@@ -5,6 +5,7 @@ import type { CommandInfo } from '@/shared/acp-protocol';
 
 const logger = createLogger('slash-command-cache');
 const CACHE_PAYLOAD_VERSION = 2;
+const SLASH_COMMAND_CACHE_UPDATE_MAX_ATTEMPTS = 5;
 
 function isCommandInfo(value: unknown): value is CommandInfo {
   if (!value || typeof value !== 'object') {
@@ -159,26 +160,36 @@ class SlashCommandCacheService {
     const normalized = normalizeCommands(commands);
 
     try {
-      const settings = await userSettingsAccessor.get();
-      const existingMap = toVersionedProviderCommandMap(settings.cachedSlashCommands) ?? {};
-      const legacyMap = toProviderCommandMap(settings.cachedSlashCommands);
-      if (!existingMap.CODEX && legacyMap?.CODEX) {
-        existingMap.CODEX = legacyMap.CODEX;
+      for (let attempt = 0; attempt < SLASH_COMMAND_CACHE_UPDATE_MAX_ATTEMPTS; attempt += 1) {
+        const settings = await userSettingsAccessor.get();
+        const existingMap = toVersionedProviderCommandMap(settings.cachedSlashCommands) ?? {};
+        const legacyMap = toProviderCommandMap(settings.cachedSlashCommands);
+        if (!existingMap.CODEX && legacyMap?.CODEX) {
+          existingMap.CODEX = legacyMap.CODEX;
+        }
+        const existing = existingMap[provider] ?? null;
+
+        if (existing && areCommandsEqual(existing, normalized)) {
+          return;
+        }
+
+        const nextPayload: CachedSlashCommandsByProvider = {
+          ...existingMap,
+          [provider]: normalized,
+        };
+
+        const updated = await userSettingsAccessor.compareAndSetCachedSlashCommands(
+          settings.updatedAt,
+          toProviderPayload(nextPayload)
+        );
+        if (updated) {
+          return;
+        }
       }
-      const existing = existingMap[provider] ?? null;
 
-      if (existing && areCommandsEqual(existing, normalized)) {
-        return;
-      }
-
-      const nextPayload: CachedSlashCommandsByProvider = {
-        ...existingMap,
-        [provider]: normalized,
-      };
-
-      await userSettingsAccessor.update({
-        cachedSlashCommands: toProviderPayload(nextPayload),
-      });
+      throw new Error(
+        `Failed to update cached slash commands for ${provider} after ${SLASH_COMMAND_CACHE_UPDATE_MAX_ATTEMPTS} attempts`
+      );
     } catch (error) {
       logger.warn('Failed to update cached slash commands', {
         error: error instanceof Error ? error.message : String(error),
