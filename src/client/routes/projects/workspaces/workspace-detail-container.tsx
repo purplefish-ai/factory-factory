@@ -85,7 +85,7 @@ export function WorkspaceDetailContainer() {
     setSelectedProvider(effectiveDefaultProvider);
   }, [effectiveDefaultProvider]);
 
-  const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
+  const { data: gitStatus, isFetching: isGitStatusFetching } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
     getArchiveGitStatusQueryOptions(archiveDialogOpen, workspace?.worktreePath)
   );
@@ -385,6 +385,7 @@ export function WorkspaceDetailContainer() {
           open: archiveDialogOpen,
           setOpen: setArchiveDialogOpen,
           hasUncommitted: hasUncommitted && !isDoneOrMergedWorkspace,
+          isCheckingGitStatus: isGitStatusFetching && !isDoneOrMergedWorkspace,
           activeChildCount,
           onConfirm: handleArchive,
         }}

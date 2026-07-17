@@ -22,6 +22,7 @@ export type ArchiveWorkspaceDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasUncommitted: boolean;
+  isCheckingGitStatus?: boolean;
   showCommitOption?: boolean;
   onConfirm: (commitUncommitted: boolean) => void;
   description?: string;
@@ -35,6 +36,7 @@ export function ArchiveWorkspaceDialog({
   open,
   onOpenChange,
   hasUncommitted,
+  isCheckingGitStatus = false,
   showCommitOption = true,
   onConfirm,
   description = defaultDescription,
@@ -100,10 +102,12 @@ export function ArchiveWorkspaceDialog({
               onConfirm(showCommitOption ? commitChangesChecked : true);
               onOpenChange(false);
             }}
-            disabled={showCommitOption && hasUncommitted && !commitChangesChecked}
+            disabled={
+              isCheckingGitStatus || (showCommitOption && hasUncommitted && !commitChangesChecked)
+            }
             className={buttonVariants({ variant: 'destructive' })}
           >
-            Archive
+            {isCheckingGitStatus ? 'Checking changes…' : 'Archive'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

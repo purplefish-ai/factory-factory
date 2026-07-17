@@ -511,7 +511,7 @@ export class GitClient {
    */
   async fetch(worktreePath: string): Promise<void> {
     const result = await gitCommand(['fetch', 'origin'], worktreePath);
-    workspaceGitStateService.invalidate(worktreePath);
+    workspaceGitStateService.invalidateAll();
     if (result.code !== 0) {
       throw new Error(`Failed to fetch: ${result.stderr || result.stdout}`);
     }

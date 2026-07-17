@@ -10,6 +10,7 @@ const mockGetWorkspaceWithProjectAndWorktreeOrThrow = vi.hoisted(() => vi.fn());
 const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
 const mockGetSnapshot = vi.hoisted(() => vi.fn());
+const mockGetMergeBase = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
@@ -27,6 +28,7 @@ vi.mock('./workspace-helpers', async (importOriginal) => {
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
   workspaceGitStateService: {
     getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
+    getMergeBase: (...args: unknown[]) => mockGetMergeBase(...args),
   },
 }));
 
@@ -295,7 +297,7 @@ describe('workspaceGitRouter', () => {
       workspace: { id: 'w1', project: { defaultBranch: 'main' } },
       worktreePath: rootDir,
     });
-    mockGetSnapshot.mockResolvedValueOnce(makeSnapshot({ base: { mergeBase: 'base-sha' } }));
+    mockGetMergeBase.mockResolvedValueOnce('base-sha');
     mockGitCommand
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
@@ -323,7 +325,7 @@ describe('workspaceGitRouter', () => {
       worktreePath: '/repo',
     });
     mockIsPathSafe.mockResolvedValueOnce(true);
-    mockGetSnapshot.mockResolvedValueOnce(makeSnapshot({ base: { mergeBase: 'base-sha' } }));
+    mockGetMergeBase.mockResolvedValueOnce('base-sha');
     mockGitCommand
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
@@ -336,7 +338,7 @@ describe('workspaceGitRouter', () => {
       worktreePath: '/repo',
     });
     mockIsPathSafe.mockResolvedValueOnce(true);
-    mockGetSnapshot.mockResolvedValueOnce(makeSnapshot({ base: { mergeBase: null } }));
+    mockGetMergeBase.mockResolvedValueOnce(null);
     mockGitCommand.mockResolvedValueOnce({
       code: 0,
       stdout: 'diff --git a/src/main.ts b/src/main.ts\n',
@@ -352,7 +354,7 @@ describe('workspaceGitRouter', () => {
       worktreePath: '/repo',
     });
     mockIsPathSafe.mockResolvedValueOnce(true);
-    mockGetSnapshot.mockResolvedValueOnce(makeSnapshot({ base: { mergeBase: 'base-sha' } }));
+    mockGetMergeBase.mockResolvedValueOnce('base-sha');
     mockGitCommand.mockResolvedValueOnce({
       code: 1,
       stdout: '',
@@ -361,5 +363,10 @@ describe('workspaceGitRouter', () => {
     await expect(caller.getFileDiff({ workspaceId: 'w4', filePath })).rejects.toThrow(
       'Git diff failed: broken diff'
     );
+    expect(mockGetSnapshot).not.toHaveBeenCalled();
+    expect(mockGetMergeBase).toHaveBeenCalledWith({
+      worktreePath: '/repo',
+      defaultBranch: 'main',
+    });
   });
 });

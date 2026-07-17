@@ -122,8 +122,10 @@ export const workspaceGitRouter = router({
       }
 
       const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-      const snapshot = await workspaceGitStateService.getSnapshot({ worktreePath, defaultBranch });
-      const mergeBase = snapshot.base.mergeBase;
+      const mergeBase = await workspaceGitStateService.getMergeBase({
+        worktreePath,
+        defaultBranch,
+      });
 
       // Try to get diff from merge base (shows all changes from main)
       // Falls back to HEAD if no merge base found

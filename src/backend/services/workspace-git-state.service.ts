@@ -82,6 +82,15 @@ interface WatcherRecord {
 const WATCH_DEBOUNCE_MS = 100;
 const DEGRADED_TTL_MS = 5000;
 const FALLBACK_TTL_MS = 300_000;
+const IGNORED_WORKTREE_WATCH_DIRECTORIES = new Set([
+  'node_modules',
+  '.next',
+  'dist',
+  'build',
+  'out',
+  '.turbo',
+  'coverage',
+]);
 
 const defaultWatchPath: WatchPath = (filePath, options, listener) =>
   watch(filePath, options, (eventType, filename) => {
@@ -105,6 +114,16 @@ function isDegraded(snapshot: WorkspaceGitStateSnapshot): boolean {
   );
 }
 
+function shouldIgnoreWorktreeWatchEvent(filename: string | null): boolean {
+  if (!filename) {
+    return false;
+  }
+
+  return filename
+    .split(/[\\/]+/)
+    .some((segment) => IGNORED_WORKTREE_WATCH_DIRECTORIES.has(segment));
+}
+
 function parseNameStatus(
   output: string
 ): Pick<WorkspaceGitStateSnapshot['base'], 'added' | 'modified' | 'deleted'> {
@@ -113,18 +132,33 @@ function parseNameStatus(
   const deleted: WorkspaceGitStateSnapshot['base']['deleted'] = [];
 
   for (const line of output.split('\n')) {
-    const [status, filePath] = line.split('\t');
+    const [rawStatus, filePath, destinationPath] = line.split('\t');
     if (!filePath) {
       continue;
     }
-    if (status === 'A') {
-      added.push({ path: filePath, status: 'added' });
-    }
-    if (status === 'M') {
-      modified.push({ path: filePath, status: 'modified' });
-    }
-    if (status === 'D') {
-      deleted.push({ path: filePath, status: 'deleted' });
+    const status = rawStatus?.[0];
+    switch (status) {
+      case 'A':
+        added.push({ path: filePath, status: 'added' });
+        break;
+      case 'M':
+      case 'T':
+        modified.push({ path: filePath, status: 'modified' });
+        break;
+      case 'D':
+        deleted.push({ path: filePath, status: 'deleted' });
+        break;
+      case 'R':
+        deleted.push({ path: filePath, status: 'deleted' });
+        if (destinationPath) {
+          added.push({ path: destinationPath, status: 'added' });
+        }
+        break;
+      case 'C':
+        if (destinationPath) {
+          added.push({ path: destinationPath, status: 'added' });
+        }
+        break;
     }
   }
 
@@ -206,14 +240,22 @@ export class WorkspaceGitStateService {
     return calculation;
   }
 
+  getMergeBase(input: WorkspaceGitStateInput): Promise<string | null> {
+    return this.findMergeBase({ ...input, worktreePath: path.resolve(input.worktreePath) });
+  }
+
   invalidate(worktreePath: string): void {
-    this.invalidatePath(path.resolve(worktreePath), true);
+    this.invalidatePath(path.resolve(worktreePath));
+  }
+
+  invalidateAll(): void {
+    this.invalidateMatching(() => true);
   }
 
   remove(worktreePath: string): void {
     const normalizedPath = path.resolve(worktreePath);
     this.closeWatcher(normalizedPath);
-    this.invalidatePath(normalizedPath, true);
+    this.invalidatePath(normalizedPath);
   }
 
   stop(): void {
@@ -221,22 +263,7 @@ export class WorkspaceGitStateService {
       this.closeWatcher(worktreePath);
     }
 
-    const keys = new Set([
-      ...this.cache.keys(),
-      ...this.inFlight.keys(),
-      ...this.generations.keys(),
-      ...this.activeCalculations.keys(),
-    ]);
-    for (const key of keys) {
-      this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
-    }
-    this.cache.clear();
-    this.inFlight.clear();
-    for (const key of keys) {
-      if (!this.activeCalculations.has(key)) {
-        this.generations.delete(key);
-      }
-    }
+    this.invalidateAll();
   }
 
   getCachedSnapshotCount(): number {
@@ -247,8 +274,12 @@ export class WorkspaceGitStateService {
     return this.generations.size;
   }
 
-  private invalidatePath(worktreePath: string, detachInFlight: boolean): void {
+  private invalidatePath(worktreePath: string): void {
     const keyPrefix = `${worktreePath}\0`;
+    this.invalidateMatching((key) => key.startsWith(keyPrefix));
+  }
+
+  private invalidateMatching(shouldInvalidate: (key: string) => boolean): void {
     const keys = new Set([
       ...this.cache.keys(),
       ...this.inFlight.keys(),
@@ -256,14 +287,12 @@ export class WorkspaceGitStateService {
       ...this.activeCalculations.keys(),
     ]);
     for (const key of keys) {
-      if (!key.startsWith(keyPrefix)) {
+      if (!shouldInvalidate(key)) {
         continue;
       }
       this.cache.delete(key);
       this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
-      if (detachInFlight) {
-        this.inFlight.delete(key);
-      }
+      this.inFlight.delete(key);
       if (!this.activeCalculations.has(key)) {
         this.generations.delete(key);
       }
@@ -298,7 +327,10 @@ export class WorkspaceGitStateService {
       if (record.mode !== 'healthy' || this.watchers.get(worktreePath) !== record) {
         return;
       }
-      const handle = this.watchPath(root, { recursive: true }, () => {
+      const handle = this.watchPath(root, { recursive: true }, (_eventType, filename) => {
+        if (root === worktreePath && shouldIgnoreWorktreeWatchEvent(filename)) {
+          return;
+        }
         this.scheduleInvalidation(worktreePath, record);
       });
       record.handles.push(handle);

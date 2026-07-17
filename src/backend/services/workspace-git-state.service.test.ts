@@ -109,9 +109,15 @@ describe('WorkspaceGitStateService', () => {
         mergeBase: 'abc123',
         noMergeBase: false,
         stats: { total: 2, additions: 2, deletions: 1, hasUncommitted: true },
-        added: [{ path: 'new.ts', status: 'added' }],
+        added: [
+          { path: 'new.ts', status: 'added' },
+          { path: 'new-name.ts', status: 'added' },
+        ],
         modified: [{ path: 'changed.ts', status: 'modified' }],
-        deleted: [{ path: 'deleted.ts', status: 'deleted' }],
+        deleted: [
+          { path: 'deleted.ts', status: 'deleted' },
+          { path: 'old.ts', status: 'deleted' },
+        ],
       },
       upstream: {
         ref: 'origin/feature',
@@ -270,6 +276,17 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
+  it('invalidates snapshots for every worktree after shared refs change', async () => {
+    const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+    const first = await service.getSnapshot(input);
+    const sibling = await service.getSnapshot(siblingInput);
+
+    service.invalidateAll();
+
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+  });
+
   it('watches the worktree, linked gitdir, and common Git metadata directory', async () => {
     await service.getSnapshot(input);
 
@@ -294,6 +311,35 @@ describe('WorkspaceGitStateService', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('ignores generated-directory events but still invalidates source and Git metadata events', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = await service.getSnapshot(input);
+
+      watchers.get('/repo/w1')?.listener('change', 'packages/app/dist/bundle.js');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await service.getSnapshot(input)).toBe(first);
+
+      watchers.get('/repo/w1')?.listener('change', 'src/a.ts');
+      await vi.advanceTimersByTimeAsync(100);
+      const afterSourceChange = await service.getSnapshot(input);
+      expect(afterSourceChange).not.toBe(first);
+
+      watchers.get('/repo/.git')?.listener('change', 'refs/remotes/origin/main');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await service.getSnapshot(input)).not.toBe(afterSourceChange);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads only merge-base state for callers that do not need a full snapshot', async () => {
+    await expect(service.getMergeBase(input)).resolves.toBe('abc123');
+
+    expect(runGit).toHaveBeenCalledTimes(1);
+    expect(runGit).toHaveBeenCalledWith(['merge-base', 'HEAD', 'origin/main'], '/repo/w1');
   });
 
   it('uses five-minute fallback expiry when recursive watcher setup fails', async () => {
@@ -475,7 +521,10 @@ describe('WorkspaceGitStateService', () => {
     expect(snapshot.base.stats).toBeNull();
     expect(snapshot.base.statsError).toBe('stats diff broke');
     expect(snapshot.base.changesError).toBeUndefined();
-    expect(snapshot.base.added).toEqual([{ path: 'new.ts', status: 'added' }]);
+    expect(snapshot.base.added).toEqual([
+      { path: 'new.ts', status: 'added' },
+      { path: 'new-name.ts', status: 'added' },
+    ]);
     expect(getStats(snapshot)).toBeNull();
   });
 
