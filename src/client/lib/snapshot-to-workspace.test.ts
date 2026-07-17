@@ -57,7 +57,23 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
 
 describe('workspace snapshot cache projections', () => {
   it('projects common real-time fields consistently across all three cache views', () => {
-    const entry = makeEntry();
+    const entry = makeEntry({
+      sessionSummaries: [
+        {
+          sessionId: 'session-1',
+          name: 'Implementation',
+          workflow: 'implement',
+          model: 'gpt-5',
+          provider: 'CODEX',
+          persistedStatus: 'RUNNING',
+          runtimePhase: 'running',
+          processState: 'alive',
+          activity: 'WORKING',
+          updatedAt: '2026-01-15T09:55:00Z',
+          lastExit: null,
+        },
+      ],
+    });
     const kanban = projectSnapshotToKanbanWorkspace(entry);
     const detailSeed: WorkspaceDetail = {
       ...kanban,
@@ -80,11 +96,14 @@ describe('workspace snapshot cache projections', () => {
         ratchetEnabled: true,
         ratchetState: 'IDLE',
         runScriptStatus: 'IDLE',
+        isWorking: true,
+        sessionSummaries: entry.sessionSummaries,
         pendingRequestType: 'plan_approval',
         ratchetButtonAnimated: false,
         flowPhase: 'CI_WAIT',
         ciObservation: 'CHECKS_PASSED',
         statusReason: entry.statusReason,
+        snapshotComputedAt: '2026-01-15T10:00:00Z',
       });
     }
   });

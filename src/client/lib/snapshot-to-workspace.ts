@@ -27,11 +27,14 @@ function projectSnapshotToCommonWorkspace(entry: WorkspaceSnapshotEntry) {
     ratchetEnabled: entry.ratchetEnabled,
     ratchetState: entry.ratchetState,
     runScriptStatus: entry.runScriptStatus,
+    isWorking: entry.isWorking,
+    sessionSummaries: entry.sessionSummaries,
     pendingRequestType: entry.pendingRequestType,
     ratchetButtonAnimated: entry.ratchetButtonAnimated,
     flowPhase: entry.flowPhase,
     ciObservation: entry.ciObservation,
     statusReason: entry.statusReason,
+    snapshotComputedAt: entry.computedAt,
   };
 }
 
@@ -49,13 +52,10 @@ export function projectSnapshotToSidebarWorkspace(
     stateComputedAt: null,
     ...existing,
     ...projectSnapshotToCommonWorkspace(entry),
-    isWorking: entry.isWorking,
-    sessionSummaries: entry.sessionSummaries,
     gitStats: entry.gitStats,
     lastActivityAt: entry.lastActivityAt,
     sidebarStatus: entry.sidebarStatus,
     cachedKanbanColumn: entry.kanbanColumn,
-    snapshotComputedAt: entry.computedAt,
   };
 }
 
@@ -148,7 +148,6 @@ export function projectSnapshotToKanbanWorkspace(
     hasHadSessions: entry.hasHadSessions,
     cachedKanbanColumn: entry.kanbanColumn ?? existing?.cachedKanbanColumn ?? 'WAITING',
     kanbanColumn: entry.kanbanColumn,
-    isWorking: entry.isWorking,
     isArchived: false,
   };
 }
@@ -167,7 +166,6 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     status: entry.status,
     hasHadSessions: entry.hasHadSessions,
     cachedKanbanColumn: entry.kanbanColumn ?? existing.cachedKanbanColumn,
-    sessionSummaries: entry.sessionSummaries,
     sidebarStatus: entry.sidebarStatus,
   };
 }
