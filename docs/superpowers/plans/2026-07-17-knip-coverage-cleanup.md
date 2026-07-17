@@ -117,6 +117,8 @@ git commit -m "Remove unused tRPC request scope (#1963)"
 
 **Files:**
 - Modify: `knip.json`
+- Modify: `package.json`
+- Modify: `pnpm-lock.yaml`
 - Create: `docs/knip.md`
 - Delete: `src/backend/clients/index.ts`
 
@@ -160,7 +162,7 @@ Remove `src/client/main.tsx` from `workspaces["."].entry`. Replace the broad `ig
 
 Create `docs/knip.md` explaining that these exact paths are generated shadcn catalog primitives that do not require current consumers, while exact matching keeps new UI and all non-UI source files analyzed by default.
 
-Delete `src/backend/clients/index.ts` rather than declaring it an entry or excluding it.
+Delete `src/backend/clients/index.ts` rather than declaring it an entry or excluding it. Remove the `autoprefixer`, `@hookform/resolvers`, and `geist` dependency ignores, confirm Knip reports those packages unused, then remove them from `package.json` and `pnpm-lock.yaml` with `pnpm remove`.
 
 - [ ] **Step 3: Verify Knip is green and hint-free**
 
@@ -171,7 +173,7 @@ Expected: both commands exit 0 with no unused files and no configuration hints.
 - [ ] **Step 4: Commit the dead-code coverage cleanup**
 
 ```bash
-git add knip.json docs/knip.md src/backend/clients/index.ts docs/superpowers
+git add knip.json package.json pnpm-lock.yaml docs/knip.md src/backend/clients/index.ts docs/superpowers
 git commit -m "Tighten Knip backend coverage (#1963)"
 ```
 

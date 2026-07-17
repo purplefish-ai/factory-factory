@@ -9,6 +9,7 @@ Make Knip analyze backend root services and orchestration files, remove obsolete
 - Remove stale Knip ignores for deleted domain/resource-accessor layouts, backend service roots, orchestration files, and barrels that no longer need protection.
 - Remove the redundant explicit `src/client/main.tsx` entry; Vite discovers it.
 - Delete the unused `src/backend/clients/index.ts` compatibility barrel exposed by broader analysis.
+- Remove unused `autoprefixer`, `@hookform/resolvers`, and `geist` packages rather than suppressing their Knip findings.
 - Remove `projectId` and `topLevelTaskId` from tRPC request context, stop parsing their headers, delete the unused `projectScopedProcedure`, remove the client provider state and header generation that fed those headers, and remove the headers from CORS.
 - Replace the broad `src/components/ui/**` exclusion with exact paths for the 19 currently unused generated shadcn primitives. Document the generated-catalog reason in `docs/knip.md` so newly added UI files are analyzed by default.
 
@@ -28,6 +29,7 @@ The tRPC context retains only request trust metadata and the application context
 
 - Add regression assertions that request-scope headers do not become tRPC context fields and are absent from the CORS allow-list, observe both fail before changing production code, then make them pass.
 - Use the stricter temporary Knip configuration as the red check: it currently reports `src/backend/clients/index.ts` unused and `src/client/main.tsx` as a redundant entry.
+- Remove suspect dependency ignores first and confirm Knip reports their packages unused before removing them from the manifest and lockfile.
 - Run `pnpm knip` with configuration hints treated as errors, targeted tRPC tests, repository checks, typecheck, full tests, and build.
 
 ## Edge Cases

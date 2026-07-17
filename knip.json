@@ -39,7 +39,6 @@
     "src/components/ui/toggle-group.tsx"
   ],
   "ignoreDependencies": [
-    "autoprefixer",
     "tw-animate-css",
     "@tailwindcss/typography",
     "@prisma/client",
@@ -57,8 +56,6 @@
     "tailwindcss-animate",
     "vaul",
     "@radix-ui/react-toggle-group",
-    "@hookform/resolvers",
-    "geist",
     "@agentclientprotocol/claude-agent-acp"
   ],
   "vitest": {

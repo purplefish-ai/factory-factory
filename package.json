@@ -89,7 +89,6 @@
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.55.0",
     "@agentclientprotocol/sdk": "0.15.0",
-    "@hookform/resolvers": "^5.2.2",
     "@linear/sdk": "^76.0.0",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-better-sqlite3": "7.7.0",
@@ -139,7 +138,6 @@
     "dotenv": "^17.3.1",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
-    "geist": "^1.7.0",
     "input-otp": "^1.4.2",
     "mermaid": "^11.15.0",
     "next": "16.2.6",
@@ -257,7 +255,6 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/coverage-v8": "^4.1.0",
-    "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
     "dependency-cruiser": "^17.3.8",
     "electron": "^40.8.5",
