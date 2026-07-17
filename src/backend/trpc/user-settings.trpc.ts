@@ -4,7 +4,11 @@
  * Provides operations for managing user settings (IDE preferences, etc).
  */
 
-import { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
+import {
+  RatchetReviewTriggerMode,
+  SessionPermissionPreset,
+  SessionProvider,
+} from '@prisma-gen/client';
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { execCommand } from '@/backend/lib/shell';
@@ -139,6 +143,7 @@ export const userSettingsRouter = router({
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
         ratchetReplyToPrComments: z.boolean().optional(),
+        ratchetReviewTriggerMode: z.nativeEnum(RatchetReviewTriggerMode).optional(),
         // Session provider defaults
         defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
         defaultClaudeModel: z.string().trim().min(1, 'Claude model cannot be empty').optional(),

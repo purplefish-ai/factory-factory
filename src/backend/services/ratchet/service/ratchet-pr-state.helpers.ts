@@ -1,3 +1,4 @@
+import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
@@ -121,23 +122,91 @@ export function isIgnoredReviewAuthor(
   return authorLogin === authenticatedUsername;
 }
 
+function parseSubmittedAtMs(submittedAt: string | null | undefined): number | null {
+  if (!submittedAt) {
+    return null;
+  }
+
+  const timestamp = Date.parse(submittedAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getApprovedReviewsByAuthor(
+  reviews: Array<{
+    submittedAt?: string | null;
+    author: { login: string };
+    state?: string;
+  }>
+): Map<string, Array<{ index: number; submittedAtMs: number | null }>> {
+  const approvedReviewsByAuthor = new Map<
+    string,
+    Array<{ index: number; submittedAtMs: number | null }>
+  >();
+
+  reviews.forEach((review, index) => {
+    if (review.state?.toUpperCase() !== 'APPROVED') {
+      return;
+    }
+
+    const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
+    approvedReviews.push({ index, submittedAtMs: parseSubmittedAtMs(review.submittedAt) });
+    approvedReviewsByAuthor.set(review.author.login, approvedReviews);
+  });
+
+  return approvedReviewsByAuthor;
+}
+
+function wasReviewSupersededByApproval(
+  review: { submittedAt?: string | null; author: { login: string } },
+  reviewIndex: number,
+  approvedReviewsByAuthor: Map<string, Array<{ index: number; submittedAtMs: number | null }>>
+): boolean {
+  const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
+  const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
+
+  return approvedReviews.some((approval) => {
+    if (submittedAtMs !== null && approval.submittedAtMs !== null) {
+      return approval.submittedAtMs > submittedAtMs;
+    }
+
+    return approval.index > reviewIndex;
+  });
+}
+
 export function computeLatestReviewActivityAtMs(
   prDetails: {
-    reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
+    reviews: Array<{
+      submittedAt: string | null;
+      author: { login: string };
+      state?: string;
+      body?: string;
+    }>;
     comments: Array<{ updatedAt: string; author: { login: string } }>;
   },
   reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-  authenticatedUsername: string | null
+  authenticatedUsername: string | null,
+  reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
+  const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
   const entries = [
-    ...prDetails.reviews.map((review) => ({
-      authorLogin: review.author.login,
-      timestamp: review.submittedAt,
-    })),
-    ...prDetails.comments.map((comment) => ({
-      authorLogin: comment.author.login,
-      timestamp: comment.updatedAt,
-    })),
+    ...prDetails.reviews
+      .filter((review, index) => {
+        if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
+          return false;
+        }
+
+        const state = review.state?.toUpperCase();
+        return (
+          state === 'CHANGES_REQUESTED' ||
+          (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' &&
+            state === 'COMMENTED' &&
+            (review.body?.trim().length ?? 0) > 0)
+        );
+      })
+      .map((review) => ({
+        authorLogin: review.author.login,
+        timestamp: review.submittedAt,
+      })),
     ...reviewComments.map((reviewComment) => ({
       authorLogin: reviewComment.author.login,
       timestamp: reviewComment.updatedAt,
@@ -155,29 +224,21 @@ export function computeLatestReviewActivityAtMs(
   return timestamps.length > 0 ? Math.max(...timestamps) : null;
 }
 
-const ACTIONABLE_REVIEW_STATES = new Set(['COMMENTED', 'CHANGES_REQUESTED']);
-
 export function buildReviewSummariesForPrompt(
   prDetails: {
     url: string;
     reviews: Array<{
+      submittedAt?: string | null;
       author: { login: string };
       state?: string;
       body?: string;
       url?: string;
     }>;
   },
-  authenticatedUsername: string | null
+  authenticatedUsername: string | null,
+  reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
-  // A CHANGES_REQUESTED review is stale once the same reviewer approves later,
-  // even if they leave further COMMENTED reviews after the approval.
-  const lastApprovedIndexByAuthor = new Map<string, number>();
-
-  prDetails.reviews.forEach((review, index) => {
-    if (review.state?.toUpperCase() === 'APPROVED') {
-      lastApprovedIndexByAuthor.set(review.author.login, index);
-    }
-  });
+  const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
 
   return prDetails.reviews
     .filter((review, index) => {
@@ -187,14 +248,14 @@ export function buildReviewSummariesForPrompt(
 
       const state = review.state?.toUpperCase() ?? '';
 
-      if (
-        state === 'CHANGES_REQUESTED' &&
-        (lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index
-      ) {
+      if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
         return false;
       }
 
-      if (!ACTIONABLE_REVIEW_STATES.has(state)) {
+      if (
+        state !== 'CHANGES_REQUESTED' &&
+        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+      ) {
         return false;
       }
 
@@ -225,7 +286,11 @@ export function hasNewReviewActivitySinceLastDispatch(
 }
 
 export function shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
-  if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
+  if (
+    prStateInfo.ciStatus !== CIStatus.SUCCESS ||
+    prStateInfo.hasChangesRequested ||
+    (prStateInfo.reviewComments?.length ?? 0) > 0
+  ) {
     return false;
   }
 
@@ -341,6 +406,7 @@ export function resolveRatchetPrContext(
 export async function fetchPRState(params: {
   workspace: WorkspaceWithPR;
   authenticatedUsername: string | null;
+  reviewTriggerMode: RatchetReviewTriggerMode;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
   signal?: AbortSignal;
@@ -353,7 +419,7 @@ export async function fetchPRState(params: {
    */
   bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
-  const { workspace, authenticatedUsername, github, backoff, signal } = params;
+  const { workspace, authenticatedUsername, reviewTriggerMode, github, backoff, signal } = params;
   signal?.throwIfAborted();
   const prContext = resolveRatchetPrContext(workspace, github);
   if (!prContext) {
@@ -421,7 +487,8 @@ export async function fetchPRState(params: {
     const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
       prDetails,
       reviewComments,
-      authenticatedUsername
+      authenticatedUsername,
+      reviewTriggerMode
     );
     const snapshotKey = computeDispatchSnapshotKey(
       prDetails.number,
@@ -458,7 +525,11 @@ export async function fetchPRState(params: {
         resolvedThreadCommentIds: resolvedReviewCommentIds.size,
       });
     }
-    const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
+    const reviewSummaries = buildReviewSummariesForPrompt(
+      prDetails,
+      authenticatedUsername,
+      reviewTriggerMode
+    );
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
     signal?.throwIfAborted();
