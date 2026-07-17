@@ -7,18 +7,18 @@ export interface WorkspaceIssueLink {
 }
 
 function collectLinkedIssueKeys<TKey extends number | string>(
-  workspaces: readonly WorkspaceIssueLink[] | undefined,
-  archivingWorkspaceIssueLinks: ReadonlyMap<string, WorkspaceIssueLink>,
+  workspaces: readonly WorkspaceIssueLink[],
+  optimisticWorkspaceIssueLinks: ReadonlyMap<string, WorkspaceIssueLink>,
   getIssueKey: (link: WorkspaceIssueLink) => TKey | null
 ): Set<TKey> {
   const issueKeys = new Set<TKey>();
-  for (const workspace of workspaces ?? []) {
+  for (const workspace of workspaces) {
     const issueKey = getIssueKey(workspace);
     if (issueKey !== null) {
       issueKeys.add(issueKey);
     }
   }
-  for (const link of archivingWorkspaceIssueLinks.values()) {
+  for (const link of optimisticWorkspaceIssueLinks.values()) {
     const issueKey = getIssueKey(link);
     if (issueKey !== null) {
       issueKeys.add(issueKey);
@@ -38,16 +38,16 @@ export function filterIssuesForCurrentWorkspaceState(
   issues: NormalizedIssue[] | undefined,
   issueProvider: IssueProvider,
   workspaces: readonly WorkspaceIssueLink[] | undefined,
-  archivingWorkspaceIssueLinks: ReadonlyMap<string, WorkspaceIssueLink>
+  optimisticWorkspaceIssueLinks: ReadonlyMap<string, WorkspaceIssueLink>
 ): NormalizedIssue[] | undefined {
-  if (!issues) {
+  if (!(issues && workspaces)) {
     return undefined;
   }
 
   if (issueProvider === IssueProvider.LINEAR) {
     const linkedIssueIds = collectLinkedIssueKeys(
       workspaces,
-      archivingWorkspaceIssueLinks,
+      optimisticWorkspaceIssueLinks,
       (link) => link.linearIssueId
     );
     return issues.filter(
@@ -57,7 +57,7 @@ export function filterIssuesForCurrentWorkspaceState(
 
   const linkedIssueNumbers = collectLinkedIssueKeys(
     workspaces,
-    archivingWorkspaceIssueLinks,
+    optimisticWorkspaceIssueLinks,
     (link) => link.githubIssueNumber
   );
   return issues.filter(

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the sidebar and Kanban use one typed implementation for provider issue queries, normalization, GitHub CLI health synchronization, and query state selection while isolating Kanban's transient cache reconciliation.
+**Goal:** Make the sidebar and Kanban use one typed implementation for provider issue queries, normalization, GitHub CLI health synchronization, query state selection, and transient client cache reconciliation.
 
-**Architecture:** Introduce `useProjectIssues` over the existing GitHub and Linear tRPC endpoints and migrate both consumers to it. Keep `filterIssuesLinkedToActiveWorkspaces` as the server-side durable policy owner, and isolate Kanban's newer-workspace-cache/in-flight-archive reconciliation in a separately tested pure helper.
+**Architecture:** Introduce `useProjectIssues` over the existing GitHub and Linear tRPC endpoints and migrate both consumers to it. Keep `filterIssuesLinkedToActiveWorkspaces` as the server-side durable policy owner, and isolate newer-workspace-cache/in-flight-archive reconciliation in a separately tested shared client helper.
 
 **Tech Stack:** TypeScript, React 19 hooks, tRPC React Query, Vitest, jsdom
 
@@ -14,7 +14,7 @@
 - Preserve 60-second refetch polling and 30-second stale timing for both providers.
 - Preserve the existing GitHub CLI health synchronization policy.
 - Keep durable active-workspace filtering in the backend provider routers.
-- Allow client filtering only for explicit temporary optimistic issue links.
+- Allow client filtering only to reconcile newer workspace-cache links and explicit temporary optimistic issue links.
 - Do not add a provider-neutral backend endpoint in this short-term change.
 - This is a behavior-preserving data-flow refactor with no intentional rendered UI change.
 
@@ -24,12 +24,12 @@
 
 **Files:**
 - Create: `src/client/hooks/use-project-issues.test.tsx`
-- Create: `src/client/components/kanban/kanban-issue-visibility.test.ts`
+- Create: `src/client/lib/project-issue-visibility.test.ts`
 - Modify: `src/backend/trpc/github.router.test.ts`
 - Modify: `src/backend/trpc/linear.router.test.ts`
 
 **Interfaces:**
-- Consumes: future `useProjectIssues(projectId, issueProvider, optimisticIssueLinks?)`
+- Consumes: future `useProjectIssues(projectId, issueProvider, clientState)`
 - Produces: regression coverage for provider selection, query timing, normalization, health synchronization, selected refetch state, transient cache reconciliation, and durable router filtering
 
 - [ ] **Step 1: Write a failing GitHub hook test**
@@ -67,16 +67,16 @@ Create pure tests for GitHub and Linear issues linked in the newer workspace cac
 - [ ] **Step 7: Verify the visibility tests fail for the missing helper**
 
 ```bash
-pnpm exec vitest run src/client/components/kanban/kanban-issue-visibility.test.ts
+pnpm exec vitest run src/client/lib/project-issue-visibility.test.ts
 ```
 
-Expected: FAIL because `kanban-issue-visibility.ts` does not exist or does not export the required helper.
+Expected: FAIL because `project-issue-visibility.ts` does not exist or does not export the required helper.
 
 ### Task 2: Implement and Adopt `useProjectIssues`
 
 **Files:**
 - Create: `src/client/hooks/use-project-issues.ts`
-- Create: `src/client/components/kanban/kanban-issue-visibility.ts`
+- Create: `src/client/lib/project-issue-visibility.ts`
 - Delete: `src/client/hooks/use-sidebar-issues.ts`
 - Modify: `src/client/components/app-sidebar.tsx`
 - Modify: `src/client/components/kanban/kanban-context.tsx`
@@ -84,8 +84,8 @@ Expected: FAIL because `kanban-issue-visibility.ts` does not exist or does not e
 - Modify: `src/backend/trpc/issue-filter.ts`
 
 **Interfaces:**
-- Produces: `useProjectIssues(projectId: string | undefined, issueProvider: IssueProvider): { issues: NormalizedIssue[] | undefined; isLoading: boolean; refetch: () => unknown }`
-- Produces: `filterIssuesForCurrentWorkspaceState(issues, issueProvider, workspaces, archivingWorkspaceIssueLinks)` for transient Kanban cache reconciliation
+- Produces: `useProjectIssues(projectId: string | undefined, issueProvider: IssueProvider, clientState: ProjectIssuesClientState)`
+- Produces: `filterIssuesForCurrentWorkspaceState(issues, issueProvider, workspaces, optimisticWorkspaceIssueLinks)` for transient shared client cache reconciliation
 - Consumes: `trpc.github.listIssuesForProject`, `trpc.linear.listIssuesForProject`, normalization helpers, and CLI health cache helpers
 
 - [ ] **Step 1: Implement the minimal shared hook**
@@ -102,23 +102,23 @@ Expected: all shared hook tests pass.
 
 - [ ] **Step 3: Migrate the sidebar**
 
-Replace `useSidebarIssues` with `useProjectIssues(selectedProjectId, issueProvider)` and stop passing `serverWorkspaces`. Delete `use-sidebar-issues.ts` after its only consumer is migrated.
+Replace `useSidebarIssues` with `useProjectIssues(selectedProjectId, issueProvider, { workspaceIssueLinks: serverWorkspaces })`. Delete `use-sidebar-issues.ts` after its only consumer is migrated.
 
 - [ ] **Step 4: Implement the transient visibility helper**
 
-Move Kanban's workspace-link and captured-archive-link filtering into `kanban-issue-visibility.ts`. Document that it reconciles newer client workspace state against a potentially stale provider query and does not define durable issue eligibility.
+Move workspace-link and captured-archive-link filtering into `src/client/lib/project-issue-visibility.ts`. Document that it reconciles newer client workspace state against a potentially stale provider query and does not define durable issue eligibility.
 
 - [ ] **Step 5: Run the visibility helper tests and verify GREEN**
 
 ```bash
-pnpm exec vitest run src/client/components/kanban/kanban-issue-visibility.test.ts
+pnpm exec vitest run src/client/lib/project-issue-visibility.test.ts
 ```
 
 Expected: all transient visibility tests pass.
 
 - [ ] **Step 6: Migrate Kanban**
 
-Remove provider query, CLI health, normalization, and inline filtering code from `kanban-context.tsx`. Use the shared hook's `issues`, `isLoading`, and `refetch`, then pass issues through the pure transient visibility helper with current workspace data and captured archive links.
+Remove provider query, CLI health, normalization, and inline filtering code from `kanban-context.tsx`. Pass current workspace data and captured archive links to the shared hook and use its `issues`, `isLoading`, and `refetch` results directly.
 
 - [ ] **Step 7: Tighten provider input types and document ownership**
 
@@ -127,7 +127,7 @@ Use the shared `IssueProvider` type for the new hook and Kanban provider props, 
 - [ ] **Step 8: Run all focused tests**
 
 ```bash
-pnpm exec vitest run src/client/hooks/use-project-issues.test.tsx src/client/components/kanban/kanban-issue-visibility.test.ts src/backend/trpc/github.router.test.ts src/backend/trpc/linear.router.test.ts
+pnpm exec vitest run src/client/hooks/use-project-issues.test.tsx src/client/lib/project-issue-visibility.test.ts src/backend/trpc/github.router.test.ts src/backend/trpc/linear.router.test.ts
 ```
 
 Expected: all focused client and router tests pass.
@@ -135,7 +135,7 @@ Expected: all focused client and router tests pass.
 - [ ] **Step 9: Commit the focused implementation**
 
 ```bash
-git add src/client/hooks/use-project-issues.ts src/client/hooks/use-project-issues.test.tsx src/client/hooks/use-sidebar-issues.ts src/client/components/app-sidebar.tsx src/client/components/kanban/kanban-context.tsx src/client/components/kanban/kanban-issue-visibility.ts src/client/components/kanban/kanban-issue-visibility.test.ts src/client/routes/projects/workspaces/components/workspaces-board-view.tsx src/backend/trpc/issue-filter.ts src/backend/trpc/github.router.test.ts src/backend/trpc/linear.router.test.ts
+git add src/client/hooks/use-project-issues.ts src/client/hooks/use-project-issues.test.tsx src/client/hooks/use-sidebar-issues.ts src/client/components/app-sidebar.tsx src/client/components/kanban/kanban-context.tsx src/client/lib/project-issue-visibility.ts src/client/lib/project-issue-visibility.test.ts src/client/routes/projects/workspaces/components/workspaces-board-view.tsx src/backend/trpc/issue-filter.ts src/backend/trpc/github.router.test.ts src/backend/trpc/linear.router.test.ts
 git commit -m "Consolidate project issue loading (#1962)"
 ```
 

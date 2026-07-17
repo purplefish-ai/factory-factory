@@ -4,6 +4,10 @@ import {
   syncGitHubCLIHealth,
 } from '@/client/lib/cli-health-cache';
 import { normalizeGitHubIssue, normalizeLinearIssue } from '@/client/lib/issue-normalization';
+import {
+  filterIssuesForCurrentWorkspaceState,
+  type WorkspaceIssueLink,
+} from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
 import { IssueProvider } from '@/shared/core';
 
@@ -12,7 +16,18 @@ const PROJECT_ISSUES_QUERY_TIMING = {
   staleTime: 30_000,
 } as const;
 
-export function useProjectIssues(projectId: string | undefined, issueProvider: IssueProvider) {
+const NO_OPTIMISTIC_WORKSPACE_ISSUE_LINKS = new Map<string, WorkspaceIssueLink>();
+
+interface ProjectIssuesClientState {
+  workspaceIssueLinks: readonly WorkspaceIssueLink[] | undefined;
+  optimisticWorkspaceIssueLinks?: ReadonlyMap<string, WorkspaceIssueLink>;
+}
+
+export function useProjectIssues(
+  projectId: string | undefined,
+  issueProvider: IssueProvider,
+  clientState: ProjectIssuesClientState
+) {
   const isLinear = issueProvider === IssueProvider.LINEAR;
   const utils = trpc.useUtils();
 
@@ -45,12 +60,28 @@ export function useProjectIssues(projectId: string | undefined, issueProvider: I
     syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubQuery.data.health);
   }, [githubQuery.data?.error, githubQuery.data?.health, utils.admin.checkCLIHealth]);
 
-  const issues = useMemo(() => {
+  const normalizedIssues = useMemo(() => {
     if (isLinear) {
       return linearQuery.data?.issues.map(normalizeLinearIssue);
     }
     return githubQuery.data?.issues.map(normalizeGitHubIssue);
   }, [githubQuery.data?.issues, isLinear, linearQuery.data?.issues]);
+
+  const issues = useMemo(
+    () =>
+      filterIssuesForCurrentWorkspaceState(
+        normalizedIssues,
+        issueProvider,
+        clientState.workspaceIssueLinks,
+        clientState.optimisticWorkspaceIssueLinks ?? NO_OPTIMISTIC_WORKSPACE_ISSUE_LINKS
+      ),
+    [
+      clientState.optimisticWorkspaceIssueLinks,
+      clientState.workspaceIssueLinks,
+      issueProvider,
+      normalizedIssues,
+    ]
+  );
 
   if (isLinear) {
     return {

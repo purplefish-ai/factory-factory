@@ -390,7 +390,9 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   }, []);
 
   // Fetch issues for the Todo section
-  const { issues } = useProjectIssues(navData.selectedProjectId, navData.issueProvider);
+  const { issues } = useProjectIssues(navData.selectedProjectId, navData.issueProvider, {
+    workspaceIssueLinks: navData.serverWorkspaces,
+  });
 
   // Group workspaces by kanban column, sorted by createdAt descending (newest first)
   const { waiting, working, done } = useMemo(() => {

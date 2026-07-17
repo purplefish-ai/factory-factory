@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { IssueProvider } from '@/shared/core';
-import { filterIssuesForCurrentWorkspaceState } from './kanban-issue-visibility';
+import { filterIssuesForCurrentWorkspaceState } from './project-issue-visibility';
 
 function githubIssue(issueNumber: number): NormalizedIssue {
   return {
@@ -56,7 +56,7 @@ describe('filterIssuesForCurrentWorkspaceState', () => {
   });
 
   it('keeps a captured archive issue hidden after its workspace disappears', () => {
-    const archivingLinks = new Map([
+    const optimisticLinks = new Map([
       ['workspace-1', { githubIssueNumber: 1, linearIssueId: 'linear-1' }],
     ]);
 
@@ -65,7 +65,7 @@ describe('filterIssuesForCurrentWorkspaceState', () => {
         [githubIssue(1), githubIssue(2)],
         IssueProvider.GITHUB,
         [],
-        archivingLinks
+        optimisticLinks
       )
     ).toEqual([githubIssue(2)]);
     expect(
@@ -73,7 +73,7 @@ describe('filterIssuesForCurrentWorkspaceState', () => {
         [linearIssue('linear-1'), linearIssue('linear-2')],
         IssueProvider.LINEAR,
         [],
-        archivingLinks
+        optimisticLinks
       )
     ).toEqual([linearIssue('linear-2')]);
   });
@@ -81,6 +81,17 @@ describe('filterIssuesForCurrentWorkspaceState', () => {
   it('preserves undefined issue data while the provider query is loading', () => {
     expect(
       filterIssuesForCurrentWorkspaceState(undefined, IssueProvider.GITHUB, [], new Map())
+    ).toBeUndefined();
+  });
+
+  it('waits for client workspace state before exposing cached provider issues', () => {
+    expect(
+      filterIssuesForCurrentWorkspaceState(
+        [githubIssue(1)],
+        IssueProvider.GITHUB,
+        undefined,
+        new Map()
+      )
     ).toBeUndefined();
   });
 });

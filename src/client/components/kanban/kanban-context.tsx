@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
 import {
   removeWorkspaceFromProjectSummaryCache,
@@ -12,10 +13,6 @@ import {
 } from '@/client/lib/workspace-cache-helpers';
 import type { IssueProvider } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
-import {
-  filterIssuesForCurrentWorkspaceState,
-  type WorkspaceIssueLink,
-} from './kanban-issue-visibility';
 
 interface KanbanContextValue {
   projectId: string;
@@ -82,12 +79,6 @@ export function KanbanProvider({
     }
   );
 
-  const {
-    issues: projectIssues,
-    isLoading: isLoadingIssues,
-    refetch: refetchIssues,
-  } = useProjectIssues(projectId, issueProvider);
-
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
     onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
   });
@@ -115,6 +106,14 @@ export function KanbanProvider({
   const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
     Map<string, WorkspaceIssueLink>
   >(new Map());
+  const {
+    issues,
+    isLoading: isLoadingIssues,
+    refetch: refetchIssues,
+  } = useProjectIssues(projectId, issueProvider, {
+    workspaceIssueLinks: workspaces,
+    optimisticWorkspaceIssueLinks: archivingWorkspaceIssueLinks,
+  });
   const [showInlineForm, setShowInlineForm] = useState(false);
   const [quickChatWorkspaceId, setQuickChatWorkspaceId] = useState<string | null>(null);
   const openQuickChat = useCallback(
@@ -343,17 +342,6 @@ export function KanbanProvider({
     [workspaces, archivingWorkspaceIds]
   );
 
-  const filteredIssues = useMemo(
-    () =>
-      filterIssuesForCurrentWorkspaceState(
-        projectIssues,
-        issueProvider,
-        workspaces,
-        archivingWorkspaceIssueLinks
-      ),
-    [projectIssues, issueProvider, workspaces, archivingWorkspaceIssueLinks]
-  );
-
   return (
     <KanbanContext.Provider
       value={{
@@ -361,7 +349,7 @@ export function KanbanProvider({
         projectSlug,
         issueProvider,
         workspaces: visibleWorkspaces as WorkspaceWithKanban[] | undefined,
-        issues: filteredIssues,
+        issues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,
         error: errorWorkspaces ? { message: errorWorkspaces.message } : null,

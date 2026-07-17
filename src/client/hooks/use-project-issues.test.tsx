@@ -42,11 +42,14 @@ type HookResult = ReturnType<typeof useProjectIssues>;
 interface HarnessProps {
   projectId: string | undefined;
   issueProvider: IssueProvider;
+  workspaceIssueLinks?: Array<{ githubIssueNumber: number | null; linearIssueId: string | null }>;
   resultRef: { current: HookResult | null };
 }
 
-function Harness({ projectId, issueProvider, resultRef }: HarnessProps) {
-  resultRef.current = useProjectIssues(projectId, issueProvider);
+function Harness({ projectId, issueProvider, workspaceIssueLinks, resultRef }: HarnessProps) {
+  resultRef.current = useProjectIssues(projectId, issueProvider, {
+    workspaceIssueLinks,
+  });
   return null;
 }
 
@@ -103,9 +106,15 @@ describe('useProjectIssues', () => {
   let root: Root;
   const resultRef: { current: HookResult | null } = { current: null };
 
-  function render(projectId: string | undefined, issueProvider: IssueProvider) {
+  function render(
+    projectId: string | undefined,
+    issueProvider: IssueProvider,
+    workspaceIssueLinks: HarnessProps['workspaceIssueLinks'] = []
+  ) {
     flushSync(() => {
-      root.render(createElement(Harness, { projectId, issueProvider, resultRef }));
+      root.render(
+        createElement(Harness, { projectId, issueProvider, workspaceIssueLinks, resultRef })
+      );
     });
   }
 
@@ -208,5 +217,11 @@ describe('useProjectIssues', () => {
 
     expect(mocks.shouldSyncHealth).toHaveBeenCalledWith(githubHealth, null);
     expect(mocks.syncHealth).not.toHaveBeenCalled();
+  });
+
+  it('reconciles provider results with newer linked-workspace state', () => {
+    render('project-1', IssueProvider.GITHUB, [{ githubIssueNumber: 42, linearIssueId: null }]);
+
+    expect(resultRef.current?.issues).toEqual([]);
   });
 });
