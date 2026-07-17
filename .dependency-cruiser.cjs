@@ -96,7 +96,7 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/(db\\.ts|server\\.ts|services/[^/]+/resources/)|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/(app-context\\.ts|db\\.ts|server\\.ts|services/[^/]+/resources/)|^src/backend/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/db\\.ts$' },
     },

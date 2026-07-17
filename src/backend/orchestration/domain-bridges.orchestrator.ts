@@ -10,25 +10,29 @@
 
 import type { Prisma } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
-import {
-  type AutoIterationLogbookBridge,
-  type AutoIterationSessionBridge,
-  type AutoIterationWorkspaceBridge,
+import type {
+  AutoIterationLogbookBridge,
+  AutoIterationSessionBridge,
+  AutoIterationWorkspaceBridge,
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
-import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import type {
+  githubCLIService,
+  prFetchRegistry,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
-import {
+import type {
   fixerSessionService,
-  type RatchetGitHubBridge,
-  type RatchetPRSnapshotBridge,
-  type RatchetSessionBridge,
+  RatchetGitHubBridge,
+  RatchetPRSnapshotBridge,
+  RatchetSessionBridge,
   ratchetService,
 } from '@/backend/services/ratchet';
-import { startupScriptService } from '@/backend/services/run-script';
-import {
+import type { startupScriptService } from '@/backend/services/run-script';
+import type {
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDataService,
@@ -38,18 +42,18 @@ import {
 import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
-  getWorkspaceInitPolicy,
-  kanbanStateService,
+  type getWorkspaceInitPolicy,
+  type kanbanStateService,
   type WorkspaceInitPolicyInput,
-  workspaceAccessor,
-  workspaceActivityService,
-  workspaceQueryService,
-  workspaceStateMachine,
+  type workspaceAccessor,
+  type workspaceActivityService,
+  type workspaceQueryService,
+  type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
+import type { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { reconciliationService } from './reconciliation.service';
+import type { reconciliationService } from './reconciliation.service';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 const logger = createLogger('domain-bridges');
@@ -57,7 +61,7 @@ const logger = createLogger('domain-bridges');
 type SessionService = typeof sessionService;
 type WorkspaceAccessor = typeof workspaceAccessor;
 
-type BridgeServices = {
+export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
@@ -66,6 +70,7 @@ type BridgeServices = {
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
+  periodicTaskService: typeof periodicTaskService;
   prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
@@ -79,30 +84,6 @@ type BridgeServices = {
   workspaceQueryService: typeof workspaceQueryService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
-};
-
-const defaultServices: BridgeServices = {
-  autoIterationService,
-  chatEventForwarderService,
-  chatMessageHandlerService,
-  fixerSessionService,
-  getWorkspaceInitPolicy,
-  githubCLIService,
-  kanbanStateService,
-  logbookService,
-  prFetchRegistry,
-  prSnapshotService,
-  ratchetService,
-  reconciliationService,
-  sessionDataService,
-  sessionDomainService,
-  sessionService,
-  startupScriptService,
-  workspaceAccessor,
-  workspaceActivityService,
-  workspaceQueryService,
-  workspaceSnapshotStore,
-  workspaceStateMachine,
 };
 
 async function stopSessionBestEffort(
@@ -155,8 +136,7 @@ async function cleanupRecycledAutoIterationSession(
   await clearAutoIterationSessionIfMatching(workspaceAccessor, workspaceId, sessionId);
 }
 
-export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
-  const resolved = { ...defaultServices, ...services };
+export function configureDomainBridges(services: BridgeServices): void {
   const {
     autoIterationService,
     chatEventForwarderService,
@@ -179,7 +159,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     workspaceQueryService,
     workspaceSnapshotStore,
     workspaceStateMachine,
-  } = resolved;
+  } = services;
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {

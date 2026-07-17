@@ -99,7 +99,7 @@ const logger = createLogger('event-collector');
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
 
-type EventCollectorSessionServices = {
+export type EventCollectorSessionServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
@@ -422,7 +422,7 @@ async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<v
  */
 function configureEventCollectorWithState(
   state: EventCollectorState,
-  services: Partial<EventCollectorSessionServices> = {}
+  services: EventCollectorSessionServices
 ): void {
   const previousSessionDomainService =
     state.listenerSessionDomainService ?? state.eventCollectorSessionServices.sessionDomainService;
@@ -437,10 +437,7 @@ function configureEventCollectorWithState(
     state.runtimeChangedHandler = null;
   }
 
-  state.eventCollectorSessionServices = {
-    ...defaultSessionServices,
-    ...services,
-  };
+  state.eventCollectorSessionServices = services;
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   state.activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
@@ -700,7 +697,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
 export class EventCollectorOrchestrator {
   private readonly state = new EventCollectorState();
 
-  configure(services: Partial<EventCollectorSessionServices> = {}): void {
+  configure(services: EventCollectorSessionServices): void {
     configureEventCollectorWithState(this.state, services);
   }
 
@@ -713,14 +710,14 @@ export function createEventCollectorOrchestrator(): EventCollectorOrchestrator {
   return new EventCollectorOrchestrator();
 }
 
-const defaultEventCollectorOrchestrator = createEventCollectorOrchestrator();
+export const eventCollectorOrchestrator = createEventCollectorOrchestrator();
 
 export function configureEventCollector(
   services: Partial<EventCollectorSessionServices> = {}
 ): void {
-  defaultEventCollectorOrchestrator.configure(services);
+  eventCollectorOrchestrator.configure({ ...defaultSessionServices, ...services });
 }
 
 export function stopEventCollector(): void {
-  defaultEventCollectorOrchestrator.stop();
+  eventCollectorOrchestrator.stop();
 }

@@ -426,7 +426,7 @@ export class SnapshotReconciliationService {
 export const snapshotReconciliationService = new SnapshotReconciliationService();
 
 /**
- * Configure and start the snapshot reconciliation service.
+ * Configure the snapshot reconciliation service.
  * Must be called AFTER configureDomainBridges() in server startup.
  */
 export function configureSnapshotReconciliation(
@@ -444,5 +444,4 @@ export function configureSnapshotReconciliation(
       getAllPendingRequests: () => resolved.chatEventForwarderService.getAllPendingRequests(),
     },
   });
-  snapshotReconciliationService.start();
 }
