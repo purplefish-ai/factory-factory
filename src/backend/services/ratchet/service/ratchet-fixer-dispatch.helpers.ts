@@ -77,6 +77,7 @@ async function handleStartedFixerResult(params: {
   }
 
   signal?.throwIfAborted();
+  commitSideEffects();
   const recorded = await workspaceAccessor.recordRatchetDispatchIfEnabled(workspace.id, {
     sessionId: result.sessionId,
     snapshotKey: prStateInfo.snapshotKey,
@@ -84,7 +85,6 @@ async function handleStartedFixerResult(params: {
   });
   if (recorded) {
     onRecorded();
-    commitSideEffects();
     if (result.promptCompletion) {
       void settleFailedPromptCompletion({
         workspaceId: workspace.id,
@@ -241,6 +241,9 @@ export async function triggerRatchetFixer(params: {
       beforeStart: ({ sessionId, prompt }) => {
         signal?.throwIfAborted();
         sessionBridge.injectCommittedUserMessage(sessionId, prompt);
+      },
+      afterStart: () => {
+        commitSideEffects();
       },
     });
     signal?.throwIfAborted();
