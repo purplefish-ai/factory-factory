@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
@@ -32,6 +32,16 @@ export interface UseLogStreamResult {
   outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
+interface LogStreamBuffer {
+  streamKey: string;
+  output: RollingOutputBuffer;
+}
+
+interface PendingOutputFlush {
+  streamBuffer: LogStreamBuffer;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -58,53 +68,59 @@ export function useLogStream(
   const [hasDisconnected, setHasDisconnected] = useState(false);
   const outputEndRef = useRef<HTMLDivElement | null>(null);
   const visibleRef = useRef(isVisible);
-  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const presentedBufferRef = useRef<RollingOutputBuffer | null>(null);
-  const streamBufferRef = useRef<{
-    streamKey: string;
-    buffer: RollingOutputBuffer;
-  } | null>(null);
+  const pendingFlushRef = useRef<PendingOutputFlush | null>(null);
   const streamKey = `${endpoint}:${workspaceId}`;
-  if (streamBufferRef.current?.streamKey !== streamKey) {
-    streamBufferRef.current = {
+  const streamBuffer = useMemo<LogStreamBuffer>(
+    () => ({
       streamKey,
-      buffer: new RollingOutputBuffer(LOG_ROLLING_OUTPUT_OPTIONS),
-    };
-  }
-  const buffer = streamBufferRef.current.buffer;
-
-  visibleRef.current = isVisible;
+      output: new RollingOutputBuffer(LOG_ROLLING_OUTPUT_OPTIONS),
+    }),
+    [streamKey]
+  );
+  const committedStreamBufferRef = useRef(streamBuffer);
 
   const url = buildWebSocketUrl(endpoint, { workspaceId });
 
   const cancelPendingFlush = useCallback(() => {
-    if (flushTimeoutRef.current === null) {
+    if (pendingFlushRef.current === null) {
       return;
     }
-    clearTimeout(flushTimeoutRef.current);
-    flushTimeoutRef.current = null;
+    clearTimeout(pendingFlushRef.current.timeoutId);
+    pendingFlushRef.current = null;
   }, []);
 
-  const flushOutput = useCallback(() => {
-    flushTimeoutRef.current = null;
-    if (visibleRef.current) {
-      setOutput(buffer.toString());
-    }
-  }, [buffer]);
-
   const scheduleVisibleFlush = useCallback(() => {
-    if (!visibleRef.current || flushTimeoutRef.current !== null) {
+    if (
+      committedStreamBufferRef.current !== streamBuffer ||
+      !visibleRef.current ||
+      pendingFlushRef.current !== null
+    ) {
       return;
     }
-    flushTimeoutRef.current = setTimeout(flushOutput, LOG_OUTPUT_FLUSH_INTERVAL_MS);
-  }, [flushOutput]);
+    const timeoutId = setTimeout(() => {
+      if (
+        pendingFlushRef.current?.timeoutId !== timeoutId ||
+        pendingFlushRef.current.streamBuffer !== streamBuffer
+      ) {
+        return;
+      }
+      pendingFlushRef.current = null;
+      if (committedStreamBufferRef.current === streamBuffer && visibleRef.current) {
+        setOutput(streamBuffer.output.toString());
+      }
+    }, LOG_OUTPUT_FLUSH_INTERVAL_MS);
+    pendingFlushRef.current = { streamBuffer, timeoutId };
+  }, [streamBuffer]);
 
   const appendOutput = useCallback(
     (next: string) => {
-      buffer.append(next);
+      if (committedStreamBufferRef.current !== streamBuffer) {
+        return;
+      }
+      streamBuffer.output.append(next);
       scheduleVisibleFlush();
     },
-    [buffer, scheduleVisibleFlush]
+    [scheduleVisibleFlush, streamBuffer]
   );
 
   const handleMessage = useCallback(
@@ -117,29 +133,36 @@ export function useLogStream(
   );
 
   const handleConnected = useCallback(() => {
+    if (committedStreamBufferRef.current !== streamBuffer) {
+      return;
+    }
     setHasDisconnected(false);
-    appendOutput(buffer.toString() ? 'Reconnected!\n\n' : 'Connected!\n\n');
-  }, [appendOutput, buffer]);
+    appendOutput(streamBuffer.output.toString() ? 'Reconnected!\n\n' : 'Connected!\n\n');
+  }, [appendOutput, streamBuffer]);
 
   const handleDisconnected = useCallback(() => {
+    if (committedStreamBufferRef.current !== streamBuffer) {
+      return;
+    }
     setHasDisconnected(true);
     appendOutput('Disconnected. Reconnecting...\n');
-  }, [appendOutput]);
+  }, [appendOutput, streamBuffer]);
 
   useLayoutEffect(() => {
-    const bufferChanged = presentedBufferRef.current !== buffer;
-    presentedBufferRef.current = buffer;
+    const bufferChanged = committedStreamBufferRef.current !== streamBuffer;
+    committedStreamBufferRef.current = streamBuffer;
+    visibleRef.current = isVisible;
     cancelPendingFlush();
 
     if (bufferChanged) {
       setHasDisconnected(false);
     }
     if (isVisible) {
-      setOutput(buffer.toString());
+      setOutput(streamBuffer.output.toString());
     } else if (bufferChanged) {
       setOutput('');
     }
-  }, [buffer, cancelPendingFlush, isVisible]);
+  }, [cancelPendingFlush, isVisible, streamBuffer]);
 
   useEffect(
     () => () => {

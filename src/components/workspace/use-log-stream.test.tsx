@@ -159,6 +159,24 @@ describe('useLogStream', () => {
     expect(capturedOptions?.url).toBe(originalUrl);
   });
 
+  it('ignores stale callbacks after the workspace identity changes', () => {
+    render(true);
+    const staleOptions = capturedOptions;
+
+    render(true, '/dev-logs', 'ws-2');
+    expect(resultRef.current?.output).toBe('');
+    expect(resultRef.current?.hasDisconnected).toBe(false);
+
+    flushSync(() => {
+      staleOptions?.onMessage?.({ type: 'output', data: 'stale workspace output\n' });
+      staleOptions?.onDisconnected?.();
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(resultRef.current?.output).toBe('');
+    expect(resultRef.current?.hasDisconnected).toBe(false);
+  });
+
   it('commits one output update for a high-frequency visible burst', () => {
     render(true);
     const rendersAfterMount = renderCountRef.current;
@@ -261,6 +279,25 @@ describe('useLogStream', () => {
 
     render(true);
     expect(resultRef.current?.output).toBe('pending\n');
+  });
+
+  it('cancels a pending animation frame when the stream becomes hidden', () => {
+    render(true);
+    attachOutputEndMarker();
+    flushSync(() => {
+      capturedOptions?.onMessage?.({ type: 'output', data: 'visible\n' });
+      vi.advanceTimersByTime(100);
+    });
+    expect(animationFrames.size).toBe(1);
+
+    render(false);
+
+    expect(animationFrames.size).toBe(0);
+    expect(cancelAnimationFrameMock).toHaveBeenCalledTimes(1);
+    flushSync(() => {
+      runAnimationFrames();
+    });
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
   });
 
   it('cancels pending flush and animation-frame work on unmount', () => {

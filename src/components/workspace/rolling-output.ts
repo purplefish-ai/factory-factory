@@ -54,6 +54,7 @@ export class RollingOutputBuffer {
 
       if (firstChunk.length <= overflow) {
         this.bufferedChars -= firstChunk.length;
+        this.chunks[this.startIndex] = '';
         this.startIndex += 1;
         this.compactIfNeeded();
         continue;

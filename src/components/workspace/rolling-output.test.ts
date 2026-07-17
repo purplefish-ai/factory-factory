@@ -94,4 +94,19 @@ describe('RollingOutputBuffer', () => {
 
     expect(buffer.toString()).toBe('');
   });
+
+  it('releases strings from consumed chunk slots', () => {
+    const buffer = new RollingOutputBuffer(options);
+
+    for (let index = 0; index < 63; index += 1) {
+      buffer.append(String(index).padEnd(options.maxChars, 'x'));
+    }
+
+    const chunks = Reflect.get(buffer, 'chunks');
+    expect(Array.isArray(chunks)).toBe(true);
+    const retainedCharacters = Array.isArray(chunks)
+      ? chunks.reduce((total, chunk) => total + (typeof chunk === 'string' ? chunk.length : 0), 0)
+      : 0;
+    expect(retainedCharacters).toBeLessThanOrEqual(options.maxChars);
+  });
 });
