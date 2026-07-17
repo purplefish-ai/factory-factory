@@ -12,7 +12,7 @@ The dispatch is currently marked as committed only after `acquireAndDispatch` re
 - Once a fixer session has successfully started, treat the dispatch as a committed side effect.
 - Do not abort or clean up a working fixer merely because its agent turn exceeds 90 seconds.
 - Continue using the agent prompt timeout for genuinely stalled agent turns.
-- Preserve cleanup when session startup or prompt delivery fails before a committed start.
+- Preserve cleanup when session startup fails or prompt delivery later fails.
 - Preserve Ratchet's existing dispatch snapshot, retry, and workspace-state semantics.
 
 ## Design
