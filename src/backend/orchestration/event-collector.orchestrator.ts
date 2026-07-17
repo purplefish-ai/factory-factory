@@ -111,7 +111,7 @@ interface PendingRequestChangedEvent {
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
 const PROJECTION_RETRY_BASE_MS = 1000;
-const MAX_PROJECTION_RETRY_BACKOFF_EXPONENT = 6;
+const MAX_PROJECTION_READ_ATTEMPTS = 3;
 let lastCoalescerTimestamp = 0;
 
 function nextCoalescerTimestamp(): number {
@@ -223,16 +223,21 @@ async function runRatchetProjectionRefresh(params: {
         failedAttempts = 0;
         continue;
       }
+      failedAttempts += 1;
       if (newerRevision !== null) {
         targetRevision = newerRevision;
         failedAttempts = 0;
-        continue;
       }
-      failedAttempts += 1;
       if (!isActive()) {
         break;
       }
-      await waitForRetry(Math.min(failedAttempts - 1, MAX_PROJECTION_RETRY_BACKOFF_EXPONENT));
+      // The 60-second snapshot reconciliation is the long-term safety net.
+      // Bound event-path retries so a database outage cannot leave one loop
+      // per workspace running indefinitely.
+      if (failedAttempts >= MAX_PROJECTION_READ_ATTEMPTS) {
+        break;
+      }
+      await waitForRetry(Math.max(failedAttempts - 1, 0));
     }
   } finally {
     if (refreshes.get(workspaceId) === refresh) {

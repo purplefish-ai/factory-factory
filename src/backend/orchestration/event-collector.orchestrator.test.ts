@@ -921,6 +921,43 @@ describe('configureEventCollector', () => {
     expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+  });
+
+  it('backs off when an invalidation arrives during a failed projection read', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    const pendingRead = deferred<never>();
+    vi.mocked(workspaceAccessor.findRawById)
+      .mockReturnValueOnce(pendingRead.promise)
+      .mockResolvedValue({
+        status: 'READY',
+        ratchetEnabled: true,
+        ratchetState: 'CI_FAILED',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      } as never);
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-concurrent-invalidation' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    handler({ workspaceId: 'ws-concurrent-invalidation' });
+    pendingRead.reject(new Error('read failed'));
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
   });
 
   it('cancels an authoritative projection retry when stopped', async () => {
