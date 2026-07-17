@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const TRANSPORT_FILES = [
+  'src/backend/server.ts',
   'src/backend/routers/health.router.ts',
   'src/backend/routers/websocket/chat-connection-registry.ts',
   'src/backend/routers/websocket/chat.handler.ts',
@@ -14,19 +15,25 @@ const TRANSPORT_FILES = [
 ] as const;
 
 const FORBIDDEN_RUNTIME_BINDINGS = [
+  'configureDomainBridges',
   'configService',
   'createLogger',
+  'eventCollectorOrchestrator',
   'healthService',
+  'prisma',
+  'registerInterceptors',
   'sessionEventBus',
   'sessionFileLogger',
   'snapshotReconciliationService',
+  'startInterceptors',
+  'stopInterceptors',
   'sessionDataService',
   'workspaceDataService',
   'workspaceQueryService',
   'workspaceSnapshotStore',
 ] as const;
 
-describe('websocket handlers context injection', () => {
+describe('HTTP and WebSocket application context injection', () => {
   for (const file of TRANSPORT_FILES) {
     it(`${file} does not create an AppContext at module scope`, () => {
       const source = readFileSync(resolve(process.cwd(), file), 'utf8');
@@ -34,6 +41,14 @@ describe('websocket handlers context injection', () => {
       expect(source).not.toMatch(/=\s*create\w+UpgradeHandler\(createAppContext\(\)\);/);
     });
   }
+
+  it('server lifecycle never performs composition-time dependency wiring', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/backend/server.ts'), 'utf8');
+
+    expect(source).not.toMatch(/\.configure\s*\(/);
+    expect(source).not.toMatch(/\bconfigureDomainBridges\b/);
+    expect(source).not.toMatch(/\bcreateApplication\s*\(/);
+  });
 
   for (const file of TRANSPORT_FILES) {
     it(`${file} resolves long-lived dependencies through the application graph`, () => {

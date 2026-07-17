@@ -7,22 +7,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-const handlers = vi.hoisted(() => ({
-  chat: vi.fn(),
-  terminal: vi.fn(),
-  setupTerminal: vi.fn(),
-  devLogs: vi.fn(),
-  postRunLogs: vi.fn(),
-  snapshots: vi.fn(),
-}));
+const { handlers, handlerFactories } = vi.hoisted(() => {
+  const upgradeHandlers = {
+    chat: vi.fn(),
+    terminal: vi.fn(),
+    setupTerminal: vi.fn(),
+    devLogs: vi.fn(),
+    postRunLogs: vi.fn(),
+    snapshots: vi.fn(),
+  };
+
+  return {
+    handlers: upgradeHandlers,
+    handlerFactories: {
+      chat: vi.fn(() => upgradeHandlers.chat),
+      terminal: vi.fn(() => upgradeHandlers.terminal),
+      setupTerminal: vi.fn(() => upgradeHandlers.setupTerminal),
+      devLogs: vi.fn(() => upgradeHandlers.devLogs),
+      postRunLogs: vi.fn(() => upgradeHandlers.postRunLogs),
+      snapshots: vi.fn(() => upgradeHandlers.snapshots),
+    },
+  };
+});
 
 vi.mock('@/backend/routers/websocket', () => ({
-  createChatUpgradeHandler: vi.fn(() => handlers.chat),
-  createTerminalUpgradeHandler: vi.fn(() => handlers.terminal),
-  createSetupTerminalUpgradeHandler: vi.fn(() => handlers.setupTerminal),
-  createDevLogsUpgradeHandler: vi.fn(() => handlers.devLogs),
-  createPostRunLogsUpgradeHandler: vi.fn(() => handlers.postRunLogs),
-  createSnapshotsUpgradeHandler: vi.fn(() => handlers.snapshots),
+  createChatUpgradeHandler: handlerFactories.chat,
+  createTerminalUpgradeHandler: handlerFactories.terminal,
+  createSetupTerminalUpgradeHandler: handlerFactories.setupTerminal,
+  createDevLogsUpgradeHandler: handlerFactories.devLogs,
+  createPostRunLogsUpgradeHandler: handlerFactories.postRunLogs,
+  createSnapshotsUpgradeHandler: handlerFactories.snapshots,
 }));
 
 vi.mock('@/backend/trpc/index', () => ({
@@ -281,6 +295,19 @@ describe('server websocket upgrade routing', () => {
     expect(handlers.terminal).not.toHaveBeenCalled();
     expect(handlers.devLogs).not.toHaveBeenCalled();
     expect(handlers.snapshots).not.toHaveBeenCalled();
+  });
+
+  it('supplies the exact application graph to every upgrade handler factory', () => {
+    const application = createTestApplication();
+
+    createTestServer(application);
+
+    expect(handlerFactories.chat).toHaveBeenCalledWith(application);
+    expect(handlerFactories.terminal).toHaveBeenCalledWith(application);
+    expect(handlerFactories.setupTerminal).toHaveBeenCalledWith(application);
+    expect(handlerFactories.devLogs).toHaveBeenCalledWith(application);
+    expect(handlerFactories.postRunLogs).toHaveBeenCalledWith(application);
+    expect(handlerFactories.snapshots).toHaveBeenCalledWith(application);
   });
 
   it('routes /terminal upgrades to terminal handler', () => {
@@ -671,6 +698,21 @@ describe('server websocket upgrade routing', () => {
     expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('starts and idempotently stops only the supplied application graph', async () => {
+    const harness = createTestHarness();
+    const server = createTestServer(harness.application, 0);
+
+    await server.start();
+    await Promise.all([server.stop(), server.stop()]);
+
+    expect(harness.lifecycle.interceptors.start).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.start).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 

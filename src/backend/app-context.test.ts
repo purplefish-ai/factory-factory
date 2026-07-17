@@ -92,7 +92,7 @@ function createApplicationDependencies(label: string): ApplicationDependencies {
 }
 
 describe('createApplication', () => {
-  it('wires only the complete dependency graph supplied by the caller', () => {
+  it('keeps complete graph A and graph B bridge wiring isolated', () => {
     const firstDependencies = createApplicationDependencies('first');
     const secondDependencies = createApplicationDependencies('second');
 
