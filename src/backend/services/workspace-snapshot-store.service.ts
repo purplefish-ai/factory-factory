@@ -16,6 +16,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type {
   CIStatus,
@@ -174,9 +175,14 @@ export interface SnapshotDerivationFns {
   };
   computeKanbanColumn: (input: {
     lifecycle: WorkspaceStatus;
-    isWorking: boolean;
+    sessionIsWorking: boolean;
+    flowIsWorking: boolean;
     prState: PRState;
     ratchetState: RatchetState;
+    pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
+    hasSessionRuntimeError: boolean;
+    ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+    ratchetDispatchRetryCount: number;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
@@ -402,6 +408,8 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
         runScriptStatus: entry.runScriptStatus,
         flowState,
       },

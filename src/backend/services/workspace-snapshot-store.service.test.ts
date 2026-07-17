@@ -427,7 +427,7 @@ describe('WorkspaceSnapshotStore', () => {
           shouldAnimateRatchetButton: input.ratchetEnabled && input.prCiStatus === 'PENDING',
         }),
         computeKanbanColumn: (input) => {
-          if (input.isWorking) {
+          if (input.sessionIsWorking || input.flowIsWorking) {
             return KanbanColumn.WORKING;
           }
           if (input.prState === 'MERGED') {
@@ -467,7 +467,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.sidebarStatus.ciState).toBe('RUNNING');
     });
 
-    it('kanbanColumn does not treat PR flow as live agent work', () => {
+    it('keeps PR flow automation-owned without treating it as live agent work', () => {
       store.upsert(
         'ws-1',
         makeUpdate({
@@ -482,7 +482,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.flowPhase).toBe('CI_WAIT');
       expect(entry!.isWorking).toBe(false);
       expect(entry!.sidebarStatus.activityState).toBe('IDLE');
-      expect(entry!.kanbanColumn).toBe('WAITING');
+      expect(entry!.kanbanColumn).toBe('WORKING');
     });
 
     it('does not latch flow-derived isWorking across PR-only updates', () => {

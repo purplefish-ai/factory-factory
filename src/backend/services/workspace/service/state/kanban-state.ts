@@ -1,17 +1,25 @@
-import type { Workspace } from '@prisma-gen/client';
+import type { RatchetDispatchOutcome, Workspace } from '@prisma-gen/client';
+import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceSessionBridge } from '@/backend/services/workspace/service/bridges';
 import { KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import type { WorkspacePendingRequestType } from '@/shared/workspace-status-reason';
+import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 
 const logger = createLogger('kanban-state');
 
 export interface KanbanStateInput {
   lifecycle: WorkspaceStatus;
-  isWorking: boolean;
+  sessionIsWorking: boolean;
+  flowIsWorking: boolean;
   prState: PRState;
   ratchetState: RatchetState;
+  pendingRequestType: WorkspacePendingRequestType | null;
+  hasSessionRuntimeError: boolean;
+  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount: number;
 }
 
 export interface WorkspaceWithKanbanState {
@@ -21,37 +29,26 @@ export interface WorkspaceWithKanbanState {
 }
 
 /**
- * Pure function to compute kanban column from workspace state.
- * This is the core derivation logic for the kanban board.
+ * Compute the Kanban column from next-action ownership.
  *
- * Simplified 3-column model:
- * - WORKING: Initializing states (NEW/PROVISIONING/FAILED) or actively working
- * - WAITING: Idle ready workspaces, including empty workspaces that need a first session
- * - DONE: PR merged or closed
+ * - WORKING: setup, a live agent session, or PR/Ratchet automation owns the next action
+ * - WAITING: a human owns the next action or automated Ratchet retries are exhausted
+ * - DONE: the pull request is merged or closed
  *
  * Archived workspaces retain their pre-archive cachedKanbanColumn and are hidden
  * unless "Show Archived" toggle is enabled.
  */
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null {
-  const { lifecycle, isWorking, prState, ratchetState } = input;
+  const { lifecycle, prState, ratchetState } = input;
+  const retriesExhausted =
+    input.ratchetDispatchOutcome === 'DIED' &&
+    input.ratchetDispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries;
 
   // Archiving/archived workspaces: return null - they use cachedKanbanColumn from before archiving
   // The caller should handle archived workspaces separately
   if (lifecycle === WorkspaceStatus.ARCHIVING || lifecycle === WorkspaceStatus.ARCHIVED) {
     return null;
   }
-
-  // WORKING: Initializing states (not ready for work yet) or actively working
-  if (
-    lifecycle === WorkspaceStatus.NEW ||
-    lifecycle === WorkspaceStatus.PROVISIONING ||
-    lifecycle === WorkspaceStatus.FAILED ||
-    isWorking
-  ) {
-    return KanbanColumn.WORKING;
-  }
-
-  // From here, lifecycle === READY and not working
 
   // DONE: PR merged or closed, as observed by either PR snapshot or ratchet monitor.
   if (
@@ -62,8 +59,27 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
     return KanbanColumn.DONE;
   }
 
-  // WAITING: Everything else - idle ready workspaces
-  // (includes PR states: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED)
+  // WAITING: Explicit errors, interactions, and exhausted retries require human attention.
+  if (
+    lifecycle === WorkspaceStatus.FAILED ||
+    input.pendingRequestType !== null ||
+    input.hasSessionRuntimeError ||
+    retriesExhausted
+  ) {
+    return KanbanColumn.WAITING;
+  }
+
+  // WORKING: Setup, a live session, or an active PR/Ratchet flow owns the next action.
+  if (
+    lifecycle === WorkspaceStatus.NEW ||
+    lifecycle === WorkspaceStatus.PROVISIONING ||
+    input.sessionIsWorking ||
+    input.flowIsWorking
+  ) {
+    return KanbanColumn.WORKING;
+  }
+
+  // WAITING: All remaining nonterminal workspaces require a human next action.
   return KanbanColumn.WAITING;
 }
 
@@ -98,15 +114,20 @@ class KanbanStateService {
 
     const kanbanColumn = computeKanbanColumn({
       lifecycle: workspace.status,
-      isWorking: runtimeState.isWorking,
+      sessionIsWorking: runtimeState.isSessionWorking,
+      flowIsWorking: runtimeState.flowState.isWorking,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
+      pendingRequestType: null,
+      hasSessionRuntimeError: false,
+      ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+      ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
     });
 
     return {
       workspace,
       kanbanColumn,
-      isWorking: runtimeState.isWorking,
+      isWorking: runtimeState.isSessionWorking,
     };
   }
 
@@ -126,15 +147,20 @@ class KanbanStateService {
       // Compute live kanban column (real-time activity overlays cached PR state)
       const kanbanColumn = computeKanbanColumn({
         lifecycle: workspace.status,
-        isWorking: runtimeState.isWorking,
+        sessionIsWorking: runtimeState.isSessionWorking,
+        flowIsWorking: runtimeState.flowState.isWorking,
         prState: workspace.prState,
         ratchetState: workspace.ratchetState,
+        pendingRequestType: null,
+        hasSessionRuntimeError: false,
+        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
       });
 
       return {
         workspace,
         kanbanColumn,
-        isWorking: runtimeState.isWorking,
+        isWorking: runtimeState.isSessionWorking,
       };
     });
   }
@@ -162,14 +188,17 @@ class KanbanStateService {
       return;
     }
 
-    // Cached columns cannot know in-memory session activity. Do not treat PR/CI
-    // flow progress as live agent work, or restarted processes can remain in
-    // the Working column without an active prompt.
+    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const cachedColumn = computeKanbanColumn({
       lifecycle: workspace.status,
-      isWorking: false,
+      sessionIsWorking: false,
+      flowIsWorking: flowState.isWorking,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
+      pendingRequestType: null,
+      hasSessionRuntimeError: false,
+      ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+      ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
     });
 
     // If column is null (archived workspace), default to WAITING for the cache

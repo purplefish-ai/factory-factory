@@ -205,6 +205,8 @@ export const workspaceRouter = router({
         sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
         pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
+        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
         runScriptStatus: workspace.runScriptStatus,
         flowState,
       },

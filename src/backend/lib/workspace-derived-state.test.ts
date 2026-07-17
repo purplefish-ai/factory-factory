@@ -7,7 +7,7 @@ import {
 
 describe('assembleWorkspaceDerivedState', () => {
   it('uses live session activity, not PR flow activity, for workspace working state', () => {
-    const computeKanbanColumn = vi.fn(() => KanbanColumn.WAITING);
+    const computeKanbanColumn = vi.fn(() => KanbanColumn.WORKING);
     const deriveSidebarStatus = vi.fn(() => ({
       activityState: 'IDLE' as const,
       ciState: 'NONE' as const,
@@ -23,6 +23,8 @@ describe('assembleWorkspaceDerivedState', () => {
         hasHadSessions: true,
         sessionIsWorking: false,
         pendingRequestType: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
         runScriptStatus: 'IDLE',
         flowState: {
           ...DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -36,10 +38,12 @@ describe('assembleWorkspaceDerivedState', () => {
     );
 
     expect(result.isWorking).toBe(false);
+    expect(result.kanbanColumn).toBe(KanbanColumn.WORKING);
     expect(computeKanbanColumn).toHaveBeenCalledWith(
       expect.objectContaining({
         lifecycle: WorkspaceStatus.READY,
-        isWorking: false,
+        sessionIsWorking: false,
+        flowIsWorking: true,
       })
     );
     expect(deriveSidebarStatus).toHaveBeenCalledWith(
@@ -61,6 +65,8 @@ describe('assembleWorkspaceDerivedState', () => {
         hasHadSessions: true,
         sessionIsWorking: false,
         pendingRequestType: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
         runScriptStatus: 'IDLE',
         flowState: {
           phase: 'CI_WAIT',
@@ -109,6 +115,8 @@ describe('assembleWorkspaceDerivedState', () => {
         hasHadSessions: true,
         sessionIsWorking: true,
         pendingRequestType: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
         runScriptStatus: 'IDLE',
         flowState: DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
       },
@@ -119,7 +127,9 @@ describe('assembleWorkspaceDerivedState', () => {
     );
 
     expect(result.isWorking).toBe(true);
-    expect(computeKanbanColumn).toHaveBeenCalledWith(expect.objectContaining({ isWorking: true }));
+    expect(computeKanbanColumn).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionIsWorking: true })
+    );
     expect(deriveSidebarStatus).toHaveBeenCalledWith(expect.objectContaining({ isWorking: true }));
   });
 });
