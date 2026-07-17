@@ -19,6 +19,10 @@ vi.mock('@/backend/services/run-script', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
+  buildChildWorkspaceContext: vi.fn(
+    (input: { reportBackOn?: string | null }) =>
+      `## Child Workspace Context\nUse send_message_to_parent.${input.reportBackOn ? `\nReport back when: ${input.reportBackOn}` : ''}\n`
+  ),
   chatMessageHandlerService: {
     tryDispatchNextMessage: vi.fn(),
   },
@@ -63,6 +67,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findById: vi.fn(),
     findByIdWithProject: vi.fn(),
+    findParentWorkspace: vi.fn(),
     update: vi.fn(),
   },
 }));
@@ -111,6 +116,7 @@ import { startupScriptService } from '@/backend/services/run-script';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import {
   agentSessionAccessor,
+  buildChildWorkspaceContext,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
@@ -860,6 +866,230 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(workspaceStateMachine.markReady).toHaveBeenCalled();
+    });
+
+    it('prepends child workspace context to the initial prompt', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {
+          initialPrompt: 'Implement the fix',
+          reportBackOn: 'a PR is opened',
+        },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      const queued = vi.mocked(sessionDomainService.enqueue).mock.calls[0]?.[1];
+      if (!queued) {
+        throw new Error('Expected an initial message to be queued');
+      }
+      expect(queued.text).toContain('## Child Workspace Context');
+      expect(queued.text).toContain('Report back when: a PR is opened');
+      expect(queued.text.indexOf('## Child Workspace Context')).toBeLessThan(
+        queued.text.indexOf('Implement the fix')
+      );
+      expect(workspaceAccessor.findParentWorkspace).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(buildChildWorkspaceContext).toHaveBeenCalledWith({
+        parentWorkspaceName: 'parent-workspace',
+        parentProjectName: 'parent-project',
+        reportBackOn: 'a PR is opened',
+      });
+    });
+
+    it('enqueues child workspace context when no initial prompt is provided', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {},
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({ text: expect.stringContaining('send_message_to_parent') })
+      );
+    });
+
+    it('preserves initial attachments when composing child workspace context', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {
+          initialPrompt: 'Review the evidence',
+          initialAttachments: [
+            {
+              id: 'att-child-1',
+              name: 'child-evidence.png',
+              type: 'image/png',
+              size: 120,
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+              contentType: 'image',
+            },
+          ],
+        },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: expect.stringContaining('Review the evidence'),
+          attachments: [
+            expect.objectContaining({
+              id: 'att-child-1',
+              name: 'child-evidence.png',
+            }),
+          ],
+        })
+      );
+    });
+
+    it('queues child workspace context with attachments when no initial prompt is provided', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {
+          initialAttachments: [
+            {
+              id: 'att-child-only-1',
+              name: 'child-only-evidence.png',
+              type: 'image/png',
+              size: 120,
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+              contentType: 'image',
+            },
+          ],
+        },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: '## Child Workspace Context\nUse send_message_to_parent.',
+          attachments: [
+            expect.objectContaining({
+              id: 'att-child-only-1',
+              name: 'child-only-evidence.png',
+            }),
+          ],
+        })
+      );
+    });
+
+    it('queues child workspace context for a whitespace-only initial prompt', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: { initialPrompt: '  \n\t' },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: '## Child Workspace Context\nUse send_message_to_parent.',
+        })
+      );
+    });
+
+    it('ignores non-string child report-back metadata', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {
+          initialPrompt: 'Implement the fix',
+          reportBackOn: { event: 'pull-request' },
+        },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(buildChildWorkspaceContext).toHaveBeenCalledWith({
+        parentWorkspaceName: 'parent-workspace',
+        parentProjectName: 'parent-project',
+        reportBackOn: undefined,
+      });
+    });
+
+    it('does not resolve a parent workspace for non-child initialization', async () => {
+      setupHappyPath({
+        creationMetadata: { initialPrompt: 'Implement the fix' },
+      });
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(workspaceAccessor.findParentWorkspace).not.toHaveBeenCalled();
+      expect(buildChildWorkspaceContext).not.toHaveBeenCalled();
     });
 
     it('enqueues initial attachments from workspace creation metadata', async () => {

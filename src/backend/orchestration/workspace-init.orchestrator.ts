@@ -8,6 +8,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import {
   agentSessionAccessor,
+  buildChildWorkspaceContext,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
@@ -364,6 +365,23 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
 
     // Build the initial prompt from linked issue data, or fallback to creation metadata.
     const initialMessage = await resolveInitialAutoMessageContent(workspaceId, metadata);
+    const parent = workspace?.parentWorkspaceId
+      ? await workspaceAccessor.findParentWorkspace(workspaceId)
+      : null;
+    const childContext = workspace?.parentWorkspaceId
+      ? buildChildWorkspaceContext({
+          parentWorkspaceName: parent?.name,
+          parentProjectName: parent?.project.name,
+          reportBackOn:
+            typeof metadata?.reportBackOn === 'string' ? metadata.reportBackOn : undefined,
+        })
+      : undefined;
+    const messageToEnqueue = childContext
+      ? {
+          text: `${childContext}\n${initialMessage?.text ?? ''}`.trimEnd(),
+          attachments: initialMessage?.attachments,
+        }
+      : initialMessage;
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
@@ -373,13 +391,13 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     });
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
-    if (initialMessage) {
+    if (messageToEnqueue) {
       enqueueAutoMessage(
         session.id,
         workspaceId,
-        initialMessage.text,
+        messageToEnqueue.text,
         session.model,
-        initialMessage.attachments
+        messageToEnqueue.attachments
       );
     }
 

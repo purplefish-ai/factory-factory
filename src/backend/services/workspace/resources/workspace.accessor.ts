@@ -6,6 +6,7 @@ import type {
 } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
+  AutoIterationStatus,
   CIStatus,
   PRState,
   RatchetState,
@@ -319,6 +320,21 @@ class WorkspaceAccessor {
       where: { id, runScriptStatus: currentStatus },
       data,
     });
+  }
+
+  async finishAutoIterationIfSessionMatches(
+    id: string,
+    sessionId: string,
+    status: AutoIterationStatus
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id, autoIterationSessionId: sessionId },
+      data: {
+        autoIterationStatus: status,
+        autoIterationSessionId: null,
+      },
+    });
+    return result.count === 1;
   }
 
   /**

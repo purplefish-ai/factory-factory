@@ -341,6 +341,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     async updateAutoIterationSessionId(workspaceId, sessionId) {
       await workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
     },
+    finishAutoIterationIfSessionMatches(workspaceId, sessionId, status) {
+      return workspaceAccessor.finishAutoIterationIfSessionMatches(workspaceId, sessionId, status);
+    },
   };
 
   const autoIterationSessionBridge: AutoIterationSessionBridge = {
