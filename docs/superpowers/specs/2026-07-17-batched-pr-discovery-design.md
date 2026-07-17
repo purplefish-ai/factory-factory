@@ -37,7 +37,7 @@ The scheduler interval remains three minutes. Therefore an activity reset is obs
 
 ## Repository Batching and Matching
 
-For each selected repository, run exactly one:
+For each selected repository with at least one successfully claimed candidate, run exactly one:
 
 ```text
 gh pr list --repo owner/repo --state open --json number,url,createdAt,headRefName --limit 1000
