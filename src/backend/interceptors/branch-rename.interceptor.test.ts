@@ -161,6 +161,7 @@ describe('branchRenameInterceptor', () => {
     'rg -n "git branch -m" .',
     "rg -n '; git branch -m' .",
     'Search git branch -m',
+    'echo \\; git branch -m escaped-name',
   ])('ignores a non-rename tool title containing the command text: %s', async (toolName) => {
     await branchRenameInterceptor.onToolComplete!(
       {
