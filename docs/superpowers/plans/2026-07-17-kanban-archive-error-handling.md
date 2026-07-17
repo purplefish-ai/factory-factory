@@ -34,11 +34,11 @@ Mock only external hook boundaries: Sonner, `useToggleRatcheting`, and the tRPC 
 
 - [ ] **Step 2: Write failing single-archive tests**
 
-Add one test with `{ data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' }` and one with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Archive service unavailable' }`. In each test, invoke `archiveWorkspace('workspace-1', false)` and assert that the promise resolves, the expected toast is shown, and the project-summary cache setter runs once for optimistic removal and once for rollback.
+Add one test with `{ data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' }` and one with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Archive service unavailable' }`. In each test, invoke `archiveWorkspace('workspace-1', false)` and assert that the promise resolves, the expected toast is shown, the project-summary cache setter runs once for optimistic removal and once for rollback, and the provider exposes `workspace-1` again after its pending archive state settles.
 
 - [ ] **Step 3: Write the failing bulk-archive test**
 
-Reject the bulk mutation with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Bulk archive unavailable' }`, invoke `bulkArchiveColumn('WAITING', true)`, and assert that the promise resolves, the message is toasted, and project-summary state is rolled back.
+Reject the bulk mutation with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Bulk archive unavailable' }`, invoke `bulkArchiveColumn('WAITING', true)`, and assert that the promise resolves, the message is toasted, project-summary state is rolled back, and the provider exposes the failed target again after its pending archive state settles.
 
 - [ ] **Step 4: Run the focused test and verify RED**
 
@@ -107,10 +107,20 @@ git commit -m "Handle Kanban archive failures (#1908)"
 - [ ] **Step 1: Run the required verification chain**
 
 ```bash
-pnpm typecheck && pnpm check:fix && pnpm test && pnpm build
+pnpm typecheck
+pnpm exec biome check src/client/components/kanban/kanban-context.tsx src/client/components/kanban/kanban-context.test.tsx docs/superpowers/specs/2026-07-17-kanban-archive-error-handling-design.md docs/superpowers/plans/2026-07-17-kanban-archive-error-handling.md
+
+test_status=0
+pnpm test || test_status=$?
+pnpm build
+build_status=$?
+if [ "$test_status" -ne 0 ]; then
+  exit "$test_status"
+fi
+exit "$build_status"
 ```
 
-Expected: all four commands exit zero.
+Expected: typecheck and the scoped, read-only Biome check exit zero. In a shell that predefines `NODE_ENV=production`, `pnpm test` retains the known baseline `act is not a function` failures in existing React tests because the production React bundle does not export `act`; record that failure without rewriting files. The wrapper still runs `pnpm build` separately and returns the test status instead of hiding it.
 
 - [ ] **Step 2: Review the complete diff and status**
 

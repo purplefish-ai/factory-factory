@@ -261,18 +261,22 @@ export function KanbanProvider({
       return next;
     });
     try {
-      await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
-      await Promise.all([
+      try {
+        await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
+      } catch {
+        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
+        );
+        // Error feedback is surfaced by the mutation's onError toast;
+        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        return;
+      }
+
+      await Promise.allSettled([
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
-    } catch {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-        restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
-      );
-      // Error feedback is surfaced by the mutation's onError toast;
-      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setArchivingWorkspaceIds((prev) => {
         if (!prev.has(workspaceId)) {
@@ -329,25 +333,29 @@ export function KanbanProvider({
     });
 
     try {
-      await bulkArchiveMutation.mutateAsync({
-        projectId,
-        kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-        commitUncommitted,
-      });
-      await Promise.all([
+      try {
+        await bulkArchiveMutation.mutateAsync({
+          projectId,
+          kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
+          commitUncommitted,
+        });
+      } catch {
+        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectSummaryCache(
+            old,
+            previousProjectSummaryState,
+            workspaceIdsToArchive
+          )
+        );
+        // Error feedback is surfaced by the mutation's onError toast;
+        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        return;
+      }
+
+      await Promise.allSettled([
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
       ]);
-    } catch {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-        restoreWorkspacesToProjectSummaryCache(
-          old,
-          previousProjectSummaryState,
-          workspaceIdsToArchive
-        )
-      );
-      // Error feedback is surfaced by the mutation's onError toast;
-      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);

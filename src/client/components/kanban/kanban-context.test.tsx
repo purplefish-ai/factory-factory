@@ -162,6 +162,15 @@ function renderProvider(children: ReactNode = <Probe />) {
   return context;
 }
 
+async function expectArchiveToResolve(action: () => Promise<void>) {
+  await expect(action()).resolves.toBeUndefined();
+  flushSync(() => undefined);
+}
+
+function expectVisibleWorkspaceIds(expectedIds: string[]) {
+  expect(context?.workspaces?.map((workspace) => workspace.id)).toEqual(expectedIds);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.archiveError = undefined;
@@ -195,7 +204,7 @@ describe('KanbanProvider archive failure handling', () => {
     mocks.archiveError = { data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' };
     const kanban = renderProvider();
 
-    await expect(kanban.archiveWorkspace('workspace-1', false)).resolves.toBeUndefined();
+    await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1', false));
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith(
       'Archiving blocked: enable commit before archiving to proceed.'
@@ -205,6 +214,7 @@ describe('KanbanProvider archive failure handling', () => {
       { id: 'workspace-1' },
       { id: 'workspace-2' },
     ]);
+    expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
   });
 
   it('handles an archive service failure and rolls back the optimistic removal', async () => {
@@ -214,7 +224,7 @@ describe('KanbanProvider archive failure handling', () => {
     };
     const kanban = renderProvider();
 
-    await expect(kanban.archiveWorkspace('workspace-1', false)).resolves.toBeUndefined();
+    await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1', false));
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Archive service unavailable');
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
@@ -222,6 +232,7 @@ describe('KanbanProvider archive failure handling', () => {
       { id: 'workspace-1' },
       { id: 'workspace-2' },
     ]);
+    expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
   });
 
   it('handles a bulk archive failure and rolls back the optimistic removals', async () => {
@@ -231,7 +242,7 @@ describe('KanbanProvider archive failure handling', () => {
     };
     const kanban = renderProvider();
 
-    await expect(kanban.bulkArchiveColumn('WAITING', true)).resolves.toBeUndefined();
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Bulk archive unavailable');
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
@@ -239,5 +250,26 @@ describe('KanbanProvider archive failure handling', () => {
       { id: 'workspace-1' },
       { id: 'workspace-2' },
     ]);
+    expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
+  });
+
+  it('keeps a successful single archive removed when workspace refetch fails', async () => {
+    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+    const kanban = renderProvider();
+
+    await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1', false));
+
+    expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(1);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([{ id: 'workspace-2' }]);
+  });
+
+  it('keeps a successful bulk archive removed when cache invalidation fails', async () => {
+    mocks.projectSummaryInvalidateMock.mockRejectedValueOnce(new Error('Invalidation failed'));
+    const kanban = renderProvider();
+
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
+
+    expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(1);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([{ id: 'workspace-2' }]);
   });
 });
