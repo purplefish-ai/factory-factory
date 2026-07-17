@@ -248,6 +248,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     session: {
       isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
+      getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
     },
   });
 

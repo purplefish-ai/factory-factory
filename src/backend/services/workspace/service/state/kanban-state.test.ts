@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
+import type { WorkspaceSessionBridge } from '@/backend/services/workspace/service/bridges';
 import { PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 
 const mockFindById = vi.hoisted(() => vi.fn());
@@ -123,6 +124,12 @@ describe('kanbanStateService', () => {
   const sessionBridge = {
     isAnySessionWorking: vi.fn(),
     getAllPendingRequests: vi.fn(() => new Map()),
+    getRuntimeSnapshot: vi.fn<WorkspaceSessionBridge['getRuntimeSnapshot']>(() => ({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })),
   };
 
   beforeEach(() => {
@@ -143,8 +150,10 @@ describe('kanbanStateService', () => {
       prState: 'OPEN',
       ratchetState: 'IDLE',
       hasHadSessions: true,
+      agentSessions: [],
     });
     mockDeriveRuntimeState.mockReturnValue({
+      sessionIds: [],
       isSessionWorking: false,
       isWorking: false,
       flowState: { isWorking: false },
@@ -157,14 +166,51 @@ describe('kanbanStateService', () => {
     });
   });
 
+  it('keeps a workspace with a pending permission request in WAITING', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'w-pending',
+      status: WorkspaceStatus.READY,
+      prState: PRState.NONE,
+      ratchetState: RatchetState.IDLE,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      agentSessions: [
+        {
+          id: 's-pending',
+          name: 'Agent',
+          workflow: 'followup',
+          model: 'gpt-5',
+          provider: 'CODEX',
+          status: 'RUNNING',
+        },
+      ],
+    });
+    mockDeriveRuntimeState.mockReturnValue({
+      sessionIds: ['s-pending'],
+      isSessionWorking: true,
+      isWorking: true,
+      flowState: { isWorking: false },
+    });
+    sessionBridge.getAllPendingRequests.mockReturnValue(
+      new Map([['s-pending', { toolName: 'Bash' }]])
+    );
+
+    await expect(kanbanStateService.getWorkspaceKanbanState('w-pending')).resolves.toMatchObject({
+      kanbanColumn: 'WAITING',
+      isWorking: true,
+    });
+  });
+
   it('computes batch kanban state using workingStatus map', () => {
     mockDeriveRuntimeState
       .mockReturnValueOnce({
+        sessionIds: [],
         isSessionWorking: false,
         isWorking: false,
         flowState: { isWorking: false },
       })
       .mockReturnValueOnce({
+        sessionIds: [],
         isSessionWorking: true,
         isWorking: true,
         flowState: { isWorking: false },
@@ -178,6 +224,7 @@ describe('kanbanStateService', () => {
           prState: 'OPEN',
           ratchetState: 'IDLE',
           hasHadSessions: true,
+          agentSessions: [],
         },
         {
           id: 'w2',
@@ -185,6 +232,7 @@ describe('kanbanStateService', () => {
           prState: 'NONE',
           ratchetState: 'IDLE',
           hasHadSessions: true,
+          agentSessions: [],
         },
       ] as never,
       new Map([
@@ -196,6 +244,50 @@ describe('kanbanStateService', () => {
     expect(result).toMatchObject([
       { workspace: { id: 'w1' }, kanbanColumn: 'WAITING', isWorking: false },
       { workspace: { id: 'w2' }, kanbanColumn: 'WORKING', isWorking: true },
+    ]);
+  });
+
+  it('keeps a batch workspace with a session runtime error in WAITING', () => {
+    mockDeriveRuntimeState.mockReturnValue({
+      sessionIds: ['s-error'],
+      isSessionWorking: true,
+      isWorking: true,
+      flowState: { isWorking: false },
+    });
+    sessionBridge.getRuntimeSnapshot.mockReturnValue({
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      errorMessage: 'ACP runtime failed',
+    });
+
+    const result = kanbanStateService.getWorkspacesKanbanStates(
+      [
+        {
+          id: 'w-error',
+          status: WorkspaceStatus.READY,
+          prState: PRState.NONE,
+          ratchetState: RatchetState.IDLE,
+          ratchetDispatchOutcome: null,
+          ratchetDispatchRetryCount: 0,
+          agentSessions: [
+            {
+              id: 's-error',
+              name: 'Agent',
+              workflow: 'followup',
+              model: 'gpt-5',
+              provider: 'CODEX',
+              status: 'RUNNING',
+            },
+          ],
+        },
+      ] as never,
+      new Map([['w-error', true]])
+    );
+
+    expect(result).toMatchObject([
+      { workspace: { id: 'w-error' }, kanbanColumn: 'WAITING', isWorking: true },
     ]);
   });
 

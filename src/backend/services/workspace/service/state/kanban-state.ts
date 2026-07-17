@@ -1,11 +1,17 @@
 import type { RatchetDispatchOutcome, Workspace } from '@prisma-gen/client';
+import { buildWorkspaceSessionSummaries } from '@/backend/lib/session-summaries';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import {
+  type WorkspaceWithSessions,
+  workspaceAccessor,
+} from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceSessionBridge } from '@/backend/services/workspace/service/bridges';
 import { KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspacePendingRequestType } from '@/shared/workspace-status-reason';
 import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
+import { computePendingRequestType } from './pending-request-type';
 import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 
 const logger = createLogger('kanban-state');
@@ -99,6 +105,21 @@ class KanbanStateService {
     return this.sessionBridge;
   }
 
+  private getHumanAttentionState(
+    workspace: Pick<WorkspaceWithSessions, 'agentSessions'>,
+    sessionIds: string[],
+    pendingRequests: ReturnType<WorkspaceSessionBridge['getAllPendingRequests']>
+  ): Pick<KanbanStateInput, 'pendingRequestType' | 'hasSessionRuntimeError'> {
+    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions, (sessionId) =>
+      this.session.getRuntimeSnapshot(sessionId)
+    );
+
+    return {
+      pendingRequestType: computePendingRequestType(sessionIds, pendingRequests),
+      hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
+    };
+  }
+
   /**
    * Get kanban state for a single workspace, including real-time activity check.
    */
@@ -111,6 +132,11 @@ class KanbanStateService {
     const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
       this.session.isAnySessionWorking(sessionIds)
     );
+    const humanAttentionState = this.getHumanAttentionState(
+      workspace,
+      runtimeState.sessionIds,
+      this.session.getAllPendingRequests()
+    );
 
     const kanbanColumn = computeKanbanColumn({
       lifecycle: workspace.status,
@@ -118,8 +144,7 @@ class KanbanStateService {
       flowIsWorking: runtimeState.flowState.isWorking,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
-      pendingRequestType: null,
-      hasSessionRuntimeError: false,
+      ...humanAttentionState,
       ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
       ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
     });
@@ -136,13 +161,20 @@ class KanbanStateService {
    * Uses cached kanban column for non-working workspaces for performance.
    */
   getWorkspacesKanbanStates(
-    workspaces: Workspace[],
+    workspaces: WorkspaceWithSessions[],
     workingStatusMap: Map<string, boolean>
   ): WorkspaceWithKanbanState[] {
+    const pendingRequests = this.session.getAllPendingRequests();
+
     return workspaces.map((workspace) => {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (_sessionIds, workspaceId) => {
         return workingStatusMap.get(workspaceId) ?? false;
       });
+      const humanAttentionState = this.getHumanAttentionState(
+        workspace,
+        runtimeState.sessionIds,
+        pendingRequests
+      );
 
       // Compute live kanban column (real-time activity overlays cached PR state)
       const kanbanColumn = computeKanbanColumn({
@@ -151,8 +183,7 @@ class KanbanStateService {
         flowIsWorking: runtimeState.flowState.isWorking,
         prState: workspace.prState,
         ratchetState: workspace.ratchetState,
-        pendingRequestType: null,
-        hasSessionRuntimeError: false,
+        ...humanAttentionState,
         ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
         ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
       });
