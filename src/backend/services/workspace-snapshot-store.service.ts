@@ -30,85 +30,18 @@ import type { SessionSummary } from '@/shared/session-runtime';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 import { SERVICE_CACHE_TTL_MS } from './constants';
 import { createLogger } from './logger.service';
+
+export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * String literal union for timestamp group keys.
- * Represents coherent groups of fields that update together from a single
- * event source (grouped by update source, not per-field).
- */
-export type SnapshotFieldGroup =
-  | 'workspace'
-  | 'pr'
-  | 'session'
-  | 'ratchet'
-  | 'runScript'
-  | 'reconciliation';
 export type WorkspaceSessionSummary = SessionSummary;
-
-/**
- * The full snapshot entry shape for a workspace.
- * Matches the output of getProjectSummaryState() with additional versioning,
- * debug metadata, and field-level timestamps for concurrent update safety.
- */
-export interface WorkspaceSnapshotEntry {
-  // Identity
-  workspaceId: string;
-  projectId: string;
-
-  // Versioning (STORE-02): monotonically increasing per entry
-  version: number;
-
-  // Debug metadata (STORE-03)
-  computedAt: string; // ISO timestamp
-  source: string; // e.g. 'event:workspace_state_change', 'reconciliation'
-
-  // Raw workspace state
-  name: string;
-  status: WorkspaceStatus;
-  createdAt: string;
-  branchName: string | null;
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prCiStatus: CIStatus;
-  prUpdatedAt: string | null;
-  ratchetEnabled: boolean;
-  ratchetState: RatchetState;
-  runScriptStatus: RunScriptStatus;
-  hasHadSessions: boolean;
-
-  // In-memory state (from session domain)
-  isWorking: boolean;
-  pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
-  sessionSummaries: WorkspaceSessionSummary[];
-
-  // Reconciliation-only state
-  gitStats: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-  lastActivityAt: string | null;
-
-  // Derived state (STORE-05): recomputed on every upsert
-  sidebarStatus: WorkspaceSidebarStatus;
-  kanbanColumn: KanbanColumn | null;
-  flowPhase: WorkspaceFlowPhase;
-  ciObservation: WorkspaceCiObservation;
-  ratchetButtonAnimated: boolean;
-  statusReason: WorkspaceStatusReason;
-
-  // Field-level timestamps for concurrent update safety
-  fieldTimestamps: Record<SnapshotFieldGroup, number>;
-}
 
 /**
  * Input type for upsert(). Contains optional versions of all raw + session +
