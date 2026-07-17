@@ -13,6 +13,7 @@ import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pre-push-rename');
 const GIT_PUSH_REGEX = /\bgit\s+push\b/;
+const MAX_PENDING_PUSHES = 1000;
 
 class PrePushRenameInterceptor implements ToolInterceptor {
   readonly name = 'pre-push-rename';
@@ -20,9 +21,32 @@ class PrePushRenameInterceptor implements ToolInterceptor {
 
   // Track workspaces that have already been renamed to avoid duplicate renames.
   private renamedWorkspaces = new Set<string>();
+  private pendingPushWorkspaces = new Map<string, string>();
+
+  private trackPendingPush(toolUseId: string, workspaceId: string): void {
+    if (this.pendingPushWorkspaces.has(toolUseId)) {
+      this.pendingPushWorkspaces.delete(toolUseId);
+    }
+
+    while (this.pendingPushWorkspaces.size >= MAX_PENDING_PUSHES) {
+      const oldestToolUseId = this.pendingPushWorkspaces.keys().next().value;
+      if (!oldestToolUseId) {
+        break;
+      }
+      this.pendingPushWorkspaces.delete(oldestToolUseId);
+    }
+
+    this.pendingPushWorkspaces.set(toolUseId, workspaceId);
+  }
+
+  start(): void {
+    this.renamedWorkspaces.clear();
+    this.pendingPushWorkspaces.clear();
+  }
 
   stop(): void {
     this.renamedWorkspaces.clear();
+    this.pendingPushWorkspaces.clear();
   }
 
   async onToolStart(event: ToolEvent, context: InterceptorContext): Promise<void> {
@@ -33,6 +57,10 @@ class PrePushRenameInterceptor implements ToolInterceptor {
       if (!command) {
         return;
       }
+
+      // Completion determines whether the push succeeded. Track it before any
+      // branch-specific early returns so every successful push can reset PR discovery.
+      this.trackPendingPush(event.toolUseId, context.workspaceId);
 
       // Skip if already renamed this workspace
       if (this.renamedWorkspaces.has(context.workspaceId)) {
@@ -108,6 +136,28 @@ class PrePushRenameInterceptor implements ToolInterceptor {
       }
       logger.error('Error in pre-push rename interceptor', {
         workspaceId: context.workspaceId,
+        error,
+      });
+    }
+  }
+
+  async onToolComplete(event: ToolEvent): Promise<void> {
+    const workspaceId = this.pendingPushWorkspaces.get(event.toolUseId);
+    if (!workspaceId) {
+      return;
+    }
+    this.pendingPushWorkspaces.delete(event.toolUseId);
+
+    if (event.output?.isError) {
+      return;
+    }
+
+    try {
+      await workspaceDataService.resetPRDiscoveryBackoff(workspaceId);
+    } catch (error) {
+      logger.error('Failed to reset PR discovery after git push', {
+        workspaceId,
+        toolUseId: event.toolUseId,
         error,
       });
     }

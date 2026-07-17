@@ -60,6 +60,24 @@ const workspaceFieldOwners = {
   prReviewState: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
   prCiStatus: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
   prUpdatedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
+  prDiscoveryLastCheckedAt: new Set([
+    'src/backend/orchestration/scheduler.service.ts',
+    'src/backend/services/session/service/lifecycle/session-pr-discovery.service.ts',
+    'src/backend/services/workspace/service/lifecycle/data.service.ts',
+    'src/backend/services/workspace/service/query/workspace-query.service.ts',
+  ]),
+  prDiscoveryRetryCount: new Set([
+    'src/backend/orchestration/scheduler.service.ts',
+    'src/backend/services/session/service/lifecycle/session-pr-discovery.service.ts',
+    'src/backend/services/workspace/service/lifecycle/data.service.ts',
+    'src/backend/services/workspace/service/query/workspace-query.service.ts',
+  ]),
+  prDiscoveryNextCheckAt: new Set([
+    'src/backend/orchestration/scheduler.service.ts',
+    'src/backend/services/session/service/lifecycle/session-pr-discovery.service.ts',
+    'src/backend/services/workspace/service/lifecycle/data.service.ts',
+    'src/backend/services/workspace/service/query/workspace-query.service.ts',
+  ]),
   prCiFailedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
   prCiLastNotifiedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
   prReviewLastCheckedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
@@ -184,6 +202,22 @@ const workspaceMutationRules = {
     payloadIndex: 2,
     requireStaticPayload: false,
     fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],
+  },
+  claimPRDiscoveryAttempt: {
+    type: 'static',
+    fields: [
+      'prDiscoveryLastCheckedAt',
+      'prDiscoveryRetryCount',
+      'prDiscoveryNextCheckAt',
+    ],
+  },
+  resetPRDiscoveryBackoff: {
+    type: 'static',
+    fields: [
+      'prDiscoveryLastCheckedAt',
+      'prDiscoveryRetryCount',
+      'prDiscoveryNextCheckAt',
+    ],
   },
   finishAutoIterationIfSessionMatches: {
     type: 'static',

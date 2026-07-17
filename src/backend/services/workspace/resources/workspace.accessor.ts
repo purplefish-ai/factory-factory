@@ -73,6 +73,9 @@ interface UpdateWorkspaceInput {
   prReviewState?: string | null;
   prCiStatus?: CIStatus;
   prUpdatedAt?: Date | null;
+  prDiscoveryLastCheckedAt?: Date | null;
+  prDiscoveryRetryCount?: number;
+  prDiscoveryNextCheckAt?: Date | null;
   // CI failure tracking
   prCiFailedAt?: Date | null;
   prCiLastNotifiedAt?: Date | null;
