@@ -299,7 +299,7 @@ export class AcpRuntimeManager {
     const startupErrorSettled = startupError.catch(() => undefined);
 
     this.wireChildErrorHandler(child, sessionId, handlers);
-    this.abortClientCreationIfStopping(child, sessionId);
+    await this.abortClientCreationIfStopping(child, sessionId);
 
     // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -401,7 +401,7 @@ export class AcpRuntimeManager {
         stopSignal.promise,
       ]);
     } catch (error) {
-      this.cleanupFailedClientCreation(child, sessionId);
+      await this.cleanupFailedClientCreation(child, sessionId);
       throw error;
     } finally {
       shutdownSignal.dispose();
@@ -413,11 +413,11 @@ export class AcpRuntimeManager {
     }
 
     if (this.isShuttingDown) {
-      this.cleanupFailedClientCreation(child, sessionId);
+      await this.cleanupFailedClientCreation(child, sessionId);
       throw this.createShutdownError(sessionId);
     }
 
-    this.abortClientCreationIfStopping(child, sessionId);
+    await this.abortClientCreationIfStopping(child, sessionId);
 
     // Build handle
     const agentCapabilities = initResult.agentCapabilities ?? {};
@@ -439,14 +439,34 @@ export class AcpRuntimeManager {
     return handle;
   }
 
-  private cleanupFailedClientCreation(child: ChildProcess, sessionId: string): void {
-    if (child.exitCode !== null) {
+  private async cleanupFailedClientCreation(child: ChildProcess, sessionId: string): Promise<void> {
+    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+
+    if (hasExited()) {
       return;
     }
 
     try {
+      let terminationObserved = false;
+      const exitPromise = new Promise<void>((resolve) => {
+        const resolveOnTermination = () => {
+          terminationObserved = true;
+          child.removeListener('exit', resolveOnTermination);
+          child.removeListener('close', resolveOnTermination);
+          resolve();
+        };
+        child.once('exit', resolveOnTermination);
+        child.once('close', resolveOnTermination);
+        if (hasExited()) {
+          resolveOnTermination();
+        }
+      });
+
       child.kill('SIGTERM');
-      if (child.exitCode === null) {
+
+      await raceWithSoftTimeout(exitPromise, 5000);
+
+      if (!(terminationObserved || hasExited())) {
         child.kill('SIGKILL');
       }
     } catch {
@@ -459,12 +479,15 @@ export class AcpRuntimeManager {
     });
   }
 
-  private abortClientCreationIfStopping(child: ChildProcess, sessionId: string): void {
+  private async abortClientCreationIfStopping(
+    child: ChildProcess,
+    sessionId: string
+  ): Promise<void> {
     if (!this.stoppingInProgress.has(sessionId)) {
       return;
     }
 
-    this.cleanupFailedClientCreation(child, sessionId);
+    await this.cleanupFailedClientCreation(child, sessionId);
     throw this.createStopRequestedError(sessionId);
   }
 

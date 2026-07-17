@@ -689,6 +689,42 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('runs syncAllPRStatuses independently for different projects', async () => {
+    let resolveFirstRefresh: ((result: { success: boolean }) => void) | undefined;
+    const firstRefresh = new Promise<{ success: boolean }>((resolve) => {
+      resolveFirstRefresh = resolve;
+    });
+
+    mockFindByProjectIdWithSessions.mockImplementation(async (projectId: string) => [
+      {
+        id: projectId === 'p1' ? 'w1' : 'w2',
+        prUrl: `https://github.com/o/r/pull/${projectId === 'p1' ? '1' : '2'}`,
+      },
+    ]);
+    mockRefreshWorkspace.mockImplementation((workspaceId: string) =>
+      workspaceId === 'w1' ? firstRefresh : Promise.resolve({ success: true })
+    );
+
+    try {
+      await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 1 });
+      await vi.waitFor(() => {
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1', 'https://github.com/o/r/pull/1');
+      });
+
+      await expect(workspaceQueryService.syncAllPRStatuses('p2')).resolves.toEqual({ queued: 1 });
+      expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('p2', {
+        excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+      });
+      await vi.waitFor(() => {
+        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2', 'https://github.com/o/r/pull/2');
+      });
+    } finally {
+      resolveFirstRefresh?.({ success: true });
+      await firstRefresh;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
+
   it('hasChanges checks workspace metadata and git stats safely', async () => {
     mockFindByIdWithProject.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);

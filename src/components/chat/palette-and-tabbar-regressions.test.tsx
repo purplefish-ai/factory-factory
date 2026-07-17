@@ -163,6 +163,86 @@ describe('session-tab-bar regression coverage', () => {
 });
 
 describe('slash-command-palette regression coverage', () => {
+  it.each([
+    'Enter',
+    'Tab',
+  ] as const)('resets selected command when reopened with an unchanged filter before %s', (selectionKey) => {
+    const commands: CommandInfo[] = [
+      { name: 'alpha', description: 'First' },
+      { name: 'beta', description: 'Second' },
+      { name: 'gamma', description: 'Third' },
+      { name: 'delta', description: 'Fourth' },
+      { name: 'epsilon', description: 'Fifth' },
+    ];
+
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    const anchorEl = document.createElement('div');
+    document.body.appendChild(anchorEl);
+    const anchorRef = { current: anchorEl };
+    const paletteRef = createRef<SlashCommandPaletteHandle>();
+
+    const cleanup = renderInDom((root) => {
+      flushSync(() => {
+        root.render(
+          createElement(SlashCommandPalette, {
+            commands,
+            isOpen: true,
+            onClose,
+            onSelect,
+            filter: '',
+            anchorRef,
+            paletteRef,
+          })
+        );
+      });
+
+      flushSync(() => {
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+      });
+
+      flushSync(() => {
+        root.render(
+          createElement(SlashCommandPalette, {
+            commands,
+            isOpen: false,
+            onClose,
+            onSelect,
+            filter: '',
+            anchorRef,
+            paletteRef,
+          })
+        );
+      });
+
+      flushSync(() => {
+        root.render(
+          createElement(SlashCommandPalette, {
+            commands,
+            isOpen: true,
+            onClose,
+            onSelect,
+            filter: '',
+            anchorRef,
+            paletteRef,
+          })
+        );
+      });
+
+      flushSync(() => {
+        expect(paletteRef.current?.handleKeyDown(selectionKey)).toBe('handled');
+      });
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(commands[0]);
+    });
+
+    cleanup();
+  });
+
   it('resets selected command when filter changes even if result count stays the same', () => {
     const commands: CommandInfo[] = [
       { name: 'alpha', description: 'First' },
