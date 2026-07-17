@@ -20,6 +20,12 @@ only production code that chooses the complete set of long-lived backend instanc
 Standalone and Electron entrypoints call `createApplication()` and supply that exact graph to
 `createServer(application)`. The server does not construct or supplement an application graph.
 
+The default dependency factory is authoritative as the selector for the public application graph;
+it does not yet construct every implementation independently. Some selected production defaults
+are shared module instances, and some capsule internals still import singleton collaborators or
+Prisma-backed accessors directly. Moving those internals to per-graph factories is staged work, as
+described below.
+
 The outer `Application`, `services`, and `lifecycle` containers are shallowly frozen. This prevents
 consumers from replacing dependencies after composition. The service objects inside those
 containers remain stateful where their public contracts require it.
