@@ -270,6 +270,7 @@ class EventCollectorState {
   activeCoalescer: EventCoalescer | null = null;
   pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
   runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
+  ratchetDispatchChangedHandler: ((event: RatchetDispatchChangedEvent) => void) | null = null;
   eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
   listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null = null;
 }
@@ -448,6 +449,10 @@ function configureEventCollectorWithState(
     previousSessionDomainService.off('runtime_changed', state.runtimeChangedHandler);
     state.runtimeChangedHandler = null;
   }
+  if (state.ratchetDispatchChangedHandler) {
+    ratchetService.off(RATCHET_DISPATCH_CHANGED, state.ratchetDispatchChangedHandler);
+    state.ratchetDispatchChangedHandler = null;
+  }
 
   state.eventCollectorSessionServices = {
     ...defaultSessionServices,
@@ -595,7 +600,7 @@ function configureEventCollectorWithState(
   });
 
   // 5. Ratchet dispatch ownership changes
-  ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+  state.ratchetDispatchChangedHandler = (event: RatchetDispatchChangedEvent) => {
     coalescer.enqueue(
       event.workspaceId,
       {
@@ -606,7 +611,8 @@ function configureEventCollectorWithState(
       { immediate: true }
     );
     refreshCachedKanbanColumn(event.workspaceId);
-  });
+  };
+  ratchetService.on(RATCHET_DISPATCH_CHANGED, state.ratchetDispatchChangedHandler);
 
   // 6. Run-script status changes
   runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
@@ -715,6 +721,10 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   if (state.runtimeChangedHandler) {
     sessionDomainService.off('runtime_changed', state.runtimeChangedHandler);
     state.runtimeChangedHandler = null;
+  }
+  if (state.ratchetDispatchChangedHandler) {
+    ratchetService.off(RATCHET_DISPATCH_CHANGED, state.ratchetDispatchChangedHandler);
+    state.ratchetDispatchChangedHandler = null;
   }
   state.listenerSessionDomainService = null;
 

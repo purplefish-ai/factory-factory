@@ -3201,6 +3201,40 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
     });
+
+    it('publishes a successful fallback settlement before observing post-write cancellation', async () => {
+      const controller = new AbortController();
+      const timeoutError = new Error('Workspace check timed out');
+      vi.mocked(agentSessionAccessor.findById).mockResolvedValue(null);
+      vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockImplementation(() => {
+        controller.abort(timeoutError);
+        return Promise.resolve(true);
+      });
+      const events: RatchetDispatchChangedEvent[] = [];
+      ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+        events.push(event);
+      });
+
+      const check = unsafeCoerce<{
+        checkActiveFixerSession: (w: unknown, signal: AbortSignal) => Promise<unknown>;
+      }>(ratchetService).checkActiveFixerSession(
+        {
+          id: 'ws-cancelled-after-settlement',
+          ratchetActiveSessionId: 'session-1',
+          ratchetDispatchRetryCount: 2,
+        },
+        controller.signal
+      );
+
+      await expect(check).rejects.toBe(timeoutError);
+      expect(events).toEqual([
+        {
+          workspaceId: 'ws-cancelled-after-settlement',
+          outcome: 'DIED',
+          retryCount: 2,
+        },
+      ]);
+    });
   });
 
   describe('triggerFixer error handling', () => {
@@ -3221,6 +3255,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       );
       vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
       const commitSideEffects = vi.fn();
+      const events: RatchetDispatchChangedEvent[] = [];
+      ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+        events.push(event);
+      });
 
       const trigger = unsafeCoerce<{
         triggerFixer: (
@@ -3256,6 +3294,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(commitSideEffects).toHaveBeenCalledTimes(1);
       expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+      expect(events).toEqual([
+        {
+          workspaceId: 'ws-cancelled-dispatch',
+          outcome: 'RUNNING',
+          retryCount: 0,
+        },
+      ]);
     });
 
     it('cleans up a started fixer when dispatch persistence fails', async () => {
@@ -3354,7 +3399,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetLastCiRunId: null,
         prReviewLastCheckedAt: null,
         ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
+        ratchetDispatchRetryCount: 2,
       };
 
       vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
@@ -3362,6 +3407,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         sessionId: 'existing-session',
       } as never);
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      const events: RatchetDispatchChangedEvent[] = [];
+      ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+        events.push(event);
+      });
 
       const result = await unsafeCoerce<{
         triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
@@ -3385,6 +3434,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         'existing-session'
       );
       expect(workspaceAccessor.recordRatchetDispatchIfEnabled).not.toHaveBeenCalled();
+      expect(events).toEqual([
+        {
+          workspaceId: 'ws-already-active',
+          outcome: 'RUNNING',
+          retryCount: 2,
+        },
+      ]);
     });
 
     it('stops already-active fixer when active-session recording loses disable race', async () => {

@@ -105,6 +105,13 @@ export async function checkActiveFixerSession(params: {
       sessionId,
       outcome
     );
+    if (settled) {
+      onDispatchChanged?.({
+        workspaceId: workspace.id,
+        outcome,
+        retryCount: workspace.ratchetDispatchRetryCount,
+      });
+    }
     signal?.throwIfAborted();
     if (!settled) {
       logger.debug('Ratchet dispatch record was settled concurrently', {
@@ -114,11 +121,6 @@ export async function checkActiveFixerSession(params: {
       });
       return { kind: 'ended_concurrently' };
     }
-    onDispatchChanged?.({
-      workspaceId: workspace.id,
-      outcome,
-      retryCount: workspace.ratchetDispatchRetryCount,
-    });
     logger.info('Settled ratchet dispatch record for ended fixer session', {
       workspaceId: workspace.id,
       sessionId,

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
 
+const { mockLoggerWarn } = vi.hoisted(() => ({ mockLoggerWarn: vi.fn() }));
+
 // ---------------------------------------------------------------------------
 // Mock store helper type
 // ---------------------------------------------------------------------------
@@ -48,6 +50,7 @@ vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_TOGGLED: 'ratchet_toggled',
   ratchetService: {
     on: vi.fn(),
+    off: vi.fn(),
     checkWorkspaceById: vi.fn().mockResolvedValue(null),
     markPrClosed: vi.fn().mockResolvedValue(undefined),
   },
@@ -100,7 +103,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
-    warn: vi.fn(),
+    warn: mockLoggerWarn,
     error: vi.fn(),
   }),
 }));
@@ -507,6 +510,45 @@ describe('configureEventCollector', () => {
     expect(sessionDomainService.off).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
+  it('detaches and replaces the dispatch listener across configure-stop-configure', () => {
+    configureEventCollector();
+    const firstHandler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1];
+
+    stopEventCollector();
+    configureEventCollector();
+
+    expect(ratchetService.off).toHaveBeenCalledWith('ratchet_dispatch_changed', firstHandler);
+    const dispatchRegistrations = vi
+      .mocked(ratchetService.on)
+      .mock.calls.filter((call) => call[0] === 'ratchet_dispatch_changed');
+    expect(dispatchRegistrations).toHaveLength(2);
+    expect(dispatchRegistrations[1]![1]).not.toBe(firstHandler);
+  });
+
+  it('detaches the prior dispatch listener on direct reconfigure', () => {
+    configureEventCollector();
+    const firstHandler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1];
+
+    configureEventCollector();
+
+    expect(ratchetService.off).toHaveBeenCalledWith('ratchet_dispatch_changed', firstHandler);
+  });
+
+  it('detaches the dispatch listener on stop', () => {
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1];
+
+    stopEventCollector();
+
+    expect(ratchetService.off).toHaveBeenCalledWith('ratchet_dispatch_changed', handler);
+  });
+
   it('ARCHIVED workspace event removes snapshot and cleans up workspace resources immediately', async () => {
     configureEventCollector();
 
@@ -720,6 +762,31 @@ describe('configureEventCollector', () => {
       'event:ratchet_dispatch_changed'
     );
     expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('warns when a Ratchet-triggered cache refresh rejects', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(kanbanStateService.updateCachedKanbanColumn).mockRejectedValueOnce(
+      new Error('cache failed')
+    );
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+      outcome: 'DIED';
+      retryCount: number;
+    }) => void;
+
+    handler({ workspaceId: 'ws-cache-failure', outcome: 'DIED', retryCount: 3 });
+    await Promise.resolve();
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Failed to refresh cached kanban column after Ratchet change',
+      { workspaceId: 'ws-cache-failure', error: 'cache failed' }
+    );
   });
 
   it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {

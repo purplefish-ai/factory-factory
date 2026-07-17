@@ -1005,14 +1005,10 @@ class RatchetService extends EventEmitter {
       sessionBridge: this.session,
       signal,
       commitSideEffects,
+      onDispatchChanged: (event) => {
+        this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);
+      },
     });
-    if (action.type === 'TRIGGERED_FIXER' && action.promptSent) {
-      this.emit(RATCHET_DISPATCH_CHANGED, {
-        workspaceId: workspace.id,
-        outcome: 'RUNNING',
-        retryCount,
-      } satisfies RatchetDispatchChangedEvent);
-    }
     return action;
   }
 
