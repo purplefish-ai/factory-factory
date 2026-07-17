@@ -45,7 +45,8 @@ Expected: FAIL because `RollingOutputBuffer` is not exported.
 
 Add a class that stores string chunks, a head index, retained character count,
 and a truncation flag. On append, detect the first overflow, trim leading chunks
-to the correct body capacity, and compact consumed array slots periodically.
+to the correct body capacity, and compact consumed array slots on append once
+the consumed-slot count reaches a threshold relative to the retained chunks.
 `toString()` must join only retained chunks and prepend the bounded marker only
 after truncation.
 
