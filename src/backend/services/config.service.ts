@@ -70,6 +70,13 @@ export interface NotificationConfig {
 export interface CorsConfig {
   allowedOrigins: string[];
   trustedLocalCidrs?: string[];
+  /**
+   * When true, WebSocket upgrades carrying client-address headers
+   * (x-forwarded-for, cf-connecting-ip, etc.) are accepted instead of
+   * rejected. Enable only when the backend sits behind a trusted reverse
+   * proxy that is the sole path to it (e.g. nginx -> 127.0.0.1).
+   */
+  trustProxyHeaders?: boolean;
 }
 
 /**
@@ -250,6 +257,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
           .map((cidr) => cidr.trim())
           .filter(Boolean)
       : [],
+    trustProxyHeaders: env.TRUST_PROXY_HEADERS,
   };
 }
 
@@ -556,6 +564,7 @@ class ConfigService {
     return {
       allowedOrigins: [...this.config.cors.allowedOrigins],
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
+      trustProxyHeaders: this.config.cors.trustProxyHeaders,
     };
   }
 

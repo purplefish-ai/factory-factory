@@ -83,6 +83,7 @@ describe('configService environment accessors', () => {
     process.env.NOTIFICATION_QUIET_HOURS_END = '7';
     process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:9999, https://example.com';
     process.env.TRUSTED_LOCAL_CIDRS = '172.17.0.1/32, 172.18.0.0/16';
+    process.env.TRUST_PROXY_HEADERS = 'true';
     process.env.BRANCH_RENAME_MESSAGE_THRESHOLD = '4';
     process.env.EVENT_COMPRESSION_ENABLED = 'false';
     process.env.WEB_CONCURRENCY = '3';
@@ -137,6 +138,7 @@ describe('configService environment accessors', () => {
     expect(configService.getCorsConfig()).toEqual({
       allowedOrigins: ['http://localhost:9999', 'https://example.com'],
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],
+      trustProxyHeaders: true,
     });
     expect(configService.getDebugConfig()).toEqual({ chatWebSocket: true });
     expect(configService.getCompressionConfig()).toEqual({ enabled: false });
