@@ -12,24 +12,28 @@
  */
 
 import type { WebSocket } from 'ws';
+import type { ApplicationServices } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
-import { configService } from '@/backend/services/config.service';
-import { createLogger } from '@/backend/services/logger.service';
 import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
   SESSION_OUTBOUND_EVENT,
-  type SessionFileLogger,
+  type SessionEventBus,
   type SessionOutboundEvent,
-  sessionEventBus,
-  sessionFileLogger,
 } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 
-const logger = createLogger('chat-connection');
+type ChatRegistryLogger = Pick<
+  ReturnType<ApplicationServices['createLogger']>,
+  'debug' | 'error' | 'info'
+>;
 
-const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
+const NOOP_LOGGER: ChatRegistryLogger = {
+  debug: () => undefined,
+  error: () => undefined,
+  info: () => undefined,
+};
 
 // ============================================================================
 // Types
@@ -54,9 +58,25 @@ interface ConnectionEntry {
 export class ChatConnectionRegistry {
   private readonly connections = new Map<string, ConnectionEntry>();
   /** Per-session socket index; topics are DB session ids. */
-  private readonly broadcaster = new TopicBroadcaster<string>(logger, 'chat session message');
+  private readonly broadcaster = new TopicBroadcaster<string>(
+    { error: (...args) => this.logger.error(...args) },
+    'chat session message'
+  );
 
   private chatWsMsgCounter = 0;
+  private logger: ChatRegistryLogger = NOOP_LOGGER;
+  private debugChatWebSocket = false;
+
+  configure({
+    logger,
+    debugChatWebSocket,
+  }: {
+    logger: ChatRegistryLogger;
+    debugChatWebSocket: boolean;
+  }): void {
+    this.logger = logger;
+    this.debugChatWebSocket = debugChatWebSocket;
+  }
 
   /**
    * Register a WebSocket connection. Re-registering an existing connection ID
@@ -106,15 +126,15 @@ export class ChatConnectionRegistry {
 
     const sent = this.broadcaster.broadcast(dbSessionId, payload);
     if (sent === 0) {
-      if (DEBUG_CHAT_WS) {
-        logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
+      if (this.debugChatWebSocket) {
+        this.logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
       }
       return 0;
     }
 
-    if (DEBUG_CHAT_WS) {
+    if (this.debugChatWebSocket) {
       const delta = payload.type === 'session_delta' ? payload.data : undefined;
-      logger.info(`[Chat WS #${msgNum}] Sent to ${sent} connection(s)`, {
+      this.logger.info(`[Chat WS #${msgNum}] Sent to ${sent} connection(s)`, {
         dbSessionId,
         type: payload.type,
         innerType: delta?.type,
@@ -133,7 +153,7 @@ export class ChatConnectionRegistry {
   broadcastToAll(payload: Record<string, unknown>): void {
     const message = JSON.stringify(payload);
     for (const entry of this.connections.values()) {
-      safeSend(entry.info.ws, message, logger, 'workspace notification');
+      safeSend(entry.info.ws, message, this.logger, 'workspace notification');
     }
   }
 
@@ -154,6 +174,7 @@ export const chatConnectionRegistry = new ChatConnectionRegistry();
 
 let sessionOutboundListener: ((event: SessionOutboundEvent) => void) | null = null;
 let chatBroadcastListener: ((event: ChatBroadcastEvent) => void) | null = null;
+let attachedSessionEventBus: SessionEventBus | null = null;
 
 /**
  * Subscribe the singleton registry to the session domain's outbound event bus
@@ -165,16 +186,26 @@ let chatBroadcastListener: ((event: ChatBroadcastEvent) => void) | null = null;
  * so it uses the app context's `sessionFileLogger`; it records only payloads
  * that actually reached at least one client.
  */
-export function attachChatTransport(deps: { sessionFileLogger?: SessionFileLogger } = {}): void {
+export function attachChatTransport(
+  deps: Pick<
+    ApplicationServices,
+    'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+  >
+): void {
   if (sessionOutboundListener) {
     return;
   }
-  const fileLogger = deps.sessionFileLogger ?? sessionFileLogger;
+  const { configService, createLogger, sessionEventBus, sessionFileLogger } = deps;
+  attachedSessionEventBus = sessionEventBus;
+  chatConnectionRegistry.configure({
+    logger: createLogger('chat-connection'),
+    debugChatWebSocket: configService.getDebugConfig().chatWebSocket,
+  });
 
   sessionOutboundListener = (event: SessionOutboundEvent) => {
     const sent = chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
     if (sent > 0) {
-      fileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+      sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
     }
   };
   chatBroadcastListener = (event: ChatBroadcastEvent) => {
@@ -189,14 +220,15 @@ export function attachChatTransport(deps: { sessionFileLogger?: SessionFileLogge
 }
 
 export function detachChatTransportForTests(): void {
-  if (sessionOutboundListener) {
-    sessionEventBus.off(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
+  if (sessionOutboundListener && attachedSessionEventBus) {
+    attachedSessionEventBus.off(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
     sessionOutboundListener = null;
   }
-  if (chatBroadcastListener) {
-    sessionEventBus.off(CHAT_BROADCAST_EVENT, chatBroadcastListener);
+  if (chatBroadcastListener && attachedSessionEventBus) {
+    attachedSessionEventBus.off(CHAT_BROADCAST_EVENT, chatBroadcastListener);
     chatBroadcastListener = null;
   }
-  sessionEventBus.registerViewerCountProvider(null);
+  attachedSessionEventBus?.registerViewerCountProvider(null);
+  attachedSessionEventBus = null;
   chatConnectionRegistry.clear();
 }

@@ -41,8 +41,13 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let snapshotConnections: typeof import('./snapshots.handler').snapshotConnections;
-let chatConnectionRegistry: typeof import('./chat-connection-registry').chatConnectionRegistry;
+let detachChatTransportForTests: typeof import('./chat-connection-registry').detachChatTransportForTests;
 let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
+let workspaceQueryService: typeof import('@/backend/services/workspace').workspaceQueryService;
+let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
+let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
+let sessionEventBus: typeof import('@/backend/services/session').sessionEventBus;
+let snapshotReconciliationService: typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator').snapshotReconciliationService;
 
 let counter = 0;
 const allowedOrigin = 'http://localhost:3000';
@@ -64,12 +69,21 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
     await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
-  ({ chatConnectionRegistry } = await vi.importActual<typeof import('./chat-connection-registry')>(
-    './chat-connection-registry'
-  ));
+  ({ detachChatTransportForTests } = await vi.importActual<
+    typeof import('./chat-connection-registry')
+  >('./chat-connection-registry'));
   ({ workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace-snapshot-store.service')
   >('@/backend/services/workspace-snapshot-store.service'));
+  ({ workspaceDataService, workspaceQueryService } = await vi.importActual<
+    typeof import('@/backend/services/workspace')
+  >('@/backend/services/workspace'));
+  ({ sessionDataService, sessionEventBus } = await vi.importActual<
+    typeof import('@/backend/services/session')
+  >('@/backend/services/session'));
+  ({ snapshotReconciliationService } = await vi.importActual<
+    typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator')
+  >('@/backend/orchestration/snapshot-reconciliation.orchestrator'));
 }, 30_000);
 
 afterEach(async () => {
@@ -85,7 +99,7 @@ afterEach(async () => {
 
   terminalConnections.clear();
   snapshotConnections.clear();
-  chatConnectionRegistry.clear();
+  detachChatTransportForTests();
   workspaceSnapshotStore.clear();
 
   await clearIntegrationDatabase(prisma);
@@ -227,6 +241,7 @@ function createChatAppContext(worktreeBaseDir: string) {
         initSession: vi.fn(),
         log: vi.fn(),
       },
+      sessionEventBus,
       sessionService: {
         getOrCreateClient: vi.fn(),
         getOrCreateSessionClient: vi.fn(),
@@ -277,7 +292,9 @@ describe('websocket integration', () => {
             services: {
               configService: createConfigService(),
               createLogger: () => createLogger(),
+              sessionDataService,
               terminalService: new FakeTerminalService(),
+              workspaceDataService,
             },
           })
         ),
@@ -328,7 +345,10 @@ describe('websocket integration', () => {
             services: {
               configService: createConfigService(),
               createLogger: () => createLogger(),
+              workspaceQueryService,
+              workspaceSnapshotStore,
             },
+            lifecycle: { snapshotReconciliation: snapshotReconciliationService },
           })
         ),
     },
@@ -360,7 +380,9 @@ describe('websocket integration', () => {
       services: {
         configService: createConfigService(),
         createLogger: () => createLogger(),
+        sessionDataService,
         terminalService: fakeTerminalService,
+        workspaceDataService,
       },
     });
 
@@ -411,7 +433,9 @@ describe('websocket integration', () => {
       services: {
         configService: createConfigService(),
         createLogger: () => createLogger(),
+        sessionDataService,
         terminalService: fakeTerminalService,
+        workspaceDataService,
       },
     });
 
@@ -509,7 +533,10 @@ describe('websocket integration', () => {
       services: {
         configService: createConfigService(),
         createLogger: () => createLogger(),
+        workspaceQueryService,
+        workspaceSnapshotStore,
       },
+      lifecycle: { snapshotReconciliation: snapshotReconciliationService },
     });
 
     const handler = createSnapshotsUpgradeHandler(appContext);
@@ -645,7 +672,9 @@ describe('websocket integration', () => {
       services: {
         configService: createConfigService(),
         createLogger: () => createLogger(),
+        sessionDataService,
         terminalService: fakeTerminalService,
+        workspaceDataService,
       },
     });
 

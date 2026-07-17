@@ -37,6 +37,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     configService,
     createLogger,
     sessionFileLogger,
+    sessionEventBus,
     sessionDomainService,
     sessionService,
   } = appContext.services;
@@ -83,7 +84,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     isInitialized = true;
 
     // Bridge session domain events onto chat WebSocket connections
-    attachChatTransport({ sessionFileLogger });
+    attachChatTransport({ configService, createLogger, sessionEventBus, sessionFileLogger });
 
     // Initialize client creator for message handler service
     chatMessageHandlerService.setClientCreator({

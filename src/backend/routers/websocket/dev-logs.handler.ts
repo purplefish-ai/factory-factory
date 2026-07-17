@@ -6,17 +6,21 @@
 
 import type { AppContext } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { createLogger } from '@/backend/services/logger.service';
 import { createPushChannelUpgradeHandler } from './push-channel.handler';
+
+let broadcasterLogger: Pick<ReturnType<AppContext['services']['createLogger']>, 'error'> = {
+  error: () => undefined,
+};
 
 /** Dev-logs WebSocket connections, keyed by workspace ID. */
 export const devLogsConnections = new TopicBroadcaster<string>(
-  createLogger('dev-logs-handler'),
+  { error: (...args) => broadcasterLogger.error(...args) },
   'log output'
 );
 
 export function createDevLogsUpgradeHandler(appContext: AppContext) {
-  const { runScriptService } = appContext.services;
+  const { createLogger, runScriptService } = appContext.services;
+  broadcasterLogger = createLogger('dev-logs-handler');
 
   return createPushChannelUpgradeHandler(appContext, {
     loggerName: 'dev-logs-handler',

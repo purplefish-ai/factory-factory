@@ -8,8 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { sessionEventBus } from '@/backend/services/session';
 import { createChatUpgradeHandler } from './chat.handler';
-import { chatConnectionRegistry } from './chat-connection-registry';
+import { chatConnectionRegistry, detachChatTransportForTests } from './chat-connection-registry';
 
 const allowedOrigin = 'http://localhost:3000';
 
@@ -53,6 +54,7 @@ function createTestContext(worktreeBaseDir: string) {
         log: vi.fn(),
         closeSession: vi.fn(),
       },
+      sessionEventBus,
       sessionService: {
         getOrCreateClient: vi.fn(),
         getOrCreateSessionClient: vi.fn(async () => ({})),
@@ -85,7 +87,7 @@ describe('createChatUpgradeHandler', () => {
   });
 
   afterEach(() => {
-    chatConnectionRegistry.clear();
+    detachChatTransportForTests();
     vi.restoreAllMocks();
   });
 

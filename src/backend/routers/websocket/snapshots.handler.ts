@@ -7,19 +7,15 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { AppContext } from '@/backend/app-context';
+import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
-import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
-import { createLogger } from '@/backend/services/logger.service';
-import { workspaceQueryService } from '@/backend/services/workspace';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
-  workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
 import { WorkspaceStatus } from '@/shared/core';
 import { createWebSocketUpgradeHandler } from './upgrade-utils';
@@ -29,10 +25,19 @@ import { createWebSocketUpgradeHandler } from './upgrade-utils';
 // ============================================================================
 
 /** Snapshot WebSocket connections, keyed by project ID. */
+let broadcasterLogger: Pick<ReturnType<ApplicationServices['createLogger']>, 'error'> = {
+  error: () => undefined,
+};
+
 export const snapshotConnections = new TopicBroadcaster<string>(
-  createLogger('snapshots-handler'),
+  { error: (...args) => broadcasterLogger.error(...args) },
   'snapshot message'
 );
+
+type SnapshotHandlerServices = Pick<
+  ApplicationServices,
+  'workspaceQueryService' | 'workspaceSnapshotStore'
+>;
 
 /**
  * Deltas that arrive for a socket before its snapshot_full baseline has been
@@ -52,14 +57,18 @@ class SnapshotStoreSubscriptionState {
     null;
   private snapshotRemovedListener: ((event: SnapshotRemovedEvent) => void | Promise<void>) | null =
     null;
+  private store: ApplicationServices['workspaceSnapshotStore'] | null = null;
 
   ensure(
     connections: TopicBroadcaster<string>,
+    services: SnapshotHandlerServices,
     logger: ReturnType<AppContext['services']['createLogger']>
   ): void {
     if (this.active) {
       return;
     }
+    const { workspaceQueryService, workspaceSnapshotStore } = services;
+    this.store = workspaceSnapshotStore;
 
     // Buffered replays omit reviewCount: it is computed before the
     // snapshot_full baseline, and clients keep their current count when the
@@ -74,7 +83,7 @@ class SnapshotStoreSubscriptionState {
         return;
       }
 
-      const reviewCount = getSnapshotReviewCount(logger);
+      const reviewCount = getSnapshotReviewCount(workspaceQueryService, logger);
       const message = JSON.stringify({ ...payload, reviewCount });
       let bufferedMessage: string | null = null;
 
@@ -126,10 +135,12 @@ class SnapshotStoreSubscriptionState {
   }
 
   reset(): void {
-    const storeWithOff = workspaceSnapshotStore as typeof workspaceSnapshotStore & {
-      off?: (event: string, listener: (...args: unknown[]) => unknown) => unknown;
-    };
-    if (typeof storeWithOff.off === 'function') {
+    const storeWithOff = this.store as
+      | (ApplicationServices['workspaceSnapshotStore'] & {
+          off?: (event: string, listener: (...args: unknown[]) => unknown) => unknown;
+        })
+      | null;
+    if (typeof storeWithOff?.off === 'function') {
       if (this.snapshotChangedListener) {
         storeWithOff.off(SNAPSHOT_CHANGED, this.snapshotChangedListener);
       }
@@ -140,6 +151,7 @@ class SnapshotStoreSubscriptionState {
 
     this.snapshotChangedListener = null;
     this.snapshotRemovedListener = null;
+    this.store = null;
     this.active = false;
   }
 }
@@ -151,6 +163,7 @@ function isHiddenWorkspaceStatus(status: WorkspaceStatus): boolean {
 }
 
 function getSnapshotReviewCount(
+  workspaceQueryService: ApplicationServices['workspaceQueryService'],
   logger: ReturnType<AppContext['services']['createLogger']>
 ): number | undefined {
   try {
@@ -182,7 +195,10 @@ export function createSnapshotsUpgradeHandler(
   } = {}
 ) {
   const logger = appContext.services.createLogger('snapshots-handler');
-  const { configService } = appContext.services;
+  const { configService, workspaceQueryService, workspaceSnapshotStore } = appContext.services;
+  const snapshotReconciliation = appContext.lifecycle.snapshotReconciliation;
+  const services: SnapshotHandlerServices = { workspaceQueryService, workspaceSnapshotStore };
+  broadcasterLogger = logger;
   const connections = options.connections ?? snapshotConnections;
   const subscriptionState = options.subscriptionState ?? defaultSnapshotStoreSubscriptionState;
 
@@ -194,7 +210,7 @@ export function createSnapshotsUpgradeHandler(
     onOpen: (ws, { params }) => {
       const { projectId } = params;
 
-      subscriptionState.ensure(connections, logger);
+      subscriptionState.ensure(connections, services, logger);
 
       logger.info('Snapshots WebSocket connection established', { projectId });
 
@@ -212,7 +228,7 @@ export function createSnapshotsUpgradeHandler(
           // Keep buffering; the close handler cleans the buffer up.
           return;
         }
-        const reviewCount = getSnapshotReviewCount(logger);
+        const reviewCount = getSnapshotReviewCount(workspaceQueryService, logger);
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
@@ -242,7 +258,7 @@ export function createSnapshotsUpgradeHandler(
       if (storeHasEntries) {
         void sendSnapshot();
       } else {
-        snapshotReconciliationService
+        snapshotReconciliation
           .waitForInProgress()
           .then(sendSnapshot)
           .catch(() => void sendSnapshot());

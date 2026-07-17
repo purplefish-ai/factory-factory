@@ -43,62 +43,19 @@ const {
   mockWaitForInProgress: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 }));
 
-vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
-  snapshotReconciliationService: {
-    waitForInProgress: mockWaitForInProgress,
-  },
-}));
-
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
-  const { EventEmitter } = require('node:events');
-  const emitter = new EventEmitter();
-  const originalOn = emitter.on.bind(emitter);
-
-  return {
-    SNAPSHOT_CHANGED: 'snapshot_changed',
-    SNAPSHOT_REMOVED: 'snapshot_removed',
-    workspaceSnapshotStore: {
-      getByProjectId: mockGetByProjectId,
-      on: vi.fn((event: string, listener: (event: unknown) => unknown) => {
-        storeListeners.set(event, listener);
-        originalOn(event, listener);
-        return emitter;
-      }),
-      off: vi.fn((event: string, listener: (event: unknown) => unknown) => {
-        emitter.off(event, listener);
-        return emitter;
-      }),
-    },
-  };
-});
-
-vi.mock('@/backend/services/workspace', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
-  return {
-    ...actual,
-    workspaceQueryService: {
-      ...actual.workspaceQueryService,
-      getCachedReviewCount: mockGetCachedReviewCount,
-      refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
-    },
-  };
-});
-
-vi.mock('@/backend/app-context', () => ({
-  createAppContext: vi.fn(() => ({
-    services: {
-      createLogger: vi.fn(() => ({
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      })),
-      configService: {
-        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
-      },
-    },
-  })),
-}));
+const snapshotStoreEmitter = new EventEmitter();
+const workspaceSnapshotStore = {
+  getByProjectId: mockGetByProjectId,
+  on: vi.fn((event: string, listener: (event: unknown) => unknown) => {
+    storeListeners.set(event, listener);
+    snapshotStoreEmitter.on(event, listener);
+    return snapshotStoreEmitter;
+  }),
+  off: vi.fn((event: string, listener: (event: unknown) => unknown) => {
+    snapshotStoreEmitter.off(event, listener);
+    return snapshotStoreEmitter;
+  }),
+};
 
 // ============================================================================
 // Helpers
@@ -115,6 +72,16 @@ function createAppContextMock(): AppContext {
       })),
       configService: {
         getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+      },
+      workspaceQueryService: {
+        getCachedReviewCount: mockGetCachedReviewCount,
+        refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
+      },
+      workspaceSnapshotStore,
+    },
+    lifecycle: {
+      snapshotReconciliation: {
+        waitForInProgress: mockWaitForInProgress,
       },
     },
   } as unknown as AppContext;

@@ -9,6 +9,7 @@ import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
 } from './orchestration/event-collector.orchestrator';
+import { healthService } from './orchestration/health.service';
 import { reconciliationService } from './orchestration/reconciliation.service';
 import { schedulerService } from './orchestration/scheduler.service';
 import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
@@ -40,6 +41,7 @@ import {
   type SessionFileLogger,
   sessionDataService,
   sessionDomainService,
+  sessionEventBus,
   sessionFileLogger,
   sessionService,
 } from './services/session';
@@ -49,6 +51,7 @@ import {
   kanbanStateService,
   workspaceAccessor,
   workspaceActivityService,
+  workspaceDataService,
   workspaceQueryService,
   workspaceStateMachine,
 } from './services/workspace';
@@ -61,13 +64,16 @@ export type ApplicationServices = BridgeServices & {
   configService: typeof configService;
   createLogger: typeof createLogger;
   findAvailablePort: typeof findAvailablePort;
+  healthService: typeof healthService;
   rateLimiter: typeof rateLimiter;
   runScriptService: RunScriptService;
   runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: ServerInstanceService;
+  sessionEventBus: typeof sessionEventBus;
   sessionFileLogger: SessionFileLogger;
   terminalService: typeof terminalService;
+  workspaceDataService: typeof workspaceDataService;
 };
 
 export type AppServices = ApplicationServices;
@@ -113,6 +119,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       configService,
       createLogger,
       findAvailablePort,
+      healthService,
       fixerSessionService,
       getWorkspaceInitPolicy,
       githubCLIService,
@@ -130,12 +137,14 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       serverInstanceService: createServerInstanceService(),
       sessionDataService,
       sessionDomainService,
+      sessionEventBus,
       sessionFileLogger,
       sessionService,
       startupScriptService,
       terminalService,
       workspaceAccessor,
       workspaceActivityService,
+      workspaceDataService,
       workspaceQueryService,
       workspaceSnapshotStore,
       workspaceStateMachine,

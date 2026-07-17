@@ -6,17 +6,21 @@
 
 import type { AppContext } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { createLogger } from '@/backend/services/logger.service';
 import { createPushChannelUpgradeHandler } from './push-channel.handler';
+
+let broadcasterLogger: Pick<ReturnType<AppContext['services']['createLogger']>, 'error'> = {
+  error: () => undefined,
+};
 
 /** Post-run logs WebSocket connections, keyed by workspace ID. */
 export const postRunLogsConnections = new TopicBroadcaster<string>(
-  createLogger('post-run-logs-handler'),
+  { error: (...args) => broadcasterLogger.error(...args) },
   'log output'
 );
 
 export function createPostRunLogsUpgradeHandler(appContext: AppContext) {
-  const { runScriptService } = appContext.services;
+  const { createLogger, runScriptService } = appContext.services;
+  broadcasterLogger = createLogger('post-run-logs-handler');
 
   return createPushChannelUpgradeHandler(appContext, {
     loggerName: 'post-run-logs-handler',
