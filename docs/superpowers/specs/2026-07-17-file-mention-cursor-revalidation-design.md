@@ -26,4 +26,3 @@ Each hook will have focused jsdom hook tests covering:
 - cursor moved into the middle of the active mention token;
 - cursor unchanged at the end of a valid mention; and
 - cursor moved to the end of another valid mention, proving the live `@` position is used.
-

@@ -124,4 +124,3 @@ Run: `git diff origin/main`, `git status -sb`, and commit only files belonging t
 - [ ] **Step 3: Push and create the PR**
 
 Push the current branch with tracking, create the required PR body with summary/testing/`Closes #1896` and the Factory Factory signature, then run `gh pr view --web` and capture the PR URL.
-
