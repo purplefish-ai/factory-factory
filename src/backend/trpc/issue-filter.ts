@@ -2,6 +2,11 @@ import { WorkspaceStatus } from '@/shared/core';
 
 type IssueKey = number | string;
 
+/**
+ * Authoritative durable policy for whether linked issues are available to start.
+ * Clients may additionally hide issues only to reconcile transient optimistic or
+ * cache-skew state; they must not redefine workspace-status eligibility.
+ */
 export function filterIssuesLinkedToActiveWorkspaces<
   TIssue,
   TWorkspace extends { status: WorkspaceStatus },

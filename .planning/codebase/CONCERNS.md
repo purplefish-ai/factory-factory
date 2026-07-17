@@ -202,12 +202,6 @@
 
 ## Test Coverage Gaps
 
-**Coverage thresholds are disabled and coverage focuses on backend paths:**
-- What's not tested: Repository-wide minimum coverage is not enforced by Vitest configuration.
-- Files: `vitest.config.ts`, `package.json`, `scripts/check-critical-coverage.mjs`
-- Risk: Large UI, orchestration, and runtime changes can reduce coverage without failing the default test command.
-- Priority: Medium
-
 **Default verification excludes several high-value checks:**
 - What's not tested: `pnpm test` does not run mobile Playwright E2E, real Codex app-server manual integration tests, dependency-cruiser checks, or Codex schema drift checks.
 - Files: `package.json`, `playwright.mobile.config.ts`, `.dependency-cruiser.cjs`, `scripts/check-codex-schema-drift.mjs`

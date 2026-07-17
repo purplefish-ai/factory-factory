@@ -211,8 +211,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
     isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
     startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
-    registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
-    cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),
+    registerFetch: (workspaceId, claimToken) => prFetchRegistry.register(workspaceId, claimToken),
+    cancelFetch: (workspaceId, claimToken) => prFetchRegistry.cancelFetch(workspaceId, claimToken),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
@@ -340,6 +340,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {
       await workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
+    },
+    finishAutoIterationIfSessionMatches(workspaceId, sessionId, status) {
+      return workspaceAccessor.finishAutoIterationIfSessionMatches(workspaceId, sessionId, status);
     },
   };
 

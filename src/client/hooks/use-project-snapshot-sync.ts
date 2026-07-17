@@ -16,36 +16,32 @@
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
 
+import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useRef } from 'react';
-import type { z } from 'zod';
 import { overridePendingRatchetToggle } from '@/client/lib/ratchet-toggle-cache';
-import { mapSnapshotEntryToKanbanWorkspace } from '@/client/lib/snapshot-to-kanban';
 import {
-  mapSnapshotEntryToServerWorkspace,
+  mergeProjectSnapshotIntoWorkspaceDetail,
+  projectSnapshotToKanbanWorkspace,
+  projectSnapshotToSidebarWorkspace,
+} from '@/client/lib/snapshot-to-workspace';
+import { type AppRouter, trpc } from '@/client/lib/trpc';
+import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
+import { buildWebSocketUrl } from '@/lib/websocket-config';
+import {
   type SnapshotChangedMessage,
   type SnapshotFullMessage,
   type SnapshotRemovedMessage,
+  type SnapshotServerMessage,
   SnapshotServerMessageSchema,
   type WorkspaceSnapshotEntry,
-} from '@/client/lib/snapshot-to-sidebar';
-import { trpc } from '@/client/lib/trpc';
-import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
-import { buildWebSocketUrl } from '@/lib/websocket-config';
+} from '@/shared/workspace-snapshot';
 
-type CacheWorkspace = ReturnType<typeof mapSnapshotEntryToServerWorkspace>;
-
-// Type alias for the sidebar cache data shape (matches tRPC-inferred getProjectSummaryState output).
-// We use a local type so the updater callbacks can be properly typed without
-// running into ServerWorkspace's `createdAt: string | Date` vs the tRPC-inferred `Date`.
-type CacheData = {
-  workspaces: CacheWorkspace[];
-  reviewCount: number;
-};
-
-// Type alias for the kanban cache data shape (matches tRPC-inferred listWithKanbanState output).
-type KanbanCacheData = Record<string, unknown>[] | undefined;
-type WorkspaceDetailCache = Record<string, unknown> | undefined;
-type PendingRequestType = 'plan_approval' | 'user_question' | 'permission_request' | null;
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type ProjectSummaryCache = RouterOutputs['workspace']['getProjectSummaryState'];
+type SidebarWorkspace = ProjectSummaryCache['workspaces'][number];
+type KanbanCacheData = RouterOutputs['workspace']['listWithKanbanState'] | undefined;
+type KanbanWorkspace = NonNullable<KanbanCacheData>[number];
+type PendingRequestType = WorkspaceSnapshotEntry['pendingRequestType'];
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
 // NOTE: `stateComputedAt` is DB-backed kanban-state timing and is preserved by
@@ -59,17 +55,16 @@ type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 function buildKanbanCacheFromFull(
   entries: WorkspaceSnapshotEntry[],
   prev: KanbanCacheData
-): Record<string, unknown>[] {
-  const existingById = new Map<string, Record<string, unknown>>();
+): NonNullable<KanbanCacheData> {
+  const existingById = new Map<string, KanbanWorkspace>();
   if (prev) {
     for (const w of prev) {
-      const id = (w as { id: string }).id;
-      existingById.set(id, w);
+      existingById.set(w.id, w);
     }
   }
   return entries
     .filter((e) => e.kanbanColumn !== null)
-    .map((e) => mapSnapshotEntryToKanbanWorkspace(e, existingById.get(e.workspaceId)));
+    .map((e) => projectSnapshotToKanbanWorkspace(e, existingById.get(e.workspaceId)));
 }
 
 /** Upsert or remove a single entry in the kanban cache from a snapshot_changed message. */
@@ -82,18 +77,18 @@ function upsertKanbanCacheEntry(
     if (!prev) {
       return prev;
     }
-    return prev.filter((w) => (w as { id: string }).id !== entry.workspaceId);
+    return prev.filter((w) => w.id !== entry.workspaceId);
   }
 
   // Find existing cache entry to merge non-snapshot fields
-  const existingEntry = prev?.find((w) => (w as { id: string }).id === entry.workspaceId);
-  const mapped = mapSnapshotEntryToKanbanWorkspace(entry, existingEntry);
+  const existingEntry = prev?.find((w) => w.id === entry.workspaceId);
+  const mapped = projectSnapshotToKanbanWorkspace(entry, existingEntry);
 
   if (!prev) {
     return [mapped];
   }
 
-  const existingIndex = prev.findIndex((w) => (w as { id: string }).id === entry.workspaceId);
+  const existingIndex = prev.findIndex((w) => w.id === entry.workspaceId);
   const items = [...prev];
 
   if (existingIndex >= 0) {
@@ -110,35 +105,7 @@ function removeFromKanbanCache(workspaceId: string, prev: KanbanCacheData): Kanb
   if (!prev) {
     return prev;
   }
-  return prev.filter((w) => (w as { id: string }).id !== workspaceId);
-}
-
-function mergeWorkspaceDetailFromSnapshot(
-  prev: WorkspaceDetailCache,
-  entry: WorkspaceSnapshotEntry
-): WorkspaceDetailCache {
-  if (!prev) {
-    return prev;
-  }
-
-  return {
-    ...prev,
-    prUrl: entry.prUrl,
-    prNumber: entry.prNumber,
-    prState: entry.prState,
-    prCiStatus: entry.prCiStatus,
-    ratchetEnabled: entry.ratchetEnabled,
-    ratchetState: entry.ratchetState,
-    runScriptStatus: entry.runScriptStatus,
-    isWorking: entry.isWorking,
-    pendingRequestType: entry.pendingRequestType,
-    sessionSummaries: entry.sessionSummaries,
-    sidebarStatus: entry.sidebarStatus,
-    ratchetButtonAnimated: entry.ratchetButtonAnimated,
-    flowPhase: entry.flowPhase,
-    ciObservation: entry.ciObservation,
-    statusReason: entry.statusReason,
-  };
+  return prev.filter((w) => w.id !== workspaceId);
 }
 
 function triggerWorkspaceAttention(workspaceId: string): void {
@@ -206,8 +173,8 @@ function applySnapshotFullMessage(
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
   const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
-  setData({ projectId: message.projectId }, ((prev: CacheData | undefined) => {
-    const existingById = new Map<string, CacheWorkspace>();
+  setData({ projectId: message.projectId }, (prev) => {
+    const existingById = new Map<string, SidebarWorkspace>();
     if (prev) {
       for (const w of prev.workspaces) {
         existingById.set(w.id, w);
@@ -215,18 +182,20 @@ function applySnapshotFullMessage(
     }
     return {
       workspaces: entries.map((e) =>
-        mapSnapshotEntryToServerWorkspace(e, existingById.get(e.workspaceId))
+        projectSnapshotToSidebarWorkspace(e, existingById.get(e.workspaceId))
       ),
       reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
     };
-  }) as never);
+  });
 
-  setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
-    buildKanbanCacheFromFull(entries, prev)) as never);
+  setKanbanData({ projectId: message.projectId }, (prev) =>
+    buildKanbanCacheFromFull(entries, prev)
+  );
 
   for (const entry of entries) {
-    setWorkspaceDetailData({ id: entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
-      mergeWorkspaceDetailFromSnapshot(prev, entry)) as never);
+    setWorkspaceDetailData({ id: entry.workspaceId }, (prev) =>
+      mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
+    );
   }
 }
 
@@ -244,16 +213,16 @@ function applySnapshotChangedMessage(
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
   const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
-  setData({ projectId }, ((prev: CacheData | undefined) => {
+  setData({ projectId }, (prev) => {
     if (!prev) {
       return {
-        workspaces: [mapSnapshotEntryToServerWorkspace(entry)],
+        workspaces: [projectSnapshotToSidebarWorkspace(entry)],
         reviewCount: message.reviewCount ?? 0,
       };
     }
 
     const existingEntry = prev.workspaces.find((w) => w.id === entry.workspaceId);
-    const mapped = mapSnapshotEntryToServerWorkspace(entry, existingEntry);
+    const mapped = projectSnapshotToSidebarWorkspace(entry, existingEntry);
     const existingIndex = prev.workspaces.findIndex((w) => w.id === mapped.id);
     const workspaces = [...prev.workspaces];
 
@@ -264,13 +233,13 @@ function applySnapshotChangedMessage(
     }
 
     return { workspaces, reviewCount: message.reviewCount ?? prev.reviewCount };
-  }) as never);
+  });
 
-  setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
-    upsertKanbanCacheEntry(entry, prev)) as never);
+  setKanbanData({ projectId }, (prev) => upsertKanbanCacheEntry(entry, prev));
 
-  setWorkspaceDetailData({ id: entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
-    mergeWorkspaceDetailFromSnapshot(prev, entry)) as never);
+  setWorkspaceDetailData({ id: entry.workspaceId }, (prev) =>
+    mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
+  );
 }
 
 function applySnapshotRemovedMessage(
@@ -285,7 +254,7 @@ function applySnapshotRemovedMessage(
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
   const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
-  setData({ projectId }, ((prev: CacheData | undefined) => {
+  setData({ projectId }, (prev) => {
     if (!prev) {
       return prev;
     }
@@ -293,12 +262,11 @@ function applySnapshotRemovedMessage(
       workspaces: prev.workspaces.filter((w) => w.id !== message.workspaceId),
       reviewCount: message.reviewCount ?? prev.reviewCount,
     };
-  }) as never);
+  });
 
-  setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
-    removeFromKanbanCache(message.workspaceId, prev)) as never);
+  setKanbanData({ projectId }, (prev) => removeFromKanbanCache(message.workspaceId, prev));
 
-  setWorkspaceDetailData({ id: message.workspaceId }, undefined as never);
+  setWorkspaceDetailData({ id: message.workspaceId }, undefined);
 }
 
 // =============================================================================
@@ -328,7 +296,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleMessage = useCallback(
-    (message: z.infer<typeof SnapshotServerMessageSchema>) => {
+    (message: SnapshotServerMessage) => {
       switch (message.type) {
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);

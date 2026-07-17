@@ -16,6 +16,7 @@ export interface SessionStore {
   historyHydratedAt?: string;
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   transcript: ChatMessage[];
+  transcriptIdToIndex: Map<string, number>;
   queue: QueuedMessage[];
   recentRejections: RecentMessageRejection[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;

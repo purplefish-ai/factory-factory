@@ -1,5 +1,6 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import * as userSettingsAccessorModule from '@/backend/services/settings';
@@ -34,6 +35,9 @@ describe('WorkspaceCreationService', () => {
     creationSource: 'MANUAL',
     creationMetadata: null,
     prUrl: null,
+    prDiscoveryLastCheckedAt: null,
+    prDiscoveryRetryCount: 0,
+    prDiscoveryNextCheckAt: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     linearIssueId: null,
@@ -336,7 +340,13 @@ describe('WorkspaceCreationService', () => {
           },
         });
 
-        await expect(service.create(source)).rejects.toThrow('Invalid auto-iteration config');
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({
+          code: 'INVALID_INPUT',
+          message: expect.stringContaining('Invalid auto-iteration config'),
+        });
         expect(workspaceAccessorModule.workspaceAccessor.create).not.toHaveBeenCalled();
       });
     });
@@ -393,7 +403,10 @@ describe('WorkspaceCreationService', () => {
           branchName: 'existing-branch',
         };
 
-        await expect(service.create(source)).rejects.toThrow('Project not found: proj-1');
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({ code: 'NOT_FOUND', message: 'Project not found: proj-1' });
       });
 
       it('should throw error when branch is already checked out', async () => {
@@ -405,9 +418,13 @@ describe('WorkspaceCreationService', () => {
           branchName: 'existing-branch',
         };
 
-        await expect(service.create(source)).rejects.toThrow(
-          "Branch 'existing-branch' is already checked out in another worktree."
-        );
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({
+          code: 'INVALID_INPUT',
+          message: "Branch 'existing-branch' is already checked out in another worktree.",
+        });
       });
     });
 

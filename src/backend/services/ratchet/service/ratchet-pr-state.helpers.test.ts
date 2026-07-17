@@ -166,7 +166,7 @@ describe('fetchPRState', () => {
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
       isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(),
+      startFetch: vi.fn(() => 41),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
       ...overrides,
@@ -225,7 +225,7 @@ describe('fetchPRState', () => {
     expect(result.prState).toBe('OPEN');
     // The bypassed fetch still claims and registers in the dedup registry.
     expect(github.startFetch).toHaveBeenCalledWith('ws-1');
-    expect(github.registerFetch).toHaveBeenCalledWith('ws-1');
+    expect(github.registerFetch).toHaveBeenCalledWith('ws-1', 41);
   });
 
   it('still skips a bypassed fetch while another fetch is actively in flight', async () => {
@@ -287,25 +287,38 @@ describe('fetchPRState', () => {
       123,
       controller.signal
     );
-    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1');
+    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
     expect(backoff.handleError).not.toHaveBeenCalled();
   });
 });
 
 describe('computeDispatchSnapshotKey', () => {
+  it('includes the pull request number', () => {
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
+
+    expect(key).toBe('pr:123|ci:SUCCESS|no-changes-requested:none|merge:conflict');
+  });
+
+  it('produces different keys for identical state on different pull requests', () => {
+    const first = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
+    const second = computeDispatchSnapshotKey(456, CIStatus.SUCCESS, false, null, null, true);
+
+    expect(first).not.toBe(second);
+  });
+
   it('includes merge:conflict suffix when hasMergeConflict is true', () => {
-    const key = computeDispatchSnapshotKey(CIStatus.SUCCESS, false, null, null, true);
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
     expect(key).toContain('merge:conflict');
   });
 
   it('includes merge:clean suffix when hasMergeConflict is false', () => {
-    const key = computeDispatchSnapshotKey(CIStatus.SUCCESS, false, null, null, false);
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, false);
     expect(key).toContain('merge:clean');
   });
 
   it('produces different keys for conflicted vs clean PRs', () => {
-    const clean = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, false);
-    const conflicted = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, true);
+    const clean = computeDispatchSnapshotKey(123, CIStatus.PENDING, false, null, null, false);
+    const conflicted = computeDispatchSnapshotKey(123, CIStatus.PENDING, false, null, null, true);
     expect(clean).not.toBe(conflicted);
   });
 });
@@ -404,7 +417,7 @@ describe('fetchPRState', () => {
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
       isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(),
+      startFetch: vi.fn(() => 41),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
       ...overrides,
@@ -450,6 +463,9 @@ describe('fetchPRState', () => {
         url: 'https://github.com/example/repo/pull/123#discussion_r1',
       },
     ]);
+    expect(result.snapshotKey).toBe(
+      'pr:123|ci:SUCCESS|changes-requested:1767225600000|merge:clean'
+    );
   });
 
   it('filters comments in resolved threads out of the prompt payload', async () => {

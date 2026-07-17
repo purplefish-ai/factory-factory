@@ -1,10 +1,11 @@
-import { TRPCError } from '@trpc/server';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   workspaceAccessor,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
+import { cleanupWorkspaceScopedCaches } from './event-collector.orchestrator';
 import type { WorkspaceWithProject } from './types';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
@@ -77,9 +78,10 @@ export async function cleanupWorkspaceRuntimeResources(
         error instanceof Error ? error.message : String(error)
       ),
     });
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: `Failed to cleanup workspace resources before ${operation}`,
+    const message = `Failed to cleanup workspace resources before ${operation}`;
+    throw new ApplicationError('INTERNAL_ERROR', message, {
+      cause:
+        cleanupErrors.length === 1 ? cleanupErrors[0] : new AggregateError(cleanupErrors, message),
     });
   }
 }
@@ -144,6 +146,7 @@ async function completeArchive(
   }
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
+  cleanupWorkspaceScopedCaches(workspace.id);
   services.runScriptService.evictWorkspaceBuffers(workspace.id);
 
   // Notify parent workspace that this child was archived (fire-and-forget)
@@ -176,10 +179,10 @@ export async function archiveWorkspace(
   services: ArchiveWorkspaceDependencies
 ) {
   if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: `Cannot archive workspace from status: ${workspace.status}`,
-    });
+    throw new ApplicationError(
+      'INVALID_INPUT',
+      `Cannot archive workspace from status: ${workspace.status}`
+    );
   }
 
   const { previousStatus: statusBeforeArchive } =

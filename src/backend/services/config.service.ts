@@ -94,6 +94,14 @@ export interface CompressionConfig {
 }
 
 /**
+ * Pull request discovery configuration
+ */
+export interface PRDiscoveryLimits {
+  candidateLimit: number;
+  repositoryLimit: number;
+}
+
+/**
  * System configuration
  */
 interface SystemConfig {
@@ -127,6 +135,9 @@ interface SystemConfig {
 
   // Session limits
   maxSessionsPerWorkspace: number;
+
+  // Pull request discovery limits
+  prDiscovery: PRDiscoveryLimits;
 
   // Logger settings
   logger: LoggerConfig;
@@ -318,6 +329,12 @@ function loadSystemConfig(): SystemConfig {
 
     // Session limits
     maxSessionsPerWorkspace: env.MAX_SESSIONS_PER_WORKSPACE,
+
+    // Pull request discovery limits
+    prDiscovery: {
+      candidateLimit: env.PR_DISCOVERY_CANDIDATE_LIMIT,
+      repositoryLimit: env.PR_DISCOVERY_REPOSITORY_LIMIT,
+    },
 
     // Logger settings
     logger: buildLoggerConfig(nodeEnv, env),
@@ -527,6 +544,13 @@ class ConfigService {
    */
   getMaxSessionsPerWorkspace(): number {
     return this.config.maxSessionsPerWorkspace;
+  }
+
+  /**
+   * Get pull request discovery limits
+   */
+  getPRDiscoveryLimits(): PRDiscoveryLimits {
+    return { ...this.config.prDiscovery };
   }
 
   /**

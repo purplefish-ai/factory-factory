@@ -109,6 +109,7 @@ function getAcpProcessorState() {
           context: { workspaceId: string; workingDir: string; provider: 'CLAUDE' | 'CODEX' }
         ) => void;
         beginPromptTurn: (sessionId: string) => void;
+        finishPromptTurn: (sessionId: string) => void;
         handleAcpDelta: (sid: string, delta: unknown) => void;
       };
     }
@@ -2155,6 +2156,26 @@ describe('SessionService', () => {
     await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
 
     expect(appendClaudeEventSpy).not.toHaveBeenCalled();
+  });
+
+  it('closes assistant text streaming when an ACP prompt completes', async () => {
+    vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
+    const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
+
+    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+
+    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
+  });
+
+  it('closes assistant text streaming when an ACP prompt fails', async () => {
+    vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue(new Error('prompt failed'));
+    const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
+
+    await expect(
+      sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
+    ).rejects.toThrow('prompt failed');
+
+    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
   });
 
   it('requests prompt cancellation instead of hard-stopping on tool timeout', async () => {

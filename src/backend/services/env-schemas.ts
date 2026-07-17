@@ -104,6 +104,8 @@ export const ConfigEnvSchema = z.object({
   MIGRATIONS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   HEALTH_CHECK_INTERVAL_MS: PositiveIntEnvSchema.catch(300_000),
   MAX_SESSIONS_PER_WORKSPACE: PositiveIntEnvSchema.catch(5),
+  PR_DISCOVERY_CANDIDATE_LIMIT: PositiveIntEnvSchema.catch(100),
+  PR_DISCOVERY_REPOSITORY_LIMIT: PositiveIntEnvSchema.catch(10),
   DEBUG_CHAT_WS: z.preprocess(parseBoolean, z.boolean()).catch(false),
   EVENT_COMPRESSION_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
   BRANCH_RENAME_MESSAGE_THRESHOLD: PositiveIntEnvSchema.catch(2),

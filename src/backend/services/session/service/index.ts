@@ -24,7 +24,10 @@ export { sessionProviderResolverService } from './data/session-provider-resolver
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
-export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
+export {
+  buildChildWorkspaceContext,
+  sessionPromptBuilder,
+} from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 // Session lifecycle (start/stop/create)
 export { createSessionService, sessionService } from './lifecycle/session.service';
@@ -38,7 +41,7 @@ export type {
   RuntimeEventHandlers,
 } from './runtime';
 // Core domain service (in-memory state management)
-export { sessionDomainService } from './session-domain.service';
+export { SessionDomainService, sessionDomainService } from './session-domain.service';
 // Transport-free outbound event surface (consumed by the WebSocket adapter)
 export type {
   ChatBroadcastEvent,

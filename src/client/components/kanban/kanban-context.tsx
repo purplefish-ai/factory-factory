@@ -1,74 +1,23 @@
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
-import {
-  shouldSyncGitHubCLIHealthFromIssuesResponse,
-  syncGitHubCLIHealth,
-} from '@/client/lib/cli-health-cache';
-import {
-  type NormalizedIssue,
-  normalizeGitHubIssue,
-  normalizeLinearIssue,
-} from '@/client/lib/issue-normalization';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
 import {
   removeWorkspaceFromProjectSummaryCache,
   removeWorkspacesFromProjectSummaryCache,
+  restoreWorkspacesToListCache,
   restoreWorkspacesToProjectSummaryCache,
 } from '@/client/lib/workspace-cache-helpers';
+import type { IssueProvider } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
-
-interface ArchivingWorkspaceIssueLink {
-  githubIssueNumber: number | null;
-  linearIssueId: string | null;
-}
-
-function collectLinearIssueIds(
-  workspaces: WorkspaceWithKanban[] | undefined,
-  archivingWorkspaceIssueLinks: Map<string, ArchivingWorkspaceIssueLink>
-): Set<string> {
-  const issueIds = new Set(
-    (workspaces ?? [])
-      .map((workspace) => workspace.linearIssueId)
-      .filter((id): id is string => id !== null)
-  );
-  for (const link of archivingWorkspaceIssueLinks.values()) {
-    if (link.linearIssueId) {
-      issueIds.add(link.linearIssueId);
-    }
-  }
-  return issueIds;
-}
-
-function collectGitHubIssueNumbers(
-  workspaces: WorkspaceWithKanban[] | undefined,
-  archivingWorkspaceIssueLinks: Map<string, ArchivingWorkspaceIssueLink>
-): Set<number> {
-  const issueNumbers = new Set(
-    (workspaces ?? [])
-      .map((workspace) => workspace.githubIssueNumber)
-      .filter((issueNumber): issueNumber is number => issueNumber !== null)
-  );
-  for (const link of archivingWorkspaceIssueLinks.values()) {
-    if (link.githubIssueNumber) {
-      issueNumbers.add(link.githubIssueNumber);
-    }
-  }
-  return issueNumbers;
-}
 
 interface KanbanContextValue {
   projectId: string;
   projectSlug: string;
-  issueProvider: string;
+  issueProvider: IssueProvider;
   workspaces: WorkspaceWithKanban[] | undefined;
   issues: NormalizedIssue[] | undefined;
   isLoading: boolean;
@@ -103,7 +52,7 @@ export function useKanban() {
 interface KanbanProviderProps {
   projectId: string;
   projectSlug: string;
-  issueProvider: string;
+  issueProvider: IssueProvider;
   children: ReactNode;
 }
 
@@ -114,8 +63,6 @@ export function KanbanProvider({
   children,
 }: KanbanProviderProps) {
   const utils = trpc.useUtils();
-  const isLinear = issueProvider === 'LINEAR';
-
   const {
     data: workspaces,
     isLoading: isLoadingWorkspaces,
@@ -132,42 +79,6 @@ export function KanbanProvider({
     }
   );
 
-  // GitHub issues — enabled only when provider is GitHub
-  const {
-    data: githubIssuesData,
-    isLoading: isLoadingGithubIssues,
-    refetch: refetchGithubIssues,
-  } = trpc.github.listIssuesForProject.useQuery(
-    { projectId },
-    { refetchInterval: 60_000, staleTime: 30_000, enabled: !isLinear }
-  );
-
-  useEffect(() => {
-    if (!githubIssuesData?.health) {
-      return;
-    }
-
-    if (
-      !shouldSyncGitHubCLIHealthFromIssuesResponse(githubIssuesData.health, githubIssuesData.error)
-    ) {
-      return;
-    }
-
-    syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubIssuesData.health);
-  }, [githubIssuesData?.error, githubIssuesData?.health, utils.admin.checkCLIHealth]);
-
-  // Linear issues — enabled only when provider is Linear
-  const {
-    data: linearIssuesData,
-    isLoading: isLoadingLinearIssues,
-    refetch: refetchLinearIssues,
-  } = trpc.linear.listIssuesForProject.useQuery(
-    { projectId },
-    { refetchInterval: 60_000, staleTime: 30_000, enabled: isLinear }
-  );
-
-  const isLoadingIssues = isLinear ? isLoadingLinearIssues : isLoadingGithubIssues;
-
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
     onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
   });
@@ -175,13 +86,34 @@ export function KanbanProvider({
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
-  const archiveMutation = trpc.workspace.archive.useMutation();
-  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
+  const handleArchiveError = (error: {
+    data?: { code?: string | null } | null;
+    message?: string;
+  }) => {
+    if (error.data?.code === 'PRECONDITION_FAILED') {
+      toast.error('Archiving blocked: enable commit before archiving to proceed.');
+    } else {
+      toast.error(error.message || 'Failed to archive workspace');
+    }
+  };
+
+  const archiveMutation = trpc.workspace.archive.useMutation({ onError: handleArchiveError });
+  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation({
+    onError: handleArchiveError,
+  });
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
   const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
-    Map<string, ArchivingWorkspaceIssueLink>
+    Map<string, WorkspaceIssueLink>
   >(new Map());
+  const {
+    issues,
+    isLoading: isLoadingIssues,
+    refetch: refetchIssues,
+  } = useProjectIssues(projectId, issueProvider, {
+    workspaceIssueLinks: workspaces,
+    optimisticWorkspaceIssueLinks: archivingWorkspaceIssueLinks,
+  });
   const [showInlineForm, setShowInlineForm] = useState(false);
   const [quickChatWorkspaceId, setQuickChatWorkspaceId] = useState<string | null>(null);
   const openQuickChat = useCallback(
@@ -189,8 +121,6 @@ export function KanbanProvider({
     []
   );
   const closeQuickChat = useCallback(() => setQuickChatWorkspaceId(null), []);
-
-  const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
 
   const syncAndRefetch = () => {
     syncMutation.mutate({ projectId });
@@ -224,12 +154,19 @@ export function KanbanProvider({
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
 
-    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+    await Promise.all([
+      utils.workspace.listWithKanbanState.cancel({ projectId }),
+      utils.workspace.getProjectSummaryState.cancel({ projectId }),
+    ]);
 
+    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
 
+    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+      old?.filter((item) => item.id !== workspaceId)
+    );
     utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
       removeWorkspaceFromProjectSummaryCache(old, workspaceId)
     );
@@ -248,17 +185,25 @@ export function KanbanProvider({
       return next;
     });
     try {
-      await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
-      await Promise.all([
+      try {
+        await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
+      } catch {
+        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+          restoreWorkspacesToListCache(old, previousWorkspaceList, [workspaceId])
+        );
+        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
+        );
+        // Error feedback is surfaced by the mutation's onError toast;
+        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        return;
+      }
+
+      await Promise.allSettled([
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
-    } catch (error) {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-        restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
-      );
-      throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
         if (!prev.has(workspaceId)) {
@@ -285,12 +230,19 @@ export function KanbanProvider({
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
 
-    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+    await Promise.all([
+      utils.workspace.listWithKanbanState.cancel({ projectId }),
+      utils.workspace.getProjectSummaryState.cancel({ projectId }),
+    ]);
 
+    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
 
+    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+      old?.filter((workspace) => !workspaceIdsToArchive.includes(workspace.id))
+    );
     utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
       removeWorkspacesFromProjectSummaryCache(old, workspaceIdsToArchive)
     );
@@ -315,24 +267,52 @@ export function KanbanProvider({
     });
 
     try {
-      await bulkArchiveMutation.mutateAsync({
-        projectId,
-        kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-        commitUncommitted,
-      });
-      await Promise.all([
+      try {
+        const result = await bulkArchiveMutation.mutateAsync({
+          projectId,
+          kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
+          commitUncommitted,
+        });
+        const failedResults = result.results.filter((item) => !item.success);
+        const failedWorkspaceIds = failedResults.map((item) => item.id);
+        for (const failedResult of failedResults) {
+          handleArchiveError({
+            data: { code: failedResult.code },
+            message: failedResult.error,
+          });
+        }
+        if (failedWorkspaceIds.length > 0) {
+          utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+            restoreWorkspacesToListCache(old, previousWorkspaceList, failedWorkspaceIds)
+          );
+          utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+            restoreWorkspacesToProjectSummaryCache(
+              old,
+              previousProjectSummaryState,
+              failedWorkspaceIds
+            )
+          );
+        }
+      } catch {
+        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+          restoreWorkspacesToListCache(old, previousWorkspaceList, workspaceIdsToArchive)
+        );
+        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectSummaryCache(
+            old,
+            previousProjectSummaryState,
+            workspaceIdsToArchive
+          )
+        );
+        // Error feedback is surfaced by the mutation's onError toast;
+        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        return;
+      }
+
+      await Promise.allSettled([
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
       ]);
-    } catch (error) {
-      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-        restoreWorkspacesToProjectSummaryCache(
-          old,
-          previousProjectSummaryState,
-          workspaceIdsToArchive
-        )
-      );
-      throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);
@@ -362,36 +342,6 @@ export function KanbanProvider({
     [workspaces, archivingWorkspaceIds]
   );
 
-  // Normalize issues from the active provider
-  const normalizedIssues = useMemo(() => {
-    if (isLinear) {
-      return linearIssuesData?.issues?.map(normalizeLinearIssue);
-    }
-    return githubIssuesData?.issues?.map(normalizeGitHubIssue);
-  }, [isLinear, githubIssuesData?.issues, linearIssuesData?.issues]);
-
-  // Filter out issues that already have a workspace
-  const filteredIssues = useMemo(() => {
-    if (!normalizedIssues) {
-      return undefined;
-    }
-
-    if (isLinear) {
-      const workspaceLinearIds = collectLinearIssueIds(workspaces, archivingWorkspaceIssueLinks);
-      return normalizedIssues.filter(
-        (issue) => !(issue.linearIssueId && workspaceLinearIds.has(issue.linearIssueId))
-      );
-    }
-
-    const workspaceIssueNumbers = collectGitHubIssueNumbers(
-      workspaces,
-      archivingWorkspaceIssueLinks
-    );
-    return normalizedIssues.filter(
-      (issue) => !(issue.githubIssueNumber && workspaceIssueNumbers.has(issue.githubIssueNumber))
-    );
-  }, [normalizedIssues, workspaces, isLinear, archivingWorkspaceIssueLinks]);
-
   return (
     <KanbanContext.Provider
       value={{
@@ -399,7 +349,7 @@ export function KanbanProvider({
         projectSlug,
         issueProvider,
         workspaces: visibleWorkspaces as WorkspaceWithKanban[] | undefined,
-        issues: filteredIssues,
+        issues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,
         error: errorWorkspaces ? { message: errorWorkspaces.message } : null,

@@ -87,7 +87,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   fetchAndComputePRState: vi.fn(),
   isRecentlyFetched: vi.fn(),
   isFetchInFlight: vi.fn(),
-  startFetch: vi.fn(),
+  startFetch: vi.fn(() => 41),
   registerFetch: vi.fn(),
   cancelFetch: vi.fn(),
 };
@@ -1302,6 +1302,75 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(fixerSessionService.acquireAndDispatch).not.toHaveBeenCalled();
   });
 
+  it('dispatches a fresh fixer after switching PRs with identical merge-conflict state', async () => {
+    const previousSnapshotKey = computeDispatchSnapshotKey(
+      123,
+      CIStatus.SUCCESS,
+      false,
+      null,
+      null,
+      true
+    );
+    const currentSnapshotKey = computeDispatchSnapshotKey(
+      456,
+      CIStatus.SUCCESS,
+      false,
+      null,
+      null,
+      true
+    );
+    expect(previousSnapshotKey).toBe('pr:123|ci:SUCCESS|no-changes-requested:none|merge:conflict');
+    expect(currentSnapshotKey).toBe('pr:456|ci:SUCCESS|no-changes-requested:none|merge:conflict');
+
+    const workspace = {
+      id: 'ws-pr-switch-merge-conflict',
+      prUrl: 'https://github.com/example/repo/pull/456',
+      prNumber: 456,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.SUCCESS,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.MERGE_CONFLICT,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: previousSnapshotKey,
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+      ratchetDispatchOutcome: 'COMPLETED',
+      ratchetDispatchRetryCount: 2,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: currentSnapshotKey,
+      hasChangesRequested: false,
+      hasMergeConflict: true,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 456,
+      reviewComments: [],
+    });
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'fresh-pr-session',
+      promptSent: true,
+    } as never);
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'TRIGGERED_FIXER' },
+    });
+    expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalledWith(workspace.id, {
+      sessionId: 'fresh-pr-session',
+      snapshotKey: currentSnapshotKey,
+      retryCount: 0,
+    });
+  });
+
   it('settles the dispatch as DIED when ratchet session process is not running', async () => {
     const workspace = {
       id: 'ws-stale-active',
@@ -1696,6 +1765,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       statusChecks: StatusCheckItem[] | null
     ) =>
       computeDispatchSnapshotKey(
+        123,
         ciStatus,
         hasChangesRequested,
         latestReviewActivityAtMs,

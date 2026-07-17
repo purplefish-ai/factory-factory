@@ -5,8 +5,6 @@
  * and computing workspace statistics.
  */
 
-import { gitCommand } from './shell';
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -67,17 +65,23 @@ export function parseGitStatusOutput(output: string): GitStatusFile[] {
 }
 
 /**
- * Parse git diff --numstat output to get total additions and deletions.
+ * Parse git diff --numstat output to get file, addition, and deletion totals.
  */
-export function parseNumstatOutput(output: string): { additions: number; deletions: number } {
+export function parseNumstatOutput(output: string): {
+  total: number;
+  additions: number;
+  deletions: number;
+} {
+  let total = 0;
   let additions = 0;
   let deletions = 0;
 
   if (!output.trim()) {
-    return { additions, deletions };
+    return { total, additions, deletions };
   }
 
   for (const line of output.trim().split('\n')) {
+    total += 1;
     const [add, del] = line.split('\t');
     // Binary files show as '-' for add/del
     if (add !== '-') {
@@ -88,69 +92,5 @@ export function parseNumstatOutput(output: string): { additions: number; deletio
     }
   }
 
-  return { additions, deletions };
-}
-
-/**
- * Get the merge base between HEAD and the default branch.
- * Tries origin/ first (which stays current with fetches), falls back to local branch.
- * Returns null if no merge base can be found.
- */
-export async function getMergeBase(
-  worktreePath: string,
-  defaultBranch: string
-): Promise<string | null> {
-  const candidates = [`origin/${defaultBranch}`, defaultBranch];
-
-  for (const base of candidates) {
-    const result = await gitCommand(['merge-base', 'HEAD', base], worktreePath);
-    if (result.code === 0 && result.stdout.trim()) {
-      return result.stdout.trim();
-    }
-  }
-  return null;
-}
-
-/**
- * Fetch git stats (additions/deletions/file count) for a single workspace.
- * Returns null if the workspace has no worktree or git commands fail.
- */
-export async function getWorkspaceGitStats(
-  worktreePath: string,
-  defaultBranch: string
-): Promise<{
-  total: number;
-  additions: number;
-  deletions: number;
-  hasUncommitted: boolean;
-} | null> {
-  // Check for uncommitted changes
-  const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
-  if (statusResult.code !== 0) {
-    return null;
-  }
-  const hasUncommitted = statusResult.stdout.trim().length > 0;
-
-  // Get merge base with the project's default branch
-  const mergeBase = await getMergeBase(worktreePath, defaultBranch);
-
-  // Get all changes from merge base (committed + uncommitted)
-  const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
-  const diffResult = await gitCommand(diffArgs, worktreePath);
-
-  // Get file count from main-relative diff
-  const fileCountArgs = mergeBase ? ['diff', '--name-only', mergeBase] : ['diff', '--name-only'];
-  const fileCountResult = await gitCommand(fileCountArgs, worktreePath);
-  const total =
-    fileCountResult.code === 0
-      ? fileCountResult.stdout
-          .trim()
-          .split('\n')
-          .filter((l) => l.length > 0).length
-      : 0;
-
-  const { additions, deletions } =
-    diffResult.code === 0 ? parseNumstatOutput(diffResult.stdout) : { additions: 0, deletions: 0 };
-
-  return { total, additions, deletions, hasUncommitted };
+  return { total, additions, deletions };
 }

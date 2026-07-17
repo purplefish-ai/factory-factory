@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
-  appendToRollingOutput,
+  RollingOutputBuffer,
   WORKSPACE_LOG_OUTPUT_MAX_CHARS,
   WORKSPACE_LOG_TRUNCATION_MARKER,
 } from './rolling-output';
@@ -17,6 +17,7 @@ const LOG_ROLLING_OUTPUT_OPTIONS = {
   maxChars: WORKSPACE_LOG_OUTPUT_MAX_CHARS,
   truncationMarker: WORKSPACE_LOG_TRUNCATION_MARKER,
 };
+const LOG_OUTPUT_FLUSH_INTERVAL_MS = 100;
 
 // =============================================================================
 // Types
@@ -29,6 +30,16 @@ export interface UseLogStreamResult {
   hasDisconnected: boolean;
   output: string;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
+}
+
+interface LogStreamBuffer {
+  streamKey: string;
+  output: RollingOutputBuffer;
+}
+
+interface PendingOutputFlush {
+  streamBuffer: LogStreamBuffer;
+  timeoutId: ReturnType<typeof setTimeout>;
 }
 
 // =============================================================================
@@ -48,47 +59,130 @@ export interface UseLogStreamResult {
  * Uses useWebSocketChannel for schema validation and automatic reconnection
  * with exponential backoff.
  */
-export function useLogStream(endpoint: LogStreamEndpoint, workspaceId: string): UseLogStreamResult {
+export function useLogStream(
+  endpoint: LogStreamEndpoint,
+  workspaceId: string,
+  isVisible: boolean
+): UseLogStreamResult {
   const [output, setOutput] = useState<string>('');
   const [hasDisconnected, setHasDisconnected] = useState(false);
   const outputEndRef = useRef<HTMLDivElement | null>(null);
+  const visibleRef = useRef(isVisible);
+  const pendingFlushRef = useRef<PendingOutputFlush | null>(null);
+  const streamKey = `${endpoint}:${workspaceId}`;
+  const streamBuffer = useMemo<LogStreamBuffer>(
+    () => ({
+      streamKey,
+      output: new RollingOutputBuffer(LOG_ROLLING_OUTPUT_OPTIONS),
+    }),
+    [streamKey]
+  );
+  const committedStreamBufferRef = useRef(streamBuffer);
 
   const url = buildWebSocketUrl(endpoint, { workspaceId });
 
-  const scrollToBottom = useCallback(() => {
-    outputEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const cancelPendingFlush = useCallback(() => {
+    if (pendingFlushRef.current === null) {
+      return;
+    }
+    clearTimeout(pendingFlushRef.current.timeoutId);
+    pendingFlushRef.current = null;
   }, []);
+
+  const scheduleVisibleFlush = useCallback(() => {
+    if (
+      committedStreamBufferRef.current !== streamBuffer ||
+      !visibleRef.current ||
+      pendingFlushRef.current !== null
+    ) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      if (
+        pendingFlushRef.current?.timeoutId !== timeoutId ||
+        pendingFlushRef.current.streamBuffer !== streamBuffer
+      ) {
+        return;
+      }
+      pendingFlushRef.current = null;
+      if (committedStreamBufferRef.current === streamBuffer && visibleRef.current) {
+        setOutput(streamBuffer.output.toString());
+      }
+    }, LOG_OUTPUT_FLUSH_INTERVAL_MS);
+    pendingFlushRef.current = { streamBuffer, timeoutId };
+  }, [streamBuffer]);
+
+  const appendOutput = useCallback(
+    (next: string) => {
+      if (committedStreamBufferRef.current !== streamBuffer) {
+        return;
+      }
+      streamBuffer.output.append(next);
+      scheduleVisibleFlush();
+    },
+    [scheduleVisibleFlush, streamBuffer]
+  );
 
   const handleMessage = useCallback(
     (message: z.infer<typeof LogStreamMessageSchema>) => {
       if (message.data) {
-        setOutput((prev) =>
-          appendToRollingOutput(prev, message.data ?? '', LOG_ROLLING_OUTPUT_OPTIONS)
-        );
-        // Scroll to bottom after a short delay to allow render
-        setTimeout(scrollToBottom, 10);
+        appendOutput(message.data);
       }
     },
-    [scrollToBottom]
+    [appendOutput]
   );
 
   const handleConnected = useCallback(() => {
+    if (committedStreamBufferRef.current !== streamBuffer) {
+      return;
+    }
     setHasDisconnected(false);
-    setOutput((prev) =>
-      appendToRollingOutput(
-        prev,
-        prev ? 'Reconnected!\n\n' : 'Connected!\n\n',
-        LOG_ROLLING_OUTPUT_OPTIONS
-      )
-    );
-  }, []);
+    appendOutput(streamBuffer.output.toString() ? 'Reconnected!\n\n' : 'Connected!\n\n');
+  }, [appendOutput, streamBuffer]);
 
   const handleDisconnected = useCallback(() => {
+    if (committedStreamBufferRef.current !== streamBuffer) {
+      return;
+    }
     setHasDisconnected(true);
-    setOutput((prev) =>
-      appendToRollingOutput(prev, 'Disconnected. Reconnecting...\n', LOG_ROLLING_OUTPUT_OPTIONS)
-    );
-  }, []);
+    appendOutput('Disconnected. Reconnecting...\n');
+  }, [appendOutput, streamBuffer]);
+
+  useLayoutEffect(() => {
+    const bufferChanged = committedStreamBufferRef.current !== streamBuffer;
+    committedStreamBufferRef.current = streamBuffer;
+    visibleRef.current = isVisible;
+    cancelPendingFlush();
+
+    if (bufferChanged) {
+      setHasDisconnected(false);
+    }
+    if (isVisible) {
+      setOutput(streamBuffer.output.toString());
+    } else if (bufferChanged) {
+      setOutput('');
+    }
+  }, [cancelPendingFlush, isVisible, streamBuffer]);
+
+  useEffect(
+    () => () => {
+      cancelPendingFlush();
+    },
+    [cancelPendingFlush]
+  );
+
+  useEffect(() => {
+    if (!(isVisible && output)) {
+      return;
+    }
+
+    const animationFrameId = requestAnimationFrame(() => {
+      outputEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isVisible, output]);
 
   const { connected } = useWebSocketChannel({
     url,

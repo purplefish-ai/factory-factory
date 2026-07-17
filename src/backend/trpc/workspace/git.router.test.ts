@@ -6,20 +6,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByIdWithProject: vi.fn(),
 }));
-const mockGetWorkspaceWithWorktree = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceWithProjectAndWorktreeOrThrow = vi.hoisted(() => vi.fn());
 const mockGitCommand = vi.hoisted(() => vi.fn());
-const mockGetMergeBase = vi.hoisted(() => vi.fn());
 const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
+const mockGetSnapshot = vi.hoisted(() => vi.fn());
+const mockGetMergeBase = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
 }));
 
-vi.mock('./workspace-helpers', () => ({
-  getWorkspaceWithWorktree: (...args: unknown[]) => mockGetWorkspaceWithWorktree(...args),
-  getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
+vi.mock('./workspace-helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./workspace-helpers')>();
+  return {
+    ...actual,
+    getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
+      mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
+  };
+});
+
+vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  workspaceGitStateService: {
+    getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
+    getMergeBase: (...args: unknown[]) => mockGetMergeBase(...args),
+  },
 }));
 
 vi.mock('@/backend/lib/shell', () => ({
@@ -30,15 +40,44 @@ vi.mock('@/backend/lib/file-helpers', () => ({
   isPathSafe: mockIsPathSafe,
 }));
 
-vi.mock('@/backend/lib/git-helpers', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/lib/git-helpers')>();
-  return {
-    ...actual,
-    getMergeBase: (...args: unknown[]) => mockGetMergeBase(...args),
-  };
-});
-
 import { workspaceGitRouter } from './git.trpc';
+
+function makeSnapshot(
+  overrides: {
+    status?: Record<string, unknown>;
+    base?: Record<string, unknown>;
+    upstream?: Record<string, unknown>;
+  } = {}
+) {
+  return {
+    worktreePath: '/repo/w1',
+    defaultBranch: 'main',
+    computedAt: 1,
+    status: {
+      files: [
+        { path: 'README.md', status: 'M', staged: false },
+        { path: 'package.json', status: 'M', staged: true },
+      ],
+      hasUncommitted: true,
+      ...overrides.status,
+    },
+    base: {
+      mergeBase: 'merge-base-sha',
+      noMergeBase: false,
+      stats: { total: 3, additions: 2, deletions: 1, hasUncommitted: true },
+      added: [{ path: 'new.ts', status: 'added' }],
+      modified: [{ path: 'mod.ts', status: 'modified' }],
+      deleted: [{ path: 'gone.ts', status: 'deleted' }],
+      ...overrides.base,
+    },
+    upstream: {
+      ref: 'origin/feature',
+      hasUpstream: true,
+      files: ['src/a.ts', 'src/b.ts'],
+      ...overrides.upstream,
+    },
+  };
+}
 
 function createCaller() {
   const logger = {
@@ -70,85 +109,40 @@ describe('workspaceGitRouter', () => {
     rmSync(rootDir, { recursive: true, force: true });
   });
 
-  it('returns empty status when workspace has no worktree', async () => {
-    mockGetWorkspaceWithWorktree.mockResolvedValue(null);
+  it('preserves NOT_FOUND errors for every aggregate endpoint when the workspace is missing', async () => {
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue(null);
+    const caller = createCaller();
+
+    const requests = [
+      caller.getGitStatus({ workspaceId: 'missing' }),
+      caller.getUnstagedChanges({ workspaceId: 'missing' }),
+      caller.getDiffVsMain({ workspaceId: 'missing' }),
+      caller.getUnpushedFiles({ workspaceId: 'missing' }),
+    ];
+
+    await Promise.all(
+      requests.map((request) =>
+        expect(request).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+          message: 'Workspace not found: missing',
+        })
+      )
+    );
+  });
+
+  it('preserves empty aggregate responses when workspace has no worktree', async () => {
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      worktreePath: null,
+      project: { defaultBranch: 'main' },
+    });
     const caller = createCaller();
     await expect(caller.getGitStatus({ workspaceId: 'w1' })).resolves.toEqual({
       files: [],
       hasUncommitted: false,
     });
-  });
-
-  it('throws when git status fails and handles empty unstaged workspace result', async () => {
-    const caller = createCaller();
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
-      workspace: { id: 'w1' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand.mockResolvedValueOnce({
-      code: 1,
-      stdout: '',
-      stderr: 'fatal',
-    });
-
-    await expect(caller.getGitStatus({ workspaceId: 'w1' })).rejects.toThrow(
-      'Git status failed: fatal'
-    );
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce(null);
     await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).resolves.toEqual({
       files: [],
-    });
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
-      workspace: { id: 'w1' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand.mockResolvedValueOnce({
-      code: 1,
-      stdout: '',
-      stderr: 'status failed',
-    });
-    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).rejects.toThrow(
-      'Git status failed: status failed'
-    );
-  });
-
-  it('parses git status and unstaged changes', async () => {
-    mockGetWorkspaceWithWorktree.mockResolvedValue({
-      workspace: { id: 'w1' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand.mockResolvedValue({
-      code: 0,
-      stdout: ' M README.md\nM  package.json\n',
-      stderr: '',
-    });
-
-    const caller = createCaller();
-    await expect(caller.getGitStatus({ workspaceId: 'w1' })).resolves.toEqual({
-      files: [
-        { path: 'README.md', status: 'M', staged: false },
-        { path: 'package.json', status: 'M', staged: true },
-      ],
-      hasUncommitted: true,
-    });
-    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).resolves.toEqual({
-      files: [{ path: 'README.md', status: 'M', staged: false }],
-    });
-  });
-
-  it('handles diff-vs-main missing workspace/no-worktree and parses status lines', async () => {
-    const caller = createCaller();
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce(null);
-    await expect(caller.getDiffVsMain({ workspaceId: 'missing' })).rejects.toThrow(
-      'Workspace not found: missing'
-    );
-
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
-      id: 'w1',
-      worktreePath: null,
-      project: { defaultBranch: 'main' },
     });
     await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toEqual({
       added: [],
@@ -156,105 +150,120 @@ describe('workspaceGitRouter', () => {
       deleted: [],
       noMergeBase: false,
     });
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toEqual({
+      files: [],
+      hasUpstream: false,
+    });
+    expect(mockGetSnapshot).not.toHaveBeenCalled();
+  });
 
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
-      id: 'w2',
-      worktreePath: '/repo',
-      project: {},
+  it('projects all aggregate endpoints from concurrent shared snapshot requests', async () => {
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      worktreePath: '/repo/w1',
+      project: { defaultBranch: 'main' },
     });
-    mockGetMergeBase.mockResolvedValueOnce('merge-base-sha');
-    mockGitCommand.mockResolvedValueOnce({
-      code: 0,
-      stdout: 'A\tnew.ts\nM\tmod.ts\nD\tgone.ts\nR100\told.ts\tnew.ts\nbad-line\n',
-      stderr: '',
+    const snapshot = makeSnapshot();
+    const sharedRequest = Promise.resolve(snapshot);
+    mockGetSnapshot.mockReturnValue(sharedRequest);
+
+    const caller = createCaller();
+    const [status, unstaged, diff, unpushed] = await Promise.all([
+      caller.getGitStatus({ workspaceId: 'w1' }),
+      caller.getUnstagedChanges({ workspaceId: 'w1' }),
+      caller.getDiffVsMain({ workspaceId: 'w1' }),
+      caller.getUnpushedFiles({ workspaceId: 'w1' }),
+    ]);
+
+    expect(status).toEqual({
+      files: [
+        { path: 'README.md', status: 'M', staged: false },
+        { path: 'package.json', status: 'M', staged: true },
+      ],
+      hasUncommitted: true,
     });
-    await expect(caller.getDiffVsMain({ workspaceId: 'w2' })).resolves.toEqual({
+    expect(unstaged).toEqual({
+      files: [{ path: 'README.md', status: 'M', staged: false }],
+    });
+    expect(diff).toEqual({
       added: [{ path: 'new.ts', status: 'added' }],
       modified: [{ path: 'mod.ts', status: 'modified' }],
       deleted: [{ path: 'gone.ts', status: 'deleted' }],
       noMergeBase: false,
     });
-
-    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
-      id: 'w3',
-      worktreePath: '/repo',
-      project: { defaultBranch: 'main' },
-    });
-    mockGetMergeBase.mockResolvedValueOnce('merge-base-sha');
-    mockGitCommand.mockResolvedValueOnce({
-      code: 1,
-      stdout: '',
-      stderr: 'diff failed',
-    });
-    await expect(caller.getDiffVsMain({ workspaceId: 'w3' })).rejects.toThrow(
-      'Git diff failed: diff failed'
-    );
-  });
-
-  it('handles unpushed-files branches for upstream and diff failures', async () => {
-    const caller = createCaller();
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce(null);
-    await expect(caller.getUnpushedFiles({ workspaceId: 'missing' })).resolves.toEqual({
-      files: [],
-      hasUpstream: false,
-    });
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
-      workspace: { id: 'w1' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand.mockResolvedValueOnce({
-      code: 0,
-      stdout: '\n',
-      stderr: '',
-    });
-    await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toEqual({
-      files: [],
-      hasUpstream: false,
-    });
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
-      workspace: { id: 'w2' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand
-      .mockResolvedValueOnce({
-        code: 0,
-        stdout: 'origin/main\n',
-        stderr: '',
-      })
-      .mockResolvedValueOnce({
-        code: 1,
-        stdout: '',
-        stderr: 'cannot diff',
-      });
-    await expect(caller.getUnpushedFiles({ workspaceId: 'w2' })).rejects.toThrow(
-      'Git diff failed: cannot diff'
-    );
-
-    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
-      workspace: { id: 'w3' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand
-      .mockResolvedValueOnce({
-        code: 0,
-        stdout: 'origin/main\n',
-        stderr: '',
-      })
-      .mockResolvedValueOnce({
-        code: 0,
-        stdout: 'src/a.ts\n\nsrc/b.ts\n',
-        stderr: '',
-      });
-    await expect(caller.getUnpushedFiles({ workspaceId: 'w3' })).resolves.toEqual({
+    expect(unpushed).toEqual({
       files: ['src/a.ts', 'src/b.ts'],
       hasUpstream: true,
     });
+    expect(mockGetSnapshot).toHaveBeenCalledTimes(4);
+    expect(mockGetSnapshot).toHaveBeenCalledWith({
+      worktreePath: '/repo/w1',
+      defaultBranch: 'main',
+    });
+    expect(mockGitCommand).not.toHaveBeenCalled();
   });
 
-  it('handles diff-vs-main, unpushed files, and untracked file diff fallback', async () => {
+  it('throws only errors from the section requested by each endpoint', async () => {
+    const caller = createCaller();
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      worktreePath: '/repo/w1',
+      project: { defaultBranch: 'main' },
+    });
+
+    mockGetSnapshot.mockResolvedValue(
+      makeSnapshot({
+        base: { statsError: 'stats failed', changesError: 'changes failed' },
+        upstream: { error: 'upstream failed' },
+      })
+    );
+    await expect(caller.getGitStatus({ workspaceId: 'w1' })).resolves.toMatchObject({
+      hasUncommitted: true,
+    });
+    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).resolves.toEqual({
+      files: [{ path: 'README.md', status: 'M', staged: false }],
+    });
+
+    mockGetSnapshot.mockResolvedValue(
+      makeSnapshot({ status: { error: 'status failed' }, upstream: { error: 'upstream failed' } })
+    );
+    await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toMatchObject({
+      noMergeBase: false,
+    });
+
+    mockGetSnapshot.mockResolvedValue(
+      makeSnapshot({ status: { error: 'status failed' }, base: { changesError: 'changes failed' } })
+    );
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toMatchObject({
+      hasUpstream: true,
+    });
+
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ status: { error: 'status failed' } }));
+    await expect(caller.getGitStatus({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git status failed: status failed'
+    );
+    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git status failed: status failed'
+    );
+
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ base: { changesError: 'changes failed' } }));
+    await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git diff failed: changes failed'
+    );
+
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ base: { statsError: 'stats failed' } }));
+    await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toMatchObject({
+      added: [{ path: 'new.ts', status: 'added' }],
+      noMergeBase: false,
+    });
+
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ upstream: { error: 'upstream failed' } }));
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git diff failed: upstream failed'
+    );
+  });
+
+  it('handles no merge base, no upstream, and untracked file diff fallback', async () => {
     const caller = createCaller();
 
     mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
@@ -262,7 +271,11 @@ describe('workspaceGitRouter', () => {
       worktreePath: '/repo',
       project: { defaultBranch: 'main' },
     });
-    mockGetMergeBase.mockResolvedValueOnce(null);
+    mockGetSnapshot.mockResolvedValueOnce(
+      makeSnapshot({
+        base: { mergeBase: null, noMergeBase: true, added: [], modified: [], deleted: [] },
+      })
+    );
     await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toEqual({
       added: [],
       modified: [],
@@ -270,15 +283,9 @@ describe('workspaceGitRouter', () => {
       noMergeBase: true,
     });
 
-    mockGetWorkspaceWithWorktree.mockResolvedValue({
-      workspace: { id: 'w1' },
-      worktreePath: '/repo',
-    });
-    mockGitCommand.mockResolvedValueOnce({
-      code: 1,
-      stdout: '',
-      stderr: 'no upstream',
-    });
+    mockGetSnapshot.mockResolvedValueOnce(
+      makeSnapshot({ upstream: { ref: null, hasUpstream: false, files: [] } })
+    );
     await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toEqual({
       files: [],
       hasUpstream: false,
@@ -356,5 +363,10 @@ describe('workspaceGitRouter', () => {
     await expect(caller.getFileDiff({ workspaceId: 'w4', filePath })).rejects.toThrow(
       'Git diff failed: broken diff'
     );
+    expect(mockGetSnapshot).not.toHaveBeenCalled();
+    expect(mockGetMergeBase).toHaveBeenCalledWith({
+      worktreePath: '/repo',
+      defaultBranch: 'main',
+    });
   });
 });
