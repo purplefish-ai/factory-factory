@@ -5,6 +5,7 @@
  */
 
 export { createChatUpgradeHandler } from './chat.handler';
+export { disposeChatTransportForApplication } from './chat-connection-registry';
 export {
   createDevLogsUpgradeHandler,
   devLogsConnections,
@@ -16,7 +17,7 @@ export {
 export { createSetupTerminalUpgradeHandler } from './setup-terminal.handler';
 export {
   createSnapshotsUpgradeHandler,
-  snapshotConnections,
+  disposeSnapshotsHandlerState,
 } from './snapshots.handler';
 export {
   createTerminalUpgradeHandler,

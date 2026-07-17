@@ -5,18 +5,6 @@ const mockGetUserSettings = vi.hoisted(() => vi.fn());
 const mockCheckIdeAvailable = vi.hoisted(() => vi.fn());
 const mockOpenPathInIde = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findById: (...args: unknown[]) => mockFindById(...args),
-  },
-}));
-
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: {
-    get: (...args: unknown[]) => mockGetUserSettings(...args),
-  },
-}));
-
 vi.mock('@/backend/lib/ide-helpers', () => ({
   checkIdeAvailable: (...args: unknown[]) => mockCheckIdeAvailable(...args),
   openPathInIde: (...args: unknown[]) => mockOpenPathInIde(...args),
@@ -25,7 +13,16 @@ vi.mock('@/backend/lib/ide-helpers', () => ({
 import { workspaceIdeRouter } from './ide.trpc';
 
 function createCaller() {
-  return workspaceIdeRouter.createCaller({ appContext: {} } as never);
+  return workspaceIdeRouter.createCaller({
+    appContext: {
+      services: {
+        workspaceDataService: { findById: (...args: unknown[]) => mockFindById(...args) },
+        userSettingsQueryService: {
+          get: (...args: unknown[]) => mockGetUserSettings(...args),
+        },
+      },
+    },
+  } as never);
 }
 
 describe('workspaceIdeRouter', () => {

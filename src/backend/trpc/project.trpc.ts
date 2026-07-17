@@ -3,15 +3,10 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { z } from 'zod';
+import type { ApplicationServices } from '@/backend/app-context';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
-import { cryptoService } from '@/backend/services/crypto.service';
-import { FactoryConfigService } from '@/backend/services/run-script';
-import {
-  gitCloneService,
-  parseGithubUrl,
-  projectManagementService,
-} from '@/backend/services/workspace';
+import { parseGithubUrl } from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {
@@ -134,6 +129,7 @@ function buildRemoteEntries(
 }
 
 async function validateStartupScriptFields(
+  projectManagementService: ApplicationServices['projectManagementService'],
   id: string,
   updates: {
     startupScriptCommand?: string | null;
@@ -178,7 +174,8 @@ export const projectRouter = router({
         })
         .optional()
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { projectManagementService } = ctx.appContext.services;
       const projects = await projectManagementService.list(input);
       return projects.map((project) => ({
         ...project,
@@ -187,7 +184,8 @@ export const projectRouter = router({
     }),
 
   // Get project by ID
-  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const { projectManagementService } = ctx.appContext.services;
     const project = await projectManagementService.findById(input.id);
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
@@ -199,7 +197,8 @@ export const projectRouter = router({
   }),
 
   // Get project by slug
-  getBySlug: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ input }) => {
+  getBySlug: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
+    const { projectManagementService } = ctx.appContext.services;
     const project = await projectManagementService.findBySlug(input.slug);
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
@@ -213,7 +212,8 @@ export const projectRouter = router({
   // List local + remote branches for a project
   listBranches: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { projectManagementService } = ctx.appContext.services;
       const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
@@ -246,7 +246,8 @@ export const projectRouter = router({
         limit: z.number().min(1).max(100).default(50),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { projectManagementService } = ctx.appContext.services;
       const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
@@ -263,7 +264,8 @@ export const projectRouter = router({
   // List slash commands available for a project (for autocomplete in new workspace form)
   listSlashCommands: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { projectManagementService } = ctx.appContext.services;
       const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
@@ -287,7 +289,7 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { configService } = ctx.appContext.services;
+      const { configService, projectManagementService } = ctx.appContext.services;
       const { startupScriptCommand, startupScriptPath, startupScriptTimeout } = input;
 
       // Validate only one of command or path is set
@@ -333,7 +335,8 @@ export const projectRouter = router({
         issueTrackerConfig: IssueTrackerConfigSchema.nullable().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { cryptoService, projectManagementService } = ctx.appContext.services;
       const { id, ...updates } = input;
 
       // Validate new repo path if provided
@@ -344,7 +347,7 @@ export const projectRouter = router({
         }
       }
 
-      await validateStartupScriptFields(id, updates);
+      await validateStartupScriptFields(projectManagementService, id, updates);
 
       // Encrypt Linear API key before persisting
       if (updates.issueTrackerConfig?.linear?.apiKey) {
@@ -365,25 +368,23 @@ export const projectRouter = router({
     }),
 
   // Archive a project (soft delete)
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return projectManagementService.archive(input.id);
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    return ctx.appContext.services.projectManagementService.archive(input.id);
   }),
 
   // Validate repo path
-  validateRepoPath: publicProcedure.input(z.object({ repoPath: z.string() })).query(({ input }) => {
-    return projectManagementService.validateRepoPath(input.repoPath);
-  }),
+  validateRepoPath: publicProcedure
+    .input(z.object({ repoPath: z.string() }))
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.projectManagementService.validateRepoPath(input.repoPath);
+    }),
 
   // Check if factory-factory.json exists in the repository
   checkFactoryConfig: publicProcedure
     .input(z.object({ repoPath: z.string() }))
-    .query(async ({ input }) => {
-      try {
-        const config = await FactoryConfigService.readConfig(input.repoPath);
-        return { exists: config !== null };
-      } catch {
-        return { exists: false };
-      }
+    .query(async ({ ctx, input }) => {
+      const config = await ctx.appContext.services.factoryConfigService.readConfig(input.repoPath);
+      return { exists: config !== null };
     }),
 
   // Save factory-factory.json to the project repo
@@ -394,7 +395,8 @@ export const projectRouter = router({
         config: FactoryConfigSchema,
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { projectManagementService } = ctx.appContext.services;
       const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error('Project not found');
@@ -407,8 +409,8 @@ export const projectRouter = router({
     }),
 
   // Check if GitHub CLI is authenticated
-  checkGithubAuth: publicProcedure.query(() => {
-    return gitCloneService.checkGithubAuth();
+  checkGithubAuth: publicProcedure.query(({ ctx }) => {
+    return ctx.appContext.services.gitCloneService.checkGithubAuth();
   }),
 
   // Clone a GitHub repo and create a project
@@ -428,7 +430,7 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { configService } = ctx.appContext.services;
+      const { configService, gitCloneService, projectManagementService } = ctx.appContext.services;
       const { startupScriptCommand, startupScriptPath, startupScriptTimeout } = input;
 
       if (startupScriptCommand && startupScriptPath) {

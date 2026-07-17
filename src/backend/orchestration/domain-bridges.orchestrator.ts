@@ -9,69 +9,73 @@
  */
 
 import { toError } from '@/backend/lib/error-utils';
-import {
-  type AutoIterationLogbookBridge,
-  type AutoIterationSessionBridge,
-  type AutoIterationWorkspaceBridge,
+import type {
+  AutoIterationLogbookBridge,
+  AutoIterationSessionBridge,
+  AutoIterationWorkspaceBridge,
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
-import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
-import { createLogger } from '@/backend/services/logger.service';
-import { periodicTaskService } from '@/backend/services/periodic-task';
-import {
+import type {
+  githubCLIService,
+  prFetchRegistry,
+  prSnapshotService,
+} from '@/backend/services/github';
+import type { createLogger } from '@/backend/services/logger.service';
+import type { periodicTaskService } from '@/backend/services/periodic-task';
+import type {
   fixerSessionService,
-  type RatchetGitHubBridge,
-  type RatchetPRSnapshotBridge,
-  type RatchetSessionBridge,
+  RatchetGitHubBridge,
+  RatchetPRSnapshotBridge,
+  RatchetSessionBridge,
   ratchetService,
 } from '@/backend/services/ratchet';
-import { startupScriptService } from '@/backend/services/run-script';
-import {
+import type { startupScriptService } from '@/backend/services/run-script';
+import type {
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
-import { terminalSessionService } from '@/backend/services/terminal';
+import type { terminalSessionService } from '@/backend/services/terminal';
 import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
-  getWorkspaceInitPolicy,
-  kanbanStateService,
-  WorkspaceCreationService,
+  type getWorkspaceInitPolicy,
+  type kanbanStateService,
+  type WorkspaceCreationService,
   type WorkspaceInitPolicyInput,
-  workspaceActivityService,
-  workspaceAutoIterationService,
-  workspaceDataService,
-  workspaceMaintenanceService,
-  workspacePrSnapshotService,
-  workspaceQueryService,
-  workspaceRatchetService,
-  workspaceRunScriptService,
-  workspaceSnapshotStore,
-  workspaceStateMachine,
+  type workspaceActivityService,
+  type workspaceAutoIterationService,
+  type workspaceDataService,
+  type workspaceMaintenanceService,
+  type workspacePrSnapshotService,
+  type workspaceQueryService,
+  type workspaceRatchetService,
+  type workspaceRunScriptService,
+  type workspaceSnapshotStore,
+  type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { reconciliationService } from './reconciliation.service';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
-
-const logger = createLogger('domain-bridges');
+import type { reconciliationService } from './reconciliation.service';
+import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 type SessionService = typeof sessionService;
 type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
 
-type BridgeServices = {
+export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
+  createLogger: typeof createLogger;
   fixerSessionService: typeof fixerSessionService;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
+  initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
+  periodicTaskService: typeof periodicTaskService;
   prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
@@ -81,48 +85,17 @@ type BridgeServices = {
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
   terminalSessionService: typeof terminalSessionService;
+  workspaceActivityService: typeof workspaceActivityService;
   workspaceAutoIterationService: typeof workspaceAutoIterationService;
   workspaceCreationService: WorkspaceCreationService;
   workspaceDataService: typeof workspaceDataService;
   workspaceMaintenanceService: typeof workspaceMaintenanceService;
   workspacePrSnapshotService: typeof workspacePrSnapshotService;
-  workspaceActivityService: typeof workspaceActivityService;
   workspaceQueryService: typeof workspaceQueryService;
   workspaceRatchetService: typeof workspaceRatchetService;
   workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
-};
-
-const defaultServices: BridgeServices = {
-  autoIterationService,
-  chatEventForwarderService,
-  chatMessageHandlerService,
-  fixerSessionService,
-  getWorkspaceInitPolicy,
-  githubCLIService,
-  kanbanStateService,
-  logbookService,
-  prFetchRegistry,
-  prSnapshotService,
-  ratchetService,
-  reconciliationService,
-  sessionDataService,
-  sessionDomainService,
-  sessionService,
-  startupScriptService,
-  terminalSessionService,
-  workspaceActivityService,
-  workspaceAutoIterationService,
-  workspaceCreationService: new WorkspaceCreationService({ logger }),
-  workspaceDataService,
-  workspaceMaintenanceService,
-  workspacePrSnapshotService,
-  workspaceQueryService,
-  workspaceRatchetService,
-  workspaceRunScriptService,
-  workspaceSnapshotStore,
-  workspaceStateMachine,
 };
 
 async function stopSessionBestEffort(
@@ -172,17 +145,19 @@ async function cleanupRecycledAutoIterationSession(
   await clearAutoIterationSessionIfMatching(workspaceAutoIterationService, workspaceId, sessionId);
 }
 
-export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
-  const resolved = { ...defaultServices, ...services };
+export function configureDomainBridges(services: BridgeServices): void {
   const {
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    createLogger,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
+    initializeWorkspaceWorktree,
     kanbanStateService,
     logbookService,
+    periodicTaskService,
     prFetchRegistry,
     prSnapshotService,
     ratchetService,
@@ -203,7 +178,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
-  } = resolved;
+  } = services;
+  const logger = createLogger('domain-bridges');
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
@@ -388,8 +364,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       await workspaceAutoIterationService.setStatus(workspaceId, status);
     },
     async updateAutoIterationProgress(workspaceId, progress) {
-      const parsedProgress = autoIterationProgressSchema.parse(progress);
-      await workspaceAutoIterationService.setProgress(workspaceId, parsedProgress);
+      await workspaceAutoIterationService.setProgress(workspaceId, progress);
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {
       await workspaceAutoIterationService.setSession(workspaceId, sessionId);

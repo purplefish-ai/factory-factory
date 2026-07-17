@@ -1,7 +1,5 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script';
-import { workspaceDataService, workspaceRunScriptService } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
@@ -14,7 +12,9 @@ export const workspaceRunScriptRouter = router({
         config: FactoryConfigSchema,
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { runScriptConfigPersistenceService, workspaceDataService, workspaceRunScriptService } =
+        ctx.appContext.services;
       const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
 
       if (!workspace) {

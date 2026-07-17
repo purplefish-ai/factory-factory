@@ -26,35 +26,16 @@ const mockGetClonePath = vi.hoisted(() => vi.fn());
 const mockCheckExistingClone = vi.hoisted(() => vi.fn());
 const mockCloneRepo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  projectManagementService: mockProjectManagementService,
-  gitCloneService: {
-    checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
-    getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
-    checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
-    clone: (...args: unknown[]) => mockCloneRepo(...args),
-  },
-  parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
-}));
-
 vi.mock('@/backend/lib/shell', () => ({
   gitCommandC: (...args: unknown[]) => mockGitCommandC(...args),
 }));
 
-vi.mock('@/backend/services/crypto.service', () => ({
-  cryptoService: {
-    encrypt: (value: string) => mockEncrypt(value),
-  },
-}));
-
-vi.mock('@/backend/services/run-script', () => ({
-  FactoryConfigService: {
-    readConfig: (...args: unknown[]) => mockReadConfig(...args),
-  },
-}));
-
 vi.mock('@/backend/lib/file-helpers', () => ({
   searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
+}));
+
+vi.mock('@/backend/services/workspace', () => ({
+  parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
 import { projectRouter } from './project.trpc';
@@ -85,6 +66,19 @@ function createCaller(
           getReposDir: () => '/repos',
           getCorsConfig: () => corsConfig,
         },
+        cryptoService: {
+          encrypt: (value: string) => mockEncrypt(value),
+        },
+        factoryConfigService: {
+          readConfig: (...args: unknown[]) => mockReadConfig(...args),
+        },
+        gitCloneService: {
+          checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
+          getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
+          checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
+          clone: (...args: unknown[]) => mockCloneRepo(...args),
+        },
+        projectManagementService: mockProjectManagementService,
       },
     },
   } as never);
@@ -510,7 +504,7 @@ describe('projectRouter', () => {
 
   it('handles factory config checks and saveFactoryConfig writes the config file', async () => {
     const caller = createCaller();
-    mockReadConfig.mockRejectedValueOnce(new Error('missing'));
+    mockReadConfig.mockResolvedValueOnce(null);
     await expect(caller.checkFactoryConfig({ repoPath: '/repo/path' })).resolves.toEqual({
       exists: false,
     });
@@ -529,6 +523,15 @@ describe('projectRouter', () => {
 
     const written = readFileSync(join(tempDir, 'factory-factory.json'), 'utf-8');
     expect(written).toContain('"run": "pnpm test"');
+  });
+
+  it('propagates invalid factory config errors', async () => {
+    const caller = createCaller();
+    mockReadConfig.mockRejectedValueOnce(new Error('Invalid factory-factory.json'));
+
+    await expect(caller.checkFactoryConfig({ repoPath: '/repo/path' })).rejects.toThrow(
+      'Invalid factory-factory.json'
+    );
   });
 
   it('returns exists=true for checkFactoryConfig and throws when save target is missing', async () => {

@@ -4,18 +4,20 @@ const mockFindByAgentId = vi.hoisted(() => vi.fn());
 const mockFindRecent = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/decision-log', () => ({
-  decisionLogService: {
-    findByAgentId: (...args: unknown[]) => mockFindByAgentId(...args),
-    findRecent: (...args: unknown[]) => mockFindRecent(...args),
-    findById: (...args: unknown[]) => mockFindById(...args),
-  },
-}));
-
 import { decisionLogRouter } from './decision-log.trpc';
 
 function createCaller() {
-  return decisionLogRouter.createCaller({ appContext: {} } as never);
+  return decisionLogRouter.createCaller({
+    appContext: {
+      services: {
+        decisionLogQueryService: {
+          findByAgentId: (...args: unknown[]) => mockFindByAgentId(...args),
+          findRecent: (...args: unknown[]) => mockFindRecent(...args),
+          findById: (...args: unknown[]) => mockFindById(...args),
+        },
+      },
+    },
+  } as never);
 }
 
 describe('decisionLogRouter', () => {

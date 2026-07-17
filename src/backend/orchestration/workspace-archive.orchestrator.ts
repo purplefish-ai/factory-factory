@@ -5,7 +5,6 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
-import { cleanupWorkspaceScopedCaches } from './event-collector.orchestrator';
 import type { WorkspaceWithProject } from './types';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
@@ -16,6 +15,7 @@ interface WorktreeCleanupOptions {
 }
 
 export type ArchiveWorkspaceDependencies = {
+  cleanupWorkspaceScopedCaches(workspaceId: string): void;
   githubCLIService: {
     addIssueComment(
       owner: string,
@@ -146,7 +146,7 @@ async function completeArchive(
   }
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
-  cleanupWorkspaceScopedCaches(workspace.id);
+  services.cleanupWorkspaceScopedCaches(workspace.id);
   services.runScriptService.evictWorkspaceBuffers(workspace.id);
 
   // Notify parent workspace that this child was archived (fire-and-forget)

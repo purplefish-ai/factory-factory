@@ -8,38 +8,11 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
-import { cleanupWorkspaceScopedCaches } from '@/backend/orchestration/event-collector.orchestrator';
-import {
-  archiveWorkspace,
-  cleanupWorkspaceRuntimeResources,
-} from '@/backend/orchestration/workspace-archive.orchestrator';
-import {
-  createChildWorkspace,
-  fireLifecycleNotification,
-  persistChildNotification,
-  persistParentNotification,
-} from '@/backend/orchestration/workspace-children.orchestrator';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
-import { prSnapshotService } from '@/backend/services/github';
-import { ratchetService } from '@/backend/services/ratchet';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script';
-import {
-  chatMessageHandlerService,
-  sessionDataService,
-  sessionDomainService,
-  sessionProviderResolverService,
-  sessionService,
-} from '@/backend/services/session';
 import {
   computeKanbanColumn,
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
-  WorkspaceCreationService,
-  workspaceDataService,
-  workspaceNotificationService,
-  workspaceQueryService,
-  workspaceRelationshipsService,
 } from '@/backend/services/workspace';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
@@ -153,15 +126,17 @@ export const workspaceRouter = router({
         offset: z.number().min(0).optional(),
       })
     )
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
       const { projectId, ...filters } = input;
-      return workspaceDataService.findByProjectId(projectId, filters);
+      return ctx.appContext.services.workspaceDataService.findByProjectId(projectId, filters);
     }),
 
   // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
   getProjectSummaryState: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => workspaceQueryService.getProjectSummaryState(input.projectId)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceQueryService.getProjectSummaryState(input.projectId)
+    ),
 
   // List workspaces with kanban state (for board view)
   listWithKanbanState: publicProcedure
@@ -174,7 +149,9 @@ export const workspaceRouter = router({
         offset: z.number().min(0).optional(),
       })
     )
-    .query(({ input }) => workspaceQueryService.listWithKanbanState(input)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceQueryService.listWithKanbanState(input)
+    ),
 
   // List workspaces with runtime state (for table view)
   listWithRuntimeState: publicProcedure
@@ -186,10 +163,13 @@ export const workspaceRouter = router({
         offset: z.number().min(0).optional(),
       })
     )
-    .query(({ input }) => workspaceQueryService.listWithRuntimeState(input)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceQueryService.listWithRuntimeState(input)
+    ),
 
   // Get workspace by ID
-  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const { sessionDomainService, sessionService, workspaceDataService } = ctx.appContext.services;
     const workspace = await workspaceDataService.findById(input.id);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
@@ -239,7 +219,13 @@ export const workspaceRouter = router({
     .input(workspaceCreationSourceSchema)
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      const { configService } = ctx.appContext.services;
+      const {
+        configService,
+        createWorkspaceCreationService,
+        initializeWorkspaceWorktree,
+        sessionDataService,
+        sessionProviderResolverService,
+      } = ctx.appContext.services;
       const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
       const explicitProvider =
         input.type === 'MANUAL' || input.type === 'GITHUB_ISSUE' || input.type === 'LINEAR_ISSUE'
@@ -268,7 +254,7 @@ export const workspaceRouter = router({
       }
 
       // Use the canonical workspace creation service
-      const workspaceCreationService = new WorkspaceCreationService({
+      const workspaceCreationService = createWorkspaceCreationService({
         logger,
       });
 
@@ -315,7 +301,8 @@ export const workspaceRouter = router({
   // Rename a workspace
   rename: publicProcedure
     .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(255) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.id);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
@@ -337,7 +324,8 @@ export const workspaceRouter = router({
           ),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { prSnapshotService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.id);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
@@ -372,6 +360,7 @@ export const workspaceRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
+      const { ratchetService, workspaceDataService } = ctx.appContext.services;
       await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
       const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
       if (!updatedWorkspace) {
@@ -401,8 +390,8 @@ export const workspaceRouter = router({
         ratchetSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
       })
     )
-    .mutation(async ({ input }) => {
-      const updated = await workspaceDataService.update(input.workspaceId, {
+    .mutation(async ({ ctx, input }) => {
+      const updated = await ctx.appContext.services.workspaceDataService.update(input.workspaceId, {
         defaultSessionProvider: input.defaultSessionProvider,
         ratchetSessionProvider: input.ratchetSessionProvider,
       });
@@ -413,7 +402,8 @@ export const workspaceRouter = router({
   archive: publicProcedure
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const workspace = await getWorkspaceWithProjectOrThrow(input.id);
+      const { archiveWorkspace, workspaceDataService } = ctx.appContext.services;
+      const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, input.id);
       return archiveWorkspace(
         workspace,
         {
@@ -434,6 +424,8 @@ export const workspaceRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
+      const { archiveWorkspace, workspaceDataService, workspaceQueryService } =
+        ctx.appContext.services;
       const { projectId, kanbanColumn, commitUncommitted = true } = input;
 
       // Get all workspaces in the specified kanban column
@@ -452,7 +444,10 @@ export const workspaceRouter = router({
       const results = [];
       for (const workspaceWithState of workspacesWithState) {
         try {
-          const workspace = await getWorkspaceWithProjectOrThrow(workspaceWithState.id);
+          const workspace = await getWorkspaceWithProjectOrThrow(
+            workspaceDataService,
+            workspaceWithState.id
+          );
           await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
@@ -475,30 +470,36 @@ export const workspaceRouter = router({
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const { cleanupWorkspaceRuntimeResources, workspaceDataService } = ctx.appContext.services;
     // Clean up running sessions, terminals, and dev processes before deleting
     await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
     const result = await workspaceDataService.delete(input.id);
-    cleanupWorkspaceScopedCaches(input.id);
+    ctx.appContext.services.cleanupWorkspaceScopedCaches(input.id);
     return result;
   }),
 
   // Refresh factory-factory.json configuration for all workspaces
   refreshFactoryConfigs: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ input }) =>
-      runScriptConfigPersistenceService.refreshFactoryConfigs(input.projectId)
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.runScriptConfigPersistenceService.refreshFactoryConfigs(
+        input.projectId
+      )
     ),
 
   // Get factory-factory.json configuration for a project
   getFactoryConfig: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => runScriptConfigPersistenceService.getFactoryConfig(input.projectId)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.runScriptConfigPersistenceService.getFactoryConfig(input.projectId)
+    ),
 
   // Sync PR status for a workspace (immediate refresh from GitHub)
   syncPRStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { fireLifecycleNotification, workspaceQueryService } = ctx.appContext.services;
       const result = await workspaceQueryService.syncPRStatus(input.workspaceId);
       if (result.success && result.prState && result.previousPrState !== result.prState) {
         const { prState } = result;
@@ -518,12 +519,16 @@ export const workspaceRouter = router({
   // Sync PR status for all workspaces in a project (immediate refresh from GitHub)
   syncAllPRStatuses: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ input }) => workspaceQueryService.syncAllPRStatuses(input.projectId)),
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.workspaceQueryService.syncAllPRStatuses(input.projectId)
+    ),
 
   // Check if workspace branch has changes relative to the project's default branch
   hasChanges: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(({ input }) => workspaceQueryService.hasChanges(input.workspaceId)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceQueryService.hasChanges(input.workspaceId)
+    ),
 
   // -------------------------------------------------------------------------
   // Child workspace procedures
@@ -541,15 +546,16 @@ export const workspaceRouter = router({
         reportBackOn: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
-      const workspaceId = await createChildWorkspace(input);
+    .mutation(async ({ ctx, input }) => {
+      const workspaceId = await ctx.appContext.services.createChildWorkspace(input);
       return { workspaceId };
     }),
 
   // List non-archived children of a workspace with status summaries
   listChildren: publicProcedure
     .input(z.object({ parentWorkspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { workspaceRelationshipsService } = ctx.appContext.services;
       const children = await workspaceRelationshipsService.findChildrenWithStatus(
         input.parentWorkspaceId
       );
@@ -571,7 +577,8 @@ export const workspaceRouter = router({
   // Get the parent workspace summary for a child workspace
   getParent: publicProcedure
     .input(z.object({ childWorkspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { workspaceRelationshipsService } = ctx.appContext.services;
       const parent = await workspaceRelationshipsService.findParent(input.childWorkspaceId);
       if (!parent) {
         return null;
@@ -594,6 +601,13 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const {
+        chatMessageHandlerService,
+        persistChildNotification,
+        sessionDataService,
+        sessionDomainService,
+        workspaceDataService,
+      } = ctx.appContext.services;
       const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
@@ -692,6 +706,13 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const {
+        chatMessageHandlerService,
+        persistParentNotification,
+        sessionDataService,
+        sessionDomainService,
+        workspaceDataService,
+      } = ctx.appContext.services;
       const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
@@ -789,6 +810,7 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const { archiveWorkspace, workspaceDataService } = ctx.appContext.services;
       const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
@@ -812,7 +834,9 @@ export const workspaceRouter = router({
   // Get count of undelivered notifications for a workspace
   getPendingNotificationCount: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(({ input }) => workspaceNotificationService.countPending(input.workspaceId)),
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.workspaceNotificationService.countPending(input.workspaceId)
+    ),
 
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,

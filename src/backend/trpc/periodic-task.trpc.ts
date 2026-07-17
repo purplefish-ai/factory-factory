@@ -1,6 +1,5 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { periodicTaskService } from '@/backend/services/periodic-task';
 import { publicProcedure, router } from './trpc';
 
 const scheduledTimeSchema = z
@@ -26,11 +25,12 @@ const timezoneSchema = z
   .optional();
 
 export const periodicTaskRouter = router({
-  list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ input }) => {
-    return periodicTaskService.list(input.projectId);
+  list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ ctx, input }) => {
+    return ctx.appContext.services.periodicTaskService.list(input.projectId);
   }),
 
-  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const { periodicTaskService } = ctx.appContext.services;
     const task = await periodicTaskService.get(input.id);
     if (!task) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Periodic task not found' });
@@ -49,8 +49,8 @@ export const periodicTaskRouter = router({
         timezone: timezoneSchema,
       })
     )
-    .mutation(({ input }) => {
-      return periodicTaskService.create(input);
+    .mutation(({ ctx, input }) => {
+      return ctx.appContext.services.periodicTaskService.create(input);
     }),
 
   update: publicProcedure
@@ -66,33 +66,38 @@ export const periodicTaskRouter = router({
         timezone: timezoneSchema,
       })
     )
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       const { id, ...data } = input;
-      return periodicTaskService.update(id, data);
+      return ctx.appContext.services.periodicTaskService.update(id, data);
     }),
 
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    await periodicTaskService.delete(input.id);
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    await ctx.appContext.services.periodicTaskService.delete(input.id);
     return { success: true };
   }),
 
   toggleEnabled: publicProcedure
     .input(z.object({ id: z.string(), enabled: z.boolean() }))
-    .mutation(({ input }) => {
-      return periodicTaskService.toggleEnabled(input.id, input.enabled);
+    .mutation(({ ctx, input }) => {
+      return ctx.appContext.services.periodicTaskService.toggleEnabled(input.id, input.enabled);
     }),
 
   listExecutions: publicProcedure
     .input(
       z.object({ periodicTaskId: z.string(), limit: z.number().int().min(1).max(100).optional() })
     )
-    .query(({ input }) => {
-      return periodicTaskService.listExecutions(input.periodicTaskId, input.limit);
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.periodicTaskService.listExecutions(
+        input.periodicTaskId,
+        input.limit ?? 20
+      );
     }),
 
   listExecutionsByPeriodicTaskId: publicProcedure
     .input(z.object({ periodicTaskId: z.string() }))
-    .query(({ input }) => {
-      return periodicTaskService.listExecutionsByPeriodicTaskId(input.periodicTaskId);
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.periodicTaskService.listExecutionsByPeriodicTaskId(
+        input.periodicTaskId
+      );
     }),
 });

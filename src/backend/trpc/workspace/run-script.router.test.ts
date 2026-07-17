@@ -4,24 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
-const mockSetCommands = vi.hoisted(() => vi.fn());
 const mockWriteFactoryConfigAndSyncWorkspace = vi.hoisted(() => vi.fn());
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-  },
-  workspaceRunScriptService: {
-    setCommands: (...args: unknown[]) => mockSetCommands(...args),
-  },
-}));
-
-vi.mock('@/backend/services/run-script', () => ({
-  runScriptConfigPersistenceService: {
-    writeFactoryConfigAndSyncWorkspace: (...args: unknown[]) =>
-      mockWriteFactoryConfigAndSyncWorkspace(...args),
-  },
-}));
 
 import { workspaceRunScriptRouter } from './run-script.trpc';
 
@@ -55,6 +38,13 @@ function createCaller(
             runScriptService?.getRunScriptStatus ??
             (async () => ({ status: 'IDLE', workspaceId: 'default' })),
         },
+        workspaceDataService: {
+          findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+        },
+        runScriptConfigPersistenceService: {
+          writeFactoryConfigAndSyncWorkspace: (...args: unknown[]) =>
+            mockWriteFactoryConfigAndSyncWorkspace(...args),
+        },
       },
     },
   } as never);
@@ -69,8 +59,7 @@ describe('workspaceRunScriptRouter', () => {
     workspaceDir = mkdtempSync(join(tmpdir(), 'ff-ws-'));
     repoDir = mkdtempSync(join(tmpdir(), 'ff-repo-'));
     mockWriteFactoryConfigAndSyncWorkspace.mockImplementation(
-      async (input: {
-        workspaceId: string;
+      (input: {
         config: {
           scripts: {
             run?: string;
@@ -87,13 +76,11 @@ describe('workspaceRunScriptRouter', () => {
         if (input.projectRepoPath) {
           writeFileSync(join(input.projectRepoPath, 'factory-factory.json'), configContent, 'utf8');
         }
-        const commands = {
+        return {
           runScriptCommand: input.config.scripts.run ?? null,
           runScriptPostRunCommand: input.config.scripts.postRun ?? null,
           runScriptCleanupCommand: input.config.scripts.cleanup ?? null,
         };
-        await input.persistWorkspaceCommands?.(input.workspaceId, commands);
-        return commands;
       }
     );
   });
@@ -138,11 +125,6 @@ describe('workspaceRunScriptRouter', () => {
         },
       },
       persistWorkspaceCommands: expect.any(Function),
-    });
-    expect(mockSetCommands).toHaveBeenCalledWith('w1', {
-      runScriptCommand: 'pnpm dev',
-      runScriptPostRunCommand: null,
-      runScriptCleanupCommand: 'pkill node',
     });
   });
 

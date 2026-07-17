@@ -29,6 +29,7 @@ function createCaller() {
           warn: vi.fn(),
           error: vi.fn(),
         }),
+        workspaceGitStateService: { invalidate: mockGitStateInvalidate },
       },
     },
   } as never);

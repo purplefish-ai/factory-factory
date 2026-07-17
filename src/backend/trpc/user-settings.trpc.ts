@@ -10,9 +10,8 @@ import {
   SessionProvider,
 } from '@prisma-gen/client';
 import { z } from 'zod';
+import type { ApplicationServices } from '@/backend/app-context';
 import { execCommand } from '@/backend/lib/shell';
-import { fetchCodexModelCatalogFromAppServer } from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
 import { publicProcedure, router } from './trpc';
 
 const providerModelOptionSchema = z.object({
@@ -57,7 +56,9 @@ function formatEffortLabel(value: string): string {
     .join(' ');
 }
 
-async function getCodexProviderOptions(): Promise<ProviderOptions> {
+async function getCodexProviderOptions(
+  fetchCodexModelCatalogFromAppServer: ApplicationServices['fetchCodexModelCatalogFromAppServer']
+): Promise<ProviderOptions> {
   try {
     const catalog = await fetchCodexModelCatalogFromAppServer();
     const effortsByValue = new Map<string, string | null>();
@@ -103,12 +104,14 @@ export const userSettingsRouter = router({
   /**
    * Get user settings
    */
-  get: publicProcedure.query(async () => {
-    return await userSettingsService.get();
+  get: publicProcedure.query(async ({ ctx }) => {
+    return await ctx.appContext.services.userSettingsQueryService.get();
   }),
 
-  getProviderOptions: publicProcedure.query(async () => {
-    const codex = await getCodexProviderOptions();
+  getProviderOptions: publicProcedure.query(async ({ ctx }) => {
+    const codex = await getCodexProviderOptions(
+      ctx.appContext.services.fetchCodexModelCatalogFromAppServer
+    );
     return {
       CLAUDE: CLAUDE_FALLBACK_OPTIONS,
       CODEX: codex,
@@ -152,12 +155,12 @@ export const userSettingsRouter = router({
         ratchetPermissions: z.nativeEnum(SessionPermissionPreset).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       // Additional validation: if preferredIde is custom, customIdeCommand must be provided
       if (input.preferredIde === 'custom' && !input.customIdeCommand) {
         throw new Error('Custom IDE command is required when using custom IDE');
       }
-      return await userSettingsService.update(input);
+      return await ctx.appContext.services.userSettingsQueryService.update(input);
     }),
 
   /**
@@ -210,8 +213,10 @@ export const userSettingsRouter = router({
    */
   getWorkspaceOrder: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
-      return await userSettingsService.getWorkspaceOrder(input.projectId);
+    .query(async ({ ctx, input }) => {
+      return await ctx.appContext.services.userSettingsQueryService.getWorkspaceOrder(
+        input.projectId
+      );
     }),
 
   /**
@@ -224,8 +229,11 @@ export const userSettingsRouter = router({
         workspaceIds: z.array(z.string()),
       })
     )
-    .mutation(async ({ input }) => {
-      await userSettingsService.updateWorkspaceOrder(input.projectId, input.workspaceIds);
+    .mutation(async ({ ctx, input }) => {
+      await ctx.appContext.services.userSettingsQueryService.updateWorkspaceOrder(
+        input.projectId,
+        input.workspaceIds
+      );
       return { success: true };
     }),
 });
