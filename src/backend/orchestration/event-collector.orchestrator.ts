@@ -28,8 +28,10 @@ import {
 import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
 import {
+  RATCHET_DISPATCH_CHANGED,
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
+  type RatchetDispatchChangedEvent,
   type RatchetStateChangedEvent,
   type RatchetToggledEvent,
   ratchetService,
@@ -48,6 +50,7 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
+  kanbanStateService,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
@@ -98,6 +101,15 @@ const logger = createLogger('event-collector');
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
+
+function refreshCachedKanbanColumn(workspaceId: string): void {
+  void kanbanStateService.updateCachedKanbanColumn(workspaceId).catch((error) => {
+    logger.warn('Failed to refresh cached kanban column after Ratchet change', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
 
 type EventCollectorSessionServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
@@ -568,6 +580,7 @@ function configureEventCollectorWithState(
       'event:ratchet_state_changed',
       { immediate: true }
     );
+    refreshCachedKanbanColumn(event.workspaceId);
   });
 
   // 4. Ratchet enabled/disabled toggles
@@ -578,9 +591,24 @@ function configureEventCollectorWithState(
       'event:ratchet_toggled',
       { immediate: true }
     );
+    refreshCachedKanbanColumn(event.workspaceId);
   });
 
-  // 5. Run-script status changes
+  // 5. Ratchet dispatch ownership changes
+  ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+    coalescer.enqueue(
+      event.workspaceId,
+      {
+        ratchetDispatchOutcome: event.outcome,
+        ratchetDispatchRetryCount: event.retryCount,
+      },
+      'event:ratchet_dispatch_changed',
+      { immediate: true }
+    );
+    refreshCachedKanbanColumn(event.workspaceId);
+  });
+
+  // 6. Run-script status changes
   runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
     coalescer.enqueue(
       event.workspaceId,
@@ -589,7 +617,7 @@ function configureEventCollectorWithState(
     );
   });
 
-  // 6. Workspace activity (active)
+  // 7. Workspace activity (active)
   workspaceActivityService.on('workspace_active', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(
       workspaceId,
@@ -599,7 +627,7 @@ function configureEventCollectorWithState(
     );
   });
 
-  // 7. Workspace activity (idle)
+  // 8. Workspace activity (idle)
   workspaceActivityService.on('workspace_idle', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(
       workspaceId,
@@ -610,7 +638,7 @@ function configureEventCollectorWithState(
     refreshPrSnapshotOnIdle(workspaceId);
   });
 
-  // 8. Session-level activity changes (running/idle transitions)
+  // 9. Session-level activity changes (running/idle transitions)
   workspaceActivityService.on(
     'session_activity_changed',
     ({ workspaceId }: { workspaceId: string; sessionId: string; isWorking: boolean }) => {
@@ -624,7 +652,7 @@ function configureEventCollectorWithState(
     }
   );
 
-  // 9. Prime session summaries on startup so fresh clients have tab runtime
+  // 10. Prime session summaries on startup so fresh clients have tab runtime
   // state before the first activity transition or reconciliation tick.
   for (const workspaceId of workspaceSnapshotStore.getAllWorkspaceIds()) {
     void refreshWorkspaceSessionSummaries(
@@ -638,7 +666,7 @@ function configureEventCollectorWithState(
     );
   }
 
-  // 10. Pending interactive request transitions (set/clear)
+  // 11. Pending interactive request transitions (set/clear)
   state.pendingRequestChangedHandler = ({ sessionId }) => {
     void refreshWorkspacePendingRequestType(
       state,
@@ -665,7 +693,7 @@ function configureEventCollectorWithState(
   );
   state.listenerSessionDomainService = state.eventCollectorSessionServices.sessionDomainService;
 
-  logger.info('Event collector configured with 10 event subscriptions');
+  logger.info('Event collector configured with 11 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------

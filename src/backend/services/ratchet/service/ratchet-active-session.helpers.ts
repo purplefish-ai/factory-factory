@@ -81,8 +81,13 @@ export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
+  onDispatchChanged?: (event: {
+    workspaceId: string;
+    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>;
+    retryCount: number;
+  }) => void;
 }): Promise<ActiveFixerCheckResult> {
-  const { workspace, sessionBridge, signal } = params;
+  const { workspace, sessionBridge, signal, onDispatchChanged } = params;
   signal?.throwIfAborted();
 
   const sessionId = workspace.ratchetActiveSessionId;
@@ -109,6 +114,11 @@ export async function checkActiveFixerSession(params: {
       });
       return { kind: 'ended_concurrently' };
     }
+    onDispatchChanged?.({
+      workspaceId: workspace.id,
+      outcome,
+      retryCount: workspace.ratchetDispatchRetryCount,
+    });
     logger.info('Settled ratchet dispatch record for ended fixer session', {
       workspaceId: workspace.id,
       sessionId,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: { on: vi.fn() },
   workspaceActivityService: { on: vi.fn(), clearWorkspace: vi.fn() },
   computePendingRequestType: vi.fn().mockReturnValue(null),
+  kanbanStateService: { updateCachedKanbanColumn: vi.fn().mockResolvedValue(undefined) },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -41,6 +43,7 @@ vi.mock('@/backend/services/github', () => ({
 }));
 
 vi.mock('@/backend/services/ratchet', () => ({
+  RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
   ratchetService: {
@@ -114,6 +117,7 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
+  kanbanStateService,
   workspaceActivityService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -443,7 +447,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 10 event listeners on domain singletons', () => {
+  it('registers 11 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -455,9 +459,13 @@ describe('configureEventCollector', () => {
     // prSnapshotService: 1 listener (PR_SNAPSHOT_UPDATED)
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_snapshot_updated', expect.any(Function));
 
-    // ratchetService: 2 listeners (RATCHET_STATE_CHANGED + RATCHET_TOGGLED)
+    // ratchetService: 3 listeners (state, toggle, and dispatch changes)
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_state_changed', expect.any(Function));
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_toggled', expect.any(Function));
+    expect(ratchetService.on).toHaveBeenCalledWith(
+      'ratchet_dispatch_changed',
+      expect.any(Function)
+    );
 
     // runScriptStateMachine: 1 listener (RUN_SCRIPT_STATUS_CHANGED)
     expect(runScriptStateMachine.on).toHaveBeenCalledWith(
@@ -679,6 +687,39 @@ describe('configureEventCollector', () => {
       { ratchetState: 'MERGED' },
       'event:ratchet_state_changed'
     );
+    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('ratchet_dispatch_changed immediately publishes ownership and refreshes the cache', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      outcome: string;
+      retryCount: number;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      outcome: 'DIED',
+      retryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+    });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      {
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+      },
+      'event:ratchet_dispatch_changed'
+    );
+    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
 
   it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {
@@ -970,6 +1011,7 @@ describe('configureEventCollector', () => {
       { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
       'event:ratchet_toggled'
     );
+    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
 
   it('stopEventCollector flushes pending and clears coalescer', () => {

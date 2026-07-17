@@ -60,6 +60,13 @@ export type { RatchetAction, RatchetCheckResult, WorkspaceRatchetResult } from '
 
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
 export const RATCHET_TOGGLED = 'ratchet_toggled' as const;
+export const RATCHET_DISPATCH_CHANGED = 'ratchet_dispatch_changed' as const;
+
+export interface RatchetDispatchChangedEvent {
+  workspaceId: string;
+  outcome: RatchetDispatchOutcome | null;
+  retryCount: number;
+}
 
 export interface RatchetStateChangedEvent {
   workspaceId: string;
@@ -292,7 +299,24 @@ class RatchetService extends EventEmitter {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
-    await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
+    const settled = await workspaceAccessor.recordRatchetSessionEnd(
+      workspaceId,
+      sessionId,
+      outcome
+    );
+    if (!settled) {
+      return;
+    }
+
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace) {
+      return;
+    }
+    this.emit(RATCHET_DISPATCH_CHANGED, {
+      workspaceId,
+      outcome: workspace.ratchetDispatchOutcome,
+      retryCount: workspace.ratchetDispatchRetryCount,
+    } satisfies RatchetDispatchChangedEvent);
   }
 
   /**
@@ -926,6 +950,9 @@ class RatchetService extends EventEmitter {
       workspace,
       sessionBridge: this.session,
       signal,
+      onDispatchChanged: (event) => {
+        this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);
+      },
     });
   }
 
@@ -971,7 +998,7 @@ class RatchetService extends EventEmitter {
       // Direct private-method callers do not have a coordinator timeout to disable.
     }
   ): Promise<RatchetAction> {
-    return await triggerRatchetFixer({
+    const action = await triggerRatchetFixer({
       workspace,
       prStateInfo,
       retryCount,
@@ -979,6 +1006,14 @@ class RatchetService extends EventEmitter {
       signal,
       commitSideEffects,
     });
+    if (action.type === 'TRIGGERED_FIXER' && action.promptSent) {
+      this.emit(RATCHET_DISPATCH_CHANGED, {
+        workspaceId: workspace.id,
+        outcome: 'RUNNING',
+        retryCount,
+      } satisfies RatchetDispatchChangedEvent);
+    }
+    return action;
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {
