@@ -131,10 +131,10 @@ async function callTrpcMutation(
     });
     const body = (await res.json()) as {
       result?: { data?: { json?: unknown } };
-      error?: { message?: string };
+      error?: { json?: { message?: string }; message?: string };
     };
     if (!res.ok || body.error) {
-      return { error: body.error?.message ?? `HTTP ${res.status}` };
+      return { error: body.error?.json?.message ?? body.error?.message ?? `HTTP ${res.status}` };
     }
     return { result: body.result?.data?.json };
   } catch (err) {
@@ -154,10 +154,10 @@ async function callTrpcQuery(
     const res = await fetch(url, { method: 'GET' });
     const body = (await res.json()) as {
       result?: { data?: { json?: unknown } };
-      error?: { message?: string };
+      error?: { json?: { message?: string }; message?: string };
     };
     if (!res.ok || body.error) {
-      return { error: body.error?.message ?? `HTTP ${res.status}` };
+      return { error: body.error?.json?.message ?? body.error?.message ?? `HTTP ${res.status}` };
     }
     return { result: body.result?.data?.json };
   } catch (err) {
