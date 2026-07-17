@@ -8,6 +8,24 @@ interface DismissibleInitBanner {
   showDismiss?: boolean;
 }
 
+export function shouldFetchArchiveGitStatus(
+  archiveDialogOpen: boolean,
+  worktreePath: string | null | undefined
+): boolean {
+  return archiveDialogOpen && Boolean(worktreePath);
+}
+
+export function getArchiveGitStatusQueryOptions(
+  archiveDialogOpen: boolean,
+  worktreePath: string | null | undefined
+) {
+  return {
+    enabled: shouldFetchArchiveGitStatus(archiveDialogOpen, worktreePath),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  } as const;
+}
+
 export function getVisibleInitBanner<T extends DismissibleInitBanner>(
   banner: T | null | undefined,
   setupWarningDismissed: boolean | null

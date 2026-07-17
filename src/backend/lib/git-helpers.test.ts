@@ -113,11 +113,19 @@ describe('parseGitStatusOutput', () => {
 });
 
 describe('parseNumstatOutput', () => {
+  it('derives additions, deletions, and file count from one numstat output', () => {
+    expect(parseNumstatOutput('2\t1\ta.ts\n-\t-\timage.png\n')).toEqual({
+      total: 2,
+      additions: 2,
+      deletions: 1,
+    });
+  });
+
   it('should parse single file stats', () => {
     const output = '10\t5\tsrc/file.ts';
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 10, deletions: 5 });
+    expect(result).toEqual({ total: 1, additions: 10, deletions: 5 });
   });
 
   it('should sum stats from multiple files', () => {
@@ -125,7 +133,7 @@ describe('parseNumstatOutput', () => {
 
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 35, deletions: 23 });
+    expect(result).toEqual({ total: 3, additions: 35, deletions: 23 });
   });
 
   it('should handle binary files (marked with -)', () => {
@@ -137,39 +145,39 @@ describe('parseNumstatOutput', () => {
 
     const result = parseNumstatOutput(output);
 
-    // Binary files should be skipped (not counted)
-    expect(result).toEqual({ additions: 13, deletions: 7 });
+    // Binary files count toward the file total but not line totals.
+    expect(result).toEqual({ total: 3, additions: 13, deletions: 7 });
   });
 
   it('should handle binary file additions only', () => {
     const output = '-\t-\timage.png';
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 0, deletions: 0 });
+    expect(result).toEqual({ total: 1, additions: 0, deletions: 0 });
   });
 
   it('should return zeros for empty output', () => {
     const result = parseNumstatOutput('');
-    expect(result).toEqual({ additions: 0, deletions: 0 });
+    expect(result).toEqual({ total: 0, additions: 0, deletions: 0 });
   });
 
   it('should return zeros for whitespace-only output', () => {
     const result = parseNumstatOutput('   \n\n   ');
-    expect(result).toEqual({ additions: 0, deletions: 0 });
+    expect(result).toEqual({ total: 0, additions: 0, deletions: 0 });
   });
 
   it('should handle zero additions or deletions', () => {
     const output = '0\t10\tsrc/file.ts';
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 0, deletions: 10 });
+    expect(result).toEqual({ total: 1, additions: 0, deletions: 10 });
   });
 
   it('should handle large numbers', () => {
     const output = '1000\t500\tsrc/large-file.ts';
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 1000, deletions: 500 });
+    expect(result).toEqual({ total: 1, additions: 1000, deletions: 500 });
   });
 
   it('should handle files with tabs in the path', () => {
@@ -178,7 +186,7 @@ describe('parseNumstatOutput', () => {
     const output = '5\t3\tsrc/file.ts';
     const result = parseNumstatOutput(output);
 
-    expect(result).toEqual({ additions: 5, deletions: 3 });
+    expect(result).toEqual({ total: 1, additions: 5, deletions: 3 });
   });
 
   it('should handle malformed lines gracefully', () => {
@@ -187,6 +195,6 @@ describe('parseNumstatOutput', () => {
     const result = parseNumstatOutput(output);
 
     // The first "word" becomes NaN which becomes 0
-    expect(result).toEqual({ additions: 0, deletions: 0 });
+    expect(result).toEqual({ total: 1, additions: 0, deletions: 0 });
   });
 });
