@@ -55,6 +55,44 @@ describe('useWorkspaceInitStatus', () => {
 
     root.unmount();
   });
+
+  it('returns to an unhydrated dismissal state when the workspace changes', async () => {
+    const initStatus = {
+      status: 'READY',
+      initErrorMessage: 'Setup failed',
+      chatBanner: { showDismiss: true },
+      hasWorktreePath: true,
+    };
+    getInitStatusUseQueryMock.mockReturnValue({ data: initStatus, isPending: false });
+    const observedStates: Array<{ workspaceId: string; dismissed: boolean | null }> = [];
+
+    function Probe({ workspaceId }: { workspaceId: string }) {
+      const utils = trpc.useUtils();
+      const { setupWarningDismissed } = useWorkspaceInitStatus(workspaceId, undefined, utils);
+      observedStates.push({ workspaceId, dismissed: setupWarningDismissed });
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe, { workspaceId: 'workspace-1' }));
+    });
+    await vi.waitFor(() => {
+      expect(observedStates.at(-1)).toEqual({ workspaceId: 'workspace-1', dismissed: false });
+    });
+
+    observedStates.length = 0;
+    flushSync(() => {
+      root.render(createElement(Probe, { workspaceId: 'workspace-2' }));
+    });
+
+    expect(observedStates[0]).toEqual({ workspaceId: 'workspace-2', dismissed: null });
+
+    root.unmount();
+  });
 });
 
 describe('resolveSelectedSessionId', () => {

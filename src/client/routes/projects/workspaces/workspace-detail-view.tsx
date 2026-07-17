@@ -17,6 +17,7 @@ import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
+import { getVisibleInitBanner } from './workspace-detail-container.utils';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 interface WorkspaceStateProps {
@@ -89,15 +90,18 @@ function ScriptBanner({
   setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
 }) {
-  const isDismissible = workspaceInitStatus?.chatBanner?.showDismiss === true;
-  if (isScriptFailed && (!isDismissible || setupWarningDismissed === false)) {
+  const visibleBanner = getVisibleInitBanner(
+    workspaceInitStatus?.chatBanner,
+    setupWarningDismissed
+  );
+  if (isScriptFailed && visibleBanner) {
     return (
       <ScriptFailedBanner
         workspaceId={workspaceId}
         initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
         initOutput={workspaceInitStatus?.initOutput ?? null}
         hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
-        showDismiss={workspaceInitStatus?.chatBanner?.showDismiss ?? false}
+        showDismiss={visibleBanner.showDismiss}
         onDismiss={dismissSetupWarning}
       />
     );

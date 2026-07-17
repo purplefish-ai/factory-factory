@@ -66,7 +66,18 @@ export function useWorkspaceInitStatus(
     (status === 'FAILED' && hasWorktreePath) || (status === 'READY' && !!initErrorMessage);
 
   // Persisted per workspace/error so navigating away and back does not resurface dismissed warnings.
-  const [setupWarningDismissed, setSetupWarningDismissed] = useState<boolean | null>(null);
+  // Keep the identity alongside the value so a previous workspace's hydrated `false` cannot make a
+  // newly selected workspace flash its warning before this effect reads that warning's storage key.
+  const [hydratedSetupWarning, setHydratedSetupWarning] = useState<{
+    workspaceId: string;
+    initErrorMessage: string | null;
+    dismissed: boolean;
+  } | null>(null);
+  const setupWarningDismissed =
+    hydratedSetupWarning?.workspaceId === workspaceId &&
+    hydratedSetupWarning.initErrorMessage === initErrorMessage
+      ? hydratedSetupWarning.dismissed
+      : null;
   useEffect(() => {
     if (!workspaceInitStatus) {
       return;
@@ -74,21 +85,25 @@ export function useWorkspaceInitStatus(
 
     if (!initErrorMessage) {
       forgetSetupWarningDismissed(workspaceId);
-      setSetupWarningDismissed(false);
+      setHydratedSetupWarning({ workspaceId, initErrorMessage, dismissed: false });
       return;
     }
 
     if (workspaceInitStatus.chatBanner?.showDismiss !== true) {
-      setSetupWarningDismissed(false);
+      setHydratedSetupWarning({ workspaceId, initErrorMessage, dismissed: false });
       return;
     }
 
-    setSetupWarningDismissed(isSetupWarningDismissed(workspaceId, initErrorMessage));
+    setHydratedSetupWarning({
+      workspaceId,
+      initErrorMessage,
+      dismissed: isSetupWarningDismissed(workspaceId, initErrorMessage),
+    });
   }, [workspaceId, workspaceInitStatus, initErrorMessage]);
 
   const dismissSetupWarning = useCallback(() => {
     rememberSetupWarningDismissed(workspaceId, initErrorMessage);
-    setSetupWarningDismissed(true);
+    setHydratedSetupWarning({ workspaceId, initErrorMessage, dismissed: true });
   }, [workspaceId, initErrorMessage]);
 
   return {
