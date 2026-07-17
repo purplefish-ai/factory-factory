@@ -3196,6 +3196,131 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   describe('triggerFixer error handling', () => {
+    it('persists and commits a dispatch while prompt completion is pending', async () => {
+      let finishPrompt!: (result: boolean) => void;
+      const promptCompletion = new Promise<boolean>((resolve) => {
+        finishPrompt = resolve;
+      });
+      let finishRecord!: (recorded: boolean) => void;
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'pending-prompt-session',
+        promptSent: true,
+        promptCompletion,
+      });
+      vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishRecord = resolve;
+          })
+      );
+      const commitSideEffects = vi.fn();
+
+      const trigger = unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-pending-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        new AbortController().signal,
+        commitSideEffects
+      );
+
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalled()
+      );
+      expect(commitSideEffects).not.toHaveBeenCalled();
+      finishRecord(true);
+      await expect(trigger).resolves.toMatchObject({ type: 'TRIGGERED_FIXER' });
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+
+      finishPrompt(true);
+      await promptCompletion;
+    });
+
+    it('settles a persisted dispatch as died when prompt completion fails', async () => {
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'failed-prompt-session',
+        promptSent: true,
+        promptCompletion: Promise.resolve(false),
+      });
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      const result = await unsafeCoerce<{
+        triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-failed-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0
+      );
+
+      expect(result).toMatchObject({ type: 'TRIGGERED_FIXER' });
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+          'ws-failed-prompt',
+          'failed-prompt-session',
+          'DIED'
+        )
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('failed-prompt-session');
+    });
+
+    it('does not stop a newer active session when an old prompt completion fails', async () => {
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'stale-prompt-session',
+        promptSent: true,
+        promptCompletion: Promise.resolve(false),
+      });
+      vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(false);
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      await unsafeCoerce<{
+        triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-replaced-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0
+      );
+
+      await vi.waitFor(() => expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalled());
+      expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+    });
+
     it('does not clean up a fixer after its dispatch record is persisted', async () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');
@@ -3204,6 +3329,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'started',
         sessionId: 'cancelled-session',
         promptSent: true,
+        promptCompletion: Promise.resolve(false),
       });
       vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockImplementation(
         () =>
@@ -3246,8 +3372,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await expect(trigger).rejects.toBe(timeoutError);
       expect(commitSideEffects).toHaveBeenCalledTimes(1);
-      expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
-      expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+          'ws-cancelled-dispatch',
+          'cancelled-session',
+          'DIED'
+        )
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('cancelled-session');
     });
 
     it('cleans up a started fixer when dispatch persistence fails', async () => {
@@ -3291,7 +3423,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       );
 
       expect(result).toMatchObject({ type: 'ERROR', error: 'dispatch record write failed' });
-      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      expect(commitSideEffects).not.toHaveBeenCalled();
       expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
         'ws-unrecorded-dispatch',
         'unrecorded-session',
