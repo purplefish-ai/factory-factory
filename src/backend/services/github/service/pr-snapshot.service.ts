@@ -232,7 +232,25 @@ class PRSnapshotService extends EventEmitter {
         prReviewState: snapshot.prReviewState,
         prCiStatus: snapshot.prCiStatus,
       };
-      await this.applySnapshot(workspaceId, snapshotData, { eventPrUrl: prUrl });
+      const persisted = await workspaceAccessor.updatePRSnapshotIfUrlMatches(
+        workspaceId,
+        prUrl,
+        snapshotData,
+        new Date()
+      );
+      if (!persisted) {
+        return { success: false, reason: 'claim_stale' };
+      }
+
+      await this.kanban.updateCachedKanbanColumn(workspaceId);
+      this.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId,
+        prUrl,
+        prNumber: snapshotData.prNumber,
+        prState: snapshotData.prState,
+        prCiStatus: snapshotData.prCiStatus,
+        prReviewState: snapshotData.prReviewState,
+      } satisfies PRSnapshotUpdatedEvent);
 
       return { success: true, snapshot: snapshotData };
     } catch (error) {

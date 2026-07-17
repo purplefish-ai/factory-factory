@@ -27,4 +27,17 @@ describe('maybeDiscoverPROnSessionEnd', () => {
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledOnce();
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
   });
+
+  it('logs and suppresses reset failures', async () => {
+    const error = new Error('database unavailable');
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    mockResetPRDiscoveryBackoff.mockRejectedValue(error);
+
+    await expect(maybeDiscoverPROnSessionEnd('workspace-1', logger)).resolves.toBeUndefined();
+
+    expect(debug).toHaveBeenCalledWith('PR discovery backoff reset on session end failed', {
+      workspaceId: 'workspace-1',
+      error: 'database unavailable',
+    });
+  });
 });

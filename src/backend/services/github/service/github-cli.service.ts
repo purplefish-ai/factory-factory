@@ -18,7 +18,7 @@ import {
 import {
   fullPRDetailsSchema,
   issueSchema,
-  openPullRequestSchema,
+  openPullRequestsGraphQLSchema,
   prStatusSchema,
   type ResolvedReviewThreadsPage,
   type ReviewThreadCommentsConnection,
@@ -438,23 +438,51 @@ class GitHubCLIService {
 
   /** List every open pull request in a repository for local branch matching. */
   async listOpenPRs(owner: string, repo: string): Promise<OpenPullRequest[]> {
-    const { stdout } = await this.exec(
-      [
-        'pr',
-        'list',
-        '--repo',
-        `${owner}/${repo}`,
-        '--state',
-        'open',
-        '--json',
-        'number,url,createdAt,headRefName',
-        '--limit',
-        '1000',
-      ],
-      { timeout: GH_TIMEOUT_MS.default }
-    );
+    const prs: OpenPullRequest[] = [];
+    const seenCursors = new Set<string>();
+    let afterCursor: string | null = null;
 
-    return parseGhJson(openPullRequestSchema.array(), stdout, 'listOpenPRs');
+    while (true) {
+      const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
+      const query = `
+        query {
+          repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) {
+            pullRequests(
+              states: OPEN
+              first: 100${afterClause}
+              orderBy: { field: CREATED_AT, direction: DESC }
+            ) {
+              pageInfo { hasNextPage endCursor }
+              nodes { number url createdAt headRefName }
+            }
+          }
+        }
+      `;
+
+      const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+        timeout: GH_TIMEOUT_MS.default,
+      });
+      const parsed = parseGhJson(openPullRequestsGraphQLSchema, stdout, 'listOpenPRs');
+      const connection = parsed.data.repository?.pullRequests;
+      if (!connection) {
+        throw new Error(`GitHub repository not found: ${owner}/${repo}`);
+      }
+
+      prs.push(...connection.nodes);
+      if (!connection.pageInfo.hasNextPage) {
+        return prs;
+      }
+
+      const nextCursor = connection.pageInfo.endCursor;
+      if (!nextCursor) {
+        throw new Error('GitHub open PR page is missing an end cursor');
+      }
+      if (seenCursors.has(nextCursor)) {
+        throw new Error('GitHub open PR pagination repeated a cursor');
+      }
+      seenCursors.add(nextCursor);
+      afterCursor = nextCursor;
+    }
   }
 
   /**

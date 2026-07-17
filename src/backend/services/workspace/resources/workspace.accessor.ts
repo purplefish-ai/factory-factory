@@ -162,6 +162,13 @@ export interface PRDiscoveryClaim {
   nextCheckAt: Date;
 }
 
+export interface PRSnapshotFields {
+  prNumber: number;
+  prState: PRState;
+  prReviewState: string | null;
+  prCiStatus: CIStatus;
+}
+
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
@@ -651,6 +658,23 @@ class WorkspaceAccessor {
       },
       data: {
         prUrl,
+        prUpdatedAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /** Atomically update snapshot fields only while the expected PR remains attached. */
+  async updatePRSnapshotIfUrlMatches(
+    id: string,
+    prUrl: string,
+    snapshot: PRSnapshotFields,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id, prUrl },
+      data: {
+        ...snapshot,
         prUpdatedAt,
       },
     });

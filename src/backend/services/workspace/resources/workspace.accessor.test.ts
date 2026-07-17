@@ -240,6 +240,39 @@ describe('workspaceAccessor', () => {
       });
     });
 
+    it('updates a discovered PR snapshot only while its URL remains attached', async () => {
+      const prUpdatedAt = new Date('2026-07-17T12:02:00.000Z');
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceAccessor.updatePRSnapshotIfUrlMatches(
+          'ws-1',
+          'https://github.com/org/repo/pull/12',
+          {
+            prNumber: 12,
+            prState: 'OPEN',
+            prReviewState: 'APPROVED',
+            prCiStatus: 'SUCCESS',
+          },
+          prUpdatedAt
+        )
+      ).resolves.toBe(true);
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ws-1',
+          prUrl: 'https://github.com/org/repo/pull/12',
+        },
+        data: {
+          prNumber: 12,
+          prState: 'OPEN',
+          prReviewState: 'APPROVED',
+          prCiStatus: 'SUCCESS',
+          prUpdatedAt,
+        },
+      });
+    });
+
     it('resets discovery backoff only while the workspace remains eligible', async () => {
       mockUpdateMany.mockResolvedValue({ count: 1 });
 

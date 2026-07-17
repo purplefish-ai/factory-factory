@@ -72,6 +72,22 @@ export const openPullRequestSchema = prListItemSchema.extend({
   headRefName: z.string(),
 });
 
+export const openPullRequestsGraphQLSchema = z.object({
+  data: z.object({
+    repository: z
+      .object({
+        pullRequests: z.object({
+          pageInfo: z.object({
+            hasNextPage: z.boolean(),
+            endCursor: z.string().nullable(),
+          }),
+          nodes: z.array(openPullRequestSchema),
+        }),
+      })
+      .nullable(),
+  }),
+});
+
 const fullPRCheckRunSchema = z.object({
   __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
   name: z.string(),

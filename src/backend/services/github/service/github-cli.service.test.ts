@@ -903,7 +903,24 @@ describe('GitHubCLIService', () => {
   });
 
   describe('listOpenPRs', () => {
-    it('lists all open pull requests for a repository in one command', async () => {
+    const page = (
+      nodes: Array<{
+        number: number;
+        url: string;
+        createdAt: string;
+        headRefName?: string;
+      }>,
+      pageInfo: { hasNextPage: boolean; endCursor: string | null }
+    ) =>
+      JSON.stringify({
+        data: {
+          repository: {
+            pullRequests: { nodes, pageInfo },
+          },
+        },
+      });
+
+    it('lists open pull requests through the repository connection', async () => {
       const prs = [
         {
           number: 11,
@@ -912,37 +929,69 @@ describe('GitHubCLIService', () => {
           headRefName: 'feature/one',
         },
       ];
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
+      mockExecFile.mockResolvedValue({
+        stdout: page(prs, { hasNextPage: false, endCursor: null }),
+        stderr: '',
+      });
 
       await expect(githubCLIService.listOpenPRs('Owner', 'Repo')).resolves.toEqual(prs);
       expect(mockExecFile).toHaveBeenCalledTimes(1);
       expect(mockExecFile).toHaveBeenCalledWith(
         'gh',
         [
-          'pr',
-          'list',
-          '--repo',
-          'Owner/Repo',
-          '--state',
-          'open',
-          '--json',
-          'number,url,createdAt,headRefName',
-          '--limit',
-          '1000',
+          'api',
+          'graphql',
+          '-f',
+          expect.stringContaining('repository(owner: "Owner", name: "Repo")'),
         ],
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+    });
+
+    it('continues paging beyond 1,000 open pull requests', async () => {
+      for (let pageIndex = 0; pageIndex < 11; pageIndex++) {
+        const prs = Array.from({ length: 100 }, (_, itemIndex) => {
+          const number = pageIndex * 100 + itemIndex + 1;
+          return {
+            number,
+            url: `https://github.com/owner/repo/pull/${number}`,
+            createdAt: '2024-01-02T00:00:00Z',
+            headRefName: `feature/${number}`,
+          };
+        });
+        mockExecFile.mockResolvedValueOnce({
+          stdout: page(prs, {
+            hasNextPage: pageIndex < 10,
+            endCursor: pageIndex < 10 ? `cursor-${pageIndex + 1}` : null,
+          }),
+          stderr: '',
+        });
+      }
+
+      const result = await githubCLIService.listOpenPRs('owner', 'repo');
+
+      expect(result).toHaveLength(1100);
+      expect(result.at(-1)).toMatchObject({ number: 1100, headRefName: 'feature/1100' });
+      expect(mockExecFile).toHaveBeenCalledTimes(11);
+      expect(mockExecFile).toHaveBeenLastCalledWith(
+        'gh',
+        ['api', 'graphql', '-f', expect.stringContaining('after: "cursor-10"')],
         expect.objectContaining({ timeout: expect.any(Number) })
       );
     });
 
     it('rejects malformed repository pull request data', async () => {
       mockExecFile.mockResolvedValue({
-        stdout: JSON.stringify([
-          {
-            number: 11,
-            url: 'https://github.com/owner/repo/pull/11',
-            createdAt: '2024-01-02T00:00:00Z',
-          },
-        ]),
+        stdout: page(
+          [
+            {
+              number: 11,
+              url: 'https://github.com/owner/repo/pull/11',
+              createdAt: '2024-01-02T00:00:00Z',
+            },
+          ],
+          { hasNextPage: false, endCursor: null }
+        ),
         stderr: '',
       });
 

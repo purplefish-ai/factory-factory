@@ -215,6 +215,10 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['prUrl', 'prUpdatedAt'],
   },
+  updatePRSnapshotIfUrlMatches: {
+    type: 'static',
+    fields: ['prNumber', 'prState', 'prReviewState', 'prCiStatus', 'prUpdatedAt'],
+  },
   resetPRDiscoveryBackoff: {
     type: 'static',
     fields: [
