@@ -237,6 +237,7 @@ export const UserSettingsScalarFieldEnum = {
   cachedSlashCommands: 'cachedSlashCommands',
   ratchetEnabled: 'ratchetEnabled',
   ratchetReplyToPrComments: 'ratchetReplyToPrComments',
+  ratchetReviewTriggerMode: 'ratchetReviewTriggerMode',
   defaultSessionProvider: 'defaultSessionProvider',
   defaultClaudeModel: 'defaultClaudeModel',
   defaultCodexModel: 'defaultCodexModel',

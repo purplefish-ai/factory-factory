@@ -3,6 +3,7 @@ export {
   IssueProvider,
   KanbanColumn,
   PRState,
+  RatchetReviewTriggerMode,
   RatchetState,
   RunScriptStatus,
   SessionPermissionPreset,

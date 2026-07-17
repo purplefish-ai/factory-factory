@@ -89,6 +89,26 @@ describe('userSettingsRouter', () => {
     });
   });
 
+  it('updates the ratchet review trigger mode', async () => {
+    mockUpdate.mockResolvedValue({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+
+    const caller = createCaller();
+
+    await expect(
+      caller.update({
+        ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      })
+    ).resolves.toEqual({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+  });
+
   it('requires command when preferred ide is custom', async () => {
     const caller = createCaller();
     await expect(caller.update({ preferredIde: 'custom' })).rejects.toThrow(

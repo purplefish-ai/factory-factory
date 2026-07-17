@@ -323,6 +323,7 @@ async function importUserSettings(
       // Ratchet settings
       ratchetEnabled: settings.ratchetEnabled,
       ratchetReplyToPrComments: settings.ratchetReplyToPrComments,
+      ratchetReviewTriggerMode: settings.ratchetReviewTriggerMode,
       defaultSessionProvider: settings.defaultSessionProvider,
       defaultClaudeModel: settings.defaultClaudeModel,
       defaultCodexModel: settings.defaultCodexModel,
@@ -468,6 +469,7 @@ class DataBackupService {
               // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
               ratchetReplyToPrComments: userSettings.ratchetReplyToPrComments,
+              ratchetReviewTriggerMode: userSettings.ratchetReviewTriggerMode,
               defaultSessionProvider: userSettings.defaultSessionProvider,
               defaultClaudeModel: userSettings.defaultClaudeModel,
               defaultCodexModel: userSettings.defaultCodexModel,

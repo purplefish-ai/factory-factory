@@ -76,6 +76,13 @@ export const RatchetState = {
 } as const;
 export type RatchetState = (typeof RatchetState)[keyof typeof RatchetState];
 
+export const RatchetReviewTriggerMode = {
+  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+  ALL_REVIEW_FEEDBACK: 'ALL_REVIEW_FEEDBACK',
+} as const;
+export type RatchetReviewTriggerMode =
+  (typeof RatchetReviewTriggerMode)[keyof typeof RatchetReviewTriggerMode];
+
 export const WorkspaceCreationSource = {
   MANUAL: 'MANUAL',
   RESUME_BRANCH: 'RESUME_BRANCH',

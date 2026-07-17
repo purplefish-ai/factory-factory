@@ -20,6 +20,7 @@ import {
   buildReviewSummariesForPrompt,
   computeCiSnapshotKey,
   computeDispatchSnapshotKey,
+  computeLatestReviewActivityAtMs,
   determineRatchetState,
   fetchPRState,
   shouldSkipCleanPR,
@@ -139,6 +140,23 @@ describe('shouldSkipCleanPR', () => {
     const prState = makePRState({ hasChangesRequested: true });
     expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
   });
+
+  it('does not skip when actionable review comments are still present', () => {
+    const prState = makePRState({
+      latestReviewActivityAtMs: new Date('2025-12-31T00:00:00Z').getTime(),
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please handle this edge case.',
+          path: 'src/example.ts',
+          line: 10,
+          url: 'https://github.com/example/repo/pull/1#discussion_r1',
+        },
+      ],
+    });
+
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
+  });
 });
 
 describe('fetchPRState', () => {
@@ -181,6 +199,7 @@ describe('fetchPRState', () => {
     const result = await fetchPRState({
       workspace: makeWorkspace(),
       authenticatedUsername: null,
+      reviewTriggerMode: 'CHANGES_REQUESTED' as const,
       github,
       backoff,
     });
@@ -214,6 +233,7 @@ describe('fetchPRState', () => {
     const result = await fetchPRState({
       workspace: makeWorkspace(),
       authenticatedUsername: null,
+      reviewTriggerMode: 'CHANGES_REQUESTED',
       github,
       backoff,
       bypassRecentFetchCooldown: true,
@@ -237,6 +257,7 @@ describe('fetchPRState', () => {
     const result = await fetchPRState({
       workspace: makeWorkspace(),
       authenticatedUsername: null,
+      reviewTriggerMode: 'CHANGES_REQUESTED',
       github,
       backoff,
       bypassRecentFetchCooldown: true,
@@ -269,6 +290,7 @@ describe('fetchPRState', () => {
       fetchPRState({
         workspace: makeWorkspace(),
         authenticatedUsername: null,
+        reviewTriggerMode: 'CHANGES_REQUESTED',
         github,
         backoff,
         signal: controller.signal,
@@ -433,6 +455,7 @@ describe('fetchPRState', () => {
         prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
       } as never,
       authenticatedUsername: null,
+      reviewTriggerMode: 'CHANGES_REQUESTED' as const,
       github,
       backoff: { handleError: vi.fn() } as never,
     };
@@ -528,6 +551,72 @@ describe('fetchPRState', () => {
       expect.objectContaining({ workspaceId: 'ws-1', error: 'GraphQL unavailable' })
     );
   });
+
+  it('excludes top-level commented summaries and ordinary comments in changes-requested mode', async () => {
+    const github = makeFetchGitHub({
+      getPRFullDetails: vi.fn().mockResolvedValue({
+        state: 'OPEN',
+        number: 123,
+        url: 'https://github.com/example/repo/pull/123',
+        reviewDecision: null,
+        mergeStateStatus: 'CLEAN',
+        reviews: [
+          {
+            author: { login: 'cubic-dev-ai' },
+            state: 'COMMENTED',
+            body: 'All reported issues have been addressed.',
+            submittedAt: '2026-01-02T00:00:00Z',
+          },
+        ],
+        comments: [
+          {
+            author: { login: 'coverage-bot' },
+            updatedAt: '2026-01-03T00:00:00Z',
+          },
+        ],
+        statusCheckRollup: null,
+      }),
+    });
+
+    const result = expectPRStateInfo(await fetchPRState(makeFetchParams(github)));
+
+    expect(result.reviewComments).toEqual([]);
+    expect(result.latestReviewActivityAtMs).toBeNull();
+  });
+
+  it('includes top-level commented summaries in all-feedback mode', async () => {
+    const github = makeFetchGitHub({
+      getPRFullDetails: vi.fn().mockResolvedValue({
+        state: 'OPEN',
+        number: 123,
+        url: 'https://github.com/example/repo/pull/123',
+        reviewDecision: null,
+        mergeStateStatus: 'CLEAN',
+        reviews: [
+          {
+            author: { login: 'reviewer' },
+            state: 'COMMENTED',
+            body: 'Please fix the edge case.',
+            submittedAt: '2026-01-02T00:00:00Z',
+          },
+        ],
+        comments: [],
+        statusCheckRollup: null,
+      }),
+    });
+
+    const result = expectPRStateInfo(
+      await fetchPRState({
+        ...makeFetchParams(github),
+        reviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      })
+    );
+
+    expect(result.reviewComments.map((comment) => comment.body)).toEqual([
+      'Please fix the edge case.',
+    ]);
+    expect(result.latestReviewActivityAtMs).toBe(Date.parse('2026-01-02T00:00:00Z'));
+  });
 });
 
 describe('buildReviewSummariesForPrompt', () => {
@@ -544,7 +633,8 @@ describe('buildReviewSummariesForPrompt', () => {
           },
         ],
       },
-      null
+      null,
+      'ALL_REVIEW_FEEDBACK'
     );
 
     expect(summaries).toEqual([
@@ -580,7 +670,8 @@ describe('buildReviewSummariesForPrompt', () => {
           },
         ],
       },
-      'me'
+      'me',
+      'CHANGES_REQUESTED'
     );
 
     expect(summaries).toEqual([]);
@@ -592,23 +683,27 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'A requests changes first',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-b' },
             state: 'CHANGES_REQUESTED',
             body: 'B requests changes',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
           },
         ],
       },
-      null
+      null,
+      'CHANGES_REQUESTED'
     );
 
     expect(summaries).toEqual([
@@ -620,6 +715,56 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
       },
     ]);
+  });
+
+  it('excludes stale commented reviews after the same reviewer approves', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            submittedAt: '2026-01-02T00:00:00Z',
+            author: { login: 'reviewer-a' },
+            state: 'COMMENTED',
+            body: 'Please fix the first-round issue',
+          },
+          {
+            submittedAt: '2026-01-03T00:00:00Z',
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+        ],
+      },
+      null,
+      'ALL_REVIEW_FEEDBACK'
+    );
+
+    expect(summaries).toEqual([]);
+  });
+
+  it('uses response order when stale feedback and approval timestamps are missing', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'COMMENTED',
+            body: 'Please fix the first-round issue',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+        ],
+      },
+      null,
+      'ALL_REVIEW_FEEDBACK'
+    );
+
+    expect(summaries).toEqual([]);
   });
 
   it('keeps changes-requested reviews when they are the reviewer latest state', () => {
@@ -639,7 +784,8 @@ describe('buildReviewSummariesForPrompt', () => {
           },
         ],
       },
-      null
+      null,
+      'CHANGES_REQUESTED'
     );
 
     expect(summaries).toEqual([
@@ -659,23 +805,27 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'Please fix the null check',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'COMMENTED',
             body: 'Thanks for the fix!',
           },
         ],
       },
-      null
+      null,
+      'ALL_REVIEW_FEEDBACK'
     );
 
     expect(summaries).toEqual([
@@ -695,23 +845,27 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'First round of feedback',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'Found a new issue after approving',
           },
         ],
       },
-      null
+      null,
+      'CHANGES_REQUESTED'
     );
 
     expect(summaries).toEqual([
@@ -723,6 +877,238 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
       },
     ]);
+  });
+
+  it('uses submission time to filter reviews when GitHub returns them out of order', () => {
+    const prDetails = {
+      url: 'https://github.com/example/repo/pull/1',
+      reviews: [
+        {
+          submittedAt: '2026-01-04T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'COMMENTED',
+          body: 'New feedback after approval',
+        },
+        {
+          submittedAt: '2026-01-03T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'APPROVED',
+          body: '',
+        },
+        {
+          submittedAt: '2026-01-02T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'COMMENTED',
+          body: 'Old feedback before approval',
+        },
+      ],
+    };
+
+    expect(buildReviewSummariesForPrompt(prDetails, null, 'ALL_REVIEW_FEEDBACK')).toEqual([
+      {
+        author: 'reviewer-a',
+        body: 'New feedback after approval',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
+
+  it('excludes commented review summaries in changes-requested mode', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'cubic-dev-ai' },
+            state: 'COMMENTED',
+            body: 'Please fix the hydration edge case.',
+          },
+        ],
+      },
+      null,
+      'CHANGES_REQUESTED'
+    );
+
+    expect(summaries).toEqual([]);
+  });
+
+  it('includes changes-requested summaries in both modes', () => {
+    const prDetails = {
+      url: 'https://github.com/example/repo/pull/1',
+      reviews: [
+        {
+          author: { login: 'reviewer' },
+          state: 'CHANGES_REQUESTED',
+          body: 'Please fix this.',
+        },
+      ],
+    };
+
+    expect(buildReviewSummariesForPrompt(prDetails, null, 'CHANGES_REQUESTED')).toHaveLength(1);
+    expect(buildReviewSummariesForPrompt(prDetails, null, 'ALL_REVIEW_FEEDBACK')).toHaveLength(1);
+  });
+});
+
+describe('computeLatestReviewActivityAtMs', () => {
+  const prDetails = {
+    reviews: [
+      {
+        submittedAt: '2026-01-02T00:00:00Z',
+        author: { login: 'commenting-reviewer' },
+        state: 'COMMENTED',
+        body: 'Please address this feedback.',
+      },
+      {
+        submittedAt: '2026-01-01T00:00:00Z',
+        author: { login: 'changes-reviewer' },
+        state: 'CHANGES_REQUESTED',
+      },
+    ],
+    comments: [
+      {
+        updatedAt: '2026-01-04T00:00:00Z',
+        author: { login: 'coverage-bot' },
+      },
+    ],
+  };
+
+  it('ignores ordinary PR comments and commented summaries in changes-requested mode', () => {
+    expect(computeLatestReviewActivityAtMs(prDetails, [], null, 'CHANGES_REQUESTED')).toBe(
+      Date.parse('2026-01-01T00:00:00Z')
+    );
+  });
+
+  it('includes commented review submissions in all-feedback mode', () => {
+    expect(computeLatestReviewActivityAtMs(prDetails, [], null, 'ALL_REVIEW_FEEDBACK')).toBe(
+      Date.parse('2026-01-02T00:00:00Z')
+    );
+  });
+
+  it('ignores empty commented review submissions in all-feedback mode', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          ...prDetails,
+          reviews: [
+            {
+              submittedAt: '2026-01-05T00:00:00Z',
+              author: { login: 'empty-commenting-reviewer' },
+              state: 'COMMENTED',
+              body: '   ',
+            },
+            ...prDetails.reviews,
+          ],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBe(Date.parse('2026-01-02T00:00:00Z'));
+  });
+
+  it('ignores stale commented review activity after the same reviewer approves', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Please fix the first-round issue',
+            },
+            {
+              submittedAt: '2026-01-03T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBeNull();
+  });
+
+  it('uses response order when an approval timestamp is unparseable', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Please fix the first-round issue',
+            },
+            {
+              submittedAt: 'not-a-timestamp',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBeNull();
+  });
+
+  it('uses submission time for activity when GitHub returns reviews out of order', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-04T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'New feedback after approval',
+            },
+            {
+              submittedAt: '2026-01-03T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Old feedback before approval',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBe(Date.parse('2026-01-04T00:00:00Z'));
+  });
+
+  it('always includes inline review comment activity', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        prDetails,
+        [
+          {
+            updatedAt: '2026-01-03T00:00:00Z',
+            author: { login: 'inline-reviewer' },
+          },
+        ],
+        null,
+        'CHANGES_REQUESTED'
+      )
+    ).toBe(Date.parse('2026-01-03T00:00:00Z'));
   });
 });
 
