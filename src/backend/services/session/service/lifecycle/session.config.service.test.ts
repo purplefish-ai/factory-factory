@@ -3,7 +3,7 @@ import {
   type AcpProcessHandle,
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
@@ -19,7 +19,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
   },
 }));
@@ -667,7 +667,7 @@ describe('SessionConfigService', () => {
   });
 
   it('tracks whitespace-only reasoning effort fallback as settings sourced', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+    vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         defaultCodexReasoningEffort: 'high',
       })
@@ -702,7 +702,7 @@ describe('SessionConfigService', () => {
   });
 
   it('applies configured reasoning effort to a new ACP handle without immediate emit when requested', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+    vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         defaultCodexReasoningEffort: 'high',
       })
@@ -882,7 +882,7 @@ describe('SessionConfigService', () => {
   });
 
   it('applies configured permission preset for CODEX sessions from user settings', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+    vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         ratchetPermissions: 'YOLO',
         defaultWorkspacePermissions: 'RELAXED',
@@ -950,7 +950,7 @@ describe('SessionConfigService', () => {
   });
 
   it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+    vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
         ratchetPermissions: 'YOLO',
         defaultWorkspacePermissions: 'YOLO',

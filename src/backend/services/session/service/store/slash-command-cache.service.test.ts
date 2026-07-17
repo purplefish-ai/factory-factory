@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { slashCommandCacheService } from './slash-command-cache.service';
 
 const { compareAndSetCachedSlashCommandsMock } = vi.hoisted(() => ({
@@ -7,7 +7,7 @@ const { compareAndSetCachedSlashCommandsMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
     update: vi.fn(),
     compareAndSetCachedSlashCommands: compareAndSetCachedSlashCommandsMock,
@@ -21,7 +21,7 @@ describe('slashCommandCacheService', () => {
   });
 
   it('reads versioned provider-scoped command cache payloads', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       cachedSlashCommands: {
         version: 2,
         global: {
@@ -40,7 +40,7 @@ describe('slashCommandCacheService', () => {
   });
 
   it('ignores legacy Claude cache payloads because they may include workspace commands', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       cachedSlashCommands: {
         CLAUDE: [{ name: '/workspace-only', description: 'Workspace only' }],
         CODEX: [{ name: '/status', description: 'Status' }],
@@ -54,7 +54,7 @@ describe('slashCommandCacheService', () => {
   });
 
   it('returns null for malformed cache payloads', async () => {
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       cachedSlashCommands: [{ name: '/help', description: 'Help' }],
     } as never);
 
@@ -64,7 +64,7 @@ describe('slashCommandCacheService', () => {
 
   it('writes versioned global command cache payloads', async () => {
     const updatedAt = new Date('2026-07-17T00:00:00.000Z');
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       cachedSlashCommands: null,
       updatedAt,
     } as never);
@@ -83,7 +83,7 @@ describe('slashCommandCacheService', () => {
 
   it('treats empty versioned provider cache payloads as cache misses', async () => {
     const updatedAt = new Date('2026-07-17T00:00:00.000Z');
-    vi.mocked(userSettingsAccessor.get)
+    vi.mocked(userSettingsService.get)
       .mockResolvedValueOnce({
         cachedSlashCommands: {
           version: 2,
@@ -126,19 +126,12 @@ describe('slashCommandCacheService', () => {
     };
     let updatedAt = new Date('2026-07-17T00:00:00.000Z');
 
-    vi.mocked(userSettingsAccessor.get).mockImplementation(() => {
+    vi.mocked(userSettingsService.get).mockImplementation(() => {
       return Promise.resolve({
         cachedSlashCommands: structuredClone(cachedSlashCommands),
         updatedAt: new Date(updatedAt),
       } as never);
     });
-    vi.mocked(userSettingsAccessor.update).mockImplementation(
-      ({ cachedSlashCommands: nextCachedSlashCommands }) => {
-        cachedSlashCommands = structuredClone(nextCachedSlashCommands);
-        updatedAt = new Date(updatedAt.getTime() + 1);
-        return Promise.resolve({} as never);
-      }
-    );
     compareAndSetCachedSlashCommandsMock.mockImplementation(
       (expectedUpdatedAt: Date, nextCachedSlashCommands: unknown) => {
         if (expectedUpdatedAt.getTime() !== updatedAt.getTime()) {

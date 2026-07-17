@@ -6,6 +6,14 @@ import type {
 } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspaceFixerContext,
+  WorkspacePRContext,
+  WorkspaceProviderSelectionSnapshot,
+  WorkspaceStatusSnapshot,
+} from '@/backend/services/workspace/types';
+import type {
   AutoIterationStatus,
   CIStatus,
   PRState,
@@ -14,6 +22,26 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import { KanbanColumn } from '@/shared/core';
+
+const autoIterationExecutionContextSelect = {
+  worktreePath: true,
+  autoIterationSessionId: true,
+} satisfies Prisma.WorkspaceSelect;
+
+const runScriptExecutionStateSelect = {
+  runScriptStatus: true,
+  runScriptPid: true,
+  runScriptPort: true,
+  runScriptStartedAt: true,
+} satisfies Prisma.WorkspaceSelect;
+
+export type AutoIterationExecutionContext = Prisma.WorkspaceGetPayload<{
+  select: typeof autoIterationExecutionContextSelect;
+}>;
+
+export type RunScriptExecutionState = Prisma.WorkspaceGetPayload<{
+  select: typeof runScriptExecutionStateSelect;
+}>;
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.
@@ -203,20 +231,6 @@ type WorkspaceWithAgentSessionsAndProject = Prisma.WorkspaceGetPayload<{
 // Type for Workspace with sessions and project included (used by reconciliation)
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
-export interface PRDiscoveryClaim {
-  branchName: string;
-  checkedAt: Date;
-  retryCount: number;
-  nextCheckAt: Date;
-}
-
-export interface PRSnapshotFields {
-  prNumber: number;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-}
-
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
@@ -264,6 +278,56 @@ class WorkspaceAccessor {
     });
   }
 
+  async exists(id: string): Promise<boolean> {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return workspace !== null;
+  }
+
+  findProviderSelection(id: string): Promise<WorkspaceProviderSelectionSnapshot | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        defaultSessionProvider: true,
+        ratchetSessionProvider: true,
+      },
+    });
+  }
+
+  findFixerContext(id: string): Promise<WorkspaceFixerContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        worktreePath: true,
+        defaultSessionProvider: true,
+        ratchetSessionProvider: true,
+      },
+    });
+  }
+
+  findStatusSnapshot(id: string): Promise<WorkspaceStatusSnapshot | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        prUrl: true,
+        prNumber: true,
+        initCompletedAt: true,
+      },
+    });
+  }
+
+  findPRContext(id: string): Promise<WorkspacePRContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: { branchName: true, prUrl: true },
+    });
+  }
+
   /**
    * Find a workspace without relation includes and throw if missing.
    * Used by state machines after compare-and-swap updates.
@@ -271,6 +335,27 @@ class WorkspaceAccessor {
   findRawByIdOrThrow(id: string): Promise<Workspace> {
     return prisma.workspace.findUniqueOrThrow({
       where: { id },
+    });
+  }
+
+  findAutoIterationExecutionContext(id: string): Promise<AutoIterationExecutionContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: autoIterationExecutionContextSelect,
+    });
+  }
+
+  findRunScriptExecutionState(id: string): Promise<RunScriptExecutionState | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: runScriptExecutionStateSelect,
+    });
+  }
+
+  findRunScriptExecutionStateOrThrow(id: string): Promise<RunScriptExecutionState> {
+    return prisma.workspace.findUniqueOrThrow({
+      where: { id },
+      select: runScriptExecutionStateSelect,
     });
   }
 
@@ -422,6 +507,14 @@ class WorkspaceAccessor {
         autoIterationStatus: status,
         autoIterationSessionId: null,
       },
+    });
+    return result.count === 1;
+  }
+
+  async clearAutoIterationSessionIfMatches(id: string, sessionId: string): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id, autoIterationSessionId: sessionId },
+      data: { autoIterationSessionId: null },
     });
     return result.count === 1;
   }

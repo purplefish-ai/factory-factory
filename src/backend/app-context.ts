@@ -2,7 +2,6 @@ import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { cliHealthService } from './orchestration/cli-health.service';
 import { dataBackupService } from './orchestration/data-backup.service';
-import { decisionLogQueryService } from './orchestration/decision-log-query.service';
 import {
   type BridgeServices,
   configureDomainBridges,
@@ -37,10 +36,11 @@ import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
+import { decisionLogService } from './services/decision-log';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
-import { periodicTaskAccessor, periodicTaskService } from './services/periodic-task';
+import { periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
 import { fixerSessionService, ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
@@ -71,7 +71,8 @@ import {
   sessionProviderResolverService,
   sessionService,
 } from './services/session';
-import { terminalService } from './services/terminal';
+import { userSettingsService } from './services/settings';
+import { terminalService, terminalSessionService } from './services/terminal';
 import {
   computePendingRequestType,
   getWorkspaceInitPolicy,
@@ -79,13 +80,17 @@ import {
   gitOpsService,
   kanbanStateService,
   projectManagementService,
-  userSettingsQueryService,
   WorkspaceCreationService,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceAutoIterationService,
   workspaceDataService,
-  workspaceNotificationAccessor,
+  workspaceMaintenanceService,
+  workspaceNotificationService,
+  workspacePrSnapshotService,
   workspaceQueryService,
+  workspaceRatchetService,
+  workspaceRelationshipsService,
+  workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -100,7 +105,7 @@ export type ApplicationServices = BridgeServices & {
   cryptoService: typeof cryptoService;
   createLogger: typeof createLogger;
   dataBackupService: typeof dataBackupService;
-  decisionLogQueryService: typeof decisionLogQueryService;
+  decisionLogQueryService: typeof decisionLogService;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   fetchCodexModelCatalogFromAppServer: typeof fetchCodexModelCatalogFromAppServer;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
@@ -116,7 +121,6 @@ export type ApplicationServices = BridgeServices & {
   linearClientService: typeof linearClientService;
   linearStateSyncService: typeof linearStateSyncService;
   listQuickActions: typeof listQuickActions;
-  periodicTaskAccessor: typeof periodicTaskAccessor;
   projectManagementService: typeof projectManagementService;
   rateLimiter: typeof rateLimiter;
   runScriptConfigPersistenceService: typeof runScriptConfigPersistenceService;
@@ -128,10 +132,11 @@ export type ApplicationServices = BridgeServices & {
   sessionFileLogger: SessionFileLogger;
   sessionProviderResolverService: typeof sessionProviderResolverService;
   terminalService: typeof terminalService;
-  userSettingsQueryService: typeof userSettingsQueryService;
+  userSettingsQueryService: typeof userSettingsService;
   workspaceDataService: typeof workspaceDataService;
   workspaceGitStateService: typeof workspaceGitStateService;
-  workspaceNotificationAccessor: typeof workspaceNotificationAccessor;
+  workspaceNotificationService: typeof workspaceNotificationService;
+  workspaceRelationshipsService: typeof workspaceRelationshipsService;
   worktreeLifecycleService: typeof worktreeLifecycleService;
   computePendingRequestType: typeof computePendingRequestType;
   archiveWorkspace: typeof archiveWorkspace;
@@ -181,6 +186,9 @@ const defaultRunScriptService = createRunScriptService({
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
   let eventCollector: EventCollectorOrchestrator | null = null;
+  const workspaceCreationService = new WorkspaceCreationService({
+    logger: createLogger('workspace-creation'),
+  });
   const services: ApplicationServices = {
     acpRuntimeManager,
     acpTraceLogger,
@@ -193,7 +201,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     cryptoService,
     createLogger,
     dataBackupService,
-    decisionLogQueryService,
+    decisionLogQueryService: decisionLogService,
     executeStartupScriptPipeline,
     fetchCodexModelCatalogFromAppServer,
     factoryConfigService: FactoryConfigService,
@@ -214,7 +222,6 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     linearClientService,
     linearStateSyncService,
     listQuickActions,
-    periodicTaskAccessor,
     periodicTaskService,
     projectManagementService,
     prFetchRegistry,
@@ -235,13 +242,20 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionService,
     startupScriptService,
     terminalService,
-    userSettingsQueryService,
-    workspaceAccessor,
+    terminalSessionService,
+    userSettingsQueryService: userSettingsService,
     workspaceActivityService,
+    workspaceAutoIterationService,
+    workspaceCreationService,
     workspaceDataService,
+    workspaceMaintenanceService,
     workspaceGitStateService,
-    workspaceNotificationAccessor,
+    workspaceNotificationService,
+    workspacePrSnapshotService,
     workspaceQueryService,
+    workspaceRatchetService,
+    workspaceRelationshipsService,
+    workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
     worktreeLifecycleService,
@@ -283,7 +297,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
           getRuntimeSnapshot: (id) => services.sessionService.getRuntimeSnapshot(id),
           getAllPendingRequests: () => services.chatEventForwarderService.getAllPendingRequests(),
         },
-        workspaceAccessor: services.workspaceAccessor,
+        workspaceMaintenanceService: services.workspaceMaintenanceService,
         workspaceSnapshotStore: services.workspaceSnapshotStore,
       }),
       recoverStaleArchivingWorkspaces,

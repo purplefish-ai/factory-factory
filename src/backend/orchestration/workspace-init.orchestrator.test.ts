@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
+const mockWorkspaceUpdate = vi.hoisted(() => vi.fn());
+
 // --- Module mocks (before imports) ---
 
 vi.mock('@/backend/services/github', () => ({
@@ -33,8 +35,7 @@ vi.mock('@/backend/services/session', () => ({
     tryDispatchNextMessage: vi.fn(),
   },
   sessionDataService: {
-    createTerminalSession: vi.fn(),
-    clearTerminalPid: vi.fn(),
+    findAgentSessionsByWorkspaceId: vi.fn(),
   },
   sessionDomainService: {
     enqueue: vi.fn(),
@@ -44,9 +45,6 @@ vi.mock('@/backend/services/session', () => ({
     startSession: vi.fn(),
     stopWorkspaceSessions: vi.fn(),
   },
-  agentSessionAccessor: {
-    findByWorkspaceId: vi.fn(),
-  },
 }));
 
 vi.mock('@/backend/services/terminal', () => ({
@@ -55,6 +53,10 @@ vi.mock('@/backend/services/terminal', () => ({
     destroyTerminal: vi.fn(),
     getTerminalsForWorkspace: vi.fn(),
     onExit: vi.fn(),
+  },
+  terminalSessionService: {
+    registerSession: vi.fn(),
+    releaseSessionPid: vi.fn(),
   },
 }));
 
@@ -70,11 +72,16 @@ vi.mock('@/backend/services/workspace', () => ({
     getInitMode: vi.fn(),
     clearInitMode: vi.fn(),
   },
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: vi.fn(),
     findByIdWithProject: vi.fn(),
-    findParentWorkspace: vi.fn(),
-    update: vi.fn(),
+  },
+  workspaceRelationshipsService: {
+    findParent: vi.fn(),
+  },
+  workspaceRunScriptService: {
+    registerInitializedWorktree: (...args: unknown[]) => mockWorkspaceUpdate(...args),
+    setCommands: (...args: unknown[]) => mockWorkspaceUpdate(...args),
   },
   gitOpsService: {
     ensureBaseBranchExists: vi.fn(),
@@ -107,17 +114,17 @@ import {
   startupScriptService,
 } from '@/backend/services/run-script';
 import {
-  agentSessionAccessor,
   buildChildWorkspaceContext,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
-import { terminalService } from '@/backend/services/terminal';
+import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
   gitOpsService,
-  workspaceAccessor,
+  workspaceDataService,
+  workspaceRelationshipsService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -142,7 +149,7 @@ function createDeferredPromise<T>() {
 
 function makeWorkspaceWithProject(overrides = {}) {
   return unsafeCoerce<
-    NonNullable<Awaited<ReturnType<typeof workspaceAccessor.findByIdWithProject>>>
+    NonNullable<Awaited<ReturnType<typeof workspaceDataService.findByIdWithProject>>>
   >({
     id: WORKSPACE_ID,
     name: 'test-workspace',
@@ -166,9 +173,9 @@ function makeWorkspaceWithProject(overrides = {}) {
 function setupHappyPath(overrides = {}) {
   const workspace = makeWorkspaceWithProject(overrides);
   vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce(workspace));
-  vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-  vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-  vi.mocked(workspaceAccessor.update).mockResolvedValue(workspace as never);
+  vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+  vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+  vi.mocked(mockWorkspaceUpdate).mockResolvedValue(workspace as never);
   vi.mocked(gitOpsService.ensureBaseBranchExists).mockResolvedValue(undefined);
   vi.mocked(gitOpsService.removeWorktree).mockResolvedValue(undefined);
   vi.mocked(gitOpsService.createWorktree).mockResolvedValue({
@@ -198,12 +205,12 @@ function setupHappyPath(overrides = {}) {
   vi.mocked(workspaceStateMachine.markReadyWithWarning).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('testuser');
-  vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([]);
+  vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
   vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
   vi.mocked(sessionService.startSession).mockResolvedValue(undefined as never);
   vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
-  vi.mocked(sessionDataService.createTerminalSession).mockResolvedValue(unsafeCoerce({}));
-  vi.mocked(sessionDataService.clearTerminalPid).mockResolvedValue(undefined);
+  vi.mocked(terminalSessionService.registerSession).mockResolvedValue(unsafeCoerce({}));
+  vi.mocked(terminalSessionService.releaseSessionPid).mockResolvedValue(undefined);
   vi.mocked(terminalService.createTerminal).mockResolvedValue({
     terminalId: 'term-default',
     pid: 12_345,
@@ -228,7 +235,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceAccessor.findByIdWithProject).not.toHaveBeenCalled();
+      expect(workspaceDataService.findByIdWithProject).not.toHaveBeenCalled();
       expect(gitOpsService.createWorktree).not.toHaveBeenCalled();
     });
 
@@ -238,7 +245,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID, { provisioningAlreadyStarted: true });
 
       expect(workspaceStateMachine.startProvisioning).not.toHaveBeenCalled();
-      expect(workspaceAccessor.findByIdWithProject).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(workspaceDataService.findByIdWithProject).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
     });
   });
@@ -246,7 +253,7 @@ describe('initializeWorkspaceWorktree', () => {
   describe('workspace lookup', () => {
     it('marks failed when workspace has no project', async () => {
       vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce({}));
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(null);
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(null);
       vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
       vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
       vi.mocked(worktreeLifecycleService.clearInitMode).mockResolvedValue(undefined);
@@ -261,7 +268,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('marks failed when workspace lookup returns workspace without project', async () => {
       vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce({}));
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, project: null })
       );
       vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
@@ -292,7 +299,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceAccessor.update).toHaveBeenCalledWith(
+      expect(mockWorkspaceUpdate).toHaveBeenCalledWith(
         WORKSPACE_ID,
         expect.objectContaining({
           worktreePath: '/worktrees/workspace-ws-1',
@@ -307,8 +314,8 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceAccessor.update).toHaveBeenCalledTimes(1);
-      expect(workspaceAccessor.update).toHaveBeenCalledWith(
+      expect(mockWorkspaceUpdate).toHaveBeenCalledTimes(1);
+      expect(mockWorkspaceUpdate).toHaveBeenCalledWith(
         WORKSPACE_ID,
         expect.objectContaining({
           worktreePath: '/worktrees/workspace-ws-1',
@@ -338,7 +345,7 @@ describe('initializeWorkspaceWorktree', () => {
         workspaceId: WORKSPACE_ID,
         workingDir: '/worktrees/workspace-ws-1',
       });
-      expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+      expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
         workspaceId: WORKSPACE_ID,
         name: 'term-default',
         pid: 12_345,
@@ -357,7 +364,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: true,
       } as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -381,7 +388,7 @@ describe('initializeWorkspaceWorktree', () => {
         startupModePreset: 'non_interactive',
       });
 
-      const updateData = vi.mocked(workspaceAccessor.update).mock.calls[0]?.[1];
+      const updateData = vi.mocked(mockWorkspaceUpdate).mock.calls[0]?.[1];
       expect(updateData).not.toHaveProperty('worktreePath');
       expect(updateData).not.toHaveProperty('branchName');
       expect(worktreeLifecycleService.clearInitMode).not.toHaveBeenCalled();
@@ -396,12 +403,12 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
-      expect(sessionDataService.createTerminalSession).not.toHaveBeenCalled();
+      expect(terminalSessionService.registerSession).not.toHaveBeenCalled();
     });
 
     it('destroys the spawned terminal when session persistence fails', async () => {
       setupHappyPath();
-      vi.mocked(sessionDataService.createTerminalSession).mockRejectedValue(
+      vi.mocked(terminalSessionService.registerSession).mockRejectedValue(
         new Error('db unavailable')
       );
 
@@ -421,7 +428,7 @@ describe('initializeWorkspaceWorktree', () => {
       const createTerminalSessionDeferred = createDeferredPromise<unknown>();
       let exitListener: ((exitCode: number) => void) | undefined;
 
-      vi.mocked(sessionDataService.createTerminalSession).mockImplementation(
+      vi.mocked(terminalSessionService.registerSession).mockImplementation(
         () => createTerminalSessionDeferred.promise as never
       );
       vi.mocked(terminalService.onExit).mockImplementation((_, listener) => {
@@ -437,12 +444,12 @@ describe('initializeWorkspaceWorktree', () => {
       expect(exitListener).toBeDefined();
 
       exitListener?.(0);
-      expect(sessionDataService.clearTerminalPid).not.toHaveBeenCalled();
+      expect(terminalSessionService.releaseSessionPid).not.toHaveBeenCalled();
 
       createTerminalSessionDeferred.resolve(unsafeCoerce({}));
       await initializationPromise;
 
-      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith(
+      expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'term-default'
       );
@@ -494,7 +501,7 @@ describe('initializeWorkspaceWorktree', () => {
         useExistingBranch: true,
       });
 
-      expect(workspaceAccessor.update).toHaveBeenCalledWith(
+      expect(mockWorkspaceUpdate).toHaveBeenCalledWith(
         WORKSPACE_ID,
         expect.objectContaining({
           isAutoGeneratedBranch: false,
@@ -794,7 +801,7 @@ describe('initializeWorkspaceWorktree', () => {
   describe('default Claude session auto-start', () => {
     it('starts default Claude session when idle session exists', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -808,10 +815,10 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('starts default session in plan mode when requested in creation metadata', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({
           id: WORKSPACE_ID,
           creationMetadata: {
@@ -830,7 +837,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('does not start session when no idle session exists', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([]);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -839,7 +846,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('dispatches queued messages after session start', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -851,7 +858,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('does not throw when session auto-start fails', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockRejectedValue(
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockRejectedValue(
         new Error('accessor error')
       );
 
@@ -869,14 +876,14 @@ describe('initializeWorkspaceWorktree', () => {
           reportBackOn: 'a PR is opened',
         },
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -892,7 +899,7 @@ describe('initializeWorkspaceWorktree', () => {
       expect(queued.text.indexOf('## Child Workspace Context')).toBeLessThan(
         queued.text.indexOf('Implement the fix')
       );
-      expect(workspaceAccessor.findParentWorkspace).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(workspaceRelationshipsService.findParent).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(buildChildWorkspaceContext).toHaveBeenCalledWith({
         parentWorkspaceName: 'parent-workspace',
         parentProjectName: 'parent-project',
@@ -905,14 +912,14 @@ describe('initializeWorkspaceWorktree', () => {
         parentWorkspaceId: 'parent-1',
         creationMetadata: {},
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -942,14 +949,14 @@ describe('initializeWorkspaceWorktree', () => {
           ],
         },
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -986,14 +993,14 @@ describe('initializeWorkspaceWorktree', () => {
           ],
         },
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1019,14 +1026,14 @@ describe('initializeWorkspaceWorktree', () => {
         parentWorkspaceId: 'parent-1',
         creationMetadata: { initialPrompt: '  \n\t' },
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1049,14 +1056,14 @@ describe('initializeWorkspaceWorktree', () => {
           reportBackOn: { event: 'pull-request' },
         },
       });
-      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+      vi.mocked(workspaceRelationshipsService.findParent).mockResolvedValue(
         unsafeCoerce({
           id: 'parent-1',
           name: 'parent-workspace',
           project: { id: 'parent-project-1', name: 'parent-project' },
         })
       );
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1074,23 +1081,23 @@ describe('initializeWorkspaceWorktree', () => {
       setupHappyPath({
         creationMetadata: { initialPrompt: 'Implement the fix' },
       });
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceAccessor.findParentWorkspace).not.toHaveBeenCalled();
+      expect(workspaceRelationshipsService.findParent).not.toHaveBeenCalled();
       expect(buildChildWorkspaceContext).not.toHaveBeenCalled();
     });
 
     it('enqueues initial attachments from workspace creation metadata', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({
           id: WORKSPACE_ID,
           creationMetadata: {
@@ -1136,7 +1143,7 @@ describe('initializeWorkspaceWorktree', () => {
           }),
         })
       );
-      expect(workspaceAccessor.findById).toHaveBeenCalledTimes(1);
+      expect(workspaceDataService.findById).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1151,9 +1158,9 @@ describe('initializeWorkspaceWorktree', () => {
         },
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1179,9 +1186,9 @@ describe('initializeWorkspaceWorktree', () => {
         },
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1207,9 +1214,9 @@ describe('initializeWorkspaceWorktree', () => {
         },
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1230,9 +1237,9 @@ describe('initializeWorkspaceWorktree', () => {
         },
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1263,9 +1270,9 @@ describe('initializeWorkspaceWorktree', () => {
         },
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
@@ -1289,8 +1296,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('enqueues GitHub issue prompt when workspace has linked issue', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockResolvedValue(
@@ -1316,8 +1323,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('emits delta when enqueue succeeds', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockResolvedValue(
@@ -1344,8 +1351,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('logs warning when enqueue returns error', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockResolvedValue(
@@ -1366,7 +1373,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('returns empty prompt when workspace has no GitHub issue', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -1387,8 +1394,8 @@ describe('initializeWorkspaceWorktree', () => {
         }),
       });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -1401,8 +1408,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('returns empty prompt when issue fetch fails', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockResolvedValue(null);
@@ -1415,8 +1422,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('returns empty prompt when issue fetch throws', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockRejectedValue(new Error('GitHub API error'));
@@ -1430,8 +1437,8 @@ describe('initializeWorkspaceWorktree', () => {
     it('includes issue body of "(No description provided)" when body is empty', async () => {
       const workspace = makeWorkspaceWithProject({ githubIssueNumber: 42 });
       setupHappyPath();
-      vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(githubCLIService.getIssue).mockResolvedValue(
@@ -1508,8 +1515,8 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('clears init mode even when error occurs after worktree creation', async () => {
       setupHappyPath();
-      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db error'));
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
       );
 
@@ -1521,8 +1528,8 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('removes unregistered worktree when persistence fails after creation', async () => {
       const workspace = setupHappyPath();
-      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
       );
 
@@ -1545,8 +1552,8 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('does not throw when unregistered worktree cleanup fails', async () => {
       setupHappyPath();
-      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
       );
       vi.mocked(gitOpsService.removeWorktree).mockRejectedValue(new Error('remove failed'));
@@ -1562,8 +1569,8 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('marks workspace failed when workspace update throws', async () => {
       setupHappyPath();
-      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
-      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
       );
 
@@ -1583,7 +1590,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       const startSessionDeferred = createDeferredPromise<void>();
       vi.mocked(sessionService.startSession).mockReturnValue(startSessionDeferred.promise as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
       vi.mocked(startupScriptService.runStartupScript).mockRejectedValue(new Error('script boom'));
@@ -1600,7 +1607,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
-      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith(
+      expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'term-default'
       );
@@ -1621,7 +1628,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
       expect(terminalService.destroyTerminal).not.toHaveBeenCalled();
-      expect(sessionDataService.clearTerminalPid).not.toHaveBeenCalled();
+      expect(terminalSessionService.releaseSessionPid).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });
@@ -1658,7 +1665,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: true,
       } as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -1677,7 +1684,7 @@ describe('initializeWorkspaceWorktree', () => {
         success: false,
         errorMessage: 'setup failed',
       } as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
 
@@ -1690,7 +1697,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('retries dispatch using the started session id without re-querying session status', async () => {
       setupHappyPath();
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({
           id: 'session-idle',
           status: SessionStatus.IDLE,
@@ -1700,8 +1707,8 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(agentSessionAccessor.findByWorkspaceId).toHaveBeenCalledTimes(1);
-      expect(agentSessionAccessor.findByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
+      expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
+      expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
         status: SessionStatus.IDLE,
         limit: 1,
       });

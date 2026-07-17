@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockCreate = vi.fn();
 const mockFindMany = vi.fn();
 const mockFindUnique = vi.fn();
+const mockFindUniqueOrThrow = vi.fn();
 const mockFindFirst = vi.fn();
 const mockUpdate = vi.fn();
 const mockUpdateMany = vi.fn();
@@ -15,6 +16,7 @@ vi.mock('@/backend/db', () => ({
       create: (...args: unknown[]) => mockCreate(...args),
       findMany: (...args: unknown[]) => mockFindMany(...args),
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
       findFirst: (...args: unknown[]) => mockFindFirst(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
@@ -709,6 +711,82 @@ describe('workspaceAccessor', () => {
       data: {
         autoIterationStatus: 'STOPPED',
         autoIterationSessionId: null,
+      },
+    });
+  });
+
+  it('clears auto-iteration session only when the expected pointer still matches', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      workspaceAccessor.clearAutoIterationSessionIfMatches('ws-1', 'session-1')
+    ).resolves.toBe(false);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', autoIterationSessionId: 'session-1' },
+      data: { autoIterationSessionId: null },
+    });
+  });
+
+  it('selects only the auto-iteration execution context', async () => {
+    mockFindUnique.mockResolvedValue({
+      worktreePath: '/tmp/worktree',
+      autoIterationSessionId: 'session-1',
+    });
+
+    await expect(workspaceAccessor.findAutoIterationExecutionContext('ws-1')).resolves.toEqual({
+      worktreePath: '/tmp/worktree',
+      autoIterationSessionId: 'session-1',
+    });
+
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      select: { worktreePath: true, autoIterationSessionId: true },
+    });
+  });
+
+  it('selects only run-script execution state', async () => {
+    const state = {
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 123,
+      runScriptPort: 3000,
+      runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    mockFindUnique.mockResolvedValue(state);
+
+    await expect(workspaceAccessor.findRunScriptExecutionState('ws-1')).resolves.toEqual(state);
+
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      select: {
+        runScriptStatus: true,
+        runScriptPid: true,
+        runScriptPort: true,
+        runScriptStartedAt: true,
+      },
+    });
+  });
+
+  it('selects only run-script execution state when requiring a result', async () => {
+    const state = {
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 123,
+      runScriptPort: 3000,
+      runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    mockFindUniqueOrThrow.mockResolvedValue(state);
+
+    await expect(workspaceAccessor.findRunScriptExecutionStateOrThrow('ws-1')).resolves.toEqual(
+      state
+    );
+
+    expect(mockFindUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      select: {
+        runScriptStatus: true,
+        runScriptPid: true,
+        runScriptPort: true,
+        runScriptStartedAt: true,
       },
     });
   });

@@ -13,11 +13,11 @@ const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 const mockWarn = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/session', () => ({
-  agentSessionAccessor: {
-    findByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
-  },
   chatMessageHandlerService: {
     tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
+  },
+  sessionDataService: {
+    findAgentSessionsByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
   },
   sessionDomainService: {
     appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),

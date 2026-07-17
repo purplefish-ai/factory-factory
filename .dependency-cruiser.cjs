@@ -111,8 +111,22 @@ module.exports = {
       name: 'no-orchestration-importing-service-internals',
       severity: 'error',
       comment: 'Orchestration must import service barrels only.',
-      from: { path: '^src/backend/orchestration/' },
+      from: {
+        path: '^src/backend/orchestration/',
+        pathNot: '^src/backend/orchestration/data-backup\\.service\\.ts$',
+      },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'data-backup-orchestration-imports-only-data-backup-accessor',
+      severity: 'error',
+      comment: 'The backup orchestrator has one exact persistence exception.',
+      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
+      to: {
+        path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
+        pathNot:
+          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
+      },
     },
     {
       name: 'only-service-layers-import-service-resources',
@@ -121,7 +135,7 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/resources/' },
     },
@@ -158,7 +172,8 @@ module.exports = {
       comment: 'External consumers must import from service barrels only.',
       from: {
         path: '^src/backend',
-        pathNot: '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$',
+        pathNot:
+          '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
     },

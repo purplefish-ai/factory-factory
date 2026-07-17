@@ -5,12 +5,6 @@ const { mockResetPRDiscoveryBackoff } = vi.hoisted(() => ({
   mockResetPRDiscoveryBackoff: vi.fn(),
 }));
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
-    resetPRDiscoveryBackoff: (...args: unknown[]) => mockResetPRDiscoveryBackoff(...args),
-  },
-}));
-
 import { maybeDiscoverPROnSessionEnd } from './session-pr-discovery.service';
 
 describe('maybeDiscoverPROnSessionEnd', () => {
@@ -22,7 +16,9 @@ describe('maybeDiscoverPROnSessionEnd', () => {
   });
 
   it('resets persisted discovery backoff without performing GitHub discovery', async () => {
-    await maybeDiscoverPROnSessionEnd('workspace-1', logger);
+    await maybeDiscoverPROnSessionEnd('workspace-1', logger, {
+      resetPRDiscoveryBackoff: mockResetPRDiscoveryBackoff,
+    });
 
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledOnce();
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
@@ -33,7 +29,11 @@ describe('maybeDiscoverPROnSessionEnd', () => {
     const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     mockResetPRDiscoveryBackoff.mockRejectedValue(error);
 
-    await expect(maybeDiscoverPROnSessionEnd('workspace-1', logger)).resolves.toBeUndefined();
+    await expect(
+      maybeDiscoverPROnSessionEnd('workspace-1', logger, {
+        resetPRDiscoveryBackoff: mockResetPRDiscoveryBackoff,
+      })
+    ).resolves.toBeUndefined();
 
     expect(debug).toHaveBeenCalledWith('PR discovery backoff reset on session end failed', {
       workspaceId: 'workspace-1',

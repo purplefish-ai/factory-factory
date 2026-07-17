@@ -119,10 +119,34 @@ describe('check-single-writer', () => {
     );
   });
 
-  it('allows ratchet-owned recordRatchetSessionEnd writes', () => {
+  it('allows workspace PR snapshot capability dispatch-reset writes', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/ratchet/service/ratchet.service.ts',
+        relPath:
+          'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+        content: `
+          async function writeSnapshots(workspaceAccessor) {
+            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
+              prNumber: 1,
+              prState: 'OPEN',
+              prReviewState: null,
+              prCiStatus: 'SUCCESS',
+              prUpdatedAt: new Date(),
+            });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('allows workspace ratchet capability recordRatchetSessionEnd writes', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
         content: `
           async function settleFromRatchet(workspaceAccessor) {
             await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');
@@ -134,6 +158,41 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(0);
+  });
+
+  it('allows creation service to own auto-iteration configuration writes', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/services/workspace/service/lifecycle/creation.service.ts',
+        content: `
+          async function createAutoIteration(workspaceAccessor) {
+            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('rejects orchestration writes to auto-iteration configuration', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/orchestration/domain-bridges.orchestrator.ts',
+        content: `
+          async function configure(workspaceAccessor) {
+            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('unauthorized write of workspace field "autoIterationConfig"');
   });
 
   it('checks ownership for updateMany payload mutators', () => {

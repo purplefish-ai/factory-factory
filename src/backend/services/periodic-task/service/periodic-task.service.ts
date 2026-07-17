@@ -16,6 +16,24 @@ import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
 
 type Logger = ReturnType<typeof createLogger>;
 
+const SCHEDULED_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function validateScheduleInput(input: {
+  scheduledTime?: string | null;
+  timezone?: string | null;
+}): void {
+  if (input.scheduledTime != null && !SCHEDULED_TIME_PATTERN.test(input.scheduledTime)) {
+    throw new Error('scheduledTime must use HH:MM in 24-hour time');
+  }
+  if (input.timezone != null) {
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: input.timezone });
+    } catch {
+      throw new Error(`Invalid IANA timezone: ${input.timezone}`);
+    }
+  }
+}
+
 export const PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS = 5 * 60_000;
 export const PERIODIC_TASK_WORKSPACE_RESERVATION_TIMEOUT_MS = 15 * 60_000;
 
@@ -57,6 +75,40 @@ export class PeriodicTaskService {
   }): void {
     this.workspaceBridge = bridges.workspace;
     this.statusBridge = bridges.status;
+  }
+
+  list(projectId: string) {
+    return periodicTaskAccessor.listByProject(projectId);
+  }
+
+  get(id: string) {
+    return periodicTaskAccessor.findById(id);
+  }
+
+  create(input: Parameters<typeof periodicTaskAccessor.create>[0]) {
+    validateScheduleInput(input);
+    return periodicTaskAccessor.create(input);
+  }
+
+  update(id: string, input: Parameters<typeof periodicTaskAccessor.update>[1]) {
+    validateScheduleInput(input);
+    return periodicTaskAccessor.update(id, input);
+  }
+
+  delete(id: string) {
+    return periodicTaskAccessor.delete(id);
+  }
+
+  toggleEnabled(id: string, enabled: boolean) {
+    return periodicTaskAccessor.toggleEnabled(id, enabled);
+  }
+
+  listExecutions(periodicTaskId: string, limit = 20) {
+    return periodicTaskAccessor.listExecutions(periodicTaskId, limit);
+  }
+
+  listExecutionsByPeriodicTaskId(periodicTaskId: string) {
+    return periodicTaskAccessor.listExecutionsByWorkspacePeriodicTask(periodicTaskId);
   }
 
   start(): void {
@@ -158,7 +210,7 @@ export class PeriodicTaskService {
 
     this.logger.info('Dispatching periodic task', { taskId, name });
 
-    const execution = await periodicTaskAccessor.createExecutionAndMarkDispatched(
+    const execution = await periodicTaskAccessor.reserveExecutionAndMarkDispatched(
       {
         periodicTaskId: taskId,
         workspaceId: null,
@@ -171,6 +223,12 @@ export class PeriodicTaskService {
         scheduledDayOfMonth,
       }
     );
+    if (!execution) {
+      this.logger.debug('Skipping periodic task — dispatch reservation was already claimed', {
+        taskId,
+      });
+      return;
+    }
 
     let result: { workspaceId: string };
     try {

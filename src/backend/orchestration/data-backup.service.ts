@@ -8,7 +8,10 @@
 import type { Prisma } from '@prisma-gen/client';
 import type { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
-import { type DataBackupTransactionClient, dataBackupAccessor } from '@/backend/services/settings';
+import {
+  type DataBackupTransactionClient,
+  dataBackupAccessor,
+} from '@/backend/services/settings/resources/data-backup.accessor';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,

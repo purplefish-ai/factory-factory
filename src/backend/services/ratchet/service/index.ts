@@ -11,6 +11,7 @@ export type {
   RatchetReviewComment,
   RatchetSessionBridge,
   RatchetStatusCheckInput,
+  RatchetWorkspaceBridge,
 } from './bridges';
 export type {
   AcquireAndDispatchInput,

@@ -58,8 +58,8 @@ import {
   type kanbanStateService,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
-  type workspaceAccessor,
   type workspaceActivityService,
+  type workspaceDataService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -138,7 +138,7 @@ export type EventCollectorDependencies = {
   sessionService: typeof sessionService;
   terminalService: typeof terminalService;
   workspaceActivityService: typeof workspaceActivityService;
-  workspaceAccessor: typeof workspaceAccessor;
+  workspaceDataService: typeof workspaceDataService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
 };
@@ -161,7 +161,8 @@ async function projectAuthoritativeRatchetState(
   isActive: () => boolean
 ): Promise<boolean> {
   try {
-    const workspace = await state.dependencies.workspaceAccessor.findRawById(workspaceId);
+    const workspace =
+      await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
     if (
       !(workspace && isActive()) ||
       workspace.status === WorkspaceStatus.ARCHIVING ||

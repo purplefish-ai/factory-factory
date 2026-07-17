@@ -2,7 +2,7 @@ import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import type { createLogger } from '@/backend/services/logger.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
@@ -72,6 +72,15 @@ export type WorkspaceCreationSource =
       description?: string;
       initialPrompt?: string;
       reportBackOn?: string;
+    }
+  | {
+      type: 'PERIODIC_TASK';
+      projectId: string;
+      periodicTaskId: string;
+      name: string;
+      description?: string;
+      initialPrompt: string;
+      ratchetEnabled?: boolean;
     };
 
 /**
@@ -104,6 +113,7 @@ type PreparedWorkspaceCreation = {
     mode?: 'STANDARD' | 'AUTO_ITERATION';
     autoIterationConfig?: Prisma.InputJsonValue;
     parentWorkspaceId?: string;
+    periodicTaskId?: string;
   };
   initMode?: {
     useExistingBranch: boolean;
@@ -173,6 +183,8 @@ export class WorkspaceCreationService {
         return this.prepareLinearIssueCreation(source);
       case 'CHILD_WORKSPACE':
         return await this.prepareChildWorkspaceCreation(source);
+      case 'PERIODIC_TASK':
+        return this.preparePeriodicTaskCreation(source);
     }
   }
 
@@ -367,10 +379,25 @@ export class WorkspaceCreationService {
     };
   }
 
+  private preparePeriodicTaskCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'PERIODIC_TASK' }>
+  ): PreparedWorkspaceCreation {
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        periodicTaskId: source.periodicTaskId,
+        name: source.name,
+        description: source.description,
+        creationSource: 'PERIODIC_TASK',
+        creationMetadata: { initialPrompt: source.initialPrompt },
+      },
+    };
+  }
+
   private async resolveWorkspaceCreationDefaults(
     explicitRatchetEnabled?: boolean
   ): Promise<boolean> {
-    const settings = await userSettingsAccessor.get();
+    const settings = await userSettingsService.get();
     return explicitRatchetEnabled ?? settings.ratchetEnabled;
   }
 }

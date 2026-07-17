@@ -24,10 +24,17 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionService: {
+    recoverOrphanedSessions: vi.fn(async () => 0),
+  },
+}));
+
 const mockInitializeWorktree = vi.fn();
 
+import { terminalSessionService } from '@/backend/services/terminal';
 // Import after mocks are set up
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceMaintenanceService } from '@/backend/services/workspace';
 import { reconciliationService } from './reconciliation.service';
 
 describe('ReconciliationService', () => {
@@ -47,6 +54,10 @@ describe('ReconciliationService', () => {
           });
         },
         initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
+        findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+      },
+      terminal: {
+        recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),
       },
     });
   });
@@ -348,7 +359,7 @@ describe('ReconciliationService', () => {
   });
 });
 
-describe('workspaceAccessor.findNeedingWorktree', () => {
+describe('workspaceMaintenanceService.findNeedingWorktree', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -370,7 +381,7 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
 
     mockFindMany.mockResolvedValue([newWorkspace]);
 
-    const result = await workspaceAccessor.findNeedingWorktree();
+    const result = await workspaceMaintenanceService.findNeedingWorktree();
 
     expect(result).toContainEqual(newWorkspace);
     expect(mockFindMany).toHaveBeenCalledWith({
@@ -401,7 +412,7 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
 
     mockFindMany.mockResolvedValue([staleWorkspace]);
 
-    const result = await workspaceAccessor.findNeedingWorktree();
+    const result = await workspaceMaintenanceService.findNeedingWorktree();
 
     expect(result).toContainEqual(staleWorkspace);
 
@@ -419,7 +430,7 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
     // (The filtering is done by Prisma, so we just verify the query is correct)
     mockFindMany.mockResolvedValue([]);
 
-    const result = await workspaceAccessor.findNeedingWorktree();
+    const result = await workspaceMaintenanceService.findNeedingWorktree();
 
     expect(result).toEqual([]);
 
@@ -428,70 +439,5 @@ describe('workspaceAccessor.findNeedingWorktree', () => {
     const threshold = callArgs.where.OR[1].initStartedAt.lt;
     const expectedThreshold = new Date(now.getTime() - 10 * 60 * 1000);
     expect(threshold.getTime()).toBe(expectedThreshold.getTime());
-  });
-});
-
-describe('workspaceAccessor.findByProjectIdWithSessions filter validation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should throw error when both status and excludeStatuses are specified', () => {
-    expect(() =>
-      workspaceAccessor.findByProjectIdWithSessions('proj-1', {
-        status: 'READY',
-        excludeStatuses: ['ARCHIVED'],
-      })
-    ).toThrow('Cannot specify both status and excludeStatuses filters');
-  });
-
-  it('should allow status filter alone', async () => {
-    mockFindMany.mockResolvedValue([]);
-
-    await expect(
-      workspaceAccessor.findByProjectIdWithSessions('proj-1', {
-        status: 'READY',
-      })
-    ).resolves.not.toThrow();
-
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          projectId: 'proj-1',
-          status: 'READY',
-        }),
-      })
-    );
-  });
-
-  it('should allow excludeStatuses filter alone', async () => {
-    mockFindMany.mockResolvedValue([]);
-
-    await expect(
-      workspaceAccessor.findByProjectIdWithSessions('proj-1', {
-        excludeStatuses: ['ARCHIVED'],
-      })
-    ).resolves.not.toThrow();
-
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          projectId: 'proj-1',
-          status: { notIn: ['ARCHIVED'] },
-        }),
-      })
-    );
-  });
-
-  it('should work with no filters', async () => {
-    mockFindMany.mockResolvedValue([]);
-
-    await expect(workspaceAccessor.findByProjectIdWithSessions('proj-1')).resolves.not.toThrow();
-
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { projectId: 'proj-1' },
-      })
-    );
   });
 });

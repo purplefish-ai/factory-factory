@@ -13,8 +13,7 @@ import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/
 import { createLogger } from '@/backend/services/logger.service';
 import {
   computePRDiscoveryNextCheckAt,
-  type PRDiscoveryClaim,
-  workspaceAccessor,
+  workspaceMaintenanceService,
 } from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
@@ -23,8 +22,10 @@ const logger = createLogger('scheduler');
 const ghLimit = pLimit(3);
 
 type PRDiscoveryCandidate = Awaited<
-  ReturnType<typeof workspaceAccessor.findNeedingPRDiscovery>
+  ReturnType<typeof workspaceMaintenanceService.findNeedingPRDiscovery>
 >[number];
+
+type PRDiscoveryClaim = Parameters<typeof prSnapshotService.attachDiscoveredPRAndRefresh>[2];
 
 interface ClaimablePRDiscoveryCandidate {
   workspace: PRDiscoveryCandidate;
@@ -108,7 +109,7 @@ class SchedulerService {
       return { synced: 0, failed: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findNeedingPRSync(
+    const workspaces = await workspaceMaintenanceService.findNeedingPRSync(
       SERVICE_THRESHOLDS.schedulerStaleMinutes
     );
 
@@ -141,7 +142,10 @@ class SchedulerService {
 
     const checkedAt = new Date();
     const { candidateLimit, repositoryLimit } = configService.getPRDiscoveryLimits();
-    const workspaces = await workspaceAccessor.findNeedingPRDiscovery(candidateLimit, checkedAt);
+    const workspaces = await workspaceMaintenanceService.findNeedingPRDiscovery(
+      candidateLimit,
+      checkedAt
+    );
 
     if (workspaces.length === 0) {
       return { discovered: 0, checked: 0 };
@@ -165,14 +169,17 @@ class SchedulerService {
             const { workspace, branchName } = candidate;
             const retryCount = workspace.prDiscoveryRetryCount + 1;
             const nextCheckAt = computePRDiscoveryNextCheckAt(checkedAt, retryCount);
-            const claimed = await workspaceAccessor.claimPRDiscoveryAttempt(workspace.id, {
-              branchName,
-              expectedUpdatedAt: workspace.updatedAt,
-              expectedRetryCount: workspace.prDiscoveryRetryCount,
-              expectedNextCheckAt: workspace.prDiscoveryNextCheckAt,
-              checkedAt,
-              nextCheckAt,
-            });
+            const claimed = await workspaceMaintenanceService.claimPRDiscoveryAttempt(
+              workspace.id,
+              {
+                branchName,
+                expectedUpdatedAt: workspace.updatedAt,
+                expectedRetryCount: workspace.prDiscoveryRetryCount,
+                expectedNextCheckAt: workspace.prDiscoveryNextCheckAt,
+                checkedAt,
+                nextCheckAt,
+              }
+            );
             return claimed
               ? {
                   ...candidate,

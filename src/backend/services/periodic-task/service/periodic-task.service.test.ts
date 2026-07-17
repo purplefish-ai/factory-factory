@@ -4,14 +4,31 @@ import { WorkspaceStatus } from '@/shared/core';
 
 const mockUpdateExecution = vi.hoisted(() => vi.fn());
 const mockCreateExecution = vi.hoisted(() => vi.fn());
-const mockCreateExecutionAndMarkDispatched = vi.hoisted(() => vi.fn());
+const mockReserveExecutionAndMarkDispatched = vi.hoisted(() => vi.fn());
 const mockMarkDispatched = vi.hoisted(() => vi.fn());
+const mockListByProject = vi.hoisted(() => vi.fn());
+const mockFindById = vi.hoisted(() => vi.fn());
+const mockCreate = vi.hoisted(() => vi.fn());
+const mockUpdate = vi.hoisted(() => vi.fn());
+const mockDelete = vi.hoisted(() => vi.fn());
+const mockToggleEnabled = vi.hoisted(() => vi.fn());
+const mockListExecutions = vi.hoisted(() => vi.fn());
+const mockListExecutionsByWorkspacePeriodicTask = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/periodic-task/resources/periodic-task.accessor', () => ({
   periodicTaskAccessor: {
+    listByProject: (...args: unknown[]) => mockListByProject(...args),
+    findById: (...args: unknown[]) => mockFindById(...args),
+    create: (...args: unknown[]) => mockCreate(...args),
+    update: (...args: unknown[]) => mockUpdate(...args),
+    delete: (...args: unknown[]) => mockDelete(...args),
+    toggleEnabled: (...args: unknown[]) => mockToggleEnabled(...args),
+    listExecutions: (...args: unknown[]) => mockListExecutions(...args),
+    listExecutionsByWorkspacePeriodicTask: (...args: unknown[]) =>
+      mockListExecutionsByWorkspacePeriodicTask(...args),
     createExecution: (...args: unknown[]) => mockCreateExecution(...args),
-    createExecutionAndMarkDispatched: (...args: unknown[]) =>
-      mockCreateExecutionAndMarkDispatched(...args),
+    reserveExecutionAndMarkDispatched: (...args: unknown[]) =>
+      mockReserveExecutionAndMarkDispatched(...args),
     markDispatched: (...args: unknown[]) => mockMarkDispatched(...args),
     updateExecution: (...args: unknown[]) => mockUpdateExecution(...args),
   },
@@ -128,7 +145,7 @@ describe('PeriodicTaskService', () => {
       workspaceId: 'workspace-1',
       status: 'RUNNING',
     });
-    mockCreateExecutionAndMarkDispatched.mockResolvedValue({
+    mockReserveExecutionAndMarkDispatched.mockResolvedValue({
       id: 'exec-1',
       periodicTaskId: 'task-1',
       workspaceId: null,
@@ -146,13 +163,116 @@ describe('PeriodicTaskService', () => {
     vi.useRealTimers();
   });
 
+  it('lists periodic tasks for a project', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.list('project-1');
+
+    expect(mockListByProject).toHaveBeenCalledWith('project-1');
+  });
+
+  it('gets a periodic task by id', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.get('task-1');
+
+    expect(mockFindById).toHaveBeenCalledWith('task-1');
+  });
+
+  it('creates a periodic task', async () => {
+    const service = new PeriodicTaskService(logger);
+    const input = {
+      projectId: 'project-1',
+      name: 'Daily cleanup',
+      prompt: 'Clean up stale data',
+      cadence: 'DAILY' as const,
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+    };
+
+    await service.create(input);
+
+    expect(mockCreate).toHaveBeenCalledWith(input);
+  });
+
+  it('validates schedules at the service boundary', () => {
+    const service = new PeriodicTaskService(logger);
+
+    expect(() =>
+      service.create({
+        projectId: 'project-1',
+        name: 'Daily cleanup',
+        prompt: 'Clean up stale data',
+        cadence: 'DAILY',
+        scheduledTime: '25:00',
+        timezone: 'UTC',
+      })
+    ).toThrow('scheduledTime must use HH:MM');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('updates a periodic task', async () => {
+    const service = new PeriodicTaskService(logger);
+    const input = {
+      name: 'Weekly cleanup',
+      prompt: 'Clean up stale data weekly',
+      cadence: 'WEEKLY' as const,
+      scheduledTime: '10:00',
+      timezone: 'America/New_York',
+    };
+
+    await service.update('task-1', input);
+
+    expect(mockUpdate).toHaveBeenCalledWith('task-1', input);
+  });
+
+  it('deletes a periodic task', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.delete('task-1');
+
+    expect(mockDelete).toHaveBeenCalledWith('task-1');
+  });
+
+  it('toggles whether a periodic task is enabled', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.toggleEnabled('task-1', true);
+
+    expect(mockToggleEnabled).toHaveBeenCalledWith('task-1', true);
+  });
+
+  it('lists periodic task executions with an explicit limit', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.listExecutions('task-1', 7);
+
+    expect(mockListExecutions).toHaveBeenCalledWith('task-1', 7);
+  });
+
+  it('defaults the periodic task execution limit to 20', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.listExecutions('task-1');
+
+    expect(mockListExecutions).toHaveBeenCalledWith('task-1', 20);
+  });
+
+  it('lists executions by periodic task id', async () => {
+    const service = new PeriodicTaskService(logger);
+
+    await service.listExecutionsByPeriodicTaskId('task-1');
+
+    expect(mockListExecutionsByWorkspacePeriodicTask).toHaveBeenCalledWith('task-1');
+  });
+
   it('reserves the execution and advances the next run before creating the workspace', async () => {
     const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
     const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
 
     await dispatchTask(service);
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalledWith(
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalledWith(
       {
         periodicTaskId: 'task-1',
         workspaceId: null,
@@ -176,7 +296,7 @@ describe('PeriodicTaskService', () => {
     });
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
-    const [persistDispatchOrder] = mockCreateExecutionAndMarkDispatched.mock.invocationCallOrder;
+    const [persistDispatchOrder] = mockReserveExecutionAndMarkDispatched.mock.invocationCallOrder;
     const [createWorkspaceOrder] = createWorkspaceForTask.mock.invocationCallOrder;
     expect(persistDispatchOrder).toBeDefined();
     expect(createWorkspaceOrder).toBeDefined();
@@ -194,7 +314,7 @@ describe('PeriodicTaskService', () => {
 
     await expect(dispatchTask(service)).rejects.toThrow('default session create failed');
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalled();
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalled();
     expect(mockUpdateExecution).toHaveBeenCalledWith(
       'exec-1',
       expect.objectContaining({
@@ -209,16 +329,27 @@ describe('PeriodicTaskService', () => {
   it('does not create a workspace when dispatch reservation fails', async () => {
     const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
     const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
-    mockCreateExecutionAndMarkDispatched.mockRejectedValue(
+    mockReserveExecutionAndMarkDispatched.mockRejectedValue(
       new Error('dispatch persistence failed')
     );
 
     await expect(dispatchTask(service)).rejects.toThrow('dispatch persistence failed');
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalled();
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalled();
     expect(createWorkspaceForTask).not.toHaveBeenCalled();
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
+  });
+
+  it('does not create a workspace when another poller claims the reservation', async () => {
+    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+    mockReserveExecutionAndMarkDispatched.mockResolvedValue(null);
+
+    await dispatchTask(service);
+
+    expect(createWorkspaceForTask).not.toHaveBeenCalled();
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
   });
 
   it('marks stale workspace reservations as failed', async () => {

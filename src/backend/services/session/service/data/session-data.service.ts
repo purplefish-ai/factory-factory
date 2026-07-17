@@ -1,39 +1,78 @@
-import type { Prisma, SessionProvider, TerminalSession } from '@prisma-gen/client';
+import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import {
-  type AgentSessionRecord,
   agentSessionAccessor,
+  type AgentSessionRecord as PersistenceAgentSessionRecord,
+  type AgentSessionRecordWithWorkspace as PersistenceAgentSessionRecordWithWorkspace,
 } from '@/backend/services/session/resources/agent-session.accessor';
 import {
   type ClosedSessionRecord,
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
-import { terminalSessionAccessor } from '@/backend/services/terminal';
+import type {
+  AgentSessionRecord,
+  AgentSessionRecordWithWorkspace,
+} from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
+import { sessionProviderResolverService } from './session-provider-resolver.service';
+
+function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
+  return {
+    id: session.id,
+    workspaceId: session.workspaceId,
+    name: session.name,
+    workflow: session.workflow,
+    model: session.model,
+    status: session.status,
+    provider: session.provider,
+    providerSessionId: session.providerSessionId,
+    providerProjectPath: session.providerProjectPath,
+    providerProcessPid: session.providerProcessPid,
+    providerMetadata: session.providerMetadata,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+function toAgentSessionRecordWithWorkspace(
+  session: PersistenceAgentSessionRecordWithWorkspace
+): AgentSessionRecordWithWorkspace {
+  return {
+    ...toAgentSessionRecord(session),
+    workspace: {
+      status: session.workspace.status,
+      worktreePath: session.workspace.worktreePath,
+      initErrorMessage: session.workspace.initErrorMessage,
+    },
+  };
+}
 
 class SessionDataService {
   // Agent sessions
 
-  findAgentSessionById(id: string) {
-    return agentSessionAccessor.findById(id);
+  async findAgentSessionById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
+    const session = await agentSessionAccessor.findById(id);
+    return session ? toAgentSessionRecordWithWorkspace(session) : null;
   }
 
-  findAgentSessionsByIds(ids: string[]): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findByIds(ids);
+  async findAgentSessionsByIds(ids: string[]): Promise<AgentSessionRecord[]> {
+    return (await agentSessionAccessor.findByIds(ids)).map(toAgentSessionRecord);
   }
 
-  findAgentSessionsByWorkspaceId(
+  async findAgentSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
   ): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
+    return (await agentSessionAccessor.findByWorkspaceId(workspaceId, filters)).map(
+      toAgentSessionRecord
+    );
   }
 
   countActiveAgentSessionsByWorkspaceId(workspaceId: string): Promise<number> {
     return agentSessionAccessor.countActiveByWorkspaceId(workspaceId);
   }
 
-  createAgentSession(data: {
+  async createAgentSession(data: {
     workspaceId: string;
     name?: string;
     workflow: string;
@@ -41,10 +80,15 @@ class SessionDataService {
     provider?: SessionProvider;
     providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.create(data);
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+      explicitModel: data.model,
+    });
+    return toAgentSessionRecord(await agentSessionAccessor.create({ ...data, ...defaults }));
   }
 
-  createAgentSessionWithinWorkspaceLimit(data: {
+  async createAgentSessionWithinWorkspaceLimit(data: {
     workspaceId: string;
     name?: string;
     workflow: string;
@@ -53,7 +97,30 @@ class SessionDataService {
     providerProjectPath?: string | null;
     maxSessions: number;
   }) {
-    return agentSessionAccessor.createWithinWorkspaceLimit(data);
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+      explicitModel: data.model,
+    });
+    const result = await agentSessionAccessor.createWithinWorkspaceLimit({ ...data, ...defaults });
+    return result.outcome === 'created'
+      ? { ...result, session: toAgentSessionRecord(result.session) }
+      : result;
+  }
+
+  async acquireFixerSession(data: {
+    workspaceId: string;
+    workflow: string;
+    sessionName: string;
+    maxSessions: number;
+    provider?: SessionProvider;
+    providerProjectPath: string | null;
+  }) {
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+    });
+    return agentSessionAccessor.acquireFixerSession({ ...data, ...defaults });
   }
 
   updateAgentSession(
@@ -70,15 +137,21 @@ class SessionDataService {
       providerProcessPid?: number | null;
     }
   ): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.update(id, data);
+    return agentSessionAccessor.update(id, data).then(toAgentSessionRecord);
   }
 
   deleteAgentSession(id: string): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.delete(id);
+    return agentSessionAccessor.delete(id).then(toAgentSessionRecord);
   }
 
   findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findWithPid();
+    return agentSessionAccessor
+      .findWithPid()
+      .then((sessions) => sessions.map(toAgentSessionRecord));
+  }
+
+  recoverStaleRunningAgentSessions(): Promise<number> {
+    return agentSessionAccessor.recoverStaleRunning();
   }
 
   // Closed sessions
@@ -96,43 +169,6 @@ class SessionDataService {
 
   deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
     return closedSessionAccessor.delete(id);
-  }
-
-  // Terminal sessions
-
-  findTerminalSessionById(id: string) {
-    return terminalSessionAccessor.findById(id);
-  }
-
-  findTerminalSessionsByWorkspaceId(
-    workspaceId: string,
-    filters?: { status?: SessionStatus; limit?: number }
-  ): Promise<TerminalSession[]> {
-    return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
-  }
-
-  createTerminalSession(data: {
-    workspaceId: string;
-    name?: string;
-    pid?: number;
-  }): Promise<TerminalSession> {
-    return terminalSessionAccessor.create(data);
-  }
-
-  updateTerminalSession(id: string, data: { name?: string }): Promise<TerminalSession> {
-    return terminalSessionAccessor.update(id, data);
-  }
-
-  deleteTerminalSession(id: string): Promise<TerminalSession> {
-    return terminalSessionAccessor.delete(id);
-  }
-
-  findTerminalSessionsWithPid(): Promise<TerminalSession[]> {
-    return terminalSessionAccessor.findWithPid();
-  }
-
-  clearTerminalPid(workspaceId: string, name: string): Promise<void> {
-    return terminalSessionAccessor.clearPid(workspaceId, name);
   }
 }
 

@@ -29,12 +29,14 @@ function createCaller(requestTrust?: {
     createChildWorkspace: (...args: unknown[]) => mockCreateChildWorkspace(...args),
     deliverWorkspaceNotification: (input: DeliverWorkspaceNotificationInput) =>
       mockDeliverWorkspaceNotification(input),
-    workspaceAccessor: {
+    workspaceDataService: {
       findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-      findChildrenWithStatus: (...args: unknown[]) => mockFindChildrenWithStatus(...args),
-      findParentWorkspace: (...args: unknown[]) => mockFindParentWorkspace(...args),
     },
-    workspaceNotificationAccessor: {
+    workspaceRelationshipsService: {
+      findChildrenWithStatus: (...args: unknown[]) => mockFindChildrenWithStatus(...args),
+      findParent: (...args: unknown[]) => mockFindParentWorkspace(...args),
+    },
+    workspaceNotificationService: {
       countPending: (...args: unknown[]) => mockCountPending(...args),
     },
   };

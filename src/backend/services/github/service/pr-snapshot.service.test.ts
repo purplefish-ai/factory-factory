@@ -18,9 +18,11 @@ const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: (...args: unknown[]) => mockFindById(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
+  },
+  workspacePrSnapshotService: {
+    record: (...args: unknown[]) => mockUpdate(...args),
     applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
       mockApplyPrSnapshotWithDispatchReset(...args),
     applyCIObservationWithDispatchReset: (...args: unknown[]) =>
@@ -69,6 +71,18 @@ describe('PRSnapshotService', () => {
     prSnapshotService.configure({
       kanban: {
         updateCachedKanbanColumn: (...args: unknown[]) => mockUpdateCachedKanbanColumn(...args),
+      },
+      workspace: {
+        findPRContext: (...args: unknown[]) => mockFindById(...args),
+        recordSnapshot: (...args: unknown[]) => mockUpdate(...args),
+        applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
+          mockApplyPrSnapshotWithDispatchReset(...args),
+        applyCIObservationWithDispatchReset: (...args: unknown[]) =>
+          mockApplyCIObservationWithDispatchReset(...args),
+        attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
+          mockAttachDiscoveredPRIfClaimMatches(...args),
+        updatePRSnapshotIfUrlMatches: (...args: unknown[]) =>
+          mockUpdatePRSnapshotIfUrlMatches(...args),
       },
     });
   });

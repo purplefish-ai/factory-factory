@@ -5,7 +5,7 @@ const {
   mockSessionDomainService,
   mockSessionService,
   mockSessionDataService,
-  mockWorkspaceNotificationAccessor,
+  mockWorkspaceNotificationService,
 } = vi.hoisted(() => ({
   mockSessionDomainService: {
     peekNextMessage: vi.fn(),
@@ -37,9 +37,9 @@ const {
   mockSessionDataService: {
     findAgentSessionById: vi.fn(),
   },
-  mockWorkspaceNotificationAccessor: {
+  mockWorkspaceNotificationService: {
     markDelivered: vi.fn(),
-    findById: vi.fn(),
+    findForDelivery: vi.fn(),
   },
 }));
 
@@ -56,7 +56,7 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceNotificationAccessor: mockWorkspaceNotificationAccessor,
+  workspaceNotificationService: mockWorkspaceNotificationService,
 }));
 
 vi.mock('./chat-message-handlers/registry', () => ({
@@ -94,8 +94,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.setSessionModel.mockResolvedValue(undefined);
     mockSessionService.setSessionReasoningEffort.mockResolvedValue(undefined);
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
-    mockWorkspaceNotificationAccessor.markDelivered.mockResolvedValue(undefined);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue(null);
+    mockWorkspaceNotificationService.markDelivered.mockResolvedValue(undefined);
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue(null);
     mockSessionDomainService.getTranscriptSnapshot.mockReturnValue([]);
     mockSessionDomainService.removeQueuedMessage.mockReturnValue(true);
     mockSessionService.isSessionWorking.mockReturnValue(false);
@@ -290,7 +290,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(mockWorkspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('drops a duplicate notification and dispatches the next queued message', async () => {
@@ -323,7 +323,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     // The message behind the duplicate still dispatches in the same pass.
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    expect(mockWorkspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(mockWorkspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('drops a workspace notification whose row is already marked delivered', async () => {
@@ -341,14 +341,14 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.peekNextMessage
       .mockReturnValueOnce(notificationMessage)
       .mockReturnValue(undefined);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue({
       id: 'notif-parent',
       deliveredAt: new Date('2026-02-01T00:00:00.000Z'),
     });
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    expect(mockWorkspaceNotificationAccessor.findById).toHaveBeenCalledWith('notif-parent');
+    expect(mockWorkspaceNotificationService.findForDelivery).toHaveBeenCalledWith('notif-parent');
     expect(mockSessionDomainService.removeQueuedMessage).toHaveBeenCalledWith(
       's1',
       'workspace-notification-notif-parent'
@@ -370,7 +370,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     };
     chatMessageHandlerService.resetDispatchState('s2');
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue({
       id: 'notif-parent',
       deliveredAt: null,
     });
@@ -410,7 +410,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     resolveSend();
     await firstDispatch;
-    expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(mockWorkspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('retries a pending notification on another session after the claiming session is reset', async () => {
@@ -426,7 +426,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     };
     chatMessageHandlerService.resetDispatchState('s2');
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue({
       id: 'notif-parent',
       deliveredAt: null,
     });
@@ -487,7 +487,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     chatMessageHandlerService.resetDispatchState('s2');
     chatMessageHandlerService.resetDispatchState('s3');
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue({
       id: 'notif-parent',
       deliveredAt: null,
     });
@@ -555,7 +555,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
-    mockWorkspaceNotificationAccessor.findById.mockResolvedValue({
+    mockWorkspaceNotificationService.findForDelivery.mockResolvedValue({
       id: 'notif-parent',
       deliveredAt: null,
     });
@@ -563,7 +563,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    expect(mockWorkspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(mockWorkspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('does not call markIdle when process has already stopped during dispatch failure', async () => {

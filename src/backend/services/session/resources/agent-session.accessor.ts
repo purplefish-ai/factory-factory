@@ -1,7 +1,6 @@
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
-import { userSettingsAccessor } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 
 export type AgentSessionRecord = AgentSession;
@@ -22,8 +21,8 @@ export interface CreateAgentSessionInput {
   workspaceId: string;
   name?: string;
   workflow: string;
-  model?: string;
-  provider?: SessionProvider;
+  model: string;
+  provider: SessionProvider;
   providerProjectPath?: string | null;
 }
 
@@ -63,7 +62,8 @@ export interface AcquireFixerAgentSessionInput {
   workflow: string;
   sessionName: string;
   maxSessions: number;
-  provider?: SessionProvider;
+  provider: SessionProvider;
+  model: string;
   providerProjectPath: string | null;
 }
 
@@ -108,26 +108,14 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   /** Serialises per-workspace acquisition to prevent count-then-create races. */
   private readonly workspaceAcquisitionQueue = new Map<string, Promise<unknown>>();
 
-  private async getConfiguredDefaultModel(provider: SessionProvider): Promise<string> {
-    const settings = await userSettingsAccessor.get();
-    return resolveSessionModelForProvider(
-      undefined,
-      provider,
-      provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel
-    );
-  }
-
   async create(data: CreateAgentSessionInput): Promise<AgentSessionRecord> {
-    const provider = data.provider ?? 'CLAUDE';
-    const fallbackModel = await this.getConfiguredDefaultModel(provider);
-
     return await prisma.agentSession.create({
       data: {
         workspaceId: data.workspaceId,
         name: data.name,
         workflow: data.workflow,
-        model: resolveSessionModelForProvider(data.model, provider, fallbackModel),
-        provider,
+        model: data.model,
+        provider: data.provider,
         providerProjectPath: data.providerProjectPath ?? null,
       },
     });
@@ -291,14 +279,11 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   private async doAcquireFixerSession(
     input: AcquireFixerAgentSessionInput
   ): Promise<FixerAgentSessionAcquisition> {
-    const provider = input.provider ?? 'CLAUDE';
-    const fallbackModel = await this.getConfiguredDefaultModel(provider);
-
     const existingSession = await prisma.agentSession.findFirst({
       where: {
         workspaceId: input.workspaceId,
         workflow: input.workflow,
-        provider,
+        provider: input.provider,
         status: { in: ACTIVE_AGENT_SESSION_STATUSES },
       },
       orderBy: { createdAt: 'desc' },
@@ -327,13 +312,13 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: {
         workspaceId: input.workspaceId,
         workflow: { not: input.workflow },
-        provider,
+        provider: input.provider,
       },
       orderBy: { updatedAt: 'desc' },
       select: { model: true },
     });
 
-    const model = resolveSessionModelForProvider(recentSession?.model, provider, fallbackModel);
+    const model = resolveSessionModelForProvider(recentSession?.model, input.provider, input.model);
 
     const newSession = await prisma.agentSession.create({
       data: {
@@ -342,7 +327,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         name: input.sessionName,
         model,
         status: SessionStatus.IDLE,
-        provider,
+        provider: input.provider,
         providerProjectPath: input.providerProjectPath,
       },
     });

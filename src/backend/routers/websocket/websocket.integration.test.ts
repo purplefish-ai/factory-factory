@@ -46,6 +46,7 @@ let workspaceSnapshotStore: typeof import('@/backend/services/workspace').worksp
 let workspaceQueryService: typeof import('@/backend/services/workspace').workspaceQueryService;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
+let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let sessionEventBus: typeof import('@/backend/services/session').sessionEventBus;
 let snapshotReconciliationService: typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator').snapshotReconciliationService;
 
@@ -79,6 +80,9 @@ beforeAll(async () => {
   ({ sessionDataService, sessionEventBus } = await vi.importActual<
     typeof import('@/backend/services/session')
   >('@/backend/services/session'));
+  ({ terminalSessionService } = await vi.importActual<typeof import('@/backend/services/terminal')>(
+    '@/backend/services/terminal'
+  ));
   ({ snapshotReconciliationService } = await vi.importActual<
     typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator')
   >('@/backend/orchestration/snapshot-reconciliation.orchestrator'));
@@ -301,6 +305,7 @@ describe('websocket integration', () => {
               configService: createConfigService(),
               createLogger: () => createLogger(),
               sessionDataService,
+              terminalSessionService,
               terminalService: new FakeTerminalService(),
               workspaceDataService,
             },
@@ -391,6 +396,7 @@ describe('websocket integration', () => {
         configService: createConfigService(),
         createLogger: () => createLogger(),
         sessionDataService,
+        terminalSessionService,
         terminalService: fakeTerminalService,
         workspaceDataService,
       },
@@ -444,6 +450,7 @@ describe('websocket integration', () => {
         configService: createConfigService(),
         createLogger: () => createLogger(),
         sessionDataService,
+        terminalSessionService,
         terminalService: fakeTerminalService,
         workspaceDataService,
       },
@@ -684,6 +691,7 @@ describe('websocket integration', () => {
         configService: createConfigService(),
         createLogger: () => createLogger(),
         sessionDataService,
+        terminalSessionService,
         terminalService: fakeTerminalService,
         workspaceDataService,
       },

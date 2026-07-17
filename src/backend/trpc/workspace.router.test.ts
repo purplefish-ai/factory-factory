@@ -159,7 +159,8 @@ function createCaller(requestTrust?: {
     workspaceDataService: Object.assign(
       {},
       fakeGraph.services.workspaceDataService,
-      mockWorkspaceDataService
+      mockWorkspaceDataService,
+      { findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args) }
     ),
     workspaceQueryService: Object.assign(
       {},
@@ -176,17 +177,20 @@ function createCaller(requestTrust?: {
           mockWorkspaceQueryService.getFactoryConfig(...args),
       }
     ),
-    workspaceAccessor: Object.assign({}, fakeGraph.services.workspaceAccessor, {
-      findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-      findChildrenWithStatus: vi.fn(async () => []),
-      findParentWorkspace: vi.fn(async () => null),
-    }),
+    workspaceRelationshipsService: Object.assign(
+      {},
+      fakeGraph.services.workspaceRelationshipsService,
+      {
+        findChildrenWithStatus: vi.fn(async () => []),
+        findParent: vi.fn(async () => null),
+      }
+    ),
     workspaceActivityService: Object.assign({}, fakeGraph.services.workspaceActivityService, {
       clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
     }),
-    workspaceNotificationAccessor: Object.assign(
+    workspaceNotificationService: Object.assign(
       {},
-      fakeGraph.services.workspaceNotificationAccessor,
+      fakeGraph.services.workspaceNotificationService,
       { countPending: vi.fn(async () => 0) }
     ),
     ratchetService: Object.assign({}, fakeGraph.services.ratchetService, {

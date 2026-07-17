@@ -6,7 +6,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
-import { sessionDataService } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 
@@ -19,14 +19,14 @@ type MockTerminalDescriptor = {
   outputBuffer: string;
 };
 
-vi.mock('@/backend/services/session', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/session')>();
+vi.mock('@/backend/services/terminal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/terminal')>();
   return {
     ...actual,
-    sessionDataService: {
-      ...actual.sessionDataService,
-      clearTerminalPid: (...args: unknown[]) => mockClearTerminalPid(...args),
-      createTerminalSession: vi.fn(),
+    terminalSessionService: {
+      ...actual.terminalSessionService,
+      releaseSessionPid: (...args: unknown[]) => mockClearTerminalPid(...args),
+      registerSession: vi.fn(),
     },
   };
 });
@@ -132,7 +132,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -166,7 +166,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -200,7 +200,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -242,7 +242,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -290,7 +290,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -367,7 +367,7 @@ describe('createTerminalUpgradeHandler', () => {
 
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -447,7 +447,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -504,7 +504,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -544,7 +544,7 @@ describe('createTerminalUpgradeHandler', () => {
       cols: 120,
       rows: 40,
     });
-    expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+    expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
       workspaceId,
       name: 'terminal-1',
       pid: 4321,
@@ -604,7 +604,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -683,7 +683,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -767,7 +767,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -811,7 +811,7 @@ describe('createTerminalUpgradeHandler', () => {
       id: workspaceId,
       worktreePath: '/tmp/worktree',
     } as never);
-    vi.mocked(sessionDataService.createTerminalSession).mockRejectedValueOnce(
+    vi.mocked(terminalSessionService.registerSession).mockRejectedValueOnce(
       new Error('database locked')
     );
 
@@ -830,7 +830,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {
@@ -862,7 +862,7 @@ describe('createTerminalUpgradeHandler', () => {
     ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
 
     await vi.waitFor(() => {
-      expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+      expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
         workspaceId,
         name: 'terminal-1',
         pid: 4321,
@@ -893,7 +893,7 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
-        sessionDataService,
+        terminalSessionService,
         terminalService,
         workspaceDataService,
         configService: {

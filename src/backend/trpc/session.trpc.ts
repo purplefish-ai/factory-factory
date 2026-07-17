@@ -254,17 +254,17 @@ export const sessionRouter = router({
       })
     )
     .query(({ ctx, input }) => {
-      const { sessionDataService } = ctx.appContext.services;
+      const { terminalSessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
-      return sessionDataService.findTerminalSessionsByWorkspaceId(workspaceId, filters);
+      return terminalSessionService.findWorkspaceSessions(workspaceId, filters);
     }),
 
   // Get terminal session by ID
   getTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { sessionDataService } = ctx.appContext.services;
-      const session = await sessionDataService.findTerminalSessionById(input.id);
+      const { terminalSessionService } = ctx.appContext.services;
+      const session = await terminalSessionService.findSession(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
       }
@@ -280,8 +280,8 @@ export const sessionRouter = router({
       })
     )
     .mutation(({ ctx, input }) => {
-      const { sessionDataService } = ctx.appContext.services;
-      return sessionDataService.createTerminalSession(input);
+      const { terminalSessionService } = ctx.appContext.services;
+      return terminalSessionService.registerSession(input);
     }),
 
   // Update a terminal session
@@ -289,19 +289,18 @@ export const sessionRouter = router({
     .input(
       z.object({
         id: z.string(),
-        name: z.string().optional(),
+        name: z.string(),
       })
     )
     .mutation(({ ctx, input }) => {
-      const { sessionDataService } = ctx.appContext.services;
-      const { id, ...updates } = input;
-      return sessionDataService.updateTerminalSession(id, updates);
+      const { terminalSessionService } = ctx.appContext.services;
+      return terminalSessionService.renameSession(input.id, input.name);
     }),
 
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ ctx, input }) => {
-      return ctx.appContext.services.sessionDataService.deleteTerminalSession(input.id);
+      return ctx.appContext.services.terminalSessionService.removeSession(input.id);
     }),
 });

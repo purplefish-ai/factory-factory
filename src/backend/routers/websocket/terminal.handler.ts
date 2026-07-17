@@ -36,7 +36,7 @@ type TerminalUnsubscribers = (() => void)[];
 
 type TerminalHandlerServices = Pick<
   ApplicationServices,
-  'sessionDataService' | 'terminalService' | 'workspaceDataService'
+  'terminalService' | 'terminalSessionService' | 'workspaceDataService'
 >;
 
 const TERMINAL_PID_CLEAR_RETRY_DELAYS_MS = [100, 500] as const;
@@ -117,7 +117,7 @@ async function handleCreateMessage(
   services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
-  const { sessionDataService, terminalService, workspaceDataService } = services;
+  const { terminalService, terminalSessionService, workspaceDataService } = services;
   logger.info('Creating terminal', {
     workspaceId,
     requestId: message.requestId,
@@ -143,7 +143,7 @@ async function handleCreateMessage(
   });
 
   try {
-    await sessionDataService.createTerminalSession({
+    await terminalSessionService.registerSession({
       workspaceId,
       name: terminalId,
       pid,
@@ -207,15 +207,15 @@ function attachTerminalListeners(
 async function clearTerminalPidWithRetry(
   workspaceId: string,
   terminalId: string,
-  services: Pick<TerminalHandlerServices, 'sessionDataService'>,
+  services: Pick<TerminalHandlerServices, 'terminalSessionService'>,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
-  const { sessionDataService } = services;
+  const { terminalSessionService } = services;
   const maxAttempts = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS.length + 1;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await sessionDataService.clearTerminalPid(workspaceId, terminalId);
+      await terminalSessionService.releaseSessionPid(workspaceId, terminalId);
       return;
     } catch (error) {
       const retryDelayMs = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS[attempt - 1];

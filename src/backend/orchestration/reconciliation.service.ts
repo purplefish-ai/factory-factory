@@ -1,9 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
+import { isProcessRunning } from '@/backend/lib/process-liveness';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { terminalSessionAccessor } from '@/backend/services/terminal';
-import { workspaceAccessor } from '@/backend/services/workspace';
-import { SessionStatus } from '@/shared/core';
 
 const logger = createLogger('reconciliation');
 
@@ -14,6 +12,19 @@ export interface ReconciliationWorkspaceBridge {
     workspaceId: string,
     options?: { branchName?: string; useExistingBranch?: boolean }
   ): Promise<void>;
+  findNeedingWorktree(): Promise<
+    Array<{
+      id: string;
+      status: string;
+      branchName: string | null;
+      initStartedAt: Date | null;
+      initScriptPid: number | null;
+    }>
+  >;
+}
+
+export interface ReconciliationTerminalBridge {
+  recoverOrphanedSessions(): Promise<number>;
 }
 
 class ReconciliationService {
@@ -21,9 +32,23 @@ class ReconciliationService {
   private isShuttingDown = false;
   private reconciliationInProgress: Promise<void> | null = null;
   private _workspace: ReconciliationWorkspaceBridge | null = null;
+  private _terminal: ReconciliationTerminalBridge | null = null;
 
-  configure(bridges: { workspace: ReconciliationWorkspaceBridge }): void {
+  configure(bridges: {
+    workspace: ReconciliationWorkspaceBridge;
+    terminal: ReconciliationTerminalBridge;
+  }): void {
     this._workspace = bridges.workspace;
+    this._terminal = bridges.terminal;
+  }
+
+  private get terminal(): ReconciliationTerminalBridge {
+    if (!this._terminal) {
+      throw new Error(
+        'ReconciliationService: terminal bridge not configured. Call configure() first.'
+      );
+    }
+    return this._terminal;
   }
 
   private get workspace(): ReconciliationWorkspaceBridge {
@@ -137,11 +162,11 @@ class ReconciliationService {
    * in which case the workspace is skipped (init is genuinely in progress).
    */
   private async reconcileWorkspaces(): Promise<void> {
-    const workspacesNeedingWorktree = await workspaceAccessor.findNeedingWorktree();
+    const workspacesNeedingWorktree = await this.workspace.findNeedingWorktree();
 
     for (const workspace of workspacesNeedingWorktree) {
       if (workspace.status === 'PROVISIONING') {
-        if (workspace.initScriptPid && this.isProcessRunning(workspace.initScriptPid)) {
+        if (workspace.initScriptPid && isProcessRunning(workspace.initScriptPid)) {
           logger.info('Skipping stale provisioning workspace with running init script', {
             workspaceId: workspace.id,
             initStartedAt: workspace.initStartedAt,
@@ -183,9 +208,7 @@ class ReconciliationService {
     }
   }
 
-  /**
-   * Cleanup orphaned Claude processes on startup
-   */
+  /** Cleanup orphaned terminal processes on startup. */
   async cleanupOrphans(): Promise<void> {
     // Bail early if shutdown has started to avoid accessing prisma after disconnect
     if (this.isShuttingDown) {
@@ -194,37 +217,11 @@ class ReconciliationService {
     }
 
     // Terminal sessions are still PID-tracked and may become orphaned.
-    const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
-
-    for (const session of terminalSessionsWithPid) {
-      if (session.pid) {
-        const isRunning = this.isProcessRunning(session.pid);
-        if (!isRunning) {
-          await terminalSessionAccessor.update(session.id, {
-            status: SessionStatus.IDLE,
-            pid: null,
-          });
-          logger.info('Marked orphaned terminal session as idle', {
-            sessionId: session.id,
-          });
-        }
-      }
-    }
-  }
-
-  /**
-   * Check if a process is running by PID.
-   * Returns true if process exists (even if we can't signal it due to permissions).
-   */
-  private isProcessRunning(pid: number): boolean {
-    try {
-      process.kill(pid, 0); // Signal 0 just checks if process exists
-      return true;
-    } catch (error) {
-      // ESRCH = no such process (not running)
-      // EPERM = permission denied (process exists but we can't signal it)
-      const err = error as NodeJS.ErrnoException;
-      return err.code === 'EPERM';
+    const recoveredCount = await this.terminal.recoverOrphanedSessions();
+    if (recoveredCount > 0) {
+      logger.info('Marked orphaned terminal sessions as idle', {
+        recoveredCount,
+      });
     }
   }
 }

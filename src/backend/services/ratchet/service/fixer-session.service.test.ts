@@ -1,23 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionStatus } from '@/shared/core';
-import type { RatchetSessionBridge } from './bridges';
+import type { RatchetSessionBridge, RatchetWorkspaceBridge } from './bridges';
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: vi.fn(),
-    findRawById: vi.fn(),
   },
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  agentSessionAccessor: {
-    findByWorkspaceId: vi.fn(),
+  sessionDataService: {
+    findAgentSessionsByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
   },
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
     getDefaultSessionProvider: vi.fn(),
   },
@@ -39,13 +38,13 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { configService } from '@/backend/services/config.service';
-import { agentSessionAccessor } from '@/backend/services/session';
-import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
 import { fixerSessionService } from './fixer-session.service';
 
 const mockSessionBridge: RatchetSessionBridge = {
+  findSessionById: vi.fn(),
   findSessionsByWorkspaceId: vi.fn(),
+  acquireFixerSession: vi.fn(),
   isSessionRunning: vi.fn(),
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
@@ -55,23 +54,28 @@ const mockSessionBridge: RatchetSessionBridge = {
   injectCommittedUserMessage: vi.fn(),
 };
 
+const mockWorkspaceBridge: RatchetWorkspaceBridge = {
+  findFixerContext: vi.fn(),
+  recordSessionEnd: vi.fn(),
+};
+
 describe('FixerSessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fixerSessionService.configure({ session: mockSessionBridge });
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    fixerSessionService.configure({ session: mockSessionBridge, workspace: mockWorkspaceBridge });
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
       id: 'w1',
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     } as never);
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       defaultSessionProvider: 'CLAUDE',
     } as never);
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('skips when workspace is missing worktree', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue(null);
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue(null);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
@@ -88,8 +92,10 @@ describe('FixerSessionService', () => {
   });
 
   it('returns already_active when existing session is actively working', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'existing',
       sessionId: 's1',
       status: SessionStatus.RUNNING,
@@ -109,8 +115,10 @@ describe('FixerSessionService', () => {
   });
 
   it('sends message to running idle session when configured', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'existing',
       sessionId: 's1',
       status: SessionStatus.RUNNING,
@@ -137,8 +145,10 @@ describe('FixerSessionService', () => {
   });
 
   it('creates and starts a new session', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'created',
       sessionId: 's-new',
     });
@@ -155,6 +165,7 @@ describe('FixerSessionService', () => {
     });
 
     expect(result).toEqual({ status: 'started', sessionId: 's-new' });
+    expect(mockWorkspaceBridge.findFixerContext).toHaveBeenCalledOnce();
     expect(mockSessionBridge.startSession).toHaveBeenCalledWith('s-new', {
       initialPrompt: 'prompt',
       startupModePreset: 'non_interactive',
@@ -162,8 +173,10 @@ describe('FixerSessionService', () => {
   });
 
   it('returns after initiating a prompt without waiting for the agent turn', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'created',
       sessionId: 's-deferred',
     });
@@ -211,8 +224,10 @@ describe('FixerSessionService', () => {
   });
 
   it('calls afterStart after startup and before awaiting the agent turn', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'created',
       sessionId: 's-new',
     });
@@ -259,8 +274,10 @@ describe('FixerSessionService', () => {
   });
 
   it('restarts an existing running idle session when configured', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'existing',
       sessionId: 's-running',
       status: SessionStatus.RUNNING,
@@ -286,14 +303,14 @@ describe('FixerSessionService', () => {
   });
 
   it('does not set providerProjectPath when resolved provider is CODEX', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
       id: 'w1',
+      worktreePath: '/tmp/w',
       defaultSessionProvider: 'CODEX',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     } as never);
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockResolvedValue({
       outcome: 'limit_reached',
     });
 
@@ -305,7 +322,7 @@ describe('FixerSessionService', () => {
       buildPrompt: () => 'prompt',
     });
 
-    expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledWith(
+    expect(mockSessionBridge.acquireFixerSession).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'CODEX',
         providerProjectPath: null,
@@ -314,8 +331,10 @@ describe('FixerSessionService', () => {
   });
 
   it('deduplicates concurrent acquisition by workspace/workflow', async () => {
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(agentSessionAccessor.acquireFixerSession).mockImplementation(async () => {
+    vi.mocked(mockWorkspaceBridge.findFixerContext).mockResolvedValue({
+      worktreePath: '/tmp/w',
+    } as never);
+    vi.mocked(mockSessionBridge.acquireFixerSession).mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return { outcome: 'created', sessionId: 's-new' };
     });
@@ -341,11 +360,11 @@ describe('FixerSessionService', () => {
     ]);
 
     expect(first).toEqual(second);
-    expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledTimes(1);
+    expect(mockSessionBridge.acquireFixerSession).toHaveBeenCalledTimes(1);
   });
 
   it('returns latest active session for workflow', async () => {
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
       {
         id: 'old',
         workflow: 'ci-fix',

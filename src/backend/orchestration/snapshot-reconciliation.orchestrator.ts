@@ -30,7 +30,7 @@ import {
   type gitOpsService,
   type SnapshotUpdateInput,
   type WorkspaceSnapshotEntry,
-  type workspaceAccessor,
+  type workspaceMaintenanceService,
   type workspaceSnapshotStore,
 } from '@/backend/services/workspace';
 
@@ -57,7 +57,10 @@ export interface SnapshotReconciliationDependencies extends ReconciliationBridge
     component: string
   ): Pick<ReturnType<typeof createLogger>, 'debug' | 'error' | 'info' | 'warn'>;
   gitOpsService: Pick<typeof gitOpsService, 'getWorkspaceGitStats'>;
-  workspaceAccessor: Pick<typeof workspaceAccessor, 'findAllNonArchivedWithSessionsAndProject'>;
+  workspaceMaintenanceService: Pick<
+    typeof workspaceMaintenanceService,
+    'findActiveWithSessionsAndProject'
+  >;
   workspaceSnapshotStore: Pick<
     typeof workspaceSnapshotStore,
     'getAllWorkspaceIds' | 'getByWorkspaceId' | 'remove' | 'upsert'
@@ -244,7 +247,7 @@ export class SnapshotReconciliationService {
   private buildAuthoritativeFields(
     ws: Awaited<
       ReturnType<
-        SnapshotReconciliationDependencies['workspaceAccessor']['findAllNonArchivedWithSessionsAndProject']
+        SnapshotReconciliationDependencies['workspaceMaintenanceService']['findActiveWithSessionsAndProject']
       >
     >[number],
     allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>,
@@ -324,7 +327,7 @@ export class SnapshotReconciliationService {
 
     // 1. Fetch all non-archived workspaces from DB
     const workspaces =
-      await this.dependencies.workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
+      await this.dependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject();
 
     // 2. Get pending requests from bridges
     const allPendingRequests = this.dependencies.session.getAllPendingRequests();

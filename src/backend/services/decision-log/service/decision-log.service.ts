@@ -1,7 +1,7 @@
 import type { DecisionLog } from '@prisma-gen/client';
-import { decisionLogAccessor } from '@/backend/services/decision-log';
+import { decisionLogAccessor } from '@/backend/services/decision-log/resources/decision-log.accessor';
 
-class DecisionLogQueryService {
+class DecisionLogService {
   findByAgentId(agentId: string, limit?: number): Promise<DecisionLog[]> {
     return decisionLogAccessor.findByAgentId(agentId, limit);
   }
@@ -37,4 +37,4 @@ class DecisionLogQueryService {
   }
 }
 
-export const decisionLogQueryService = new DecisionLogQueryService();
+export const decisionLogService = new DecisionLogService();

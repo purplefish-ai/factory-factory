@@ -13,7 +13,7 @@ const mockLoggerInfo = vi.fn();
 vi.mock('@/backend/services/workspace', () => ({
   computePRDiscoveryNextCheckAt: (date: Date, retryCount: number) =>
     new Date(date.getTime() + retryCount * 60_000),
-  workspaceAccessor: {
+  workspaceMaintenanceService: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
     findNeedingPRDiscovery: (...args: unknown[]) => mockFindNeedingPRDiscovery(...args),
     claimPRDiscoveryAttempt: (...args: unknown[]) => mockClaimPRDiscoveryAttempt(...args),

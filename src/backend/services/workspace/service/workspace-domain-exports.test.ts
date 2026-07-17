@@ -16,9 +16,16 @@ import {
   WorkspaceStateMachineError,
   WorktreePathSafetyError,
   workspaceActivityService,
+  workspaceAutoIterationService,
   workspaceDataService,
+  workspaceMaintenanceService,
+  workspaceNotificationService,
+  workspacePrSnapshotService,
   // Query
   workspaceQueryService,
+  workspaceRatchetService,
+  workspaceRelationshipsService,
+  workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -72,6 +79,18 @@ describe('Workspace domain exports', () => {
 
   it('exports WorkspaceCreationService as a constructor', () => {
     expect(typeof WorkspaceCreationService).toBe('function');
+  });
+
+  it.each([
+    ['workspaceAutoIterationService', workspaceAutoIterationService],
+    ['workspacePrSnapshotService', workspacePrSnapshotService],
+    ['workspaceRatchetService', workspaceRatchetService],
+    ['workspaceRunScriptService', workspaceRunScriptService],
+    ['workspaceRelationshipsService', workspaceRelationshipsService],
+    ['workspaceMaintenanceService', workspaceMaintenanceService],
+    ['workspaceNotificationService', workspaceNotificationService],
+  ])('exports %s as an intent-focused service', (_name, service) => {
+    expect(service).toBeDefined();
   });
 
   // --- Worktree ---

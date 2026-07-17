@@ -12,3 +12,5 @@ export {
   TerminalService,
   terminalService,
 } from './terminal.service';
+export type { TerminalSession } from './terminal-session.service';
+export { terminalSessionService } from './terminal-session.service';

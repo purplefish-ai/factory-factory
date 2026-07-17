@@ -1,9 +1,27 @@
 import type { SessionProvider, Workspace } from '@prisma-gen/client';
 import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
-import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
+import { userSettingsService } from '@/backend/services/settings';
+import { workspaceDataService } from '@/backend/services/workspace';
 
 class SessionProviderResolverService {
+  async resolveSessionDefaults(params: {
+    workspaceId: string;
+    explicitProvider?: SessionProvider;
+    explicitModel?: string;
+    workspace?: Workspace;
+  }): Promise<{ provider: SessionProvider; model: string }> {
+    const provider = await this.resolveSessionProvider(params);
+    const settings = await userSettingsService.get();
+    const configuredModel =
+      provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel;
+
+    return {
+      provider,
+      model: resolveSessionModelForProvider(params.explicitModel, provider, configuredModel),
+    };
+  }
+
   async resolveProviderForWorkspaceCreation(
     explicitProvider?: SessionProvider
   ): Promise<SessionProvider> {
@@ -11,7 +29,7 @@ class SessionProviderResolverService {
       return explicitProvider;
     }
 
-    return await userSettingsAccessor.getDefaultSessionProvider();
+    return await userSettingsService.getDefaultSessionProvider();
   }
 
   async resolveSessionProvider(params: {
@@ -23,7 +41,7 @@ class SessionProviderResolverService {
       return params.explicitProvider;
     }
 
-    const workspace = params.workspace ?? (await workspaceAccessor.findRawById(params.workspaceId));
+    const workspace = params.workspace ?? (await workspaceDataService.findById(params.workspaceId));
     if (!workspace) {
       throw new Error(`Workspace not found: ${params.workspaceId}`);
     }
@@ -33,7 +51,7 @@ class SessionProviderResolverService {
       return workspaceProvider;
     }
 
-    return userSettingsAccessor.getDefaultSessionProvider();
+    return userSettingsService.getDefaultSessionProvider();
   }
 }
 

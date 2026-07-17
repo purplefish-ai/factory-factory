@@ -12,7 +12,7 @@
  * The table below therefore encodes intent and acts as a tripwire for future
  * refactors rather than restricting today's graph. The enforced invariant is
  * compare-and-swap on the expected fromState at the point of persistence
- * (see workspaceAccessor.transitionRatchetStateIfEnabled and
+ * (see workspaceRatchetService.transitionStateIfEnabled and
  * settleRatchetIdleWhileDisabled), which guarantees that emitted
  * RATCHET_STATE_CHANGED events carry an accurate fromState and that stale
  * in-flight checks cannot overwrite a concurrent transition.

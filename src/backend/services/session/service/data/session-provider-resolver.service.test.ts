@@ -1,7 +1,7 @@
 import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 vi.mock('@/backend/services/workspace');
@@ -61,8 +61,8 @@ describe('sessionProviderResolverService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(createWorkspace());
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(createWorkspace() as never);
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
       preferredIde: 'cursor',
@@ -84,7 +84,7 @@ describe('sessionProviderResolverService', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('uses explicit provider over workspace and user defaults', async () => {
@@ -94,13 +94,13 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(workspaceAccessor.findRawById).not.toHaveBeenCalled();
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(workspaceDataService.findById).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('uses workspace default when configured', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(
-      createWorkspace({ defaultSessionProvider: 'CODEX' })
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(
+      createWorkspace({ defaultSessionProvider: 'CODEX' }) as never
     );
 
     const provider = await sessionProviderResolverService.resolveSessionProvider({
@@ -108,7 +108,7 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('falls back to user default when workspace is WORKSPACE_DEFAULT', async () => {
@@ -117,6 +117,22 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CLAUDE');
-    expect(userSettingsAccessor.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
+    expect(userSettingsService.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves the configured model for the selected provider', async () => {
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CODEX');
+    vi.mocked(userSettingsService.get).mockResolvedValue({
+      defaultCodexModel: 'gpt-5.3-codex',
+    } as never);
+
+    await expect(
+      sessionProviderResolverService.resolveSessionDefaults({
+        workspaceId: 'ws-1',
+      })
+    ).resolves.toEqual({
+      provider: 'CODEX',
+      model: 'gpt-5.3-codex',
+    });
   });
 });

@@ -1,5 +1,5 @@
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
-import type { workspaceAccessor } from '@/backend/services/workspace';
+import type { workspaceRatchetService } from '@/backend/services/workspace';
 import type { CIStatus, RatchetState } from '@/shared/core';
 
 export interface RatchetStatusCheckRollupItem {
@@ -60,7 +60,7 @@ export interface RatchetCheckResult {
 }
 
 export type WorkspaceWithPR = NonNullable<
-  Awaited<ReturnType<(typeof workspaceAccessor)['findForRatchetById']>>
+  Awaited<ReturnType<(typeof workspaceRatchetService)['findCandidateById']>>
 >;
 
 /**

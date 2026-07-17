@@ -22,9 +22,6 @@ vi.mock('@/backend/interceptors', () => ({
 }));
 vi.mock('@/backend/orchestration/cli-health.service', () => ({ cliHealthService: {} }));
 vi.mock('@/backend/orchestration/data-backup.service', () => ({ dataBackupService: {} }));
-vi.mock('@/backend/orchestration/decision-log-query.service', () => ({
-  decisionLogQueryService: {},
-}));
 vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () => ({
   configureDomainBridges: vi.fn(),
 }));
@@ -79,6 +76,7 @@ vi.mock('@/backend/services/auto-iteration', () => ({
 }));
 vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
+vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {},
   prFetchRegistry: {},
@@ -98,7 +96,6 @@ vi.mock('@/backend/services/logger.service', () => ({
   getLogFilePath: vi.fn(),
 }));
 vi.mock('@/backend/services/periodic-task', () => ({
-  periodicTaskAccessor: {},
   periodicTaskService: {},
 }));
 vi.mock('@/backend/services/port.service', () => ({ findAvailablePort: vi.fn() }));
@@ -127,7 +124,11 @@ vi.mock('@/backend/services/session', () => ({
   sessionProviderResolverService: {},
   sessionService: {},
 }));
-vi.mock('@/backend/services/terminal', () => ({ terminalService: {} }));
+vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
+vi.mock('@/backend/services/terminal', () => ({
+  terminalService: {},
+  terminalSessionService: {},
+}));
 vi.mock('@/backend/services/workspace', () => ({
   computeKanbanColumn: (...args: unknown[]) => applicationGraphMocks.computeKanbanColumn(...args),
   computePendingRequestType: (...args: unknown[]) =>
@@ -139,13 +140,17 @@ vi.mock('@/backend/services/workspace', () => ({
   gitOpsService: {},
   kanbanStateService: {},
   projectManagementService: {},
-  userSettingsQueryService: {},
   WorkspaceCreationService: class {},
-  workspaceAccessor: {},
   workspaceActivityService: {},
+  workspaceAutoIterationService: {},
   workspaceDataService: {},
-  workspaceNotificationAccessor: {},
+  workspaceMaintenanceService: {},
+  workspaceNotificationService: {},
+  workspacePrSnapshotService: {},
   workspaceQueryService: {},
+  workspaceRatchetService: {},
+  workspaceRelationshipsService: {},
+  workspaceRunScriptService: {},
   workspaceSnapshotStore: {},
   workspaceStateMachine: {},
   worktreeLifecycleService: {},
@@ -163,7 +168,6 @@ import { prisma } from '@/backend/db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from '@/backend/interceptors';
 import { cliHealthService } from '@/backend/orchestration/cli-health.service';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
 import {
   createEventCollectorOrchestrator,
@@ -199,10 +203,11 @@ import {
 } from '@/backend/services/auto-iteration';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
+import { decisionLogService } from '@/backend/services/decision-log';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
-import { periodicTaskAccessor, periodicTaskService } from '@/backend/services/periodic-task';
+import { periodicTaskService } from '@/backend/services/periodic-task';
 import { findAvailablePort } from '@/backend/services/port.service';
 import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
 import { rateLimiter } from '@/backend/services/rate-limiter.service';
@@ -227,7 +232,8 @@ import {
   sessionProviderResolverService,
   sessionService,
 } from '@/backend/services/session';
-import { terminalService } from '@/backend/services/terminal';
+import { userSettingsService } from '@/backend/services/settings';
+import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   getWorkspaceInitPolicy,
@@ -235,12 +241,16 @@ import {
   gitOpsService,
   kanbanStateService,
   projectManagementService,
-  userSettingsQueryService,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceAutoIterationService,
   workspaceDataService,
-  workspaceNotificationAccessor,
+  workspaceMaintenanceService,
+  workspaceNotificationService,
+  workspacePrSnapshotService,
   workspaceQueryService,
+  workspaceRatchetService,
+  workspaceRelationshipsService,
+  workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -333,7 +343,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     cryptoService,
     dataBackupService,
-    decisionLogQueryService,
+    decisionLogQueryService: decisionLogService,
     executeStartupScriptPipeline,
     factoryConfigService: FactoryConfigService,
     fetchCodexModelCatalogFromAppServer,
@@ -355,7 +365,6 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     linearStateSyncService,
     listQuickActions,
     logbookService,
-    periodicTaskAccessor,
     periodicTaskService,
     persistChildNotification,
     persistParentNotification,
@@ -379,13 +388,22 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     sessionService: graphSessionService,
     startupScriptService,
     terminalService,
-    userSettingsQueryService,
-    workspaceAccessor,
+    terminalSessionService,
+    userSettingsQueryService: userSettingsService,
     workspaceActivityService,
+    workspaceAutoIterationService,
+    workspaceCreationService: {
+      create: vi.fn(),
+    } as unknown as ApplicationServices['workspaceCreationService'],
     workspaceDataService,
+    workspaceMaintenanceService,
     workspaceGitStateService,
-    workspaceNotificationAccessor,
+    workspaceNotificationService,
+    workspacePrSnapshotService,
     workspaceQueryService,
+    workspaceRatchetService,
+    workspaceRelationshipsService,
+    workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
     worktreeLifecycleService,
@@ -409,7 +427,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
         getRuntimeSnapshot: services.sessionService.getRuntimeSnapshot,
         getAllPendingRequests: services.chatEventForwarderService.getAllPendingRequests,
       },
-      workspaceAccessor: services.workspaceAccessor,
+      workspaceMaintenanceService: services.workspaceMaintenanceService,
       workspaceSnapshotStore: services.workspaceSnapshotStore,
     }),
     recoverStaleArchivingWorkspaces,

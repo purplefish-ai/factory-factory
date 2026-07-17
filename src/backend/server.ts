@@ -67,7 +67,7 @@ export function createServer(application: Application, requestedPort?: number): 
     sessionFileLogger,
     sessionService,
     terminalService,
-    workspaceAccessor,
+    workspaceAutoIterationService,
     workspaceGitStateService,
   } = services;
   const {
@@ -403,7 +403,7 @@ export function createServer(application: Application, requestedPort?: number): 
   };
 
   const recoverStaleAutoIterationOnStartup = async (): Promise<void> => {
-    const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
+    const recovered = await workspaceAutoIterationService.recoverStaleStatuses();
     if (recovered.length > 0) {
       logger.info('Recovered stale auto-iteration states on startup', {
         count: recovered.length,

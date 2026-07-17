@@ -9,10 +9,15 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
+import { workspaceDataService, workspaceRatchetService } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
-import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
+import type {
+  RatchetGitHubBridge,
+  RatchetPRSnapshotBridge,
+  RatchetSessionBridge,
+  RatchetWorkspaceBridge,
+} from './bridges';
 import type {
   ActiveFixerCheckResult,
   PRStateFetchResult,
@@ -107,15 +112,27 @@ class RatchetService extends EventEmitter {
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
   private snapshotBridge: RatchetPRSnapshotBridge | null = null;
+  private workspaceBridge: RatchetWorkspaceBridge | null = null;
 
   configure(bridges: {
     session: RatchetSessionBridge;
     github: RatchetGitHubBridge;
     snapshot: RatchetPRSnapshotBridge;
+    workspace: RatchetWorkspaceBridge;
   }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
     this.snapshotBridge = bridges.snapshot;
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): RatchetWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'RatchetService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
   }
 
   private get session(): RatchetSessionBridge {
@@ -232,13 +249,13 @@ class RatchetService extends EventEmitter {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
 
-    const workspaces = await workspaceAccessor.findWithPRsForRatchet();
+    const workspaces = await workspaceRatchetService.findCandidates();
 
     if (workspaces.length === 0) {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
 
-    const userSettings = await userSettingsAccessor.get();
+    const userSettings = await userSettingsService.get();
 
     const results = await Promise.all(
       workspaces.map((workspace) =>
@@ -273,12 +290,12 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
+    const workspace = await workspaceRatchetService.findCandidateById(workspaceId);
     if (!workspace) {
       return null;
     }
 
-    const userSettings = await userSettingsAccessor.get();
+    const userSettings = await userSettingsService.get();
     const reviewTriggerMode = userSettings.ratchetReviewTriggerMode;
 
     const result = await this.runWorkspaceCheckSafely(
@@ -293,7 +310,7 @@ class RatchetService extends EventEmitter {
     // service's fetch was actively in flight. Rerun once now that the
     // concurrent work has settled so the bypass actually applies.
     if (opts?.bypassPrFetchCooldown && isRecentlyFetchedWaitResult(result)) {
-      const freshWorkspace = await workspaceAccessor.findForRatchetById(workspaceId);
+      const freshWorkspace = await workspaceRatchetService.findCandidateById(workspaceId);
       if (!freshWorkspace) {
         return result;
       }
@@ -313,11 +330,7 @@ class RatchetService extends EventEmitter {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
-    const settled = await workspaceAccessor.recordRatchetSessionEnd(
-      workspaceId,
-      sessionId,
-      outcome
-    );
+    const settled = await this.workspace.recordSessionEnd(workspaceId, sessionId, outcome);
     if (!settled) {
       return;
     }
@@ -344,14 +357,14 @@ class RatchetService extends EventEmitter {
   async markPrClosed(workspaceId: string): Promise<void> {
     const maxCasAttempts = 3;
     for (let attempt = 0; attempt < maxCasAttempts; attempt++) {
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace?.ratchetEnabled || workspace.ratchetState === RatchetState.IDLE) {
         return;
       }
 
       const fromState = workspace.ratchetState;
       assertValidRatchetTransition(workspaceId, fromState, RatchetState.IDLE);
-      const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+      const updated = await workspaceRatchetService.transitionStateIfEnabled(
         workspaceId,
         fromState,
         {
@@ -413,15 +426,13 @@ class RatchetService extends EventEmitter {
   }
 
   async setWorkspaceRatcheting(workspaceId: string, enabled: boolean): Promise<void> {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
     }
 
     if (enabled) {
-      await workspaceAccessor.update(workspaceId, {
-        ratchetEnabled: true,
-      });
+      await workspaceRatchetService.enable(workspaceId);
       this.emit(RATCHET_TOGGLED, {
         workspaceId,
         enabled: true,
@@ -430,14 +441,7 @@ class RatchetService extends EventEmitter {
       return;
     }
 
-    await workspaceAccessor.update(workspaceId, {
-      ratchetEnabled: false,
-      ratchetState: RatchetState.IDLE,
-      ratchetActiveSessionId: null,
-      ratchetLastCiRunId: null,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
-    });
+    await workspaceRatchetService.disable(workspaceId);
 
     // Stops every running ratchet-workflow session, including the one the
     // (now cleared) active-session pointer named.
@@ -486,7 +490,7 @@ class RatchetService extends EventEmitter {
       // CAS on the pre-read fromState: a lost swap means another path already
       // settled (or re-enabled) the workspace, and that path emitted its own
       // event, so emitting here with this fromState would be stale.
-      const settled = await workspaceAccessor.settleRatchetIdleWhileDisabled(
+      const settled = await workspaceRatchetService.settleIdleWhileDisabled(
         workspace.id,
         fromState
       );
@@ -513,7 +517,7 @@ class RatchetService extends EventEmitter {
     try {
       signal.throwIfAborted();
       const effectiveReviewTriggerMode =
-        reviewTriggerMode ?? (await userSettingsAccessor.get()).ratchetReviewTriggerMode;
+        reviewTriggerMode ?? (await userSettingsService.get()).ratchetReviewTriggerMode;
       signal.throwIfAborted();
       const authenticatedUsername = await this.getAuthenticatedUsernameCached(signal);
       signal.throwIfAborted();
@@ -928,7 +932,7 @@ class RatchetService extends EventEmitter {
 
     signal.throwIfAborted();
     assertValidRatchetTransition(workspace.id, workspace.ratchetState, nextState);
-    const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+    const updated = await workspaceRatchetService.transitionStateIfEnabled(
       workspace.id,
       workspace.ratchetState,
       {
@@ -942,7 +946,7 @@ class RatchetService extends EventEmitter {
       // The CAS refused the write: either ratcheting was disabled mid-check,
       // or another path (markPrClosed, disable+re-enable) transitioned the
       // state away from the one this check ran against.
-      const fresh = await workspaceAccessor.findById(workspace.id);
+      const fresh = await workspaceDataService.findById(workspace.id);
       signal.throwIfAborted();
       return fresh?.ratchetEnabled ? 'superseded' : 'disabled';
     }
@@ -973,6 +977,7 @@ class RatchetService extends EventEmitter {
     return await checkActiveFixerSessionHelper({
       workspace,
       sessionBridge: this.session,
+      workspaceBridge: this.workspace,
       signal,
       onDispatchChanged: (event) => {
         this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);

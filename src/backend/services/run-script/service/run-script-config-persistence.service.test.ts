@@ -18,11 +18,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  projectAccessor: { findById: mockFindProjectById },
+  projectManagementService: { findById: mockFindProjectById },
   workspaceDataService: {
     findByProjectId: mockFindWorkspacesByProjectId,
-    setRunScriptCommands: mockUpdateWorkspace,
   },
+  workspaceRunScriptService: { setCommands: mockUpdateWorkspace },
 }));
 
 import { runScriptConfigPersistenceService } from './run-script-config-persistence.service';
@@ -172,7 +172,11 @@ describe('runScriptConfigPersistenceService', () => {
       totalWorkspaces: 3,
       errors: [{ workspaceId: 'w2', error: expect.stringContaining('Invalid JSON') }],
     });
-    expect(mockUpdateWorkspace).toHaveBeenCalledWith('w1', 'pnpm dev', null, null);
+    expect(mockUpdateWorkspace).toHaveBeenCalledWith('w1', {
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+    });
   });
 
   it('reads project factory config and returns null when the file is missing', async () => {

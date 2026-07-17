@@ -5,6 +5,7 @@ const prismaMock = vi.hoisted(() => ({
   periodicTask: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   periodicTaskExecution: {
     create: vi.fn(),
@@ -256,17 +257,16 @@ describe('periodicTaskAccessor.markDispatched', () => {
   });
 });
 
-describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
+describe('periodicTaskAccessor.reserveExecutionAndMarkDispatched', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
     prismaMock.periodicTask.findUnique.mockReset();
     prismaMock.periodicTask.update.mockReset();
+    prismaMock.periodicTask.updateMany.mockReset();
     prismaMock.periodicTaskExecution.create.mockReset();
     prismaMock.$transaction.mockReset();
-    prismaMock.$transaction.mockImplementation(async (operations: Promise<unknown>[]) =>
-      Promise.all(operations)
-    );
+    prismaMock.$transaction.mockImplementation(async (operation) => operation(prismaMock));
   });
 
   afterEach(() => {
@@ -280,13 +280,11 @@ describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
       workspaceId: null,
       status: 'RUNNING',
     };
-    const executionCreate = Promise.resolve(execution);
-    const taskUpdate = Promise.resolve({});
-    prismaMock.periodicTaskExecution.create.mockReturnValue(executionCreate);
-    prismaMock.periodicTask.update.mockReturnValue(taskUpdate);
+    prismaMock.periodicTaskExecution.create.mockResolvedValue(execution);
+    prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
-      periodicTaskAccessor.createExecutionAndMarkDispatched(
+      periodicTaskAccessor.reserveExecutionAndMarkDispatched(
         {
           periodicTaskId: 'task-1',
           workspaceId: null,
@@ -308,14 +306,41 @@ describe('periodicTaskAccessor.createExecutionAndMarkDispatched', () => {
         status: 'RUNNING',
       },
     });
-    expect(prismaMock.periodicTask.update).toHaveBeenCalledWith({
-      where: { id: 'task-1' },
+    expect(prismaMock.periodicTask.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'task-1',
+        isEnabled: true,
+        nextRunAt: { lte: new Date('2026-02-28T15:00:00.000Z') },
+        executions: { none: { status: 'RUNNING' } },
+      },
       data: expect.objectContaining({
         lastRunAt: new Date('2026-02-28T15:00:00.000Z'),
         scheduledDayOfMonth: null,
         nextRunAt: new Date('2026-03-01T09:00:00.000Z'),
       }),
     });
-    expect(prismaMock.$transaction).toHaveBeenCalledWith([executionCreate, taskUpdate]);
+    expect(prismaMock.$transaction).toHaveBeenCalledOnce();
+  });
+
+  it('does not create an execution when the conditional reservation loses the race', async () => {
+    prismaMock.periodicTask.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      periodicTaskAccessor.reserveExecutionAndMarkDispatched(
+        {
+          periodicTaskId: 'task-1',
+          workspaceId: null,
+          status: 'RUNNING',
+        },
+        {
+          cadence: 'DAILY',
+          scheduledTime: '09:00',
+          timezone: 'UTC',
+          scheduledDayOfMonth: null,
+        }
+      )
+    ).resolves.toBeNull();
+
+    expect(prismaMock.periodicTaskExecution.create).not.toHaveBeenCalled();
   });
 });

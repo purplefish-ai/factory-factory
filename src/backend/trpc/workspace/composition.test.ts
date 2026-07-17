@@ -42,9 +42,9 @@ describe('workspace router composition', () => {
       workspaceDataService: Object.assign({}, fakeGraph.services.workspaceDataService, {
         findByProjectId: mockFindByProjectId,
       }),
-      workspaceNotificationAccessor: Object.assign(
+      workspaceNotificationService: Object.assign(
         {},
-        fakeGraph.services.workspaceNotificationAccessor,
+        fakeGraph.services.workspaceNotificationService,
         { countPending: mockCountPending }
       ),
     };

@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import {
-  agentSessionAccessor,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
 } from '@/backend/services/session';
 import type { AgentMessage } from '@/shared/acp-protocol';
@@ -57,7 +57,7 @@ export async function deliverWorkspaceNotification(
     return { delivered: false };
   }
 
-  const sessions = await agentSessionAccessor.findByWorkspaceId(input.targetWorkspaceId);
+  const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(input.targetWorkspaceId);
   const activeSession = [...sessions]
     .reverse()
     .find((session) => session.status === 'RUNNING' || session.status === 'IDLE');

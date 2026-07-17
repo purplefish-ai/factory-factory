@@ -3,7 +3,7 @@ import {
   type AgentSessionRecord,
   agentSessionAccessor,
 } from '@/backend/services/session/resources/agent-session.accessor';
-import { projectAccessor, workspaceAccessor } from '@/backend/services/workspace';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 
 type SessionUpdateData = Partial<
   Pick<
@@ -34,7 +34,7 @@ type SessionAccessor = {
 
 type WorkspaceAccessor = {
   findById(id: string): Promise<Workspace | null>;
-  markHasHadSessions(id: string): Promise<void>;
+  recordSessionPresence(id: string): Promise<void>;
 };
 
 type ProjectAccessor = {
@@ -44,8 +44,8 @@ type ProjectAccessor = {
 export class SessionRepository {
   constructor(
     private readonly sessions: SessionAccessor = agentSessionAccessor,
-    private readonly workspaces: WorkspaceAccessor = workspaceAccessor,
-    private readonly projects: ProjectAccessor = projectAccessor
+    private readonly workspaces: WorkspaceAccessor = workspaceDataService,
+    private readonly projects: ProjectAccessor = projectManagementService
   ) {}
 
   getSessionById(sessionId: string): Promise<AgentSessionRecord | null> {
@@ -65,7 +65,7 @@ export class SessionRepository {
   }
 
   markWorkspaceHasHadSessions(workspaceId: string): Promise<void> {
-    return this.workspaces.markHasHadSessions(workspaceId);
+    return this.workspaces.recordSessionPresence(workspaceId);
   }
 
   updateSession(sessionId: string, data: SessionUpdateData): Promise<AgentSessionRecord> {

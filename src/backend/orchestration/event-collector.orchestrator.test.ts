@@ -46,7 +46,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
   kanbanStateService: { updateCachedKanbanColumn: vi.fn().mockResolvedValue(undefined) },
-  workspaceAccessor: { findRawById: vi.fn() },
+  workspaceDataService: { findRatchetProjection: vi.fn() },
   workspaceSnapshotStore: {
     upsert: vi.fn(),
     getByWorkspaceId: vi.fn(),
@@ -144,8 +144,8 @@ import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   kanbanStateService,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceDataService,
   workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -176,9 +176,9 @@ function configureEventCollector(): void {
     sessionService,
     terminalService,
     workspaceActivityService,
-    workspaceAccessor,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    workspaceDataService,
   });
   activeEventCollector.start();
 }
@@ -756,7 +756,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'MERGED',
@@ -795,7 +795,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_FAILED',
@@ -829,7 +829,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
       status: 'READY',
       ratchetEnabled: true,
       ratchetState: 'CI_RUNNING',
@@ -859,7 +859,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     const pendingRead = deferred<never>();
-    vi.mocked(workspaceAccessor.findRawById).mockReturnValue(pendingRead.promise);
+    vi.mocked(workspaceDataService.findRatchetProjection).mockReturnValue(pendingRead.promise);
     configureEventCollector();
 
     const dispatchHandler = vi
@@ -876,7 +876,9 @@ describe('configureEventCollector', () => {
     }) => void;
 
     dispatchHandler({ workspaceId: 'ws-archived-race' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     workspaceHandler({
       workspaceId: 'ws-archived-race',
       fromStatus: 'READY',
@@ -903,7 +905,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById)
+    vi.mocked(workspaceDataService.findRatchetProjection)
       .mockRejectedValueOnce(new Error('read failed'))
       .mockResolvedValue({
         status: 'READY',
@@ -920,10 +922,14 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-retry' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     await vi.advanceTimersByTimeAsync(1000);
 
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(2)
+    );
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-retry',
       expect.objectContaining({ ratchetDispatchOutcome: 'DIED' }),
@@ -936,7 +942,9 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    vi.mocked(workspaceDataService.findRatchetProjection).mockRejectedValue(
+      new Error('read failed')
+    );
     configureEventCollector();
     const handler = vi
       .mocked(ratchetService.on)
@@ -945,15 +953,17 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-persistent-failure' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     await vi.advanceTimersByTimeAsync(999);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(2000);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(3);
   });
 
   it('backs off when an invalidation arrives during a failed projection read', async () => {
@@ -961,7 +971,7 @@ describe('configureEventCollector', () => {
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     const pendingRead = deferred<never>();
-    vi.mocked(workspaceAccessor.findRawById)
+    vi.mocked(workspaceDataService.findRatchetProjection)
       .mockReturnValueOnce(pendingRead.promise)
       .mockResolvedValue({
         status: 'READY',
@@ -978,22 +988,26 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-concurrent-invalidation' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     handler({ workspaceId: 'ws-concurrent-invalidation' });
     pendingRead.reject(new Error('read failed'));
     await Promise.resolve();
 
     await vi.advanceTimersByTimeAsync(999);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(2);
   });
 
   it('does not reset the projection failure budget for repeated invalidations', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    vi.mocked(workspaceDataService.findRatchetProjection).mockRejectedValue(
+      new Error('read failed')
+    );
     configureEventCollector();
     const handler = vi
       .mocked(ratchetService.on)
@@ -1002,24 +1016,28 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-invalidation-stream' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     handler({ workspaceId: 'ws-invalidation-stream' });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(2);
     handler({ workspaceId: 'ws-invalidation-stream' });
     await vi.advanceTimersByTimeAsync(1999);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(3);
   });
 
   it('cancels an authoritative projection retry when stopped', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    vi.mocked(workspaceDataService.findRatchetProjection).mockRejectedValue(
+      new Error('read failed')
+    );
     configureEventCollector();
     const handler = vi
       .mocked(ratchetService.on)
@@ -1028,11 +1046,13 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-stop-retry' });
-    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1)
+    );
     stopEventCollector();
     await vi.advanceTimersByTimeAsync(100);
 
-    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledTimes(1);
   });
 
   it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {

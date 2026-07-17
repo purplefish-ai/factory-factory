@@ -2,6 +2,7 @@
 // Public API for the session domain module.
 // Consumers should import from '@/backend/services/session' only.
 
+export type { AgentSessionRecord } from '@/backend/services/session/types';
 // ACP runtime (Phase 19+)
 export type { AcpClientOptions, AcpRuntimeEventHandlers, AcpSessionState } from './acp';
 export {

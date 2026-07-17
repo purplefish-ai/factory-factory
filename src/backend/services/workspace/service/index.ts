@@ -1,4 +1,12 @@
 // Domain: workspace
+export type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspaceFixerContext,
+  WorkspacePRContext,
+  WorkspaceProviderSelectionSnapshot,
+  WorkspaceStatusSnapshot,
+} from '@/backend/services/workspace/types';
 // Public API for the workspace domain module.
 // Consumers should import from '@/backend/services/workspace' only.
 
@@ -24,10 +32,19 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
+export { workspaceAutoIterationService } from './lifecycle/workspace-auto-iteration.service';
+export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
+export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
+export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';
+export {
+  type RunScriptExecutionState,
+  workspaceRunScriptService,
+} from './lifecycle/workspace-run-script.service';
 export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
-export { userSettingsQueryService } from './query/user-settings-query.service';
+export { workspaceMaintenanceService } from './query/workspace-maintenance.service';
+export { workspaceNotificationService } from './query/workspace-notification.service';
 export { workspaceQueryService } from './query/workspace-query.service';
 // --- Workspace snapshots ---
 export {

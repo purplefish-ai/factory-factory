@@ -7,7 +7,8 @@ import { SessionStatus } from '@/shared/core';
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   findByIdWithProject: vi.fn(),
-  updateWorkspace: vi.fn(),
+  registerInitializedWorktree: vi.fn(),
+  setRunScriptCommands: vi.fn(),
   findByWorkspaceId: vi.fn(),
   ensureBaseBranchExists: vi.fn(),
   createWorktree: vi.fn(),
@@ -51,10 +52,16 @@ vi.mock('@/backend/services/workspace', () => ({
     getInitMode: mocks.getInitMode,
     clearInitMode: mocks.clearInitMode,
   },
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: mocks.findById,
     findByIdWithProject: mocks.findByIdWithProject,
-    update: mocks.updateWorkspace,
+  },
+  workspaceRelationshipsService: {
+    findParent: vi.fn(),
+  },
+  workspaceRunScriptService: {
+    registerInitializedWorktree: mocks.registerInitializedWorktree,
+    setCommands: mocks.setRunScriptCommands,
   },
   gitOpsService: {
     ensureBaseBranchExists: mocks.ensureBaseBranchExists,
@@ -65,9 +72,6 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  agentSessionAccessor: {
-    findByWorkspaceId: mocks.findByWorkspaceId,
-  },
   sessionService: {
     startSession: mocks.startSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
@@ -80,8 +84,7 @@ vi.mock('@/backend/services/session', () => ({
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
   sessionDataService: {
-    createTerminalSession: mocks.createTerminalSession,
-    clearTerminalPid: mocks.clearTerminalPid,
+    findAgentSessionsByWorkspaceId: mocks.findByWorkspaceId,
   },
 }));
 
@@ -91,6 +94,10 @@ vi.mock('@/backend/services/terminal', () => ({
     destroyTerminal: mocks.destroyTerminal,
     getTerminalsForWorkspace: mocks.getTerminalsForWorkspace,
     onExit: mocks.onExit,
+  },
+  terminalSessionService: {
+    registerSession: mocks.createTerminalSession,
+    releaseSessionPid: mocks.clearTerminalPid,
   },
 }));
 
@@ -155,7 +162,8 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     mocks.removeWorktree.mockResolvedValue(undefined);
     mocks.getAuthenticatedUsername.mockResolvedValue(null);
     mocks.getIssue.mockResolvedValue(null);
-    mocks.updateWorkspace.mockResolvedValue(undefined);
+    mocks.registerInitializedWorktree.mockResolvedValue(undefined);
+    mocks.setRunScriptCommands.mockResolvedValue(undefined);
     mocks.hasStartupScript.mockReturnValue(false);
     mocks.readConfig.mockResolvedValue({
       scripts: {

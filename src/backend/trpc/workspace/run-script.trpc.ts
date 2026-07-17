@@ -13,7 +13,8 @@ export const workspaceRunScriptRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { runScriptConfigPersistenceService, workspaceDataService } = ctx.appContext.services;
+      const { runScriptConfigPersistenceService, workspaceDataService, workspaceRunScriptService } =
+        ctx.appContext.services;
       const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
 
       if (!workspace) {
@@ -37,12 +38,7 @@ export const workspaceRunScriptRouter = router({
           projectRepoPath: workspace.project?.repoPath,
           config: input.config,
           persistWorkspaceCommands: (id, commands) =>
-            workspaceDataService.setRunScriptCommands(
-              id,
-              commands.runScriptCommand,
-              commands.runScriptPostRunCommand,
-              commands.runScriptCleanupCommand
-            ),
+            workspaceRunScriptService.setCommands(id, commands),
         });
 
         return { success: true };

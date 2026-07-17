@@ -91,7 +91,7 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
 
 import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
@@ -154,6 +154,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle: vi.fn(),
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
@@ -161,7 +162,7 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
-    vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(
       unsafeCoerce({
         id: 'workspace-1',
         worktreePath: '/tmp/work',
@@ -1016,6 +1017,7 @@ describe('SessionService', () => {
         markSessionRunning,
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     const acpProcessor = getAcpProcessorState();
@@ -1307,6 +1309,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -1430,6 +1433,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
 

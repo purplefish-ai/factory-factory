@@ -168,8 +168,13 @@ export const adminRouter = router({
    * Get all active processes (Agent sessions via ACP and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
-    const { acpRuntimeManager, sessionDataService, terminalService, workspaceDataService } =
-      ctx.appContext.services;
+    const {
+      acpRuntimeManager,
+      sessionDataService,
+      terminalService,
+      terminalSessionService,
+      workspaceDataService,
+    } = ctx.appContext.services;
     const logger = getLogger(ctx);
     // Get active ACP sessions from in-memory map
     const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
@@ -186,7 +191,7 @@ export const adminRouter = router({
     const mergedAgentSessions = mergeAgentSessions(activeDbSessions, agentSessionsWithPid);
 
     // Get terminal sessions with PIDs from database
-    const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
+    const terminalSessionsWithPid = await terminalSessionService.listPidBackedSessions();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([

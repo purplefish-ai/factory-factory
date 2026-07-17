@@ -23,9 +23,8 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
   return {
     ...actual,
-    workspaceAccessor: {
-      findAllNonArchivedWithSessionsAndProject: (...args: unknown[]) =>
-        mockFindAllNonArchived(...args),
+    workspaceMaintenanceService: {
+      findActiveWithSessionsAndProject: (...args: unknown[]) => mockFindAllNonArchived(...args),
     },
     gitOpsService: {
       getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
@@ -325,8 +324,8 @@ describe('SnapshotReconciliationService', () => {
       }),
       gitOpsService: { getWorkspaceGitStats: mockGetWorkspaceGitStats },
       session: bridges.session,
-      workspaceAccessor: {
-        findAllNonArchivedWithSessionsAndProject: mockFindAllNonArchived,
+      workspaceMaintenanceService: {
+        findActiveWithSessionsAndProject: mockFindAllNonArchived,
       },
       workspaceSnapshotStore: {
         getAllWorkspaceIds: mockGetAllWorkspaceIds,
@@ -932,8 +931,8 @@ describe('per-graph snapshot reconciliation', () => {
         createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
         gitOpsService: { getWorkspaceGitStats: vi.fn() },
         session: createMockBridges().session,
-        workspaceAccessor: {
-          findAllNonArchivedWithSessionsAndProject: vi
+        workspaceMaintenanceService: {
+          findActiveWithSessionsAndProject: vi
             .fn()
             .mockResolvedValue([createMockWorkspace({ id: workspaceId, worktreePath: null })]),
         },
@@ -948,7 +947,7 @@ describe('per-graph snapshot reconciliation', () => {
     await first.reconcile();
 
     expect(
-      firstDependencies.workspaceAccessor.findAllNonArchivedWithSessionsAndProject
+      firstDependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject
     ).toHaveBeenCalledOnce();
     expect(firstDependencies.workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'first',
@@ -957,7 +956,7 @@ describe('per-graph snapshot reconciliation', () => {
       expect.any(Number)
     );
     expect(
-      secondDependencies.workspaceAccessor.findAllNonArchivedWithSessionsAndProject
+      secondDependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject
     ).not.toHaveBeenCalled();
     expect(secondDependencies.workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });

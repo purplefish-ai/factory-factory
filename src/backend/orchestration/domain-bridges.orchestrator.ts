@@ -8,7 +8,6 @@
  * Domain services never import each other; they receive capabilities via bridges.
  */
 
-import type { Prisma } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
 import type {
   AutoIterationLogbookBridge,
@@ -39,25 +38,31 @@ import type {
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import type { terminalSessionService } from '@/backend/services/terminal';
 import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
   type getWorkspaceInitPolicy,
   type kanbanStateService,
+  type WorkspaceCreationService,
   type WorkspaceInitPolicyInput,
-  type workspaceAccessor,
   type workspaceActivityService,
+  type workspaceAutoIterationService,
+  type workspaceDataService,
+  type workspaceMaintenanceService,
+  type workspacePrSnapshotService,
   type workspaceQueryService,
+  type workspaceRatchetService,
+  type workspaceRunScriptService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
 import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 type SessionService = typeof sessionService;
-type WorkspaceAccessor = typeof workspaceAccessor;
+type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
 
 export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
@@ -79,9 +84,16 @@ export type BridgeServices = {
   sessionDomainService: typeof sessionDomainService;
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
-  workspaceAccessor: typeof workspaceAccessor;
+  terminalSessionService: typeof terminalSessionService;
   workspaceActivityService: typeof workspaceActivityService;
+  workspaceAutoIterationService: typeof workspaceAutoIterationService;
+  workspaceCreationService: WorkspaceCreationService;
+  workspaceDataService: typeof workspaceDataService;
+  workspaceMaintenanceService: typeof workspaceMaintenanceService;
+  workspacePrSnapshotService: typeof workspacePrSnapshotService;
   workspaceQueryService: typeof workspaceQueryService;
+  workspaceRatchetService: typeof workspaceRatchetService;
+  workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
 };
@@ -112,15 +124,12 @@ async function stopPreviousAutoIterationSession(
 }
 
 async function clearAutoIterationSessionIfMatching(
-  workspaceAccessor: WorkspaceAccessor,
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
 ): Promise<void> {
   try {
-    const latestWorkspace = await workspaceAccessor.findRawById(workspaceId);
-    if (latestWorkspace?.autoIterationSessionId === sessionId) {
-      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: null });
-    }
+    await workspaceAutoIterationService.clearSessionIfMatching(workspaceId, sessionId);
   } catch {
     // Preserve the original handoff or persistence error
   }
@@ -128,12 +137,12 @@ async function clearAutoIterationSessionIfMatching(
 
 async function cleanupRecycledAutoIterationSession(
   sessionService: SessionService,
-  workspaceAccessor: WorkspaceAccessor,
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
 ): Promise<void> {
   await stopSessionBestEffort(sessionService, sessionId);
-  await clearAutoIterationSessionIfMatching(workspaceAccessor, workspaceId, sessionId);
+  await clearAutoIterationSessionIfMatching(workspaceAutoIterationService, workspaceId, sessionId);
 }
 
 export function configureDomainBridges(services: BridgeServices): void {
@@ -157,9 +166,16 @@ export function configureDomainBridges(services: BridgeServices): void {
     sessionDomainService,
     sessionService,
     startupScriptService,
-    workspaceAccessor,
+    terminalSessionService,
     workspaceActivityService,
+    workspaceAutoIterationService,
+    workspaceCreationService,
+    workspaceDataService,
+    workspaceMaintenanceService,
+    workspacePrSnapshotService,
     workspaceQueryService,
+    workspaceRatchetService,
+    workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
   } = services;
@@ -167,8 +183,10 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
+    findSessionById: (sessionId) => sessionDataService.findAgentSessionById(sessionId),
     findSessionsByWorkspaceId: (workspaceId) =>
       sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
+    acquireFixerSession: (input) => sessionDataService.acquireFixerSession(input),
     isSessionRunning: (id) => sessionService.isSessionRunning(id),
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
@@ -177,6 +195,12 @@ export function configureDomainBridges(services: BridgeServices): void {
     sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
+  };
+
+  const ratchetWorkspaceBridge = {
+    findFixerContext: (workspaceId: string) => workspaceDataService.findFixerContext(workspaceId),
+    recordSessionEnd: (workspaceId: string, sessionId: string, outcome: 'COMPLETED' | 'DIED') =>
+      workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome),
   };
 
   const ratchetGithubBridge: RatchetGitHubBridge = {
@@ -216,14 +240,22 @@ export function configureDomainBridges(services: BridgeServices): void {
     session: ratchetSessionBridge,
     github: ratchetGithubBridge,
     snapshot: ratchetSnapshotBridge,
+    workspace: ratchetWorkspaceBridge,
   });
-  fixerSessionService.configure({ session: ratchetSessionBridge });
+  fixerSessionService.configure({
+    session: ratchetSessionBridge,
+    workspace: ratchetWorkspaceBridge,
+  });
   reconciliationService.configure({
     workspace: {
       markFailed: async (id, reason) => {
         await workspaceStateMachine.markFailed(id, reason);
       },
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
+      findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+    },
+    terminal: {
+      recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),
     },
   });
 
@@ -256,6 +288,18 @@ export function configureDomainBridges(services: BridgeServices): void {
     kanban: {
       updateCachedKanbanColumn: (id) => kanbanStateService.updateCachedKanbanColumn(id),
     },
+    workspace: {
+      findPRContext: (id) => workspaceDataService.findPRContext(id),
+      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
+      applyPrSnapshotWithDispatchReset: (id, observation) =>
+        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
+      applyCIObservationWithDispatchReset: (id, observation) =>
+        workspacePrSnapshotService.applyCIObservationWithDispatchReset(id, observation),
+      attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
+        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
+      updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>
+        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, snapshot, updatedAt),
+    },
   });
 
   // === Session domain bridges ===
@@ -275,6 +319,8 @@ export function configureDomainBridges(services: BridgeServices): void {
         workspaceActivityService.markSessionIdle(wsId, sId, generation),
       recordRatchetSessionEnd: (workspaceId, sessionId, outcome) =>
         ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
+      resetPRDiscoveryBackoff: (workspaceId) =>
+        workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
     },
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>
@@ -302,32 +348,34 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: {
       markReady: (id) => workspaceStateMachine.markReady(id),
       markFailed: (id, msg) => workspaceStateMachine.markFailed(id, msg),
+      clearInitOutput: (id) => workspaceRunScriptService.clearInitOutput(id),
+      appendInitOutput: (id, output, maxSize) =>
+        workspaceRunScriptService.appendInitOutput(id, output, maxSize),
+      setInitScriptPid: (id, pid) => workspaceRunScriptService.setInitScriptPid(id, pid),
+      clearInitScriptPid: (id, pid) => workspaceRunScriptService.clearInitScriptPid(id, pid),
     },
   });
 
   // === Auto-iteration domain bridges ===
   const autoIterationWorkspaceBridge: AutoIterationWorkspaceBridge = {
     async getWorktreePath(workspaceId) {
-      const ws = await workspaceAccessor.findRawById(workspaceId);
+      const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
       if (!ws?.worktreePath) {
         throw new Error(`Workspace ${workspaceId} has no worktree path`);
       }
       return ws.worktreePath;
     },
     async updateAutoIterationStatus(workspaceId, status) {
-      await workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
+      await workspaceAutoIterationService.setStatus(workspaceId, status);
     },
     async updateAutoIterationProgress(workspaceId, progress) {
-      const parsedProgress = autoIterationProgressSchema.parse(progress);
-      await workspaceAccessor.update(workspaceId, {
-        autoIterationProgress: parsedProgress as unknown as Prisma.InputJsonValue,
-      });
+      await workspaceAutoIterationService.setProgress(workspaceId, progress);
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {
-      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
+      await workspaceAutoIterationService.setSession(workspaceId, sessionId);
     },
     finishAutoIterationIfSessionMatches(workspaceId, sessionId, status) {
-      return workspaceAccessor.finishAutoIterationIfSessionMatches(workspaceId, sessionId, status);
+      return workspaceAutoIterationService.finishSessionIfMatching(workspaceId, sessionId, status);
     },
   };
 
@@ -390,7 +438,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       return Promise.resolve('');
     },
     async recycleSession(workspaceId, handoffPrompt) {
-      const ws = await workspaceAccessor.findRawById(workspaceId);
+      const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
       if (ws?.autoIterationSessionId) {
         await stopPreviousAutoIterationSession(sessionService, ws.autoIterationSessionId);
       }
@@ -406,12 +454,12 @@ export function configureDomainBridges(services: BridgeServices): void {
         throw err;
       }
       try {
-        await workspaceAccessor.update(workspaceId, { autoIterationSessionId: newSession.id });
+        await workspaceAutoIterationService.setSession(workspaceId, newSession.id);
         await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
       } catch (err) {
         await cleanupRecycledAutoIterationSession(
           sessionService,
-          workspaceAccessor,
+          workspaceAutoIterationService,
           workspaceId,
           newSession.id
         );
@@ -433,14 +481,13 @@ export function configureDomainBridges(services: BridgeServices): void {
   periodicTaskService.configure({
     workspace: {
       async createWorkspaceForTask({ projectId, name, prompt, periodicTaskId }) {
-        // Create workspace directly with periodicTaskId and PERIODIC_TASK source
-        const workspace = await workspaceAccessor.create({
+        const workspace = await workspaceCreationService.create({
+          type: 'PERIODIC_TASK',
           projectId,
           name,
-          creationSource: 'PERIODIC_TASK',
           periodicTaskId,
+          initialPrompt: prompt,
           ratchetEnabled: true,
-          creationMetadata: { initialPrompt: prompt },
         });
 
         // Create default session
@@ -462,7 +509,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
     status: {
       async getWorkspaceStatus(workspaceId) {
-        const ws = await workspaceAccessor.findRawById(workspaceId);
+        const ws = await workspaceDataService.findStatusSnapshot(workspaceId);
         if (!ws) {
           return null;
         }

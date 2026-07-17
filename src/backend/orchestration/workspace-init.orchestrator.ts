@@ -8,18 +8,19 @@ import {
   runScriptConfigPersistenceService,
 } from '@/backend/services/run-script';
 import {
-  agentSessionAccessor,
   buildChildWorkspaceContext,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
-import { terminalService } from '@/backend/services/terminal';
+import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
   assertWorktreePathSafe,
   gitOpsService,
-  workspaceAccessor,
+  workspaceDataService,
+  workspaceRelationshipsService,
+  workspaceRunScriptService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -74,7 +75,7 @@ async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
 }
 
 async function getWorkspaceWithProjectOrThrow(workspaceId: string): Promise<WorkspaceWithProject> {
-  const workspaceWithProject = await workspaceAccessor.findByIdWithProject(workspaceId);
+  const workspaceWithProject = await workspaceDataService.findByIdWithProject(workspaceId);
   if (!workspaceWithProject?.project) {
     throw new Error('Workspace project not found');
   }
@@ -129,7 +130,7 @@ async function handleWorkspaceInitFailure(
       });
     }
     try {
-      await sessionDataService.clearTerminalPid(workspaceId, autoCreatedTerminalId);
+      await terminalSessionService.releaseSessionPid(workspaceId, autoCreatedTerminalId);
     } catch (clearPidError) {
       logger.warn('Failed to clear default terminal PID after init failure', {
         workspaceId,
@@ -155,7 +156,7 @@ async function cleanupUnregisteredWorktreeAfterInitFailure(
   const { project, worktreeInfo } = candidate;
 
   try {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (workspace?.worktreePath === worktreeInfo.worktreePath) {
       return;
     }
@@ -352,7 +353,7 @@ async function resolveInitialAutoMessageContent(
 
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
-    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });
@@ -361,14 +362,14 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       return null;
     }
 
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
     const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
 
     // Build the initial prompt from linked issue data, or fallback to creation metadata.
     const initialMessage = await resolveInitialAutoMessageContent(workspaceId, metadata);
     const parent = workspace?.parentWorkspaceId
-      ? await workspaceAccessor.findParentWorkspace(workspaceId)
+      ? await workspaceRelationshipsService.findParent(workspaceId)
       : null;
     const childContext = workspace?.parentWorkspaceId
       ? buildChildWorkspaceContext({
@@ -434,7 +435,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const runningSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const runningSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.RUNNING,
       limit: 1,
     });
@@ -444,7 +445,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const idleSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const idleSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });
@@ -486,7 +487,7 @@ async function startDefaultTerminal(
     let terminalSessionPersisted = false;
     const clearPersistedTerminalPid = async () => {
       try {
-        await sessionDataService.clearTerminalPid(workspaceId, terminalId);
+        await terminalSessionService.releaseSessionPid(workspaceId, terminalId);
       } catch (error) {
         logger.warn('Failed to clear terminal PID after default terminal exit', {
           workspaceId,
@@ -508,7 +509,7 @@ async function startDefaultTerminal(
     });
 
     try {
-      await sessionDataService.createTerminalSession({
+      await terminalSessionService.registerSession({
         workspaceId,
         name: terminalId,
         pid,
@@ -643,7 +644,7 @@ async function awaitSessionAndDispatchIfSuccess(
  */
 async function maybeStartAutoIteration(workspaceId: string): Promise<boolean> {
   try {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (!workspace || workspace.mode !== WorkspaceMode.AUTO_ITERATION) {
       return false;
     }
@@ -741,7 +742,7 @@ export async function initializeWorkspaceWorktree(
       factoryConfig,
       persistWorkspaceCommands: (id, commands) => {
         if (worktreeInfo.created) {
-          return workspaceAccessor.update(id, {
+          return workspaceRunScriptService.registerInitializedWorktree(id, {
             worktreePath: worktreeInfo.worktreePath,
             branchName: worktreeInfo.branchName,
             isAutoGeneratedBranch: !useExistingBranch,
@@ -751,7 +752,7 @@ export async function initializeWorkspaceWorktree(
           });
         }
 
-        return workspaceAccessor.update(id, {
+        return workspaceRunScriptService.setCommands(id, {
           runScriptCommand: commands.runScriptCommand,
           runScriptPostRunCommand: commands.runScriptPostRunCommand,
           runScriptCleanupCommand: commands.runScriptCleanupCommand,

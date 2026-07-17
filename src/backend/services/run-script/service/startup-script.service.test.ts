@@ -16,7 +16,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceRunScriptService: {
     clearInitOutput: (...args: unknown[]) => mockClearInitOutput(...args),
     appendInitOutput: (...args: unknown[]) => mockAppendInitOutput(...args),
     setInitScriptPid: (...args: unknown[]) => mockSetInitScriptPid(...args),
@@ -53,6 +53,10 @@ describe('StartupScriptService', () => {
       workspace: {
         markReady,
         markFailed,
+        clearInitOutput: mockClearInitOutput,
+        appendInitOutput: mockAppendInitOutput,
+        setInitScriptPid: mockSetInitScriptPid,
+        clearInitScriptPid: mockClearInitScriptPid,
       },
     });
     mockClearInitOutput.mockResolvedValue(undefined);

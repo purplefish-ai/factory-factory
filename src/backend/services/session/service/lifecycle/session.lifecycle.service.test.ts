@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
-import { workspaceNotificationAccessor } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
+import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -17,15 +17,15 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: { findById: vi.fn() },
-  workspaceNotificationAccessor: {
-    findPending: vi.fn(),
+  workspaceDataService: { findById: vi.fn() },
+  workspaceNotificationService: {
+    listPendingForDelivery: vi.fn(),
     markDelivered: vi.fn(),
   },
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(async () => ({
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
@@ -67,6 +67,7 @@ function createLifecycleService(options?: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
       recordRatchetSessionEnd: vi.fn(async () => undefined),
+      resetPRDiscoveryBackoff: vi.fn(async () => true),
     },
     messageQueue: { tryDispatchNextMessage },
   });
@@ -156,7 +157,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
   it('adds pending workspace notifications to the UI transcript and ACP dispatch queue', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -180,7 +181,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
@@ -234,12 +235,12 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     );
     expect(enqueuedCount).toBe(2);
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('does not enqueue notifications found after the startup stop generation changes', async () => {
     let resolvePending!: (notifications: unknown[]) => void;
-    vi.mocked(workspaceNotificationAccessor.findPending).mockReturnValue(
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockReturnValue(
       new Promise((resolve) => {
         resolvePending = resolve;
       }) as never
@@ -248,7 +249,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
     const deliveryPromise = deliverPendingChildNotifications(service);
     await vi.waitFor(() => {
-      expect(workspaceNotificationAccessor.findPending).toHaveBeenCalledWith('workspace-1');
+      expect(workspaceNotificationService.listPendingForDelivery).toHaveBeenCalledWith(
+        'workspace-1'
+      );
     });
 
     (
@@ -277,7 +280,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
   });
 
   it('leaves notifications pending when enqueue fails', async () => {
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -300,11 +303,11 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('does not dispatch pending notifications ahead of an existing queued message', async () => {
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -317,7 +320,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: new Date('2026-06-22T10:30:00.000Z'),
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
@@ -330,11 +333,11 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       })
     );
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('reports a pending workspace notification that is already queued as dispatchable', async () => {
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -357,11 +360,11 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('does not re-enqueue a notification queued during transcript reconciliation', async () => {
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -393,7 +396,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
   it('marks an already-committed pending notification delivered without requeueing it', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -406,7 +409,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
       transcript: [
         {
@@ -426,12 +429,12 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('matches an already-committed pending notification with a provider-generated ID', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -444,7 +447,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService } = createLifecycleService({
       historyHydrationSource: 'jsonl',
       transcript: [
@@ -464,12 +467,12 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('does not match identical user text without a notification marker', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -499,13 +502,13 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
     expect(enqueuedCount).toBe(1);
     expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('consumes one provider-generated transcript entry once for duplicate pending notifications', async () => {
     const oldestCreatedAt = new Date('2026-06-22T10:30:00.000Z');
     const newestCreatedAt = new Date('2026-06-22T10:31:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent-oldest',
         workspaceId: 'workspace-1',
@@ -529,7 +532,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: newestCreatedAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService } = createLifecycleService({
       historyHydrationSource: 'jsonl',
       transcript: [
@@ -547,8 +550,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
     expect(enqueuedCount).toBe(1);
     expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledTimes(1);
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith([
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledTimes(1);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledWith([
       'notif-parent-oldest',
     ]);
   });
@@ -556,7 +559,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
   it("does not let an older duplicate consume a later notification's exact transcript entry", async () => {
     const oldestCreatedAt = new Date('2026-06-22T10:30:00.000Z');
     const newestCreatedAt = new Date('2026-06-22T10:31:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent-A',
         workspaceId: 'workspace-1',
@@ -580,7 +583,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: newestCreatedAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService } = createLifecycleService({
       historyHydrationSource: 'jsonl',
       transcript: [
@@ -602,13 +605,13 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       'session-1',
       expect.objectContaining({ id: 'workspace-notification-notif-parent-A' })
     );
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledTimes(1);
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent-B']);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledTimes(1);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent-B']);
   });
 
   it('does not content-match a normal live user entry with canonical notification text', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -637,12 +640,12 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 
     expect(enqueuedCount).toBe(1);
     expect(sessionDomainService.enqueue).toHaveBeenCalledOnce();
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
   it('does not requeue an already-committed pending notification when delivery retry fails', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -655,7 +658,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockRejectedValue(
+    vi.mocked(workspaceNotificationService.markDelivered).mockRejectedValue(
       new Error('database unavailable')
     );
     const { service, sessionDomainService } = createLifecycleService({
@@ -676,12 +679,12 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
     expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
     expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
-    expect(workspaceNotificationAccessor.markDelivered).toHaveBeenCalledWith(['notif-parent']);
+    expect(workspaceNotificationService.markDelivered).toHaveBeenCalledWith(['notif-parent']);
   });
 
   it('does not treat UI-only workspace update cards as delivered user messages', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
-    vi.mocked(workspaceNotificationAccessor.findPending).mockResolvedValue([
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       {
         id: 'notif-parent',
         workspaceId: 'workspace-1',
@@ -694,7 +697,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    vi.mocked(workspaceNotificationAccessor.markDelivered).mockResolvedValue();
+    vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
     const { service, sessionDomainService } = createLifecycleService({
       transcript: [
         {
@@ -723,7 +726,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         id: 'workspace-notification-notif-parent',
       })
     );
-    expect(workspaceNotificationAccessor.markDelivered).not.toHaveBeenCalled();
+    expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 });
 
@@ -835,6 +838,7 @@ function createStartableLifecycleService(options?: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
       recordRatchetSessionEnd: vi.fn(async () => undefined),
+      resetPRDiscoveryBackoff: vi.fn(async () => true),
     },
     messageQueue: { tryDispatchNextMessage },
   });
@@ -897,19 +901,19 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not create a client after stop completes during permission resolution', async () => {
-    type UserSettings = Awaited<ReturnType<typeof userSettingsAccessor.get>>;
+    type UserSettings = Awaited<ReturnType<typeof userSettingsService.get>>;
     let resolveSettings!: (settings: UserSettings) => void;
     const pendingSettings = new Promise<UserSettings>((resolve) => {
       resolveSettings = resolve;
     });
-    vi.mocked(userSettingsAccessor.get).mockReturnValueOnce(pendingSettings);
+    vi.mocked(userSettingsService.get).mockReturnValueOnce(pendingSettings);
     const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
 
     const startResult = service
       .startSession('session-1', sendSessionMessage)
       .catch((error) => error);
     await vi.waitFor(() => {
-      expect(userSettingsAccessor.get).toHaveBeenCalled();
+      expect(userSettingsService.get).toHaveBeenCalled();
     });
 
     await service.stopSession('session-1');

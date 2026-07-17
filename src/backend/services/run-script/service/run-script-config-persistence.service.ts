@@ -1,7 +1,11 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
-import { projectAccessor, workspaceDataService } from '@/backend/services/workspace';
+import {
+  projectManagementService,
+  workspaceDataService,
+  workspaceRunScriptService,
+} from '@/backend/services/workspace';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { FactoryConfigService } from './factory-config.service';
 
@@ -68,12 +72,7 @@ class RunScriptConfigPersistenceService {
           workspaceId: workspace.id,
           worktreePath: workspace.worktreePath,
           persistWorkspaceCommands: (id, commands) =>
-            workspaceDataService.setRunScriptCommands(
-              id,
-              commands.runScriptCommand,
-              commands.runScriptPostRunCommand,
-              commands.runScriptCleanupCommand
-            ),
+            workspaceRunScriptService.setCommands(id, commands),
         });
         updatedCount++;
       } catch (error) {
@@ -90,7 +89,7 @@ class RunScriptConfigPersistenceService {
   }
 
   async getFactoryConfig(projectId: string): Promise<FactoryConfig | null> {
-    const project = await projectAccessor.findById(projectId);
+    const project = await projectManagementService.findById(projectId);
     if (!project) {
       throw new Error('Project not found');
     }

@@ -1,7 +1,7 @@
 import { githubCLIService } from '@/backend/services/github';
 import { linearClientService } from '@/backend/services/linear';
 import type { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 import { getDecryptedLinearConfig } from './linear-config.helper';
 
@@ -12,7 +12,7 @@ export async function buildInitialPromptFromGitHubIssue(
   logger: Logger
 ): Promise<string> {
   try {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
     if (!workspace?.githubIssueNumber) {
       return '';
     }
@@ -66,7 +66,7 @@ export async function buildInitialPromptFromLinearIssue(
   logger: Logger
 ): Promise<string> {
   try {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
     if (!workspace?.linearIssueId) {
       return '';
     }

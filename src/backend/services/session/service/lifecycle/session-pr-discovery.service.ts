@@ -1,5 +1,5 @@
 import type { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -10,10 +10,11 @@ type Logger = ReturnType<typeof createLogger>;
  */
 export async function maybeDiscoverPROnSessionEnd(
   workspaceId: string,
-  logger: Logger
+  logger: Logger,
+  workspace: Pick<SessionLifecycleWorkspaceBridge, 'resetPRDiscoveryBackoff'>
 ): Promise<void> {
   try {
-    await workspaceAccessor.resetPRDiscoveryBackoff(workspaceId);
+    await workspace.resetPRDiscoveryBackoff(workspaceId);
   } catch (error) {
     // Fire-and-forget: log but don't surface to caller.
     logger.debug('PR discovery backoff reset on session end failed', {
