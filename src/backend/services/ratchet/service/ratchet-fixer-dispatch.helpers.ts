@@ -208,7 +208,6 @@ export async function triggerRatchetFixer(params: {
         sessionBridge.injectCommittedUserMessage(sessionId, prompt);
       },
       afterStart: () => {
-        signal?.throwIfAborted();
         commitSideEffects();
       },
     });
