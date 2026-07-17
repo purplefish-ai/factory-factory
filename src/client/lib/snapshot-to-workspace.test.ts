@@ -199,6 +199,16 @@ describe('workspace snapshot cache projections', () => {
     });
   });
 
+  it('preserves archived state from an existing kanban cache entry', () => {
+    const entry = makeEntry();
+    const existing = {
+      ...projectSnapshotToKanbanWorkspace(entry),
+      isArchived: true,
+    };
+
+    expect(projectSnapshotToKanbanWorkspace(entry, existing).isArchived).toBe(true);
+  });
+
   it('supplies only the router-required defaults for a new kanban entry', () => {
     const result = projectSnapshotToKanbanWorkspace(makeEntry());
 

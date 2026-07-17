@@ -159,7 +159,7 @@ export function projectSnapshotToKanbanWorkspace(
     hasHadSessions: entry.hasHadSessions,
     cachedKanbanColumn: entry.kanbanColumn ?? existing?.cachedKanbanColumn ?? 'WAITING',
     kanbanColumn: entry.kanbanColumn,
-    isArchived: false,
+    isArchived: existing?.isArchived ?? false,
   };
 
   return {

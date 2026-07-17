@@ -24,6 +24,7 @@
 - Create: `src/shared/workspace-snapshot.ts`
 - Create: `src/shared/workspace-snapshot.test.ts`
 - Modify: `src/backend/services/workspace-snapshot-store.service.ts`
+- Modify: `src/backend/services/workspace-snapshot-store.service.test.ts`
 - Modify: `src/backend/routers/websocket/snapshots.handler.ts`
 - Modify: `src/backend/routers/websocket/snapshots.handler.test.ts`
 
@@ -62,7 +63,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit the shared contract**
 
 ```bash
-git add src/shared/workspace-snapshot.ts src/shared/workspace-snapshot.test.ts src/backend/services/workspace-snapshot-store.service.ts src/backend/routers/websocket/snapshots.handler.ts src/backend/routers/websocket/snapshots.handler.test.ts
+git add src/shared/workspace-snapshot.ts src/shared/workspace-snapshot.test.ts src/backend/services/workspace-snapshot-store.service.ts src/backend/services/workspace-snapshot-store.service.test.ts src/backend/routers/websocket/snapshots.handler.ts src/backend/routers/websocket/snapshots.handler.test.ts
 git commit -m "Share workspace snapshot protocol (#1959)"
 ```
 
