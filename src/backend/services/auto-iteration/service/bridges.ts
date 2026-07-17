@@ -31,6 +31,11 @@ export interface AutoIterationWorkspaceBridge {
   updateAutoIterationStatus(workspaceId: string, status: AutoIterationStatus): Promise<void>;
   updateAutoIterationProgress(workspaceId: string, progress: AutoIterationProgress): Promise<void>;
   updateAutoIterationSessionId(workspaceId: string, sessionId: string | null): Promise<void>;
+  finishAutoIterationIfSessionMatches(
+    workspaceId: string,
+    sessionId: string,
+    status: AutoIterationStatus
+  ): Promise<boolean>;
 }
 
 /** Logbook capabilities needed by auto-iteration. */

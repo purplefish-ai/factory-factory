@@ -169,6 +169,22 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  it('finishes auto-iteration only when the session pointer still matches', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      workspaceAccessor.finishAutoIterationIfSessionMatches('ws-1', 'session-1', 'STOPPED')
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', autoIterationSessionId: 'session-1' },
+      data: {
+        autoIterationStatus: 'STOPPED',
+        autoIterationSessionId: null,
+      },
+    });
+  });
+
   it('returns false when ratchet session end conditional update affects no rows', async () => {
     mockUpdateMany.mockResolvedValue({ count: 0 });
 

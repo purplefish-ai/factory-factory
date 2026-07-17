@@ -174,8 +174,7 @@ export class AutoIterationService {
       // Run the loop (fire-and-forget — errors are caught internally)
       placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
         this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
-        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.deleteLoopIfCurrent(placeholder);
+        return this.finishLoopAfterFailure(placeholder, AutoIterationStatus.FAILED);
       });
     } catch (err) {
       // Clean up the session if one was started before the failure
@@ -185,10 +184,15 @@ export class AutoIterationService {
         } catch {
           // Session cleanup is best-effort
         }
-        void this.workspace.updateAutoIterationSessionId(workspaceId, null);
       }
-      this.deleteLoopIfCurrent(placeholder);
-      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+      try {
+        await this.finishFailedSetup(placeholder);
+      } catch (cleanupError) {
+        this.logger.error('Failed to persist auto-iteration setup failure', {
+          workspaceId,
+          error: String(cleanupError),
+        });
+      }
       throw err;
     }
   }
@@ -244,8 +248,7 @@ export class AutoIterationService {
           workspaceId,
           error: String(err),
         });
-        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.deleteLoopIfCurrent(loop);
+        return this.finishLoopAfterFailure(loop, AutoIterationStatus.FAILED);
       });
     } catch (err) {
       loop.pauseRequested = true;
@@ -313,8 +316,7 @@ export class AutoIterationService {
           workspaceId,
           error: String(err),
         });
-        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.deleteLoopIfCurrent(placeholder);
+        return this.finishLoopAfterFailure(placeholder, AutoIterationStatus.FAILED);
       });
     } catch (err) {
       // Clean up the session if one was started before the failure
@@ -324,10 +326,15 @@ export class AutoIterationService {
         } catch {
           // Session cleanup is best-effort
         }
-        void this.workspace.updateAutoIterationSessionId(workspaceId, null);
       }
-      this.deleteLoopIfCurrent(placeholder);
-      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+      try {
+        await this.finishFailedSetup(placeholder);
+      } catch (cleanupError) {
+        this.logger.error('Failed to persist auto-iteration setup failure', {
+          workspaceId,
+          error: String(cleanupError),
+        });
+      }
       throw err;
     }
   }
@@ -373,9 +380,7 @@ export class AutoIterationService {
     this.logger.warn('Auto-iteration session died unexpectedly', { workspaceId, sessionId });
     loop.failedByDeath = true;
     loop.stopRequested = true;
-    void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-    void this.workspace.updateAutoIterationSessionId(workspaceId, null);
-    this.loops.delete(workspaceId);
+    loop.loopPromise = this.finishLoopAfterFailure(loop, AutoIterationStatus.FAILED);
   }
 
   // --- Phase tracking ---
@@ -881,9 +886,64 @@ export class AutoIterationService {
     } catch {
       // Session may already be stopped
     }
-    await this.workspace.updateAutoIterationStatus(loop.workspaceId, status);
-    await this.workspace.updateAutoIterationSessionId(loop.workspaceId, null);
-    this.deleteLoopIfCurrent(loop);
+    await this.finishLoopIfSessionMatches(loop, status);
+  }
+
+  private async finishLoopIfSessionMatches(
+    loop: RunningLoop,
+    status: AutoIterationStatus
+  ): Promise<boolean> {
+    try {
+      return await this.workspace.finishAutoIterationIfSessionMatches(
+        loop.workspaceId,
+        loop.sessionId,
+        status
+      );
+    } finally {
+      this.deleteLoopIfCurrent(loop);
+    }
+  }
+
+  private async finishLoopAfterFailure(
+    loop: RunningLoop,
+    status: AutoIterationStatus
+  ): Promise<void> {
+    try {
+      await this.finishLoopIfSessionMatches(loop, status);
+    } catch (error) {
+      this.logger.error('Failed to persist auto-iteration terminal state', {
+        workspaceId: loop.workspaceId,
+        error: String(error),
+      });
+    }
+  }
+
+  private async finishFailedSetup(loop: RunningLoop): Promise<void> {
+    try {
+      if (!loop.sessionId) {
+        if (this.loops.get(loop.workspaceId) === loop) {
+          await this.workspace.updateAutoIterationStatus(
+            loop.workspaceId,
+            AutoIterationStatus.FAILED
+          );
+        }
+        return;
+      }
+
+      const finished = await this.workspace.finishAutoIterationIfSessionMatches(
+        loop.workspaceId,
+        loop.sessionId,
+        AutoIterationStatus.FAILED
+      );
+      if (finished || this.loops.get(loop.workspaceId) !== loop) {
+        return;
+      }
+
+      await this.workspace.updateAutoIterationStatus(loop.workspaceId, AutoIterationStatus.FAILED);
+      await this.workspace.updateAutoIterationSessionId(loop.workspaceId, null);
+    } finally {
+      this.deleteLoopIfCurrent(loop);
+    }
   }
 
   private deleteLoopIfCurrent(loop: RunningLoop): void {

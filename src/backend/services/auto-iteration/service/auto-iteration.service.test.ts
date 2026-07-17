@@ -9,6 +9,7 @@ import type {
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
+import { insightsService } from './insights.service';
 
 type Logger = ReturnType<typeof createLogger>;
 type AutoIterationServiceInternals = {
@@ -40,6 +41,7 @@ function createWorkspaceBridge(): AutoIterationWorkspaceBridge {
     updateAutoIterationStatus: vi.fn().mockResolvedValue(undefined),
     updateAutoIterationProgress: vi.fn().mockResolvedValue(undefined),
     updateAutoIterationSessionId: vi.fn().mockResolvedValue(undefined),
+    finishAutoIterationIfSessionMatches: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -75,11 +77,13 @@ function createPausedLoop(workspaceId: string): RunningLoop {
 describe('AutoIterationService resume', () => {
   let service: AutoIterationService;
   let serviceInternals: AutoIterationServiceInternals;
+  let logger: Logger;
   let sessionBridge: AutoIterationSessionBridge;
   let workspaceBridge: AutoIterationWorkspaceBridge;
 
   beforeEach(() => {
-    service = new AutoIterationService(createLoggerMock());
+    logger = createLoggerMock();
+    service = new AutoIterationService(logger);
     serviceInternals = service as unknown as AutoIterationServiceInternals;
     sessionBridge = createSessionBridge();
     workspaceBridge = createWorkspaceBridge();
@@ -202,11 +206,48 @@ describe('AutoIterationService resume', () => {
     expect(loop.pauseRequested).toBe(false);
   });
 
+  it('keeps failed setup registered until terminal persistence settles', async () => {
+    vi.spyOn(insightsService, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(insightsService, 'getOpenContent').mockResolvedValue('');
+
+    const setupError = new Error('session pointer write failed');
+    let releaseFailedStatus!: () => void;
+    vi.mocked(workspaceBridge.updateAutoIterationStatus)
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFailedStatus = resolve;
+          })
+      );
+    vi.mocked(workspaceBridge.updateAutoIterationSessionId)
+      .mockRejectedValueOnce(setupError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockResolvedValueOnce(false);
+
+    const startPromise = service.start('ws-1', config);
+    await vi.waitFor(() => {
+      expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledWith(
+        'ws-1',
+        AutoIterationStatus.FAILED
+      );
+    });
+
+    expect(service.isRunning('ws-1')).toBe(true);
+    await expect(service.start('ws-1', config)).rejects.toThrow(
+      'Auto-iteration already running for workspace ws-1'
+    );
+
+    releaseFailedStatus();
+    await expect(startPromise).rejects.toBe(setupError);
+    expect(service.isRunning('ws-1')).toBe(false);
+  });
+
   it('does not remove a replacement loop when a stale resumed loop rejects', async () => {
     const oldLoop = createPausedLoop('ws-1');
     serviceInternals.loops.set('ws-1', oldLoop);
 
-    let rejectRunLoop = (_error: Error): void => undefined;
+    let rejectRunLoop!: (error: Error) => void;
     vi.spyOn(serviceInternals, 'runLoop').mockImplementation(
       () =>
         new Promise<void>((_resolve, reject) => {
@@ -215,16 +256,123 @@ describe('AutoIterationService resume', () => {
     );
 
     await service.resume('ws-1');
-    service.onSessionDeath('ws-1', 'session-1');
 
     const replacement = createPausedLoop('ws-1');
     replacement.sessionId = 'session-2';
     serviceInternals.loops.set('ws-1', replacement);
+    vi.clearAllMocks();
+
+    let releasePersistence!: (updated: boolean) => void;
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releasePersistence = resolve;
+        })
+    );
+    let loopSettled = false;
+    void oldLoop.loopPromise?.then(() => {
+      loopSettled = true;
+    });
 
     rejectRunLoop(new Error('old loop failed'));
+    await vi.waitFor(() => {
+      expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalled();
+    });
+    expect(loopSettled).toBe(false);
+
+    releasePersistence(false);
     await oldLoop.loopPromise;
 
     expect(serviceInternals.loops.get('ws-1')).toBe(replacement);
+    expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+      'ws-1',
+      'session-1',
+      AutoIterationStatus.FAILED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).not.toHaveBeenCalled();
+  });
+
+  it('finishes a dead session with a session-keyed mutation', () => {
+    const loop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', loop);
+
+    service.onSessionDeath('ws-1', 'session-1');
+
+    expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+      'ws-1',
+      'session-1',
+      AutoIterationStatus.FAILED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).not.toHaveBeenCalled();
+    expect(workspaceBridge.updateAutoIterationSessionId).not.toHaveBeenCalled();
+  });
+
+  it('keeps a dead loop registered until its terminal state is persisted', async () => {
+    const loop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', loop);
+
+    let releasePersistence!: (updated: boolean) => void;
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releasePersistence = resolve;
+        })
+    );
+
+    service.onSessionDeath('ws-1', 'session-1');
+
+    expect(service.isRunning('ws-1')).toBe(true);
+    await expect(service.start('ws-1', config)).rejects.toThrow(
+      'Auto-iteration already running for workspace ws-1'
+    );
+
+    releasePersistence(true);
+    await vi.waitFor(() => {
+      expect(service.isRunning('ws-1')).toBe(false);
+    });
+  });
+
+  it('does not resume a dead loop while terminal persistence is pending', async () => {
+    const loop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', loop);
+
+    let releasePersistence!: (updated: boolean) => void;
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releasePersistence = resolve;
+        })
+    );
+
+    service.onSessionDeath('ws-1', 'session-1');
+    const resumePromise = service.resume('ws-1');
+    void resumePromise.catch(() => undefined);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(workspaceBridge.getWorktreePath).not.toHaveBeenCalled();
+
+    releasePersistence(true);
+    await expect(resumePromise).rejects.toThrow('failed and was cleaned up — cannot resume');
+  });
+
+  it('logs rejected background terminal persistence without leaving the loop registered', async () => {
+    const loop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', loop);
+    const persistenceError = new Error('database unavailable');
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockRejectedValueOnce(
+      persistenceError
+    );
+
+    service.onSessionDeath('ws-1', 'session-1');
+
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('Failed to persist auto-iteration terminal state', {
+        workspaceId: 'ws-1',
+        error: 'Error: database unavailable',
+      });
+    });
+    expect(service.isRunning('ws-1')).toBe(false);
   });
 
   it('does not remove a replacement loop when a stale finalizer completes', async () => {
@@ -248,10 +396,18 @@ describe('AutoIterationService resume', () => {
     const replacement = createPausedLoop('ws-1');
     replacement.sessionId = 'session-2';
     serviceInternals.loops.set('ws-1', replacement);
+    vi.clearAllMocks();
 
     releaseStopSession();
     await finalizePromise;
 
     expect(serviceInternals.loops.get('ws-1')).toBe(replacement);
+    expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+      'ws-1',
+      'session-1',
+      AutoIterationStatus.STOPPED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).not.toHaveBeenCalled();
+    expect(workspaceBridge.updateAutoIterationSessionId).not.toHaveBeenCalled();
   });
 });
