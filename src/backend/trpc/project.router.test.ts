@@ -28,6 +28,13 @@ const mockCloneRepo = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   projectManagementService: mockProjectManagementService,
+  gitCloneService: {
+    checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
+    getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
+    checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
+    clone: (...args: unknown[]) => mockCloneRepo(...args),
+  },
+  parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
 vi.mock('@/backend/lib/shell', () => ({
@@ -40,7 +47,7 @@ vi.mock('@/backend/services/crypto.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/factory-config.service', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   FactoryConfigService: {
     readConfig: (...args: unknown[]) => mockReadConfig(...args),
   },
@@ -48,16 +55,6 @@ vi.mock('@/backend/services/factory-config.service', () => ({
 
 vi.mock('@/backend/lib/file-helpers', () => ({
   searchFilesRecursive: (...args: unknown[]) => mockSearchFilesRecursive(...args),
-}));
-
-vi.mock('@/backend/services/git-clone.service', () => ({
-  gitCloneService: {
-    checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
-    getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
-    checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
-    clone: (...args: unknown[]) => mockCloneRepo(...args),
-  },
-  parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
 import { projectRouter } from './project.trpc';

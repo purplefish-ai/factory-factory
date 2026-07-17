@@ -12,7 +12,7 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   runScriptConfigPersistenceService: {
     writeFactoryConfigAndSyncWorkspace: (...args: unknown[]) =>
       mockWriteFactoryConfigAndSyncWorkspace(...args),

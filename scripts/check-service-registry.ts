@@ -3,10 +3,12 @@ import path from 'node:path';
 import ts from 'typescript';
 
 import {
+  infrastructureServiceRegistry,
   prismaModelNames,
   type ServiceName,
   serviceRegistry,
 } from '../src/backend/services/registry';
+import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
 
 const rootDir = process.cwd();
 const servicesRoot = path.join(rootDir, 'src/backend/services');
@@ -19,13 +21,7 @@ const publicPrismaGeneratedSpecifiers = new Set([
   '@prisma-gen/enums',
   '@prisma-gen/models',
 ]);
-const infraServiceFileNames = new Set(
-  readdirSync(servicesRoot, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
-    )
-    .map((entry) => entry.name.replace(/\.(ts|tsx)$/u, ''))
-);
+const infrastructureServiceNames = new Set(Object.keys(infrastructureServiceRegistry));
 
 function readPrismaModelNames(schemaFilePath: string): Set<string> {
   const schema = readFileSync(schemaFilePath, 'utf8');
@@ -165,6 +161,12 @@ function isRegisteredServiceName(serviceName: string): serviceName is ServiceNam
   return Object.hasOwn(serviceRegistry, serviceName);
 }
 
+function checkInfrastructureServiceClassification(errors: string[]): void {
+  errors.push(
+    ...getInfrastructureServiceClassificationErrors(servicesRoot, infrastructureServiceRegistry)
+  );
+}
+
 function getFromService(relativePath: string): ServiceName | null {
   const fromMatch = relativePath.match(/^src\/backend\/services\/([^/]+)\//);
   if (!fromMatch) {
@@ -205,8 +207,7 @@ function validateCrossServiceImport(
   }
 
   if (!isRegisteredServiceName(serviceImport.toServiceName)) {
-    // Registry scope is service capsules only. Root infra service files are out of scope.
-    if (infraServiceFileNames.has(serviceImport.toServiceName)) {
+    if (infrastructureServiceNames.has(serviceImport.toServiceName)) {
       return;
     }
     errors.push(
@@ -361,6 +362,7 @@ function checkRegistryModelList(errors: string[]): void {
 function main(): void {
   const errors: string[] = [];
 
+  checkInfrastructureServiceClassification(errors);
   checkRegistryModelList(errors);
   checkDependencyGraph(errors);
   checkCrossServiceImports(errors);

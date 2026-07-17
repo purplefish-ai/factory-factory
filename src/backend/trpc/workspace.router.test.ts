@@ -15,11 +15,14 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
   getProjectSummaryState: vi.fn(),
   listWithKanbanState: vi.fn(),
   listWithRuntimeState: vi.fn(),
-  refreshFactoryConfigs: vi.fn(),
-  getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
   syncAllPRStatuses: vi.fn(),
   hasChanges: vi.fn(),
+}));
+
+const mockRunScriptConfigPersistenceService = vi.hoisted(() => ({
+  refreshFactoryConfigs: vi.fn(),
+  getFactoryConfig: vi.fn(),
 }));
 
 const mockDeriveFlowState = vi.hoisted(() => vi.fn());
@@ -99,6 +102,10 @@ vi.mock('@/backend/services/ratchet', () => ({
     setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
     checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
   },
+}));
+
+vi.mock('@/backend/services/run-script', () => ({
+  runScriptConfigPersistenceService: mockRunScriptConfigPersistenceService,
 }));
 
 vi.mock('@/backend/lib/session-summaries', () => ({
@@ -624,8 +631,10 @@ describe('workspaceRouter', () => {
 
   it('cleans up on delete and delegates summary procedures', async () => {
     mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
-    mockWorkspaceQueryService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
-    mockWorkspaceQueryService.getFactoryConfig.mockResolvedValue({ scripts: { run: 'pnpm dev' } });
+    mockRunScriptConfigPersistenceService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
+    mockRunScriptConfigPersistenceService.getFactoryConfig.mockResolvedValue({
+      scripts: { run: 'pnpm dev' },
+    });
     mockWorkspaceQueryService.syncPRStatus.mockResolvedValue({ synced: true });
     mockWorkspaceQueryService.syncAllPRStatuses.mockResolvedValue({ synced: 10 });
     mockWorkspaceQueryService.hasChanges.mockResolvedValue({ hasChanges: true });
