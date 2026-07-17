@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 
 // --- Module mocks (before imports) ---
 
@@ -31,8 +32,13 @@ vi.mock('./workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
 }));
 
-import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import {
+  projectAccessor,
+  workspaceAccessor,
+  workspaceNotificationAccessor,
+} from '@/backend/services/workspace';
+import {
+  createChildWorkspace,
   persistChildNotification,
   persistParentNotification,
 } from './workspace-children.orchestrator';
@@ -40,6 +46,28 @@ import {
 const mockFindByIdWithProject = vi.mocked(workspaceAccessor.findByIdWithProject);
 const mockFindRawById = vi.mocked(workspaceAccessor.findRawById);
 const mockNotificationCreate = vi.mocked(workspaceNotificationAccessor.create);
+
+describe('createChildWorkspace', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('throws a not-found application error when the target project is missing', async () => {
+    vi.mocked(projectAccessor.findById).mockResolvedValue(null);
+
+    const error = await createChildWorkspace({
+      parentWorkspaceId: 'parent-1',
+      projectId: 'missing-project',
+      name: 'Child workspace',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error).toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Project not found: missing-project',
+    });
+  });
+});
 
 describe('persistChildNotification', () => {
   beforeEach(() => {

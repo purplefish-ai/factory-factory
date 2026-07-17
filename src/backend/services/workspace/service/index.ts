@@ -15,7 +15,6 @@ export {
   type WorkspaceCreationSource,
 } from './lifecycle/creation.service';
 export { workspaceDataService } from './lifecycle/data.service';
-
 // --- Workspace lifecycle ---
 export {
   type StartProvisioningOptions,
@@ -25,6 +24,7 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
+export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
 export { userSettingsQueryService } from './query/user-settings-query.service';

@@ -2,11 +2,13 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import type { Request } from 'express';
 import superjson from 'superjson';
 import type { AppContext } from '@/backend/app-context';
+import { ApplicationError } from '@/backend/lib/application-error';
 import {
   isLoopbackRemoteAddress,
   isOriginAllowed,
   isTrustedLocalAddress,
 } from '@/backend/lib/request-trust';
+import { toTRPCError } from './application-error-mapper';
 
 export { isLoopbackRemoteAddress };
 
@@ -50,7 +52,15 @@ const t = initTRPC.context<Context>().create({
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure;
+
+export const publicProcedure = t.procedure.use(async ({ next }) => {
+  const result = await next();
+  if (!result.ok && result.error.cause instanceof ApplicationError) {
+    throw toTRPCError(result.error.cause);
+  }
+
+  return result;
+});
 
 function isTrustedLocalContext(ctx: Context): boolean {
   // In-process callers, including tests and orchestration code using createCaller,
