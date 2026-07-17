@@ -175,7 +175,7 @@ export class AutoIterationService {
       placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
         this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
         void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.loops.delete(workspaceId);
+        this.deleteLoopIfCurrent(placeholder);
       });
     } catch (err) {
       // Clean up the session if one was started before the failure
@@ -187,7 +187,7 @@ export class AutoIterationService {
         }
         void this.workspace.updateAutoIterationSessionId(workspaceId, null);
       }
-      this.loops.delete(workspaceId);
+      this.deleteLoopIfCurrent(placeholder);
       void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       throw err;
     }
@@ -245,7 +245,7 @@ export class AutoIterationService {
           error: String(err),
         });
         void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.loops.delete(workspaceId);
+        this.deleteLoopIfCurrent(loop);
       });
     } catch (err) {
       loop.pauseRequested = true;
@@ -314,7 +314,7 @@ export class AutoIterationService {
           error: String(err),
         });
         void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.loops.delete(workspaceId);
+        this.deleteLoopIfCurrent(placeholder);
       });
     } catch (err) {
       // Clean up the session if one was started before the failure
@@ -326,7 +326,7 @@ export class AutoIterationService {
         }
         void this.workspace.updateAutoIterationSessionId(workspaceId, null);
       }
-      this.loops.delete(workspaceId);
+      this.deleteLoopIfCurrent(placeholder);
       void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       throw err;
     }
@@ -883,6 +883,12 @@ export class AutoIterationService {
     }
     await this.workspace.updateAutoIterationStatus(loop.workspaceId, status);
     await this.workspace.updateAutoIterationSessionId(loop.workspaceId, null);
-    this.loops.delete(loop.workspaceId);
+    this.deleteLoopIfCurrent(loop);
+  }
+
+  private deleteLoopIfCurrent(loop: RunningLoop): void {
+    if (this.loops.get(loop.workspaceId) === loop) {
+      this.loops.delete(loop.workspaceId);
+    }
   }
 }
