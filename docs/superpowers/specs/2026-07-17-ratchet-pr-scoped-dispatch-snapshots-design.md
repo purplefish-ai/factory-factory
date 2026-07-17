@@ -30,7 +30,7 @@ A separate field could make the comparison explicit, but it would require a Pris
 
 `computeDispatchSnapshotKey` will take `prNumber` as its first required argument. It will retain the existing CI, review, and merge segments unchanged and prefix the result with `pr:<prNumber>|`.
 
-`fetchPRState` will pass `prContext.prNumber`, the same resolved number used for GitHub reads. Unit-test callers will provide a stable pull request number. No stored snapshots need migration: an existing unprefixed key will compare different from the first new prefixed key, causing at most one appropriate re-evaluation; subsequent dispatches store the new format.
+`fetchPRState` will pass `prDetails.number`, the identity returned for the pull request fetched from GitHub. Unit-test callers will provide a stable pull request number. No stored snapshots need migration: an existing unprefixed key will compare different from the first new prefixed key, causing at most one appropriate re-evaluation; subsequent dispatches store the new format.
 
 ## Edge Cases
 

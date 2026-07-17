@@ -89,7 +89,7 @@ export function computeDispatchSnapshotKey(
 
 ```typescript
 const snapshotKey = computeDispatchSnapshotKey(
-  prContext.prNumber,
+  prDetails.number,
   ciStatus,
   hasChangesRequested,
   latestReviewActivityAtMs,
