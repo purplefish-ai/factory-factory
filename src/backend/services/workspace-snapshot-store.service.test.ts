@@ -391,6 +391,29 @@ describe('WorkspaceSnapshotStore', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('treats reordered session summaries as equal without changing stored order', () => {
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      const first = makeSessionSummary({ sessionId: 'session-1', name: 'First' });
+      const second = makeSessionSummary({ sessionId: 'session-2', name: 'Second' });
+      store.upsert('ws-1', makeUpdate({ sessionSummaries: [first, second] }), 'seed', 100);
+      handler.mockClear();
+
+      const result = store.upsert(
+        'ws-1',
+        { sessionSummaries: [{ ...second }, { ...first }] },
+        'reconciliation',
+        200
+      );
+
+      const entry = store.getByWorkspaceId('ws-1')!;
+      expect(result).toEqual({ accepted: true, changed: false, emitted: false });
+      expect(entry.sessionSummaries).toEqual([first, second]);
+      expect(entry.fieldTimestamps.session).toBe(200);
+      expect(entry.version).toBe(1);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
     it('emits exactly once when a structured field changes', () => {
       const handler = vi.fn();
       store.on(SNAPSHOT_CHANGED, handler);

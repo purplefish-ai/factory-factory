@@ -82,7 +82,7 @@ Expected: FAIL because the result and log do not yet expose the metrics.
 
 - [ ] **Step 3: Aggregate outcomes in reconciliation**
 
-Extend `ReconciliationResult` and fallback results, collect each `upsert()` result, increment `workspacesChanged`, count both changed-upsert and successful stale-removal events in `deltasEmitted`, and include the requested fields in the completion log and returned result. Preserve existing result fields for compatibility.
+Extend `ReconciliationResult` and fallback results, collect each `upsert()` result, increment `workspacesChanged` when `upsertResult.changed` is true, increment `deltasEmitted` when `upsertResult.emitted` is true, count successful stale-removal events separately in `deltasEmitted`, and include the requested fields in the completion log and returned result. Preserve existing result fields for compatibility.
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 

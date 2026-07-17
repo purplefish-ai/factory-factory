@@ -285,7 +285,10 @@ function sessionSummariesEqual(
   left: WorkspaceSessionSummary[],
   right: WorkspaceSessionSummary[]
 ): boolean {
-  return isDeepStrictEqual(left, right);
+  return isDeepStrictEqual(
+    [...left].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
+    [...right].sort((a, b) => a.sessionId.localeCompare(b.sessionId))
+  );
 }
 
 function sidebarStatusesEqual(
