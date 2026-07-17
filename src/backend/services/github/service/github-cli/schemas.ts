@@ -68,6 +68,10 @@ export const prListItemSchema = z.object({
   createdAt: z.string(),
 });
 
+export const openPullRequestSchema = prListItemSchema.extend({
+  headRefName: z.string(),
+});
+
 const fullPRCheckRunSchema = z.object({
   __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
   name: z.string(),

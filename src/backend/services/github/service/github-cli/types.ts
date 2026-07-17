@@ -30,6 +30,13 @@ export interface PRInfo {
   number: number;
 }
 
+export interface OpenPullRequest {
+  number: number;
+  url: string;
+  createdAt: string;
+  headRefName: string;
+}
+
 export interface ReviewRequestedPR {
   number: number;
   title: string;

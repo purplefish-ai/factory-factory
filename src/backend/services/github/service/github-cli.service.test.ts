@@ -1012,6 +1012,62 @@ describe('GitHubCLIService', () => {
     });
   });
 
+  describe('listOpenPRs', () => {
+    it('lists all open pull requests for a repository in one command', async () => {
+      const prs = [
+        {
+          number: 11,
+          url: 'https://github.com/Owner/Repo/pull/11',
+          createdAt: '2024-01-02T00:00:00Z',
+          headRefName: 'feature/one',
+        },
+      ];
+      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
+
+      await expect(githubCLIService.listOpenPRs('Owner', 'Repo')).resolves.toEqual(prs);
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--repo',
+          'Owner/Repo',
+          '--state',
+          'open',
+          '--json',
+          'number,url,createdAt,headRefName',
+          '--limit',
+          '1000',
+        ],
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+    });
+
+    it('rejects malformed repository pull request data', async () => {
+      mockExecFile.mockResolvedValue({
+        stdout: JSON.stringify([
+          {
+            number: 11,
+            url: 'https://github.com/owner/repo/pull/11',
+            createdAt: '2024-01-02T00:00:00Z',
+          },
+        ]),
+        stderr: '',
+      });
+
+      await expect(githubCLIService.listOpenPRs('owner', 'repo')).rejects.toThrow();
+    });
+
+    it('propagates repository listing failures', async () => {
+      mockExecFile.mockRejectedValue(new Error('repository unavailable'));
+
+      await expect(githubCLIService.listOpenPRs('owner', 'repo')).rejects.toThrow(
+        'repository unavailable'
+      );
+    });
+  });
+
   describe('getAuthenticatedUsername', () => {
     it('should return username when authenticated', async () => {
       mockExecFile.mockResolvedValue({ stdout: 'testuser\n', stderr: '' });

@@ -7,15 +7,31 @@
 
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { computePRDiscoveryNextCheckAt, workspaceAccessor } from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
 
 // At most 3 concurrent GitHub CLI calls from the scheduler to avoid rate limit bursts
 const ghLimit = pLimit(3);
+
+type PRDiscoveryCandidate = Awaited<
+  ReturnType<typeof workspaceAccessor.findNeedingPRDiscovery>
+>[number];
+
+interface ClaimablePRDiscoveryCandidate {
+  workspace: PRDiscoveryCandidate;
+  branchName: string;
+}
+
+interface PRDiscoveryRepositoryGroup {
+  owner: string;
+  repo: string;
+  candidates: ClaimablePRDiscoveryCandidate[];
+}
 
 class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -113,90 +129,152 @@ class SchedulerService {
       return { discovered: 0, checked: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findNeedingPRDiscovery();
+    const checkedAt = new Date();
+    const { candidateLimit, repositoryLimit } = configService.getPRDiscoveryLimits();
+    const workspaces = await workspaceAccessor.findNeedingPRDiscovery(candidateLimit, checkedAt);
 
     if (workspaces.length === 0) {
       return { discovered: 0, checked: 0 };
     }
 
-    logger.info('Starting PR discovery', { count: workspaces.length });
+    const repositoryGroups = this.groupPRDiscoveryCandidates(workspaces);
+    const selectedGroups = repositoryGroups.slice(0, repositoryLimit);
 
-    const results = await Promise.all(
-      workspaces.map((workspace) => ghLimit(() => this.discoverPRForWorkspace(workspace)))
+    logger.info('Starting PR discovery', {
+      candidates: workspaces.length,
+      selectedRepositories: selectedGroups.length,
+      candidateLimit,
+      repositoryLimit,
+      limitedRepositories: repositoryGroups.length - selectedGroups.length,
+    });
+
+    const claimedGroups = await Promise.all(
+      selectedGroups.map(async (group) => {
+        const claimedCandidates = await Promise.all(
+          group.candidates.map(async (candidate) => {
+            const { workspace, branchName } = candidate;
+            const claimed = await workspaceAccessor.claimPRDiscoveryAttempt(workspace.id, {
+              branchName,
+              expectedUpdatedAt: workspace.updatedAt,
+              expectedRetryCount: workspace.prDiscoveryRetryCount,
+              expectedNextCheckAt: workspace.prDiscoveryNextCheckAt,
+              checkedAt,
+              nextCheckAt: computePRDiscoveryNextCheckAt(
+                checkedAt,
+                workspace.prDiscoveryRetryCount + 1
+              ),
+            });
+            return claimed ? candidate : null;
+          })
+        );
+
+        return {
+          ...group,
+          candidates: claimedCandidates.filter(
+            (candidate): candidate is ClaimablePRDiscoveryCandidate => candidate !== null
+          ),
+        };
+      })
     );
 
-    const discovered = results.filter((r) => r.found).length;
+    const checked = claimedGroups.reduce((sum, group) => sum + group.candidates.length, 0);
 
-    logger.info('PR discovery completed', { checked: workspaces.length, discovered });
+    const results = await Promise.all(
+      claimedGroups
+        .filter((group) => group.candidates.length > 0)
+        .map((group) => ghLimit(() => this.discoverPRsForRepository(group)))
+    );
 
-    return { discovered, checked: workspaces.length };
+    const discovered = results.reduce((sum, result) => sum + result.discovered, 0);
+    const failures = results.filter((result) => result.failed).length;
+
+    logger.info('PR discovery completed', {
+      candidates: workspaces.length,
+      selectedRepositories: selectedGroups.length,
+      checked,
+      discovered,
+      failures,
+      candidateLimit,
+      repositoryLimit,
+    });
+
+    return { discovered, checked };
   }
 
-  /**
-   * Check if a PR exists for a single workspace's branch.
-   */
-  private async discoverPRForWorkspace(workspace: {
-    id: string;
-    branchName: string | null;
-    createdAt: Date;
-    project: { githubOwner: string | null; githubRepo: string | null };
-  }): Promise<{ found: boolean }> {
-    if (this.isShuttingDown) {
-      return { found: false };
-    }
-
-    const { branchName, project, createdAt } = workspace;
-    if (!(branchName && project.githubOwner && project.githubRepo)) {
-      return { found: false };
-    }
-
+  private async discoverPRsForRepository(
+    group: PRDiscoveryRepositoryGroup
+  ): Promise<{ discovered: number; failed: boolean }> {
     try {
-      const pr = await githubCLIService.findPRForBranch(
-        project.githubOwner,
-        project.githubRepo,
-        branchName,
-        createdAt
-      );
+      const prs = await githubCLIService.listOpenPRs(group.owner, group.repo);
+      const unmatched = new Set(group.candidates);
+      let discovered = 0;
 
-      if (pr) {
-        // Route through PRSnapshotService for canonical PR attachment
-        const result = await prSnapshotService.attachAndRefreshPR(workspace.id, pr.url);
+      for (const pr of [...prs].sort(
+        (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+      )) {
+        const prCreatedAt = new Date(pr.createdAt).getTime();
+        const candidate = [...unmatched]
+          .filter(
+            (item) =>
+              item.branchName === pr.headRefName &&
+              item.workspace.createdAt.getTime() <= prCreatedAt
+          )
+          .sort(
+            (left, right) =>
+              right.workspace.createdAt.getTime() - left.workspace.createdAt.getTime()
+          )[0];
 
-        if (result.success) {
-          logger.info('Discovered PR for workspace', {
-            workspaceId: workspace.id,
-            branchName,
-            prNumber: result.snapshot.prNumber,
+        if (!candidate) {
+          continue;
+        }
+
+        unmatched.delete(candidate);
+        const result = await prSnapshotService.attachAndRefreshPR(candidate.workspace.id, pr.url);
+        if (result.success || result.reason === 'fetch_failed') {
+          discovered += 1;
+        } else {
+          logger.warn('Discovered PR but failed to attach snapshot', {
+            workspaceId: candidate.workspace.id,
+            branchName: candidate.branchName,
             prUrl: pr.url,
+            reason: result.reason,
           });
-          return { found: true };
         }
-
-        // Log warning but don't count as discovered if attachment failed
-        logger.warn('Discovered PR but failed to attach snapshot', {
-          workspaceId: workspace.id,
-          branchName,
-          prUrl: pr.url,
-          reason: result.reason,
-        });
-
-        // Only count as discovered if attachment succeeded or partially succeeded (fetch_failed still attaches prUrl)
-        if (result.reason === 'fetch_failed') {
-          return { found: true };
-        }
-
-        return { found: false };
       }
 
-      return { found: false };
+      return { discovered, failed: false };
     } catch (error) {
-      logger.debug('PR discovery failed for workspace', {
-        workspaceId: workspace.id,
-        branchName,
+      logger.warn('PR discovery failed for repository', {
+        owner: group.owner,
+        repo: group.repo,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { found: false };
+      return { discovered: 0, failed: true };
     }
+  }
+
+  private groupPRDiscoveryCandidates(
+    workspaces: PRDiscoveryCandidate[]
+  ): PRDiscoveryRepositoryGroup[] {
+    const groups = new Map<string, PRDiscoveryRepositoryGroup>();
+
+    for (const workspace of workspaces) {
+      const { branchName, project } = workspace;
+      if (!(branchName && project.githubOwner && project.githubRepo)) {
+        continue;
+      }
+
+      const key = `${project.githubOwner}/${project.githubRepo}`.toLowerCase();
+      const group = groups.get(key) ?? {
+        owner: project.githubOwner,
+        repo: project.githubRepo,
+        candidates: [],
+      };
+      group.candidates.push({ workspace, branchName });
+      groups.set(key, group);
+    }
+
+    return [...groups.values()];
   }
 
   /**

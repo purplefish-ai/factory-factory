@@ -18,6 +18,7 @@ import {
 import {
   fullPRDetailsSchema,
   issueSchema,
+  openPullRequestSchema,
   prListItemSchema,
   prStatusSchema,
   type ResolvedReviewThreadsPage,
@@ -31,6 +32,7 @@ import type {
   GitHubCLIErrorType,
   GitHubCLIHealthStatus,
   GitHubIssue,
+  OpenPullRequest,
   PRInfo,
   PRStatusFromGitHub,
   ReviewRequestedPR,
@@ -487,6 +489,27 @@ class GitHubCLIService {
       }
       return null;
     }
+  }
+
+  /** List every open pull request in a repository for local branch matching. */
+  async listOpenPRs(owner: string, repo: string): Promise<OpenPullRequest[]> {
+    const { stdout } = await this.exec(
+      [
+        'pr',
+        'list',
+        '--repo',
+        `${owner}/${repo}`,
+        '--state',
+        'open',
+        '--json',
+        'number,url,createdAt,headRefName',
+        '--limit',
+        '1000',
+      ],
+      { timeout: GH_TIMEOUT_MS.default }
+    );
+
+    return parseGhJson(openPullRequestSchema.array(), stdout, 'listOpenPRs');
   }
 
   /**
@@ -1177,6 +1200,7 @@ export type {
   GitHubCLIErrorType,
   GitHubCLIHealthStatus,
   GitHubIssue,
+  OpenPullRequest,
   PRInfo,
   PRStatusFromGitHub,
   ReviewRequestedPR,
