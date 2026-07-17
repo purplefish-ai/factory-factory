@@ -4,7 +4,7 @@ import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orch
 import { createChildWorkspace } from '@/backend/orchestration/workspace-children.orchestrator';
 import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
-import { publicProcedure, router, trustedLocalProcedure } from '../trpc';
+import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 
 export const workspaceChildrenRouter = router({
   createChild: trustedLocalProcedure

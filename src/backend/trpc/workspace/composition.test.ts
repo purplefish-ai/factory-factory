@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { mergeRouters } from '../trpc';
-import { workspaceRouter } from '../workspace.trpc';
+import { mergeRouters } from '@/backend/trpc/trpc';
+import { workspaceRouter } from '@/backend/trpc/workspace.trpc';
 
 describe('workspace router composition', () => {
   it('uses the supported merge API without reading internal procedure definitions', () => {
