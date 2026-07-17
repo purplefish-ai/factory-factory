@@ -262,6 +262,9 @@ class KanbanStateService {
           return;
         }
       } catch (error) {
+        if (generation !== this.refreshGeneration) {
+          return;
+        }
         if (attempt === 2) {
           throw error;
         }

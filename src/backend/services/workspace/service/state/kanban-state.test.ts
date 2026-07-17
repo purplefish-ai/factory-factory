@@ -3,6 +3,16 @@ import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { WorkspaceSessionBridge } from '@/backend/services/workspace/service/bridges';
 import { PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 const mockFindById = vi.hoisted(() => vi.fn());
 const mockUpdate = vi.hoisted(() => vi.fn());
 const mockDeriveRuntimeState = vi.hoisted(() => vi.fn());
@@ -441,6 +451,24 @@ describe('kanbanStateService', () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(mockFindById).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('does not create a cache retry after reconfigure during a pending read', async () => {
+    vi.useFakeTimers();
+    const pendingRead = deferred<never>();
+    mockFindById.mockReturnValue(pendingRead.promise);
+
+    const refresh = kanbanStateService.updateCachedKanbanColumn('w-pending-cancel');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockFindById).toHaveBeenCalledTimes(1);
+    kanbanStateService.configure({ session: sessionBridge });
+    pendingRead.reject(new Error('read failed after configure'));
+    await refresh;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(mockFindById).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();
   });
 

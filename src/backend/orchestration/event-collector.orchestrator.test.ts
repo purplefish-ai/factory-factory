@@ -6,10 +6,12 @@ const { mockLoggerWarn } = vi.hoisted(() => ({ mockLoggerWarn: vi.fn() }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,6 +1266,66 @@ describe('configureEventCollector', () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives an invalidation during the third failed read a fresh retry budget', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    const thirdRead = deferred<never>();
+    vi.mocked(workspaceAccessor.findRawById)
+      .mockRejectedValueOnce(new Error('read failed 1'))
+      .mockRejectedValueOnce(new Error('read failed 2'))
+      .mockReturnValueOnce(thirdRead.promise)
+      .mockResolvedValue({
+        ratchetEnabled: true,
+        ratchetState: 'CI_FAILED',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      } as never);
+    configureEventCollector();
+    const dispatchHandler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    dispatchHandler({ workspaceId: 'ws-third-failure' });
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3));
+    dispatchHandler({ workspaceId: 'ws-third-failure' });
+    thirdRead.reject(new Error('read failed 3'));
+
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(4));
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-third-failure',
+      expect.objectContaining({ ratchetDispatchOutcome: 'DIED' }),
+      'projection:ratchet_authoritative',
+      expect.any(Number)
+    );
+  });
+
+  it('does not create a projection retry after stop during a pending read', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    const pendingRead = deferred<never>();
+    vi.mocked(workspaceAccessor.findRawById).mockReturnValue(pendingRead.promise);
+    configureEventCollector();
+    const dispatchHandler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    dispatchHandler({ workspaceId: 'ws-pending-stop' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    stopEventCollector();
+    pendingRead.reject(new Error('read failed after stop'));
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('triggers immediate ratchet recompute when PR identity changes', () => {

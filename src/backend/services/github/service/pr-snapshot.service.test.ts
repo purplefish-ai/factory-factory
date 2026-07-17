@@ -280,6 +280,19 @@ describe('PRSnapshotService', () => {
       expect(events).toEqual([{ workspaceId: 'ws-exhausted' }]);
     });
 
+    it('publishes a direct CI reset before a cache refresh rejection', async () => {
+      mockApplyCIObservationWithDispatchReset.mockResolvedValue(true);
+      mockUpdateCachedKanbanColumn.mockRejectedValueOnce(new Error('cache failed'));
+      const events: Array<{ workspaceId: string }> = [];
+      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+
+      await expect(
+        prSnapshotService.recordCIObservation('ws-cache-failure', { ciStatus: 'PENDING' })
+      ).rejects.toThrow('cache failed');
+
+      expect(events).toEqual([{ workspaceId: 'ws-cache-failure' }]);
+    });
+
     it('emits pr_snapshot_updated after successful applySnapshot', async () => {
       const events: PRSnapshotUpdatedEvent[] = [];
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {

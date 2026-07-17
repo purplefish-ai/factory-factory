@@ -91,10 +91,10 @@ class PRSnapshotService extends EventEmitter {
       prUpdatedAt: input.observedAt ?? new Date(),
       ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
     });
-    await this.kanban.updateCachedKanbanColumn(workspaceId);
     if (dispatchReset) {
       this.emit(PR_DISPATCH_INVALIDATED, { workspaceId } satisfies PRDispatchInvalidatedEvent);
     }
+    await this.kanban.updateCachedKanbanColumn(workspaceId);
   }
 
   /**

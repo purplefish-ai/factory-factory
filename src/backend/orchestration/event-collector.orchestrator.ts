@@ -159,21 +159,35 @@ async function projectAuthoritativeRatchetState(
   }
 }
 
+function getNewerProjectionRevision(refresh: { revision: number }, target: number): number | null {
+  return refresh.revision > target ? refresh.revision : null;
+}
+
 async function runRatchetProjectionRefresh(params: {
   coalescer: EventCoalescer;
   workspaceId: string;
-  refresh: { dirty: boolean };
-  refreshes: Map<string, { dirty: boolean }>;
+  refresh: { revision: number };
+  refreshes: Map<string, { revision: number }>;
   isActive: () => boolean;
   waitForRetry: (attempt: number) => Promise<void>;
 }): Promise<void> {
   const { coalescer, workspaceId, refresh, refreshes, isActive, waitForRetry } = params;
+  let targetRevision = refresh.revision;
   let failedAttempts = 0;
   try {
-    while (refresh.dirty && isActive()) {
-      refresh.dirty = false;
+    while (isActive()) {
       const succeeded = await projectAuthoritativeRatchetState(coalescer, workspaceId, isActive);
+      const newerRevision = getNewerProjectionRevision(refresh, targetRevision);
       if (succeeded) {
+        if (newerRevision === null) {
+          break;
+        }
+        targetRevision = newerRevision;
+        failedAttempts = 0;
+        continue;
+      }
+      if (newerRevision !== null) {
+        targetRevision = newerRevision;
         failedAttempts = 0;
         continue;
       }
@@ -181,7 +195,9 @@ async function runRatchetProjectionRefresh(params: {
       if (failedAttempts >= 3) {
         break;
       }
-      refresh.dirty = true;
+      if (!isActive()) {
+        break;
+      }
       await waitForRetry(failedAttempts - 1);
     }
   } finally {
@@ -568,7 +584,7 @@ function configureEventCollectorWithState(
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   state.activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
-  const ratchetProjectionRefreshes = new Map<string, { dirty: boolean }>();
+  const ratchetProjectionRefreshes = new Map<string, { revision: number }>();
   let projectionActive = true;
   const projectionRetryWaiters = new Set<{
     timer: NodeJS.Timeout;
@@ -586,6 +602,10 @@ function configureEventCollectorWithState(
 
   const waitForProjectionRetry = (attempt: number): Promise<void> =>
     new Promise((resolve) => {
+      if (!projectionActive || state.activeCoalescer !== coalescer) {
+        resolve();
+        return;
+      }
       const waiter = {
         timer: setTimeout(
           () => {
@@ -602,11 +622,11 @@ function configureEventCollectorWithState(
   const requestAuthoritativeRatchetProjection = (workspaceId: string): void => {
     const existing = ratchetProjectionRefreshes.get(workspaceId);
     if (existing) {
-      existing.dirty = true;
+      existing.revision += 1;
       return;
     }
 
-    const refresh = { dirty: true };
+    const refresh = { revision: 1 };
     ratchetProjectionRefreshes.set(workspaceId, refresh);
     void runRatchetProjectionRefresh({
       coalescer,
