@@ -118,10 +118,11 @@ export function useFileMentions({
       const atPos = findAtPosition(currentValue, cursorPos);
       const charAtCursor = currentValue[cursorPos];
       const cursorAtMentionEnd =
-        charAtCursor === undefined ||
-        charAtCursor === ' ' ||
-        charAtCursor === '\n' ||
-        charAtCursor === '\t';
+        inputRef.current.selectionStart === inputRef.current.selectionEnd &&
+        (charAtCursor === undefined ||
+          charAtCursor === ' ' ||
+          charAtCursor === '\n' ||
+          charAtCursor === '\t');
 
       if (atPos === -1 || !isValidAtPosition(currentValue, atPos) || !cursorAtMentionEnd) {
         setFileMentionMenuOpen(false);

@@ -129,6 +129,23 @@ describe('useProjectFileMentions selection', () => {
     expect(rendered.getResult().fileMentionFilter).toBe('');
   });
 
+  it('does not insert a file when the live selection is not collapsed', () => {
+    const rendered = renderHook();
+    const value = '@src trailing text';
+    openMentionMenu(rendered, '@src');
+
+    rendered.textarea.value = value;
+    rendered.textarea.setSelectionRange(4, 13);
+    flushSync(() => {
+      rendered.getResult().handleFileMentionSelect('src/foo.ts');
+    });
+
+    expect(rendered.textarea.value).toBe(value);
+    expect(rendered.onChange).not.toHaveBeenCalled();
+    expect(rendered.getResult().fileMentionMenuOpen).toBe(false);
+    expect(rendered.getResult().fileMentionFilter).toBe('');
+  });
+
   it('inserts a file when the cursor remains at the end of the active mention', () => {
     const rendered = renderHook();
     openMentionMenu(rendered, 'Hello @src');
