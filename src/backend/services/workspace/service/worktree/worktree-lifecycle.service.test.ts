@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { gitOpsService } from './git-ops.service';
 import {
@@ -84,6 +85,82 @@ describe('worktreeLifecycleService cleanup', () => {
       ).rejects.toThrow(WorktreePathSafetyError);
       expect(commitSpy).not.toHaveBeenCalled();
       expect(removeSpy).not.toHaveBeenCalled();
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves successful removal eviction to GitOpsService', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-cleanup-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const worktreePath = path.join(worktreeBasePath, 'workspace');
+    await mkdir(worktreePath, { recursive: true });
+    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+    const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
+    const workspace = unsafeCoerce<
+      Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
+    >({
+      name: 'Workspace',
+      worktreePath,
+      project: { repoPath: path.join(tempRoot, 'repo'), worktreeBasePath },
+    });
+
+    try {
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
+        commitUncommitted: true,
+      });
+      expect(removeStateSpy).not.toHaveBeenCalled();
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('evicts Git state when the worktree is already missing', async () => {
+    const worktreePath = '/tmp/worktrees/missing-workspace';
+    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+    const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
+    const workspace = unsafeCoerce<
+      Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
+    >({
+      name: 'Missing workspace',
+      worktreePath,
+      project: { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' },
+    });
+
+    await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
+      commitUncommitted: true,
+    });
+
+    expect(removeStateSpy).toHaveBeenCalledWith(worktreePath);
+    expect(gitOpsService.commitIfNeeded).not.toHaveBeenCalled();
+    expect(gitOpsService.removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('does not evict Git state when worktree removal fails', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-cleanup-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const worktreePath = path.join(worktreeBasePath, 'workspace');
+    await mkdir(worktreePath, { recursive: true });
+    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'removeWorktree').mockRejectedValue(new Error('remove failed'));
+    const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
+    const workspace = unsafeCoerce<
+      Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
+    >({
+      name: 'Workspace',
+      worktreePath,
+      project: { repoPath: path.join(tempRoot, 'repo'), worktreeBasePath },
+    });
+
+    try {
+      await expect(
+        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
+          commitUncommitted: true,
+        })
+      ).rejects.toThrow('remove failed');
+      expect(removeStateSpy).not.toHaveBeenCalled();
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

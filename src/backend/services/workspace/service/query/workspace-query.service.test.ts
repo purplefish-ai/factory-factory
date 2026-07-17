@@ -434,6 +434,7 @@ describe('WorkspaceQueryService', () => {
       isWorking: false,
       gitStats: expect.objectContaining({ total: 3 }),
     });
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
 
     // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
     await new Promise((resolve) => setImmediate(resolve));
@@ -657,6 +658,7 @@ describe('WorkspaceQueryService', () => {
   it('hasChanges checks workspace metadata and git stats safely', async () => {
     mockFindByIdWithProject.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -670,6 +672,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -683,6 +686,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(true);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
