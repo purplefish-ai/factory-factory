@@ -162,9 +162,27 @@ function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction 
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
   if (isWsAgentMessage(data) && data.order !== undefined) {
-    return { type: 'WS_AGENT_MESSAGE', payload: { message: data.data, order: data.order } };
+    return {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { message: data.data, order: data.order, messageId: data.messageId },
+    };
   }
   return null;
+}
+
+function handleAssistantTextDeltaAction(data: WebSocketMessage): ChatAction | null {
+  if (data.type !== 'assistant_text_delta') {
+    return null;
+  }
+  return {
+    type: 'WS_ASSISTANT_TEXT_DELTA',
+    payload: {
+      messageId: data.messageId,
+      order: data.order,
+      offset: data.offset,
+      text: data.text,
+    },
+  };
 }
 
 function handleErrorMessageAction(data: WebSocketMessage): ChatAction | null {
@@ -439,7 +457,7 @@ const messageHandlers: MessageHandlerMap = {
   session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
   session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   agent_message: handleClaudeMessageAction,
-  assistant_text_delta: null,
+  assistant_text_delta: handleAssistantTextDeltaAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
   chat_capabilities: handleChatCapabilitiesMessage,

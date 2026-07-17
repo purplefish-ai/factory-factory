@@ -185,6 +185,8 @@ export interface ChatState {
   queuedMessages: Map<string, RecoverableQueuedMessage>;
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
+  /** Agent transcript order to message index map for O(1) live updates. */
+  agentMessageOrderToIndex: Map<number, number>;
   /** Latest accumulated thinking content from extended thinking mode */
   latestThinking: string | null;
   /**
@@ -249,7 +251,14 @@ export type ChatAction =
   // WebSocket message actions
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
-  | { type: 'WS_AGENT_MESSAGE'; payload: { message: AgentMessage; order: number } }
+  | {
+      type: 'WS_AGENT_MESSAGE';
+      payload: { message: AgentMessage; order: number; messageId?: string };
+    }
+  | {
+      type: 'WS_ASSISTANT_TEXT_DELTA';
+      payload: { messageId: string; order: number; offset: number; text: string };
+    }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }

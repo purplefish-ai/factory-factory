@@ -125,6 +125,7 @@ describe('session-replay-builder', () => {
         }),
         expect.objectContaining({
           type: 'agent_message',
+          messageId: 'c1',
           order: 1,
         }),
         expect.objectContaining({
@@ -251,6 +252,17 @@ describe('session-replay-builder', () => {
     expect(snapshot).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT + 1);
     expect(snapshot[0]!.id).toBe('m-5');
     expect(snapshot.at(-1)?.id).toBe('queued-visible');
+  });
+
+  it('does not mutate an under-limit transcript when adding queued snapshot messages', () => {
+    const store = createStore();
+    const transcriptReference = store.transcript;
+
+    const snapshot = buildSnapshotMessages(store);
+
+    expect(store.transcript).toBe(transcriptReference);
+    expect(store.transcript.map((message) => message.id)).toEqual(['u1', 'c1']);
+    expect(snapshot.map((message) => message.id)).toEqual(['u1', 'c1', 'q1']);
   });
 
   it('starts bounded snapshots at a render-safe boundary', () => {

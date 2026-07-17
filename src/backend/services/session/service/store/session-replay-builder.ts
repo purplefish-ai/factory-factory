@@ -16,7 +16,7 @@ function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
 }
 
 export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
-  const snapshot = selectRendererTranscriptWindow(store);
+  const snapshot = [...selectRendererTranscriptWindow(store)];
   store.queue.forEach((queued, index) => {
     snapshot.push({
       id: queued.id,
@@ -97,6 +97,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
       replayEvents.push({
         type: 'agent_message',
         data: message.message,
+        messageId: message.id,
         order: message.order,
       });
     }

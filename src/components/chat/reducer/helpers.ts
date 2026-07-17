@@ -17,7 +17,7 @@ import {
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { isUserQuestionRequest } from '@/shared/pending-request-types';
-import type { ChatState, PendingRequest } from './types';
+import type { ChatAction, ChatState, PendingRequest } from './types';
 
 // Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
 const DEBUG_CHAT_REDUCER = DEBUG_CHAT_WS;
@@ -74,9 +74,13 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
   return state;
 }
 
-function createClaudeMessage(message: AgentMessage, order: number): ChatMessage {
+function createClaudeMessage(
+  message: AgentMessage,
+  order: number,
+  messageId?: string
+): ChatMessage {
   return {
-    id: generateMessageId(),
+    id: messageId ?? generateMessageId(),
     source: 'agent',
     message,
     timestamp: new Date().toISOString(),
@@ -139,6 +143,16 @@ function buildToolUseIdToIndex(messages: ChatMessage[]): Map<string, number> {
   return toolUseIdToIndex;
 }
 
+function buildAgentMessageOrderToIndex(messages: ChatMessage[]): Map<number, number> {
+  const orderToIndex = new Map<number, number>();
+  messages.forEach((message, index) => {
+    if (message.source === 'agent') {
+      orderToIndex.set(message.order, index);
+    }
+  });
+  return orderToIndex;
+}
+
 function filterMapByIds<Value>(
   map: Map<string, Value>,
   retainedIds: Set<string>
@@ -176,6 +190,7 @@ export function applyRendererMessages(state: ChatState, messages: ChatMessage[])
     ...state,
     messages: retainedMessages,
     toolUseIdToIndex: buildToolUseIdToIndex(retainedMessages),
+    agentMessageOrderToIndex: buildAgentMessageOrderToIndex(retainedMessages),
     messageIdToUuid: filterMapByIds(state.messageIdToUuid, retainedIds),
     localUserMessageIds: filterSetByIds(state.localUserMessageIds, retainedIds),
     pendingUserMessageUuids:
@@ -236,22 +251,22 @@ function getToolUseIdFromMessage(claudeMsg: AgentMessage): string | null {
 function upsertClaudeMessageAtOrder(
   state: ChatState,
   claudeMsg: AgentMessage,
-  order: number
+  order: number,
+  messageId?: string
 ): ChatState | null {
-  const existingIndex = state.messages.findIndex(
-    (msg) => msg.source === 'agent' && msg.order === order
-  );
-  if (existingIndex < 0) {
+  const existingIndex = state.agentMessageOrderToIndex.get(order);
+  if (existingIndex === undefined) {
     return null;
   }
 
   const existingMsg = state.messages[existingIndex];
-  if (!existingMsg) {
+  if (!existingMsg || existingMsg.source !== 'agent' || existingMsg.order !== order) {
     return null;
   }
   const updatedMessages = [...state.messages];
   updatedMessages[existingIndex] = {
     ...existingMsg,
+    id: messageId ?? existingMsg.id,
     message: claudeMsg,
     timestamp: claudeMsg.timestamp ?? existingMsg.timestamp,
   };
@@ -265,7 +280,8 @@ function upsertClaudeMessageAtOrder(
 export function handleClaudeMessage(
   state: ChatState,
   claudeMsg: AgentMessage,
-  order: number
+  order: number,
+  messageId?: string
 ): ChatState {
   let baseState: ChatState = state;
 
@@ -315,15 +331,116 @@ export function handleClaudeMessage(
   // If this Claude message order already exists, update in place instead of appending.
   // This prevents duplicate rendering when the same websocket event is delivered twice
   // (for example during reconnect/replay overlap).
-  const upsertedState = upsertClaudeMessageAtOrder(baseState, claudeMsg, order);
+  const upsertedState = upsertClaudeMessageAtOrder(baseState, claudeMsg, order, messageId);
   if (upsertedState) {
     return upsertedState;
   }
 
   // Create and add the message using order-based insertion
-  const chatMessage = createClaudeMessage(claudeMsg, order);
+  const chatMessage = createClaudeMessage(claudeMsg, order, messageId);
   const newMessages = insertMessageByOrder(baseState.messages, chatMessage);
   return applyRendererMessages(baseState, newMessages);
+}
+
+type AssistantTextDeltaPayload = Extract<
+  ChatAction,
+  { type: 'WS_ASSISTANT_TEXT_DELTA' }
+>['payload'];
+
+function getAssistantText(message: ChatMessage): string | null {
+  const agentMessage = message.message;
+  if (agentMessage?.type !== 'assistant') {
+    return null;
+  }
+  const content = agentMessage.message?.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+  const first = content[0];
+  return first?.type === 'text' ? first.text : null;
+}
+
+function createAssistantTextMessage(payload: AssistantTextDeltaPayload): ChatMessage {
+  return {
+    id: payload.messageId,
+    source: 'agent',
+    message: {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: payload.text }] },
+    },
+    timestamp: new Date().toISOString(),
+    order: payload.order,
+  };
+}
+
+export function handleAssistantTextDelta(
+  state: ChatState,
+  payload: AssistantTextDeltaPayload
+): ChatState {
+  if (payload.text.length === 0 || payload.offset < 0) {
+    return state;
+  }
+
+  const messageIndex = state.agentMessageOrderToIndex.get(payload.order);
+  if (messageIndex === undefined) {
+    if (payload.offset !== 0) {
+      return state;
+    }
+    return applyRendererMessages(
+      state,
+      insertMessageByOrder(state.messages, createAssistantTextMessage(payload))
+    );
+  }
+
+  const existingMessage = state.messages[messageIndex];
+  if (
+    !existingMessage ||
+    existingMessage.source !== 'agent' ||
+    existingMessage.order !== payload.order ||
+    existingMessage.id !== payload.messageId
+  ) {
+    return state;
+  }
+
+  const currentText = getAssistantText(existingMessage);
+  if (currentText === null || payload.offset > currentText.length) {
+    return state;
+  }
+  const overlapLength = Math.min(payload.text.length, currentText.length - payload.offset);
+  if (
+    currentText.slice(payload.offset, payload.offset + overlapLength) !==
+    payload.text.slice(0, overlapLength)
+  ) {
+    return state;
+  }
+  const unseenText = payload.text.slice(overlapLength);
+  if (unseenText.length === 0) {
+    return state;
+  }
+
+  const existingAgentMessage = existingMessage.message;
+  const messagePayload = existingAgentMessage?.message;
+  const content = messagePayload?.content;
+  if (
+    !(existingAgentMessage && messagePayload && Array.isArray(content)) ||
+    content[0]?.type !== 'text'
+  ) {
+    return state;
+  }
+  const updatedContent = [...content];
+  updatedContent[0] = { ...content[0], text: currentText + unseenText };
+  const updatedMessages = [...state.messages];
+  updatedMessages[messageIndex] = {
+    ...existingMessage,
+    message: {
+      ...existingAgentMessage,
+      message: {
+        ...messagePayload,
+        content: updatedContent,
+      },
+    },
+  };
+  return { ...state, messages: updatedMessages };
 }
 
 /**

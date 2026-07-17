@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { SessionDomainService } from '../session-domain.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -39,7 +40,9 @@ vi.mock('@/backend/services/session/service/logging/session-file-logger.service'
 import type { AcpEventProcessorDependencies } from './acp-event-processor';
 import { AcpEventProcessor } from './acp-event-processor';
 
-function makeDeps(): AcpEventProcessorDependencies {
+function makeDeps(
+  overrides: Partial<AcpEventProcessorDependencies> = {}
+): AcpEventProcessorDependencies {
   return {
     runtimeManager: {
       getClient: vi.fn(),
@@ -59,6 +62,7 @@ function makeDeps(): AcpEventProcessorDependencies {
       applyConfigOptionsUpdateDelta: vi.fn(),
     } as unknown as AcpEventProcessorDependencies['sessionConfigService'],
     onToolCallTimeout: vi.fn(),
+    ...overrides,
   };
 }
 
@@ -141,15 +145,18 @@ describe('AcpEventProcessor assistant text streaming', () => {
   });
 
   it('persists complete assistant text before the live flush fires', () => {
-    const deps = makeDeps();
+    const sessionDomainService = new SessionDomainService();
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+    const deps = makeDeps({ sessionDomainService });
     const processor = new AcpEventProcessor(deps);
 
     processor.handleAcpDelta('sid', assistantDelta('Hello'));
     processor.handleAcpDelta('sid', assistantDelta(' world'));
 
-    const lastPersisted = vi.mocked(deps.sessionDomainService.upsertClaudeEvent).mock.lastCall;
-    expect(persistedText(lastPersisted?.[1] as AgentMessage)).toBe('Hello world');
-    expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalled();
+    const transcript = sessionDomainService.getTranscriptSnapshot('sid');
+    expect(transcript).toHaveLength(1);
+    expect(persistedText(transcript[0]?.message as AgentMessage)).toBe('Hello world');
+    expect(emitDeltaSpy).not.toHaveBeenCalled();
   });
 
   it('flushes before a tool boundary and allocates a new order for the next text block', () => {

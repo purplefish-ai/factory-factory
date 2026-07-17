@@ -85,6 +85,8 @@ interface WebSocketMessagePayloadByType {
   };
   agent_message: {
     data: import('./messages').AgentMessage;
+    /** Stable backend transcript identifier when emitted from snapshot/replay. */
+    messageId?: string;
     /** Backend-assigned order for agent_message and message_used_as_response events */
     order?: number;
   };
