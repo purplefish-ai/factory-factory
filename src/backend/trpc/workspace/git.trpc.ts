@@ -3,19 +3,18 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
 import { gitCommand } from '@/backend/lib/shell';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
-import { getWorkspaceWithProjectAndWorktreeOrThrow } from './workspace-helpers';
+import {
+  getWorkspaceWithProjectAndWorktreeOrThrow,
+  getWorkspaceWithProjectOrThrow,
+} from './workspace-helpers';
 
 const loggerName = 'workspace-git-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 async function getSnapshotForWorkspace(workspaceId: string) {
-  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
-  if (!workspace) {
-    throw new Error(`Workspace not found: ${workspaceId}`);
-  }
+  const workspace = await getWorkspaceWithProjectOrThrow(workspaceId);
   if (!workspace.worktreePath) {
     return null;
   }

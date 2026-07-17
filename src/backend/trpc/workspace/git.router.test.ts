@@ -15,10 +15,14 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
 }));
 
-vi.mock('./workspace-helpers', () => ({
-  getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
-}));
+vi.mock('./workspace-helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./workspace-helpers')>();
+  return {
+    ...actual,
+    getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
+      mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
+  };
+});
 
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
   workspaceGitStateService: {
@@ -103,15 +107,24 @@ describe('workspaceGitRouter', () => {
     rmSync(rootDir, { recursive: true, force: true });
   });
 
-  it('preserves missing workspace errors for aggregate endpoints', async () => {
+  it('preserves NOT_FOUND errors for every aggregate endpoint when the workspace is missing', async () => {
     mockWorkspaceDataService.findByIdWithProject.mockResolvedValue(null);
     const caller = createCaller();
 
-    await expect(caller.getGitStatus({ workspaceId: 'missing' })).rejects.toThrow(
-      'Workspace not found: missing'
-    );
-    await expect(caller.getDiffVsMain({ workspaceId: 'missing' })).rejects.toThrow(
-      'Workspace not found: missing'
+    const requests = [
+      caller.getGitStatus({ workspaceId: 'missing' }),
+      caller.getUnstagedChanges({ workspaceId: 'missing' }),
+      caller.getDiffVsMain({ workspaceId: 'missing' }),
+      caller.getUnpushedFiles({ workspaceId: 'missing' }),
+    ];
+
+    await Promise.all(
+      requests.map((request) =>
+        expect(request).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+          message: 'Workspace not found: missing',
+        })
+      )
     );
   });
 
