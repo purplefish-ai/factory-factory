@@ -219,6 +219,24 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('projectAccessor');
   });
 
+  it('tracks every accessor exposed through a namespace import', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/service/persistence.ts',
+        content:
+          "export { workspaceAccessor } from '../resources/workspace.accessor';\nexport { projectAccessor } from '../resources/project.accessor';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "import * as persistence from './service/persistence';\nexport { persistence };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('workspaceAccessor');
+    expect(result.output).toContain('projectAccessor');
+  });
+
   it('rejects accessors assigned to exported bindings after declaration', () => {
     const result = runChecker([
       {
