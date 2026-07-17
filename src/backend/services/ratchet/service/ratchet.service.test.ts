@@ -896,7 +896,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('aborted-prompt-session');
   });
 
-  it('publishes the authoritative dispatch outcome after lifecycle settlement', async () => {
+  it('publishes a dispatch invalidation after lifecycle settlement', async () => {
     const events: RatchetDispatchChangedEvent[] = [];
     ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
       events.push(event);
@@ -909,11 +909,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     await ratchetService.recordSessionEnd('ws-1', 'session-1', 'DIED');
 
-    expect(events).toContainEqual({
-      workspaceId: 'ws-1',
-      outcome: 'DIED',
-      retryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-    });
+    expect(events).toContainEqual({ workspaceId: 'ws-1' });
   });
 
   it('does not publish a dispatch change when lifecycle settlement loses its CAS', async () => {
@@ -1209,11 +1205,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: 'clean-snapshot',
       retryCount: 1,
     });
-    expect(events).toContainEqual({
-      workspaceId: 'ws-died-clean',
-      outcome: 'RUNNING',
-      retryCount: 1,
-    });
+    expect(events).toContainEqual({ workspaceId: 'ws-died-clean' });
   });
 
   it('stops retrying a died fixer once the retry budget is exhausted', async () => {
@@ -1487,13 +1479,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'deleted-session',
       'DIED'
     );
-    expect(events).toEqual([
-      {
-        workspaceId: 'ws-missing-session',
-        outcome: 'DIED',
-        retryCount: 0,
-      },
-    ]);
+    expect(events).toEqual([{ workspaceId: 'ws-missing-session' }]);
   });
 
   it('reports a concurrent end when another path already settled the dispatch', async () => {
@@ -3227,13 +3213,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       );
 
       await expect(check).rejects.toBe(timeoutError);
-      expect(events).toEqual([
-        {
-          workspaceId: 'ws-cancelled-after-settlement',
-          outcome: 'DIED',
-          retryCount: 2,
-        },
-      ]);
+      expect(events).toEqual([{ workspaceId: 'ws-cancelled-after-settlement' }]);
     });
   });
 
@@ -3294,13 +3274,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(commitSideEffects).toHaveBeenCalledTimes(1);
       expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
-      expect(events).toEqual([
-        {
-          workspaceId: 'ws-cancelled-dispatch',
-          outcome: 'RUNNING',
-          retryCount: 0,
-        },
-      ]);
+      expect(events).toEqual([{ workspaceId: 'ws-cancelled-dispatch' }]);
     });
 
     it('cleans up a started fixer when dispatch persistence fails', async () => {
@@ -3434,13 +3408,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         'existing-session'
       );
       expect(workspaceAccessor.recordRatchetDispatchIfEnabled).not.toHaveBeenCalled();
-      expect(events).toEqual([
-        {
-          workspaceId: 'ws-already-active',
-          outcome: 'RUNNING',
-          retryCount: 2,
-        },
-      ]);
+      expect(events).toEqual([{ workspaceId: 'ws-already-active' }]);
     });
 
     it('stops already-active fixer when active-session recording loses disable race', async () => {
@@ -3551,8 +3519,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           workspaceId: 'ws-enable',
           enabled: true,
           ratchetState: RatchetState.CI_FAILED,
-          ratchetDispatchOutcome: 'DIED',
-          ratchetDispatchRetryCount: 2,
         },
       ]);
       expect(stateEvents).toHaveLength(0);
@@ -3597,8 +3563,6 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           workspaceId: 'ws-disable',
           enabled: false,
           ratchetState: RatchetState.IDLE,
-          ratchetDispatchOutcome: null,
-          ratchetDispatchRetryCount: 0,
         },
       ]);
     });

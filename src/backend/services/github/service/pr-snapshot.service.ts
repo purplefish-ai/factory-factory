@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events';
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
@@ -40,8 +39,8 @@ export interface PRSnapshotUpdatedEvent {
   prState: string;
   prCiStatus: string;
   prReviewState: string | null;
-  ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
-  ratchetDispatchRetryCount?: number;
+  /** The PR write may have reset dispatch ownership; consumers must re-read it. */
+  ratchetDispatchChanged?: true;
 }
 
 interface CIObservationInput {
@@ -273,7 +272,7 @@ class PRSnapshotService extends EventEmitter {
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,
       prReviewState: snapshot.prReviewState,
-      ...(dispatchReset ? { ratchetDispatchOutcome: null, ratchetDispatchRetryCount: 0 } : {}),
+      ...(dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
     } satisfies PRSnapshotUpdatedEvent);
   }
 }

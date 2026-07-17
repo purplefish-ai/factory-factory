@@ -81,11 +81,7 @@ export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
-  onDispatchChanged?: (event: {
-    workspaceId: string;
-    outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>;
-    retryCount: number;
-  }) => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<ActiveFixerCheckResult> {
   const { workspace, sessionBridge, signal, onDispatchChanged } = params;
   signal?.throwIfAborted();
@@ -108,8 +104,6 @@ export async function checkActiveFixerSession(params: {
     if (settled) {
       onDispatchChanged?.({
         workspaceId: workspace.id,
-        outcome,
-        retryCount: workspace.ratchetDispatchRetryCount,
       });
     }
     signal?.throwIfAborted();

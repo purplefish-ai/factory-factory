@@ -128,14 +128,17 @@ Persisted snapshot entries include `ratchetDispatchOutcome` and
 `ratchetDispatchRetryCount`, so reconciliation and snapshot-derived Kanban state apply the same
 exhausted-retry rule as full workspace queries.
 
-Ratchet dispatch changes publish `ratchet_dispatch_changed` after successful dispatch-record
-mutations. The event collector immediately updates both snapshot fields and starts a
-fire-and-forget refresh of the durable cached Kanban column. Ratchet state and toggle events use
-the same cache-refresh path; toggle events carry authoritative dispatch fields so disabling
-Ratchet clears exhausted ownership in the live snapshot as well as the database. Event-collector
-timestamps are strictly monotonic so later same-millisecond Ratchet events cannot be rejected as
-stale by the snapshot store. Session activity remains a live overlay and is the only source of the
-public `isWorking` flag.
+Ratchet dispatch changes publish `ratchet_dispatch_changed` as an invalidation after successful
+dispatch-record mutations. PR resets and Ratchet toggles use the same invalidation model. The
+event collector serializes and coalesces those invalidations per workspace, re-reads the
+authoritative Ratchet fields from the database, and reruns the projection when another mutation
+lands during a read. This prevents a delayed older callback from overwriting a newer dispatch or
+reset. Fresh `prCiStatus` observations still travel directly on Ratchet state events. Durable
+cached-column refreshes serialize their complete read/derive/write operation per workspace, so a
+slow old read cannot finish after and overwrite a newer refresh. Event-collector timestamps are
+strictly monotonic so later same-millisecond Ratchet events cannot be rejected as stale by the
+snapshot store. Session activity remains a live overlay and is the only source of the public
+`isWorking` flag.
 
 ## Ratchet Animation
 

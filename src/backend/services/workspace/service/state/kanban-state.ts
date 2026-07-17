@@ -91,6 +91,7 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 
 class KanbanStateService {
   private sessionBridge: WorkspaceSessionBridge | null = null;
+  private readonly cachedColumnRefreshes = new Map<string, Promise<void>>();
 
   configure(bridges: { session: WorkspaceSessionBridge }): void {
     this.sessionBridge = bridges.session;
@@ -205,6 +206,24 @@ class KanbanStateService {
    * Only updates stateComputedAt when the column actually changes.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
+    const previousRefresh = this.cachedColumnRefreshes.get(workspaceId) ?? Promise.resolve();
+    const refresh = previousRefresh
+      .catch(() => {
+        // A failed refresh must not prevent a later request from reading fresh state.
+      })
+      .then(() => this.refreshCachedKanbanColumn(workspaceId));
+    this.cachedColumnRefreshes.set(workspaceId, refresh);
+
+    try {
+      await refresh;
+    } finally {
+      if (this.cachedColumnRefreshes.get(workspaceId) === refresh) {
+        this.cachedColumnRefreshes.delete(workspaceId);
+      }
+    }
+  }
+
+  private async refreshCachedKanbanColumn(workspaceId: string): Promise<void> {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       logger.warn('Cannot update cached kanban column: workspace not found', { workspaceId });

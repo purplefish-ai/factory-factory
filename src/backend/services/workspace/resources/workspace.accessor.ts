@@ -621,9 +621,11 @@ class WorkspaceAccessor {
   /**
    * Persist a PR aggregate and clear ownership from a settled dispatch when
    * the newly fetched aggregate changed. The conditional update writes the
-   * aggregate and reset atomically. Identical periodic refreshes use the plain
-   * snapshot update and leave settled metadata untouched; RUNNING ownership is
-   * never eligible for the reset.
+   * aggregate and reset atomically. The reset compares all dispatch metadata
+   * read in the transaction; if a newer dispatch wins that race, only the PR
+   * aggregate is written and its ownership is preserved. Identical periodic
+   * refreshes use the plain snapshot update and leave settled metadata
+   * untouched; RUNNING ownership is never eligible for the reset.
    * ratchetLastCiRunId deliberately remains the richer dispatch snapshot key;
    * the Ratchet still uses it to decide whether the changed aggregate warrants
    * another fixer.
@@ -650,7 +652,10 @@ class WorkspaceAccessor {
           prState: true,
           prReviewState: true,
           prCiStatus: true,
+          ratchetActiveSessionId: true,
+          ratchetLastCiRunId: true,
           ratchetDispatchOutcome: true,
+          ratchetDispatchRetryCount: true,
         },
       });
       const aggregateChanged =
@@ -664,14 +669,31 @@ class WorkspaceAccessor {
         (current.ratchetDispatchOutcome === 'COMPLETED' ||
           current.ratchetDispatchOutcome === 'DIED');
 
+      if (shouldReset) {
+        const reset = await transaction.workspace.updateMany({
+          where: {
+            id: workspaceId,
+            ratchetActiveSessionId: current.ratchetActiveSessionId,
+            ratchetLastCiRunId: current.ratchetLastCiRunId,
+            ratchetDispatchOutcome: current.ratchetDispatchOutcome,
+            ratchetDispatchRetryCount: current.ratchetDispatchRetryCount,
+          },
+          data: {
+            ...snapshotData,
+            ratchetDispatchOutcome: null,
+            ratchetDispatchRetryCount: 0,
+          },
+        });
+        if (reset.count > 0) {
+          return true;
+        }
+      }
+
       await transaction.workspace.update({
         where: { id: workspaceId },
-        data: {
-          ...snapshotData,
-          ...(shouldReset ? { ratchetDispatchOutcome: null, ratchetDispatchRetryCount: 0 } : {}),
-        },
+        data: snapshotData,
       });
-      return shouldReset;
+      return false;
     });
   }
 

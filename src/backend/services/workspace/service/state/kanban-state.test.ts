@@ -338,6 +338,45 @@ describe('kanbanStateService', () => {
     expect(mockUpdate).toHaveBeenCalledTimes(2);
   });
 
+  it('serializes refreshes so a slower old read cannot overwrite a newer column', async () => {
+    let resolveOldRead!: (value: unknown) => void;
+    const oldRead = new Promise((resolve) => {
+      resolveOldRead = resolve;
+    });
+    mockFindById.mockReturnValueOnce(oldRead).mockResolvedValueOnce({
+      id: 'w-race',
+      status: WorkspaceStatus.READY,
+      prState: PRState.OPEN,
+      ratchetState: RatchetState.IDLE,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      cachedKanbanColumn: 'WORKING',
+    });
+    mockDeriveFlowStateFromWorkspace.mockImplementation((workspace) => ({
+      isWorking: workspace.ratchetState === RatchetState.CI_RUNNING,
+    }));
+
+    const oldRefresh = kanbanStateService.updateCachedKanbanColumn('w-race');
+    await vi.waitFor(() => expect(mockFindById).toHaveBeenCalledTimes(1));
+    const newRefresh = kanbanStateService.updateCachedKanbanColumn('w-race');
+    resolveOldRead({
+      id: 'w-race',
+      status: WorkspaceStatus.READY,
+      prState: PRState.OPEN,
+      ratchetState: RatchetState.CI_RUNNING,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      cachedKanbanColumn: 'WAITING',
+    });
+
+    await Promise.all([oldRefresh, newRefresh]);
+
+    expect(mockUpdate).toHaveBeenLastCalledWith(
+      'w-race',
+      expect.objectContaining({ cachedKanbanColumn: 'WAITING' })
+    );
+  });
+
   it('caches WORKING for pending CI without a live session', async () => {
     mockFindById.mockResolvedValue({
       id: 'w-ci',

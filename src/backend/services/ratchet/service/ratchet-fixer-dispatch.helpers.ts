@@ -43,11 +43,7 @@ async function handleStartedFixerResult(params: {
   commitSideEffects: () => void;
   onRecorded: () => void;
   onCleaned: () => void;
-  onDispatchChanged?: (event: {
-    workspaceId: string;
-    outcome: 'RUNNING';
-    retryCount: number;
-  }) => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
   const {
     workspace,
@@ -93,8 +89,6 @@ async function handleStartedFixerResult(params: {
     onRecorded();
     onDispatchChanged?.({
       workspaceId: workspace.id,
-      outcome: 'RUNNING',
-      retryCount,
     });
   }
   signal?.throwIfAborted();
@@ -120,11 +114,7 @@ async function handleAlreadyActiveFixerResult(params: {
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
   commitSideEffects: () => void;
-  onDispatchChanged?: (event: {
-    workspaceId: string;
-    outcome: 'RUNNING';
-    retryCount: number;
-  }) => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
   const { workspace, result, sessionBridge, signal, commitSideEffects, onDispatchChanged } = params;
   // Adopt (pointer + RUNNING outcome) rather than record a full dispatch: the
@@ -139,8 +129,6 @@ async function handleAlreadyActiveFixerResult(params: {
   if (adopted) {
     onDispatchChanged?.({
       workspaceId: workspace.id,
-      outcome: 'RUNNING',
-      retryCount: workspace.ratchetDispatchRetryCount,
     });
   }
   signal?.throwIfAborted();
@@ -191,11 +179,7 @@ export async function triggerRatchetFixer(params: {
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
   commitSideEffects?: () => void;
-  onDispatchChanged?: (event: {
-    workspaceId: string;
-    outcome: 'RUNNING';
-    retryCount: number;
-  }) => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
   const {
     workspace,

@@ -316,10 +316,7 @@ describe('PRSnapshotService', () => {
           prUpdatedAt: expect.any(Date),
         })
       );
-      expect(events[0]).toMatchObject({
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
-      });
+      expect(events[0]).toMatchObject({ ratchetDispatchChanged: true });
     });
 
     it('does not publish a dispatch reset for an identical PR aggregate refresh', async () => {
@@ -335,8 +332,7 @@ describe('PRSnapshotService', () => {
         prReviewState: 'CHANGES_REQUESTED',
       });
 
-      expect(events[0]).not.toHaveProperty('ratchetDispatchOutcome');
-      expect(events[0]).not.toHaveProperty('ratchetDispatchRetryCount');
+      expect(events[0]).not.toHaveProperty('ratchetDispatchChanged');
     });
 
     it('does not include prUrl in event when applySnapshot is called without prUrl options', async () => {

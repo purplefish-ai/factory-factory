@@ -181,12 +181,19 @@ describe('workspaceAccessor', () => {
       prState: 'CHANGES_REQUESTED',
       prCiStatus: 'FAILURE',
       prReviewState: 'CHANGES_REQUESTED',
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'failed:41',
       ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
     });
-    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    mockUpdateMany.mockResolvedValue({ count: 1 });
     mockTransaction.mockImplementation(async (callback) =>
       callback({
-        workspace: { findUniqueOrThrow: mockFindUnique, update: mockUpdate },
+        workspace: {
+          findUniqueOrThrow: mockFindUnique,
+          update: mockUpdate,
+          updateMany: mockUpdateMany,
+        },
       })
     );
 
@@ -200,8 +207,14 @@ describe('workspaceAccessor', () => {
       })
     ).resolves.toBe(true);
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 'ws-1' },
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'ws-1',
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: 'failed:41',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      },
       data: {
         prNumber: 42,
         prState: 'OPEN',
@@ -210,6 +223,67 @@ describe('workspaceAccessor', () => {
         prUpdatedAt,
         ratchetDispatchOutcome: null,
         ratchetDispatchRetryCount: 0,
+      },
+    });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('preserves a RUNNING dispatch that wins the reset compare-and-swap', async () => {
+    const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
+    mockFindUnique.mockResolvedValue({
+      prUrl: null,
+      prNumber: 41,
+      prState: 'CHANGES_REQUESTED',
+      prCiStatus: 'FAILURE',
+      prReviewState: 'CHANGES_REQUESTED',
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
+    });
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        workspace: {
+          findUniqueOrThrow: mockFindUnique,
+          update: mockUpdate,
+          updateMany: mockUpdateMany,
+        },
+      })
+    );
+
+    await expect(
+      workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+        prUpdatedAt,
+      })
+    ).resolves.toBe(false);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'ws-1',
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: 'old-snapshot',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      },
+      data: expect.objectContaining({
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      }),
+    });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      data: {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+        prUpdatedAt,
       },
     });
   });

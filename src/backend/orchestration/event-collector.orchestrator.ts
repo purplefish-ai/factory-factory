@@ -53,6 +53,7 @@ import {
   kanbanStateService,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
+  workspaceAccessor,
   workspaceActivityService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -121,6 +122,35 @@ function refreshCachedKanbanColumn(workspaceId: string): void {
       error: error instanceof Error ? error.message : String(error),
     });
   });
+}
+
+async function projectAuthoritativeRatchetState(
+  coalescer: EventCoalescer,
+  workspaceId: string,
+  isActive: () => boolean
+): Promise<void> {
+  try {
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
+    if (!(workspace && isActive())) {
+      return;
+    }
+    coalescer.enqueue(
+      workspaceId,
+      {
+        ratchetEnabled: workspace.ratchetEnabled,
+        ratchetState: workspace.ratchetState,
+        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
+      },
+      'projection:ratchet_authoritative',
+      { immediate: true }
+    );
+  } catch (error) {
+    logger.warn('Failed to refresh authoritative Ratchet snapshot projection', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 type EventCollectorSessionServices = {
@@ -473,6 +503,34 @@ function configureEventCollectorWithState(
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   state.activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
+  const ratchetProjectionRefreshes = new Map<string, { dirty: boolean }>();
+
+  const requestAuthoritativeRatchetProjection = (workspaceId: string): void => {
+    const existing = ratchetProjectionRefreshes.get(workspaceId);
+    if (existing) {
+      existing.dirty = true;
+      return;
+    }
+
+    const refresh = { dirty: true };
+    ratchetProjectionRefreshes.set(workspaceId, refresh);
+    void (async () => {
+      try {
+        while (refresh.dirty) {
+          refresh.dirty = false;
+          await projectAuthoritativeRatchetState(
+            coalescer,
+            workspaceId,
+            () => state.activeCoalescer === coalescer
+          );
+        }
+      } finally {
+        if (ratchetProjectionRefreshes.get(workspaceId) === refresh) {
+          ratchetProjectionRefreshes.delete(workspaceId);
+        }
+      }
+    })();
+  };
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
     const now = Date.now();
@@ -547,17 +605,15 @@ function configureEventCollectorWithState(
       prNumber: event.prNumber,
       prState: event.prState as PRState,
       prCiStatus: event.prCiStatus as CIStatus,
-      ...(event.ratchetDispatchOutcome !== undefined
-        ? { ratchetDispatchOutcome: event.ratchetDispatchOutcome }
-        : {}),
-      ...(event.ratchetDispatchRetryCount !== undefined
-        ? { ratchetDispatchRetryCount: event.ratchetDispatchRetryCount }
-        : {}),
     };
 
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
       immediate: true,
     });
+
+    if (event.ratchetDispatchChanged) {
+      requestAuthoritativeRatchetProjection(event.workspaceId);
+    }
 
     if (shouldRefreshRatchet) {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
@@ -613,26 +669,17 @@ function configureEventCollectorWithState(
       {
         ratchetEnabled: event.enabled,
         ratchetState: event.ratchetState,
-        ratchetDispatchOutcome: event.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: event.ratchetDispatchRetryCount,
       },
       'event:ratchet_toggled',
       { immediate: true }
     );
+    requestAuthoritativeRatchetProjection(event.workspaceId);
     refreshCachedKanbanColumn(event.workspaceId);
   });
 
   // 5. Ratchet dispatch ownership changes
   state.ratchetDispatchChangedHandler = (event: RatchetDispatchChangedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      {
-        ratchetDispatchOutcome: event.outcome,
-        ratchetDispatchRetryCount: event.retryCount,
-      },
-      'event:ratchet_dispatch_changed',
-      { immediate: true }
-    );
+    requestAuthoritativeRatchetProjection(event.workspaceId);
     refreshCachedKanbanColumn(event.workspaceId);
   };
   ratchetService.on(RATCHET_DISPATCH_CHANGED, state.ratchetDispatchChangedHandler);

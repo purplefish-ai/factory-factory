@@ -64,8 +64,6 @@ export const RATCHET_DISPATCH_CHANGED = 'ratchet_dispatch_changed' as const;
 
 export interface RatchetDispatchChangedEvent {
   workspaceId: string;
-  outcome: RatchetDispatchOutcome | null;
-  retryCount: number;
 }
 
 export interface RatchetStateChangedEvent {
@@ -80,8 +78,6 @@ export interface RatchetToggledEvent {
   workspaceId: string;
   enabled: boolean;
   ratchetState: RatchetState;
-  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-  ratchetDispatchRetryCount: number;
 }
 
 export interface RatchetCheckOptions {
@@ -310,14 +306,8 @@ class RatchetService extends EventEmitter {
       return;
     }
 
-    const workspace = await workspaceAccessor.findById(workspaceId);
-    if (!workspace) {
-      return;
-    }
     this.emit(RATCHET_DISPATCH_CHANGED, {
       workspaceId,
-      outcome: workspace.ratchetDispatchOutcome,
-      retryCount: workspace.ratchetDispatchRetryCount,
     } satisfies RatchetDispatchChangedEvent);
   }
 
@@ -413,8 +403,6 @@ class RatchetService extends EventEmitter {
         workspaceId,
         enabled: true,
         ratchetState: workspace.ratchetState,
-        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
       } satisfies RatchetToggledEvent);
       return;
     }
@@ -444,8 +432,6 @@ class RatchetService extends EventEmitter {
       workspaceId,
       enabled: false,
       ratchetState: RatchetState.IDLE,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
     } satisfies RatchetToggledEvent);
   }
 
