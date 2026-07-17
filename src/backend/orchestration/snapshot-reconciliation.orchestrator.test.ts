@@ -66,9 +66,11 @@ vi.mock('@/backend/services/session', () => ({
 // ---------------------------------------------------------------------------
 
 import {
+  configureSnapshotReconciliation,
   detectDrift,
   type ReconciliationBridges,
   SnapshotReconciliationService,
+  snapshotReconciliationService,
 } from './snapshot-reconciliation.orchestrator';
 
 // ---------------------------------------------------------------------------
@@ -285,6 +287,24 @@ describe('detectDrift', () => {
 // ---------------------------------------------------------------------------
 // Tests: SnapshotReconciliationService
 // ---------------------------------------------------------------------------
+
+describe('configureSnapshotReconciliation', () => {
+  it('preserves legacy configure-and-start behavior', () => {
+    const configure = vi
+      .spyOn(snapshotReconciliationService, 'configure')
+      .mockImplementation(() => undefined);
+    const start = vi
+      .spyOn(snapshotReconciliationService, 'start')
+      .mockImplementation(() => undefined);
+
+    configureSnapshotReconciliation();
+
+    expect(configure).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    configure.mockRestore();
+    start.mockRestore();
+  });
+});
 
 describe('SnapshotReconciliationService', () => {
   let service: SnapshotReconciliationService;

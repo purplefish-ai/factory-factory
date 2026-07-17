@@ -23,7 +23,7 @@ import type {
   prSnapshotService,
 } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
-import { periodicTaskService } from '@/backend/services/periodic-task';
+import type { periodicTaskService } from '@/backend/services/periodic-task';
 import type {
   fixerSessionService,
   RatchetGitHubBridge,
@@ -146,6 +146,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     githubCLIService,
     kanbanStateService,
     logbookService,
+    periodicTaskService,
     prFetchRegistry,
     prSnapshotService,
     ratchetService,

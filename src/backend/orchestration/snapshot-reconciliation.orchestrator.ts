@@ -444,4 +444,5 @@ export function configureSnapshotReconciliation(
       getAllPendingRequests: () => resolved.chatEventForwarderService.getAllPendingRequests(),
     },
   });
+  snapshotReconciliationService.start();
 }

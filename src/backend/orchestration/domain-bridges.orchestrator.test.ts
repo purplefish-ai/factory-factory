@@ -222,6 +222,22 @@ describe('configureDomainBridges', () => {
     expect(periodicTaskService.configure).toHaveBeenCalledTimes(1);
   });
 
+  it('configures only the caller-supplied periodic task service', () => {
+    const configure = vi.fn();
+    const suppliedPeriodicTaskService = new Proxy(periodicTaskService, {
+      get(target, property, receiver) {
+        return property === 'configure' ? configure : Reflect.get(target, property, receiver);
+      },
+    });
+
+    configureDomainBridges(
+      createBridgeServices({ periodicTaskService: suppliedPeriodicTaskService })
+    );
+
+    expect(configure).toHaveBeenCalledTimes(1);
+    expect(periodicTaskService.configure).not.toHaveBeenCalled();
+  });
+
   describe('ratchet bridge delegation', () => {
     it('session bridge delegates isSessionRunning to sessionService', () => {
       configureDomainBridges(createBridgeServices());
