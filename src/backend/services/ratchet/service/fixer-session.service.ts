@@ -23,7 +23,12 @@ export interface AcquireAndDispatchInput {
 }
 
 export type AcquireAndDispatchResult =
-  | { status: 'started'; sessionId: string; promptSent?: boolean }
+  | {
+      status: 'started';
+      sessionId: string;
+      promptSent?: boolean;
+      promptCompletion?: Promise<boolean>;
+    }
   | { status: 'already_active'; sessionId: string; reason: 'working' | 'message_dispatched' }
   | { status: 'skipped'; reason: string }
   | { status: 'error'; error: string };
@@ -221,14 +226,18 @@ class FixerSessionService {
         startupModePreset: 'non_interactive',
       });
 
-      const promptSent = await this.sendMessageSafely(acquisitionResult.sessionId, prompt);
-
       await input.afterStart?.({ sessionId: acquisitionResult.sessionId, prompt });
+
+      const { promptSent, promptCompletion } = this.beginMessageSafely(
+        acquisitionResult.sessionId,
+        prompt
+      );
 
       return {
         status: 'started',
         sessionId: acquisitionResult.sessionId,
         promptSent,
+        promptCompletion,
       };
     } else {
       await this.startOrRestartSession(acquisitionResult, {
@@ -272,6 +281,36 @@ class FixerSessionService {
         error: error instanceof Error ? error.message : String(error),
       });
       return false;
+    }
+  }
+
+  private beginMessageSafely(
+    sessionId: string,
+    prompt: string
+  ): { promptSent: boolean; promptCompletion?: Promise<boolean> } {
+    if (!this.session.isSessionRunning(sessionId)) {
+      logger.warn('Could not send fixer message because session is not running', { sessionId });
+      return { promptSent: false };
+    }
+
+    try {
+      const promptCompletion = this.session
+        .sendSessionMessage(sessionId, prompt)
+        .then(() => true)
+        .catch((error) => {
+          logger.warn('Failed to send fixer message', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return false;
+        });
+      return { promptSent: true, promptCompletion };
+    } catch (error) {
+      logger.warn('Failed to initiate fixer message', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { promptSent: false };
     }
   }
 }

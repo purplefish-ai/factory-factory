@@ -477,11 +477,28 @@ export type EnumSessionProviderWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumSessionProviderFilter<$PrismaModel>
 }
 
+export type EnumRatchetReviewTriggerModeFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetReviewTriggerMode | Prisma.EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetReviewTriggerMode[]
+  notIn?: $Enums.RatchetReviewTriggerMode[]
+  not?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel> | $Enums.RatchetReviewTriggerMode
+}
+
 export type EnumSessionPermissionPresetFilter<$PrismaModel = never> = {
   equals?: $Enums.SessionPermissionPreset | Prisma.EnumSessionPermissionPresetFieldRefInput<$PrismaModel>
   in?: $Enums.SessionPermissionPreset[]
   notIn?: $Enums.SessionPermissionPreset[]
   not?: Prisma.NestedEnumSessionPermissionPresetFilter<$PrismaModel> | $Enums.SessionPermissionPreset
+}
+
+export type EnumRatchetReviewTriggerModeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetReviewTriggerMode | Prisma.EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetReviewTriggerMode[]
+  notIn?: $Enums.RatchetReviewTriggerMode[]
+  not?: Prisma.NestedEnumRatchetReviewTriggerModeWithAggregatesFilter<$PrismaModel> | $Enums.RatchetReviewTriggerMode
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel>
 }
 
 export type EnumSessionPermissionPresetWithAggregatesFilter<$PrismaModel = never> = {
@@ -1003,11 +1020,28 @@ export type NestedEnumSessionProviderWithAggregatesFilter<$PrismaModel = never> 
   _max?: Prisma.NestedEnumSessionProviderFilter<$PrismaModel>
 }
 
+export type NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetReviewTriggerMode | Prisma.EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetReviewTriggerMode[]
+  notIn?: $Enums.RatchetReviewTriggerMode[]
+  not?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel> | $Enums.RatchetReviewTriggerMode
+}
+
 export type NestedEnumSessionPermissionPresetFilter<$PrismaModel = never> = {
   equals?: $Enums.SessionPermissionPreset | Prisma.EnumSessionPermissionPresetFieldRefInput<$PrismaModel>
   in?: $Enums.SessionPermissionPreset[]
   notIn?: $Enums.SessionPermissionPreset[]
   not?: Prisma.NestedEnumSessionPermissionPresetFilter<$PrismaModel> | $Enums.SessionPermissionPreset
+}
+
+export type NestedEnumRatchetReviewTriggerModeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetReviewTriggerMode | Prisma.EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetReviewTriggerMode[]
+  notIn?: $Enums.RatchetReviewTriggerMode[]
+  not?: Prisma.NestedEnumRatchetReviewTriggerModeWithAggregatesFilter<$PrismaModel> | $Enums.RatchetReviewTriggerMode
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel>
 }
 
 export type NestedEnumSessionPermissionPresetWithAggregatesFilter<$PrismaModel = never> = {

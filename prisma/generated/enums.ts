@@ -49,6 +49,14 @@ export const SessionPermissionPreset = {
 export type SessionPermissionPreset = (typeof SessionPermissionPreset)[keyof typeof SessionPermissionPreset]
 
 
+export const RatchetReviewTriggerMode = {
+  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+  ALL_REVIEW_FEEDBACK: 'ALL_REVIEW_FEEDBACK'
+} as const
+
+export type RatchetReviewTriggerMode = (typeof RatchetReviewTriggerMode)[keyof typeof RatchetReviewTriggerMode]
+
+
 export const WorkspaceProviderSelection = {
   WORKSPACE_DEFAULT: 'WORKSPACE_DEFAULT',
   CLAUDE: 'CLAUDE',
