@@ -7,37 +7,49 @@ import type {
 } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 
-export type WorkspacePendingRequestType = 'plan_approval' | 'user_question' | 'permission_request';
+export const WORKSPACE_PENDING_REQUEST_TYPES = [
+  'plan_approval',
+  'user_question',
+  'permission_request',
+] as const;
 
-export type WorkspaceStatusReasonTone =
-  | 'neutral'
-  | 'working'
-  | 'waiting'
-  | 'attention'
-  | 'success'
-  | 'danger';
+export type WorkspacePendingRequestType = (typeof WORKSPACE_PENDING_REQUEST_TYPES)[number];
 
-export type WorkspaceStatusReasonCode =
-  | 'NEEDS_PERMISSION'
-  | 'NEEDS_PLAN_APPROVAL'
-  | 'NEEDS_ANSWER'
-  | 'SESSION_ERROR'
-  | 'SETTING_UP'
-  | 'SETUP_FAILED'
-  | 'ARCHIVING'
-  | 'ARCHIVED'
-  | 'AGENT_WORKING'
-  | 'DEV_SERVER_RUNNING'
-  | 'WAITING_FOR_CI'
-  | 'FIXING_CI_FAILURES'
-  | 'FIXING_REVIEW_COMMENTS'
-  | 'CHECKING_PR'
-  | 'MERGED'
-  | 'PR_CLOSED'
-  | 'READY_TO_MERGE'
-  | 'READY_FOR_REVIEW'
-  | 'NO_SESSION_STARTED'
-  | 'READY_FOR_NEXT_PROMPT';
+export const WORKSPACE_STATUS_REASON_TONES = [
+  'neutral',
+  'working',
+  'waiting',
+  'attention',
+  'success',
+  'danger',
+] as const;
+
+export type WorkspaceStatusReasonTone = (typeof WORKSPACE_STATUS_REASON_TONES)[number];
+
+export const WORKSPACE_STATUS_REASON_CODES = [
+  'NEEDS_PERMISSION',
+  'NEEDS_PLAN_APPROVAL',
+  'NEEDS_ANSWER',
+  'SESSION_ERROR',
+  'SETTING_UP',
+  'SETUP_FAILED',
+  'ARCHIVING',
+  'ARCHIVED',
+  'AGENT_WORKING',
+  'DEV_SERVER_RUNNING',
+  'WAITING_FOR_CI',
+  'FIXING_CI_FAILURES',
+  'FIXING_REVIEW_COMMENTS',
+  'CHECKING_PR',
+  'MERGED',
+  'PR_CLOSED',
+  'READY_TO_MERGE',
+  'READY_FOR_REVIEW',
+  'NO_SESSION_STARTED',
+  'READY_FOR_NEXT_PROMPT',
+] as const;
+
+export type WorkspaceStatusReasonCode = (typeof WORKSPACE_STATUS_REASON_CODES)[number];
 
 export interface WorkspaceStatusReason {
   code: WorkspaceStatusReasonCode;

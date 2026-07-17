@@ -14,6 +14,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { KanbanColumn } from '@/shared/core';
+import { WorkspaceSnapshotEntrySchema } from '@/shared/workspace-snapshot';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -809,6 +810,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(event.projectId).toBe('proj-A');
       expect(event.entry).toBeDefined();
       expect(event.entry.workspaceId).toBe('ws-1');
+      expect(() => WorkspaceSnapshotEntrySchema.parse(event.entry)).not.toThrow();
     });
 
     it('emits snapshot_removed on remove', () => {
