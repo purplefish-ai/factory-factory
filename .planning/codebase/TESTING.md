@@ -163,7 +163,7 @@ pnpm check:coverage:critical
 **Scope:**
 - Coverage includes `src/backend/**/*.ts`.
 - Coverage excludes backend tests, `src/backend/index.ts`, `src/backend/testing/**`, service and route barrels, type files, bridge files, and constants. See `vitest.config.ts`.
-- General thresholds are not enabled in `vitest.config.ts`.
+- Aggregate coverage thresholds are enforced in `vitest.config.ts` and fail `pnpm test:coverage` when any minimum drops.
 - Critical coverage thresholds are enforced by `scripts/check-critical-coverage.mjs` across WebSocket, resource accessor, run-script, workspace runtime, workspace tRPC, and specific backend files.
 
 ## Test Types
