@@ -151,7 +151,9 @@ function createCaller() {
         sessionDataService: {
           findAgentSessionsByIds: mockFindAgentSessionsByIds,
           findAgentSessionsWithPid: mockFindAgentSessionsWithPid,
-          findTerminalSessionsWithPid: mockFindTerminalSessionsWithPid,
+        },
+        terminalSessionService: {
+          findWithPid: mockFindTerminalSessionsWithPid,
         },
         workspaceDataService: {
           findByIdsWithProject: mockFindWorkspacesByIdsWithProject,

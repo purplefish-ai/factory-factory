@@ -62,6 +62,13 @@ function createCaller() {
           sessionService,
           sessionDomainService,
           sessionDataService: mockSessionDataService,
+          terminalSessionService: {
+            findByWorkspaceId: mockSessionDataService.findTerminalSessionsByWorkspaceId,
+            findById: mockSessionDataService.findTerminalSessionById,
+            create: mockSessionDataService.createTerminalSession,
+            update: mockSessionDataService.updateTerminalSession,
+            delete: mockSessionDataService.deleteTerminalSession,
+          },
           sessionProviderResolverService: mockSessionProviderResolverService,
           cliHealthService,
           listQuickActions: () => mockListQuickActions(),

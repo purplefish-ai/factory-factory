@@ -175,7 +175,8 @@ function createCaller(requestTrust?: {
     workspaceDataService: Object.assign(
       {},
       fakeGraph.services.workspaceDataService,
-      mockWorkspaceDataService
+      mockWorkspaceDataService,
+      { findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args) }
     ),
     workspaceQueryService: Object.assign(
       {},
