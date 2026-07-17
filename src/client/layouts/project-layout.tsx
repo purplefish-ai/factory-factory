@@ -1,28 +1,14 @@
-import { useEffect } from 'react';
 import { Outlet, useParams } from 'react-router';
-import { useProjectContext } from '@/client/lib/providers';
 import { trpc } from '@/client/lib/trpc';
 
 export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
-  const { setProjectContext } = useProjectContext();
 
   const {
     data: project,
     isLoading,
     error,
   } = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
-
-  // Set project context for tRPC requests when project is loaded
-  useEffect(() => {
-    if (project?.id) {
-      setProjectContext(project.id);
-    }
-    return () => {
-      // Clear project context when leaving project pages
-      setProjectContext(undefined);
-    };
-  }, [project?.id, setProjectContext]);
 
   if (isLoading) {
     return (

@@ -6,17 +6,43 @@
 
 import type { AppContext } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
-import { createLogger } from '@/backend/services/logger.service';
 import { createPushChannelUpgradeHandler } from './push-channel.handler';
+
+let broadcasterLogger: Pick<ReturnType<AppContext['services']['createLogger']>, 'error'> = {
+  error: () => undefined,
+};
+
+function proxyBroadcasterError(message: string, context?: Record<string, unknown>): void;
+function proxyBroadcasterError(
+  message: string,
+  error: Error,
+  context?: Record<string, unknown>
+): void;
+function proxyBroadcasterError(
+  message: string,
+  errorOrContext?: Error | Record<string, unknown>,
+  context?: Record<string, unknown>
+): void {
+  if (errorOrContext instanceof Error) {
+    broadcasterLogger.error(message, errorOrContext, context);
+    return;
+  }
+  broadcasterLogger.error(message, errorOrContext);
+}
+
+const broadcasterLoggerProxy: typeof broadcasterLogger = {
+  error: proxyBroadcasterError,
+};
 
 /** Dev-logs WebSocket connections, keyed by workspace ID. */
 export const devLogsConnections = new TopicBroadcaster<string>(
-  createLogger('dev-logs-handler'),
+  broadcasterLoggerProxy,
   'log output'
 );
 
 export function createDevLogsUpgradeHandler(appContext: AppContext) {
-  const { runScriptService } = appContext.services;
+  const { createLogger, runScriptService } = appContext.services;
+  broadcasterLogger = createLogger('dev-logs-handler');
 
   return createPushChannelUpgradeHandler(appContext, {
     loggerName: 'dev-logs-handler',

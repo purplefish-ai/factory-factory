@@ -848,6 +848,7 @@ function RatchetSettingsSection() {
   }
 
   const currentRatchetPermissions = settings?.ratchetPermissions ?? 'YOLO';
+  const currentReviewTriggerMode = settings?.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED';
 
   return (
     <Card>
@@ -887,6 +888,33 @@ function RatchetSettingsSection() {
             }}
             disabled={updateSettings.isPending}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ratchet-review-trigger">Review feedback trigger</Label>
+          <Select
+            value={currentReviewTriggerMode}
+            onValueChange={(value) => {
+              if (value === 'CHANGES_REQUESTED' || value === 'ALL_REVIEW_FEEDBACK') {
+                updateSettings.mutate({ ratchetReviewTriggerMode: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="ratchet-review-trigger">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CHANGES_REQUESTED">
+                Changes requested and unresolved threads
+              </SelectItem>
+              <SelectItem value="ALL_REVIEW_FEEDBACK">All review feedback</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            All review feedback also lets top-level commented review summaries start sessions.
+            Ordinary PR conversation comments never trigger Ratchet.
+          </p>
         </div>
 
         <div className="space-y-2">

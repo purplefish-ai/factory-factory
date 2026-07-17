@@ -1350,6 +1350,7 @@ export const UserSettingsScalarFieldEnum = {
   cachedSlashCommands: 'cachedSlashCommands',
   ratchetEnabled: 'ratchetEnabled',
   ratchetReplyToPrComments: 'ratchetReplyToPrComments',
+  ratchetReviewTriggerMode: 'ratchetReviewTriggerMode',
   defaultSessionProvider: 'defaultSessionProvider',
   defaultClaudeModel: 'defaultClaudeModel',
   defaultCodexModel: 'defaultCodexModel',
@@ -1597,6 +1598,13 @@ export type EnumSessionStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$Pr
  * Reference to a field of type 'SessionProvider'
  */
 export type EnumSessionProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionProvider'>
+    
+
+
+/**
+ * Reference to a field of type 'RatchetReviewTriggerMode'
+ */
+export type EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetReviewTriggerMode'>
     
 
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDefaultApplicationDependencies } from '@/backend/app-context';
 import {
   PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
@@ -17,7 +18,6 @@ import {
   workspaceActivityService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 
 describe('event collector listener lifecycle', () => {
   it('restores every real EventEmitter listener count after stop', () => {
@@ -36,14 +36,14 @@ describe('event collector listener lifecycle', () => {
       [sessionDomainService, 'runtime_changed'],
     ] as const;
     const baseline = sources.map(([emitter, event]) => emitter.listenerCount(event));
-    const collector = createEventCollectorOrchestrator();
+    const collector = createDefaultApplicationDependencies().lifecycle.eventCollector;
 
-    collector.configure();
+    collector.start();
     expect(sources.map(([emitter, event]) => emitter.listenerCount(event))).toEqual(
       baseline.map((count) => count + 1)
     );
 
-    collector.configure();
+    collector.start();
     expect(sources.map(([emitter, event]) => emitter.listenerCount(event))).toEqual(
       baseline.map((count) => count + 1)
     );

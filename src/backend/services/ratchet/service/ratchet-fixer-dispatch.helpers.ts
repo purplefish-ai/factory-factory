@@ -87,9 +87,15 @@ async function handleStartedFixerResult(params: {
   });
   if (recorded) {
     onRecorded();
-    onDispatchChanged?.({
-      workspaceId: workspace.id,
-    });
+    onDispatchChanged?.({ workspaceId: workspace.id });
+    if (result.promptCompletion) {
+      void settleFailedPromptCompletion({
+        workspaceId: workspace.id,
+        sessionId: result.sessionId,
+        promptCompletion: result.promptCompletion,
+        sessionBridge,
+      });
+    }
   }
   signal?.throwIfAborted();
   if (!recorded) {
@@ -106,6 +112,33 @@ async function handleStartedFixerResult(params: {
     sessionId: result.sessionId,
     promptSent,
   };
+}
+
+async function settleFailedPromptCompletion(params: {
+  workspaceId: string;
+  sessionId: string;
+  promptCompletion: Promise<boolean>;
+  sessionBridge: RatchetSessionBridge;
+}): Promise<void> {
+  const { workspaceId, sessionId, promptCompletion, sessionBridge } = params;
+
+  try {
+    const completed = await promptCompletion;
+    if (completed) {
+      return;
+    }
+
+    const settled = await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, 'DIED');
+    if (settled && sessionBridge.isSessionRunning(sessionId)) {
+      await sessionBridge.stopSession(sessionId);
+    }
+  } catch (error) {
+    logger.warn('Failed to reconcile ratchet prompt completion', {
+      workspaceId,
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function handleAlreadyActiveFixerResult(params: {
@@ -127,9 +160,7 @@ async function handleAlreadyActiveFixerResult(params: {
     result.sessionId
   );
   if (adopted) {
-    onDispatchChanged?.({
-      workspaceId: workspace.id,
-    });
+    onDispatchChanged?.({ workspaceId: workspace.id });
   }
   signal?.throwIfAborted();
   if (!adopted) {

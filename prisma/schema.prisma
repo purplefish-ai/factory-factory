@@ -40,6 +40,11 @@ enum SessionPermissionPreset {
   YOLO
 }
 
+enum RatchetReviewTriggerMode {
+  CHANGES_REQUESTED
+  ALL_REVIEW_FEEDBACK
+}
+
 enum WorkspaceProviderSelection {
   WORKSPACE_DEFAULT
   CLAUDE
@@ -385,6 +390,7 @@ model UserSettings {
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
   ratchetReplyToPrComments  Boolean  @default(true)   // Whether Ratchet should post PR/review comment replies
+  ratchetReviewTriggerMode  RatchetReviewTriggerMode @default(CHANGES_REQUESTED)
   defaultSessionProvider    SessionProvider @default(CLAUDE)
   defaultClaudeModel        String @default("sonnet")
   defaultCodexModel         String @default("default")

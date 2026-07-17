@@ -243,7 +243,7 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Headers']).toBe(
-        'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Top-Level-Task-Id'
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization'
       );
     });
 

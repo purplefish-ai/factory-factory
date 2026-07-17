@@ -1,4 +1,9 @@
-import type { SessionPermissionPreset, SessionProvider, UserSettings } from '@prisma-gen/client';
+import type {
+  RatchetReviewTriggerMode,
+  SessionPermissionPreset,
+  SessionProvider,
+  UserSettings,
+} from '@prisma-gen/client';
 import { Prisma } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
@@ -13,6 +18,7 @@ interface UpdateUserSettingsInput {
   // Ratchet settings
   ratchetEnabled?: boolean;
   ratchetReplyToPrComments?: boolean;
+  ratchetReviewTriggerMode?: RatchetReviewTriggerMode;
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
@@ -100,6 +106,7 @@ class UserSettingsAccessor {
           defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
           ratchetReplyToPrComments: true,
+          ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
           ratchetPermissions: 'YOLO',
         },
       });
@@ -157,6 +164,7 @@ class UserSettingsAccessor {
         defaultCodexReasoningEffort: normalizedCodexEffort ?? null,
         defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
         ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
+        ratchetReviewTriggerMode: data.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED',
         ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
       },
     });

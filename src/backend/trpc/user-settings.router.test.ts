@@ -7,30 +7,27 @@ const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
 const mockFetchCodexModelCatalogFromAppServer = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  projectAccessor: {},
-  userSettingsQueryService: {
-    get: (...args: unknown[]) => mockGet(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
-    getWorkspaceOrder: (...args: unknown[]) => mockGetWorkspaceOrder(...args),
-    updateWorkspaceOrder: (...args: unknown[]) => mockUpdateWorkspaceOrder(...args),
-  },
-  workspaceAccessor: {},
-}));
-
 vi.mock('@/backend/lib/shell', () => ({
   execCommand: (...args: unknown[]) => mockExecCommand(...args),
-}));
-
-vi.mock('@/backend/services/session', () => ({
-  fetchCodexModelCatalogFromAppServer: (...args: unknown[]) =>
-    mockFetchCodexModelCatalogFromAppServer(...args),
 }));
 
 import { userSettingsRouter } from './user-settings.trpc';
 
 function createCaller() {
-  return userSettingsRouter.createCaller({ appContext: {} } as never);
+  return userSettingsRouter.createCaller({
+    appContext: {
+      services: {
+        fetchCodexModelCatalogFromAppServer: (...args: unknown[]) =>
+          mockFetchCodexModelCatalogFromAppServer(...args),
+        userSettingsQueryService: {
+          get: (...args: unknown[]) => mockGet(...args),
+          update: (...args: unknown[]) => mockUpdate(...args),
+          getWorkspaceOrder: (...args: unknown[]) => mockGetWorkspaceOrder(...args),
+          updateWorkspaceOrder: (...args: unknown[]) => mockUpdateWorkspaceOrder(...args),
+        },
+      },
+    },
+  } as never);
 }
 
 describe('userSettingsRouter', () => {
@@ -88,6 +85,26 @@ describe('userSettingsRouter', () => {
       preferredIde: 'vscode',
       playSoundOnComplete: true,
       ratchetReplyToPrComments: false,
+    });
+  });
+
+  it('updates the ratchet review trigger mode', async () => {
+    mockUpdate.mockResolvedValue({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+
+    const caller = createCaller();
+
+    await expect(
+      caller.update({
+        ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      })
+    ).resolves.toEqual({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
     });
   });
 

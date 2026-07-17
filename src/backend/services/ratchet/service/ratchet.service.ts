@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
+import type { RatchetDispatchOutcome, RatchetReviewTriggerMode } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -237,9 +238,16 @@ class RatchetService extends EventEmitter {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
 
+    const userSettings = await userSettingsAccessor.get();
+
     const results = await Promise.all(
       workspaces.map((workspace) =>
-        this.runWorkspaceCheckSafely(workspace, undefined, scheduleRatchetBatchCheck)
+        this.runWorkspaceCheckSafely(
+          workspace,
+          undefined,
+          scheduleRatchetBatchCheck,
+          userSettings.ratchetReviewTriggerMode
+        )
       )
     );
 
@@ -270,7 +278,15 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const result = await this.runWorkspaceCheckSafely(workspace, opts);
+    const userSettings = await userSettingsAccessor.get();
+    const reviewTriggerMode = userSettings.ratchetReviewTriggerMode;
+
+    const result = await this.runWorkspaceCheckSafely(
+      workspace,
+      opts,
+      undefined,
+      reviewTriggerMode
+    );
 
     // A bypassed check can still come back dedup-skipped: the coordinator may
     // have joined a normal check that was already in flight, or another
@@ -281,7 +297,7 @@ class RatchetService extends EventEmitter {
       if (!freshWorkspace) {
         return result;
       }
-      return this.runWorkspaceCheckSafely(freshWorkspace, opts);
+      return this.runWorkspaceCheckSafely(freshWorkspace, opts, undefined, reviewTriggerMode);
     }
 
     return result;
@@ -362,14 +378,21 @@ class RatchetService extends EventEmitter {
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR,
     opts?: RatchetCheckOptions,
-    schedule?: WorkspaceCheckScheduler
+    schedule?: WorkspaceCheckScheduler,
+    reviewTriggerMode?: RatchetReviewTriggerMode
   ): Promise<WorkspaceRatchetResult> {
     try {
       return await this.checkCoordinator.run(
         workspace,
         (signal, commitSideEffects) => {
           signal.throwIfAborted();
-          return this.processWorkspace(workspace, opts, signal, commitSideEffects);
+          return this.processWorkspace(
+            workspace,
+            opts,
+            signal,
+            commitSideEffects,
+            reviewTriggerMode
+          );
         },
         schedule
       );
@@ -441,7 +464,8 @@ class RatchetService extends EventEmitter {
     signal: AbortSignal = new AbortController().signal,
     commitSideEffects: () => void = () => {
       // Direct private-method callers do not have a coordinator timeout to disable.
-    }
+    },
+    reviewTriggerMode?: RatchetReviewTriggerMode
   ): Promise<WorkspaceRatchetResult> {
     signal.throwIfAborted();
     if (this.isShuttingDown) {
@@ -488,6 +512,9 @@ class RatchetService extends EventEmitter {
 
     try {
       signal.throwIfAborted();
+      const effectiveReviewTriggerMode =
+        reviewTriggerMode ?? (await userSettingsAccessor.get()).ratchetReviewTriggerMode;
+      signal.throwIfAborted();
       const authenticatedUsername = await this.getAuthenticatedUsernameCached(signal);
       signal.throwIfAborted();
       const prStateResult = await this.fetchPRState(
@@ -495,6 +522,7 @@ class RatchetService extends EventEmitter {
         authenticatedUsername,
         {
           bypassRecentFetchCooldown: opts?.bypassPrFetchCooldown,
+          reviewTriggerMode: effectiveReviewTriggerMode,
         },
         signal
       );
@@ -780,6 +808,10 @@ class RatchetService extends EventEmitter {
       return true;
     }
 
+    if (prStateInfo.hasChangesRequested) {
+      return true;
+    }
+
     return (prStateInfo.reviewComments?.length ?? 0) > 0;
   }
 
@@ -958,12 +990,16 @@ class RatchetService extends EventEmitter {
   private async fetchPRState(
     workspace: WorkspaceWithPR,
     authenticatedUsername: string | null,
-    opts?: { bypassRecentFetchCooldown?: boolean },
+    opts?: {
+      bypassRecentFetchCooldown?: boolean;
+      reviewTriggerMode?: RatchetReviewTriggerMode;
+    },
     signal?: AbortSignal
   ): Promise<PRStateFetchResult> {
     return await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
+      reviewTriggerMode: opts?.reviewTriggerMode ?? 'CHANGES_REQUESTED',
       github: this.github,
       backoff: this.backoff,
       signal,

@@ -1,0 +1,2 @@
+ALTER TABLE "UserSettings"
+ADD COLUMN "ratchetReviewTriggerMode" TEXT NOT NULL DEFAULT 'CHANGES_REQUESTED';

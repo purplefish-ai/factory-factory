@@ -13,14 +13,12 @@ vi.mock('node:fs/promises', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-vi.mock('@/backend/services/session', () => ({
-  sessionDataService: mockSessionDataService,
-}));
-
 import { closedSessionsRouter } from './closed-sessions.trpc';
 
 function createCaller() {
-  return closedSessionsRouter.createCaller({ appContext: {} } as never);
+  return closedSessionsRouter.createCaller({
+    appContext: { services: { sessionDataService: mockSessionDataService } },
+  } as never);
 }
 
 describe('closedSessionsRouter', () => {

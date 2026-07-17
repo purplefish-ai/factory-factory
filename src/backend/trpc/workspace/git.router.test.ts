@@ -12,10 +12,6 @@ const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
 const mockGetSnapshot = vi.hoisted(() => vi.fn());
 const mockGetMergeBase = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-}));
-
 vi.mock('./workspace-helpers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./workspace-helpers')>();
   return {
@@ -24,13 +20,6 @@ vi.mock('./workspace-helpers', async (importOriginal) => {
       mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
   };
 });
-
-vi.mock('@/backend/services/workspace-git-state.service', () => ({
-  workspaceGitStateService: {
-    getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
-    getMergeBase: (...args: unknown[]) => mockGetMergeBase(...args),
-  },
-}));
 
 vi.mock('@/backend/lib/shell', () => ({
   gitCommand: (...args: unknown[]) => mockGitCommand(...args),
@@ -91,6 +80,11 @@ function createCaller() {
     appContext: {
       services: {
         createLogger: () => logger,
+        workspaceDataService: mockWorkspaceDataService,
+        workspaceGitStateService: {
+          getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
+          getMergeBase: (...args: unknown[]) => mockGetMergeBase(...args),
+        },
       },
     },
   } as never);

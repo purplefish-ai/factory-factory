@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockRunStartupScript = vi.hoisted(() => vi.fn());
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
 const mockResetToNew = vi.hoisted(() => vi.fn());
@@ -14,49 +13,8 @@ const mockRetryQueuedDispatchAfterWorkspaceReady = vi.hoisted(() => vi.fn());
 const mockExecuteStartupScriptPipeline = vi.hoisted(() => vi.fn());
 const mockReadConfig = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/run-script', () => ({
-  startupScriptService: {
-    runStartupScript: (...args: unknown[]) => mockRunStartupScript(...args),
-  },
-  FactoryConfigService: {
-    readConfig: (...args: unknown[]) => mockReadConfig(...args),
-  },
-}));
-
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-    findById: (...args: unknown[]) => mockFindById(...args),
-  },
-  workspaceStateMachine: {
-    resetToNew: (...args: unknown[]) => mockResetToNew(...args),
-    startProvisioning: (...args: unknown[]) => mockStartProvisioning(...args),
-    startProvisioningFromReady: (...args: unknown[]) => mockStartProvisioningFromReady(...args),
-  },
-  worktreeLifecycleService: {
-    getInitMode: (...args: unknown[]) => mockGetInitMode(...args),
-    setInitMode: (...args: unknown[]) => mockSetInitMode(...args),
-  },
   getWorkspaceInitPolicy: (...args: unknown[]) => mockGetWorkspaceInitPolicy(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
-  retryQueuedDispatchAfterWorkspaceReady: (...args: unknown[]) =>
-    mockRetryQueuedDispatchAfterWorkspaceReady(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
-  executeStartupScriptPipeline: (...args: unknown[]) => mockExecuteStartupScriptPipeline(...args),
-}));
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
 }));
 
 import { workspaceInitRouter } from './init.trpc';
@@ -75,6 +33,28 @@ function createCaller(requestTrust?: {
             allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
           }),
         },
+        createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+        workspaceDataService: {
+          findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+          findById: (...args: unknown[]) => mockFindById(...args),
+        },
+        workspaceStateMachine: {
+          resetToNew: (...args: unknown[]) => mockResetToNew(...args),
+          startProvisioning: (...args: unknown[]) => mockStartProvisioning(...args),
+          startProvisioningFromReady: (...args: unknown[]) =>
+            mockStartProvisioningFromReady(...args),
+        },
+        worktreeLifecycleService: {
+          getInitMode: (...args: unknown[]) => mockGetInitMode(...args),
+          setInitMode: (...args: unknown[]) => mockSetInitMode(...args),
+        },
+        initializeWorkspaceWorktree: (...args: unknown[]) =>
+          mockInitializeWorkspaceWorktree(...args),
+        retryQueuedDispatchAfterWorkspaceReady: (...args: unknown[]) =>
+          mockRetryQueuedDispatchAfterWorkspaceReady(...args),
+        executeStartupScriptPipeline: (...args: unknown[]) =>
+          mockExecuteStartupScriptPipeline(...args),
+        factoryConfigService: { readConfig: (...args: unknown[]) => mockReadConfig(...args) },
       },
     },
   } as never);
@@ -85,7 +65,6 @@ describe('workspaceInitRouter', () => {
     vi.clearAllMocks();
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
     mockRetryQueuedDispatchAfterWorkspaceReady.mockResolvedValue(undefined);
-    mockRunStartupScript.mockResolvedValue({ success: true });
   });
 
   it('returns initialization status with policy fields', async () => {
@@ -170,8 +149,6 @@ describe('workspaceInitRouter', () => {
       branchName: 'feature/w2',
       provisioningAlreadyStarted: true,
     });
-    expect(mockRunStartupScript).not.toHaveBeenCalled();
-
     deferredInit.resolve();
     await deferredInit.promise;
   });

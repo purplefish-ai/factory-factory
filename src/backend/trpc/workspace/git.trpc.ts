@@ -3,7 +3,6 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
 import { gitCommand } from '@/backend/lib/shell';
-import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,
@@ -13,12 +12,15 @@ import {
 const loggerName = 'workspace-git-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
-async function getSnapshotForWorkspace(workspaceId: string) {
-  const workspace = await getWorkspaceWithProjectOrThrow(workspaceId);
+async function getSnapshotForWorkspace(ctx: Context, workspaceId: string) {
+  const workspace = await getWorkspaceWithProjectOrThrow(
+    ctx.appContext.services.workspaceDataService,
+    workspaceId
+  );
   if (!workspace.worktreePath) {
     return null;
   }
-  return workspaceGitStateService.getSnapshot({
+  return ctx.appContext.services.workspaceGitStateService.getSnapshot({
     worktreePath: workspace.worktreePath,
     defaultBranch: workspace.project?.defaultBranch ?? 'main',
   });
@@ -28,8 +30,8 @@ export const workspaceGitRouter = router({
   // Get git status for workspace
   getGitStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const snapshot = await getSnapshotForWorkspace(ctx, input.workspaceId);
       if (!snapshot) {
         return { files: [], hasUncommitted: false };
       }
@@ -46,8 +48,8 @@ export const workspaceGitRouter = router({
   // Get only unstaged changes for workspace
   getUnstagedChanges: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const snapshot = await getSnapshotForWorkspace(ctx, input.workspaceId);
       if (!snapshot) {
         return { files: [] };
       }
@@ -64,7 +66,7 @@ export const workspaceGitRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+      const snapshot = await getSnapshotForWorkspace(ctx, input.workspaceId);
       if (!snapshot) {
         return { added: [], modified: [], deleted: [], noMergeBase: false };
       }
@@ -88,8 +90,8 @@ export const workspaceGitRouter = router({
   // Get files changed in commits not yet pushed to upstream
   getUnpushedFiles: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const snapshot = await getSnapshotForWorkspace(ctx, input.workspaceId);
       if (!snapshot) {
         return { files: [], hasUpstream: false };
       }
@@ -111,8 +113,9 @@ export const workspaceGitRouter = router({
         filePath: z.string(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const { workspace, worktreePath } = await getWorkspaceWithProjectAndWorktreeOrThrow(
+        ctx.appContext.services.workspaceDataService,
         input.workspaceId
       );
 
@@ -121,8 +124,9 @@ export const workspaceGitRouter = router({
         throw new Error('Invalid file path');
       }
 
+      // Get merge base with the project's default branch
       const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-      const mergeBase = await workspaceGitStateService.getMergeBase({
+      const mergeBase = await ctx.appContext.services.workspaceGitStateService.getMergeBase({
         worktreePath,
         defaultBranch,
       });

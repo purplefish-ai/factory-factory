@@ -4,94 +4,46 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppContext } from '@/backend/app-context';
-import { prisma } from '@/backend/db';
-import { startInterceptors, stopInterceptors } from '@/backend/interceptors';
-import { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
-import {
-  configureEventCollector,
-  stopEventCollector,
-} from '@/backend/orchestration/event-collector.orchestrator';
-import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
-import {
-  configureSnapshotReconciliation,
-  snapshotReconciliationService,
-} from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
-import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
-import { runScriptStateMachine } from '@/backend/services/run-script';
-import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import { WebSocket } from 'ws';
+import type { Application } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-const handlers = vi.hoisted(() => ({
-  chat: vi.fn(),
-  terminal: vi.fn(),
-  setupTerminal: vi.fn(),
-  devLogs: vi.fn(),
-  postRunLogs: vi.fn(),
-  snapshots: vi.fn(),
-}));
+const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
+  const upgradeHandlers = {
+    chat: vi.fn(),
+    terminal: vi.fn(),
+    setupTerminal: vi.fn(),
+    devLogs: vi.fn(),
+    postRunLogs: vi.fn(),
+    snapshots: vi.fn(),
+  };
 
-vi.mock('@/backend/routers/websocket', () => ({
-  createChatUpgradeHandler: vi.fn(() => handlers.chat),
-  createTerminalUpgradeHandler: vi.fn(() => handlers.terminal),
-  createSetupTerminalUpgradeHandler: vi.fn(() => handlers.setupTerminal),
-  createDevLogsUpgradeHandler: vi.fn(() => handlers.devLogs),
-  createPostRunLogsUpgradeHandler: vi.fn(() => handlers.postRunLogs),
-  createSnapshotsUpgradeHandler: vi.fn(() => handlers.snapshots),
-}));
-
-vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () => ({
-  configureDomainBridges: vi.fn(),
-}));
-
-vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
-  configureEventCollector: vi.fn(),
-  stopEventCollector: vi.fn(),
-}));
-
-vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
-  configureSnapshotReconciliation: vi.fn(),
-  snapshotReconciliationService: {
-    stop: vi.fn(async () => undefined),
-  },
-}));
-
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
-  recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
-}));
-
-vi.mock('@/backend/orchestration/reconciliation.service', () => ({
-  reconciliationService: {
-    cleanupOrphans: vi.fn(async () => undefined),
-    reconcile: vi.fn(async () => undefined),
-    startPeriodicCleanup: vi.fn(),
-    stopPeriodicCleanup: vi.fn(async () => undefined),
-  },
-}));
-
-vi.mock('@/backend/services/run-script', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/run-script')>();
   return {
-    ...actual,
-    runScriptStateMachine: {
-      ...actual.runScriptStateMachine,
-      removeAllListeners: vi.fn(),
-      on: vi.fn(),
-      recoverStaleStates: vi.fn(async () => undefined),
+    handlers: upgradeHandlers,
+    handlerFactories: {
+      chat: vi.fn(() => upgradeHandlers.chat),
+      terminal: vi.fn(() => upgradeHandlers.terminal),
+      setupTerminal: vi.fn(() => upgradeHandlers.setupTerminal),
+      devLogs: vi.fn(() => upgradeHandlers.devLogs),
+      postRunLogs: vi.fn(() => upgradeHandlers.postRunLogs),
+      snapshots: vi.fn(() => upgradeHandlers.snapshots),
+    },
+    transportDisposers: {
+      chat: vi.fn(),
+      snapshots: vi.fn(),
     },
   };
 });
 
-vi.mock('@/backend/services/workspace-git-state.service', () => ({
-  workspaceGitStateService: {
-    stop: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/interceptors', () => ({
-  registerInterceptors: vi.fn(),
-  startInterceptors: vi.fn(async () => undefined),
-  stopInterceptors: vi.fn(async () => undefined),
+vi.mock('@/backend/routers/websocket', () => ({
+  createChatUpgradeHandler: handlerFactories.chat,
+  createTerminalUpgradeHandler: handlerFactories.terminal,
+  createSetupTerminalUpgradeHandler: handlerFactories.setupTerminal,
+  createDevLogsUpgradeHandler: handlerFactories.devLogs,
+  createPostRunLogsUpgradeHandler: handlerFactories.postRunLogs,
+  createSnapshotsUpgradeHandler: handlerFactories.snapshots,
+  disposeChatTransportForApplication: transportDisposers.chat,
+  disposeSnapshotsHandlerState: transportDisposers.snapshots,
 }));
 
 vi.mock('@/backend/trpc/index', () => ({
@@ -101,12 +53,6 @@ vi.mock('@/backend/trpc/index', () => ({
 
 vi.mock('@trpc/server/adapters/express', () => ({
   createExpressMiddleware: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
-}));
-
-vi.mock('@/backend/db', () => ({
-  prisma: {
-    $disconnect: vi.fn(async () => undefined),
-  },
 }));
 
 import { createServer } from './server';
@@ -156,6 +102,19 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       start: vi.fn(),
       stop: vi.fn(async () => undefined),
     },
+    periodicTaskService: {
+      start: vi.fn(),
+      stop: vi.fn(async () => undefined),
+    },
+    reconciliationService: {
+      cleanupOrphans: vi.fn(async () => undefined),
+      reconcile: vi.fn(async () => undefined),
+      startPeriodicCleanup: vi.fn(),
+      stopPeriodicCleanup: vi.fn(async () => undefined),
+    },
+    runScriptStateMachine: {
+      recoverStaleStates: vi.fn(async () => undefined),
+    },
     acpTraceLogger: {
       cleanup: vi.fn(),
       cleanupOldLogs: vi.fn(),
@@ -171,17 +130,48 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     terminalService: {
       cleanup: vi.fn(),
     },
+    workspaceAccessor: {
+      resetStaleAutoIterationStatuses: vi.fn(async () => []),
+    },
+    workspaceGitStateService: {
+      stop: vi.fn(),
+    },
   };
 
+  const lifecycle = {
+    database: {
+      $disconnect: vi.fn(async () => undefined),
+    },
+    interceptors: {
+      register: vi.fn(),
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    },
+    wireDomainBridges: vi.fn(),
+    eventCollector: {
+      configure: vi.fn(),
+      stop: vi.fn(),
+    },
+    snapshotReconciliation: {
+      configure: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(async () => undefined),
+    },
+    recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
+  };
+
+  const application = unsafeCoerce<Application>({ services, lifecycle, config: {} });
+
   return {
-    context: unsafeCoerce<AppContext>({ services }),
+    application,
+    lifecycle,
     logger,
     services,
   };
 }
 
-function createTestAppContext(options: TestHarnessOptions = {}): AppContext {
-  return createTestHarness(options).context;
+function createTestApplication(options: TestHarnessOptions = {}): Application {
+  return createTestHarness(options).application;
 }
 
 async function occupyPort(port = 0): Promise<{ port: number; server: NetServer }> {
@@ -265,8 +255,8 @@ describe('server websocket upgrade routing', () => {
   const servers: ReturnType<typeof createServer>[] = [];
   const tempDirs: string[] = [];
 
-  const createTestServer = (appContext = createTestAppContext(), requestedPort?: number) => {
-    const server = createServer(requestedPort, appContext);
+  const createTestServer = (application = createTestApplication(), requestedPort?: number) => {
+    const server = createServer(application, requestedPort);
     servers.push(server);
     return server;
   };
@@ -315,6 +305,19 @@ describe('server websocket upgrade routing', () => {
     expect(handlers.terminal).not.toHaveBeenCalled();
     expect(handlers.devLogs).not.toHaveBeenCalled();
     expect(handlers.snapshots).not.toHaveBeenCalled();
+  });
+
+  it('supplies the exact application graph to every upgrade handler factory', () => {
+    const application = createTestApplication();
+
+    createTestServer(application);
+
+    expect(handlerFactories.chat).toHaveBeenCalledWith(application);
+    expect(handlerFactories.terminal).toHaveBeenCalledWith(application);
+    expect(handlerFactories.setupTerminal).toHaveBeenCalledWith(application);
+    expect(handlerFactories.devLogs).toHaveBeenCalledWith(application);
+    expect(handlerFactories.postRunLogs).toHaveBeenCalledWith(application);
+    expect(handlerFactories.snapshots).toHaveBeenCalledWith(application);
   });
 
   it('routes /terminal upgrades to terminal handler', () => {
@@ -432,40 +435,18 @@ describe('server websocket upgrade routing', () => {
     expect(handlers.snapshots).not.toHaveBeenCalled();
   });
 
-  it('starts server and wires startup services', async () => {
-    const harness = createTestHarness();
-    const server = createTestServer(harness.context, 0);
+  it('starts an already-composed application without rewiring dependencies', async () => {
+    const { application, lifecycle } = createTestHarness();
+    const server = createTestServer(application, 0);
 
     const endpoint = await server.start();
 
     expect(endpoint).toBe('http://localhost:0');
     expect(server.getPort()).toBe(0);
-    expect(harness.services.findAvailablePort).not.toHaveBeenCalled();
-    expect(harness.logger.warn).not.toHaveBeenCalled();
-    expect(configureDomainBridges).toHaveBeenCalledWith(harness.context.services);
-    expect(configureEventCollector).toHaveBeenCalledWith(harness.context.services);
-    expect(configureSnapshotReconciliation).toHaveBeenCalledWith(harness.context.services);
-    expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
-    expect(harness.services.sessionService.recoverStaleSessionStates).toHaveBeenCalledOnce();
-    expect(reconciliationService.reconcile).toHaveBeenCalledOnce();
-    expect(runScriptStateMachine.recoverStaleStates).toHaveBeenCalledOnce();
-    expect(recoverStaleArchivingWorkspaces).toHaveBeenCalledWith(harness.context.services);
-    const runScriptRecoveryOrder = vi.mocked(runScriptStateMachine.recoverStaleStates).mock
-      .invocationCallOrder[0];
-    const archiveRecoveryOrder = vi.mocked(recoverStaleArchivingWorkspaces).mock
-      .invocationCallOrder[0];
-    const snapshotReconciliationOrder = vi.mocked(configureSnapshotReconciliation).mock
-      .invocationCallOrder[0];
-    expect(runScriptRecoveryOrder).toBeDefined();
-    expect(archiveRecoveryOrder).toBeDefined();
-    expect(snapshotReconciliationOrder).toBeDefined();
-    expect(runScriptRecoveryOrder ?? 0).toBeLessThan(archiveRecoveryOrder ?? 0);
-    expect(archiveRecoveryOrder ?? 0).toBeLessThan(snapshotReconciliationOrder ?? 0);
-    expect(startInterceptors).toHaveBeenCalledOnce();
-    expect(reconciliationService.startPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(harness.services.rateLimiter.start).toHaveBeenCalledOnce();
-    expect(harness.services.schedulerService.start).toHaveBeenCalledOnce();
-    expect(harness.services.ratchetService.start).toHaveBeenCalledOnce();
+    expect(lifecycle.wireDomainBridges).not.toHaveBeenCalled();
+    expect(lifecycle.eventCollector.configure).not.toHaveBeenCalled();
+    expect(lifecycle.snapshotReconciliation.configure).not.toHaveBeenCalled();
+    expect(lifecycle.snapshotReconciliation.start).toHaveBeenCalledOnce();
   });
 
   it('rejects concurrent start calls without running startup cleanup', async () => {
@@ -478,20 +459,22 @@ describe('server websocket upgrade routing', () => {
     const continueReconciliationPromise = new Promise<void>((resolve) => {
       continueReconciliation = resolve;
     });
-    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
-      reconciliationStarted();
-      await continueReconciliationPromise;
-    });
+    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
+      async () => {
+        reconciliationStarted();
+        await continueReconciliationPromise;
+      }
+    );
 
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
     const startPromise = server.start();
     await reconciliationStartedPromise;
 
     await expect(server.start()).rejects.toThrow('Server startup has already been initiated');
-    expect(stopInterceptors).not.toHaveBeenCalled();
+    expect(harness.lifecycle.interceptors.stop).not.toHaveBeenCalled();
     expect(harness.services.sessionService.stopAllClients).not.toHaveBeenCalled();
     expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
-    expect(prisma.$disconnect).not.toHaveBeenCalled();
+    expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
     continueReconciliation();
     await expect(startPromise).resolves.toBe('http://localhost:0');
@@ -503,7 +486,7 @@ describe('server websocket upgrade routing', () => {
     const harness = createTestHarness({
       isRunScriptProxyEnabled: true,
     });
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
 
     await server.start();
 
@@ -513,21 +496,23 @@ describe('server websocket upgrade routing', () => {
 
   it('logs startup reconciliation failures and continues starting', async () => {
     const harness = createTestHarness();
-    vi.mocked(reconciliationService.cleanupOrphans).mockRejectedValueOnce(
+    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockRejectedValueOnce(
       new Error('cleanup failed')
     );
     vi.mocked(harness.services.sessionService.recoverStaleSessionStates).mockRejectedValueOnce(
       new Error('session recovery failed')
     );
-    vi.mocked(reconciliationService.reconcile).mockRejectedValueOnce(new Error('reconcile failed'));
-    vi.mocked(runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
+    vi.mocked(harness.services.reconciliationService.reconcile).mockRejectedValueOnce(
+      new Error('reconcile failed')
+    );
+    vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
       new Error('run script recovery failed')
     );
-    vi.mocked(recoverStaleArchivingWorkspaces).mockRejectedValueOnce(
+    vi.mocked(harness.lifecycle.recoverStaleArchivingWorkspaces).mockRejectedValueOnce(
       new Error('archive recovery failed')
     );
 
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
 
     await expect(server.start()).resolves.toBe('http://localhost:0');
     expect(harness.logger.error).toHaveBeenCalledWith(
@@ -562,12 +547,14 @@ describe('server websocket upgrade routing', () => {
     const continueReconciliationPromise = new Promise<void>((resolve) => {
       continueReconciliation = resolve;
     });
-    vi.mocked(reconciliationService.cleanupOrphans).mockImplementationOnce(async () => {
-      reconciliationStarted();
-      await continueReconciliationPromise;
-    });
+    vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockImplementationOnce(
+      async () => {
+        reconciliationStarted();
+        await continueReconciliationPromise;
+      }
+    );
 
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
     const startPromise = server.start();
     await reconciliationStartedPromise;
     await waitForHttpServerToListen(server);
@@ -608,7 +595,7 @@ describe('server websocket upgrade routing', () => {
 
     try {
       const harness = createTestHarness({ backendHost: '127.0.0.1' });
-      const server = createTestServer(harness.context, startPort);
+      const server = createTestServer(harness.application, startPort);
 
       await expect(server.start()).resolves.toBe(`http://127.0.0.1:${startPort + 1}`);
 
@@ -618,8 +605,8 @@ describe('server websocket upgrade routing', () => {
         requestedPort: startPort,
         actualPort: startPort + 1,
       });
-      expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
-      expect(startInterceptors).toHaveBeenCalledOnce();
+      expect(harness.services.reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
+      expect(harness.lifecycle.interceptors.start).toHaveBeenCalledOnce();
     } finally {
       await closeNetServer(requestedPortReservation);
     }
@@ -630,15 +617,15 @@ describe('server websocket upgrade routing', () => {
 
     try {
       const harness = createTestHarness({ backendHost: '127.0.0.1' });
-      const server = createTestServer(harness.context, startPort);
+      const server = createTestServer(harness.application, startPort);
 
       await expect(server.start()).rejects.toThrow(
         `Could not bind server to an available port starting from ${startPort}`
       );
 
       expect(harness.services.findAvailablePort).not.toHaveBeenCalled();
-      expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
-      expect(startInterceptors).not.toHaveBeenCalled();
+      expect(harness.lifecycle.snapshotReconciliation.start).not.toHaveBeenCalled();
+      expect(harness.lifecycle.interceptors.start).not.toHaveBeenCalled();
     } finally {
       await Promise.all(occupiedServers.map(closeNetServer));
     }
@@ -646,7 +633,7 @@ describe('server websocket upgrade routing', () => {
 
   it('rejects start when http server emits an error', async () => {
     const harness = createTestHarness();
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
     const httpServer = server.getHttpServer();
 
     vi.spyOn(httpServer, 'listen').mockImplementation(() => httpServer);
@@ -656,7 +643,7 @@ describe('server websocket upgrade routing', () => {
     httpServer.emit('error', new Error('listen failed'));
 
     await expect(startPromise).rejects.toThrow('listen failed');
-    expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
+    expect(harness.lifecycle.snapshotReconciliation.start).not.toHaveBeenCalled();
   });
 
   it('runs normal cleanup when startup fails after the server is bound', async () => {
@@ -664,27 +651,28 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
       throw new Error('scheduler failed');
     });
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
 
     await expect(server.start()).rejects.toThrow('scheduler failed');
 
     expect(server.getHttpServer().listening).toBe(false);
-    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
     expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
-    expect(stopEventCollector).toHaveBeenCalledOnce();
-    expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
-    expect(workspaceGitStateService.stop).toHaveBeenCalledOnce();
+    expect(harness.services.periodicTaskService.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
     expect(
-      vi.mocked(snapshotReconciliationService.stop).mock.invocationCallOrder[0] ?? 0
-    ).toBeLessThan(vi.mocked(workspaceGitStateService.stop).mock.invocationCallOrder[0] ?? 0);
+      harness.lifecycle.snapshotReconciliation.stop.mock.invocationCallOrder[0] ?? 0
+    ).toBeLessThan(harness.services.workspaceGitStateService.stop.mock.invocationCallOrder[0] ?? 0);
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
-    expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(prisma.$disconnect).toHaveBeenCalledOnce();
+    expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('does not allow retrying start after startup failure cleanup', async () => {
@@ -692,7 +680,7 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(harness.services.schedulerService.start).mockImplementationOnce(() => {
       throw new Error('scheduler failed');
     });
-    const server = createTestServer(harness.context, 0);
+    const server = createTestServer(harness.application, 0);
 
     await expect(server.start()).rejects.toThrow('scheduler failed');
 
@@ -700,37 +688,84 @@ describe('server websocket upgrade routing', () => {
     await expect(server.start()).rejects.toThrow('Server has already been stopped');
 
     await server.stop();
-    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
     expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledOnce();
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
-    expect(prisma.$disconnect).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('runs cleanup fan-out when server stops', async () => {
     const harness = createTestHarness();
-    const server = createTestServer(harness.context);
+    const server = createTestServer(harness.application);
 
     await server.stop();
 
-    expect(stopInterceptors).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
     expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
-    expect(stopEventCollector).toHaveBeenCalledOnce();
-    expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
-    expect(workspaceGitStateService.stop).toHaveBeenCalledOnce();
+    expect(harness.services.periodicTaskService.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
-    expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
-    expect(prisma.$disconnect).toHaveBeenCalledOnce();
+    expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+    expect(transportDisposers.chat).toHaveBeenCalledWith(harness.application);
+    expect(transportDisposers.snapshots).toHaveBeenCalledWith(harness.application);
+  });
+
+  it('closes active WebSocket clients before completing server cleanup', async () => {
+    handlers.chat.mockImplementationOnce((request, socket, head, _url, wss) => {
+      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+        wss.emit('connection', ws, request);
+      });
+    });
+    const harness = createTestHarness({ backendHost: '127.0.0.1' });
+    const server = createTestServer(harness.application, 0);
+    await server.start();
+    const address = server.getHttpServer().address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('Expected the server to listen on a TCP port');
+    }
+
+    const client = new WebSocket(`ws://127.0.0.1:${address.port}/chat`, {
+      headers: { Origin: 'http://localhost:3000' },
+    });
+    await new Promise<void>((resolve, reject) => {
+      client.once('open', resolve);
+      client.once('error', reject);
+    });
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+
+    await server.stop();
+    await closed;
+
+    expect(client.readyState).toBe(WebSocket.CLOSED);
+  });
+
+  it('starts and idempotently stops only the supplied application graph', async () => {
+    const harness = createTestHarness();
+    const server = createTestServer(harness.application, 0);
+
+    await server.start();
+    await Promise.all([server.stop(), server.stop()]);
+
+    expect(harness.lifecycle.interceptors.start).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.start).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('serves static index fallback with no-cache headers and bypasses API routes', async () => {
     const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
     const harness = createTestHarness({ frontendStaticPath });
-    const server = createTestServer(harness.context);
+    const server = createTestServer(harness.application);
 
     const fallbackResponse = await request(server.getHttpServer()).get('/workspace/abc');
     const deepFallbackResponse = await request(server.getHttpServer()).get(
@@ -753,7 +788,7 @@ describe('server websocket upgrade routing', () => {
 
   it('sets no-cache headers when index.html is requested directly', async () => {
     const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
-    const server = createTestServer(createTestAppContext({ frontendStaticPath }));
+    const server = createTestServer(createTestApplication({ frontendStaticPath }));
 
     const response = await request(server.getHttpServer()).get('/index.html');
 
@@ -766,7 +801,7 @@ describe('server websocket upgrade routing', () => {
   it('returns 503 when static fallback index.html is missing', async () => {
     const frontendStaticPath = createStaticFrontendDir({ withIndex: false });
     const harness = createTestHarness({ frontendStaticPath });
-    const server = createTestServer(harness.context);
+    const server = createTestServer(harness.application);
 
     const response = await request(server.getHttpServer()).get('/workspace/xyz');
 

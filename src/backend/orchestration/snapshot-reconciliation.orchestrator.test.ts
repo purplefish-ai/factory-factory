@@ -315,9 +315,26 @@ describe('SnapshotReconciliationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new SnapshotReconciliationService();
     bridges = createMockBridges();
-    service.configure(bridges);
+    service = new SnapshotReconciliationService({
+      createLogger: () => ({
+        info: (...args: unknown[]) => mockLoggerInfo(...args),
+        debug: vi.fn(),
+        warn: (...args: unknown[]) => mockLoggerWarn(...args),
+        error: (...args: unknown[]) => mockLoggerError(...args),
+      }),
+      gitOpsService: { getWorkspaceGitStats: mockGetWorkspaceGitStats },
+      session: bridges.session,
+      workspaceAccessor: {
+        findAllNonArchivedWithSessionsAndProject: mockFindAllNonArchived,
+      },
+      workspaceSnapshotStore: {
+        getAllWorkspaceIds: mockGetAllWorkspaceIds,
+        getByWorkspaceId: mockGetByWorkspaceId,
+        remove: mockRemove,
+        upsert: mockUpsert,
+      },
+    });
 
     // Default: no workspaces, no stale entries
     mockFindAllNonArchived.mockResolvedValue([]);
@@ -899,5 +916,49 @@ describe('SnapshotReconciliationService', () => {
       // Confirm it completed
       expect(mockFindAllNonArchived).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('per-graph snapshot reconciliation', () => {
+  it('uses only the accessor, store, git, and session dependencies supplied at construction', async () => {
+    const createDependencies = (workspaceId: string) => {
+      const store = {
+        getAllWorkspaceIds: vi.fn(() => []),
+        getByWorkspaceId: vi.fn(),
+        remove: vi.fn(),
+        upsert: vi.fn(() => ({ accepted: true, changed: true, emitted: true })),
+      };
+      return {
+        createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+        gitOpsService: { getWorkspaceGitStats: vi.fn() },
+        session: createMockBridges().session,
+        workspaceAccessor: {
+          findAllNonArchivedWithSessionsAndProject: vi
+            .fn()
+            .mockResolvedValue([createMockWorkspace({ id: workspaceId, worktreePath: null })]),
+        },
+        workspaceSnapshotStore: store,
+      };
+    };
+    const firstDependencies = createDependencies('first');
+    const secondDependencies = createDependencies('second');
+    const first = new SnapshotReconciliationService(firstDependencies as never);
+    new SnapshotReconciliationService(secondDependencies as never);
+
+    await first.reconcile();
+
+    expect(
+      firstDependencies.workspaceAccessor.findAllNonArchivedWithSessionsAndProject
+    ).toHaveBeenCalledOnce();
+    expect(firstDependencies.workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'first',
+      expect.any(Object),
+      'reconciliation',
+      expect.any(Number)
+    );
+    expect(
+      secondDependencies.workspaceAccessor.findAllNonArchivedWithSessionsAndProject
+    ).not.toHaveBeenCalled();
+    expect(secondDependencies.workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });
 });
