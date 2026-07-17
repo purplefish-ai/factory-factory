@@ -120,7 +120,8 @@ export class WorkspaceGitStateService {
     const generation = this.generations.get(key) ?? 0;
     const calculation = this.calculate(normalizedInput)
       .then((snapshot) => {
-        if ((this.generations.get(key) ?? 0) === generation) {
+        const hasError = snapshot.status.error || snapshot.base.error || snapshot.upstream.error;
+        if ((this.generations.get(key) ?? 0) === generation && !hasError) {
           this.cache.set(key, { snapshot });
         }
         return snapshot;

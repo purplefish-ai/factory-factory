@@ -94,6 +94,24 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
   });
 
+  it('recalculates a snapshot with a transient section error', async () => {
+    let statusAttempts = 0;
+    runGit.mockImplementation((args) => {
+      if (args[0] === 'status' && statusAttempts++ === 0) {
+        return resolvedResult('', 1, 'status temporarily unavailable');
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const degraded = await service.getSnapshot(input);
+    const recovered = await service.getSnapshot(input);
+
+    expect(degraded.status.error).toBe('status temporarily unavailable');
+    expect(recovered.status.error).toBeUndefined();
+    expect(recovered.status.files).toEqual([{ path: 'src/a.ts', status: 'M', staged: false }]);
+    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+  });
+
   it('does not cache a calculation invalidated while it is in flight', async () => {
     const first = service.getSnapshot(input);
     service.invalidate('/repo/w1');
