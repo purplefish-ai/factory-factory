@@ -881,6 +881,7 @@ describe('configureEventCollector', () => {
       if (update.prUrl !== undefined) {
         existingSnapshot.prUrl = update.prUrl;
       }
+      return { accepted: true, changed: true, emitted: true };
     });
 
     configureEventCollector();

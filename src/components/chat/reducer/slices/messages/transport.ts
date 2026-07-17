@@ -1,6 +1,7 @@
 import {
   applyRendererMessages,
   generateMessageId,
+  handleAssistantTextDelta,
   handleClaudeMessage,
 } from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
@@ -9,7 +10,14 @@ import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 export function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'WS_AGENT_MESSAGE':
-      return handleClaudeMessage(state, action.payload.message, action.payload.order);
+      return handleClaudeMessage(
+        state,
+        action.payload.message,
+        action.payload.order,
+        action.payload.messageId
+      );
+    case 'WS_ASSISTANT_TEXT_DELTA':
+      return handleAssistantTextDelta(state, action.payload);
     case 'WS_ERROR': {
       const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const errorMsg: AgentMessage = {

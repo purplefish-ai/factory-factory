@@ -255,7 +255,7 @@ model Workspace {
   ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
-  ratchetLastCiRunId      String?                         // Misnomer (kept to avoid a migration): stores the full PR dispatch snapshot key (CI signature + review activity + merge conflict), not just a CI run id. Dedupes fixer dispatches.
+  ratchetLastCiRunId      String?                         // Misnomer (kept to avoid a migration): stores the full PR dispatch snapshot key (PR number + CI signature + review activity + merge conflict), not just a CI run id. Dedupes fixer dispatches.
   ratchetDispatchOutcome  RatchetDispatchOutcome?         // Outcome of the last fixer dispatch for the snapshot key above (null = never dispatched)
   ratchetDispatchRetryCount Int         @default(0)       // DIED re-dispatches consumed for the current snapshot key
 

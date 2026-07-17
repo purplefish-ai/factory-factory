@@ -41,7 +41,7 @@ export type {
   RuntimeEventHandlers,
 } from './runtime';
 // Core domain service (in-memory state management)
-export { sessionDomainService } from './session-domain.service';
+export { SessionDomainService, sessionDomainService } from './session-domain.service';
 // Transport-free outbound event surface (consumed by the WebSocket adapter)
 export type {
   ChatBroadcastEvent,

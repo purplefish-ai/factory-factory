@@ -7,7 +7,35 @@ import {
   isRenderableAssistantContentItem,
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
+  trimTranscriptForRenderer,
 } from './protocol';
+
+function rendererMessage(id: string, order: number): ChatMessage {
+  return {
+    id,
+    source: 'user',
+    text: id,
+    timestamp: '2026-02-01T00:00:00.000Z',
+    order,
+  };
+}
+
+describe('renderer transcript window', () => {
+  it('returns an already ordered under-limit transcript without cloning', () => {
+    const messages = [rendererMessage('m-1', 1), rendererMessage('m-2', 2)];
+
+    expect(trimTranscriptForRenderer(messages)).toBe(messages);
+  });
+
+  it('sorts an unordered under-limit transcript without mutating the input', () => {
+    const messages = [rendererMessage('m-2', 2), rendererMessage('m-1', 1)];
+
+    const sorted = trimTranscriptForRenderer(messages);
+
+    expect(sorted.map((message) => message.id)).toEqual(['m-1', 'm-2']);
+    expect(messages.map((message) => message.id)).toEqual(['m-2', 'm-1']);
+  });
+});
 
 describe('assistant renderability guards', () => {
   it('rejects malformed tool_use blocks missing id/name', () => {

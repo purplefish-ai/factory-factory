@@ -26,6 +26,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
           pendingRequest,
           sessionRuntime: action.payload.sessionRuntime,
           toolUseIdToIndex: new Map(),
+          agentMessageOrderToIndex: new Map(),
           pendingMessages: newPendingMessages,
           lastRejectedMessage: state.lastRejectedMessage,
           messageIdToUuid: new Map(),
