@@ -564,18 +564,76 @@ class WorkspaceAccessor {
    * Find READY workspaces without PR URLs that have a branch name.
    * Used for detecting newly created PRs.
    */
-  findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
+  findNeedingPRDiscovery(limit: number, dueAt = new Date()): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
         status: 'READY',
         prUrl: null,
         branchName: { not: null },
+        project: {
+          githubOwner: { not: null },
+          githubRepo: { not: null },
+        },
+        OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: dueAt } }],
       },
       include: {
         project: true,
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ prDiscoveryNextCheckAt: 'asc' }, { updatedAt: 'desc' }],
+      take: limit,
     });
+  }
+
+  /**
+   * Claim a due PR discovery candidate using the values observed by the caller.
+   * Concurrent activity or eligibility changes win by making this update a no-op.
+   */
+  async claimPRDiscoveryAttempt(
+    id: string,
+    attempt: {
+      branchName: string;
+      expectedUpdatedAt: Date;
+      expectedRetryCount: number;
+      expectedNextCheckAt: Date | null;
+      checkedAt: Date;
+      nextCheckAt: Date;
+    }
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: attempt.branchName,
+        updatedAt: attempt.expectedUpdatedAt,
+        prDiscoveryRetryCount: attempt.expectedRetryCount,
+        prDiscoveryNextCheckAt: attempt.expectedNextCheckAt,
+      },
+      data: {
+        prDiscoveryLastCheckedAt: attempt.checkedAt,
+        prDiscoveryRetryCount: { increment: 1 },
+        prDiscoveryNextCheckAt: attempt.nextCheckAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /** Make an eligible workspace immediately due for PR discovery again. */
+  async resetPRDiscoveryBackoff(id: string): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: { not: null },
+      },
+      data: {
+        prDiscoveryLastCheckedAt: null,
+        prDiscoveryRetryCount: 0,
+        prDiscoveryNextCheckAt: null,
+      },
+    });
+    return result.count > 0;
   }
 
   /**

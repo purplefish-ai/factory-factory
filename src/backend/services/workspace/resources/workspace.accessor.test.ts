@@ -98,6 +98,132 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  describe('PR discovery scheduling', () => {
+    it('finds a bounded due set with GitHub metadata and reset candidates first', async () => {
+      const dueAt = new Date('2026-07-17T12:00:00.000Z');
+      mockFindMany.mockResolvedValue([]);
+
+      await workspaceAccessor.findNeedingPRDiscovery(25, dueAt);
+
+      expect(mockFindMany).toHaveBeenCalledWith({
+        where: {
+          status: 'READY',
+          prUrl: null,
+          branchName: { not: null },
+          project: {
+            githubOwner: { not: null },
+            githubRepo: { not: null },
+          },
+          OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: dueAt } }],
+        },
+        include: { project: true },
+        orderBy: [{ prDiscoveryNextCheckAt: 'asc' }, { updatedAt: 'desc' }],
+        take: 25,
+      });
+    });
+
+    it('uses the current time as the default due threshold', async () => {
+      const now = new Date('2026-07-17T12:00:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      mockFindMany.mockResolvedValue([]);
+
+      try {
+        await workspaceAccessor.findNeedingPRDiscovery(10);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: now } }],
+          }),
+        })
+      );
+    });
+
+    it('claims an attempt only while all observed eligibility values still match', async () => {
+      const expectedUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
+      const expectedNextCheckAt = new Date('2026-07-17T11:58:00.000Z');
+      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
+      const nextCheckAt = new Date('2026-07-17T12:06:00.000Z');
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceAccessor.claimPRDiscoveryAttempt('ws-1', {
+          branchName: 'feature/pr-discovery',
+          expectedUpdatedAt,
+          expectedRetryCount: 1,
+          expectedNextCheckAt,
+          checkedAt,
+          nextCheckAt,
+        })
+      ).resolves.toBe(true);
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ws-1',
+          status: 'READY',
+          prUrl: null,
+          branchName: 'feature/pr-discovery',
+          updatedAt: expectedUpdatedAt,
+          prDiscoveryRetryCount: 1,
+          prDiscoveryNextCheckAt: expectedNextCheckAt,
+        },
+        data: {
+          prDiscoveryLastCheckedAt: checkedAt,
+          prDiscoveryRetryCount: { increment: 1 },
+          prDiscoveryNextCheckAt: nextCheckAt,
+        },
+      });
+    });
+
+    it('guards a claim whose observed next-check timestamp was null', async () => {
+      const expectedUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
+      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
+      const nextCheckAt = new Date('2026-07-17T12:03:00.000Z');
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        workspaceAccessor.claimPRDiscoveryAttempt('ws-1', {
+          branchName: 'feature/pr-discovery',
+          expectedUpdatedAt,
+          expectedRetryCount: 0,
+          expectedNextCheckAt: null,
+          checkedAt,
+          nextCheckAt,
+        })
+      ).resolves.toBe(false);
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ prDiscoveryNextCheckAt: null }),
+        })
+      );
+    });
+
+    it('resets discovery backoff only while the workspace remains eligible', async () => {
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(workspaceAccessor.resetPRDiscoveryBackoff('ws-1')).resolves.toBe(true);
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ws-1',
+          status: 'READY',
+          prUrl: null,
+          branchName: { not: null },
+        },
+        data: {
+          prDiscoveryLastCheckedAt: null,
+          prDiscoveryRetryCount: 0,
+          prDiscoveryNextCheckAt: null,
+        },
+      });
+    });
+  });
+
   it('marks workspace as having had sessions with guarded updateMany', async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
 

@@ -33,6 +33,7 @@ export type WorkspaceAvgAggregateOutputType = {
   runScriptPort: number | null
   githubIssueNumber: number | null
   prNumber: number | null
+  prDiscoveryRetryCount: number | null
   ratchetDispatchRetryCount: number | null
 }
 
@@ -43,6 +44,7 @@ export type WorkspaceSumAggregateOutputType = {
   runScriptPort: number | null
   githubIssueNumber: number | null
   prNumber: number | null
+  prDiscoveryRetryCount: number | null
   ratchetDispatchRetryCount: number | null
 }
 
@@ -84,6 +86,9 @@ export type WorkspaceMinAggregateOutputType = {
   prReviewState: string | null
   prCiStatus: $Enums.CIStatus | null
   prUpdatedAt: Date | null
+  prDiscoveryLastCheckedAt: Date | null
+  prDiscoveryRetryCount: number | null
+  prDiscoveryNextCheckAt: Date | null
   prCiFailedAt: Date | null
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
@@ -143,6 +148,9 @@ export type WorkspaceMaxAggregateOutputType = {
   prReviewState: string | null
   prCiStatus: $Enums.CIStatus | null
   prUpdatedAt: Date | null
+  prDiscoveryLastCheckedAt: Date | null
+  prDiscoveryRetryCount: number | null
+  prDiscoveryNextCheckAt: Date | null
   prCiFailedAt: Date | null
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
@@ -203,6 +211,9 @@ export type WorkspaceCountAggregateOutputType = {
   prReviewState: number
   prCiStatus: number
   prUpdatedAt: number
+  prDiscoveryLastCheckedAt: number
+  prDiscoveryRetryCount: number
+  prDiscoveryNextCheckAt: number
   prCiFailedAt: number
   prCiLastNotifiedAt: number
   prReviewLastCheckedAt: number
@@ -235,6 +246,7 @@ export type WorkspaceAvgAggregateInputType = {
   runScriptPort?: true
   githubIssueNumber?: true
   prNumber?: true
+  prDiscoveryRetryCount?: true
   ratchetDispatchRetryCount?: true
 }
 
@@ -245,6 +257,7 @@ export type WorkspaceSumAggregateInputType = {
   runScriptPort?: true
   githubIssueNumber?: true
   prNumber?: true
+  prDiscoveryRetryCount?: true
   ratchetDispatchRetryCount?: true
 }
 
@@ -286,6 +299,9 @@ export type WorkspaceMinAggregateInputType = {
   prReviewState?: true
   prCiStatus?: true
   prUpdatedAt?: true
+  prDiscoveryLastCheckedAt?: true
+  prDiscoveryRetryCount?: true
+  prDiscoveryNextCheckAt?: true
   prCiFailedAt?: true
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
@@ -345,6 +361,9 @@ export type WorkspaceMaxAggregateInputType = {
   prReviewState?: true
   prCiStatus?: true
   prUpdatedAt?: true
+  prDiscoveryLastCheckedAt?: true
+  prDiscoveryRetryCount?: true
+  prDiscoveryNextCheckAt?: true
   prCiFailedAt?: true
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
@@ -405,6 +424,9 @@ export type WorkspaceCountAggregateInputType = {
   prReviewState?: true
   prCiStatus?: true
   prUpdatedAt?: true
+  prDiscoveryLastCheckedAt?: true
+  prDiscoveryRetryCount?: true
+  prDiscoveryNextCheckAt?: true
   prCiFailedAt?: true
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
@@ -554,6 +576,9 @@ export type WorkspaceGroupByOutputType = {
   prReviewState: string | null
   prCiStatus: $Enums.CIStatus
   prUpdatedAt: Date | null
+  prDiscoveryLastCheckedAt: Date | null
+  prDiscoveryRetryCount: number
+  prDiscoveryNextCheckAt: Date | null
   prCiFailedAt: Date | null
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
@@ -639,6 +664,9 @@ export type WorkspaceWhereInput = {
   prReviewState?: Prisma.StringNullableFilter<"Workspace"> | string | null
   prCiStatus?: Prisma.EnumCIStatusFilter<"Workspace"> | $Enums.CIStatus
   prUpdatedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFilter<"Workspace"> | number
+  prDiscoveryNextCheckAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiFailedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
@@ -710,6 +738,9 @@ export type WorkspaceOrderByWithRelationInput = {
   prReviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiStatus?: Prisma.SortOrder
   prUpdatedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  prDiscoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
+  prDiscoveryNextCheckAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiFailedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -784,6 +815,9 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   prReviewState?: Prisma.StringNullableFilter<"Workspace"> | string | null
   prCiStatus?: Prisma.EnumCIStatusFilter<"Workspace"> | $Enums.CIStatus
   prUpdatedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFilter<"Workspace"> | number
+  prDiscoveryNextCheckAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiFailedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
@@ -855,6 +889,9 @@ export type WorkspaceOrderByWithAggregationInput = {
   prReviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiStatus?: Prisma.SortOrder
   prUpdatedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  prDiscoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
+  prDiscoveryNextCheckAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiFailedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prCiLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -925,6 +962,9 @@ export type WorkspaceScalarWhereWithAggregatesInput = {
   prReviewState?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
   prCiStatus?: Prisma.EnumCIStatusWithAggregatesFilter<"Workspace"> | $Enums.CIStatus
   prUpdatedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntWithAggregatesFilter<"Workspace"> | number
+  prDiscoveryNextCheckAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   prCiFailedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   prCiLastNotifiedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
@@ -986,6 +1026,9 @@ export type WorkspaceCreateInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -1055,6 +1098,9 @@ export type WorkspaceUncheckedCreateInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -1122,6 +1168,9 @@ export type WorkspaceUpdateInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1191,6 +1240,9 @@ export type WorkspaceUncheckedUpdateInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1259,6 +1311,9 @@ export type WorkspaceCreateManyInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -1320,6 +1375,9 @@ export type WorkspaceUpdateManyMutationInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1380,6 +1438,9 @@ export type WorkspaceUncheckedUpdateManyInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1457,6 +1518,9 @@ export type WorkspaceCountOrderByAggregateInput = {
   prReviewState?: Prisma.SortOrder
   prCiStatus?: Prisma.SortOrder
   prUpdatedAt?: Prisma.SortOrder
+  prDiscoveryLastCheckedAt?: Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
+  prDiscoveryNextCheckAt?: Prisma.SortOrder
   prCiFailedAt?: Prisma.SortOrder
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
@@ -1487,6 +1551,7 @@ export type WorkspaceAvgOrderByAggregateInput = {
   runScriptPort?: Prisma.SortOrder
   githubIssueNumber?: Prisma.SortOrder
   prNumber?: Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
   ratchetDispatchRetryCount?: Prisma.SortOrder
 }
 
@@ -1528,6 +1593,9 @@ export type WorkspaceMaxOrderByAggregateInput = {
   prReviewState?: Prisma.SortOrder
   prCiStatus?: Prisma.SortOrder
   prUpdatedAt?: Prisma.SortOrder
+  prDiscoveryLastCheckedAt?: Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
+  prDiscoveryNextCheckAt?: Prisma.SortOrder
   prCiFailedAt?: Prisma.SortOrder
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
@@ -1587,6 +1655,9 @@ export type WorkspaceMinOrderByAggregateInput = {
   prReviewState?: Prisma.SortOrder
   prCiStatus?: Prisma.SortOrder
   prUpdatedAt?: Prisma.SortOrder
+  prDiscoveryLastCheckedAt?: Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
+  prDiscoveryNextCheckAt?: Prisma.SortOrder
   prCiFailedAt?: Prisma.SortOrder
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
@@ -1615,6 +1686,7 @@ export type WorkspaceSumOrderByAggregateInput = {
   runScriptPort?: Prisma.SortOrder
   githubIssueNumber?: Prisma.SortOrder
   prNumber?: Prisma.SortOrder
+  prDiscoveryRetryCount?: Prisma.SortOrder
   ratchetDispatchRetryCount?: Prisma.SortOrder
 }
 
@@ -1931,6 +2003,9 @@ export type WorkspaceCreateWithoutProjectInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -1998,6 +2073,9 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2094,6 +2172,9 @@ export type WorkspaceScalarWhereInput = {
   prReviewState?: Prisma.StringNullableFilter<"Workspace"> | string | null
   prCiStatus?: Prisma.EnumCIStatusFilter<"Workspace"> | $Enums.CIStatus
   prUpdatedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFilter<"Workspace"> | number
+  prDiscoveryNextCheckAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiFailedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
@@ -2155,6 +2236,9 @@ export type WorkspaceCreateWithoutChildWorkspacesInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2223,6 +2307,9 @@ export type WorkspaceUncheckedCreateWithoutChildWorkspacesInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2294,6 +2381,9 @@ export type WorkspaceCreateWithoutParentWorkspaceInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2362,6 +2452,9 @@ export type WorkspaceUncheckedCreateWithoutParentWorkspaceInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2448,6 +2541,9 @@ export type WorkspaceUpdateWithoutChildWorkspacesInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2516,6 +2612,9 @@ export type WorkspaceUncheckedUpdateWithoutChildWorkspacesInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2598,6 +2697,9 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2666,6 +2768,9 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2748,6 +2853,9 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2816,6 +2924,9 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2882,6 +2993,9 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -2950,6 +3064,9 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3032,6 +3149,9 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3100,6 +3220,9 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3166,6 +3289,9 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3234,6 +3360,9 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3316,6 +3445,9 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3384,6 +3516,9 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3450,6 +3585,9 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3518,6 +3656,9 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3609,6 +3750,9 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3677,6 +3821,9 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3759,6 +3906,9 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3827,6 +3977,9 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -3893,6 +4046,9 @@ export type WorkspaceCreateWithoutNotificationsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -3961,6 +4117,9 @@ export type WorkspaceUncheckedCreateWithoutNotificationsInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -4043,6 +4202,9 @@ export type WorkspaceUpdateWithoutNotificationsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4111,6 +4273,9 @@ export type WorkspaceUncheckedUpdateWithoutNotificationsInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4177,6 +4342,9 @@ export type WorkspaceCreateManyProjectInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -4238,6 +4406,9 @@ export type WorkspaceUpdateWithoutProjectInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4305,6 +4476,9 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4372,6 +4546,9 @@ export type WorkspaceUncheckedUpdateManyWithoutProjectInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4434,6 +4611,9 @@ export type WorkspaceCreateManyParentWorkspaceInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -4494,6 +4674,9 @@ export type WorkspaceUpdateWithoutParentWorkspaceInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4562,6 +4745,9 @@ export type WorkspaceUncheckedUpdateWithoutParentWorkspaceInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4629,6 +4815,9 @@ export type WorkspaceUncheckedUpdateManyWithoutParentWorkspaceInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4690,6 +4879,9 @@ export type WorkspaceCreateManyPeriodicTaskInput = {
   prReviewState?: string | null
   prCiStatus?: $Enums.CIStatus
   prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
   prCiFailedAt?: Date | string | null
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
@@ -4750,6 +4942,9 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4818,6 +5013,9 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -4885,6 +5083,9 @@ export type WorkspaceUncheckedUpdateManyWithoutPeriodicTaskInput = {
   prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -5013,6 +5214,9 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   prReviewState?: boolean
   prCiStatus?: boolean
   prUpdatedAt?: boolean
+  prDiscoveryLastCheckedAt?: boolean
+  prDiscoveryRetryCount?: boolean
+  prDiscoveryNextCheckAt?: boolean
   prCiFailedAt?: boolean
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
@@ -5085,6 +5289,9 @@ export type WorkspaceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   prReviewState?: boolean
   prCiStatus?: boolean
   prUpdatedAt?: boolean
+  prDiscoveryLastCheckedAt?: boolean
+  prDiscoveryRetryCount?: boolean
+  prDiscoveryNextCheckAt?: boolean
   prCiFailedAt?: boolean
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
@@ -5150,6 +5357,9 @@ export type WorkspaceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   prReviewState?: boolean
   prCiStatus?: boolean
   prUpdatedAt?: boolean
+  prDiscoveryLastCheckedAt?: boolean
+  prDiscoveryRetryCount?: boolean
+  prDiscoveryNextCheckAt?: boolean
   prCiFailedAt?: boolean
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
@@ -5215,6 +5425,9 @@ export type WorkspaceSelectScalar = {
   prReviewState?: boolean
   prCiStatus?: boolean
   prUpdatedAt?: boolean
+  prDiscoveryLastCheckedAt?: boolean
+  prDiscoveryRetryCount?: boolean
+  prDiscoveryNextCheckAt?: boolean
   prCiFailedAt?: boolean
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
@@ -5238,7 +5451,7 @@ export type WorkspaceSelectScalar = {
   stateComputedAt?: boolean
 }
 
-export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "ratchetDispatchOutcome" | "ratchetDispatchRetryCount" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions" | "cachedKanbanColumn" | "stateComputedAt", ExtArgs["result"]["workspace"]>
+export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prDiscoveryLastCheckedAt" | "prDiscoveryRetryCount" | "prDiscoveryNextCheckAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "ratchetDispatchOutcome" | "ratchetDispatchRetryCount" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions" | "cachedKanbanColumn" | "stateComputedAt", ExtArgs["result"]["workspace"]>
 export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
@@ -5314,6 +5527,9 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     prReviewState: string | null
     prCiStatus: $Enums.CIStatus
     prUpdatedAt: Date | null
+    prDiscoveryLastCheckedAt: Date | null
+    prDiscoveryRetryCount: number
+    prDiscoveryNextCheckAt: Date | null
     prCiFailedAt: Date | null
     prCiLastNotifiedAt: Date | null
     prReviewLastCheckedAt: Date | null
@@ -5805,6 +6021,9 @@ export interface WorkspaceFieldRefs {
   readonly prReviewState: Prisma.FieldRef<"Workspace", 'String'>
   readonly prCiStatus: Prisma.FieldRef<"Workspace", 'CIStatus'>
   readonly prUpdatedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
+  readonly prDiscoveryLastCheckedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
+  readonly prDiscoveryRetryCount: Prisma.FieldRef<"Workspace", 'Int'>
+  readonly prDiscoveryNextCheckAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly prCiFailedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly prCiLastNotifiedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly prReviewLastCheckedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
