@@ -159,6 +159,31 @@ describe('AcpEventProcessor assistant text streaming', () => {
     expect(emitDeltaSpy).not.toHaveBeenCalled();
   });
 
+  it('emits later flush windows at the authoritative accumulated offset', () => {
+    const deps = makeDeps();
+    const processor = new AcpEventProcessor(deps);
+
+    processor.handleAcpDelta('sid', assistantDelta('Hello'));
+    vi.advanceTimersByTime(25);
+    processor.handleAcpDelta('sid', assistantDelta(' world'));
+    vi.advanceTimersByTime(25);
+
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenNthCalledWith(1, 'sid', {
+      type: 'assistant_text_delta',
+      messageId: 'sid-2',
+      order: 2,
+      offset: 0,
+      text: 'Hello',
+    });
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenNthCalledWith(2, 'sid', {
+      type: 'assistant_text_delta',
+      messageId: 'sid-2',
+      order: 2,
+      offset: 5,
+      text: ' world',
+    });
+  });
+
   it('flushes before a tool boundary and allocates a new order for the next text block', () => {
     const deps = makeDeps();
     vi.mocked(deps.sessionDomainService.allocateOrder)
