@@ -54,7 +54,7 @@ The current orchestration query wrapper moves into the decision-log capsule as `
 
 ## Guardrail
 
-The service-registry architecture checker will maintain an explicit map from accessor modules/bindings to owning capsules. It will reject:
+The architecture checks will maintain an explicit map from accessor modules/bindings to owning capsules. They will reject:
 
 - top-level capsule exports that expose a `resources/*.accessor` module;
 - imports of a raw accessor binding from a capsule barrel outside the owner;
