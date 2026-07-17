@@ -4,6 +4,7 @@ import {
   IssueProvider,
   KanbanColumn,
   PRState,
+  RatchetReviewTriggerMode,
   RatchetState,
   RunScriptStatus,
   SessionStatus,
@@ -65,12 +66,21 @@ describe('domain enums', () => {
     ]);
   });
 
+  it('RatchetReviewTriggerMode has all expected values', () => {
+    expect(Object.values(RatchetReviewTriggerMode)).toEqual([
+      'CHANGES_REQUESTED',
+      'ALL_REVIEW_FEEDBACK',
+    ]);
+  });
+
   it('WorkspaceCreationSource has all expected values', () => {
     expect(Object.values(WorkspaceCreationSource)).toEqual([
       'MANUAL',
       'RESUME_BRANCH',
       'GITHUB_ISSUE',
       'LINEAR_ISSUE',
+      'PERIODIC_TASK',
+      'CHILD_WORKSPACE',
     ]);
   });
 

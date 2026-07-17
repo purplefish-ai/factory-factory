@@ -208,6 +208,7 @@ const mockUserSettings: UserSettings = {
   cachedSlashCommands: { commands: [] },
   ratchetEnabled: true,
   ratchetReplyToPrComments: true,
+  ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
   defaultSessionProvider: SessionProvider.CLAUDE,
   defaultClaudeModel: 'sonnet',
   defaultCodexModel: 'gpt-5-codex',
@@ -336,6 +337,7 @@ function createImportData(
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
         ratchetReplyToPrComments: true,
+        ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
         defaultSessionProvider: SessionProvider.CLAUDE,
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
@@ -375,6 +377,7 @@ describe('DataBackupService', () => {
         expect.objectContaining({
           ratchetEnabled: true,
           ratchetReplyToPrComments: true,
+          ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
           defaultSessionProvider: SessionProvider.CLAUDE,
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
@@ -383,6 +386,26 @@ describe('DataBackupService', () => {
         })
       );
       expect(exportDataSchema.safeParse(result).success).toBe(true);
+    });
+
+    it('defaults old backups to changes-requested review triggers', () => {
+      const exportedData = createImportData({
+        userSettings: {
+          preferredIde: 'cursor',
+          customIdeCommand: null,
+          playSoundOnComplete: true,
+          notificationSoundPath: null,
+          ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
+          defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'default',
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
+        },
+      });
+
+      expect(exportedData.data.userSettings?.ratchetReviewTriggerMode).toBe('CHANGES_REQUESTED');
     });
 
     it('exports null user settings when absent', async () => {
@@ -496,6 +519,11 @@ describe('DataBackupService', () => {
           provider: SessionProvider.CODEX,
           providerSessionId: 'thread-123',
           providerMetadata: { transport: 'app-server' },
+        }),
+      });
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
         }),
       });
     });

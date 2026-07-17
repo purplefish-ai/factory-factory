@@ -130,6 +130,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       cachedSlashCommands: null,
       ratchetEnabled: false,
       ratchetReplyToPrComments: true,
+      ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
       defaultSessionProvider: 'CLAUDE',
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
@@ -653,7 +654,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it('does not dispatch for CHANGES_REQUESTED when there are no PR review comments', async () => {
+  it('dispatches for CHANGES_REQUESTED when there are no PR review comments', async () => {
     const workspace = {
       id: 'ws-review-no-comments',
       prUrl: 'https://github.com/example/repo/pull/56',
@@ -686,6 +687,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-session',
+      promptSent: true,
+    });
     const triggerSpy = vi.spyOn(
       unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
@@ -695,16 +701,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
     }>(ratchetService).processWorkspace(workspace);
 
-    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(triggerSpy).toHaveBeenCalled();
     expect(result).toMatchObject({
-      action: {
-        type: 'WAITING',
-        reason: 'No CI failures or PR review comments to address',
-      },
+      action: { type: 'TRIGGERED_FIXER' },
     });
   });
 
-  it('dispatches for PR review summary feedback without changes requested', async () => {
+  it('dispatches for PR review summary feedback in all-feedback mode', async () => {
     const workspace = {
       id: 'ws-review-summary',
       prUrl: 'https://github.com/example/repo/pull/57',
@@ -720,30 +723,37 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.spyOn(
-      unsafeCoerce<{
-        fetchPRState: (...args: unknown[]) => Promise<unknown>;
-      }>(ratchetService),
-      'fetchPRState'
-    ).mockResolvedValue({
-      ciStatus: CIStatus.SUCCESS,
-      snapshotKey: 'ci:SUCCESS|no-changes-requested:1767315600000|merge:clean',
-      hasChangesRequested: false,
-      hasMergeConflict: false,
-      latestReviewActivityAtMs: new Date('2026-01-02T01:00:00Z').getTime(),
-      statusCheckRollup: null,
-      prState: 'OPEN',
-      prNumber: 57,
-      reviewComments: [
-        {
-          author: 'cubic-dev-ai',
-          body: 'Please fix the hydration edge case.',
-          path: 'PR review',
-          line: null,
-          url: 'https://github.com/example/repo/pull/57#pullrequestreview-1',
-        },
-      ],
-    });
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      ratchetReplyToPrComments: true,
+      ratchetPermissions: 'YOLO',
+    } as never);
+    const fetchPRStateSpy = vi
+      .spyOn(
+        unsafeCoerce<{
+          fetchPRState: (...args: unknown[]) => Promise<unknown>;
+        }>(ratchetService),
+        'fetchPRState'
+      )
+      .mockResolvedValue({
+        ciStatus: CIStatus.SUCCESS,
+        snapshotKey: 'ci:SUCCESS|no-changes-requested:1767315600000|merge:clean',
+        hasChangesRequested: false,
+        hasMergeConflict: false,
+        latestReviewActivityAtMs: new Date('2026-01-02T01:00:00Z').getTime(),
+        statusCheckRollup: null,
+        prState: 'OPEN',
+        prNumber: 57,
+        reviewComments: [
+          {
+            author: 'cubic-dev-ai',
+            body: 'Please fix the hydration edge case.',
+            path: 'PR review',
+            line: null,
+            url: 'https://github.com/example/repo/pull/57#pullrequestreview-1',
+          },
+        ],
+      });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
@@ -761,6 +771,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       newState: RatchetState.READY,
     });
     expect(fixerSessionService.acquireAndDispatch).toHaveBeenCalled();
+    expect(fetchPRStateSpy).toHaveBeenCalledWith(
+      workspace,
+      null,
+      expect.objectContaining({ reviewTriggerMode: 'ALL_REVIEW_FEEDBACK' }),
+      expect.any(AbortSignal)
+    );
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
@@ -938,6 +954,71 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR is clean (green CI and no new review activity)',
       },
     });
+  });
+
+  it('dispatches stale actionable review comments when the PR snapshot changes', async () => {
+    const recentCheck = new Date();
+    const workspace = {
+      id: 'ws-stale-actionable-review',
+      prUrl: 'https://github.com/example/repo/pull/43',
+      prNumber: 43,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.FAILURE,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'failed-snapshot',
+      prReviewLastCheckedAt: recentCheck,
+      ratchetDispatchOutcome: 'COMPLETED' as const,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'successful-snapshot',
+      hasChangesRequested: false,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: recentCheck.getTime() - 1000,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 43,
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please handle this edge case.',
+          path: 'src/example.ts',
+          line: 10,
+          url: 'https://github.com/example/repo/pull/43#discussion_r1',
+        },
+      ],
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-review-session',
+      promptSent: true,
+    } as never);
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'TRIGGERED_FIXER', sessionId: 'ratchet-review-session' },
+    });
+    expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalledWith(
+      'ws-stale-actionable-review',
+      {
+        sessionId: 'ratchet-review-session',
+        snapshotKey: 'successful-snapshot',
+        retryCount: 0,
+      }
+    );
   });
 
   it('returns disabled when stale check-state update loses disable race', async () => {
@@ -1653,13 +1734,22 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     const latestActivity = computeLatestReviewActivityAtMs(
       {
         reviews: [
-          { submittedAt: '2026-01-02T00:00:00Z', author: { login: 'ratchet-bot' } },
-          { submittedAt: '2026-01-01T00:00:00Z', author: { login: 'reviewer' } },
+          {
+            submittedAt: '2026-01-02T00:00:00Z',
+            author: { login: 'ratchet-bot' },
+            state: 'CHANGES_REQUESTED',
+          },
+          {
+            submittedAt: '2026-01-01T00:00:00Z',
+            author: { login: 'reviewer' },
+            state: 'CHANGES_REQUESTED',
+          },
         ],
         comments: [{ updatedAt: '2026-01-02T01:00:00Z', author: { login: 'ratchet-bot' } }],
       },
       [{ updatedAt: '2026-01-01T02:00:00Z', author: { login: 'reviewer2' } }],
-      'ratchet-bot'
+      'ratchet-bot',
+      'CHANGES_REQUESTED'
     );
 
     expect(latestActivity).toBe(new Date('2026-01-01T02:00:00Z').getTime());
@@ -1821,7 +1911,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('computeLatestReviewActivityAtMs edge cases', () => {
     type PRDetails = {
-      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
+      reviews: Array<{
+        submittedAt: string | null;
+        author: { login: string };
+        state?: string;
+      }>;
       comments: Array<{ updatedAt: string; author: { login: string } }>;
     };
     type ReviewComment = { updatedAt: string; author: { login: string } };
@@ -1830,7 +1924,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prDetails: PRDetails,
       reviewComments: ReviewComment[],
       authenticatedUsername: string | null
-    ) => computeLatestReviewActivityAtMs(prDetails, reviewComments, authenticatedUsername);
+    ) =>
+      computeLatestReviewActivityAtMs(
+        prDetails,
+        reviewComments,
+        authenticatedUsername,
+        'CHANGES_REQUESTED'
+      );
 
     it('returns null when there are no reviews or comments', () => {
       expect(callCompute({ reviews: [], comments: [] }, [], null)).toBeNull();
@@ -1840,7 +1940,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(
         callCompute(
           {
-            reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'me' } }],
+            reviews: [
+              {
+                submittedAt: '2026-01-01T00:00:00Z',
+                author: { login: 'me' },
+                state: 'CHANGES_REQUESTED',
+              },
+            ],
             comments: [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'me' } }],
           },
           [{ updatedAt: '2026-01-03T00:00:00Z', author: { login: 'me' } }],
@@ -1852,7 +1958,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('does not filter when authenticatedUsername is null', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'bot' } }],
+          reviews: [
+            {
+              submittedAt: '2026-01-01T00:00:00Z',
+              author: { login: 'bot' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [],
         },
         [],
@@ -1861,28 +1973,40 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(result).toBe(new Date('2026-01-01T00:00:00Z').getTime());
     });
 
-    it('ignores reviews that have null submittedAt', () => {
+    it('ignores reviews with null submittedAt and ordinary PR comments', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: null, author: { login: 'reviewer' } }],
+          reviews: [
+            {
+              submittedAt: null,
+              author: { login: 'reviewer' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'commenter' } }],
         },
         [],
         null
       );
-      expect(result).toBe(new Date('2026-01-02T00:00:00Z').getTime());
+      expect(result).toBeNull();
     });
 
     it('returns the latest timestamp across all sources', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'a' } }],
+          reviews: [
+            {
+              submittedAt: '2026-01-01T00:00:00Z',
+              author: { login: 'a' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [{ updatedAt: '2026-01-03T00:00:00Z', author: { login: 'b' } }],
         },
         [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'c' } }],
         null
       );
-      expect(result).toBe(new Date('2026-01-03T00:00:00Z').getTime());
+      expect(result).toBe(new Date('2026-01-02T00:00:00Z').getTime());
     });
   });
 
@@ -2020,6 +2144,35 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(result).toEqual({ checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] });
     });
 
+    it('loads the global review trigger mode once for the whole batch', async () => {
+      const workspaces = ['ws-one', 'ws-two'].map((id) => ({
+        id,
+        prUrl: `https://github.com/example/repo/pull/${id}`,
+        prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      }));
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
+      vi.spyOn(
+        unsafeCoerce<{
+          fetchPRState: () => Promise<{ skipped: true; reason: 'recently_fetched' }>;
+        }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue({ skipped: true, reason: 'recently_fetched' });
+
+      const result = await ratchetService.checkAllWorkspaces();
+
+      expect(result.checked).toBe(2);
+      expect(userSettingsAccessor.get).toHaveBeenCalledTimes(1);
+    });
+
     it('returns an error result when one workspace check times out', async () => {
       unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
 
@@ -2151,7 +2304,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         expect.objectContaining({ id: 'ws-queued-timeout-3' }),
         undefined,
         expect.any(AbortSignal),
-        expect.any(Function)
+        expect.any(Function),
+        'CHANGES_REQUESTED'
       );
       expect(result.results[3]).toMatchObject({
         workspaceId: 'ws-queued-timeout-3',
@@ -3291,6 +3445,192 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(commitSideEffects).toHaveBeenCalledTimes(1);
       expect(workspaceAccessor.recordRatchetSessionEnd).not.toHaveBeenCalled();
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+    });
+
+    it('persists and commits a dispatch while prompt completion is pending', async () => {
+      let finishPrompt!: (result: boolean) => void;
+      const promptCompletion = new Promise<boolean>((resolve) => {
+        finishPrompt = resolve;
+      });
+      let finishRecord!: (recorded: boolean) => void;
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'pending-prompt-session',
+        promptSent: true,
+        promptCompletion,
+      });
+      vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishRecord = resolve;
+          })
+      );
+      const commitSideEffects = vi.fn();
+
+      const trigger = unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-pending-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        new AbortController().signal,
+        commitSideEffects
+      );
+
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalled()
+      );
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      finishRecord(true);
+      await expect(trigger).resolves.toMatchObject({ type: 'TRIGGERED_FIXER' });
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+
+      finishPrompt(true);
+      await promptCompletion;
+    });
+
+    it('settles a persisted dispatch as died when prompt completion fails', async () => {
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'failed-prompt-session',
+        promptSent: true,
+        promptCompletion: Promise.resolve(false),
+      });
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      const result = await unsafeCoerce<{
+        triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-failed-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0
+      );
+
+      expect(result).toMatchObject({ type: 'TRIGGERED_FIXER' });
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+          'ws-failed-prompt',
+          'failed-prompt-session',
+          'DIED'
+        )
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('failed-prompt-session');
+    });
+
+    it('does not stop a newer active session when an old prompt completion fails', async () => {
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'stale-prompt-session',
+        promptSent: true,
+        promptCompletion: Promise.resolve(false),
+      });
+      vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(false);
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      await unsafeCoerce<{
+        triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-replaced-prompt',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0
+      );
+
+      await vi.waitFor(() => expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalled());
+      expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+    });
+
+    it('cleans up a fixer through prompt failure after its dispatch record is persisted', async () => {
+      const controller = new AbortController();
+      const timeoutError = new Error('Workspace check timed out');
+      let finishRecord!: (value: boolean) => void;
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'cancelled-session',
+        promptSent: true,
+        promptCompletion: Promise.resolve(false),
+      });
+      vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishRecord = resolve;
+          })
+      );
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      const commitSideEffects = vi.fn();
+
+      const trigger = unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-cancelled-dispatch',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        controller.signal,
+        commitSideEffects
+      );
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalled()
+      );
+      controller.abort(timeoutError);
+      finishRecord(true);
+
+      await expect(trigger).rejects.toBe(timeoutError);
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() =>
+        expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+          'ws-cancelled-dispatch',
+          'cancelled-session',
+          'DIED'
+        )
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('cancelled-session');
     });
 
     it('cleans up a started fixer when dispatch persistence fails', async () => {
