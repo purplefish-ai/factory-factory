@@ -516,6 +516,76 @@ describe('SessionConfigService', () => {
     expect(runtimeManager.setSessionModel).not.toHaveBeenCalled();
   });
 
+  it('skips thinking budget when token count is not in ACP thought-level options', async () => {
+    const configOptions = [
+      {
+        id: 'effort',
+        name: 'Effort',
+        type: 'select',
+        category: 'thought_level',
+        currentValue: 'default',
+        options: [
+          { value: 'default', name: 'Default' },
+          { value: 'low', name: 'Low' },
+          { value: 'medium', name: 'Medium' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+    ];
+    runtimeManager.getClient.mockReturnValue(
+      unsafeCoerce({
+        provider: 'CLAUDE',
+        providerSessionId: 'provider-session-1',
+        configOptions,
+      })
+    );
+
+    await service.setSessionThinkingBudget('session-1', 10_000);
+
+    expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Skipping unsupported thinking budget for ACP session',
+      expect.objectContaining({
+        sessionId: 'session-1',
+        provider: 'CLAUDE',
+        maxTokens: 10_000,
+        availableValues: ['default', 'low', 'medium', 'high'],
+      })
+    );
+  });
+
+  it('sets thinking budget when token count is in ACP thought-level options', async () => {
+    const configOptions = [
+      {
+        id: 'thinking_budget',
+        name: 'Thinking Budget',
+        type: 'select',
+        category: 'thought_level',
+        currentValue: '5000',
+        options: [
+          { value: '5000', name: '5,000 tokens' },
+          { value: '10000', name: '10,000 tokens' },
+        ],
+      },
+    ];
+    runtimeManager.getClient.mockReturnValue(
+      unsafeCoerce({
+        provider: 'CLAUDE',
+        providerSessionId: 'provider-session-1',
+        configOptions,
+      })
+    );
+    runtimeManager.setConfigOption.mockResolvedValue(configOptions);
+
+    await service.setSessionThinkingBudget('session-1', 10_000);
+
+    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+      'session-1',
+      'thinking_budget',
+      '10000'
+    );
+  });
+
   it('routes model config updates through ACP setSessionModel', async () => {
     runtimeManager.getClient.mockReturnValue(
       unsafeCoerce({

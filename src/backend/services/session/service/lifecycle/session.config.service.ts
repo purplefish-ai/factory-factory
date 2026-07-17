@@ -285,7 +285,19 @@ export class SessionConfigService {
         (option) => option.category === 'thought_level'
       );
       if (thoughtOption && maxTokens != null) {
-        await this.setSessionConfigOption(sessionId, thoughtOption.id, String(maxTokens));
+        const availableValues = getConfigOptionValues(thoughtOption);
+        const thinkingBudget = String(maxTokens);
+        if (availableValues.length > 0 && !availableValues.includes(thinkingBudget)) {
+          logger.debug('Skipping unsupported thinking budget for ACP session', {
+            sessionId,
+            provider: acpHandle.provider,
+            maxTokens,
+            availableValues,
+          });
+          return;
+        }
+
+        await this.setSessionConfigOption(sessionId, thoughtOption.id, thinkingBudget);
       }
       return;
     }
