@@ -1,6 +1,7 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
@@ -341,12 +342,12 @@ describe('workspaceRouter', () => {
     mockWorkspaceQueryService.listWithKanbanState.mockResolvedValue([
       { id: 'w-success' },
       { id: 'w-blocked' },
+      { id: 'w-missing' },
     ]);
     mockArchiveWorkspace
       .mockResolvedValueOnce({ archived: true })
-      .mockRejectedValueOnce(
-        new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Uncommitted changes' })
-      );
+      .mockRejectedValueOnce(new ApplicationError('PRECONDITION_FAILED', 'Uncommitted changes'))
+      .mockRejectedValueOnce(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
     const { caller } = createCaller();
 
     await expect(
@@ -364,8 +365,14 @@ describe('workspaceRouter', () => {
           error: 'Uncommitted changes',
           code: 'PRECONDITION_FAILED',
         },
+        {
+          id: 'w-missing',
+          success: false,
+          error: 'Workspace not found',
+          code: 'NOT_FOUND',
+        },
       ],
-      total: 2,
+      total: 3,
     });
   });
 

@@ -24,6 +24,7 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
+export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
 export { userSettingsQueryService } from './query/user-settings-query.service';

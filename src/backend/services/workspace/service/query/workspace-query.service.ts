@@ -375,6 +375,7 @@ class WorkspaceQueryService {
     }
 
     if (!workspace.prUrl) {
+      await workspaceAccessor.resetPRDiscoveryBackoff(workspaceId);
       return { success: false, reason: 'no_pr_url' as const };
     }
 

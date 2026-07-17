@@ -1,6 +1,7 @@
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import {
   buildWorkspaceSessionSummaries,
@@ -51,6 +52,7 @@ import {
   workspaceNotificationMessageId,
 } from '@/shared/workspace-notifications';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { toTRPCError } from './application-error-mapper';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -61,6 +63,13 @@ import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+function normalizeBulkArchiveError(error: unknown): TRPCError | undefined {
+  if (error instanceof ApplicationError) {
+    return toTRPCError(error);
+  }
+  return error instanceof TRPCError ? error : undefined;
+}
 
 // Zod schema for workspace creation source discriminated union
 const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
@@ -448,6 +457,7 @@ export const workspaceRouter = router({
           await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
+          const mappedError = normalizeBulkArchiveError(error);
           logger.error('Failed to archive workspace during bulk operation', {
             workspaceId: workspaceWithState.id,
             error: error instanceof Error ? error.message : String(error),
@@ -456,7 +466,7 @@ export const workspaceRouter = router({
             id: workspaceWithState.id,
             success: false,
             error: error instanceof Error ? error.message : String(error),
-            code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
+            code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
           });
         }
       }
