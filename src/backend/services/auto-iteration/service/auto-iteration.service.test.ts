@@ -14,6 +14,7 @@ type Logger = ReturnType<typeof createLogger>;
 type AutoIterationServiceInternals = {
   loops: Map<string, RunningLoop>;
   runLoop(loop: RunningLoop, worktreePath: string): Promise<void>;
+  finalize(loop: RunningLoop, status: AutoIterationStatus): Promise<void>;
 };
 
 const config = {
@@ -74,13 +75,15 @@ function createPausedLoop(workspaceId: string): RunningLoop {
 describe('AutoIterationService resume', () => {
   let service: AutoIterationService;
   let serviceInternals: AutoIterationServiceInternals;
+  let sessionBridge: AutoIterationSessionBridge;
   let workspaceBridge: AutoIterationWorkspaceBridge;
 
   beforeEach(() => {
     service = new AutoIterationService(createLoggerMock());
     serviceInternals = service as unknown as AutoIterationServiceInternals;
+    sessionBridge = createSessionBridge();
     workspaceBridge = createWorkspaceBridge();
-    service.configure(createSessionBridge(), workspaceBridge, createLogbookBridge());
+    service.configure(sessionBridge, workspaceBridge, createLogbookBridge());
   });
 
   it('starts only one run loop for concurrent resume calls', async () => {
@@ -197,5 +200,58 @@ describe('AutoIterationService resume', () => {
     expect(runLoop).toHaveBeenCalledTimes(1);
     expect(loop.loopPromise).not.toBeNull();
     expect(loop.pauseRequested).toBe(false);
+  });
+
+  it('does not remove a replacement loop when a stale resumed loop rejects', async () => {
+    const oldLoop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', oldLoop);
+
+    let rejectRunLoop = (_error: Error): void => undefined;
+    vi.spyOn(serviceInternals, 'runLoop').mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectRunLoop = reject;
+        })
+    );
+
+    await service.resume('ws-1');
+    service.onSessionDeath('ws-1', 'session-1');
+
+    const replacement = createPausedLoop('ws-1');
+    replacement.sessionId = 'session-2';
+    serviceInternals.loops.set('ws-1', replacement);
+
+    rejectRunLoop(new Error('old loop failed'));
+    await oldLoop.loopPromise;
+
+    expect(serviceInternals.loops.get('ws-1')).toBe(replacement);
+  });
+
+  it('does not remove a replacement loop when a stale finalizer completes', async () => {
+    const oldLoop = createPausedLoop('ws-1');
+    serviceInternals.loops.set('ws-1', oldLoop);
+
+    let releaseStopSession = (): void => undefined;
+    vi.mocked(sessionBridge.stopSession).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStopSession = resolve;
+        })
+    );
+
+    const finalizePromise = serviceInternals.finalize(oldLoop, AutoIterationStatus.STOPPED);
+    await vi.waitFor(() => {
+      expect(sessionBridge.stopSession).toHaveBeenCalledWith('session-1');
+    });
+
+    service.onSessionDeath('ws-1', 'session-1');
+    const replacement = createPausedLoop('ws-1');
+    replacement.sessionId = 'session-2';
+    serviceInternals.loops.set('ws-1', replacement);
+
+    releaseStopSession();
+    await finalizePromise;
+
+    expect(serviceInternals.loops.get('ws-1')).toBe(replacement);
   });
 });
