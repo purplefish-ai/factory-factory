@@ -44,9 +44,9 @@ import {
   workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { reconciliationService } from './reconciliation.service';

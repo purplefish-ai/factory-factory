@@ -6,7 +6,7 @@ import { serviceNames } from '@/backend/services/registry';
 import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
 
 // Mock logger (standard pattern)
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),

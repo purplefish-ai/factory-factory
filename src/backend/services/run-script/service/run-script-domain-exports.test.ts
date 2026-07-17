@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import * as runScriptExports from './index';
 import {
   createRunScriptService,
+  FactoryConfigService,
   RunScriptService,
   RunScriptStateMachineError,
+  runScriptConfigPersistenceService,
   runScriptStateMachine,
   startupScriptService,
 } from './index';
@@ -30,5 +33,16 @@ describe('Run script domain barrel exports', () => {
 
   it('exports startupScriptService singleton', () => {
     expect(startupScriptService).toBeDefined();
+  });
+
+  it('exports run-script configuration services', () => {
+    expect(typeof FactoryConfigService.readConfig).toBe('function');
+    expect(runScriptConfigPersistenceService).toBeDefined();
+  });
+
+  it('keeps internal run-script infrastructure out of the public barrel', () => {
+    expect(runScriptExports).not.toHaveProperty('PortAllocationService');
+    expect(runScriptExports).not.toHaveProperty('RunScriptProxyService');
+    expect(runScriptExports).not.toHaveProperty('runScriptProxyService');
   });
 });

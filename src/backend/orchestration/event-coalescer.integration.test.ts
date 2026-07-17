@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
-import { WorkspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace';
 import { EventCoalescer } from './event-collector.orchestrator';
 
 describe('authoritative Ratchet projection integration', () => {

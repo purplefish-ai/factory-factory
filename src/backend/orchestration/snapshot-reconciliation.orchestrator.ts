@@ -13,7 +13,7 @@
  *
  * Import rules (same as event-collector.orchestrator.ts):
  * - Domain singletons from domain barrels (orchestration layer is allowed)
- * - Store from @/backend/services/workspace-snapshot-store.service
+ * - Store from @/backend/services/workspace
  * - NOT re-exported from orchestration/index.ts (circular dep avoidance)
  */
 
@@ -23,15 +23,16 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { chatEventForwarderService, sessionService } from '@/backend/services/session';
-import { computePendingRequestType, workspaceAccessor } from '@/backend/services/workspace';
 import {
+  computePendingRequestType,
+  gitOpsService,
   type SnapshotUpdateInput,
   type WorkspaceSnapshotEntry,
+  workspaceAccessor,
   workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
+} from '@/backend/services/workspace';
 
 // ---------------------------------------------------------------------------
 // Constants

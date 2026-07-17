@@ -19,6 +19,8 @@ import { EventEmitter } from 'node:events';
 import { isDeepStrictEqual } from 'node:util';
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   CIStatus,
   KanbanColumn,
@@ -33,8 +35,6 @@ import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/worksp
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
-import { SERVICE_CACHE_TTL_MS } from './constants';
-import { createLogger } from './logger.service';
 
 export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 

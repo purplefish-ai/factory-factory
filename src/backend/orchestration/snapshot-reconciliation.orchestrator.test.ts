@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
+import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
-import type {
-  SnapshotUpdateInput,
-  WorkspaceSnapshotEntry,
-} from '@/backend/services/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
@@ -13,6 +10,14 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 // ---------------------------------------------------------------------------
 
 const mockFindAllNonArchived = vi.fn();
+const mockGetWorkspaceGitStats = vi.fn();
+const mockUpsert = vi.fn();
+const mockGetByWorkspaceId = vi.fn();
+const mockGetAllWorkspaceIds = vi.fn().mockReturnValue([]);
+const mockRemove = vi.fn();
+const mockLoggerWarn = vi.fn();
+const mockLoggerInfo = vi.fn();
+const mockLoggerError = vi.fn();
 
 vi.mock('@/backend/services/workspace', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
@@ -22,33 +27,17 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
       findAllNonArchivedWithSessionsAndProject: (...args: unknown[]) =>
         mockFindAllNonArchived(...args),
     },
+    gitOpsService: {
+      getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
+    },
+    workspaceSnapshotStore: {
+      upsert: (...args: unknown[]) => mockUpsert(...args),
+      getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
+      getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
+      remove: (...args: unknown[]) => mockRemove(...args),
+    },
   };
 });
-
-const mockGetWorkspaceGitStats = vi.fn();
-
-vi.mock('@/backend/services/git-ops.service', () => ({
-  gitOpsService: {
-    getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
-  },
-}));
-
-const mockUpsert = vi.fn();
-const mockGetByWorkspaceId = vi.fn();
-const mockGetAllWorkspaceIds = vi.fn().mockReturnValue([]);
-const mockRemove = vi.fn();
-const mockLoggerWarn = vi.fn();
-const mockLoggerInfo = vi.fn();
-const mockLoggerError = vi.fn();
-
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {
-    upsert: (...args: unknown[]) => mockUpsert(...args),
-    getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
-    getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
-    remove: (...args: unknown[]) => mockRemove(...args),
-  },
-}));
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -376,8 +365,8 @@ describe('SnapshotReconciliationService', () => {
       expect(fields.ratchetDispatchRetryCount).toBe(SERVICE_THRESHOLDS.ratchetDispatchMaxRetries);
 
       const { WorkspaceSnapshotStore } = await vi.importActual<
-        typeof import('@/backend/services/workspace-snapshot-store.service')
-      >('@/backend/services/workspace-snapshot-store.service');
+        typeof import('@/backend/services/workspace')
+      >('@/backend/services/workspace');
       const snapshotStore = new WorkspaceSnapshotStore();
       snapshotStore.configure({
         deriveFlowState: (input) =>

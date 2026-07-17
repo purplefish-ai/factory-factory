@@ -18,6 +18,9 @@ vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: {
     runStartupScript: (...args: unknown[]) => mockRunStartupScript(...args),
   },
+  FactoryConfigService: {
+    readConfig: (...args: unknown[]) => mockReadConfig(...args),
+  },
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
@@ -45,12 +48,6 @@ vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
 
 vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
   executeStartupScriptPipeline: (...args: unknown[]) => mockExecuteStartupScriptPipeline(...args),
-}));
-
-vi.mock('@/backend/services/factory-config.service', () => ({
-  FactoryConfigService: {
-    readConfig: (...args: unknown[]) => mockReadConfig(...args),
-  },
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({

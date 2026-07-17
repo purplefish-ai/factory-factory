@@ -5,10 +5,7 @@ import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
 } from '@/backend/lib/workspace-derived-state';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type {
@@ -19,6 +16,7 @@ import type {
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
+import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -372,67 +370,6 @@ class WorkspaceQueryService {
         pendingRequestType,
       };
     });
-  }
-
-  async refreshFactoryConfigs(projectId: string) {
-    const workspaces = await workspaceAccessor.findByProjectId(projectId);
-
-    let updatedCount = 0;
-    const errors: Array<{ workspaceId: string; error: string }> = [];
-
-    for (const workspace of workspaces) {
-      if (!workspace.worktreePath) {
-        continue;
-      }
-
-      try {
-        await runScriptConfigPersistenceService.syncWorkspaceCommandsFromWorktreeConfig({
-          workspaceId: workspace.id,
-          worktreePath: workspace.worktreePath,
-          persistWorkspaceCommands: (id, commands) =>
-            workspaceAccessor.update(id, {
-              runScriptCommand: commands.runScriptCommand,
-              runScriptPostRunCommand: commands.runScriptPostRunCommand,
-              runScriptCleanupCommand: commands.runScriptCleanupCommand,
-            }),
-        });
-
-        updatedCount++;
-      } catch (error) {
-        errors.push({
-          workspaceId: workspace.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        logger.error('Failed to refresh factory config for workspace', {
-          workspaceId: workspace.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    return {
-      updatedCount,
-      totalWorkspaces: workspaces.length,
-      errors,
-    };
-  }
-
-  async getFactoryConfig(projectId: string) {
-    const project = await projectAccessor.findById(projectId);
-    if (!project) {
-      throw new Error('Project not found');
-    }
-
-    try {
-      const config = await FactoryConfigService.readConfig(project.repoPath);
-      return config;
-    } catch (error) {
-      logger.error('Failed to read factory config', {
-        projectId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
   }
 
   async syncPRStatus(workspaceId: string) {

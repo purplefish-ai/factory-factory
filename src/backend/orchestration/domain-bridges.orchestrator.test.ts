@@ -31,6 +31,7 @@ vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
   workspaceAccessor: { create: vi.fn(), findRawById: vi.fn(), update: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
+  workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
     markSessionIdle: vi.fn(),
@@ -119,6 +120,7 @@ import {
   workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
@@ -160,6 +162,7 @@ describe('configureDomainBridges', () => {
 
     expect(kanbanStateService.configure).toHaveBeenCalledTimes(1);
     expect(workspaceQueryService.configure).toHaveBeenCalledTimes(1);
+    expect(workspaceSnapshotStore.configure).toHaveBeenCalledTimes(1);
   });
 
   it('configures GitHub domain services', () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
-import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 
 const { mockLoggerWarn } = vi.hoisted(() => ({ mockLoggerWarn: vi.fn() }));
 
@@ -45,6 +45,12 @@ vi.mock('@/backend/services/workspace', () => ({
   computePendingRequestType: vi.fn().mockReturnValue(null),
   kanbanStateService: { updateCachedKanbanColumn: vi.fn().mockResolvedValue(undefined) },
   workspaceAccessor: { findRawById: vi.fn() },
+  workspaceSnapshotStore: {
+    upsert: vi.fn(),
+    getByWorkspaceId: vi.fn(),
+    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
+    remove: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -106,15 +112,6 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {
-    upsert: vi.fn(),
-    getByWorkspaceId: vi.fn(),
-    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
-    remove: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -139,9 +136,9 @@ import {
   kanbanStateService,
   workspaceAccessor,
   workspaceActivityService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {
   configureEventCollector,
