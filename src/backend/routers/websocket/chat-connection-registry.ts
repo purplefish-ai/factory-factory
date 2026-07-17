@@ -12,24 +12,27 @@
  */
 
 import type { WebSocket } from 'ws';
+import type { Application, ApplicationServices } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
-import { configService } from '@/backend/services/config.service';
-import { createLogger } from '@/backend/services/logger.service';
 import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
   SESSION_OUTBOUND_EVENT,
-  type SessionFileLogger,
   type SessionOutboundEvent,
-  sessionEventBus,
-  sessionFileLogger,
 } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 
-const logger = createLogger('chat-connection');
+type ChatRegistryLogger = Pick<
+  ReturnType<ApplicationServices['createLogger']>,
+  'debug' | 'error' | 'info'
+>;
 
-const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
+const NOOP_LOGGER: ChatRegistryLogger = {
+  debug: () => undefined,
+  error: () => undefined,
+  info: () => undefined,
+};
 
 // ============================================================================
 // Types
@@ -54,9 +57,25 @@ interface ConnectionEntry {
 export class ChatConnectionRegistry {
   private readonly connections = new Map<string, ConnectionEntry>();
   /** Per-session socket index; topics are DB session ids. */
-  private readonly broadcaster = new TopicBroadcaster<string>(logger, 'chat session message');
+  private readonly broadcaster = new TopicBroadcaster<string>(
+    { error: (...args) => this.logger.error(...args) },
+    'chat session message'
+  );
 
   private chatWsMsgCounter = 0;
+  private logger: ChatRegistryLogger = NOOP_LOGGER;
+  private debugChatWebSocket = false;
+
+  configure({
+    logger,
+    debugChatWebSocket,
+  }: {
+    logger: ChatRegistryLogger;
+    debugChatWebSocket: boolean;
+  }): void {
+    this.logger = logger;
+    this.debugChatWebSocket = debugChatWebSocket;
+  }
 
   /**
    * Register a WebSocket connection. Re-registering an existing connection ID
@@ -106,15 +125,15 @@ export class ChatConnectionRegistry {
 
     const sent = this.broadcaster.broadcast(dbSessionId, payload);
     if (sent === 0) {
-      if (DEBUG_CHAT_WS) {
-        logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
+      if (this.debugChatWebSocket) {
+        this.logger.debug(`[Chat WS #${msgNum}] No connections viewing session`, { dbSessionId });
       }
       return 0;
     }
 
-    if (DEBUG_CHAT_WS) {
+    if (this.debugChatWebSocket) {
       const delta = payload.type === 'session_delta' ? payload.data : undefined;
-      logger.info(`[Chat WS #${msgNum}] Sent to ${sent} connection(s)`, {
+      this.logger.info(`[Chat WS #${msgNum}] Sent to ${sent} connection(s)`, {
         dbSessionId,
         type: payload.type,
         innerType: delta?.type,
@@ -133,70 +152,129 @@ export class ChatConnectionRegistry {
   broadcastToAll(payload: Record<string, unknown>): void {
     const message = JSON.stringify(payload);
     for (const entry of this.connections.values()) {
-      safeSend(entry.info.ws, message, logger, 'workspace notification');
+      safeSend(entry.info.ws, message, this.logger, 'workspace notification');
     }
   }
 
-  /** Drop all connections and subscriptions. Intended for tests. */
+  /** Drop all connections and subscriptions. */
   clear(): void {
     for (const entry of this.connections.values()) {
       entry.unsubscribe?.();
     }
     this.connections.clear();
   }
+
+  /** Close all registered sockets before dropping transport-owned references. */
+  dispose(): void {
+    for (const entry of this.connections.values()) {
+      entry.unsubscribe?.();
+      entry.info.ws.close();
+    }
+    this.connections.clear();
+  }
 }
 
-export const chatConnectionRegistry = new ChatConnectionRegistry();
+const applicationChatConnectionRegistries = new WeakMap<Application, ChatConnectionRegistry>();
+
+export function getChatConnectionRegistryForApplication(
+  application: Application
+): ChatConnectionRegistry {
+  const existing = applicationChatConnectionRegistries.get(application);
+  if (existing) {
+    return existing;
+  }
+  const registry = new ChatConnectionRegistry();
+  applicationChatConnectionRegistries.set(application, registry);
+  return registry;
+}
 
 // ============================================================================
 // Event Bus Wiring
 // ============================================================================
 
-let sessionOutboundListener: ((event: SessionOutboundEvent) => void) | null = null;
-let chatBroadcastListener: ((event: ChatBroadcastEvent) => void) | null = null;
+type ChatTransportDeps = Pick<
+  ApplicationServices,
+  'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+>;
+
+interface ChatTransportAttachment {
+  readonly deps: ChatTransportDeps;
+  readonly sessionOutboundListener: (event: SessionOutboundEvent) => void;
+  readonly chatBroadcastListener: (event: ChatBroadcastEvent) => void;
+}
+
+const chatTransportAttachments = new WeakMap<ChatConnectionRegistry, ChatTransportAttachment>();
+
+export function detachChatTransport(registry: ChatConnectionRegistry): void {
+  const attachment = chatTransportAttachments.get(registry);
+  if (!attachment) {
+    registry.dispose();
+    return;
+  }
+  const { sessionEventBus } = attachment.deps;
+  sessionEventBus.off(SESSION_OUTBOUND_EVENT, attachment.sessionOutboundListener);
+  sessionEventBus.off(CHAT_BROADCAST_EVENT, attachment.chatBroadcastListener);
+  sessionEventBus.registerViewerCountProvider(null);
+  chatTransportAttachments.delete(registry);
+  registry.dispose();
+}
 
 /**
- * Subscribe the singleton registry to the session domain's outbound event bus
- * and register the viewer-count provider. Idempotent (first caller's
- * dependencies win); called during chat upgrade handler creation at server
- * startup.
+ * Subscribe a transport-owned registry to an application's session event bus
+ * and register the viewer-count provider. Repeated attachment with the same
+ * dependency identities is idempotent; a different graph is rebound safely.
  *
  * OUT_TO_CLIENT session file logging lives here rather than in the registry
  * so it uses the app context's `sessionFileLogger`; it records only payloads
  * that actually reached at least one client.
  */
-export function attachChatTransport(deps: { sessionFileLogger?: SessionFileLogger } = {}): void {
-  if (sessionOutboundListener) {
+export function attachChatTransport(
+  deps: ChatTransportDeps,
+  registry: ChatConnectionRegistry
+): void {
+  const existing = chatTransportAttachments.get(registry);
+  if (
+    existing?.deps.configService === deps.configService &&
+    existing.deps.createLogger === deps.createLogger &&
+    existing.deps.sessionEventBus === deps.sessionEventBus &&
+    existing.deps.sessionFileLogger === deps.sessionFileLogger
+  ) {
     return;
   }
-  const fileLogger = deps.sessionFileLogger ?? sessionFileLogger;
+  if (existing) {
+    detachChatTransport(registry);
+  }
+  const { configService, createLogger, sessionEventBus, sessionFileLogger } = deps;
+  registry.configure({
+    logger: createLogger('chat-connection'),
+    debugChatWebSocket: configService.getDebugConfig().chatWebSocket,
+  });
 
-  sessionOutboundListener = (event: SessionOutboundEvent) => {
-    const sent = chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
+  const sessionOutboundListener = (event: SessionOutboundEvent) => {
+    const sent = registry.broadcastToSession(event.sessionId, event.payload);
     if (sent > 0) {
-      fileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+      sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
     }
   };
-  chatBroadcastListener = (event: ChatBroadcastEvent) => {
-    chatConnectionRegistry.broadcastToAll(event.payload);
+  const chatBroadcastListener = (event: ChatBroadcastEvent) => {
+    registry.broadcastToAll(event.payload);
   };
 
   sessionEventBus.on(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
   sessionEventBus.on(CHAT_BROADCAST_EVENT, chatBroadcastListener);
-  sessionEventBus.registerViewerCountProvider((sessionId) =>
-    chatConnectionRegistry.countViewers(sessionId)
-  );
+  sessionEventBus.registerViewerCountProvider((sessionId) => registry.countViewers(sessionId));
+  chatTransportAttachments.set(registry, {
+    deps,
+    sessionOutboundListener,
+    chatBroadcastListener,
+  });
 }
 
-export function detachChatTransportForTests(): void {
-  if (sessionOutboundListener) {
-    sessionEventBus.off(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
-    sessionOutboundListener = null;
+export function disposeChatTransportForApplication(application: Application): void {
+  const registry = applicationChatConnectionRegistries.get(application);
+  if (!registry) {
+    return;
   }
-  if (chatBroadcastListener) {
-    sessionEventBus.off(CHAT_BROADCAST_EVENT, chatBroadcastListener);
-    chatBroadcastListener = null;
-  }
-  sessionEventBus.registerViewerCountProvider(null);
-  chatConnectionRegistry.clear();
+  detachChatTransport(registry);
+  applicationChatConnectionRegistries.delete(application);
 }

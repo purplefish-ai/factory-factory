@@ -2,8 +2,6 @@ import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
-import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
-import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -20,7 +18,12 @@ async function createAgentSessionFromInput(
   ctx: Context,
   input: z.infer<typeof createSessionInputSchema>
 ) {
-  const { configService, sessionDomainService } = ctx.appContext.services;
+  const {
+    configService,
+    sessionDataService,
+    sessionDomainService,
+    sessionProviderResolverService,
+  } = ctx.appContext.services;
   const maxSessions = configService.getMaxSessionsPerWorkspace();
 
   const provider = await sessionProviderResolverService.resolveSessionProvider({
@@ -61,6 +64,7 @@ async function createAgentSessionFromInput(
 
 async function rollbackCreatedSession(
   sessionId: string,
+  sessionDataService: Context['appContext']['services']['sessionDataService'],
   sessionDomainService: Context['appContext']['services']['sessionDomainService']
 ) {
   sessionDomainService.clearSession(sessionId);
@@ -93,12 +97,12 @@ export const sessionRouter = router({
   // Quick Actions
 
   // List all available quick actions
-  listQuickActions: publicProcedure.query(() => listQuickActions()),
+  listQuickActions: publicProcedure.query(({ ctx }) => ctx.appContext.services.listQuickActions()),
 
   // Get a specific quick action by ID
   getQuickAction: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ input }) => getQuickAction(input.id)),
+    .query(({ ctx, input }) => ctx.appContext.services.getQuickAction(input.id)),
 
   // Sessions
 
@@ -112,7 +116,7 @@ export const sessionRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { sessionService } = ctx.appContext.services;
+      const { sessionDataService, sessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
       const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(
         workspaceId,
@@ -126,7 +130,8 @@ export const sessionRouter = router({
     }),
 
   // Get session by ID
-  getSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  getSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const { sessionDataService } = ctx.appContext.services;
     const session = await sessionDataService.findAgentSessionById(input.id);
     if (!session) {
       throw new Error(`Session not found: ${input.id}`);
@@ -147,7 +152,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { sessionService, sessionDomainService } = ctx.appContext.services;
+      const { sessionDataService, sessionService, sessionDomainService } = ctx.appContext.services;
       const session = await createAgentSessionFromInput(ctx, input);
 
       try {
@@ -163,7 +168,7 @@ export const sessionRouter = router({
           // Best-effort runtime cleanup; preserve the startup error.
         }
 
-        await rollbackCreatedSession(session.id, sessionDomainService);
+        await rollbackCreatedSession(session.id, sessionDataService, sessionDomainService);
 
         throw error;
       }
@@ -181,7 +186,8 @@ export const sessionRouter = router({
         model: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       const { id, ...updates } = input;
       return sessionDataService.updateAgentSession(id, updates);
     }),
@@ -195,7 +201,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { sessionService } = ctx.appContext.services;
+      const { sessionDataService, sessionService } = ctx.appContext.services;
       await sessionService.startSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
@@ -206,7 +212,7 @@ export const sessionRouter = router({
   stopSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionService } = ctx.appContext.services;
+      const { sessionDataService, sessionService } = ctx.appContext.services;
       await sessionService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
@@ -217,7 +223,7 @@ export const sessionRouter = router({
   restartSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionService } = ctx.appContext.services;
+      const { sessionDataService, sessionService } = ctx.appContext.services;
       await sessionService.restartSession(input.id);
       return sessionDataService.findAgentSessionById(input.id);
     }),
@@ -226,7 +232,7 @@ export const sessionRouter = router({
   deleteSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionService, sessionDomainService } = ctx.appContext.services;
+      const { sessionDataService, sessionService, sessionDomainService } = ctx.appContext.services;
       // Stop process first to prevent orphaned session processes
       await sessionService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
@@ -247,7 +253,8 @@ export const sessionRouter = router({
         limit: z.number().min(1).max(100).optional(),
       })
     )
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
       return sessionDataService.findTerminalSessionsByWorkspaceId(workspaceId, filters);
     }),
@@ -255,7 +262,8 @@ export const sessionRouter = router({
   // Get terminal session by ID
   getTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       const session = await sessionDataService.findTerminalSessionById(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
@@ -271,7 +279,8 @@ export const sessionRouter = router({
         name: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       return sessionDataService.createTerminalSession(input);
     }),
 
@@ -283,7 +292,8 @@ export const sessionRouter = router({
         name: z.string().optional(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       const { id, ...updates } = input;
       return sessionDataService.updateTerminalSession(id, updates);
     }),
@@ -291,7 +301,7 @@ export const sessionRouter = router({
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => {
-      return sessionDataService.deleteTerminalSession(input.id);
+    .mutation(({ ctx, input }) => {
+      return ctx.appContext.services.sessionDataService.deleteTerminalSession(input.id);
     }),
 });

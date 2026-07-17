@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { ClosedSessionTranscript } from '@/backend/services/session';
-import { sessionDataService } from '@/backend/services/session';
 import { publicProcedure, router } from './trpc';
 
 export const closedSessionsRouter = router({
@@ -17,7 +16,8 @@ export const closedSessionsRouter = router({
         limit: z.number().min(1).max(50).default(20).optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
       const { workspaceId, limit = 20 } = input;
 
       const closedSessions = await sessionDataService.findClosedSessionsByWorkspaceId(
@@ -31,50 +31,57 @@ export const closedSessionsRouter = router({
   /**
    * Get a specific closed session with its full transcript
    */
-  getTranscript: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const closedSession = await sessionDataService.findClosedSessionByIdWithWorkspace(input.id);
+  getTranscript: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { sessionDataService } = ctx.appContext.services;
+      const closedSession = await sessionDataService.findClosedSessionByIdWithWorkspace(input.id);
 
-    if (!closedSession) {
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: `Closed session not found: ${input.id}`,
-      });
-    }
-
-    if (!closedSession.workspace.worktreePath) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Workspace has no worktree path',
-      });
-    }
-
-    // Read transcript from file
-    const transcriptPath = join(closedSession.workspace.worktreePath, closedSession.transcriptPath);
-
-    try {
-      const content = await readFile(transcriptPath, 'utf-8');
-      const transcript: ClosedSessionTranscript = JSON.parse(content);
-
-      return transcript;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if (!closedSession) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Transcript file not found',
+          message: `Closed session not found: ${input.id}`,
         });
       }
 
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to read transcript file',
-      });
-    }
-  }),
+      if (!closedSession.workspace.worktreePath) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Workspace has no worktree path',
+        });
+      }
+
+      // Read transcript from file
+      const transcriptPath = join(
+        closedSession.workspace.worktreePath,
+        closedSession.transcriptPath
+      );
+
+      try {
+        const content = await readFile(transcriptPath, 'utf-8');
+        const transcript: ClosedSessionTranscript = JSON.parse(content);
+
+        return transcript;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Transcript file not found',
+          });
+        }
+
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to read transcript file',
+        });
+      }
+    }),
 
   /**
    * Delete a closed session and its transcript file
    */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const { sessionDataService } = ctx.appContext.services;
     const closedSession = await sessionDataService.findClosedSessionByIdWithWorkspace(input.id);
 
     if (!closedSession) {

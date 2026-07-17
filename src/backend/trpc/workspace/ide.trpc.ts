@@ -1,14 +1,13 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { checkIdeAvailable, openPathInIde } from '@/backend/lib/ide-helpers';
-import { userSettingsQueryService, workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 
 export const workspaceIdeRouter = router({
   // Get list of available IDEs
-  getAvailableIdes: publicProcedure.query(async () => {
+  getAvailableIdes: publicProcedure.query(async ({ ctx }) => {
     const ides: Array<{ id: string; name: string }> = [];
-    const settings = await userSettingsQueryService.get();
+    const settings = await ctx.appContext.services.userSettingsQueryService.get();
 
     // Check Cursor
     const cursorAvailable = await checkIdeAvailable('cursor');
@@ -33,7 +32,8 @@ export const workspaceIdeRouter = router({
   // Open workspace in specified IDE
   openInIde: publicProcedure
     .input(z.object({ id: z.string(), ide: z.string().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { userSettingsQueryService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.id);
       if (!workspace) {
         throw new TRPCError({

@@ -5,10 +5,6 @@ import type { WorkspaceWithProject } from './types';
 
 const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
 
-vi.mock('./event-collector.orchestrator', () => ({
-  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
-}));
-
 vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
 }));
@@ -69,6 +65,7 @@ function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): Workspace
 const defaultOptions = { commitUncommitted: false };
 
 const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
+  cleanupWorkspaceScopedCaches: mockCleanupWorkspaceScopedCaches,
   githubCLIService: {
     addIssueComment: vi.fn(),
   },

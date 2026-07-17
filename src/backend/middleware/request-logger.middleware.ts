@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { type AppContext, createAppContext } from '@/backend/app-context';
+import type { AppContext } from '@/backend/app-context';
 
 /**
  * Request logging middleware.
@@ -25,5 +25,3 @@ export function createRequestLoggerMiddleware(appContext: AppContext) {
     next();
   };
 }
-
-export const requestLoggerMiddleware = createRequestLoggerMiddleware(createAppContext());

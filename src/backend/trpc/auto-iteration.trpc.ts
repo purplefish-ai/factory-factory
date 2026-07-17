@@ -1,11 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import {
-  autoIterationService,
-  insightsService,
-  logbookService,
-} from '@/backend/services/auto-iteration';
-import { workspaceDataService } from '@/backend/services/workspace';
+import type { ApplicationServices } from '@/backend/app-context';
 import {
   autoIterationConfigSchema,
   autoIterationProgressSchema,
@@ -36,6 +31,7 @@ function parseAutoIterationProgress(value: unknown) {
 
 /** Handle resume-from-failed: validate config/progress and delegate to service. */
 async function handleResumeFromFailed(
+  autoIterationService: ApplicationServices['autoIterationService'],
   workspace: { autoIterationConfig: unknown; autoIterationProgress: unknown },
   workspaceId: string
 ): Promise<void> {
@@ -67,7 +63,8 @@ export const autoIterationRouter = router({
   /** Start the auto-iteration loop for a workspace. */
   start: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { autoIterationService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
@@ -107,7 +104,8 @@ export const autoIterationRouter = router({
   /** Pause the auto-iteration loop. */
   pause: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { autoIterationService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
@@ -119,7 +117,8 @@ export const autoIterationRouter = router({
   /** Resume a paused or failed auto-iteration loop. */
   resume: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { autoIterationService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
@@ -135,7 +134,7 @@ export const autoIterationRouter = router({
       }
 
       if (workspace.autoIterationStatus === 'FAILED') {
-        await handleResumeFromFailed(workspace, input.workspaceId);
+        await handleResumeFromFailed(autoIterationService, workspace, input.workspaceId);
         return { success: true };
       }
 
@@ -159,19 +158,23 @@ export const autoIterationRouter = router({
     }),
 
   /** Stop the auto-iteration loop. */
-  stop: publicProcedure.input(z.object({ workspaceId: z.string() })).mutation(async ({ input }) => {
-    const workspace = await workspaceDataService.findById(input.workspaceId);
-    if (!workspace) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
-    }
-    autoIterationService.stop(input.workspaceId);
-    return { success: true };
-  }),
+  stop: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { autoIterationService, workspaceDataService } = ctx.appContext.services;
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+      }
+      autoIterationService.stop(input.workspaceId);
+      return { success: true };
+    }),
 
   /** Get auto-iteration status snapshot. */
   getStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { autoIterationService, workspaceDataService } = ctx.appContext.services;
       // Check in-memory state first
       const running = autoIterationService.getStatus(input.workspaceId);
       if (running) {
@@ -197,7 +200,8 @@ export const autoIterationRouter = router({
   /** Get the agent logbook for a workspace. */
   getLogbook: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { logbookService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
@@ -211,7 +215,8 @@ export const autoIterationRouter = router({
   /** Get the insights file contents for a workspace. */
   getInsights: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { insightsService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
@@ -225,7 +230,8 @@ export const autoIterationRouter = router({
   /** Save the insights file contents for a workspace. */
   saveInsights: publicProcedure
     .input(z.object({ workspaceId: z.string(), content: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const { insightsService, workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findById(input.workspaceId);
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });

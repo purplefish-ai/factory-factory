@@ -2,7 +2,6 @@ import { Router } from 'express';
 import type { AppContext } from '@/backend/app-context';
 import { HTTP_STATUS } from '@/backend/constants/http';
 import { toError } from '@/backend/lib/error-utils';
-import { healthService } from '@/backend/orchestration/health.service';
 
 // ============================================================================
 // Health Check Routes
@@ -10,7 +9,8 @@ import { healthService } from '@/backend/orchestration/health.service';
 
 export function createHealthRouter(appContext: AppContext): Router {
   const router = Router();
-  const logger = appContext.services.createLogger('health-route');
+  const { configService, createLogger, healthService, rateLimiter } = appContext.services;
+  const logger = createLogger('health-route');
 
   /**
    * GET /health
@@ -21,8 +21,8 @@ export function createHealthRouter(appContext: AppContext): Router {
       status: 'ok',
       timestamp: new Date().toISOString(),
       service: 'factoryfactory-backend',
-      version: appContext.services.configService.getAppVersion(),
-      environment: appContext.services.configService.getEnvironment(),
+      version: configService.getAppVersion(),
+      environment: configService.getEnvironment(),
     });
   });
 
@@ -66,7 +66,7 @@ export function createHealthRouter(appContext: AppContext): Router {
       };
     }
 
-    const apiUsage = appContext.services.rateLimiter.getApiUsageStats();
+    const apiUsage = rateLimiter.getApiUsageStats();
     checks.rateLimiter = {
       status: apiUsage.isRateLimited ? 'degraded' : 'ok',
       details: {

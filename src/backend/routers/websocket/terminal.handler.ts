@@ -7,15 +7,12 @@
 
 import type { Duplex } from 'node:stream';
 import type { WebSocket } from 'ws';
-import type { AppContext } from '@/backend/app-context';
+import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { toError } from '@/backend/lib/error-utils';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
-import { createLogger } from '@/backend/services/logger.service';
-import { sessionDataService } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { parseWebSocketMessage, sendJsonError } from './message-utils';
 import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
@@ -24,14 +21,23 @@ import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 // ============================================================================
 
 /** Terminal WebSocket connections, keyed by workspace ID. */
+let broadcasterLogger: Pick<ReturnType<ApplicationServices['createLogger']>, 'error'> = {
+  error: () => undefined,
+};
+
 export const terminalConnections = new TopicBroadcaster<string>(
-  createLogger('terminal-handler'),
+  { error: (...args) => broadcasterLogger.error(...args) },
   'terminal message'
 );
 
 const terminalListenerCleanup = new WeakMap<WebSocket, Map<string, (() => void)[]>>();
 
 type TerminalUnsubscribers = (() => void)[];
+
+type TerminalHandlerServices = Pick<
+  ApplicationServices,
+  'sessionDataService' | 'terminalService' | 'workspaceDataService'
+>;
 
 const TERMINAL_PID_CLEAR_RETRY_DELAYS_MS = [100, 500] as const;
 
@@ -73,9 +79,10 @@ function logConnectionEstablished(
 function sendExistingTerminals(
   ws: WebSocket,
   workspaceId: string,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): void {
+  const { terminalService } = services;
   const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
   if (existingTerminals.length === 0) {
     return;
@@ -99,7 +106,7 @@ function sendExistingTerminals(
 
   const cleanupMap = terminalListenerCleanup.get(ws);
   for (const terminal of existingTerminals) {
-    attachTerminalListeners(ws, workspaceId, terminal.id, terminalService, logger, cleanupMap);
+    attachTerminalListeners(ws, workspaceId, terminal.id, services, logger, cleanupMap);
   }
 }
 
@@ -107,9 +114,10 @@ async function handleCreateMessage(
   ws: WebSocket,
   workspaceId: string,
   message: Extract<TerminalMessageInput, { type: 'create' }>,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
+  const { sessionDataService, terminalService, workspaceDataService } = services;
   logger.info('Creating terminal', {
     workspaceId,
     requestId: message.requestId,
@@ -150,7 +158,7 @@ async function handleCreateMessage(
   // (same synchronous block), so early bytes are delivered exactly once:
   // buffered output via `created`, later output via the live listener.
   const outputBuffer = terminalService.getTerminal(workspaceId, terminalId)?.outputBuffer ?? '';
-  attachTerminalListeners(ws, workspaceId, terminalId, terminalService, logger, cleanupMap);
+  attachTerminalListeners(ws, workspaceId, terminalId, services, logger, cleanupMap);
 
   logger.info('Sending created message to client', { terminalId, requestId: message.requestId });
   ws.send(
@@ -167,10 +175,11 @@ function attachTerminalListeners(
   ws: WebSocket,
   workspaceId: string,
   terminalId: string,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>,
   cleanupMap: Map<string, TerminalUnsubscribers> | undefined
 ): void {
+  const { terminalService } = services;
   const unsubscribers: TerminalUnsubscribers = [];
   cleanupMap?.set(terminalId, unsubscribers);
 
@@ -190,7 +199,7 @@ function attachTerminalListeners(
       ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
     }
     terminalListenerCleanup.get(ws)?.delete(terminalId);
-    void clearTerminalPidWithRetry(workspaceId, terminalId, logger);
+    void clearTerminalPidWithRetry(workspaceId, terminalId, services, logger);
   });
   unsubscribers.push(unsubExit);
 }
@@ -198,8 +207,10 @@ function attachTerminalListeners(
 async function clearTerminalPidWithRetry(
   workspaceId: string,
   terminalId: string,
+  services: Pick<TerminalHandlerServices, 'sessionDataService'>,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
+  const { sessionDataService } = services;
   const maxAttempts = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS.length + 1;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -311,8 +322,10 @@ function handleSetActiveMessage(
 async function authorizeTerminalWorkspaceUpgrade(
   workspaceId: string,
   socket: Duplex,
+  services: Pick<TerminalHandlerServices, 'workspaceDataService'>,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<boolean> {
+  const { workspaceDataService } = services;
   const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace?.worktreePath) {
     logger.warn('Rejected terminal WebSocket for unknown workspace or missing worktree', {
@@ -329,9 +342,10 @@ async function handleTerminalMessage(
   ws: WebSocket,
   workspaceId: string,
   data: unknown,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
+  const { terminalService } = services;
   const message = parseWebSocketMessage(TerminalMessageSchema, data, logger, 'terminal message', {
     workspaceId,
   });
@@ -350,7 +364,7 @@ async function handleTerminalMessage(
   switch (message.type) {
     case 'create':
       try {
-        await handleCreateMessage(ws, workspaceId, message, terminalService, logger);
+        await handleCreateMessage(ws, workspaceId, message, services, logger);
       } catch (error) {
         const err = toError(error);
         logger.error('Error handling terminal create message', err, {
@@ -379,11 +393,11 @@ async function handleTerminalSocketMessage(
   ws: WebSocket,
   workspaceId: string,
   data: unknown,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): Promise<void> {
   try {
-    await handleTerminalMessage(ws, workspaceId, data as Buffer, terminalService, logger);
+    await handleTerminalMessage(ws, workspaceId, data as Buffer, services, logger);
   } catch (error) {
     const err = toError(error);
     logger.error('Error handling terminal message', err, { workspaceId });
@@ -394,12 +408,12 @@ async function handleTerminalSocketMessage(
 function initializeTerminalWebSocket({
   ws,
   workspaceId,
-  terminalService,
+  services,
   logger,
 }: {
   ws: WebSocket;
   workspaceId: string;
-  terminalService: AppContext['services']['terminalService'];
+  services: TerminalHandlerServices;
   logger: ReturnType<AppContext['services']['createLogger']>;
 }): void {
   logger.info('Terminal WebSocket connection established', { workspaceId });
@@ -412,10 +426,10 @@ function initializeTerminalWebSocket({
   });
   addTerminalCleanupMap(ws);
   logConnectionEstablished(workspaceId, logger);
-  sendExistingTerminals(ws, workspaceId, terminalService, logger);
+  sendExistingTerminals(ws, workspaceId, services, logger);
 
   ws.on('message', (data) => {
-    void handleTerminalSocketMessage(ws, workspaceId, data, terminalService, logger);
+    void handleTerminalSocketMessage(ws, workspaceId, data, services, logger);
   });
 
   ws.on('close', () => {
@@ -439,9 +453,10 @@ function initializeTerminalWebSocket({
 // ============================================================================
 
 export function createTerminalUpgradeHandler(appContext: AppContext) {
-  const terminalService = appContext.services.terminalService;
-  const { configService } = appContext.services;
-  const logger = appContext.services.createLogger('terminal-handler');
+  const services: TerminalHandlerServices = appContext.services;
+  const { configService, createLogger } = appContext.services;
+  const logger = createLogger('terminal-handler');
+  broadcasterLogger = logger;
 
   return createWebSocketUpgradeHandler({
     connectionName: 'terminal WebSocket',
@@ -449,12 +464,14 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
     logger,
     requiredParams: ['workspaceId'],
     authorize: async ({ params, socket }) =>
-      (await authorizeTerminalWorkspaceUpgrade(params.workspaceId, socket, logger)) ? {} : null,
+      (await authorizeTerminalWorkspaceUpgrade(params.workspaceId, socket, services, logger))
+        ? {}
+        : null,
     onOpen: (ws, { params }) => {
       initializeTerminalWebSocket({
         ws,
         workspaceId: params.workspaceId,
-        terminalService,
+        services,
         logger,
       });
     },

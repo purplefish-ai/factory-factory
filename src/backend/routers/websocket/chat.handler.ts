@@ -21,7 +21,7 @@ import { ChatMessageSchema } from '@/backend/schemas/websocket';
 import {
   attachChatTransport,
   type ConnectionInfo,
-  chatConnectionRegistry,
+  getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
 import { parseWebSocketMessage } from './message-utils';
 import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
@@ -37,9 +37,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     configService,
     createLogger,
     sessionFileLogger,
+    sessionEventBus,
     sessionDomainService,
     sessionService,
   } = appContext.services;
+  const chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
 
   const logger = createLogger('chat-handler');
   const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
@@ -83,7 +85,10 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     isInitialized = true;
 
     // Bridge session domain events onto chat WebSocket connections
-    attachChatTransport({ sessionFileLogger });
+    attachChatTransport(
+      { configService, createLogger, sessionEventBus, sessionFileLogger },
+      chatConnectionRegistry
+    );
 
     // Initialize client creator for message handler service
     chatMessageHandlerService.setClientCreator({

@@ -4,17 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-// Mock dependencies before importing the router
 const mockQueryRaw = vi.fn();
 const mockGetEnvironment = vi.fn();
 const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
-
-vi.mock('@/backend/services/settings', () => ({
-  healthAccessor: {
-    checkDatabaseConnection: () => mockQueryRaw(),
-  },
-}));
 
 import { createHealthRouter } from './health.router';
 
@@ -26,6 +19,9 @@ describe('healthRouter', () => {
     app = express();
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        healthService: {
+          checkDatabaseConnection: () => mockQueryRaw(),
+        },
         configService: {
           getEnvironment: () => mockGetEnvironment(),
           getAppVersion: () => mockGetAppVersion(),
