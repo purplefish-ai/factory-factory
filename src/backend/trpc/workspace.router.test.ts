@@ -1,11 +1,8 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  type AppContext,
-  type ApplicationServices,
-  createDefaultApplicationDependencies,
-} from '@/backend/app-context';
+import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByProjectId: vi.fn(),
@@ -25,7 +22,7 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
   hasChanges: vi.fn(),
 }));
 
-const mockDeriveFlowState = vi.hoisted(() => vi.fn());
+const mockDeriveFlowState = applicationGraphMocks.deriveWorkspaceFlowStateFromWorkspace;
 const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
@@ -34,8 +31,8 @@ const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
 const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
-const mockComputeKanbanColumn = vi.hoisted(() => vi.fn());
-const mockComputePendingRequestType = vi.hoisted(() => vi.fn());
+const mockComputeKanbanColumn = applicationGraphMocks.computeKanbanColumn;
+const mockComputePendingRequestType = applicationGraphMocks.computePendingRequestType;
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
@@ -52,16 +49,6 @@ const mockHasQueuedMessage = vi.hoisted(() => vi.fn());
 const mockTryDispatchNextMessage = vi.hoisted(() => vi.fn());
 const mockPersistChildNotification = vi.hoisted(() => vi.fn());
 const mockPersistParentNotification = vi.hoisted(() => vi.fn());
-
-vi.mock('@/backend/services/workspace', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
-  return {
-    ...actual,
-    deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
-    computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
-    computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
-  };
-});
 
 vi.mock('@/backend/lib/session-summaries', () => ({
   buildWorkspaceSessionSummaries: (...args: unknown[]) => mockBuildSessionSummaries(...args),
@@ -102,7 +89,7 @@ function createCaller(requestTrust?: {
   origin?: string;
   isLocal: boolean;
 }) {
-  const defaults = createDefaultApplicationDependencies();
+  const fakeGraph = createFakeApplicationGraph('workspace-router');
   const sessionService = {
     stopWorkspaceSessions: vi.fn(async () => undefined),
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
@@ -126,7 +113,7 @@ function createCaller(requestTrust?: {
       })
     ),
   };
-  const logger = Object.assign(defaults.services.createLogger('workspace-router-test'), {
+  const logger = Object.assign(fakeGraph.services.createLogger('workspace-router-test'), {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
@@ -134,38 +121,38 @@ function createCaller(requestTrust?: {
   });
   const composedSessionService = Object.assign(
     {},
-    defaults.services.sessionService,
+    fakeGraph.services.sessionService,
     sessionService
   );
   const composedRunScriptService = Object.assign(
     {},
-    defaults.services.runScriptService,
+    fakeGraph.services.runScriptService,
     runScriptService
   );
   const composedTerminalService = Object.assign(
     {},
-    defaults.services.terminalService,
+    fakeGraph.services.terminalService,
     terminalService
   );
 
   const services = {
-    ...defaults.services,
-    configService: Object.assign({}, defaults.services.configService, {
+    ...fakeGraph.services,
+    configService: Object.assign({}, fakeGraph.services.configService, {
       getWorktreeBaseDir: () => '/tmp/worktrees',
       getMaxSessionsPerWorkspace: () => 2,
       getCorsConfig: () => ({
         allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
       }),
     }),
-    cliHealthService: Object.assign({}, defaults.services.cliHealthService, cliHealthService),
+    cliHealthService: Object.assign({}, fakeGraph.services.cliHealthService, cliHealthService),
     createLogger: () => logger,
     sessionService: composedSessionService,
-    sessionDataService: Object.assign({}, defaults.services.sessionDataService, {
+    sessionDataService: Object.assign({}, fakeGraph.services.sessionDataService, {
       createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
       findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
         mockFindSessionsByWorkspaceId(...args),
     }),
-    sessionDomainService: Object.assign({}, defaults.services.sessionDomainService, {
+    sessionDomainService: Object.assign({}, fakeGraph.services.sessionDomainService, {
       getAllPendingRequests: () => new Map(),
       appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
       emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
@@ -174,43 +161,43 @@ function createCaller(requestTrust?: {
     }),
     sessionProviderResolverService: Object.assign(
       {},
-      defaults.services.sessionProviderResolverService,
+      fakeGraph.services.sessionProviderResolverService,
       {
         resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
           mockResolveProviderForWorkspaceCreation(explicitProvider),
       }
     ),
-    chatMessageHandlerService: Object.assign({}, defaults.services.chatMessageHandlerService, {
+    chatMessageHandlerService: Object.assign({}, fakeGraph.services.chatMessageHandlerService, {
       tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
     }),
     workspaceDataService: Object.assign(
       {},
-      defaults.services.workspaceDataService,
+      fakeGraph.services.workspaceDataService,
       mockWorkspaceDataService
     ),
     workspaceQueryService: Object.assign(
       {},
-      defaults.services.workspaceQueryService,
+      fakeGraph.services.workspaceQueryService,
       mockWorkspaceQueryService
     ),
-    workspaceAccessor: Object.assign({}, defaults.services.workspaceAccessor, {
+    workspaceAccessor: Object.assign({}, fakeGraph.services.workspaceAccessor, {
       findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
       findChildrenWithStatus: vi.fn(async () => []),
       findParentWorkspace: vi.fn(async () => null),
     }),
-    workspaceActivityService: Object.assign({}, defaults.services.workspaceActivityService, {
+    workspaceActivityService: Object.assign({}, fakeGraph.services.workspaceActivityService, {
       clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
     }),
     workspaceNotificationAccessor: Object.assign(
       {},
-      defaults.services.workspaceNotificationAccessor,
+      fakeGraph.services.workspaceNotificationAccessor,
       { countPending: vi.fn(async () => 0) }
     ),
-    ratchetService: Object.assign({}, defaults.services.ratchetService, {
+    ratchetService: Object.assign({}, fakeGraph.services.ratchetService, {
       setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
       checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
     }),
-    prSnapshotService: Object.assign({}, defaults.services.prSnapshotService, {
+    prSnapshotService: Object.assign({}, fakeGraph.services.prSnapshotService, {
       attachAndRefreshPR: vi.fn(),
     }),
     archiveWorkspace: (...args) => mockArchiveWorkspace(...args),
@@ -228,8 +215,8 @@ function createCaller(requestTrust?: {
   } satisfies ApplicationServices;
   const appContext = {
     services,
-    lifecycle: defaults.lifecycle,
-    config: defaults.services.configService.getSystemConfig(),
+    lifecycle: fakeGraph.lifecycle,
+    config: fakeGraph.config,
   } satisfies AppContext;
 
   const caller = workspaceRouter.createCaller({ requestTrust, appContext });
