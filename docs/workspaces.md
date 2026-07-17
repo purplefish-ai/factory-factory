@@ -1,149 +1,165 @@
 # Workspace Progression Model
 
-This document defines the current workspace lifecycle and PR ratcheting model.
+This document defines the workspace lifecycle, Kanban ownership, and PR Ratchet model.
 
 Goals:
-- one clear mental model for workspace progression
-- one derivation path for `WORKING` vs `WAITING` vs `DONE`
-- explicit handling for edge cases and race conditions
+
+- one clear mental model for workspace progression;
+- one canonical derivation for `WORKING`, `WAITING`, and `DONE`;
+- distinct signals for live session activity and background PR/Ratchet activity;
+- explicit handling for human-attention states, exhausted retries, and archive behavior.
 
 ## Terms
 
-- `workspace.status`: lifecycle of workspace provisioning (`NEW`, `PROVISIONING`, `READY`, `FAILED`, `ARCHIVED`)
-- `prState`: high-level PR state (`NONE`, `DRAFT`, `OPEN`, `CHANGES_REQUESTED`, `APPROVED`, `MERGED`, `CLOSED`)
-- `prCiStatus`: CI snapshot (`UNKNOWN`, `PENDING`, `SUCCESS`, `FAILURE`)
-- `ratchetEnabled`: workspace-level toggle for automated PR progression
-- `ratchetState`: ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, `MERGED`)
-- `flowPhase`: derived workspace flow phase used by UI and kanban logic
-- `ciObservation`: derived CI observation
-  - `NOT_FETCHED`: PR exists but no CI snapshot has been fetched yet
-  - `NO_CHECKS`: PR snapshot exists and reports no checks configured
-  - `CHECKS_PENDING` / `CHECKS_FAILED` / `CHECKS_PASSED` / `CHECKS_UNKNOWN`
-- `statusReason`: derived visible reason shown to users, e.g. `Needs permission`,
-  `Waiting for CI`, `No session started`, or `Fixing review comments`
+- `workspace.status`: provisioning lifecycle (`NEW`, `PROVISIONING`, `READY`, `FAILED`,
+  `ARCHIVING`, `ARCHIVED`).
+- `prState`: high-level pull-request state (`NONE`, `DRAFT`, `OPEN`,
+  `CHANGES_REQUESTED`, `APPROVED`, `MERGED`, `CLOSED`).
+- `prCiStatus`: cached CI snapshot (`UNKNOWN`, `PENDING`, `SUCCESS`, `FAILURE`).
+- `ratchetEnabled`: workspace-level toggle for automated PR progression.
+- `ratchetState`: Ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`,
+  `REVIEW_PENDING`, `READY`, `MERGED`).
+- `flowPhase`: derived PR/Ratchet phase (`NO_PR`, `CI_WAIT`, `RATCHET_VERIFY`,
+  `RATCHET_FIXING`, `READY`, `MERGED`).
+- `ciObservation`: interpretation of the cached CI snapshot:
+  - `NOT_FETCHED`: the PR exists but has no fetched snapshot;
+  - `NO_CHECKS`: an old enough snapshot reports no checks;
+  - `CHECKS_PENDING`, `CHECKS_FAILED`, `CHECKS_PASSED`, or `CHECKS_UNKNOWN`.
+- `isWorking`: live agent-session activity only. PR/CI/Ratchet progress does not set this
+  field; that background ownership is represented by `flowPhase` and `flowIsWorking` when
+  deriving the Kanban column.
+- `statusReason`: derived user-facing reason such as `Needs permission`, `Waiting for CI`,
+  `No session started`, or `Fixing review comments`.
 
-## Source Of Truth
+## Sources of Truth
 
-Workspace flow is derived in one place:
-- `src/backend/services/workspace-flow-state.service.ts`
+PR/Ratchet flow is derived in:
 
-```ts
-type WorkspaceFlowPhase =
-  | 'NO_PR'
-  | 'CI_WAIT'
-  | 'RATCHET_VERIFY'
-  | 'RATCHET_FIXING'
-  | 'READY'
-  | 'MERGED';
-```
+- `src/backend/services/workspace/service/state/flow-state.ts`
 
-Derived outputs:
-- `isWorking`
-- `shouldAnimateRatchetButton`
-- `flowPhase`
-- `statusReason`
+Next-action ownership and the Kanban column are derived in:
 
-These are consumed by:
-- kanban derivation (`src/backend/services/kanban-state.service.ts`)
-- sidebar and board projections (`src/backend/services/workspace-query.service.ts`)
-- workspace detail API (`src/backend/trpc/workspace.trpc.ts`)
+- `src/backend/services/workspace/service/state/kanban-state.ts`
+
+The derived outputs are assembled and projected by:
+
+- `src/backend/lib/workspace-derived-state.ts`;
+- `src/backend/services/workspace/service/query/workspace-query.service.ts`;
+- `src/backend/trpc/workspace.trpc.ts`.
+
+The service-level `isWorking` output remains session-only even when the resulting Kanban
+column is `WORKING` because CI or Ratchet automation owns the next action.
 
 ## Lifecycle State Machine
 
-Workspace provisioning transitions (`src/backend/services/workspace/service/lifecycle/state-machine.service.ts`):
+Workspace provisioning transitions are enforced by
+`src/backend/services/workspace/service/lifecycle/state-machine.service.ts`:
 
-- `NEW -> PROVISIONING`
-- `PROVISIONING -> READY | FAILED`
-- `FAILED -> PROVISIONING | NEW | ARCHIVED`
-- `READY -> ARCHIVED`
+- `NEW -> PROVISIONING`;
+- `PROVISIONING -> READY | FAILED`;
+- `READY -> ARCHIVING | PROVISIONING`;
+- `FAILED -> PROVISIONING | NEW | ARCHIVING`;
+- `ARCHIVING -> READY | FAILED | ARCHIVED`;
+- `ARCHIVED` is terminal.
 
-Invalid transitions throw `WorkspaceStateMachineError`.
+Invalid transitions throw `WorkspaceStateMachineError`. Lifecycle transitions also refresh
+the cached Kanban column when the target is not `ARCHIVING` or `ARCHIVED`.
 
-## PR / Ratchet Progression
+## PR and Ratchet Progression
 
-Ratchet monitor loop:
-- polls every 60s (`src/backend/services/ratchet.service.ts`)
-- loads all `READY` workspaces with open PR metadata
-- determines current ratchet state from live GitHub PR details
-- optionally triggers fixer sessions if `ratchetEnabled`
+The Ratchet capsule is implemented in
+`src/backend/services/ratchet/service/ratchet.service.ts`. Its monitor loop uses the shared
+`SERVICE_INTERVAL_MS.ratchetPoll` interval of two minutes. It evaluates `READY`,
+Ratchet-enabled workspaces with PRs, refreshes their Ratchet state from live GitHub data, and
+dispatches fixer sessions when the decision policy requires one.
 
-Immediate check on ratchet enable:
-- `workspace.toggleRatcheting` now triggers `ratchetService.checkWorkspaceById(...)`
-- this avoids waiting for the next 60s poll before entering verification/fix flow
+The PR scheduler in `src/backend/orchestration/scheduler.service.ts` uses
+`SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover new PRs every
+three minutes. Manual `syncPRStatus` calls and these periodic syncs converge cached PR state.
 
-## Working / Waiting / Done Rules
+Enabling Ratchet through `workspace.toggleRatcheting` also starts a background
+`ratchetService.checkWorkspaceById(...)` evaluation so the workspace does not have to wait for
+the next two-minute monitor cycle.
 
-`computeKanbanColumn(...)` uses:
-- `lifecycle`
-- derived `isWorking`
-- `prState`
-- `hasHadSessions`
+## Kanban as Next-Action Ownership
 
-Current behavior:
-- `WORKING`: provisioning states or derived working state
-- `DONE`: merged PR and not working
-- `WAITING`: idle ready workspace, including workspaces with no prior sessions
-- `null`: archived/archiving workspaces only
+`computeKanbanColumn(...)` accepts:
 
-Important: derived `isWorking` is:
-- `sessionService.isAnySessionWorking(...)`
+- `lifecycle`;
+- `sessionIsWorking`;
+- `flowIsWorking`;
+- `prState`;
+- `ratchetState`;
+- `pendingRequestType`;
+- `hasSessionRuntimeError`;
+- `ratchetDispatchOutcome`;
+- `ratchetDispatchRetryCount`.
 
-## Ratchet Animation Rules
+`hasHadSessions` is not a Kanban input. A `READY` workspace with no live owner falls through to
+`WAITING`, whether or not it had an earlier session.
 
-Ratchet button animation is now explicit:
-- animate only when `flowPhase === 'CI_WAIT'` and `ratchetEnabled === true`
+The rules are evaluated in this order:
 
-No push-based animation remains:
-- `git-push` interceptor removed
-- old utility-based animation triggers removed
+| Priority | Condition | Column | Next-action owner |
+| --- | --- | --- | --- |
+| 1 | Lifecycle is `ARCHIVING` or `ARCHIVED` | `null` | Hidden from the active board |
+| 2 | PR is merged/closed, or Ratchet observed `MERGED` | `DONE` | Terminal |
+| 3a | Lifecycle failed, a request awaits input, or a session has a runtime error | `WAITING` | Human |
+| 3b | A `DIED` Ratchet dispatch reached the configured retry limit | `WAITING` | Human |
+| 4 | Lifecycle is `NEW`/`PROVISIONING`, a session is live, or PR/Ratchet flow is active | `WORKING` | Setup, agent, CI, or Ratchet automation |
+| 5 | Any remaining nonterminal workspace | `WAITING` | Human |
+
+The exhausted-retry rule deliberately overrides an otherwise active Ratchet flow. The limit is
+`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries` (currently 3). A `COMPLETED` dispatch outcome by
+itself does not force `WAITING`.
+
+Archived workspaces retain their last pre-archive `cachedKanbanColumn`; the live derivation
+returns `null` so they remain off the active board unless archived items are explicitly shown.
+
+## Cached and Live State Propagation
+
+Persisted snapshot entries include `ratchetDispatchOutcome` and
+`ratchetDispatchRetryCount`, so reconciliation and snapshot-derived Kanban state apply the same
+exhausted-retry rule as full workspace queries.
+
+Ratchet dispatch changes publish `ratchet_dispatch_changed` after successful dispatch-record
+mutations. The event collector immediately updates both snapshot fields and starts a
+fire-and-forget refresh of the durable cached Kanban column. Ratchet state and toggle events use
+the same cache-refresh path. Session activity remains a live overlay and is the only source of
+the public `isWorking` flag.
+
+## Ratchet Animation
+
+The Ratchet button animates only when `flowPhase === 'CI_WAIT'` and Ratchet is enabled. Push
+interceptors and other utility animation triggers are not part of the current model.
 
 ## Invariants
 
-These invariants should always hold:
-
-1. If `workspace.status !== READY`, workspace lifecycle controls board placement.
-2. Ratchet button animation only occurs during CI wait with ratchet enabled.
-3. Enabling ratchet should trigger immediate ratchet evaluation.
-4. `CIStatus.UNKNOWN` must be interpreted through `ciObservation` (`NOT_FETCHED` vs `NO_CHECKS`).
-
-## Edge Cases And Current Handling
-
-1. Ratchet toggle changed during in-flight ratchet check.
-- Risk: stale snapshot could trigger unwanted fixer action.
-- Handling: `ratchet.service` now re-reads latest `ratchetEnabled` before executing actions.
-
-2. GitHub fetch failure during ratchet check.
-- Handling: action result is `ERROR`; previous ratchet state remains.
-- Effect: workspace may temporarily stay in prior flow phase until next successful check.
-
-3. `CIStatus.UNKNOWN` ambiguity at storage layer.
-- DB still stores `UNKNOWN`, but flow derivation resolves it into explicit `ciObservation`:
-  - `NOT_FETCHED` when `prUpdatedAt` is null
-  - `NO_CHECKS` when `prUpdatedAt` is set
-- This keeps UI/kanban logic deterministic while avoiding a DB enum migration.
-
-4. PR URL present but PR metadata stale.
-- Handling: sidebar/board projections use latest cached snapshot and ratchet state.
-- Manual resync (`syncPRStatus`) and periodic polling converge state.
-
-5. Archived workspaces.
-- Handling: excluded from active list queries and retain cached pre-archive column.
+1. Archive state is handled before every visible Kanban column.
+2. Terminal PR state wins over human-attention and automation-owned states.
+3. Human-attention state and exhausted Ratchet retries win over active session or flow state.
+4. `isWorking` reports session activity only; Kanban `WORKING` may instead be owned by setup,
+   CI, or Ratchet automation.
+5. `CIStatus.UNKNOWN` is interpreted through `ciObservation`, including the grace period before
+   it becomes `NO_CHECKS`.
+6. Enabling Ratchet triggers an immediate background evaluation.
 
 ## Testing Coverage
 
-Key tests:
-- flow-state derivation: `src/backend/services/workspace-flow-state.service.test.ts`
-- kanban derivation: `src/backend/services/kanban-state.service.test.ts`
-- ratchet behavior and disable semantics: `src/backend/services/ratchet.service.test.ts`
-- ratchet visual state helpers: `src/components/workspace/ratchet-state.test.ts`
+Key tests are located at:
 
-## Hardening Checklist (Recommended Next Steps)
-
-1. Add integration tests around toggle-on/off races with mocked delayed GitHub responses.
-2. Add contract tests asserting `flowPhase`, `ciObservation`, `statusReason`, and `ratchetButtonAnimated` on all TRPC workspace endpoints.
-3. Consider a future schema-level CI enum split (`NOT_FETCHED` / `NO_CHECKS`) if we want storage and derivation to match exactly.
-4. Add a metrics dashboard for ratchet outcomes:
-- state transition counts
-- fixer trigger counts
-- fetch failure counts
-5. Add alerting for workspaces stuck in `RATCHET_VERIFY` beyond a threshold.
+- PR/Ratchet flow derivation:
+  `src/backend/services/workspace/service/state/flow-state.test.ts`;
+- next-action ownership and cache behavior:
+  `src/backend/services/workspace/service/state/kanban-state.test.ts`;
+- lifecycle transitions and lifecycle-driven cache updates:
+  `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`;
+- query projections:
+  `src/backend/services/workspace/service/query/workspace-query.service.test.ts`;
+- Ratchet behavior, dispatch retries, and disable semantics:
+  `src/backend/services/ratchet/service/ratchet.service.test.ts`;
+- Ratchet visual-state helpers: `src/components/workspace/ratchet-state.test.ts`;
+- snapshot propagation and reconciliation:
+  `src/backend/services/workspace-snapshot-store.service.test.ts` and
+  `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
+- live event propagation: `src/backend/orchestration/event-collector.orchestrator.test.ts`.
