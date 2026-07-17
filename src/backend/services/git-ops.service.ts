@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { TRPCError } from '@trpc/server';
 import { GitClientFactory } from '@/backend/clients/git.client';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { gitCommand } from '@/backend/lib/shell';
 import {
@@ -59,9 +59,8 @@ class GitOpsService {
 
     const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
     if (statusResult.code !== 0) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `Git status failed: ${statusResult.stderr || statusResult.stdout}`,
+      throw new ApplicationError('INTERNAL_ERROR', 'Git status failed', {
+        cause: statusResult,
       });
     }
 
@@ -70,19 +69,16 @@ class GitOpsService {
     }
 
     if (!commitUncommitted) {
-      throw new TRPCError({
-        code: 'PRECONDITION_FAILED',
-        message: 'Workspace has uncommitted changes. Enable commit-before-archive to proceed.',
-      });
+      throw new ApplicationError(
+        'PRECONDITION_FAILED',
+        'Workspace has uncommitted changes. Enable commit-before-archive to proceed.'
+      );
     }
 
     try {
       const addResult = await gitCommand(['add', '-A'], worktreePath);
       if (addResult.code !== 0) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
-        });
+        throw new ApplicationError('INTERNAL_ERROR', 'Git add failed', { cause: addResult });
       }
 
       const commitMessage = `Archive workspace ${workspaceName}`;
@@ -91,9 +87,8 @@ class GitOpsService {
         worktreePath
       );
       if (commitResult.code !== 0) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
+        throw new ApplicationError('INTERNAL_ERROR', 'Git commit failed', {
+          cause: commitResult,
         });
       }
     } finally {
