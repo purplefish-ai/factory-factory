@@ -166,7 +166,7 @@ describe('fetchPRState', () => {
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
       isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(),
+      startFetch: vi.fn(() => 41),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
       ...overrides,
@@ -225,7 +225,7 @@ describe('fetchPRState', () => {
     expect(result.prState).toBe('OPEN');
     // The bypassed fetch still claims and registers in the dedup registry.
     expect(github.startFetch).toHaveBeenCalledWith('ws-1');
-    expect(github.registerFetch).toHaveBeenCalledWith('ws-1');
+    expect(github.registerFetch).toHaveBeenCalledWith('ws-1', 41);
   });
 
   it('still skips a bypassed fetch while another fetch is actively in flight', async () => {
@@ -287,7 +287,7 @@ describe('fetchPRState', () => {
       123,
       controller.signal
     );
-    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1');
+    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
     expect(backoff.handleError).not.toHaveBeenCalled();
   });
 });
@@ -417,7 +417,7 @@ describe('fetchPRState', () => {
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
       isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(),
+      startFetch: vi.fn(() => 41),
       registerFetch: vi.fn(),
       cancelFetch: vi.fn(),
       ...overrides,

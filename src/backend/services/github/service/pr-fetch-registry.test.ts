@@ -19,8 +19,8 @@ describe('PRFetchRegistry', () => {
   });
 
   it('removes completed and in-flight entries for one workspace', () => {
-    registry.startFetch('ws-1');
-    registry.register('ws-1');
+    const claimToken = registry.startFetch('ws-1');
+    registry.register('ws-1', claimToken);
     registry.startFetch('ws-2');
 
     registry.removeWorkspace('ws-1');
@@ -30,10 +30,10 @@ describe('PRFetchRegistry', () => {
   });
 
   it('does not record a completion after workspace cleanup', () => {
-    registry.startFetch('ws-1');
+    const claimToken = registry.startFetch('ws-1');
     registry.removeWorkspace('ws-1');
 
-    registry.register('ws-1');
+    registry.register('ws-1', claimToken);
 
     expect(registry.size()).toEqual({ completed: 0, inFlight: 0 });
   });
@@ -49,8 +49,8 @@ describe('PRFetchRegistry', () => {
   });
 
   it('returns false after the default cooldown without deleting the timestamp', () => {
-    registry.startFetch('ws-1');
-    registry.register('ws-1');
+    const claimToken = registry.startFetch('ws-1');
+    registry.register('ws-1', claimToken);
 
     vi.advanceTimersByTime(COOLDOWN_MS);
 
@@ -59,8 +59,8 @@ describe('PRFetchRegistry', () => {
   });
 
   it('honors a longer custom cooldown after an unrelated registry operation', () => {
-    registry.startFetch('ws-1');
-    registry.register('ws-1');
+    const claimToken = registry.startFetch('ws-1');
+    registry.register('ws-1', claimToken);
 
     vi.advanceTimersByTime(COOLDOWN_MS);
     registry.startFetch('ws-2');
@@ -69,8 +69,8 @@ describe('PRFetchRegistry', () => {
   });
 
   it('keeps a default-expired timestamp available to a longer custom cooldown', () => {
-    registry.startFetch('ws-1');
-    registry.register('ws-1');
+    const claimToken = registry.startFetch('ws-1');
+    registry.register('ws-1', claimToken);
 
     vi.advanceTimersByTime(COOLDOWN_MS);
 
@@ -88,8 +88,8 @@ describe('PRFetchRegistry', () => {
   });
 
   it('evicts the oldest workspace when capacity is reached', () => {
-    registry.startFetch('oldest-completed');
-    registry.register('oldest-completed');
+    const claimToken = registry.startFetch('oldest-completed');
+    registry.register('oldest-completed', claimToken);
 
     for (let index = 0; index < MAX_ENTRIES; index += 1) {
       vi.advanceTimersByTime(1);
@@ -102,13 +102,52 @@ describe('PRFetchRegistry', () => {
   });
 
   it('reuses a workspace after cleanup', () => {
-    registry.startFetch('ws-1');
+    const oldClaimToken = registry.startFetch('ws-1');
     registry.removeWorkspace('ws-1');
 
-    registry.startFetch('ws-1');
-    registry.register('ws-1');
+    const newClaimToken = registry.startFetch('ws-1');
+    registry.register('ws-1', newClaimToken);
 
     expect(registry.isRecentlyFetched('ws-1')).toBe(true);
     expect(registry.size()).toEqual({ completed: 1, inFlight: 0 });
+    expect(newClaimToken).toBeGreaterThan(oldClaimToken);
+  });
+
+  it('keeps a newer claim in flight when an older claim registers after cleanup', () => {
+    const oldClaimToken = registry.startFetch('ws-1');
+    registry.removeWorkspace('ws-1');
+    const newClaimToken = registry.startFetch('ws-1');
+
+    registry.register('ws-1', oldClaimToken);
+
+    expect(registry.isFetchInFlight('ws-1')).toBe(true);
+    expect(registry.size()).toEqual({ completed: 0, inFlight: 1 });
+
+    registry.register('ws-1', newClaimToken);
+    expect(registry.isFetchInFlight('ws-1')).toBe(false);
+    expect(registry.size()).toEqual({ completed: 1, inFlight: 0 });
+  });
+
+  it('keeps a newer claim in flight when an older claim cancels after cleanup', () => {
+    const oldClaimToken = registry.startFetch('ws-1');
+    registry.removeWorkspace('ws-1');
+    const newClaimToken = registry.startFetch('ws-1');
+
+    registry.cancelFetch('ws-1', oldClaimToken);
+
+    expect(registry.isFetchInFlight('ws-1')).toBe(true);
+
+    registry.cancelFetch('ws-1', newClaimToken);
+    expect(registry.isFetchInFlight('ws-1')).toBe(false);
+    expect(registry.size()).toEqual({ completed: 0, inFlight: 0 });
+  });
+
+  it('does not reuse claim tokens after clear', () => {
+    const oldClaimToken = registry.startFetch('ws-1');
+    registry.clear();
+
+    const newClaimToken = registry.startFetch('ws-1');
+
+    expect(newClaimToken).toBeGreaterThan(oldClaimToken);
   });
 });

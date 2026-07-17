@@ -17,45 +17,54 @@ import { SERVICE_CACHE_TTL_MS, SERVICE_LIMITS } from '@/backend/services/constan
 
 const DEFAULT_COOLDOWN_MS = 90_000; // 90 seconds
 
+interface InFlightFetchClaim {
+  startedAt: number;
+  claimToken: number;
+}
+
 export class PRFetchRegistry {
   // Completed timestamps cannot be age-pruned because callers may supply any cooldown.
   // Explicit cleanup and oldest-workspace capacity eviction bound their retention.
   private readonly lastFetchedAt = new Map<string, number>();
-  private readonly inFlightStartedAt = new Map<string, number>();
+  private readonly inFlightClaims = new Map<string, InFlightFetchClaim>();
+  private nextClaimToken = 0;
 
   private pruneExpiredInFlight(now: number): void {
-    for (const [workspaceId, startedAt] of this.inFlightStartedAt) {
-      if (now - startedAt >= SERVICE_CACHE_TTL_MS.workspacePrFetchInFlight) {
-        this.inFlightStartedAt.delete(workspaceId);
+    for (const [workspaceId, claim] of this.inFlightClaims) {
+      if (now - claim.startedAt >= SERVICE_CACHE_TTL_MS.workspacePrFetchInFlight) {
+        this.inFlightClaims.delete(workspaceId);
       }
     }
   }
 
   private ensureCapacityFor(workspaceId: string): void {
-    if (this.lastFetchedAt.has(workspaceId) || this.inFlightStartedAt.has(workspaceId)) {
+    if (this.lastFetchedAt.has(workspaceId) || this.inFlightClaims.has(workspaceId)) {
       return;
     }
 
-    const workspaceIds = new Set([...this.lastFetchedAt.keys(), ...this.inFlightStartedAt.keys()]);
+    const workspaceIds = new Set([...this.lastFetchedAt.keys(), ...this.inFlightClaims.keys()]);
     if (workspaceIds.size < SERVICE_LIMITS.workspaceScopedCacheMaxEntries) {
       return;
     }
 
     let oldestWorkspaceId: string | undefined;
     let oldestTimestamp = Number.POSITIVE_INFINITY;
-    for (const [candidateWorkspaceId, timestamp] of [
-      ...this.lastFetchedAt,
-      ...this.inFlightStartedAt,
-    ]) {
+    for (const [candidateWorkspaceId, timestamp] of this.lastFetchedAt) {
       if (timestamp < oldestTimestamp) {
         oldestWorkspaceId = candidateWorkspaceId;
         oldestTimestamp = timestamp;
       }
     }
+    for (const [candidateWorkspaceId, claim] of this.inFlightClaims) {
+      if (claim.startedAt < oldestTimestamp) {
+        oldestWorkspaceId = candidateWorkspaceId;
+        oldestTimestamp = claim.startedAt;
+      }
+    }
 
     if (oldestWorkspaceId !== undefined) {
       this.lastFetchedAt.delete(oldestWorkspaceId);
-      this.inFlightStartedAt.delete(oldestWorkspaceId);
+      this.inFlightClaims.delete(oldestWorkspaceId);
     }
   }
 
@@ -64,33 +73,40 @@ export class PRFetchRegistry {
    * Subsequent `isRecentlyFetched` calls will return true until the claim is
    * registered, canceled, expired, evicted at capacity, or removed by cleanup.
    */
-  startFetch(workspaceId: string): void {
+  startFetch(workspaceId: string): number {
     const now = Date.now();
     this.pruneExpiredInFlight(now);
     this.ensureCapacityFor(workspaceId);
-    this.inFlightStartedAt.set(workspaceId, now);
+    this.nextClaimToken += 1;
+    const claimToken = this.nextClaimToken;
+    this.inFlightClaims.set(workspaceId, { startedAt: now, claimToken });
+    return claimToken;
   }
 
   /**
    * Record that a GitHub PR fetch was performed for a workspace.
-   * Clears any in-flight claim set by `startFetch`.
+   * Clears only the matching in-flight claim set by `startFetch`.
    * Call this after a successful fetch.
    */
-  register(workspaceId: string): void {
+  register(workspaceId: string, claimToken: number): void {
     const now = Date.now();
     this.pruneExpiredInFlight(now);
-    if (this.inFlightStartedAt.delete(workspaceId)) {
-      this.lastFetchedAt.set(workspaceId, now);
+    if (this.inFlightClaims.get(workspaceId)?.claimToken !== claimToken) {
+      return;
     }
+    this.inFlightClaims.delete(workspaceId);
+    this.lastFetchedAt.set(workspaceId, now);
   }
 
   /**
-   * Release an in-flight claim without recording a successful fetch timestamp.
+   * Release the matching in-flight claim without recording a successful fetch timestamp.
    * Call this when a fetch fails so the workspace becomes eligible again.
    */
-  cancelFetch(workspaceId: string): void {
+  cancelFetch(workspaceId: string, claimToken: number): void {
     this.pruneExpiredInFlight(Date.now());
-    this.inFlightStartedAt.delete(workspaceId);
+    if (this.inFlightClaims.get(workspaceId)?.claimToken === claimToken) {
+      this.inFlightClaims.delete(workspaceId);
+    }
   }
 
   /**
@@ -100,7 +116,7 @@ export class PRFetchRegistry {
   isRecentlyFetched(workspaceId: string, cooldownMs = DEFAULT_COOLDOWN_MS): boolean {
     const now = Date.now();
     this.pruneExpiredInFlight(now);
-    if (this.inFlightStartedAt.has(workspaceId)) {
+    if (this.inFlightClaims.has(workspaceId)) {
       return true;
     }
     const lastFetch = this.lastFetchedAt.get(workspaceId);
@@ -117,7 +133,7 @@ export class PRFetchRegistry {
    */
   isFetchInFlight(workspaceId: string): boolean {
     this.pruneExpiredInFlight(Date.now());
-    return this.inFlightStartedAt.has(workspaceId);
+    return this.inFlightClaims.has(workspaceId);
   }
 
   /**
@@ -126,7 +142,7 @@ export class PRFetchRegistry {
   removeWorkspace(workspaceId: string): void {
     this.pruneExpiredInFlight(Date.now());
     this.lastFetchedAt.delete(workspaceId);
-    this.inFlightStartedAt.delete(workspaceId);
+    this.inFlightClaims.delete(workspaceId);
   }
 
   /**
@@ -136,16 +152,16 @@ export class PRFetchRegistry {
     this.pruneExpiredInFlight(Date.now());
     return {
       completed: this.lastFetchedAt.size,
-      inFlight: this.inFlightStartedAt.size,
+      inFlight: this.inFlightClaims.size,
     };
   }
 
   /**
-   * Clear all entries. Useful in tests.
+   * Clear all entries without resetting claim identity. Useful in tests.
    */
   clear(): void {
     this.lastFetchedAt.clear();
-    this.inFlightStartedAt.clear();
+    this.inFlightClaims.clear();
   }
 }
 

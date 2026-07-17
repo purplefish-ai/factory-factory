@@ -1090,6 +1090,24 @@ describe('configureEventCollector', () => {
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
+  it('suppresses idle PR refresh before 30 seconds and allows it at the boundary', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+    vi.advanceTimersByTime(29_999);
+    handler({ workspaceId: 'ws-1' });
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    handler({ workspaceId: 'ws-1' });
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(2);
+  });
+
   it('bounds idle refresh timestamps and evicts the oldest workspace at capacity', () => {
     configureEventCollector();
 

@@ -18,7 +18,7 @@ The ARCHIVED state listener will call that hook immediately. `completeArchive()`
 
 `WorkspaceSnapshotStore` will store tombstone metadata containing the logical removal timestamp and a wall-clock expiration. A per-tombstone unref'd timer removes it after `SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace` (ten minutes). A newer upsert clears the tombstone and its timer immediately. Repeated removal keeps the greatest logical removal timestamp and refreshes the grace period, so an older duplicate cannot weaken protection. `clear()` cancels every timer.
 
-`PRFetchRegistry` will expose `removeWorkspace`, prune completed timestamps after their cooldown, prune abandoned in-flight claims after ten minutes, and cap optimization-only tracking at 1,024 workspaces. Successful completion will only be recorded when an in-flight claim still exists, so a fetch that completes after archive cleanup cannot recreate a completed-fetch entry. Idle-refresh timestamps use their existing 30-second cooldown as a TTL and the same 1,024-entry defensive cap.
+`PRFetchRegistry` will expose `removeWorkspace`, prune abandoned in-flight claims after ten minutes, and cap optimization-only tracking at 1,024 workspaces. Completed timestamps are not age-pruned because `isRecentlyFetched` supports arbitrary caller cooldowns; they are bounded by explicit workspace cleanup and oldest-timestamp eviction at capacity. Successful completion will only be recorded when the matching in-flight claim still exists, so a fetch that completes after archive cleanup cannot consume a newer claim or recreate a completed-fetch entry. Idle-refresh timestamps use their existing 30-second cooldown as a TTL and the same 1,024-entry defensive cap.
 
 ## Safety and Reuse
 

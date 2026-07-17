@@ -338,6 +338,41 @@ describe('WorkspaceSnapshotStore', () => {
       expect(store.getByWorkspaceId('ws-1')).toBeDefined();
     });
 
+    it('preserves the tombstone when a newer first upsert is structurally invalid', () => {
+      store.remove('ws-1', 200);
+
+      expect(() => store.upsert('ws-1', { name: 'Invalid' }, 'test', 300)).toThrow(
+        'projectId is required on first upsert'
+      );
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 150);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+    });
+
+    it('cancels tombstone expiry when a valid newer update recreates the workspace', () => {
+      const isolatedStore = new WorkspaceSnapshotStore();
+      isolatedStore.configure({
+        deriveFlowState: (_input) => ({
+          phase: 'NO_PR' as const,
+          ciObservation: 'CHECKS_UNKNOWN' as const,
+          hasActivePr: false,
+          isWorking: false,
+          shouldAnimateRatchetButton: false,
+        }),
+        computeKanbanColumn: (_input) => KanbanColumn.WORKING,
+        deriveSidebarStatus: (_input) => ({
+          activityState: 'IDLE' as const,
+          ciState: 'NONE' as const,
+        }),
+      });
+      isolatedStore.remove('ws-1', 200);
+      expect(vi.getTimerCount()).toBe(1);
+
+      isolatedStore.upsert('ws-1', makeUpdate(), 'test', 300);
+
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('records a tombstone even when the store has no entry for the workspace', () => {
       // Archive event can arrive before reconciliation ever populated the
       // entry (e.g. right after startup); a stale reconcile pass must still

@@ -593,7 +593,6 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         });
         return { accepted: false, changed: false, emitted: false };
       }
-      this.clearRemovalTombstone(workspaceId);
     }
 
     let entry = this.entries.get(workspaceId);
@@ -607,6 +606,9 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         );
       }
       entry = this.createDefaultEntry(workspaceId, update.projectId);
+    }
+    if (tombstone) {
+      this.clearRemovalTombstone(workspaceId);
     }
 
     // Field-level timestamp merge
