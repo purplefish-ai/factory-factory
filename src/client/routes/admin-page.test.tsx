@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
     defaultWorkspacePermissions: 'STRICT',
     ratchetEnabled: false,
     ratchetReplyToPrComments: true,
+    ratchetReviewTriggerMode: 'CHANGES_REQUESTED' as 'CHANGES_REQUESTED' | 'ALL_REVIEW_FEEDBACK',
     ratchetPermissions: 'YOLO',
   },
 }));
@@ -219,6 +220,7 @@ beforeEach(() => {
   mocks.testCustomCommandMutate.mockReset();
   mocks.userSettings.preferredIde = 'cursor';
   mocks.userSettings.customIdeCommand = null;
+  mocks.userSettings.ratchetReviewTriggerMode = 'CHANGES_REQUESTED';
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
     writable: true,
@@ -233,6 +235,41 @@ afterEach(() => {
 });
 
 describe('AdminDashboardPage settings tabs', () => {
+  it('updates the Ratchet review feedback trigger mode', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    expect(container.textContent).toContain('Review feedback trigger');
+    const trigger = container.querySelector<HTMLElement>('#ratchet-review-trigger');
+    expect(trigger?.textContent).toContain('Changes requested and unresolved threads');
+
+    flushSync(() => {
+      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const broadOption = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (option) => option.textContent?.includes('All review feedback')
+    );
+    expect(broadOption).toBeDefined();
+
+    flushSync(() => {
+      broadOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      broadOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
+
+    root.unmount();
+  });
+
   it('tests the current custom command before it has been saved', () => {
     mocks.userSettings.preferredIde = 'custom';
     mocks.userSettings.customIdeCommand = null;
