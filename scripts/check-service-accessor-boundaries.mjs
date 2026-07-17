@@ -157,8 +157,10 @@ function parseModuleRecords(sourceFiles, rootDir) {
       filePath,
       modulePath,
       imports: [],
+      namespaceImports: [],
       localExports: [],
       namedReExports: [],
+      namespaceReExports: [],
       starReExports: [],
     };
 
@@ -174,6 +176,11 @@ function parseModuleRecords(sourceFiles, rootDir) {
               modulePath: importedModule,
             });
           }
+        } else if (importedModule && namedBindings && ts.isNamespaceImport(namedBindings)) {
+          record.namespaceImports.push({
+            local: namedBindings.name.text,
+            modulePath: importedModule,
+          });
         }
         continue;
       }
@@ -190,6 +197,16 @@ function parseModuleRecords(sourceFiles, rootDir) {
       if (!statement.exportClause) {
         if (exportedModule) {
           record.starReExports.push(exportedModule);
+        }
+        continue;
+      }
+
+      if (ts.isNamespaceExport(statement.exportClause)) {
+        if (exportedModule) {
+          record.namespaceReExports.push({
+            exported: statement.exportClause.name.text,
+            modulePath: exportedModule,
+          });
         }
         continue;
       }
@@ -257,6 +274,14 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
         }
       }
 
+      for (const namespaceImport of record.namespaceImports) {
+        const importedModule = resolveSourceModule(namespaceImport.modulePath, records);
+        const accessorBinding = exportsByModule.get(importedModule)?.values().next().value;
+        if (accessorBinding) {
+          localBindings.set(namespaceImport.local, accessorBinding);
+        }
+      }
+
       for (const localExport of record.localExports) {
         const accessorBinding = localBindings.get(localExport.local);
         if (accessorBinding && !moduleExports.has(localExport.exported)) {
@@ -268,6 +293,15 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
       for (const reExport of record.namedReExports) {
         const reExportedModule = resolveSourceModule(reExport.modulePath, records);
         const accessorBinding = exportsByModule.get(reExportedModule)?.get(reExport.imported);
+        if (accessorBinding && !moduleExports.has(reExport.exported)) {
+          moduleExports.set(reExport.exported, accessorBinding);
+          changed = true;
+        }
+      }
+
+      for (const reExport of record.namespaceReExports) {
+        const reExportedModule = resolveSourceModule(reExport.modulePath, records);
+        const accessorBinding = exportsByModule.get(reExportedModule)?.values().next().value;
         if (accessorBinding && !moduleExports.has(reExport.exported)) {
           moduleExports.set(reExport.exported, accessorBinding);
           changed = true;

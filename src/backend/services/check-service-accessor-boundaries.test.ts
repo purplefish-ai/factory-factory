@@ -98,6 +98,34 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('workspaceAccessor');
   });
 
+  it('rejects locally imported accessor namespaces re-exported from capsule barrels', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import * as persistence from './resources/workspace.accessor';\nexport { persistence };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it('rejects accessor namespace exports from capsule barrels', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "export * as persistence from './resources/workspace.accessor';\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
   it('rejects indirect named and star accessor re-exports from capsule barrels', () => {
     const named = runChecker([
       {
