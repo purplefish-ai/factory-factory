@@ -5,6 +5,8 @@ import {
   buildTranscriptFromHistory,
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
+  removeTranscriptMessageById,
+  upsertTranscriptMessage,
 } from './session-transcript';
 
 function createStore(): SessionStore {
@@ -12,6 +14,7 @@ function createStore(): SessionStore {
     sessionId: 's1',
     initialized: true,
     transcript: [],
+    transcriptIdToIndex: new Map(),
     queue: [],
     recentRejections: [],
     pendingInteractiveRequest: null,
@@ -69,6 +72,105 @@ function appendToolResult(
 }
 
 describe('session-transcript', () => {
+  it('replaces an indexed transcript message without changing stable order', () => {
+    const store = createStore();
+    store.transcript = [
+      {
+        id: 'm-1',
+        source: 'user',
+        text: 'first',
+        timestamp: '2026-02-01T00:00:00.000Z',
+        order: 1,
+      },
+      {
+        id: 'm-2',
+        source: 'user',
+        text: 'second',
+        timestamp: '2026-02-01T00:00:01.000Z',
+        order: 2,
+      },
+    ];
+    store.transcriptIdToIndex = new Map([
+      ['m-1', 0],
+      ['m-2', 1],
+    ]);
+
+    upsertTranscriptMessage(store, { ...store.transcript[0]!, text: 'updated' });
+
+    expect(store.transcript.map((message) => message.id)).toEqual(['m-1', 'm-2']);
+    expect(store.transcript[0]?.text).toBe('updated');
+    expect(store.transcriptIdToIndex).toEqual(
+      new Map([
+        ['m-1', 0],
+        ['m-2', 1],
+      ])
+    );
+  });
+
+  it('indexes an inserted transcript message at its sorted position', () => {
+    const store = createStore();
+    store.transcript = [
+      {
+        id: 'm-1',
+        source: 'user',
+        text: 'first',
+        timestamp: '2026-02-01T00:00:00.000Z',
+        order: 1,
+      },
+      {
+        id: 'm-3',
+        source: 'user',
+        text: 'third',
+        timestamp: '2026-02-01T00:00:02.000Z',
+        order: 3,
+      },
+    ];
+    store.transcriptIdToIndex = new Map([
+      ['m-1', 0],
+      ['m-3', 1],
+    ]);
+
+    upsertTranscriptMessage(store, {
+      id: 'm-2',
+      source: 'user',
+      text: 'second',
+      timestamp: '2026-02-01T00:00:01.000Z',
+      order: 2,
+    });
+
+    expect(store.transcript.map((message) => message.id)).toEqual(['m-1', 'm-2', 'm-3']);
+    expect(store.transcriptIdToIndex).toEqual(
+      new Map([
+        ['m-1', 0],
+        ['m-2', 1],
+        ['m-3', 2],
+      ])
+    );
+  });
+
+  it('reindexes the shifted suffix after transcript removal', () => {
+    const store = createStore();
+    for (let order = 0; order < 3; order += 1) {
+      upsertTranscriptMessage(store, {
+        id: `m-${order}`,
+        source: 'user',
+        text: String(order),
+        timestamp: '2026-02-01T00:00:00.000Z',
+        order,
+      });
+    }
+
+    expect(removeTranscriptMessageById(store, 'm-1')).toBe(true);
+
+    expect(store.transcript.map((message) => message.id)).toEqual(['m-0', 'm-2']);
+    expect(store.transcriptIdToIndex).toEqual(
+      new Map([
+        ['m-0', 0],
+        ['m-2', 1],
+      ])
+    );
+  });
+
   it('creates stable fallback IDs for history entries without uuid', () => {
     const history = [
       { type: 'user' as const, content: 'hello', timestamp: '2026-02-01T00:00:00.000Z' },

@@ -30,6 +30,7 @@ import {
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
   messageSort,
+  rebuildTranscriptIndex,
   removeTranscriptMessageById,
   setNextOrderFromTranscript,
   upsertTranscriptMessage,
@@ -531,6 +532,7 @@ export class SessionDomainService extends EventEmitter {
   ): void {
     const store = this.registry.getOrCreate(sessionId);
     store.transcript = [...transcript].sort(messageSort);
+    rebuildTranscriptIndex(store);
     setNextOrderFromTranscript(store);
 
     if (options?.historySource) {

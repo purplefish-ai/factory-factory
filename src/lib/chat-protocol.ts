@@ -60,6 +60,42 @@ const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
 const claudeMessageTypes = new Set<string>(AGENT_MESSAGE_TYPES);
 
+function isAssistantTextDeltaMessage(data: object): boolean {
+  const delta = data as {
+    messageId?: unknown;
+    order?: unknown;
+    offset?: unknown;
+    text?: unknown;
+  };
+  return (
+    typeof delta.messageId === 'string' &&
+    delta.messageId.length > 0 &&
+    typeof delta.order === 'number' &&
+    Number.isInteger(delta.order) &&
+    delta.order >= 0 &&
+    typeof delta.offset === 'number' &&
+    Number.isInteger(delta.offset) &&
+    delta.offset >= 0 &&
+    typeof delta.text === 'string'
+  );
+}
+
+function isSessionDeltaMessage(data: object): boolean {
+  const nestedData = (data as { data?: unknown }).data;
+  if (typeof nestedData !== 'object' || nestedData === null) {
+    return false;
+  }
+  const nested = nestedData as { type?: unknown };
+  if (
+    typeof nested.type !== 'string' ||
+    !wsMessageTypes.has(nested.type) ||
+    sessionDeltaExcludedMessageTypes.has(nested.type)
+  ) {
+    return false;
+  }
+  return isWebSocketMessage(nestedData);
+}
+
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
  * Used for type-safe parsing of incoming WebSocket data.
@@ -75,15 +111,7 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 
   // session_delta must wrap another websocket event object.
   if (obj.type === 'session_delta') {
-    if (typeof obj.data !== 'object' || obj.data === null) {
-      return false;
-    }
-    const nested = obj.data as { type?: unknown };
-    return (
-      typeof nested.type === 'string' &&
-      wsMessageTypes.has(nested.type) &&
-      !sessionDeltaExcludedMessageTypes.has(nested.type)
-    );
+    return isSessionDeltaMessage(data);
   }
 
   // agent_message must include a minimally shaped Claude payload to avoid runtime crashes.
@@ -93,6 +121,10 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
     }
     const nested = obj.data as { type?: unknown };
     return typeof nested.type === 'string' && claudeMessageTypes.has(nested.type);
+  }
+
+  if (obj.type === 'assistant_text_delta') {
+    return isAssistantTextDeltaMessage(data);
   }
 
   return true;
