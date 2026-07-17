@@ -7,7 +7,8 @@ import { SessionStatus } from '@/shared/core';
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   findByIdWithProject: vi.fn(),
-  updateWorkspace: vi.fn(),
+  registerInitializedWorktree: vi.fn(),
+  setRunScriptCommands: vi.fn(),
   findByWorkspaceId: vi.fn(),
   ensureBaseBranchExists: vi.fn(),
   createWorktree: vi.fn(),
@@ -59,8 +60,8 @@ vi.mock('@/backend/services/workspace', () => ({
     findParent: vi.fn(),
   },
   workspaceRunScriptService: {
-    registerInitializedWorktree: mocks.updateWorkspace,
-    setCommands: mocks.updateWorkspace,
+    registerInitializedWorktree: mocks.registerInitializedWorktree,
+    setCommands: mocks.setRunScriptCommands,
   },
   gitOpsService: {
     ensureBaseBranchExists: mocks.ensureBaseBranchExists,
@@ -161,7 +162,8 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     mocks.removeWorktree.mockResolvedValue(undefined);
     mocks.getAuthenticatedUsername.mockResolvedValue(null);
     mocks.getIssue.mockResolvedValue(null);
-    mocks.updateWorkspace.mockResolvedValue(undefined);
+    mocks.registerInitializedWorktree.mockResolvedValue(undefined);
+    mocks.setRunScriptCommands.mockResolvedValue(undefined);
     mocks.hasStartupScript.mockReturnValue(false);
     mocks.readConfig.mockResolvedValue({
       scripts: {

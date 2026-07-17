@@ -1,19 +1,5 @@
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import type { CIStatus, PRState } from '@/shared/core';
-
-export interface PRDiscoveryClaim {
-  branchName: string;
-  checkedAt: Date;
-  retryCount: number;
-  nextCheckAt: Date;
-}
-
-interface PRSnapshotFields {
-  prNumber: number;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-}
+import type { PRDiscoveryClaim, PRSnapshotFields } from '@/backend/services/workspace/types';
 
 type PRSnapshotUpdate = Pick<
   Parameters<typeof workspaceAccessor.update>[1],

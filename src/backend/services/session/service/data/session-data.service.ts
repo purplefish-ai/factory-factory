@@ -1,34 +1,73 @@
 import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import {
-  type AgentSessionRecord,
   agentSessionAccessor,
+  type AgentSessionRecord as PersistenceAgentSessionRecord,
+  type AgentSessionRecordWithWorkspace as PersistenceAgentSessionRecordWithWorkspace,
 } from '@/backend/services/session/resources/agent-session.accessor';
 import {
   type ClosedSessionRecord,
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
+import type {
+  AgentSessionRecord,
+  AgentSessionRecordWithWorkspace,
+} from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
-export type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
+export type { AgentSessionRecord } from '@/backend/services/session/types';
+
+function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
+  return {
+    id: session.id,
+    workspaceId: session.workspaceId,
+    name: session.name,
+    workflow: session.workflow,
+    model: session.model,
+    status: session.status,
+    provider: session.provider,
+    providerSessionId: session.providerSessionId,
+    providerProjectPath: session.providerProjectPath,
+    providerProcessPid: session.providerProcessPid,
+    providerMetadata: session.providerMetadata,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+function toAgentSessionRecordWithWorkspace(
+  session: PersistenceAgentSessionRecordWithWorkspace
+): AgentSessionRecordWithWorkspace {
+  return {
+    ...toAgentSessionRecord(session),
+    workspace: {
+      status: session.workspace.status,
+      worktreePath: session.workspace.worktreePath,
+      initErrorMessage: session.workspace.initErrorMessage,
+    },
+  };
+}
 
 class SessionDataService {
   // Agent sessions
 
-  findAgentSessionById(id: string) {
-    return agentSessionAccessor.findById(id);
+  async findAgentSessionById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
+    const session = await agentSessionAccessor.findById(id);
+    return session ? toAgentSessionRecordWithWorkspace(session) : null;
   }
 
-  findAgentSessionsByIds(ids: string[]): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findByIds(ids);
+  async findAgentSessionsByIds(ids: string[]): Promise<AgentSessionRecord[]> {
+    return (await agentSessionAccessor.findByIds(ids)).map(toAgentSessionRecord);
   }
 
-  findAgentSessionsByWorkspaceId(
+  async findAgentSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
   ): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
+    return (await agentSessionAccessor.findByWorkspaceId(workspaceId, filters)).map(
+      toAgentSessionRecord
+    );
   }
 
   countActiveAgentSessionsByWorkspaceId(workspaceId: string): Promise<number> {
@@ -48,7 +87,7 @@ class SessionDataService {
       explicitProvider: data.provider,
       explicitModel: data.model,
     });
-    return agentSessionAccessor.create({ ...data, ...defaults });
+    return toAgentSessionRecord(await agentSessionAccessor.create({ ...data, ...defaults }));
   }
 
   async createAgentSessionWithinWorkspaceLimit(data: {
@@ -65,7 +104,10 @@ class SessionDataService {
       explicitProvider: data.provider,
       explicitModel: data.model,
     });
-    return agentSessionAccessor.createWithinWorkspaceLimit({ ...data, ...defaults });
+    const result = await agentSessionAccessor.createWithinWorkspaceLimit({ ...data, ...defaults });
+    return result.outcome === 'created'
+      ? { ...result, session: toAgentSessionRecord(result.session) }
+      : result;
   }
 
   async acquireFixerSession(data: {
@@ -97,15 +139,17 @@ class SessionDataService {
       providerProcessPid?: number | null;
     }
   ): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.update(id, data);
+    return agentSessionAccessor.update(id, data).then(toAgentSessionRecord);
   }
 
   deleteAgentSession(id: string): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.delete(id);
+    return agentSessionAccessor.delete(id).then(toAgentSessionRecord);
   }
 
   findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {
-    return agentSessionAccessor.findWithPid();
+    return agentSessionAccessor
+      .findWithPid()
+      .then((sessions) => sessions.map(toAgentSessionRecord));
   }
 
   recoverStaleRunningAgentSessions(): Promise<number> {

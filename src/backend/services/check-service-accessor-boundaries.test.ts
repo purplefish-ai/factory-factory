@@ -98,6 +98,82 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('workspaceAccessor');
   });
 
+  it('rejects local accessor aliases re-exported from capsule barrels', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import { workspaceAccessor } from './resources/workspace.accessor';\nconst persistence = workspaceAccessor;\nexport { persistence };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it('rejects exported variable declarations that alias accessors', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import { workspaceAccessor } from './resources/workspace.accessor';\nexport const persistence = workspaceAccessor;\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it('rejects accessor alias chains re-exported from capsule barrels', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import { workspaceAccessor } from './resources/workspace.accessor';\nconst store = workspaceAccessor;\nconst persistence = store;\nexport { persistence };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it.each([
+    ['parenthesized', '(workspaceAccessor)'],
+    ['type asserted', 'workspaceAccessor as typeof workspaceAccessor'],
+    ['non-null asserted', 'workspaceAccessor!'],
+    ['satisfies constrained', 'workspaceAccessor satisfies object'],
+  ])('rejects %s accessor aliases re-exported from capsule barrels', (_label, initializer) => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: `import { workspaceAccessor } from './resources/workspace.accessor';\nconst persistence = ${initializer};\nexport { persistence };\n`,
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it.each([
+    ['parenthesized', '(workspaceAccessor)'],
+    ['type asserted', 'workspaceAccessor as typeof workspaceAccessor'],
+  ])('rejects %s accessor default exports from capsule barrels', (_label, expression) => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: `import { workspaceAccessor } from './resources/workspace.accessor';\nexport default ${expression};\n`,
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
   it('rejects locally imported accessor namespaces re-exported from capsule barrels', () => {
     const result = runChecker([
       {

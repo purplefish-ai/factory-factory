@@ -1,9 +1,9 @@
-import type { Prisma } from '@prisma-gen/client';
 import {
   type AutoIterationExecutionContext,
   workspaceAccessor,
 } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { AutoIterationStatus } from '@/shared/core';
+import type { AutoIterationProgress } from '@/shared/schemas/auto-iteration.schema';
 
 class WorkspaceAutoIterationService {
   getExecutionContext(workspaceId: string): Promise<AutoIterationExecutionContext | null> {
@@ -14,7 +14,7 @@ class WorkspaceAutoIterationService {
     return workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
   }
 
-  setProgress(workspaceId: string, progress: Prisma.InputJsonValue) {
+  setProgress(workspaceId: string, progress: AutoIterationProgress) {
     return workspaceAccessor.update(workspaceId, { autoIterationProgress: progress });
   }
 

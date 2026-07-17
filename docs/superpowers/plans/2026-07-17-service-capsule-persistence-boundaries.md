@@ -4,7 +4,7 @@
 
 **Goal:** Hide raw persistence accessors behind capsule-owned application APIs and prevent future accessor leakage.
 
-**Architecture:** Keep accessors private to their owning capsule. Extend existing services and add intent-focused services where public use cases are missing; transport and cross-service callers import only capsule barrels. A TypeScript-AST guard rejects raw re-exports and cross-owner imports, with one exact backup-orchestration exception.
+**Architecture:** Keep accessors private to their owning capsule. Extend existing services and add intent-focused services where public use cases are missing; transport and cross-service callers import only capsule barrels. A TypeScript-AST guard rejects raw re-exports, aliases and indirect re-export chains, dynamic `CallExpression` imports, and cross-owner imports, with one exact backup-orchestration exception.
 
 **Tech Stack:** TypeScript, Express/tRPC, Prisma, Vitest, TypeScript compiler API, Biome, pnpm
 
@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Write failing fixture tests**
 
-Create fixtures that invoke the checker against a temporary source root. Assert owner-internal imports pass; a capsule `index.ts` re-exporting `./resources/example.accessor` fails; tRPC/barrel accessor imports fail; cross-service deep imports fail; and the exact backup exception passes.
+Create fixtures that invoke the checker against a temporary source root. Assert owner-internal imports pass; a capsule `index.ts` re-exporting `./resources/example.accessor` fails; local and exported accessor aliases fail; indirect named/star re-export chains fail; type-only, dynamic `import()`, and loader `CallExpression` references fail; tRPC/barrel accessor imports fail; cross-service deep imports fail; and the exact backup exception passes.
 
 ```ts
 expect(runChecker([{ path: 'src/backend/services/workspace/index.ts', content: "export * from './resources/workspace.accessor';" }]).output)
@@ -48,7 +48,7 @@ Expected: FAIL because `scripts/check-service-accessor-boundaries.mjs` does not 
 
 - [ ] **Step 3: Implement the AST checker and wire it into ownership checks**
 
-Use an explicit owner map for `projectAccessor`, `workspaceAccessor`, `workspaceNotificationAccessor`, `agentSessionAccessor`, `closedSessionAccessor`, `userSettingsAccessor`, `healthAccessor`, `dataBackupAccessor`, `terminalSessionAccessor`, `decisionLogAccessor`, and `periodicTaskAccessor`. Parse import/export declarations with TypeScript, include type-only imports, and keep the exception keyed by exact importer and exact module.
+Use an explicit owner map for `projectAccessor`, `workspaceAccessor`, `workspaceNotificationAccessor`, `agentSessionAccessor`, `closedSessionAccessor`, `userSettingsAccessor`, `healthAccessor`, `dataBackupAccessor`, `terminalSessionAccessor`, `decisionLogAccessor`, and `periodicTaskAccessor`. Parse import/export declarations with TypeScript, include type-only imports and dynamic `CallExpression` module references, propagate accessor identity through local aliases and indirect re-export chains, and keep the exception keyed by exact importer and exact module.
 
 Update:
 
@@ -133,21 +133,21 @@ git commit -m "Own settings and decision log APIs (#1956)"
 - Modify: `src/backend/trpc/periodic-task.trpc.ts`
 
 **Interfaces:**
-- Produces: `periodicTaskService.list/get/create/update/delete/toggleEnabled/listExecutions/listExecutionsByPeriodicTaskId`.
+- Produces: periodic-task administration and query operations plus scheduler-owned execution reservation and dispatch APIs. The service owns schedule validation, next-run calculation, default query limits, and atomic execution state transitions.
 
 - [ ] **Step 1: Write failing service API tests**
 
-Mock the internal accessor and assert each public method preserves arguments, including the default execution limit of 20.
+Test application behavior at the service boundary: the default execution limit is 20, toggling preserves schedule invariants, schedule updates validate and recompute the next run, and concurrent execution reservation is atomic. Router tests should assert delegation to these public operations.
 
 - [ ] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/backend/services/periodic-task/service/periodic-task.service.test.ts`
 
-Expected: FAIL because CRUD/query methods are absent.
+Expected: FAIL because the application operations and their invariants are absent.
 
 - [ ] **Step 3: Implement methods and migrate tRPC**
 
-Add the intent methods to `PeriodicTaskService`, replace every router accessor call with `periodicTaskService`, and stop exporting the accessor from the capsule barrel.
+Expose administration, query, and scheduler operations from `PeriodicTaskService`; keep validation and execution-state invariants inside the capsule. Replace every router accessor call with the service API and stop exporting the accessor from the capsule barrel.
 
 - [ ] **Step 4: Verify GREEN**
 
@@ -188,7 +188,7 @@ git commit -m "Route periodic task CRUD through service (#1956)"
 - Modify: `src/backend/trpc/session.router.test.ts`
 
 **Interfaces:**
-- Produces: terminal-owned CRUD/query/PID recovery methods and session-owned atomic fixer acquisition/recovery methods.
+- Produces: terminal-owned lifecycle APIs that preserve terminal ownership, orphan-cleanup, and PID-recovery invariants, plus session-owned atomic fixer acquisition/recovery operations.
 - Consumes: resolved provider/model defaults at the session service boundary; the agent-session resource no longer imports settings.
 
 - [ ] **Step 1: Write failing tests for terminal exports and fixer acquisition**
@@ -203,7 +203,7 @@ Expected: FAIL for missing APIs.
 
 - [ ] **Step 3: Implement and migrate consumers**
 
-Move terminal persistence calls out of `sessionDataService`, add semantic orphan cleanup, and move settings-dependent acquisition preparation above the resource layer. Replace raw session/terminal imports in workspace tRPC, ratchet, orchestration, and transports with public services.
+Introduce terminal lifecycle operations around creation, attachment/lookup, deletion, orphan cleanup, and PID recovery rather than exposing accessor-shaped pass-through methods. Move settings-dependent acquisition preparation above the resource layer. Replace raw session/terminal imports in workspace tRPC, ratchet, orchestration, and transports with public intent/invariant APIs.
 
 - [ ] **Step 4: Verify GREEN and scan leakage**
 
@@ -303,7 +303,8 @@ git commit -m "Expose workspace use case APIs (#1956)"
 - Modify: `src/backend/services/terminal/index.ts`
 - Modify: `src/backend/services/decision-log/index.ts`
 - Modify: `src/backend/services/periodic-task/index.ts`
-- Modify: `src/backend/services/resources.integration.test.ts`
+- Move/Delete: `src/backend/services/resources.integration.test.ts`
+- Create/Modify: resource-level integration tests under their owning service capsules.
 - Modify: all tests still mocking raw accessor properties on capsule barrels.
 
 **Interfaces:**
@@ -317,7 +318,7 @@ Expected: FAIL listing any remaining raw re-exports/imports.
 
 - [ ] **Step 2: Remove exports and update resource tests**
 
-Resource integration tests import owner resource modules directly. Consumer tests mock public services. Required record types are re-exported deliberately from service modules without accessor values.
+Integration tests outside an owner capsule exercise public service APIs only. Tests that must import resource modules directly move under the owning capsule. Consumer tests mock public services. Required record types are re-exported deliberately from service modules without accessor values.
 
 - [ ] **Step 3: Verify GREEN**
 
@@ -346,7 +347,7 @@ git commit -m "Remove persistence exports from capsules (#1956)"
 - [ ] **Step 1: Run required verification**
 
 ```bash
-pnpm typecheck && pnpm check:fix && pnpm test && pnpm build
+pnpm typecheck && pnpm check:fix && pnpm check && pnpm test && pnpm build
 ```
 
 Expected: all checks pass. If the two recorded React `act` files still fail unchanged, run all issue-related tests separately, document the verified baseline delta, and do not claim a clean full test run until the baseline problem is resolved or demonstrably environmental.

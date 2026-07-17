@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
-    findById: vi.fn(),
+    findProviderSelection: vi.fn(),
   },
 }));
 
@@ -24,7 +24,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('uses ratchet provider when workspace overrides it', async () => {
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findProviderSelection).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'CODEX',
       defaultSessionProvider: 'CLAUDE',
@@ -39,7 +39,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('falls back to workspace default when ratchet provider is WORKSPACE_DEFAULT', async () => {
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findProviderSelection).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
       defaultSessionProvider: 'CODEX',
@@ -54,7 +54,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('falls back to user default when workspace defers provider selection', async () => {
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findProviderSelection).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
@@ -79,11 +79,11 @@ describe('ratchetProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(workspaceDataService.findById).not.toHaveBeenCalled();
+    expect(workspaceDataService.findProviderSelection).not.toHaveBeenCalled();
   });
 
   it('throws when workspace cannot be found', async () => {
-    vi.mocked(workspaceDataService.findById).mockResolvedValue(null);
+    vi.mocked(workspaceDataService.findProviderSelection).mockResolvedValue(null);
 
     await expect(
       ratchetProviderResolverService.resolveRatchetProvider({

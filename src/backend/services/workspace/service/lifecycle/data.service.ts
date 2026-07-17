@@ -11,6 +11,26 @@ class WorkspaceDataService {
     return workspaceAccessor.findByIdWithProject(id);
   }
 
+  exists(id: string) {
+    return workspaceAccessor.exists(id);
+  }
+
+  findProviderSelection(id: string) {
+    return workspaceAccessor.findProviderSelection(id);
+  }
+
+  findFixerContext(id: string) {
+    return workspaceAccessor.findFixerContext(id);
+  }
+
+  findStatusSnapshot(id: string) {
+    return workspaceAccessor.findStatusSnapshot(id);
+  }
+
+  findPRContext(id: string) {
+    return workspaceAccessor.findPRContext(id);
+  }
+
   findByProjectId(
     projectId: string,
     filters?: { status?: WorkspaceStatus; limit?: number; offset?: number }

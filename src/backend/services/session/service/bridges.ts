@@ -35,6 +35,7 @@ export interface SessionLifecycleWorkspaceBridge {
     sessionId: string,
     outcome: RatchetSessionEndOutcome
   ): Promise<void>;
+  resetPRDiscoveryBackoff(workspaceId: string): Promise<boolean>;
 }
 
 /** Queued message dispatch callback needed by session lifecycle service */

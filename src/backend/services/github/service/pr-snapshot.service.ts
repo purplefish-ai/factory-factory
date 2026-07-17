@@ -1,12 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import {
-  type PRDiscoveryClaim,
-  workspaceDataService,
-  workspacePrSnapshotService,
-} from '@/backend/services/workspace';
-import type { GitHubKanbanBridge } from './bridges';
+import type { GitHubKanbanBridge, GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 
 const logger = createLogger('pr-snapshot');
@@ -67,9 +62,20 @@ interface ApplySnapshotOptions {
 
 class PRSnapshotService extends EventEmitter {
   private kanbanBridge: GitHubKanbanBridge | null = null;
+  private workspaceBridge: GitHubWorkspaceBridge | null = null;
 
-  configure(bridges: { kanban: GitHubKanbanBridge }): void {
+  configure(bridges: { kanban: GitHubKanbanBridge; workspace: GitHubWorkspaceBridge }): void {
     this.kanbanBridge = bridges.kanban;
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): GitHubWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'PRSnapshotService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
   }
 
   private get kanban(): GitHubKanbanBridge {
@@ -86,7 +92,7 @@ class PRSnapshotService extends EventEmitter {
    * This is the canonical write path for CI tracking fields.
    */
   async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
-    await workspacePrSnapshotService.record(workspaceId, {
+    await this.workspace.recordSnapshot(workspaceId, {
       prCiStatus: input.ciStatus,
       prUpdatedAt: input.observedAt ?? new Date(),
       ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
@@ -98,7 +104,7 @@ class PRSnapshotService extends EventEmitter {
    * Record that CI failure notification was sent.
    */
   async recordCINotification(workspaceId: string, notifiedAt = new Date()): Promise<void> {
-    await workspacePrSnapshotService.record(workspaceId, {
+    await this.workspace.recordSnapshot(workspaceId, {
       prCiLastNotifiedAt: notifiedAt,
     });
   }
@@ -108,7 +114,7 @@ class PRSnapshotService extends EventEmitter {
    */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
     const checkedAt = input.checkedAt === null ? null : (input.checkedAt ?? new Date());
-    await workspacePrSnapshotService.record(workspaceId, {
+    await this.workspace.recordSnapshot(workspaceId, {
       prReviewLastCheckedAt: checkedAt,
       ...(input.latestCommentId !== undefined
         ? { prReviewLastCommentId: input.latestCommentId }
@@ -127,7 +133,7 @@ class PRSnapshotService extends EventEmitter {
   async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
     try {
       // Verify workspace exists
-      const workspace = await workspaceDataService.findById(workspaceId);
+      const workspace = await this.workspace.findPRContext(workspaceId);
       if (!workspace) {
         return { success: false, reason: 'workspace_not_found' };
       }
@@ -136,7 +142,7 @@ class PRSnapshotService extends EventEmitter {
       const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
       if (!snapshot) {
         // Still attach the URL even if we can't fetch details
-        await workspacePrSnapshotService.record(workspaceId, {
+        await this.workspace.recordSnapshot(workspaceId, {
           prUrl,
           prUpdatedAt: new Date(),
         });
@@ -207,10 +213,10 @@ class PRSnapshotService extends EventEmitter {
   async attachDiscoveredPRAndRefresh(
     workspaceId: string,
     prUrl: string,
-    claim: PRDiscoveryClaim
+    claim: GitHubPRDiscoveryClaim
   ): Promise<AttachAndRefreshResult> {
     try {
-      const attached = await workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(
+      const attached = await this.workspace.attachDiscoveredPRIfClaimMatches(
         workspaceId,
         prUrl,
         claim,
@@ -236,7 +242,7 @@ class PRSnapshotService extends EventEmitter {
         prReviewState: snapshot.prReviewState,
         prCiStatus: snapshot.prCiStatus,
       };
-      const persisted = await workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(
+      const persisted = await this.workspace.updatePRSnapshotIfUrlMatches(
         workspaceId,
         prUrl,
         snapshotData,
@@ -274,7 +280,7 @@ class PRSnapshotService extends EventEmitter {
       let prUrl = explicitPrUrl;
 
       if (!prUrl) {
-        const workspace = await workspaceDataService.findById(workspaceId);
+        const workspace = await this.workspace.findPRContext(workspaceId);
         if (!workspace) {
           return { success: false, reason: 'workspace_not_found' };
         }
@@ -326,7 +332,7 @@ class PRSnapshotService extends EventEmitter {
   ): Promise<void> {
     const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
 
-    await workspacePrSnapshotService.record(workspaceId, {
+    await this.workspace.recordSnapshot(workspaceId, {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,

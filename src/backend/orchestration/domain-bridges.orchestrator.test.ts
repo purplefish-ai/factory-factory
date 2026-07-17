@@ -42,7 +42,26 @@ vi.mock('@/backend/services/workspace', () => ({
     finishSessionIfMatching: vi.fn(),
     clearSessionIfMatching: vi.fn(),
   },
-  workspaceDataService: { findById: vi.fn() },
+  workspaceDataService: {
+    findById: vi.fn(),
+    findFixerContext: vi.fn(),
+    findPRContext: vi.fn(),
+    findStatusSnapshot: vi.fn(),
+    resetPRDiscoveryBackoff: vi.fn(),
+  },
+  workspaceMaintenanceService: { findNeedingWorktree: vi.fn() },
+  workspacePrSnapshotService: {
+    record: vi.fn(),
+    attachDiscoveredPRIfClaimMatches: vi.fn(),
+    updatePRSnapshotIfUrlMatches: vi.fn(),
+  },
+  workspaceRatchetService: { recordSessionEnd: vi.fn() },
+  workspaceRunScriptService: {
+    clearInitOutput: vi.fn(),
+    appendInitOutput: vi.fn(),
+    setInitScriptPid: vi.fn(),
+    clearInitScriptPid: vi.fn(),
+  },
   workspaceQueryService: { configure: vi.fn() },
   workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
@@ -56,8 +75,10 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
+    findAgentSessionById: vi.fn(),
     createAgentSession: vi.fn(),
     findAgentSessionsByWorkspaceId: vi.fn(),
+    acquireFixerSession: vi.fn(),
   },
   sessionService: {
     configure: vi.fn(),
@@ -108,6 +129,10 @@ vi.mock('@/backend/services/periodic-task', () => ({
 
 vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: { configure: vi.fn() },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionService: { recoverOrphanedSessions: vi.fn() },
 }));
 
 vi.mock('./workspace-init.orchestrator', () => ({
@@ -458,12 +483,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('includes agent working state in periodic task workspace status', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findStatusSnapshot).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findStatusSnapshot>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
         { id: 'session-2' },
@@ -484,12 +509,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('treats queued periodic task session messages as active agent work', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findStatusSnapshot).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findStatusSnapshot>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
         { id: 'session-2' },
@@ -513,12 +538,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('does not read queued messages for stopped periodic task sessions', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findStatusSnapshot).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findStatusSnapshot>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);

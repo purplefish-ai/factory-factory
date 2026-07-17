@@ -140,17 +140,6 @@ module.exports = {
       to: { path: '^src/backend/services/[^/]+/resources/' },
     },
     {
-      name: 'data-backup-orchestration-imports-no-other-service-resources',
-      severity: 'error',
-      comment: 'The backup orchestrator may import only its exact backup persistence module.',
-      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
-      to: {
-        path: '^src/backend/services/[^/]+/resources/',
-        pathNot:
-          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
-      },
-    },
-    {
       name: 'no-cross-service-resource-imports',
       severity: 'error',
       comment: 'Service business logic must not import another service\'s resources.',
@@ -187,17 +176,6 @@ module.exports = {
           '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
-    },
-    {
-      name: 'data-backup-orchestration-has-no-other-deep-service-imports',
-      severity: 'error',
-      comment: 'The backup orchestrator may deep-import only its exact backup persistence module.',
-      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
-      to: {
-        path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
-        pathNot:
-          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
-      },
     },
     {
       name: 'no-services-importing-transport-layers',

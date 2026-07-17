@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockAttachDiscoveredPRIfClaimMatches, mockUpdate, mockUpdatePRSnapshotIfUrlMatches } =
-  vi.hoisted(() => ({
+const { mockAttachDiscoveredPRIfClaimMatches, mockUpdatePRSnapshotIfUrlMatches } = vi.hoisted(
+  () => ({
     mockAttachDiscoveredPRIfClaimMatches: vi.fn(),
-    mockUpdate: vi.fn(),
     mockUpdatePRSnapshotIfUrlMatches: vi.fn(),
-  }));
+  })
+);
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
       mockAttachDiscoveredPRIfClaimMatches(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
     updatePRSnapshotIfUrlMatches: (...args: unknown[]) => mockUpdatePRSnapshotIfUrlMatches(...args),
   },
 }));

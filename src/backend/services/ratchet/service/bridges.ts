@@ -4,7 +4,12 @@
  * The ratchet domain never imports from other domains directly.
  */
 
-import type { CIStatus, SessionStatus } from '@/shared/core';
+import type {
+  CIStatus,
+  SessionProvider,
+  SessionStatus,
+  WorkspaceProviderSelection,
+} from '@/shared/core';
 
 // --- Session bridge ---
 
@@ -13,10 +18,26 @@ export interface RatchetSessionSummary {
   id: string;
   workflow: string;
   status: SessionStatus;
+  provider: SessionProvider;
+  createdAt: Date;
 }
 
+export type RatchetFixerSessionAcquisition =
+  | { outcome: 'existing'; sessionId: string; status: SessionStatus }
+  | { outcome: 'limit_reached' }
+  | { outcome: 'created'; sessionId: string };
+
 export interface RatchetSessionBridge {
+  findSessionById(sessionId: string): Promise<RatchetSessionSummary | null>;
   findSessionsByWorkspaceId(workspaceId: string): Promise<RatchetSessionSummary[]>;
+  acquireFixerSession(input: {
+    workspaceId: string;
+    workflow: string;
+    sessionName: string;
+    maxSessions: number;
+    provider?: SessionProvider;
+    providerProjectPath: string | null;
+  }): Promise<RatchetFixerSessionAcquisition>;
   isSessionRunning(sessionId: string): boolean;
   isSessionWorking(sessionId: string): boolean;
   stopSession(sessionId: string): Promise<void>;
@@ -30,6 +51,20 @@ export interface RatchetSessionBridge {
   ): Promise<void>;
   sendSessionMessage(sessionId: string, message: string): Promise<void>;
   injectCommittedUserMessage(sessionId: string, message: string): void;
+}
+
+export interface RatchetWorkspaceBridge {
+  findFixerContext(workspaceId: string): Promise<{
+    id: string;
+    worktreePath: string | null;
+    defaultSessionProvider: WorkspaceProviderSelection;
+    ratchetSessionProvider: WorkspaceProviderSelection;
+  } | null>;
+  recordSessionEnd(
+    workspaceId: string,
+    sessionId: string,
+    outcome: 'COMPLETED' | 'DIED'
+  ): Promise<boolean>;
 }
 
 // --- GitHub bridge ---

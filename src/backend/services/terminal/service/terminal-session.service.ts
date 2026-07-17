@@ -1,4 +1,5 @@
 import type { TerminalSession } from '@prisma-gen/client';
+import { isProcessRunning } from '@/backend/lib/process-liveness';
 import { terminalSessionAccessor } from '@/backend/services/terminal/resources/terminal-session.accessor';
 import { SessionStatus } from '@/shared/core';
 
@@ -44,7 +45,7 @@ class TerminalSessionService {
     let recovered = 0;
 
     for (const session of sessions) {
-      if (!session.pid || this.isProcessRunning(session.pid)) {
+      if (!session.pid || isProcessRunning(session.pid)) {
         continue;
       }
 
@@ -56,15 +57,6 @@ class TerminalSessionService {
     }
 
     return recovered;
-  }
-
-  private isProcessRunning(pid: number): boolean {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === 'EPERM';
-    }
   }
 }
 

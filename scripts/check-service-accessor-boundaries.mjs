@@ -140,6 +140,20 @@ function exportedNames(exportDeclaration) {
   );
 }
 
+function unwrapTransparentExpression(expression) {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
 function parseModuleRecords(sourceFiles, rootDir) {
   const records = new Map();
 
@@ -158,6 +172,7 @@ function parseModuleRecords(sourceFiles, rootDir) {
       modulePath,
       imports: [],
       namespaceImports: [],
+      localAliases: [],
       localExports: [],
       namedReExports: [],
       namespaceReExports: [],
@@ -186,12 +201,38 @@ function parseModuleRecords(sourceFiles, rootDir) {
       }
 
       if (!ts.isExportDeclaration(statement)) {
-        if (
-          ts.isExportAssignment(statement) &&
-          !statement.isExportEquals &&
-          ts.isIdentifier(statement.expression)
-        ) {
-          record.localExports.push({ local: statement.expression.text, exported: 'default' });
+        if (ts.isVariableStatement(statement)) {
+          const isExported = statement.modifiers?.some(
+            (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+          );
+          for (const declaration of statement.declarationList.declarations) {
+            const initializer = declaration.initializer
+              ? unwrapTransparentExpression(declaration.initializer)
+              : null;
+            if (
+              ts.isIdentifier(declaration.name) &&
+              initializer &&
+              ts.isIdentifier(initializer)
+            ) {
+              record.localAliases.push({
+                local: declaration.name.text,
+                target: initializer.text,
+              });
+              if (isExported) {
+                record.localExports.push({
+                  local: declaration.name.text,
+                  exported: declaration.name.text,
+                });
+              }
+            }
+          }
+        }
+
+        if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+          const expression = unwrapTransparentExpression(statement.expression);
+          if (ts.isIdentifier(expression)) {
+            record.localExports.push({ local: expression.text, exported: 'default' });
+          }
         }
         continue;
       }
@@ -290,6 +331,18 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
         const accessorBinding = exportsByModule.get(importedModule)?.values().next().value;
         if (accessorBinding) {
           localBindings.set(namespaceImport.local, accessorBinding);
+        }
+      }
+
+      let aliasesChanged = true;
+      while (aliasesChanged) {
+        aliasesChanged = false;
+        for (const alias of record.localAliases) {
+          const accessorBinding = localBindings.get(alias.target);
+          if (accessorBinding && !localBindings.has(alias.local)) {
+            localBindings.set(alias.local, accessorBinding);
+            aliasesChanged = true;
+          }
         }
       }
 

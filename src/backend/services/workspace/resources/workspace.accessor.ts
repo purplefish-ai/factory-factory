@@ -6,6 +6,14 @@ import type {
 } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import type {
+  PRDiscoveryClaim,
+  PRSnapshotFields,
+  WorkspaceFixerContext,
+  WorkspacePRContext,
+  WorkspaceProviderSelectionSnapshot,
+  WorkspaceStatusSnapshot,
+} from '@/backend/services/workspace/types';
+import type {
   AutoIterationStatus,
   CIStatus,
   PRState,
@@ -175,20 +183,6 @@ type WorkspaceWithAgentSessionsAndProject = Prisma.WorkspaceGetPayload<{
 // Type for Workspace with sessions and project included (used by reconciliation)
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
-export interface PRDiscoveryClaim {
-  branchName: string;
-  checkedAt: Date;
-  retryCount: number;
-  nextCheckAt: Date;
-}
-
-export interface PRSnapshotFields {
-  prNumber: number;
-  prState: PRState;
-  prReviewState: string | null;
-  prCiStatus: CIStatus;
-}
-
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
@@ -233,6 +227,56 @@ class WorkspaceAccessor {
   findRawById(id: string): Promise<Workspace | null> {
     return prisma.workspace.findUnique({
       where: { id },
+    });
+  }
+
+  async exists(id: string): Promise<boolean> {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return workspace !== null;
+  }
+
+  findProviderSelection(id: string): Promise<WorkspaceProviderSelectionSnapshot | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        defaultSessionProvider: true,
+        ratchetSessionProvider: true,
+      },
+    });
+  }
+
+  findFixerContext(id: string): Promise<WorkspaceFixerContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        worktreePath: true,
+        defaultSessionProvider: true,
+        ratchetSessionProvider: true,
+      },
+    });
+  }
+
+  findStatusSnapshot(id: string): Promise<WorkspaceStatusSnapshot | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        prUrl: true,
+        prNumber: true,
+        initCompletedAt: true,
+      },
+    });
+  }
+
+  findPRContext(id: string): Promise<WorkspacePRContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: { branchName: true, prUrl: true },
     });
   }
 

@@ -21,7 +21,7 @@ vi.mock('@/backend/services/workspace', () => ({
   },
   workspaceDataService: {
     findByIdWithProject: vi.fn(),
-    findById: vi.fn(),
+    exists: vi.fn(),
   },
   workspaceNotificationService: {
     notifyParent: vi.fn(),
@@ -45,7 +45,7 @@ import {
 } from './workspace-children.orchestrator';
 
 const mockFindByIdWithProject = vi.mocked(workspaceDataService.findByIdWithProject);
-const mockFindById = vi.mocked(workspaceDataService.findById);
+const mockExists = vi.mocked(workspaceDataService.exists);
 const mockNotifyParent = vi.mocked(workspaceNotificationService.notifyParent);
 const mockNotifyChild = vi.mocked(workspaceNotificationService.notifyChild);
 
@@ -82,7 +82,7 @@ describe('persistChildNotification', () => {
       name: 'Child WS',
       project: { name: 'Child Project' },
     } as never);
-    mockFindById.mockResolvedValue({ id: 'parent-1' } as never);
+    mockExists.mockResolvedValue(true);
     const createdNotification = { id: 'notif-1', message: 'hello' };
     mockNotifyParent.mockResolvedValue(createdNotification as never);
 
@@ -104,7 +104,7 @@ describe('persistChildNotification', () => {
 
   it('returns null without creating when a workspace is missing', async () => {
     mockFindByIdWithProject.mockResolvedValue(null as never);
-    mockFindById.mockResolvedValue({ id: 'parent-1' } as never);
+    mockExists.mockResolvedValue(true);
 
     const result = await persistChildNotification({
       parentWorkspaceId: 'parent-1',
@@ -128,7 +128,7 @@ describe('persistParentNotification', () => {
       name: 'Parent WS',
       project: { name: 'Parent Project' },
     } as never);
-    mockFindById.mockResolvedValue({ id: 'child-1' } as never);
+    mockExists.mockResolvedValue(true);
     const createdNotification = { id: 'notif-2', message: 'do this' };
     mockNotifyChild.mockResolvedValue(createdNotification as never);
 
@@ -154,7 +154,7 @@ describe('persistParentNotification', () => {
       name: 'Parent WS',
       project: { name: 'Parent Project' },
     } as never);
-    mockFindById.mockResolvedValue(null as never);
+    mockExists.mockResolvedValue(false);
 
     const result = await persistParentNotification({
       parentWorkspaceId: 'parent-1',

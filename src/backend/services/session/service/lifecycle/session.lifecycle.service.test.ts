@@ -67,6 +67,7 @@ function createLifecycleService(options?: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
       recordRatchetSessionEnd: vi.fn(async () => undefined),
+      resetPRDiscoveryBackoff: vi.fn(async () => true),
     },
     messageQueue: { tryDispatchNextMessage },
   });
@@ -806,6 +807,7 @@ function createStartableLifecycleService(options?: {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
       recordRatchetSessionEnd: vi.fn(async () => undefined),
+      resetPRDiscoveryBackoff: vi.fn(async () => true),
     },
     messageQueue: { tryDispatchNextMessage },
   });

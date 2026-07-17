@@ -93,7 +93,7 @@ export async function persistChildNotification(input: {
 }): Promise<WorkspaceNotification | null> {
   const [sourceWorkspace, parentWorkspace] = await Promise.all([
     workspaceDataService.findByIdWithProject(input.sourceWorkspaceId),
-    workspaceDataService.findById(input.parentWorkspaceId),
+    workspaceDataService.exists(input.parentWorkspaceId),
   ]);
 
   if (!(sourceWorkspace && parentWorkspace)) {
@@ -126,7 +126,7 @@ export async function persistParentNotification(input: {
 }): Promise<WorkspaceNotification | null> {
   const [parentWorkspace, childWorkspace] = await Promise.all([
     workspaceDataService.findByIdWithProject(input.parentWorkspaceId),
-    workspaceDataService.findById(input.targetChildWorkspaceId),
+    workspaceDataService.exists(input.targetChildWorkspaceId),
   ]);
 
   if (!(parentWorkspace && childWorkspace)) {

@@ -414,14 +414,15 @@ describe('workspaceAccessor', () => {
   });
 
   it('selects only run-script execution state', async () => {
-    mockFindUnique.mockResolvedValue({
+    const state = {
       runScriptStatus: 'RUNNING',
       runScriptPid: 123,
       runScriptPort: 3000,
       runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
-    });
+    };
+    mockFindUnique.mockResolvedValue(state);
 
-    await workspaceAccessor.findRunScriptExecutionState('ws-1');
+    await expect(workspaceAccessor.findRunScriptExecutionState('ws-1')).resolves.toEqual(state);
 
     expect(mockFindUnique).toHaveBeenCalledWith({
       where: { id: 'ws-1' },

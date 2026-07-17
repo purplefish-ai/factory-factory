@@ -11,7 +11,12 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { workspaceDataService, workspaceRatchetService } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
-import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
+import type {
+  RatchetGitHubBridge,
+  RatchetPRSnapshotBridge,
+  RatchetSessionBridge,
+  RatchetWorkspaceBridge,
+} from './bridges';
 import type {
   ActiveFixerCheckResult,
   PRStateFetchResult,
@@ -101,15 +106,27 @@ class RatchetService extends EventEmitter {
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
   private snapshotBridge: RatchetPRSnapshotBridge | null = null;
+  private workspaceBridge: RatchetWorkspaceBridge | null = null;
 
   configure(bridges: {
     session: RatchetSessionBridge;
     github: RatchetGitHubBridge;
     snapshot: RatchetPRSnapshotBridge;
+    workspace: RatchetWorkspaceBridge;
   }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
     this.snapshotBridge = bridges.snapshot;
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): RatchetWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'RatchetService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
   }
 
   private get session(): RatchetSessionBridge {
@@ -292,7 +309,7 @@ class RatchetService extends EventEmitter {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
-    await workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome);
+    await this.workspace.recordSessionEnd(workspaceId, sessionId, outcome);
   }
 
   /**
@@ -916,6 +933,7 @@ class RatchetService extends EventEmitter {
     return await checkActiveFixerSessionHelper({
       workspace,
       sessionBridge: this.session,
+      workspaceBridge: this.workspace,
       signal,
     });
   }

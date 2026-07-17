@@ -1,9 +1,7 @@
 import type { RatchetDispatchOutcome, SessionProvider } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionDataService } from '@/backend/services/session';
-import { workspaceRatchetService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import type { RatchetSessionBridge } from './bridges';
+import type { RatchetSessionBridge, RatchetWorkspaceBridge } from './bridges';
 import type { ActiveFixerCheckResult, WorkspaceWithPR } from './ratchet.types';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
@@ -80,9 +78,10 @@ async function stopSessionForProviderMismatch(params: {
 export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
+  workspaceBridge: Pick<RatchetWorkspaceBridge, 'recordSessionEnd'>;
   signal?: AbortSignal;
 }): Promise<ActiveFixerCheckResult> {
-  const { workspace, sessionBridge, signal } = params;
+  const { workspace, sessionBridge, workspaceBridge, signal } = params;
   signal?.throwIfAborted();
 
   const sessionId = workspace.ratchetActiveSessionId;
@@ -95,11 +94,7 @@ export async function checkActiveFixerSession(params: {
     reason: string
   ): Promise<ActiveFixerCheckResult> => {
     signal?.throwIfAborted();
-    const settled = await workspaceRatchetService.recordSessionEnd(
-      workspace.id,
-      sessionId,
-      outcome
-    );
+    const settled = await workspaceBridge.recordSessionEnd(workspace.id, sessionId, outcome);
     signal?.throwIfAborted();
     if (!settled) {
       logger.debug('Ratchet dispatch record was settled concurrently', {
@@ -124,7 +119,7 @@ export async function checkActiveFixerSession(params: {
     workspace,
   });
   signal?.throwIfAborted();
-  const session = await sessionDataService.findAgentSessionById(sessionId);
+  const session = await sessionBridge.findSessionById(sessionId);
   signal?.throwIfAborted();
   if (!session) {
     // Transient ratchet session rows are deleted on normal exit, so a missing
@@ -182,7 +177,7 @@ export async function hasActiveSession(
   signal?: AbortSignal
 ): Promise<boolean> {
   signal?.throwIfAborted();
-  const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+  const sessions = await sessionBridge.findSessionsByWorkspaceId(workspaceId);
   signal?.throwIfAborted();
   return sessions.some((session) => sessionBridge.isSessionWorking(session.id));
 }

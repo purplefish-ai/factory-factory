@@ -53,6 +53,10 @@ describe('StartupScriptService', () => {
       workspace: {
         markReady,
         markFailed,
+        clearInitOutput: mockClearInitOutput,
+        appendInitOutput: mockAppendInitOutput,
+        setInitScriptPid: mockSetInitScriptPid,
+        clearInitScriptPid: mockClearInitScriptPid,
       },
     });
     mockClearInitOutput.mockResolvedValue(undefined);

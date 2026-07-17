@@ -8,7 +8,6 @@
  * Domain services never import each other; they receive capabilities via bridges.
  */
 
-import type { Prisma } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
 import {
   type AutoIterationLogbookBridge,
@@ -35,6 +34,7 @@ import {
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
@@ -45,7 +45,11 @@ import {
   workspaceActivityService,
   workspaceAutoIterationService,
   workspaceDataService,
+  workspaceMaintenanceService,
+  workspacePrSnapshotService,
   workspaceQueryService,
+  workspaceRatchetService,
+  workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -76,11 +80,16 @@ type BridgeServices = {
   sessionDomainService: typeof sessionDomainService;
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
+  terminalSessionService: typeof terminalSessionService;
   workspaceAutoIterationService: typeof workspaceAutoIterationService;
   workspaceCreationService: WorkspaceCreationService;
   workspaceDataService: typeof workspaceDataService;
+  workspaceMaintenanceService: typeof workspaceMaintenanceService;
+  workspacePrSnapshotService: typeof workspacePrSnapshotService;
   workspaceActivityService: typeof workspaceActivityService;
   workspaceQueryService: typeof workspaceQueryService;
+  workspaceRatchetService: typeof workspaceRatchetService;
+  workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
 };
@@ -102,11 +111,16 @@ const defaultServices: BridgeServices = {
   sessionDomainService,
   sessionService,
   startupScriptService,
+  terminalSessionService,
   workspaceActivityService,
   workspaceAutoIterationService,
   workspaceCreationService: new WorkspaceCreationService({ logger }),
   workspaceDataService,
+  workspaceMaintenanceService,
+  workspacePrSnapshotService,
   workspaceQueryService,
+  workspaceRatchetService,
+  workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
 };
@@ -177,19 +191,26 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     sessionDomainService,
     sessionService,
     startupScriptService,
+    terminalSessionService,
     workspaceActivityService,
     workspaceAutoIterationService,
     workspaceCreationService,
     workspaceDataService,
+    workspaceMaintenanceService,
+    workspacePrSnapshotService,
     workspaceQueryService,
+    workspaceRatchetService,
+    workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
   } = resolved;
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
+    findSessionById: (sessionId) => sessionDataService.findAgentSessionById(sessionId),
     findSessionsByWorkspaceId: (workspaceId) =>
       sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
+    acquireFixerSession: (input) => sessionDataService.acquireFixerSession(input),
     isSessionRunning: (id) => sessionService.isSessionRunning(id),
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
@@ -198,6 +219,12 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
+  };
+
+  const ratchetWorkspaceBridge = {
+    findFixerContext: (workspaceId: string) => workspaceDataService.findFixerContext(workspaceId),
+    recordSessionEnd: (workspaceId: string, sessionId: string, outcome: 'COMPLETED' | 'DIED') =>
+      workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome),
   };
 
   const ratchetGithubBridge: RatchetGitHubBridge = {
@@ -237,14 +264,22 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     session: ratchetSessionBridge,
     github: ratchetGithubBridge,
     snapshot: ratchetSnapshotBridge,
+    workspace: ratchetWorkspaceBridge,
   });
-  fixerSessionService.configure({ session: ratchetSessionBridge });
+  fixerSessionService.configure({
+    session: ratchetSessionBridge,
+    workspace: ratchetWorkspaceBridge,
+  });
   reconciliationService.configure({
     workspace: {
       markFailed: async (id, reason) => {
         await workspaceStateMachine.markFailed(id, reason);
       },
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
+      findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+    },
+    terminal: {
+      recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),
     },
   });
 
@@ -276,6 +311,14 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     kanban: {
       updateCachedKanbanColumn: (id) => kanbanStateService.updateCachedKanbanColumn(id),
     },
+    workspace: {
+      findPRContext: (id) => workspaceDataService.findPRContext(id),
+      recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
+      attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
+        workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
+      updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>
+        workspacePrSnapshotService.updatePRSnapshotIfUrlMatches(id, url, snapshot, updatedAt),
+    },
   });
 
   // === Session domain bridges ===
@@ -295,6 +338,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         workspaceActivityService.markSessionIdle(wsId, sId, generation),
       recordRatchetSessionEnd: (workspaceId, sessionId, outcome) =>
         ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
+      resetPRDiscoveryBackoff: (workspaceId) =>
+        workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
     },
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>
@@ -322,6 +367,11 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     workspace: {
       markReady: (id) => workspaceStateMachine.markReady(id),
       markFailed: (id, msg) => workspaceStateMachine.markFailed(id, msg),
+      clearInitOutput: (id) => workspaceRunScriptService.clearInitOutput(id),
+      appendInitOutput: (id, output, maxSize) =>
+        workspaceRunScriptService.appendInitOutput(id, output, maxSize),
+      setInitScriptPid: (id, pid) => workspaceRunScriptService.setInitScriptPid(id, pid),
+      clearInitScriptPid: (id, pid) => workspaceRunScriptService.clearInitScriptPid(id, pid),
     },
   });
 
@@ -339,10 +389,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
     async updateAutoIterationProgress(workspaceId, progress) {
       const parsedProgress = autoIterationProgressSchema.parse(progress);
-      await workspaceAutoIterationService.setProgress(
-        workspaceId,
-        parsedProgress as unknown as Prisma.InputJsonValue
-      );
+      await workspaceAutoIterationService.setProgress(workspaceId, parsedProgress);
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {
       await workspaceAutoIterationService.setSession(workspaceId, sessionId);
@@ -482,7 +529,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
     status: {
       async getWorkspaceStatus(workspaceId) {
-        const ws = await workspaceDataService.findById(workspaceId);
+        const ws = await workspaceDataService.findStatusSnapshot(workspaceId);
         if (!ws) {
           return null;
         }

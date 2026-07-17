@@ -154,6 +154,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle: vi.fn(),
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
@@ -1016,6 +1017,7 @@ describe('SessionService', () => {
         markSessionRunning,
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     const acpProcessor = getAcpProcessorState();
@@ -1307,6 +1309,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -1430,6 +1433,7 @@ describe('SessionService', () => {
         markSessionRunning: vi.fn(),
         markSessionIdle,
         recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
+        resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
 

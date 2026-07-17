@@ -14,7 +14,8 @@ class RatchetProviderResolverService {
     workspaceId: string;
     workspace?: RatchetProviderWorkspace;
   }): Promise<SessionProvider> {
-    const workspace = params.workspace ?? (await workspaceDataService.findById(params.workspaceId));
+    const workspace =
+      params.workspace ?? (await workspaceDataService.findProviderSelection(params.workspaceId));
     if (!workspace) {
       throw new Error(`Workspace not found: ${params.workspaceId}`);
     }

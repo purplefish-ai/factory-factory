@@ -32,6 +32,7 @@ vi.mock('@/backend/services/terminal', () => ({
 
 const mockInitializeWorktree = vi.fn();
 
+import { terminalSessionService } from '@/backend/services/terminal';
 // Import after mocks are set up
 import { workspaceMaintenanceService } from '@/backend/services/workspace';
 import { reconciliationService } from './reconciliation.service';
@@ -53,6 +54,10 @@ describe('ReconciliationService', () => {
           });
         },
         initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
+        findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+      },
+      terminal: {
+        recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),
       },
     });
   });

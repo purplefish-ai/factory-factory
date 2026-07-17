@@ -1,10 +1,8 @@
 import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionDataService } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import type { RatchetSessionBridge } from './bridges';
+import type { RatchetSessionBridge, RatchetWorkspaceBridge } from './bridges';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
 const logger = createLogger('fixer-session');
@@ -38,9 +36,20 @@ type SessionAcquisitionDecision =
 class FixerSessionService {
   private readonly pendingAcquisitions = new Map<string, Promise<AcquireAndDispatchResult>>();
   private sessionBridge: RatchetSessionBridge | null = null;
+  private workspaceBridge: RatchetWorkspaceBridge | null = null;
 
-  configure(bridges: { session: RatchetSessionBridge }): void {
+  configure(bridges: { session: RatchetSessionBridge; workspace: RatchetWorkspaceBridge }): void {
     this.sessionBridge = bridges.session;
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): RatchetWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'FixerSessionService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
   }
 
   private get session(): RatchetSessionBridge {
@@ -77,10 +86,15 @@ class FixerSessionService {
     workspaceId: string,
     workflow: string
   ): Promise<{ id: string; status: SessionStatus } | null> {
+    const workspace = await this.workspace.findFixerContext(workspaceId);
+    if (!workspace) {
+      return null;
+    }
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId,
+      workspace,
     });
-    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+    const sessions = await this.session.findSessionsByWorkspaceId(workspaceId);
     const matching = sessions
       .filter(
         (s) =>
@@ -100,7 +114,7 @@ class FixerSessionService {
     const { workspaceId, workflow } = input;
 
     try {
-      const workspace = await workspaceDataService.findById(workspaceId);
+      const workspace = await this.workspace.findFixerContext(workspaceId);
       if (!workspace?.worktreePath) {
         logger.warn('Workspace not ready for fixer session', { workspaceId, workflow });
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
@@ -126,10 +140,15 @@ class FixerSessionService {
   private async acquireSessionDecision(
     input: AcquireAndDispatchInput
   ): Promise<SessionAcquisitionDecision> {
+    const workspace = await this.workspace.findFixerContext(input.workspaceId);
+    if (!workspace) {
+      return { action: 'limit_reached' };
+    }
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
+      workspace,
     });
-    const acquisition = await sessionDataService.acquireFixerSession({
+    const acquisition = await this.session.acquireFixerSession({
       workspaceId: input.workspaceId,
       workflow: input.workflow,
       sessionName: input.sessionName,

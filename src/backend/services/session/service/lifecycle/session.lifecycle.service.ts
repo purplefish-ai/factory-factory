@@ -862,7 +862,10 @@ export class SessionLifecycleService {
   }
 
   private async maybeDiscoverPROnSessionEnd(workspaceId: string): Promise<void> {
-    await maybeDiscoverPROnSessionEndHelper(workspaceId, logger);
+    if (!this.workspaceBridge) {
+      return;
+    }
+    await maybeDiscoverPROnSessionEndHelper(workspaceId, logger, this.workspaceBridge);
   }
 
   private clearSessionStoreIfInactive(

@@ -49,6 +49,14 @@ describe('PRSnapshotService', () => {
       kanban: {
         updateCachedKanbanColumn: (...args: unknown[]) => mockUpdateCachedKanbanColumn(...args),
       },
+      workspace: {
+        findPRContext: (...args: unknown[]) => mockFindById(...args),
+        recordSnapshot: (...args: unknown[]) => mockUpdate(...args),
+        attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
+          mockAttachDiscoveredPRIfClaimMatches(...args),
+        updatePRSnapshotIfUrlMatches: (...args: unknown[]) =>
+          mockUpdatePRSnapshotIfUrlMatches(...args),
+      },
     });
   });
 
