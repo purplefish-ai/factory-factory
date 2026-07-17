@@ -50,13 +50,30 @@ const baseWorkspace = {
   linearIssueUrl: null,
 } as unknown as ServerWorkspace;
 
-function renderContent(workspace: ServerWorkspace): { container: HTMLDivElement; root: Root } {
+function renderContent(
+  workspace: ServerWorkspace,
+  {
+    onOpenPr,
+    onOpenIssue,
+    onParentPointerUp,
+  }: {
+    onOpenPr?: () => void;
+    onOpenIssue?: () => void;
+    onParentPointerUp?: () => void;
+  } = {}
+): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   flushSync(() => {
-    root.render(createElement(WorkspaceItemContent, { workspace }));
+    root.render(
+      createElement(
+        'div',
+        { onPointerUp: onParentPointerUp },
+        createElement(WorkspaceItemContent, { workspace, onOpenPr, onOpenIssue })
+      )
+    );
   });
 
   return { container, root };
@@ -76,6 +93,55 @@ afterEach(() => {
 });
 
 describe('WorkspaceItemContent', () => {
+  it('opens a pull request without propagating pointerup to its parent', () => {
+    const onOpenPr = vi.fn();
+    const onParentPointerUp = vi.fn();
+    const { container, root } = renderContent(
+      {
+        ...baseWorkspace,
+        prUrl: 'https://github.com/example/repo/pull/42',
+        prNumber: 42,
+        prState: 'OPEN',
+      },
+      { onOpenPr, onParentPointerUp }
+    );
+    const button = container.querySelector('button');
+
+    expect(button).not.toBeNull();
+    button?.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    button?.click();
+
+    expect(onParentPointerUp).not.toHaveBeenCalled();
+    expect(onOpenPr).toHaveBeenCalledOnce();
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('opens an issue without propagating pointerup to its parent', () => {
+    const onOpenIssue = vi.fn();
+    const onParentPointerUp = vi.fn();
+    const { container, root } = renderContent(
+      {
+        ...baseWorkspace,
+        githubIssueNumber: 1905,
+        githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+      },
+      { onOpenIssue, onParentPointerUp }
+    );
+    const button = container.querySelector('button');
+
+    expect(button).not.toBeNull();
+    button?.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    button?.click();
+
+    expect(onParentPointerUp).not.toHaveBeenCalled();
+    expect(onOpenIssue).toHaveBeenCalledOnce();
+
+    root.unmount();
+    container.remove();
+  });
+
   it('hides default idle status reasons', () => {
     const { container, root } = renderContent({
       ...baseWorkspace,
