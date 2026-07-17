@@ -3,7 +3,6 @@
   "workspaces": {
     ".": {
       "entry": [
-        "src/client/main.tsx",
         "src/cli/index.ts",
         "src/backend/index.ts",
         "src/backend/server.ts",
@@ -19,20 +18,27 @@
     "@prisma-gen/*": ["prisma/generated/*"]
   },
   "ignore": [
-    "src/components/ui/**",
-    "src/backend/services/index.ts",
-    "src/backend/services/*.service.ts",
-    "src/backend/resource_accessors/index.ts",
-    "src/backend/clients/index.ts",
-    "src/backend/trpc/index.ts",
-    "src/backend/trpc/procedures/index.ts",
-    "src/backend/domains/*/index.ts",
-    "src/backend/domains/**/*/index.ts",
-    "src/backend/domains/**/*.service.ts",
-    "src/backend/orchestration/*.ts"
+    "src/components/ui/accordion.tsx",
+    "src/components/ui/aspect-ratio.tsx",
+    "src/components/ui/avatar.tsx",
+    "src/components/ui/breadcrumb.tsx",
+    "src/components/ui/button-group.tsx",
+    "src/components/ui/carousel.tsx",
+    "src/components/ui/chart.tsx",
+    "src/components/ui/drawer.tsx",
+    "src/components/ui/empty.tsx",
+    "src/components/ui/field.tsx",
+    "src/components/ui/form.tsx",
+    "src/components/ui/hover-card.tsx",
+    "src/components/ui/input-otp.tsx",
+    "src/components/ui/item.tsx",
+    "src/components/ui/menubar.tsx",
+    "src/components/ui/navigation-menu.tsx",
+    "src/components/ui/pagination.tsx",
+    "src/components/ui/slider.tsx",
+    "src/components/ui/toggle-group.tsx"
   ],
   "ignoreDependencies": [
-    "autoprefixer",
     "tw-animate-css",
     "@tailwindcss/typography",
     "@prisma/client",
@@ -50,8 +56,6 @@
     "tailwindcss-animate",
     "vaul",
     "@radix-ui/react-toggle-group",
-    "@hookform/resolvers",
-    "geist",
     "@agentclientprotocol/claude-agent-acp"
   ],
   "vitest": {

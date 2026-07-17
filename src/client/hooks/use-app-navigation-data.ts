@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
-import { useProjectContext } from '@/client/lib/providers';
 import { trpc } from '@/client/lib/trpc';
 
 export function getProjectSlugFromPath(pathname: string): string | null {
@@ -91,7 +90,6 @@ function useProjectSlugSync(
 export function useAppNavigationData() {
   const { pathname } = useLocation();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(getInitialProjectSlug);
-  const { setProjectContext } = useProjectContext();
 
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const selectProjectSlug = useCallback((slug: string) => {
@@ -125,13 +123,6 @@ export function useAppNavigationData() {
 
   // Sync slug from URL/localStorage and keep stale selections from surviving project changes.
   useProjectSlugSync(pathname, projects, selectedProjectSlug, selectProjectSlug);
-
-  // Set project context for tRPC headers
-  useEffect(() => {
-    if (selectedProjectId) {
-      setProjectContext(selectedProjectId);
-    }
-  }, [selectedProjectId, setProjectContext]);
 
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
