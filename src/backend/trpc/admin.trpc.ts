@@ -9,7 +9,7 @@ import type { DecisionLog } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
+import { decisionLogService } from '@/backend/services/decision-log';
 import { getLogFilePath } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
@@ -64,7 +64,7 @@ export const adminRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const logs = await decisionLogQueryService.list({
+      const logs = await decisionLogService.list({
         agentId: input.agentId,
         limit: input.limit,
       });

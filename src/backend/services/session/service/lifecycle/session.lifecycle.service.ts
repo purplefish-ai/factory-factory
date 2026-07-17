@@ -18,7 +18,7 @@ import type {
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
@@ -1301,7 +1301,7 @@ export class SessionLifecycleService {
   ): Promise<PermissionPreset> {
     const fallback: PermissionPreset = session?.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
     try {
-      const settings = await userSettingsAccessor.get();
+      const settings = await userSettingsService.get();
       return session?.workflow === 'ratchet'
         ? settings.ratchetPermissions
         : settings.defaultWorkspacePermissions;

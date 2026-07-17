@@ -17,7 +17,7 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
     getDefaultSessionProvider: vi.fn(),
   },
@@ -40,7 +40,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { configService } from '@/backend/services/config.service';
 import { agentSessionAccessor } from '@/backend/services/session';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
 
@@ -64,10 +64,10 @@ describe('FixerSessionService', () => {
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     } as never);
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       defaultSessionProvider: 'CLAUDE',
     } as never);
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('skips when workspace is missing worktree', async () => {

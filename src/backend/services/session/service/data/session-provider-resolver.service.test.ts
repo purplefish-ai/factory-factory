@@ -1,6 +1,6 @@
 import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
@@ -62,7 +62,7 @@ describe('sessionProviderResolverService', () => {
     vi.clearAllMocks();
 
     vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(createWorkspace());
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
       preferredIde: 'cursor',
@@ -83,7 +83,7 @@ describe('sessionProviderResolverService', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('uses explicit provider over workspace and user defaults', async () => {
@@ -94,7 +94,7 @@ describe('sessionProviderResolverService', () => {
 
     expect(provider).toBe('CODEX');
     expect(workspaceAccessor.findRawById).not.toHaveBeenCalled();
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('uses workspace default when configured', async () => {
@@ -107,7 +107,7 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('falls back to user default when workspace is WORKSPACE_DEFAULT', async () => {
@@ -116,6 +116,6 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CLAUDE');
-    expect(userSettingsAccessor.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
+    expect(userSettingsService.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
   });
 });

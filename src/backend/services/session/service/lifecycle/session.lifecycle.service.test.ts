@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationAccessor } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
@@ -25,7 +25,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(async () => ({
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
@@ -866,19 +866,19 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not create a client after stop completes during permission resolution', async () => {
-    type UserSettings = Awaited<ReturnType<typeof userSettingsAccessor.get>>;
+    type UserSettings = Awaited<ReturnType<typeof userSettingsService.get>>;
     let resolveSettings!: (settings: UserSettings) => void;
     const pendingSettings = new Promise<UserSettings>((resolve) => {
       resolveSettings = resolve;
     });
-    vi.mocked(userSettingsAccessor.get).mockReturnValueOnce(pendingSettings);
+    vi.mocked(userSettingsService.get).mockReturnValueOnce(pendingSettings);
     const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
 
     const startResult = service
       .startSession('session-1', sendSessionMessage)
       .catch((error) => error);
     await vi.waitFor(() => {
-      expect(userSettingsAccessor.get).toHaveBeenCalled();
+      expect(userSettingsService.get).toHaveBeenCalled();
     });
 
     await service.stopSession('session-1');

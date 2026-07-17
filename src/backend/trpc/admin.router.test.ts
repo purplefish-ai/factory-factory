@@ -45,8 +45,8 @@ vi.mock('@/backend/orchestration/data-backup.service', () => ({
   },
 }));
 
-vi.mock('@/backend/orchestration/decision-log-query.service', () => ({
-  decisionLogQueryService: {
+vi.mock('@/backend/services/decision-log', () => ({
+  decisionLogService: {
     list: (...args: unknown[]) => mockDecisionLogList(...args),
   },
 }));

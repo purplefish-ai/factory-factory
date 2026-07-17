@@ -7,20 +7,20 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
     getDefaultSessionProvider: vi.fn(),
   },
 }));
 
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
 describe('ratchetProviderResolverService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('uses ratchet provider when workspace overrides it', async () => {
@@ -35,7 +35,7 @@ describe('ratchetProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('falls back to workspace default when ratchet provider is WORKSPACE_DEFAULT', async () => {
@@ -50,7 +50,7 @@ describe('ratchetProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
+    expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('falls back to user default when workspace defers provider selection', async () => {
@@ -65,7 +65,7 @@ describe('ratchetProviderResolverService', () => {
     });
 
     expect(provider).toBe('CLAUDE');
-    expect(userSettingsAccessor.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
+    expect(userSettingsService.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
   });
 
   it('uses provided workspace and skips lookup', async () => {

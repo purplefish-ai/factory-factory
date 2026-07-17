@@ -9,7 +9,10 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findById: (...args: unknown[]) => mockFindById(...args),
   },
-  userSettingsQueryService: {
+}));
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: {
     get: (...args: unknown[]) => mockGetUserSettings(...args),
   },
 }));

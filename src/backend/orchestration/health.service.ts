@@ -1,8 +1,8 @@
-import { healthAccessor } from '@/backend/services/settings';
+import { settingsHealthService } from '@/backend/services/settings';
 
 class HealthService {
   checkDatabaseConnection(): Promise<void> {
-    return healthAccessor.checkDatabaseConnection();
+    return settingsHealthService.checkDatabaseConnection();
   }
 }
 

@@ -26,7 +26,7 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
+  userSettingsService: {
     get: vi.fn(),
     getDefaultSessionProvider: vi.fn(),
   },
@@ -48,7 +48,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { agentSessionAccessor } from '@/backend/services/session';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
 import {
@@ -119,7 +119,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockGitHubBridge.getResolvedReviewCommentIds).mockResolvedValue(new Set());
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
-    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+    vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
       preferredIde: 'cursor',
@@ -140,7 +140,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
-    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   afterEach(() => {

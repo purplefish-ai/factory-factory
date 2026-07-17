@@ -11,7 +11,7 @@ const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
 
 vi.mock('@/backend/services/settings', () => ({
-  healthAccessor: {
+  settingsHealthService: {
     checkDatabaseConnection: () => mockQueryRaw(),
   },
 }));

@@ -1,5 +1,5 @@
 import type { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { resolveRatchetProviderFromWorkspace } from './provider-selection';
 
@@ -24,7 +24,7 @@ class RatchetProviderResolverService {
       return selectedProvider;
     }
 
-    return userSettingsAccessor.getDefaultSessionProvider();
+    return userSettingsService.getDefaultSessionProvider();
   }
 }
 

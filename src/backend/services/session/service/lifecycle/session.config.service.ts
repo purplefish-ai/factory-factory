@@ -9,7 +9,7 @@ import {
 } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { SessionRepository } from './session.repository';
@@ -652,7 +652,7 @@ export class SessionConfigService {
   ): Promise<SessionPermissionPreset> {
     const fallback: SessionPermissionPreset = workflow === 'ratchet' ? 'YOLO' : 'STRICT';
     try {
-      const settings = await userSettingsAccessor.get();
+      const settings = await userSettingsService.get();
       return workflow === 'ratchet'
         ? settings.ratchetPermissions
         : settings.defaultWorkspacePermissions;
@@ -671,7 +671,7 @@ export class SessionConfigService {
     provider: SessionProvider
   ): Promise<string | null> {
     try {
-      const settings = await userSettingsAccessor.get();
+      const settings = await userSettingsService.get();
       const value =
         provider === 'CLAUDE'
           ? settings.defaultClaudeReasoningEffort

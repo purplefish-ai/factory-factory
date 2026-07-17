@@ -2,7 +2,7 @@ import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
-import * as userSettingsAccessorModule from '@/backend/services/settings';
+import * as userSettingsServiceModule from '@/backend/services/settings';
 import * as projectAccessorModule from '@/backend/services/workspace/resources/project.accessor';
 import * as workspaceAccessorModule from '@/backend/services/workspace/resources/workspace.accessor';
 import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
@@ -140,7 +140,7 @@ describe('WorkspaceCreationService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue(
+    vi.spyOn(userSettingsServiceModule.userSettingsService, 'get').mockResolvedValue(
       mockUserSettings
     );
     vi.spyOn(workspaceAccessorModule.workspaceAccessor, 'create').mockResolvedValue(mockWorkspace);
@@ -191,7 +191,7 @@ describe('WorkspaceCreationService', () => {
           })
         );
         // resolveWorkspaceCreationDefaults always reads user settings for ratchet defaults.
-        expect(userSettingsAccessorModule.userSettingsAccessor.get).toHaveBeenCalled();
+        expect(userSettingsServiceModule.userSettingsService.get).toHaveBeenCalled();
       });
 
       it('should default to user settings ratchetEnabled when not provided', async () => {
@@ -216,7 +216,7 @@ describe('WorkspaceCreationService', () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue(
+        vi.spyOn(userSettingsServiceModule.userSettingsService, 'get').mockResolvedValue(
           disabledSettings
         );
 
@@ -244,7 +244,7 @@ describe('WorkspaceCreationService', () => {
 
         await service.create(source);
 
-        expect(userSettingsAccessorModule.userSettingsAccessor.get).toHaveBeenCalledTimes(1);
+        expect(userSettingsServiceModule.userSettingsService.get).toHaveBeenCalledTimes(1);
       });
 
       it('persists initial prompt attachments in creation metadata', async () => {

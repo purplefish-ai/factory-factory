@@ -4,8 +4,8 @@ const mockFindByAgentId = vi.hoisted(() => vi.fn());
 const mockFindRecent = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/orchestration/decision-log-query.service', () => ({
-  decisionLogQueryService: {
+vi.mock('@/backend/services/decision-log', () => ({
+  decisionLogService: {
     findByAgentId: (...args: unknown[]) => mockFindByAgentId(...args),
     findRecent: (...args: unknown[]) => mockFindRecent(...args),
     findById: (...args: unknown[]) => mockFindById(...args),

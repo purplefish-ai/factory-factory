@@ -8,7 +8,7 @@ import { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 import { z } from 'zod';
 import { execCommand } from '@/backend/lib/shell';
 import { fetchCodexModelCatalogFromAppServer } from '@/backend/services/session';
-import { userSettingsQueryService } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
 import { publicProcedure, router } from './trpc';
 
 const providerModelOptionSchema = z.object({
@@ -100,7 +100,7 @@ export const userSettingsRouter = router({
    * Get user settings
    */
   get: publicProcedure.query(async () => {
-    return await userSettingsQueryService.get();
+    return await userSettingsService.get();
   }),
 
   getProviderOptions: publicProcedure.query(async () => {
@@ -152,7 +152,7 @@ export const userSettingsRouter = router({
       if (input.preferredIde === 'custom' && !input.customIdeCommand) {
         throw new Error('Custom IDE command is required when using custom IDE');
       }
-      return await userSettingsQueryService.update(input);
+      return await userSettingsService.update(input);
     }),
 
   /**
@@ -206,7 +206,7 @@ export const userSettingsRouter = router({
   getWorkspaceOrder: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      return await userSettingsQueryService.getWorkspaceOrder(input.projectId);
+      return await userSettingsService.getWorkspaceOrder(input.projectId);
     }),
 
   /**
@@ -220,7 +220,7 @@ export const userSettingsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      await userSettingsQueryService.updateWorkspaceOrder(input.projectId, input.workspaceIds);
+      await userSettingsService.updateWorkspaceOrder(input.projectId, input.workspaceIds);
       return { success: true };
     }),
 });

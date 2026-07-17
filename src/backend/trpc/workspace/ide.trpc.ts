@@ -1,14 +1,15 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { checkIdeAvailable, openPathInIde } from '@/backend/lib/ide-helpers';
-import { userSettingsQueryService, workspaceDataService } from '@/backend/services/workspace';
+import { userSettingsService } from '@/backend/services/settings';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 
 export const workspaceIdeRouter = router({
   // Get list of available IDEs
   getAvailableIdes: publicProcedure.query(async () => {
     const ides: Array<{ id: string; name: string }> = [];
-    const settings = await userSettingsQueryService.get();
+    const settings = await userSettingsService.get();
 
     // Check Cursor
     const cursorAvailable = await checkIdeAvailable('cursor');
@@ -50,7 +51,7 @@ export const workspaceIdeRouter = router({
       }
 
       // Get user settings to determine which IDE to use
-      const settings = await userSettingsQueryService.get();
+      const settings = await userSettingsService.get();
       const ideToUse = input.ide ?? settings.preferredIde;
 
       // Validate custom IDE configuration

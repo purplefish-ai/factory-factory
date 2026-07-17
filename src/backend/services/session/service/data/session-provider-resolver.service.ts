@@ -1,6 +1,6 @@
 import type { SessionProvider, Workspace } from '@prisma-gen/client';
 import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 
 class SessionProviderResolverService {
@@ -11,7 +11,7 @@ class SessionProviderResolverService {
       return explicitProvider;
     }
 
-    return await userSettingsAccessor.getDefaultSessionProvider();
+    return await userSettingsService.getDefaultSessionProvider();
   }
 
   async resolveSessionProvider(params: {
@@ -33,7 +33,7 @@ class SessionProviderResolverService {
       return workspaceProvider;
     }
 
-    return userSettingsAccessor.getDefaultSessionProvider();
+    return userSettingsService.getDefaultSessionProvider();
   }
 }
 

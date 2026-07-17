@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
@@ -373,7 +373,7 @@ export class WorkspaceCreationService {
   private async resolveWorkspaceCreationDefaults(
     explicitRatchetEnabled?: boolean
   ): Promise<boolean> {
-    const settings = await userSettingsAccessor.get();
+    const settings = await userSettingsService.get();
     return explicitRatchetEnabled ?? settings.ratchetEnabled;
   }
 }

@@ -1,7 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { createLogger } from '@/backend/services/logger.service';
-import { userSettingsAccessor } from '@/backend/services/settings';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import type { RatchetSessionBridge } from './bridges';
 import { type AcquireAndDispatchResult, fixerSessionService } from './fixer-session.service';
@@ -185,7 +185,7 @@ export async function triggerRatchetFixer(params: {
 
   try {
     signal?.throwIfAborted();
-    const userSettings = await userSettingsAccessor.get();
+    const userSettings = await userSettingsService.get();
     signal?.throwIfAborted();
     result = await fixerSessionService.acquireAndDispatch({
       workspaceId: workspace.id,
