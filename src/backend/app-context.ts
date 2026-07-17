@@ -31,6 +31,7 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
+import { deliverWorkspaceNotification } from './orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
@@ -142,6 +143,7 @@ export type ApplicationServices = BridgeServices & {
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: typeof createChildWorkspace;
+  deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
   ) => Pick<WorkspaceCreationService, 'create'>;
@@ -266,6 +268,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       eventCollector.removeWorkspace(workspaceId);
     },
     createChildWorkspace,
+    deliverWorkspaceNotification,
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
     fireLifecycleNotification,

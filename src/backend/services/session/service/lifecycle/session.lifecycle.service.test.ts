@@ -363,6 +363,37 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     expect(workspaceNotificationService.markDelivered).not.toHaveBeenCalled();
   });
 
+  it('does not re-enqueue a notification queued during transcript reconciliation', async () => {
+    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
+      {
+        id: 'notif-parent',
+        workspaceId: 'workspace-1',
+        sourceWorkspaceId: 'parent-workspace',
+        sourceWorkspaceName: 'Parent Workspace',
+        sourceProjectName: 'Parent Project',
+        message: 'Please check the failing test.',
+        direction: 'PARENT_TO_CHILD',
+        deliveredAt: null,
+        createdAt: new Date('2026-06-22T10:30:00.000Z'),
+      },
+    ] as never);
+    const { service, sessionDomainService } = createLifecycleService();
+    let queuedByLiveDelivery = false;
+    sessionDomainService.hasQueuedMessage.mockImplementation(() => queuedByLiveDelivery);
+    sessionDomainService.getTranscriptSnapshot.mockImplementation(() => {
+      queuedByLiveDelivery = true;
+      return [];
+    });
+
+    const dispatchableCount = await deliverPendingChildNotifications(service);
+
+    expect(dispatchableCount).toBe(1);
+    expect(sessionDomainService.hasQueuedMessage).toHaveBeenCalledTimes(2);
+    expect(sessionDomainService.enqueue).not.toHaveBeenCalled();
+    expect(sessionDomainService.appendClaudeEvent).not.toHaveBeenCalled();
+    expect(sessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
   it('marks an already-committed pending notification delivered without requeueing it', async () => {
     const createdAt = new Date('2026-06-22T10:30:00.000Z');
     vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([

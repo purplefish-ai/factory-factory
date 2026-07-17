@@ -55,6 +55,9 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
   persistChildNotification: vi.fn(),
   persistParentNotification: vi.fn(),
 }));
+vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
+  deliverWorkspaceNotification: vi.fn(),
+}));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
@@ -191,6 +194,7 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
+import { deliverWorkspaceNotification } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import {
   autoIterationService,
@@ -334,6 +338,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     configService: graphConfigService,
     computePendingRequestType,
     createChildWorkspace,
+    deliverWorkspaceNotification,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
     cryptoService,

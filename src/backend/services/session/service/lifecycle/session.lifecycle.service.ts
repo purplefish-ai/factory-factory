@@ -1162,6 +1162,10 @@ export class SessionLifecycleService {
         if (alreadyDelivered) {
           continue;
         }
+        if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
+          dispatchableCount += 1;
+          continue;
+        }
 
         const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
           id: messageId,
