@@ -32,6 +32,8 @@ export {
   getWorkspaceCiLabel,
   getWorkspaceCiTooltip,
   getWorkspacePrTooltipSuffix,
+  WORKSPACE_SIDEBAR_ACTIVITY_STATES,
+  WORKSPACE_SIDEBAR_CI_STATES,
   type WorkspaceSidebarActivityState,
   type WorkspaceSidebarCiState,
   type WorkspaceSidebarStatus,
