@@ -46,13 +46,16 @@ export function usePaletteKeyboardNavigation({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selectedIndexRef = useRef(selectedIndex);
   const prevResetKeyRef = useRef(resetKey);
+  const prevIsOpenRef = useRef(isOpen);
 
-  // Reset selection when input filter changes while open.
+  // Reset selection when the palette opens or its input filter changes.
   useEffect(() => {
+    const justOpened = isOpen && !prevIsOpenRef.current;
     const filterChanged = prevResetKeyRef.current !== resetKey;
+    prevIsOpenRef.current = isOpen;
     prevResetKeyRef.current = resetKey;
 
-    if (isOpen && filterChanged) {
+    if (isOpen && (justOpened || filterChanged)) {
       setSelectedIndex(0);
       selectedIndexRef.current = 0;
     }
