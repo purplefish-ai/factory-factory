@@ -16,6 +16,7 @@ describe('ApplicationError', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({
+      name: 'ApplicationError',
       code,
       message: 'Public message',
       cause,
