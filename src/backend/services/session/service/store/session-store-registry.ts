@@ -17,6 +17,7 @@ export class SessionStoreRegistry {
         initialized: false,
         historyHydrated: false,
         transcript: [],
+        transcriptIdToIndex: new Map(),
         queue: [],
         recentRejections: [],
         pendingInteractiveRequest: null,

@@ -27,6 +27,10 @@ function createStore(): SessionStore {
         order: 1,
       },
     ],
+    transcriptIdToIndex: new Map([
+      ['u1', 0],
+      ['c1', 1],
+    ]),
     queue: [
       {
         id: 'q1',
