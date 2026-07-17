@@ -44,22 +44,10 @@ const mockCreateAgentSession = vi.hoisted(() => vi.fn());
 const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
   vi.fn(async (_explicitProvider?: unknown) => 'CLAUDE')
 );
-const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
-const mockFindSessionsByWorkspaceId = vi.hoisted(() => vi.fn());
-const mockAppendClaudeEvent = vi.hoisted(() => vi.fn());
-const mockEmitDelta = vi.hoisted(() => vi.fn());
-const mockEnqueue = vi.hoisted(() => vi.fn());
-const mockHasQueuedMessage = vi.hoisted(() => vi.fn());
-const mockTryDispatchNextMessage = vi.hoisted(() => vi.fn());
-const mockPersistChildNotification = vi.hoisted(() => vi.fn());
-const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   workspaceQueryService: mockWorkspaceQueryService,
-  workspaceAccessor: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-  },
   workspaceActivityService: {
     clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
   },
@@ -77,10 +65,6 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionDomainService: {
     getAllPendingRequests: () => new Map(),
-    appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
-    emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
-    enqueue: (...args: unknown[]) => mockEnqueue(...args),
-    hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
   },
   sessionDataService: {
     createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
@@ -88,12 +72,6 @@ vi.mock('@/backend/services/session', () => ({
   sessionProviderResolverService: {
     resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
       mockResolveProviderForWorkspaceCreation(explicitProvider),
-  },
-  agentSessionAccessor: {
-    findByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
-  },
-  chatMessageHandlerService: {
-    tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
   },
 }));
 
@@ -132,10 +110,7 @@ vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
 }));
 
 vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
-  createChildWorkspace: vi.fn(),
   fireLifecycleNotification: vi.fn(),
-  persistChildNotification: (...args: unknown[]) => mockPersistChildNotification(...args),
-  persistParentNotification: (...args: unknown[]) => mockPersistParentNotification(...args),
 }));
 
 vi.mock('./workspace/workspace-helpers', () => ({
@@ -145,23 +120,7 @@ vi.mock('./workspace/workspace-helpers', () => ({
   })),
 }));
 
-vi.mock('./workspace/files.trpc', () => ({
-  workspaceFilesRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/git.trpc', () => ({
-  workspaceGitRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/ide.trpc', () => ({
-  workspaceIdeRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/init.trpc', () => ({
-  workspaceInitRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/run-script.trpc', () => ({
-  workspaceRunScriptRouter: { _def: { procedures: {} } },
-}));
-
-import { workspaceRouter } from './workspace.trpc';
+import { workspaceCoreRouter } from './workspace.trpc';
 
 function createCaller(requestTrust?: {
   remoteAddress?: string;
@@ -191,7 +150,7 @@ function createCaller(requestTrust?: {
     ),
   };
 
-  const caller = workspaceRouter.createCaller({
+  const caller = workspaceCoreRouter.createCaller({
     requestTrust,
     appContext: {
       services: {
@@ -219,7 +178,7 @@ function createCaller(requestTrust?: {
   return { caller, sessionService, runScriptService, terminalService, cliHealthService };
 }
 
-describe('workspaceRouter', () => {
+describe('workspaceCoreRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveProviderForWorkspaceCreation.mockResolvedValue('CLAUDE');
@@ -388,14 +347,6 @@ describe('workspaceRouter', () => {
         type: 'MANUAL',
         projectId: 'p1',
         name: 'New Workspace',
-      })
-    ).rejects.toThrow('trusted local Factory Factory client');
-
-    await expect(
-      caller.createChild({
-        parentWorkspaceId: 'parent-1',
-        projectId: 'p1',
-        name: 'Child Workspace',
       })
     ).rejects.toThrow('trusted local Factory Factory client');
 
@@ -729,206 +680,5 @@ describe('workspaceRouter', () => {
     expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
-  });
-
-  describe('sendMessageToParent', () => {
-    const child = {
-      id: 'child-1',
-      name: 'Child WS',
-      parentWorkspaceId: 'parent-1',
-      project: { name: 'Child Project' },
-    };
-
-    beforeEach(() => {
-      mockFindByIdWithProject.mockResolvedValue(child);
-      mockPersistChildNotification.mockResolvedValue({
-        id: 'notif-1',
-        direction: 'CHILD_TO_PARENT',
-        sourceWorkspaceName: 'Child WS',
-        message: 'hello',
-      });
-      mockAppendClaudeEvent.mockReturnValue(1);
-      mockEnqueue.mockReturnValue({ position: 0 });
-      mockHasQueuedMessage.mockReturnValue(false);
-      mockTryDispatchNextMessage.mockResolvedValue(undefined);
-    });
-
-    it('persists the notification before live delivery to an active session', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-1', status: 'RUNNING' }]);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToParent({ childWorkspaceId: 'child-1', message: 'hello' })
-      ).resolves.toEqual({ delivered: true });
-
-      expect(mockPersistChildNotification).toHaveBeenCalledWith({
-        parentWorkspaceId: 'parent-1',
-        sourceWorkspaceId: 'child-1',
-        message: 'hello',
-      });
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        'sess-1',
-        expect.objectContaining({
-          id: 'workspace-notification-notif-1',
-          text: `[Message from child workspace "Child WS"]: hello\n\n<!-- factory-factory-workspace-notification:notif-1 -->`,
-        })
-      );
-      expect(mockTryDispatchNextMessage).toHaveBeenCalledWith('sess-1');
-      const persistOrder = mockPersistChildNotification.mock.invocationCallOrder[0];
-      const enqueueOrder = mockEnqueue.mock.invocationCallOrder[0];
-      if (persistOrder === undefined || enqueueOrder === undefined) {
-        throw new Error('Expected both persist and enqueue to be called');
-      }
-      expect(persistOrder).toBeLessThan(enqueueOrder);
-    });
-
-    it('persists the notification and skips live delivery when no active session', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-1', status: 'STOPPED' }]);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToParent({ childWorkspaceId: 'child-1', message: 'hello' })
-      ).resolves.toEqual({ delivered: false });
-
-      expect(mockPersistChildNotification).toHaveBeenCalledWith({
-        parentWorkspaceId: 'parent-1',
-        sourceWorkspaceId: 'child-1',
-        message: 'hello',
-      });
-      expect(mockEnqueue).not.toHaveBeenCalled();
-      expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
-    });
-
-    it('leaves the notification pending when live enqueue fails', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-1', status: 'RUNNING' }]);
-      mockEnqueue.mockReturnValue({ error: 'queue full' });
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToParent({ childWorkspaceId: 'child-1', message: 'hello' })
-      ).resolves.toEqual({ delivered: false });
-
-      expect(mockPersistChildNotification).toHaveBeenCalled();
-      expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
-    });
-
-    it('skips enqueue when session startup already queued the notification', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-1', status: 'RUNNING' }]);
-      mockHasQueuedMessage.mockReturnValue(true);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToParent({ childWorkspaceId: 'child-1', message: 'hello' })
-      ).resolves.toEqual({ delivered: true });
-
-      expect(mockHasQueuedMessage).toHaveBeenCalledWith('sess-1', 'workspace-notification-notif-1');
-      expect(mockEnqueue).not.toHaveBeenCalled();
-      expect(mockAppendClaudeEvent).not.toHaveBeenCalled();
-      expect(mockEmitDelta).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('sendMessageToChild', () => {
-    const child = {
-      id: 'child-1',
-      name: 'Child WS',
-      parentWorkspaceId: 'parent-1',
-      project: { name: 'Child Project' },
-    };
-    const parent = {
-      id: 'parent-1',
-      name: 'Parent WS',
-      parentWorkspaceId: null,
-      project: { name: 'Parent Project' },
-    };
-
-    beforeEach(() => {
-      mockFindByIdWithProject.mockImplementation(async (id: unknown) =>
-        id === 'child-1' ? child : parent
-      );
-      mockPersistParentNotification.mockResolvedValue({
-        id: 'notif-2',
-        direction: 'PARENT_TO_CHILD',
-        sourceWorkspaceName: 'Parent WS',
-        message: 'do this',
-      });
-      mockAppendClaudeEvent.mockReturnValue(1);
-      mockEnqueue.mockReturnValue({ position: 0 });
-      mockHasQueuedMessage.mockReturnValue(false);
-      mockTryDispatchNextMessage.mockResolvedValue(undefined);
-    });
-
-    it('persists the notification before live delivery to an active session', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-2', status: 'IDLE' }]);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToChild({
-          parentWorkspaceId: 'parent-1',
-          childWorkspaceId: 'child-1',
-          message: 'do this',
-        })
-      ).resolves.toEqual({ delivered: true });
-
-      expect(mockPersistParentNotification).toHaveBeenCalledWith({
-        parentWorkspaceId: 'parent-1',
-        targetChildWorkspaceId: 'child-1',
-        message: 'do this',
-      });
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        'sess-2',
-        expect.objectContaining({
-          id: 'workspace-notification-notif-2',
-          text: `[Message from parent workspace "Parent WS"]: do this\n\n<!-- factory-factory-workspace-notification:notif-2 -->`,
-        })
-      );
-      expect(mockTryDispatchNextMessage).toHaveBeenCalledWith('sess-2');
-      const persistOrder = mockPersistParentNotification.mock.invocationCallOrder[0];
-      const enqueueOrder = mockEnqueue.mock.invocationCallOrder[0];
-      if (persistOrder === undefined || enqueueOrder === undefined) {
-        throw new Error('Expected both persist and enqueue to be called');
-      }
-      expect(persistOrder).toBeLessThan(enqueueOrder);
-    });
-
-    it('persists the notification and skips live delivery when no active session', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([]);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToChild({
-          parentWorkspaceId: 'parent-1',
-          childWorkspaceId: 'child-1',
-          message: 'do this',
-        })
-      ).resolves.toEqual({ delivered: false });
-
-      expect(mockPersistParentNotification).toHaveBeenCalledWith({
-        parentWorkspaceId: 'parent-1',
-        targetChildWorkspaceId: 'child-1',
-        message: 'do this',
-      });
-      expect(mockEnqueue).not.toHaveBeenCalled();
-      expect(mockTryDispatchNextMessage).not.toHaveBeenCalled();
-    });
-
-    it('skips enqueue when session startup already queued the notification', async () => {
-      mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'sess-2', status: 'IDLE' }]);
-      mockHasQueuedMessage.mockReturnValue(true);
-
-      const { caller } = createCaller();
-      await expect(
-        caller.sendMessageToChild({
-          parentWorkspaceId: 'parent-1',
-          childWorkspaceId: 'child-1',
-          message: 'do this',
-        })
-      ).resolves.toEqual({ delivered: true });
-
-      expect(mockHasQueuedMessage).toHaveBeenCalledWith('sess-2', 'workspace-notification-notif-2');
-      expect(mockEnqueue).not.toHaveBeenCalled();
-      expect(mockAppendClaudeEvent).not.toHaveBeenCalled();
-      expect(mockEmitDelta).not.toHaveBeenCalled();
-    });
   });
 });
