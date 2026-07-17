@@ -116,11 +116,6 @@ export const branchRenameInterceptor: ToolInterceptor = {
   tools: '*',
 
   async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
-    // Skip if tool execution failed
-    if (event.output?.isError) {
-      return;
-    }
-
     // Check if this was a `git branch -m` or `git branch -M` command (branch rename)
     // -m: rename branch, -M: force rename (overwrite if target exists)
     // Use regex to avoid false positives from strings containing "git branch -m"
@@ -129,6 +124,9 @@ export const branchRenameInterceptor: ToolInterceptor = {
       return;
     }
     workspaceGitStateService.invalidate(context.workingDir);
+    if (event.output?.isError) {
+      return;
+    }
 
     logger.info('Detected git branch rename command', {
       workspaceId: context.workspaceId,

@@ -464,13 +464,12 @@ export class GitClient {
       : ['merge', sourceBranch];
 
     const mergeResult = await gitCommand(mergeArgs, worktreePath);
+    workspaceGitStateService.invalidate(worktreePath);
     if (mergeResult.code !== 0) {
       throw new Error(
         `Failed to merge branch ${sourceBranch}: ${mergeResult.stderr || mergeResult.stdout}`
       );
     }
-    workspaceGitStateService.invalidate(worktreePath);
-
     // Get the merge commit SHA
     const revResult = await gitCommand(['rev-parse', 'HEAD'], worktreePath);
     if (revResult.code !== 0) {
@@ -490,10 +489,10 @@ export class GitClient {
   async pushBranch(worktreePath: string, branchName?: string): Promise<void> {
     const branch = branchName || 'HEAD';
     const result = await gitCommand(['push', 'origin', branch], worktreePath);
+    workspaceGitStateService.invalidate(worktreePath);
     if (result.code !== 0) {
       throw new Error(`Failed to push branch: ${result.stderr || result.stdout}`);
     }
-    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**
@@ -501,10 +500,10 @@ export class GitClient {
    */
   async pushBranchWithUpstream(worktreePath: string): Promise<void> {
     const result = await gitCommand(['push', '-u', 'origin', 'HEAD'], worktreePath);
+    workspaceGitStateService.invalidate(worktreePath);
     if (result.code !== 0) {
       throw new Error(`Failed to push branch with upstream: ${result.stderr || result.stdout}`);
     }
-    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**
@@ -512,10 +511,10 @@ export class GitClient {
    */
   async fetch(worktreePath: string): Promise<void> {
     const result = await gitCommand(['fetch', 'origin'], worktreePath);
+    workspaceGitStateService.invalidate(worktreePath);
     if (result.code !== 0) {
       throw new Error(`Failed to fetch: ${result.stderr || result.stdout}`);
     }
-    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**

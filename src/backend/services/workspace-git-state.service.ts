@@ -207,7 +207,7 @@ export class WorkspaceGitStateService {
   }
 
   invalidate(worktreePath: string): void {
-    this.invalidatePath(path.resolve(worktreePath), false);
+    this.invalidatePath(path.resolve(worktreePath), true);
   }
 
   remove(worktreePath: string): void {
@@ -383,7 +383,10 @@ export class WorkspaceGitStateService {
   }
 
   private async calculate(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
-    const statusResult = await this.runGit(['status', '--porcelain'], input.worktreePath);
+    const statusResult = await this.runGit(
+      ['--no-optional-locks', 'status', '--porcelain'],
+      input.worktreePath
+    );
     const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
     const status: WorkspaceGitStateSnapshot['status'] = {
       files: statusFiles,

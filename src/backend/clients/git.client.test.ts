@@ -625,7 +625,7 @@ describe('GitClient', () => {
       await expect(client.mergeBranch('/tmp/ws', 'feature-1')).rejects.toThrow(
         'Failed to merge branch feature-1: conflict'
       );
-      expect(mockGitStateInvalidate).not.toHaveBeenCalled();
+      expect(mockGitStateInvalidate).toHaveBeenCalledWith('/tmp/ws');
     });
 
     it('throws when merge commit lookup fails', async () => {
@@ -674,7 +674,8 @@ describe('GitClient', () => {
         'Failed to push branch with upstream: push -u failed'
       );
       await expect(client.fetch('/tmp/ws')).rejects.toThrow('Failed to fetch: fetch failed');
-      expect(mockGitStateInvalidate).not.toHaveBeenCalled();
+      expect(mockGitStateInvalidate).toHaveBeenCalledTimes(3);
+      expect(mockGitStateInvalidate).toHaveBeenCalledWith('/tmp/ws');
     });
 
     it('returns branch and latest commit message when commands succeed', async () => {

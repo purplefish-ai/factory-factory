@@ -41,7 +41,7 @@ describe('auto-iteration Git mutations', () => {
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
   });
 
-  it('does not invalidate when an auto-iteration mutation fails', async () => {
+  it('invalidates when a revert fails after partially changing the worktree', async () => {
     mockExecFile.mockImplementation(
       (_file: string, _args: string[], _options: object, callback: ExecCallback) => {
         callback(new Error('git failed'));
@@ -50,6 +50,36 @@ describe('auto-iteration Git mutations', () => {
 
     await expect(revertHead('/repo/w1')).rejects.toThrow('git failed');
 
-    expect(mockGitStateInvalidate).not.toHaveBeenCalled();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
+  });
+
+  it('invalidates staged changes when an auto-iteration commit fails', async () => {
+    mockExecFile.mockImplementation(
+      (_file: string, args: string[], _options: object, callback: ExecCallback) => {
+        callback(args[0] === 'commit' ? new Error('commit failed') : null, {
+          stdout: '',
+          stderr: '',
+        });
+      }
+    );
+
+    await expect(commitAll('/repo/w1', 'iteration')).rejects.toThrow('commit failed');
+
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
+  });
+
+  it('invalidates a hard reset when the following clean fails', async () => {
+    mockExecFile.mockImplementation(
+      (_file: string, args: string[], _options: object, callback: ExecCallback) => {
+        callback(args[0] === 'clean' ? new Error('clean failed') : null, {
+          stdout: '',
+          stderr: '',
+        });
+      }
+    );
+
+    await expect(discardUncommittedChanges('/repo/w1')).rejects.toThrow('clean failed');
+
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
   });
 });

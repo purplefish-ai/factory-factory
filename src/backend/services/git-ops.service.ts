@@ -76,26 +76,29 @@ class GitOpsService {
       });
     }
 
-    const addResult = await gitCommand(['add', '-A'], worktreePath);
-    if (addResult.code !== 0) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
-      });
-    }
+    try {
+      const addResult = await gitCommand(['add', '-A'], worktreePath);
+      if (addResult.code !== 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
+        });
+      }
 
-    const commitMessage = `Archive workspace ${workspaceName}`;
-    const commitResult = await gitCommand(
-      ['commit', '-m', commitMessage, '--no-verify'],
-      worktreePath
-    );
-    if (commitResult.code !== 0) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
-      });
+      const commitMessage = `Archive workspace ${workspaceName}`;
+      const commitResult = await gitCommand(
+        ['commit', '-m', commitMessage, '--no-verify'],
+        worktreePath
+      );
+      if (commitResult.code !== 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
+        });
+      }
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
     }
-    workspaceGitStateService.invalidate(worktreePath);
   }
 
   async removeWorktree(worktreePath: string, project: ProjectPaths): Promise<void> {
@@ -115,13 +118,23 @@ class GitOpsService {
       (entry) => path.resolve(entry.path) === expectedWorktreePath
     );
     if (registeredWorktree) {
-      await gitClient.deleteWorktree(worktreeName);
+      try {
+        await gitClient.deleteWorktree(worktreeName);
+      } catch (error) {
+        workspaceGitStateService.invalidate(worktreePath);
+        throw error;
+      }
       workspaceGitStateService.remove(worktreePath);
       return;
     }
 
     if (await pathExists(worktreePath)) {
-      await fs.rm(worktreePath, { recursive: true, force: true });
+      try {
+        await fs.rm(worktreePath, { recursive: true, force: true });
+      } catch (error) {
+        workspaceGitStateService.invalidate(worktreePath);
+        throw error;
+      }
     }
     workspaceGitStateService.remove(worktreePath);
   }
@@ -169,11 +182,13 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
-    workspaceGitStateService.invalidate(worktreePath);
-
-    return { worktreePath, branchName: worktreeInfo.branchName };
+    try {
+      const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
+      return { worktreePath, branchName: worktreeInfo.branchName };
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
+    }
   }
 
   async createWorktreeFromExistingBranch(
@@ -186,11 +201,16 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(worktreeName, branchRef);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
-    workspaceGitStateService.invalidate(worktreePath);
-
-    return { worktreePath, branchName: worktreeInfo.branchName };
+    try {
+      const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(
+        worktreeName,
+        branchRef
+      );
+      return { worktreePath, branchName: worktreeInfo.branchName };
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
+    }
   }
 
   async isBranchCheckedOut(project: ProjectPaths, branchName: string): Promise<boolean> {

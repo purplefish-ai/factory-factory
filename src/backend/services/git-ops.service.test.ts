@@ -112,7 +112,7 @@ describe('gitOpsService', () => {
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
   });
 
-  it('does not invalidate when the archive commit fails', async () => {
+  it('invalidates staged archive changes when the commit fails', async () => {
     mockGitCommand
       .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: ' M file.ts\n', stderr: '' })
@@ -122,7 +122,8 @@ describe('gitOpsService', () => {
     await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1', true)).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
     });
-    expect(mockGitStateInvalidate).not.toHaveBeenCalled();
+    expect(mockGitStateInvalidate).toHaveBeenCalledOnce();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
   });
 
   it('removeWorktree uses git when registered and fs fallback otherwise', async () => {
@@ -173,6 +174,7 @@ describe('gitOpsService', () => {
       'remove failed'
     );
     expect(mockGitStateRemove).not.toHaveBeenCalled();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
   });
 
   it('removeWorktree refuses requested paths that do not match the configured worktree path', async () => {
@@ -273,12 +275,12 @@ describe('gitOpsService', () => {
     await expect(gitOpsService.isBranchCheckedOut(project, 'feature/test')).resolves.toBe(false);
   });
 
-  it('does not invalidate when worktree creation fails', async () => {
+  it('invalidates a partial worktree when creation fails', async () => {
     mockGitClient.createWorktree.mockRejectedValueOnce(new Error('create failed'));
 
     await expect(
       gitOpsService.createWorktree(project, 'w1', 'main', { workspaceName: 'W1' })
     ).rejects.toThrow('create failed');
-    expect(mockGitStateInvalidate).not.toHaveBeenCalled();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
   });
 });

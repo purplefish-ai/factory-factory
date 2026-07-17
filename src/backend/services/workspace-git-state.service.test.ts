@@ -26,8 +26,12 @@ function resolvedResult(stdout = '', code = 0, stderr = ''): Promise<ExecResult>
   return Promise.resolve(result(stdout, code, stderr));
 }
 
+function isStatusCommand(args: string[]): boolean {
+  return args.includes('status');
+}
+
 function defaultGitResult(args: string[]): ExecResult {
-  if (args[0] === 'status') {
+  if (isStatusCommand(args)) {
     return result(' M src/a.ts\n');
   }
   if (args[0] === 'merge-base') {
@@ -115,6 +119,10 @@ describe('WorkspaceGitStateService', () => {
         files: ['pushed-later.ts'],
       },
     });
+    expect(runGit).toHaveBeenCalledWith(
+      ['--no-optional-locks', 'status', '--porcelain'],
+      '/repo/w1'
+    );
     expect(runGit).toHaveBeenCalledWith(['diff', '--numstat', 'abc123'], '/repo/w1');
     expect(runGit).toHaveBeenCalledWith(['diff', '--name-status', 'abc123'], '/repo/w1');
     expect(
@@ -134,13 +142,13 @@ describe('WorkspaceGitStateService', () => {
 
     expect(await second).toBe(await first);
     expect(await service.getSnapshot(input)).toBe(await first);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(1);
   });
 
   it('reuses a degraded snapshot before its 5000 ms retry boundary', async () => {
     let statusAttempts = 0;
     runGit.mockImplementation((args) => {
-      if (args[0] === 'status' && statusAttempts++ === 0) {
+      if (isStatusCommand(args) && statusAttempts++ === 0) {
         return resolvedResult('', 1, 'status temporarily unavailable');
       }
       return Promise.resolve(defaultGitResult(args));
@@ -152,13 +160,13 @@ describe('WorkspaceGitStateService', () => {
 
     expect(degraded.status.error).toBe('status temporarily unavailable');
     expect(cached).toBe(degraded);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(1);
   });
 
   it('recalculates a degraded snapshot at exactly 5000 ms', async () => {
     let statusAttempts = 0;
     runGit.mockImplementation((args) => {
-      if (args[0] === 'status' && statusAttempts++ === 0) {
+      if (isStatusCommand(args) && statusAttempts++ === 0) {
         return resolvedResult('', 1, 'status temporarily unavailable');
       }
       return Promise.resolve(defaultGitResult(args));
@@ -173,7 +181,7 @@ describe('WorkspaceGitStateService', () => {
     expect(recovered).not.toBe(degraded);
     expect(recovered.status.error).toBeUndefined();
     expect(recovered.status.files).toEqual([{ path: 'src/a.ts', status: 'M', staged: false }]);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('does not cache a calculation invalidated while it is in flight', async () => {
@@ -183,7 +191,29 @@ describe('WorkspaceGitStateService', () => {
     await first;
     await service.getSnapshot(input);
 
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
+  });
+
+  it('starts a fresh calculation for a caller arriving after invalidation', async () => {
+    const statusResolvers: Array<(value: ExecResult) => void> = [];
+    runGit.mockImplementation((args) => {
+      if (isStatusCommand(args)) {
+        return new Promise((resolve) => statusResolvers.push(resolve));
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const first = service.getSnapshot(input);
+    await vi.waitFor(() => expect(statusResolvers).toHaveLength(1));
+    service.invalidate(input.worktreePath);
+
+    const second = service.getSnapshot(input);
+    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
+    expect(second).not.toBe(first);
+
+    statusResolvers[0]?.(defaultGitResult(['status']));
+    statusResolvers[1]?.(defaultGitResult(['status']));
+    await Promise.all([first, second]);
   });
 
   it('does not restore a removed entry when an old calculation completes', async () => {
@@ -193,13 +223,13 @@ describe('WorkspaceGitStateService', () => {
     await first;
     await service.getSnapshot(input);
 
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('cleans a removal generation tombstone only after all detached calculations settle', async () => {
     const statusResolvers: Array<(value: ExecResult) => void> = [];
     runGit.mockImplementation((args) => {
-      if (args[0] === 'status') {
+      if (isStatusCommand(args)) {
         return new Promise((resolve) => statusResolvers.push(resolve));
       }
       return Promise.resolve(defaultGitResult(args));
@@ -229,7 +259,7 @@ describe('WorkspaceGitStateService', () => {
     await first;
     await service.getSnapshot(input);
 
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('keeps default branches in separate cache entries', async () => {
@@ -237,7 +267,7 @@ describe('WorkspaceGitStateService', () => {
     const develop = await service.getSnapshot({ ...input, defaultBranch: 'develop' });
 
     expect(develop).not.toBe(main);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('watches the worktree, linked gitdir, and common Git metadata directory', async () => {
@@ -260,7 +290,7 @@ describe('WorkspaceGitStateService', () => {
       await vi.advanceTimersByTimeAsync(1);
 
       expect(await service.getSnapshot(input)).not.toBe(main);
-      expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(3);
+      expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(3);
     } finally {
       vi.useRealTimers();
     }
@@ -276,7 +306,7 @@ describe('WorkspaceGitStateService', () => {
     expect(await service.getSnapshot(input)).toBe(first);
     now += 1;
     expect(await service.getSnapshot(input)).not.toBe(first);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('switches to fallback expiry when an installed watcher emits an error', async () => {
@@ -286,7 +316,7 @@ describe('WorkspaceGitStateService', () => {
     now += 300_000;
 
     expect(await service.getSnapshot(input)).not.toBe(first);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(2);
   });
 
   it('does not expire warm entries while watchers remain healthy', async () => {
@@ -294,7 +324,7 @@ describe('WorkspaceGitStateService', () => {
     now += 3_000_000;
 
     expect(await service.getSnapshot(input)).toBe(first);
-    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
+    expect(runGit.mock.calls.filter(([args]) => isStatusCommand(args))).toHaveLength(1);
   });
 
   it('closes watchers and clears all base variants on remove', async () => {
@@ -344,7 +374,7 @@ describe('WorkspaceGitStateService', () => {
 
   it('falls back to the local default branch when the origin merge base is unavailable', async () => {
     runGit.mockImplementation((args) => {
-      if (args[0] === 'status') {
+      if (isStatusCommand(args)) {
         return resolvedResult();
       }
       if (args[0] === 'merge-base' && args[2] === 'origin/main') {
@@ -368,7 +398,7 @@ describe('WorkspaceGitStateService', () => {
 
   it('computes aggregate unstaged stats and skips metadata when no merge base exists', async () => {
     runGit.mockImplementation((args) => {
-      if (args[0] === 'status') {
+      if (isStatusCommand(args)) {
         return resolvedResult('?? new.ts\n');
       }
       if (args[0] === 'merge-base' || args[0] === 'rev-parse') {
@@ -420,7 +450,7 @@ describe('WorkspaceGitStateService', () => {
       ['--name-only', result('', 3, 'upstream diff broke')],
     ]);
     runGit.mockImplementation((args) => {
-      const command = args[0] === 'diff' ? args[1] : args[0];
+      const command = args[0] === 'diff' ? args[1] : isStatusCommand(args) ? 'status' : args[0];
       return Promise.resolve(resultsByCommand.get(command as string) ?? result());
     });
 
