@@ -28,7 +28,7 @@
 - [ ] **Step 1: Add failing metadata-only tests**
 
 ```typescript
-it('returns null for metadata-only plan payloads', () => {
+it('returns null for metadata-only plan payload strings', () => {
   const payload = JSON.stringify({
     type: 'plan',
     id: 'item_plan_approval',
@@ -36,22 +36,35 @@ it('returns null for metadata-only plan payloads', () => {
   });
 
   expect(extractPlanToolResult(payload)).toBeNull();
+});
+
+it('returns null for metadata-only plan payloads in text item arrays', () => {
+  const payload = JSON.stringify({
+    type: 'plan',
+    id: 'item_plan_approval',
+    status: 'completed',
+  });
+
   expect(extractPlanToolResult([{ type: 'text', text: payload }])).toBeNull();
 });
 
-it('returns null when explicit plan fields contain no plan text', () => {
-  const blankPayload = JSON.stringify({
+it('returns null when an explicit plan text field is blank', () => {
+  const payload = JSON.stringify({
     type: 'plan',
     id: 'item_plan_approval',
     text: '   ',
   });
-  const nestedMetadataPayload = JSON.stringify({
+
+  expect(extractPlanToolResult(payload)).toBeNull();
+});
+
+it('returns null for nested metadata-only plan payloads', () => {
+  const payload = JSON.stringify({
     type: 'plan',
     plan: { id: 'item_nested_plan', status: 'completed' },
   });
 
-  expect(extractPlanToolResult(blankPayload)).toBeNull();
-  expect(extractPlanToolResult(nestedMetadataPayload)).toBeNull();
+  expect(extractPlanToolResult(payload)).toBeNull();
 });
 ```
 
@@ -74,6 +87,8 @@ Expected: the metadata-only and invalid explicit-field tests fail because IDs ar
 - [ ] **Step 1: Add recursive explicit-content validation**
 
 ```typescript
+const MAX_PLAN_SEARCH_DEPTH = 6;
+const PLAN_TYPE = 'plan';
 const PLAN_TEXT_KEYS = ['plan', 'markdown', 'text', 'content'] as const;
 
 function hasPlanTextContent(value: unknown, depth = 0): boolean {

@@ -44,7 +44,7 @@ describe('extractPlanToolResult', () => {
     expect(extractPlanToolResult(payload)).toBeNull();
   });
 
-  it('returns null for metadata-only plan payloads', () => {
+  it('returns null for metadata-only plan payload strings', () => {
     const payload = JSON.stringify({
       type: 'plan',
       id: 'item_plan_approval',
@@ -52,21 +52,34 @@ describe('extractPlanToolResult', () => {
     });
 
     expect(extractPlanToolResult(payload)).toBeNull();
+  });
+
+  it('returns null for metadata-only plan payloads in text item arrays', () => {
+    const payload = JSON.stringify({
+      type: 'plan',
+      id: 'item_plan_approval',
+      status: 'completed',
+    });
+
     expect(extractPlanToolResult([{ type: 'text', text: payload }])).toBeNull();
   });
 
-  it('returns null when explicit plan fields contain no plan text', () => {
-    const blankPayload = JSON.stringify({
+  it('returns null when an explicit plan text field is blank', () => {
+    const payload = JSON.stringify({
       type: 'plan',
       id: 'item_plan_approval',
       text: '   ',
     });
-    const nestedMetadataPayload = JSON.stringify({
+
+    expect(extractPlanToolResult(payload)).toBeNull();
+  });
+
+  it('returns null for nested metadata-only plan payloads', () => {
+    const payload = JSON.stringify({
       type: 'plan',
       plan: { id: 'item_nested_plan', status: 'completed' },
     });
 
-    expect(extractPlanToolResult(blankPayload)).toBeNull();
-    expect(extractPlanToolResult(nestedMetadataPayload)).toBeNull();
+    expect(extractPlanToolResult(payload)).toBeNull();
   });
 });
