@@ -111,8 +111,22 @@ module.exports = {
       name: 'no-orchestration-importing-service-internals',
       severity: 'error',
       comment: 'Orchestration must import service barrels only.',
-      from: { path: '^src/backend/orchestration/' },
+      from: {
+        path: '^src/backend/orchestration/',
+        pathNot: '^src/backend/orchestration/data-backup\\.service\\.ts$',
+      },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'data-backup-orchestration-imports-only-data-backup-accessor',
+      severity: 'error',
+      comment: 'The backup orchestrator has one exact persistence exception.',
+      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
+      to: {
+        path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
+        pathNot:
+          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
+      },
     },
     {
       name: 'only-service-layers-import-service-resources',
@@ -121,9 +135,20 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/resources/' },
+    },
+    {
+      name: 'data-backup-orchestration-imports-no-other-service-resources',
+      severity: 'error',
+      comment: 'The backup orchestrator may import only its exact backup persistence module.',
+      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
+      to: {
+        path: '^src/backend/services/[^/]+/resources/',
+        pathNot:
+          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
+      },
     },
     {
       name: 'no-cross-service-resource-imports',
@@ -158,9 +183,21 @@ module.exports = {
       comment: 'External consumers must import from service barrels only.',
       from: {
         path: '^src/backend',
-        pathNot: '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$',
+        pathNot:
+          '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'data-backup-orchestration-has-no-other-deep-service-imports',
+      severity: 'error',
+      comment: 'The backup orchestrator may deep-import only its exact backup persistence module.',
+      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
+      to: {
+        path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
+        pathNot:
+          '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
+      },
     },
     {
       name: 'no-services-importing-transport-layers',

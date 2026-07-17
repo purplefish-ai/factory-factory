@@ -33,8 +33,8 @@ let workspaceStateMachine: typeof import('@/backend/services/workspace').workspa
 let projectManagementService: typeof import('@/backend/services/workspace').projectManagementService;
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
-let userSettingsAccessor: typeof import('@/backend/services/settings').userSettingsAccessor;
-let decisionLogAccessor: typeof import('@/backend/services/decision-log').decisionLogAccessor;
+let userSettingsService: typeof import('@/backend/services/settings').userSettingsService;
+let decisionLogService: typeof import('@/backend/services/decision-log').decisionLogService;
 
 let counter = 0;
 const tempRepoDirs = new Set<string>();
@@ -60,12 +60,12 @@ beforeAll(async () => {
   ({ terminalSessionService } = await vi.importActual<typeof import('@/backend/services/terminal')>(
     '@/backend/services/terminal'
   ));
-  ({ userSettingsAccessor } = await vi.importActual<typeof import('@/backend/services/settings')>(
+  ({ userSettingsService } = await vi.importActual<typeof import('@/backend/services/settings')>(
     '@/backend/services/settings'
   ));
-  ({ decisionLogAccessor } = await vi.importActual<
-    typeof import('@/backend/services/decision-log')
-  >('@/backend/services/decision-log'));
+  ({ decisionLogService } = await vi.importActual<typeof import('@/backend/services/decision-log')>(
+    '@/backend/services/decision-log'
+  ));
 }, 30_000);
 
 afterEach(async () => {
@@ -671,9 +671,9 @@ describe('resource accessors integration', () => {
     });
   });
 
-  describe('userSettingsAccessor', () => {
+  describe('userSettingsService', () => {
     it('creates defaults on first read', async () => {
-      const settings = await userSettingsAccessor.get();
+      const settings = await userSettingsService.get();
 
       expect(settings.userId).toBe('default');
       expect(settings.preferredIde).toBe('cursor');
@@ -684,7 +684,7 @@ describe('resource accessors integration', () => {
 
     it('returns one default row for concurrent first reads', async () => {
       const settings = await Promise.all(
-        Array.from({ length: 10 }, () => userSettingsAccessor.get())
+        Array.from({ length: 10 }, () => userSettingsService.get())
       );
 
       expect(new Set(settings.map((row) => row.id)).size).toBe(1);
@@ -695,11 +695,11 @@ describe('resource accessors integration', () => {
       const projectA = await createProjectFixture();
       const projectB = await createProjectFixture();
 
-      await userSettingsAccessor.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
-      await userSettingsAccessor.updateWorkspaceOrder(projectB.id, ['ws-9']);
+      await userSettingsService.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
+      await userSettingsService.updateWorkspaceOrder(projectB.id, ['ws-9']);
 
-      const orderA = await userSettingsAccessor.getWorkspaceOrder(projectA.id);
-      const orderB = await userSettingsAccessor.getWorkspaceOrder(projectB.id);
+      const orderA = await userSettingsService.getWorkspaceOrder(projectA.id);
+      const orderB = await userSettingsService.getWorkspaceOrder(projectB.id);
 
       expect(orderA).toEqual(['ws-3', 'ws-1']);
       expect(orderB).toEqual(['ws-9']);
@@ -708,7 +708,7 @@ describe('resource accessors integration', () => {
     it('retries stale workspace order writes and preserves concurrent project entries', async () => {
       const projectA = await createProjectFixture();
       const projectB = await createProjectFixture();
-      await userSettingsAccessor.get();
+      await userSettingsService.get();
 
       type UserSettingsUpdateManyResult = ReturnType<typeof prisma.userSettings.updateMany>;
       const originalUpdateMany = prisma.userSettings.updateMany.bind(prisma.userSettings);
@@ -738,7 +738,7 @@ describe('resource accessors integration', () => {
           return originalUpdateMany(args);
         });
 
-      await userSettingsAccessor.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
+      await userSettingsService.updateWorkspaceOrder(projectA.id, ['ws-3', 'ws-1']);
 
       const settings = await prisma.userSettings.findUniqueOrThrow({
         where: { userId: 'default' },
@@ -752,9 +752,9 @@ describe('resource accessors integration', () => {
     });
   });
 
-  describe('decisionLogAccessor', () => {
+  describe('decisionLogService', () => {
     it('formats automatic error logs with structured context', async () => {
-      const entry = await decisionLogAccessor.createAutomatic('agent-1', 'OpenFile', 'error', {
+      const entry = await decisionLogService.createAutomatic('agent-1', 'OpenFile', 'error', {
         message: 'permission denied',
         code: 'EACCES',
       });
@@ -767,12 +767,12 @@ describe('resource accessors integration', () => {
     });
 
     it('lists recent logs scoped by agent id', async () => {
-      await decisionLogAccessor.createManual('agent-1', 'Decision A', 'Reason A');
-      await decisionLogAccessor.createManual('agent-2', 'Decision B', 'Reason B');
-      await decisionLogAccessor.createManual('agent-1', 'Decision C', 'Reason C');
+      await decisionLogService.createManual('agent-1', 'Decision A', 'Reason A');
+      await decisionLogService.createManual('agent-2', 'Decision B', 'Reason B');
+      await decisionLogService.createManual('agent-1', 'Decision C', 'Reason C');
 
-      const agentOne = await decisionLogAccessor.list({ agentId: 'agent-1', limit: 10 });
-      const all = await decisionLogAccessor.list({ limit: 10 });
+      const agentOne = await decisionLogService.list({ agentId: 'agent-1', limit: 10 });
+      const all = await decisionLogService.list({ limit: 10 });
 
       expect(agentOne).toHaveLength(2);
       expect(agentOne.every((entry) => entry.agentId === 'agent-1')).toBe(true);
