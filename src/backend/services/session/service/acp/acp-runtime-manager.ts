@@ -440,14 +440,16 @@ export class AcpRuntimeManager {
   }
 
   private async cleanupFailedClientCreation(child: ChildProcess, sessionId: string): Promise<void> {
-    if (child.exitCode !== null) {
+    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+
+    if (hasExited()) {
       return;
     }
 
     try {
       const exitPromise = new Promise<void>((resolve) => {
         child.on('exit', () => resolve());
-        if (child.exitCode !== null) {
+        if (hasExited()) {
           resolve();
         }
       });
@@ -456,7 +458,7 @@ export class AcpRuntimeManager {
 
       await raceWithSoftTimeout(exitPromise, 5000);
 
-      if (child.exitCode === null) {
+      if (!hasExited()) {
         child.kill('SIGKILL');
       }
     } catch {

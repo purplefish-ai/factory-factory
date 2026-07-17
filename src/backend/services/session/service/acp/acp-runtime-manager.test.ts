@@ -81,6 +81,7 @@ import type { AcpClientOptions } from './types';
 function createMockChildProcess(): EventEmitter & {
   pid: number;
   exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
   killed: boolean;
   kill: ReturnType<typeof vi.fn>;
   stdout: PassThrough;
@@ -90,6 +91,7 @@ function createMockChildProcess(): EventEmitter & {
   const child = new EventEmitter() as EventEmitter & {
     pid: number;
     exitCode: number | null;
+    signalCode: NodeJS.Signals | null;
     killed: boolean;
     kill: ReturnType<typeof vi.fn>;
     stdout: PassThrough;
@@ -98,6 +100,7 @@ function createMockChildProcess(): EventEmitter & {
   };
   child.pid = 12_345;
   child.exitCode = null;
+  child.signalCode = null;
   child.killed = false;
   child.kill = vi.fn((signal?: string) => {
     if (signal) {
@@ -120,8 +123,8 @@ function exitChildAfterSigterm(child: ReturnType<typeof createMockChildProcess>)
   child.kill = vi.fn((signal?: string) => {
     if (signal === 'SIGTERM') {
       queueMicrotask(() => {
-        child.exitCode = 0;
-        child.emit('exit', 0, null);
+        child.signalCode = 'SIGTERM';
+        child.emit('exit', null, 'SIGTERM');
       });
     }
     return true;
@@ -427,6 +430,30 @@ describe('AcpRuntimeManager', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
       expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
       expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
+    it('does not signal a subprocess that already terminated from a signal', async () => {
+      const child = createMockChildProcess();
+      child.signalCode = 'SIGTERM';
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockRejectedValue(new Error('handshake failed'));
+      vi.useFakeTimers();
+
+      try {
+        const creationPromise = manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        const creationRejection = creationPromise.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await expect(creationRejection).resolves.toMatchObject({ message: 'handshake failed' });
+        expect(child.kill).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('escalates failed initialization cleanup to SIGKILL after the grace period', async () => {
