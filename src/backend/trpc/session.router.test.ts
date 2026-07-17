@@ -29,17 +29,6 @@ const mockSessionProviderResolverService = vi.hoisted(() => ({
 const mockListQuickActions = vi.hoisted(() => vi.fn());
 const mockGetQuickAction = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/session', () => ({
-  sessionDataService: mockSessionDataService,
-  sessionDomainService: mockSessionDomainService,
-  sessionProviderResolverService: mockSessionProviderResolverService,
-}));
-
-vi.mock('@/backend/prompts/quick-actions', () => ({
-  listQuickActions: () => mockListQuickActions(),
-  getQuickAction: (id: string) => mockGetQuickAction(id),
-}));
-
 import { sessionRouter } from './session.trpc';
 
 function createCaller() {
@@ -72,7 +61,11 @@ function createCaller() {
           },
           sessionService,
           sessionDomainService,
+          sessionDataService: mockSessionDataService,
+          sessionProviderResolverService: mockSessionProviderResolverService,
           cliHealthService,
+          listQuickActions: () => mockListQuickActions(),
+          getQuickAction: (id: string) => mockGetQuickAction(id),
         },
       },
     } as never),

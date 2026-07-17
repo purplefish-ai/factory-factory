@@ -11,30 +11,6 @@ const mockFindChildrenWithStatus = vi.hoisted(() => vi.fn());
 const mockFindParentWorkspace = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
-  archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
-  createChildWorkspace: (...args: unknown[]) => mockCreateChildWorkspace(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
-  deliverWorkspaceNotification: (input: DeliverWorkspaceNotificationInput) =>
-    mockDeliverWorkspaceNotification(input),
-}));
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-    findChildrenWithStatus: (...args: unknown[]) => mockFindChildrenWithStatus(...args),
-    findParentWorkspace: (...args: unknown[]) => mockFindParentWorkspace(...args),
-  },
-  workspaceNotificationAccessor: {
-    countPending: (...args: unknown[]) => mockCountPending(...args),
-  },
-}));
-
 import { workspaceChildrenRouter } from './children.trpc';
 
 function createCaller(requestTrust?: {
@@ -43,11 +19,23 @@ function createCaller(requestTrust?: {
   isLocal: boolean;
 }) {
   const services = {
+    archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
     configService: {
       getCorsConfig: () => ({
         allowedOrigins: ['http://localhost:3000'],
         trustedLocalCidrs: [],
       }),
+    },
+    createChildWorkspace: (...args: unknown[]) => mockCreateChildWorkspace(...args),
+    deliverWorkspaceNotification: (input: DeliverWorkspaceNotificationInput) =>
+      mockDeliverWorkspaceNotification(input),
+    workspaceAccessor: {
+      findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+      findChildrenWithStatus: (...args: unknown[]) => mockFindChildrenWithStatus(...args),
+      findParentWorkspace: (...args: unknown[]) => mockFindParentWorkspace(...args),
+    },
+    workspaceNotificationAccessor: {
+      countPending: (...args: unknown[]) => mockCountPending(...args),
     },
   };
   return {

@@ -1,8 +1,10 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByProjectId: vi.fn(),
@@ -15,28 +17,24 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
   getProjectSummaryState: vi.fn(),
   listWithKanbanState: vi.fn(),
   listWithRuntimeState: vi.fn(),
+  refreshFactoryConfigs: vi.fn(),
+  getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
   syncAllPRStatuses: vi.fn(),
   hasChanges: vi.fn(),
 }));
 
-const mockRunScriptConfigPersistenceService = vi.hoisted(() => ({
-  refreshFactoryConfigs: vi.fn(),
-  getFactoryConfig: vi.fn(),
-}));
-
-const mockDeriveFlowState = vi.hoisted(() => vi.fn());
+const mockDeriveFlowState = applicationGraphMocks.deriveWorkspaceFlowStateFromWorkspace;
 const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
-const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
 const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
-const mockComputeKanbanColumn = vi.hoisted(() => vi.fn());
-const mockComputePendingRequestType = vi.hoisted(() => vi.fn());
+const mockComputeKanbanColumn = applicationGraphMocks.computeKanbanColumn;
+const mockComputePendingRequestType = applicationGraphMocks.computePendingRequestType;
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
@@ -44,47 +42,15 @@ const mockCreateAgentSession = vi.hoisted(() => vi.fn());
 const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
   vi.fn(async (_explicitProvider?: unknown) => 'CLAUDE')
 );
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-  workspaceQueryService: mockWorkspaceQueryService,
-  workspaceActivityService: {
-    clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
-  },
-  deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
-  computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
-  computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
-  WorkspaceCreationService: class {
-    create = (...args: unknown[]) => mockWorkspaceCreationCreate(...args);
-  },
-}));
-
-vi.mock('@/backend/services/session', () => ({
-  sessionService: {
-    getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
-  },
-  sessionDomainService: {
-    getAllPendingRequests: () => new Map(),
-  },
-  sessionDataService: {
-    createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
-  },
-  sessionProviderResolverService: {
-    resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
-      mockResolveProviderForWorkspaceCreation(explicitProvider),
-  },
-}));
-
-vi.mock('@/backend/services/ratchet', () => ({
-  ratchetService: {
-    setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
-    checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
-  },
-}));
-
-vi.mock('@/backend/services/run-script', () => ({
-  runScriptConfigPersistenceService: mockRunScriptConfigPersistenceService,
-}));
+const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
+const mockFindSessionsByWorkspaceId = vi.hoisted(() => vi.fn());
+const mockAppendClaudeEvent = vi.hoisted(() => vi.fn());
+const mockEmitDelta = vi.hoisted(() => vi.fn());
+const mockEnqueue = vi.hoisted(() => vi.fn());
+const mockHasQueuedMessage = vi.hoisted(() => vi.fn());
+const mockTryDispatchNextMessage = vi.hoisted(() => vi.fn());
+const mockPersistChildNotification = vi.hoisted(() => vi.fn());
+const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/lib/session-summaries', () => ({
   buildWorkspaceSessionSummaries: (...args: unknown[]) => mockBuildSessionSummaries(...args),
@@ -95,29 +61,27 @@ vi.mock('@/shared/workspace-sidebar-status', () => ({
   deriveWorkspaceSidebarStatus: (...args: unknown[]) => mockDeriveWorkspaceSidebarStatus(...args),
 }));
 
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
-  archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
-  cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
-    mockCleanupWorkspaceRuntimeResources(...args),
-}));
-
-vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
-  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
-  fireLifecycleNotification: vi.fn(),
-}));
-
 vi.mock('./workspace/workspace-helpers', () => ({
-  getWorkspaceWithProjectOrThrow: vi.fn(async (id: string) => ({
+  getWorkspaceWithProjectOrThrow: vi.fn(async (_service: unknown, id: string) => ({
     id,
     project: { slug: 'demo' },
   })),
+}));
+
+vi.mock('./workspace/files.trpc', () => ({
+  workspaceFilesRouter: { _def: { procedures: {} } },
+}));
+vi.mock('./workspace/git.trpc', () => ({
+  workspaceGitRouter: { _def: { procedures: {} } },
+}));
+vi.mock('./workspace/ide.trpc', () => ({
+  workspaceIdeRouter: { _def: { procedures: {} } },
+}));
+vi.mock('./workspace/init.trpc', () => ({
+  workspaceInitRouter: { _def: { procedures: {} } },
+}));
+vi.mock('./workspace/run-script.trpc', () => ({
+  workspaceRunScriptRouter: { _def: { procedures: {} } },
 }));
 
 import { workspaceCoreRouter } from './workspace.trpc';
@@ -127,8 +91,10 @@ function createCaller(requestTrust?: {
   origin?: string;
   isLocal: boolean;
 }) {
+  const fakeGraph = createFakeApplicationGraph('workspace-router');
   const sessionService = {
     stopWorkspaceSessions: vi.fn(async () => undefined),
+    getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
   };
   const runScriptService = {
     stopRunScript: vi.fn(
@@ -149,33 +115,133 @@ function createCaller(requestTrust?: {
       })
     ),
   };
+  const logger = Object.assign(fakeGraph.services.createLogger('workspace-router-test'), {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  });
+  const composedSessionService = Object.assign(
+    {},
+    fakeGraph.services.sessionService,
+    sessionService
+  );
+  const composedRunScriptService = Object.assign(
+    {},
+    fakeGraph.services.runScriptService,
+    runScriptService
+  );
+  const composedTerminalService = Object.assign(
+    {},
+    fakeGraph.services.terminalService,
+    terminalService
+  );
 
-  const caller = workspaceCoreRouter.createCaller({
-    requestTrust,
-    appContext: {
-      services: {
-        configService: {
-          getWorktreeBaseDir: () => '/tmp/worktrees',
-          getMaxSessionsPerWorkspace: () => 2,
-          getCorsConfig: () => ({
-            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
-          }),
-        },
-        cliHealthService,
-        createLogger: () => ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }),
-        sessionService,
-        runScriptService,
-        terminalService,
-      },
-    },
-  } as never);
+  const services = {
+    ...fakeGraph.services,
+    configService: Object.assign({}, fakeGraph.services.configService, {
+      getWorktreeBaseDir: () => '/tmp/worktrees',
+      getMaxSessionsPerWorkspace: () => 2,
+      getCorsConfig: () => ({
+        allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+      }),
+    }),
+    cliHealthService: Object.assign({}, fakeGraph.services.cliHealthService, cliHealthService),
+    createLogger: () => logger,
+    sessionService: composedSessionService,
+    sessionDataService: Object.assign({}, fakeGraph.services.sessionDataService, {
+      createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
+      findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
+        mockFindSessionsByWorkspaceId(...args),
+    }),
+    sessionDomainService: Object.assign({}, fakeGraph.services.sessionDomainService, {
+      getAllPendingRequests: () => new Map(),
+      appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
+      emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
+      enqueue: (...args: unknown[]) => mockEnqueue(...args),
+      hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
+    }),
+    sessionProviderResolverService: Object.assign(
+      {},
+      fakeGraph.services.sessionProviderResolverService,
+      {
+        resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
+          mockResolveProviderForWorkspaceCreation(explicitProvider),
+      }
+    ),
+    chatMessageHandlerService: Object.assign({}, fakeGraph.services.chatMessageHandlerService, {
+      tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
+    }),
+    workspaceDataService: Object.assign(
+      {},
+      fakeGraph.services.workspaceDataService,
+      mockWorkspaceDataService
+    ),
+    workspaceQueryService: Object.assign(
+      {},
+      fakeGraph.services.workspaceQueryService,
+      mockWorkspaceQueryService
+    ),
+    runScriptConfigPersistenceService: Object.assign(
+      {},
+      fakeGraph.services.runScriptConfigPersistenceService,
+      {
+        refreshFactoryConfigs: (...args: unknown[]) =>
+          mockWorkspaceQueryService.refreshFactoryConfigs(...args),
+        getFactoryConfig: (...args: unknown[]) =>
+          mockWorkspaceQueryService.getFactoryConfig(...args),
+      }
+    ),
+    workspaceAccessor: Object.assign({}, fakeGraph.services.workspaceAccessor, {
+      findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+      findChildrenWithStatus: vi.fn(async () => []),
+      findParentWorkspace: vi.fn(async () => null),
+    }),
+    workspaceActivityService: Object.assign({}, fakeGraph.services.workspaceActivityService, {
+      clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
+    }),
+    workspaceNotificationAccessor: Object.assign(
+      {},
+      fakeGraph.services.workspaceNotificationAccessor,
+      { countPending: vi.fn(async () => 0) }
+    ),
+    ratchetService: Object.assign({}, fakeGraph.services.ratchetService, {
+      setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
+      checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
+    }),
+    prSnapshotService: Object.assign({}, fakeGraph.services.prSnapshotService, {
+      attachAndRefreshPR: vi.fn(),
+    }),
+    archiveWorkspace: (...args) => mockArchiveWorkspace(...args),
+    cleanupWorkspaceRuntimeResources: (...args) => mockCleanupWorkspaceRuntimeResources(...args),
+    initializeWorkspaceWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
+    createWorkspaceCreationService: () => ({
+      create: (...args) => mockWorkspaceCreationCreate(...args),
+    }),
+    createChildWorkspace: vi.fn(),
+    deliverWorkspaceNotification: vi.fn(),
+    fireLifecycleNotification: vi.fn(),
+    persistChildNotification: (...args) => mockPersistChildNotification(...args),
+    persistParentNotification: (...args) => mockPersistParentNotification(...args),
+    runScriptService: composedRunScriptService,
+    terminalService: composedTerminalService,
+  } satisfies ApplicationServices;
+  const appContext = {
+    services,
+    lifecycle: fakeGraph.lifecycle,
+    config: fakeGraph.config,
+  } satisfies AppContext;
 
-  return { caller, sessionService, runScriptService, terminalService, cliHealthService };
+  const caller = workspaceCoreRouter.createCaller({ requestTrust, appContext });
+
+  return {
+    caller,
+    sessionService: composedSessionService,
+    runScriptService: composedRunScriptService,
+    terminalService: composedTerminalService,
+    cliHealthService,
+    eventCollector: fakeGraph.lifecycle.eventCollector,
+  };
 }
 
 describe('workspaceCoreRouter', () => {
@@ -582,15 +648,14 @@ describe('workspaceCoreRouter', () => {
 
   it('cleans up on delete and delegates summary procedures', async () => {
     mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
-    mockRunScriptConfigPersistenceService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
-    mockRunScriptConfigPersistenceService.getFactoryConfig.mockResolvedValue({
-      scripts: { run: 'pnpm dev' },
-    });
+    mockWorkspaceQueryService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
+    mockWorkspaceQueryService.getFactoryConfig.mockResolvedValue({ scripts: { run: 'pnpm dev' } });
     mockWorkspaceQueryService.syncPRStatus.mockResolvedValue({ synced: true });
     mockWorkspaceQueryService.syncAllPRStatuses.mockResolvedValue({ synced: 10 });
     mockWorkspaceQueryService.hasChanges.mockResolvedValue({ hasChanges: true });
 
-    const { caller, sessionService, runScriptService, terminalService } = createCaller();
+    const { caller, sessionService, runScriptService, terminalService, eventCollector } =
+      createCaller();
 
     await expect(caller.delete({ id: 'w1' })).resolves.toEqual({ deleted: true });
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
@@ -612,11 +677,7 @@ describe('workspaceCoreRouter', () => {
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
-    expect(mockCleanupWorkspaceScopedCaches).toHaveBeenCalledWith('w1');
-    const cacheCleanupCallOrder = mockCleanupWorkspaceScopedCaches.mock.invocationCallOrder[0];
-    expect(deleteCallOrder).toBeDefined();
-    expect(cacheCleanupCallOrder).toBeDefined();
-    expect(cacheCleanupCallOrder!).toBeGreaterThan(deleteCallOrder!);
+    expect(eventCollector.removeWorkspace).toHaveBeenCalledWith('w1');
 
     await expect(caller.refreshFactoryConfigs({ projectId: 'p1' })).resolves.toEqual({
       refreshed: 3,
@@ -645,11 +706,11 @@ describe('workspaceCoreRouter', () => {
 
   it('does not clean workspace caches when database deletion fails', async () => {
     mockWorkspaceDataService.delete.mockRejectedValue(new Error('database delete failed'));
-    const { caller } = createCaller();
+    const { caller, eventCollector } = createCaller();
 
     await expect(caller.delete({ id: 'w1' })).rejects.toThrow('database delete failed');
 
-    expect(mockCleanupWorkspaceScopedCaches).not.toHaveBeenCalled();
+    expect(eventCollector.removeWorkspace).not.toHaveBeenCalled();
   });
 
   it('does not delete when workspace session cleanup throws', async () => {

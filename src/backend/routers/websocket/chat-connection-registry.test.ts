@@ -8,26 +8,18 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
+import type { Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE, type WsReadyState } from '@/backend/constants/websocket';
-import {
-  SESSION_OUTBOUND_EVENT,
-  type SessionFileLogger,
-  sessionEventBus,
-} from '@/backend/services/session';
+import { SESSION_OUTBOUND_EVENT, sessionEventBus } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 import {
   attachChatTransport,
   ChatConnectionRegistry,
   type ConnectionInfo,
-  chatConnectionRegistry,
-  detachChatTransportForTests,
+  detachChatTransport,
+  disposeChatTransportForApplication,
+  getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
-
-vi.mock('@/backend/services/session/service/logging/session-file-logger.service', () => ({
-  sessionFileLogger: {
-    log: vi.fn(),
-  },
-}));
 
 class MockWebSocket extends EventEmitter {
   private _readyState: WsReadyState = WS_READY_STATE.OPEN;
@@ -50,6 +42,25 @@ function asWs(mock: MockWebSocket): WebSocket {
 
 function asMessage(payload: object): WebSocketMessage {
   return payload as WebSocketMessage;
+}
+
+function createTransportDeps(sessionLogger: { log: ReturnType<typeof vi.fn> } = { log: vi.fn() }) {
+  return {
+    configService: {
+      getDebugConfig: () => ({ chatWebSocket: false }),
+    },
+    createLogger: () => ({
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    }),
+    sessionEventBus,
+    sessionFileLogger: sessionLogger,
+  } as unknown as Pick<
+    ApplicationServices,
+    'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+  >;
 }
 
 describe('ChatConnectionRegistry', () => {
@@ -227,15 +238,21 @@ describe('ChatConnectionRegistry', () => {
 });
 
 describe('attachChatTransport', () => {
+  let registry: ChatConnectionRegistry;
+
+  beforeEach(() => {
+    registry = new ChatConnectionRegistry();
+  });
+
   afterEach(() => {
-    detachChatTransportForTests();
+    detachChatTransport(registry);
   });
 
   it('delivers session events published on the bus to viewing connections', () => {
-    attachChatTransport();
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
@@ -248,10 +265,10 @@ describe('attachChatTransport', () => {
   });
 
   it('delivers all-client broadcasts published on the bus', () => {
-    attachChatTransport();
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: null,
       workingDir: null,
@@ -265,11 +282,11 @@ describe('attachChatTransport', () => {
   });
 
   it('answers viewer-count queries from the domain', () => {
-    attachChatTransport();
+    attachChatTransport(createTransportDeps(), registry);
 
     expect(sessionEventBus.countViewers('s1')).toBe(0);
 
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(new MockWebSocket()),
       dbSessionId: 's1',
       workingDir: null,
@@ -279,11 +296,11 @@ describe('attachChatTransport', () => {
   });
 
   it('is idempotent and does not double-deliver after repeated attach', () => {
-    attachChatTransport();
-    attachChatTransport();
+    attachChatTransport(createTransportDeps(), registry);
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
@@ -299,13 +316,16 @@ describe('attachChatTransport', () => {
 
   it('logs OUT_TO_CLIENT via the injected sessionFileLogger only when a client received the payload', () => {
     const fileLogger = { log: vi.fn() };
-    attachChatTransport({ sessionFileLogger: fileLogger as unknown as SessionFileLogger });
+    attachChatTransport(
+      createTransportDeps(fileLogger as unknown as { log: ReturnType<typeof vi.fn> }),
+      registry
+    );
 
     const payload = asMessage({ type: 'session_delta', data: { type: 'noop' } });
     sessionEventBus.publishToSession('s1', payload);
     expect(fileLogger.log).not.toHaveBeenCalled();
 
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(new MockWebSocket()),
       dbSessionId: 's1',
       workingDir: null,
@@ -319,8 +339,8 @@ describe('attachChatTransport', () => {
     const unrelatedListener = vi.fn();
     sessionEventBus.on(SESSION_OUTBOUND_EVENT, unrelatedListener);
     try {
-      attachChatTransport();
-      detachChatTransportForTests();
+      attachChatTransport(createTransportDeps(), registry);
+      detachChatTransport(registry);
 
       sessionEventBus.publishToSession(
         's1',
@@ -331,5 +351,35 @@ describe('attachChatTransport', () => {
     } finally {
       sessionEventBus.off(SESSION_OUTBOUND_EVENT, unrelatedListener);
     }
+  });
+
+  it('disposes application listeners, viewer state, and registry identity idempotently', () => {
+    const application = {} as Application;
+    const applicationRegistry = getChatConnectionRegistryForApplication(application);
+    const initialListenerCount = sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT);
+    attachChatTransport(createTransportDeps(), applicationRegistry);
+    const ws = new MockWebSocket();
+    applicationRegistry.register('conn-1', {
+      ws: asWs(ws),
+      dbSessionId: 's1',
+      workingDir: null,
+    });
+
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount + 1);
+    expect(sessionEventBus.countViewers('s1')).toBe(1);
+
+    disposeChatTransportForApplication(application);
+    disposeChatTransportForApplication(application);
+
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount);
+    expect(sessionEventBus.countViewers('s1')).toBe(0);
+    expect(ws.close).toHaveBeenCalledOnce();
+    const restartedRegistry = getChatConnectionRegistryForApplication(application);
+    expect(restartedRegistry).not.toBe(applicationRegistry);
+
+    attachChatTransport(createTransportDeps(), restartedRegistry);
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount + 1);
+    disposeChatTransportForApplication(application);
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount);
   });
 });

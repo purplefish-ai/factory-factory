@@ -7,33 +7,27 @@ const mockListMyIssues = vi.hoisted(() => vi.fn());
 const mockGetIssue = vi.hoisted(() => vi.fn());
 const mockDecrypt = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  projectManagementService: {
-    findById: (...args: unknown[]) => mockFindProjectById(...args),
-  },
-  workspaceDataService: {
-    findByProjectId: (...args: unknown[]) => mockFindWorkspacesByProjectId(...args),
-  },
-}));
-
-vi.mock('@/backend/services/linear', () => ({
-  linearClientService: {
-    validateKeyAndListTeams: (...args: unknown[]) => mockValidateKeyAndListTeams(...args),
-    listMyIssues: (...args: unknown[]) => mockListMyIssues(...args),
-    getIssue: (...args: unknown[]) => mockGetIssue(...args),
-  },
-}));
-
-vi.mock('@/backend/services/crypto.service', () => ({
-  cryptoService: {
-    decrypt: (...args: unknown[]) => mockDecrypt(...args),
-  },
-}));
-
 import { linearRouter } from './linear.trpc';
 
 function createCaller() {
-  return linearRouter.createCaller({ appContext: {} } as never);
+  return linearRouter.createCaller({
+    appContext: {
+      services: {
+        cryptoService: { decrypt: (...args: unknown[]) => mockDecrypt(...args) },
+        linearClientService: {
+          validateKeyAndListTeams: (...args: unknown[]) => mockValidateKeyAndListTeams(...args),
+          listMyIssues: (...args: unknown[]) => mockListMyIssues(...args),
+          getIssue: (...args: unknown[]) => mockGetIssue(...args),
+        },
+        projectManagementService: {
+          findById: (...args: unknown[]) => mockFindProjectById(...args),
+        },
+        workspaceDataService: {
+          findByProjectId: (...args: unknown[]) => mockFindWorkspacesByProjectId(...args),
+        },
+      },
+    },
+  } as never);
 }
 
 describe('linearRouter', () => {

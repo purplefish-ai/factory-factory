@@ -132,7 +132,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -164,7 +166,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -196,7 +200,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
         },
@@ -236,7 +242,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
         },
@@ -282,7 +290,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin], trustedLocalCidrs: [] })),
         },
@@ -357,7 +367,9 @@ describe('createTerminalUpgradeHandler', () => {
 
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -435,7 +447,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -490,7 +504,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -588,7 +604,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -665,7 +683,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -747,7 +767,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -808,7 +830,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },
@@ -869,7 +893,9 @@ describe('createTerminalUpgradeHandler', () => {
     const logger = createLogger();
     const appContext = {
       services: {
+        sessionDataService,
         terminalService,
+        workspaceDataService,
         configService: {
           getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         },

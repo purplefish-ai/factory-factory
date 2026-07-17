@@ -11,6 +11,14 @@ interface ServerInstance {
   stop(): Promise<void>;
 }
 
+interface Application {
+  services: {
+    serverInstanceService: {
+      setInstance(instance: ServerInstance): void;
+    };
+  };
+}
+
 /**
  * ServerManager handles the lifecycle of the backend server
  * for the Electron application.
@@ -102,11 +110,16 @@ export class ServerManager {
       console.log('[electron] Starting backend server...');
       const serverPath = join(backendDistPath, 'server.js');
       const serverModule = await this.dynamicImport<{
-        createServer: () => ServerInstance;
+        createApplication: () => Application;
+        createServer: (application: Application) => ServerInstance;
+        disposeApplication: (application: Application) => Promise<void>;
       }>(this.toModuleImportSpecifier(serverPath));
-      const serverInstance = serverModule.createServer();
+      const application = serverModule.createApplication();
+      let serverInstance: ServerInstance | null = null;
 
       try {
+        serverInstance = serverModule.createServer(application);
+        application.services.serverInstanceService.setInstance(serverInstance);
         const url = await serverInstance.start();
         this.serverInstance = serverInstance;
         this.serverUrl = url;
@@ -114,7 +127,11 @@ export class ServerManager {
         return url;
       } catch (error) {
         try {
-          await serverInstance.stop();
+          if (serverInstance) {
+            await serverInstance.stop();
+          } else {
+            await serverModule.disposeApplication(application);
+          }
         } catch (stopError) {
           console.error('[electron] Failed to cleanup server after start error:', stopError);
         }

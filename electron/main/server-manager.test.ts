@@ -18,6 +18,14 @@ type ServerModuleImportShim = {
   dynamicImport: (moduleSpecifier: string) => Promise<unknown>;
 };
 
+type TestApplication = {
+  services: {
+    serverInstanceService: {
+      setInstance: ReturnType<typeof vi.fn>;
+    };
+  };
+};
+
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_RESOURCES_PATH = Object.getOwnPropertyDescriptor(process, 'resourcesPath');
 
@@ -49,15 +57,27 @@ const restoreResourcesPath = () => {
 
 function mockServerManagerImports(
   manager: ServerManager,
-  createServer: () => { start(): Promise<string>; stop(): Promise<void> },
+  createServer: (application: TestApplication) => {
+    start(): Promise<string>;
+    stop(): Promise<void>;
+  },
   runMigrations: ReturnType<typeof vi.fn> = vi.fn()
 ) {
+  const application: TestApplication = {
+    services: {
+      serverInstanceService: {
+        setInstance: vi.fn(),
+      },
+    },
+  };
+  const createApplication = vi.fn(() => application);
+  const disposeApplication = vi.fn().mockResolvedValue(undefined);
   const dynamicImportMock = vi.fn((modulePath: string) => {
     if (modulePath.endsWith('migrate.js')) {
       return Promise.resolve({ runMigrations });
     }
     if (modulePath.endsWith('server.js')) {
-      return Promise.resolve({ createServer });
+      return Promise.resolve({ createApplication, createServer, disposeApplication });
     }
     return Promise.reject(new Error(`Unexpected module path: ${modulePath}`));
   });
@@ -75,7 +95,7 @@ function mockServerManagerImports(
     }
   ).ensureDataDir = vi.fn();
 
-  return { dynamicImportMock, runMigrations };
+  return { application, createApplication, disposeApplication, dynamicImportMock, runMigrations };
 }
 
 describe('ServerManager module import behavior', () => {
@@ -98,13 +118,22 @@ describe('ServerManager module import behavior', () => {
       start: startServer,
       stop: vi.fn().mockResolvedValue(undefined),
     }));
+    const application: TestApplication = {
+      services: {
+        serverInstanceService: {
+          setInstance: vi.fn(),
+        },
+      },
+    };
+    const createApplication = vi.fn(() => application);
+    const disposeApplication = vi.fn().mockResolvedValue(undefined);
 
     const importSpy = vi.fn((moduleSpecifier: string) => {
       if (moduleSpecifier.includes('migrate.js')) {
         return Promise.resolve({ runMigrations });
       }
       if (moduleSpecifier.includes('server.js')) {
-        return Promise.resolve({ createServer });
+        return Promise.resolve({ createApplication, createServer, disposeApplication });
       }
       return Promise.reject(new Error(`Unexpected module import: ${moduleSpecifier}`));
     });
@@ -127,6 +156,11 @@ describe('ServerManager module import behavior', () => {
     expect(url).toBe('http://127.0.0.1:4311');
     expect(importSpy).toHaveBeenNthCalledWith(1, expectedMigrateUrl);
     expect(importSpy).toHaveBeenNthCalledWith(2, expectedServerUrl);
+    expect(createApplication).toHaveBeenCalledOnce();
+    expect(createServer).toHaveBeenCalledWith(application);
+    expect(application.services.serverInstanceService.setInstance).toHaveBeenCalledWith(
+      expect.objectContaining({ start: startServer })
+    );
     expect(runMigrations).toHaveBeenCalledWith({
       databasePath: '/tmp/data.db',
       migrationsPath: join(process.resourcesPath, 'prisma', 'migrations'),
@@ -174,7 +208,10 @@ describe('ServerManager lifecycle locking', () => {
       stop: vi.fn().mockResolvedValue(undefined),
     };
     const createServer = vi.fn(() => serverInstance);
-    const { runMigrations } = mockServerManagerImports(manager, createServer);
+    const { application, createApplication, runMigrations } = mockServerManagerImports(
+      manager,
+      createServer
+    );
 
     const firstStart = manager.start();
     const secondStart = manager.start();
@@ -183,7 +220,12 @@ describe('ServerManager lifecycle locking', () => {
       expect(serverInstance.start).toHaveBeenCalledTimes(1);
     });
     expect(serverInstance.start).toHaveBeenCalledTimes(1);
+    expect(createApplication).toHaveBeenCalledTimes(1);
     expect(createServer).toHaveBeenCalledTimes(1);
+    expect(createServer).toHaveBeenCalledWith(application);
+    expect(application.services.serverInstanceService.setInstance).toHaveBeenCalledWith(
+      serverInstance
+    );
     expect(runMigrations).toHaveBeenCalledTimes(1);
 
     startGate.resolve('http://localhost:4321');
@@ -192,6 +234,20 @@ describe('ServerManager lifecycle locking', () => {
     expect(firstUrl).toBe('http://localhost:4321');
     expect(secondUrl).toBe('http://localhost:4321');
     expect(createServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes a composed application when server construction fails', async () => {
+    const manager = new ServerManager();
+    const constructionError = new Error('server construction failed');
+    const createServer = vi.fn(() => {
+      throw constructionError;
+    });
+    const { application, disposeApplication } = mockServerManagerImports(manager, createServer);
+
+    await expect(manager.start()).rejects.toThrow(constructionError);
+
+    expect(disposeApplication).toHaveBeenCalledWith(application);
+    expect(application.services.serverInstanceService.setInstance).not.toHaveBeenCalled();
   });
 
   it('serializes stop and start so a new server is not clobbered', async () => {
