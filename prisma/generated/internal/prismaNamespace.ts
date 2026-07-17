@@ -1347,6 +1347,7 @@ export const UserSettingsScalarFieldEnum = {
   cachedSlashCommands: 'cachedSlashCommands',
   ratchetEnabled: 'ratchetEnabled',
   ratchetReplyToPrComments: 'ratchetReplyToPrComments',
+  ratchetReviewTriggerMode: 'ratchetReviewTriggerMode',
   defaultSessionProvider: 'defaultSessionProvider',
   defaultClaudeModel: 'defaultClaudeModel',
   defaultCodexModel: 'defaultCodexModel',
@@ -1598,6 +1599,13 @@ export type EnumSessionProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$
 
 
 /**
+ * Reference to a field of type 'RatchetReviewTriggerMode'
+ */
+export type EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetReviewTriggerMode'>
+
+
+
+/**
  * Reference to a field of type 'SessionPermissionPreset'
  */
 export type EnumSessionPermissionPresetFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionPermissionPreset'>
@@ -1798,4 +1806,3 @@ export type PrismaAction =
  * `PrismaClient` proxy available in interactive transactions.
  */
 export type TransactionClient = Omit<DefaultPrismaClient, runtime.ITXClientDenyList>
-

@@ -130,6 +130,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       cachedSlashCommands: null,
       ratchetEnabled: false,
       ratchetReplyToPrComments: true,
+      ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
       defaultSessionProvider: 'CLAUDE',
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',

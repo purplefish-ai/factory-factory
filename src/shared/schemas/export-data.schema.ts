@@ -150,6 +150,10 @@ const exportedUserSettingsSchema = z.object({
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
   ratchetReplyToPrComments: z.boolean().optional().default(true),
+  ratchetReviewTriggerMode: z
+    .enum(['CHANGES_REQUESTED', 'ALL_REVIEW_FEEDBACK'])
+    .optional()
+    .default('CHANGES_REQUESTED'),
   defaultSessionProvider: SessionProvider,
   defaultClaudeModel: z.string().optional().default('sonnet'),
   defaultCodexModel: z.string().optional().default('default'),

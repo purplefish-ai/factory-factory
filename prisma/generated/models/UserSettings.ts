@@ -33,6 +33,7 @@ export type UserSettingsMinAggregateOutputType = {
   notificationSoundPath: string | null
   ratchetEnabled: boolean | null
   ratchetReplyToPrComments: boolean | null
+  ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode | null
   defaultSessionProvider: $Enums.SessionProvider | null
   defaultClaudeModel: string | null
   defaultCodexModel: string | null
@@ -53,6 +54,7 @@ export type UserSettingsMaxAggregateOutputType = {
   notificationSoundPath: string | null
   ratchetEnabled: boolean | null
   ratchetReplyToPrComments: boolean | null
+  ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode | null
   defaultSessionProvider: $Enums.SessionProvider | null
   defaultClaudeModel: string | null
   defaultCodexModel: string | null
@@ -75,6 +77,7 @@ export type UserSettingsCountAggregateOutputType = {
   cachedSlashCommands: number
   ratchetEnabled: number
   ratchetReplyToPrComments: number
+  ratchetReviewTriggerMode: number
   defaultSessionProvider: number
   defaultClaudeModel: number
   defaultCodexModel: number
@@ -97,6 +100,7 @@ export type UserSettingsMinAggregateInputType = {
   notificationSoundPath?: true
   ratchetEnabled?: true
   ratchetReplyToPrComments?: true
+  ratchetReviewTriggerMode?: true
   defaultSessionProvider?: true
   defaultClaudeModel?: true
   defaultCodexModel?: true
@@ -117,6 +121,7 @@ export type UserSettingsMaxAggregateInputType = {
   notificationSoundPath?: true
   ratchetEnabled?: true
   ratchetReplyToPrComments?: true
+  ratchetReviewTriggerMode?: true
   defaultSessionProvider?: true
   defaultClaudeModel?: true
   defaultCodexModel?: true
@@ -139,6 +144,7 @@ export type UserSettingsCountAggregateInputType = {
   cachedSlashCommands?: true
   ratchetEnabled?: true
   ratchetReplyToPrComments?: true
+  ratchetReviewTriggerMode?: true
   defaultSessionProvider?: true
   defaultClaudeModel?: true
   defaultCodexModel?: true
@@ -234,6 +240,7 @@ export type UserSettingsGroupByOutputType = {
   cachedSlashCommands: runtime.JsonValue | null
   ratchetEnabled: boolean
   ratchetReplyToPrComments: boolean
+  ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode
   defaultSessionProvider: $Enums.SessionProvider
   defaultClaudeModel: string
   defaultCodexModel: string
@@ -277,6 +284,7 @@ export type UserSettingsWhereInput = {
   cachedSlashCommands?: Prisma.JsonNullableFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   ratchetReplyToPrComments?: Prisma.BoolFilter<"UserSettings"> | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFilter<"UserSettings"> | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFilter<"UserSettings"> | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFilter<"UserSettings"> | string
   defaultCodexModel?: Prisma.StringFilter<"UserSettings"> | string
@@ -299,6 +307,7 @@ export type UserSettingsOrderByWithRelationInput = {
   cachedSlashCommands?: Prisma.SortOrderInput | Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
+  ratchetReviewTriggerMode?: Prisma.SortOrder
   defaultSessionProvider?: Prisma.SortOrder
   defaultClaudeModel?: Prisma.SortOrder
   defaultCodexModel?: Prisma.SortOrder
@@ -324,6 +333,7 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   cachedSlashCommands?: Prisma.JsonNullableFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   ratchetReplyToPrComments?: Prisma.BoolFilter<"UserSettings"> | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFilter<"UserSettings"> | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFilter<"UserSettings"> | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFilter<"UserSettings"> | string
   defaultCodexModel?: Prisma.StringFilter<"UserSettings"> | string
@@ -346,6 +356,7 @@ export type UserSettingsOrderByWithAggregationInput = {
   cachedSlashCommands?: Prisma.SortOrderInput | Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
+  ratchetReviewTriggerMode?: Prisma.SortOrder
   defaultSessionProvider?: Prisma.SortOrder
   defaultClaudeModel?: Prisma.SortOrder
   defaultCodexModel?: Prisma.SortOrder
@@ -374,6 +385,7 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   cachedSlashCommands?: Prisma.JsonNullableWithAggregatesFilter<"UserSettings">
   ratchetEnabled?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
   ratchetReplyToPrComments?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeWithAggregatesFilter<"UserSettings"> | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderWithAggregatesFilter<"UserSettings"> | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
   defaultCodexModel?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
@@ -396,6 +408,7 @@ export type UserSettingsCreateInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: $Enums.SessionProvider
   defaultClaudeModel?: string
   defaultCodexModel?: string
@@ -418,6 +431,7 @@ export type UserSettingsUncheckedCreateInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: $Enums.SessionProvider
   defaultClaudeModel?: string
   defaultCodexModel?: string
@@ -440,6 +454,7 @@ export type UserSettingsUpdateInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   ratchetReplyToPrComments?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFieldUpdateOperationsInput | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFieldUpdateOperationsInput | string
   defaultCodexModel?: Prisma.StringFieldUpdateOperationsInput | string
@@ -462,6 +477,7 @@ export type UserSettingsUncheckedUpdateInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   ratchetReplyToPrComments?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFieldUpdateOperationsInput | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFieldUpdateOperationsInput | string
   defaultCodexModel?: Prisma.StringFieldUpdateOperationsInput | string
@@ -484,6 +500,7 @@ export type UserSettingsCreateManyInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: $Enums.SessionProvider
   defaultClaudeModel?: string
   defaultCodexModel?: string
@@ -506,6 +523,7 @@ export type UserSettingsUpdateManyMutationInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   ratchetReplyToPrComments?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFieldUpdateOperationsInput | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFieldUpdateOperationsInput | string
   defaultCodexModel?: Prisma.StringFieldUpdateOperationsInput | string
@@ -528,6 +546,7 @@ export type UserSettingsUncheckedUpdateManyInput = {
   cachedSlashCommands?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   ratchetReplyToPrComments?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  ratchetReviewTriggerMode?: Prisma.EnumRatchetReviewTriggerModeFieldUpdateOperationsInput | $Enums.RatchetReviewTriggerMode
   defaultSessionProvider?: Prisma.EnumSessionProviderFieldUpdateOperationsInput | $Enums.SessionProvider
   defaultClaudeModel?: Prisma.StringFieldUpdateOperationsInput | string
   defaultCodexModel?: Prisma.StringFieldUpdateOperationsInput | string
@@ -550,6 +569,7 @@ export type UserSettingsCountOrderByAggregateInput = {
   cachedSlashCommands?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
+  ratchetReviewTriggerMode?: Prisma.SortOrder
   defaultSessionProvider?: Prisma.SortOrder
   defaultClaudeModel?: Prisma.SortOrder
   defaultCodexModel?: Prisma.SortOrder
@@ -570,6 +590,7 @@ export type UserSettingsMaxOrderByAggregateInput = {
   notificationSoundPath?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
+  ratchetReviewTriggerMode?: Prisma.SortOrder
   defaultSessionProvider?: Prisma.SortOrder
   defaultClaudeModel?: Prisma.SortOrder
   defaultCodexModel?: Prisma.SortOrder
@@ -590,6 +611,7 @@ export type UserSettingsMinOrderByAggregateInput = {
   notificationSoundPath?: Prisma.SortOrder
   ratchetEnabled?: Prisma.SortOrder
   ratchetReplyToPrComments?: Prisma.SortOrder
+  ratchetReviewTriggerMode?: Prisma.SortOrder
   defaultSessionProvider?: Prisma.SortOrder
   defaultClaudeModel?: Prisma.SortOrder
   defaultCodexModel?: Prisma.SortOrder
@@ -599,6 +621,10 @@ export type UserSettingsMinOrderByAggregateInput = {
   ratchetPermissions?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+}
+
+export type EnumRatchetReviewTriggerModeFieldUpdateOperationsInput = {
+  set?: $Enums.RatchetReviewTriggerMode
 }
 
 export type EnumSessionPermissionPresetFieldUpdateOperationsInput = {
@@ -618,6 +644,7 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: boolean
   defaultSessionProvider?: boolean
   defaultClaudeModel?: boolean
   defaultCodexModel?: boolean
@@ -640,6 +667,7 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: boolean
   defaultSessionProvider?: boolean
   defaultClaudeModel?: boolean
   defaultCodexModel?: boolean
@@ -662,6 +690,7 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: boolean
   defaultSessionProvider?: boolean
   defaultClaudeModel?: boolean
   defaultCodexModel?: boolean
@@ -684,6 +713,7 @@ export type UserSettingsSelectScalar = {
   cachedSlashCommands?: boolean
   ratchetEnabled?: boolean
   ratchetReplyToPrComments?: boolean
+  ratchetReviewTriggerMode?: boolean
   defaultSessionProvider?: boolean
   defaultClaudeModel?: boolean
   defaultCodexModel?: boolean
@@ -695,7 +725,7 @@ export type UserSettingsSelectScalar = {
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -711,6 +741,7 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     cachedSlashCommands: runtime.JsonValue | null
     ratchetEnabled: boolean
     ratchetReplyToPrComments: boolean
+    ratchetReviewTriggerMode: $Enums.RatchetReviewTriggerMode
     defaultSessionProvider: $Enums.SessionProvider
     defaultClaudeModel: string
     defaultCodexModel: string
@@ -1153,6 +1184,7 @@ export interface UserSettingsFieldRefs {
   readonly cachedSlashCommands: Prisma.FieldRef<"UserSettings", 'Json'>
   readonly ratchetEnabled: Prisma.FieldRef<"UserSettings", 'Boolean'>
   readonly ratchetReplyToPrComments: Prisma.FieldRef<"UserSettings", 'Boolean'>
+  readonly ratchetReviewTriggerMode: Prisma.FieldRef<"UserSettings", 'RatchetReviewTriggerMode'>
   readonly defaultSessionProvider: Prisma.FieldRef<"UserSettings", 'SessionProvider'>
   readonly defaultClaudeModel: Prisma.FieldRef<"UserSettings", 'String'>
   readonly defaultCodexModel: Prisma.FieldRef<"UserSettings", 'String'>
