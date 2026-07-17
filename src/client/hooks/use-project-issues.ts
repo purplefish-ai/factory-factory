@@ -29,13 +29,14 @@ export function useProjectIssues(
   clientState: ProjectIssuesClientState
 ) {
   const isLinear = issueProvider === IssueProvider.LINEAR;
+  const isGitHubQueryEnabled = !!projectId && !isLinear;
   const utils = trpc.useUtils();
 
   const githubQuery = trpc.github.listIssuesForProject.useQuery(
     { projectId: projectId ?? '' },
     {
       ...PROJECT_ISSUES_QUERY_TIMING,
-      enabled: !!projectId && !isLinear,
+      enabled: isGitHubQueryEnabled,
     }
   );
   const linearQuery = trpc.linear.listIssuesForProject.useQuery(
@@ -47,7 +48,7 @@ export function useProjectIssues(
   );
 
   useEffect(() => {
-    if (!githubQuery.data?.health) {
+    if (!(isGitHubQueryEnabled && githubQuery.data?.health)) {
       return;
     }
 
@@ -58,13 +59,18 @@ export function useProjectIssues(
     }
 
     syncGitHubCLIHealth(utils.admin.checkCLIHealth, githubQuery.data.health);
-  }, [githubQuery.data?.error, githubQuery.data?.health, utils.admin.checkCLIHealth]);
+  }, [
+    githubQuery.data?.error,
+    githubQuery.data?.health,
+    isGitHubQueryEnabled,
+    utils.admin.checkCLIHealth,
+  ]);
 
   const normalizedIssues = useMemo(() => {
     if (isLinear) {
-      return linearQuery.data?.issues.map(normalizeLinearIssue);
+      return linearQuery.data?.issues?.map(normalizeLinearIssue);
     }
-    return githubQuery.data?.issues.map(normalizeGitHubIssue);
+    return githubQuery.data?.issues?.map(normalizeGitHubIssue);
   }, [githubQuery.data?.issues, isLinear, linearQuery.data?.issues]);
 
   const issues = useMemo(

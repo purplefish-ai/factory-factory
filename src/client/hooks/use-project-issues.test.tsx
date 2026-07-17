@@ -163,12 +163,6 @@ describe('useProjectIssues', () => {
   });
 
   it('selects and normalizes only Linear issue state', () => {
-    mocks.githubUseQuery.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      refetch: githubRefetch,
-    });
-
     render('project-1', IssueProvider.LINEAR);
 
     expect(mocks.githubUseQuery).toHaveBeenCalledWith(
@@ -194,7 +188,24 @@ describe('useProjectIssues', () => {
         },
       ],
     });
+    expect(mocks.shouldSyncHealth).not.toHaveBeenCalled();
     expect(mocks.syncHealth).not.toHaveBeenCalled();
+  });
+
+  it('handles provider responses without an issues collection while loading', () => {
+    mocks.githubUseQuery.mockReturnValue({
+      data: { health: githubHealth, error: null },
+      isLoading: true,
+      refetch: githubRefetch,
+    });
+
+    render('project-1', IssueProvider.GITHUB);
+
+    expect(resultRef.current).toMatchObject({
+      issues: undefined,
+      isLoading: true,
+      refetch: githubRefetch,
+    });
   });
 
   it('disables both provider queries without a project', () => {
@@ -208,6 +219,8 @@ describe('useProjectIssues', () => {
       { projectId: '' },
       { enabled: false, refetchInterval: 60_000, staleTime: 30_000 }
     );
+    expect(mocks.shouldSyncHealth).not.toHaveBeenCalled();
+    expect(mocks.syncHealth).not.toHaveBeenCalled();
   });
 
   it('does not overwrite GitHub health when the response is not eligible', () => {
