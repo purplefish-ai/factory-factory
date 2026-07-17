@@ -22,7 +22,7 @@ async function validateScreenshotPath(
   workspaceDataService: Context['appContext']['services']['workspaceDataService'],
   workspaceId: string,
   screenshotPath: string
-): Promise<string> {
+): Promise<{ fullPath: string; worktreePath: string }> {
   if (!screenshotPath.startsWith('.factory-factory/screenshots/')) {
     throw new Error('Invalid screenshot path');
   }
@@ -38,7 +38,7 @@ async function validateScreenshotPath(
     throw new Error('Invalid image format');
   }
 
-  return path.join(worktreePath, screenshotPath);
+  return { fullPath: path.join(worktreePath, screenshotPath), worktreePath };
 }
 
 export const workspaceFilesRouter = router({
@@ -289,7 +289,7 @@ export const workspaceFilesRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const fullPath = await validateScreenshotPath(
+      const { fullPath } = await validateScreenshotPath(
         ctx.appContext.services.workspaceDataService,
         input.workspaceId,
         input.path
@@ -320,12 +320,13 @@ export const workspaceFilesRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const fullPath = await validateScreenshotPath(
+      const { fullPath, worktreePath } = await validateScreenshotPath(
         ctx.appContext.services.workspaceDataService,
         input.workspaceId,
         input.path
       );
       await unlink(fullPath);
+      ctx.appContext.services.workspaceGitStateService.invalidate(worktreePath);
       return { success: true };
     }),
 });

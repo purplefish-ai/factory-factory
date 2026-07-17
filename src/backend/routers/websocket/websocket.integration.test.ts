@@ -42,7 +42,7 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let disposeSnapshotsHandlerState: typeof import('./snapshots.handler').disposeSnapshotsHandlerState;
 let disposeChatTransportForApplication: typeof import('./chat-connection-registry').disposeChatTransportForApplication;
-let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
+let workspaceSnapshotStore: typeof import('@/backend/services/workspace').workspaceSnapshotStore;
 let workspaceQueryService: typeof import('@/backend/services/workspace').workspaceQueryService;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
@@ -73,10 +73,7 @@ beforeAll(async () => {
   ({ disposeChatTransportForApplication } = await vi.importActual<
     typeof import('./chat-connection-registry')
   >('./chat-connection-registry'));
-  ({ workspaceSnapshotStore } = await vi.importActual<
-    typeof import('@/backend/services/workspace-snapshot-store.service')
-  >('@/backend/services/workspace-snapshot-store.service'));
-  ({ workspaceDataService, workspaceQueryService } = await vi.importActual<
+  ({ workspaceDataService, workspaceQueryService, workspaceSnapshotStore } = await vi.importActual<
     typeof import('@/backend/services/workspace')
   >('@/backend/services/workspace'));
   ({ sessionDataService, sessionEventBus } = await vi.importActual<

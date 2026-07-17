@@ -23,15 +23,16 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import type { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { sessionService } from '@/backend/services/session';
-import { computePendingRequestType, type workspaceAccessor } from '@/backend/services/workspace';
-import type {
-  SnapshotUpdateInput,
-  WorkspaceSnapshotEntry,
-  workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
+import {
+  computePendingRequestType,
+  type gitOpsService,
+  type SnapshotUpdateInput,
+  type WorkspaceSnapshotEntry,
+  type workspaceAccessor,
+  type workspaceSnapshotStore,
+} from '@/backend/services/workspace';
 
 // ---------------------------------------------------------------------------
 // Constants

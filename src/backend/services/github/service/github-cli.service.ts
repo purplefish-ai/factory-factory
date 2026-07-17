@@ -18,7 +18,7 @@ import {
 import {
   fullPRDetailsSchema,
   issueSchema,
-  prListItemSchema,
+  openPullRequestsGraphQLSchema,
   prStatusSchema,
   type ResolvedReviewThreadsPage,
   type ReviewThreadCommentsConnection,
@@ -31,6 +31,7 @@ import type {
   GitHubCLIErrorType,
   GitHubCLIHealthStatus,
   GitHubIssue,
+  OpenPullRequest,
   PRInfo,
   PRStatusFromGitHub,
   ReviewRequestedPR,
@@ -435,57 +436,52 @@ class GitHubCLIService {
     return prs;
   }
 
-  /**
-   * Find a PR for a given branch in a repository.
-   * Only returns open PRs created after the workspace was created.
-   * Returns the PR URL if found, null otherwise.
-   */
-  async findPRForBranch(
-    owner: string,
-    repo: string,
-    branchName: string,
-    workspaceCreatedAt?: Date
-  ): Promise<{ url: string; number: number } | null> {
-    try {
-      const { stdout } = await this.exec(
-        [
-          'pr',
-          'list',
-          '--head',
-          branchName,
-          '--repo',
-          `${owner}/${repo}`,
-          '--state',
-          'open',
-          '--json',
-          'number,url,createdAt',
-          '--limit',
-          '10',
-        ],
-        { timeout: GH_TIMEOUT_MS.default }
-      );
+  /** List every open pull request in a repository for local branch matching. */
+  async listOpenPRs(owner: string, repo: string): Promise<OpenPullRequest[]> {
+    const prs: OpenPullRequest[] = [];
+    const seenCursors = new Set<string>();
+    let afterCursor: string | null = null;
 
-      const prs = parseGhJson(prListItemSchema.array(), stdout, 'findPRForBranch');
-      if (prs.length === 0) {
-        return null;
+    while (true) {
+      const afterClause = afterCursor ? `, after: ${JSON.stringify(afterCursor)}` : '';
+      const query = `
+        query {
+          repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) {
+            pullRequests(
+              states: OPEN
+              first: 100${afterClause}
+              orderBy: { field: CREATED_AT, direction: DESC }
+            ) {
+              pageInfo { hasNextPage endCursor }
+              nodes { number url createdAt headRefName }
+            }
+          }
+        }
+      `;
+
+      const { stdout } = await this.exec(['api', 'graphql', '-f', `query=${query}`], {
+        timeout: GH_TIMEOUT_MS.default,
+      });
+      const parsed = parseGhJson(openPullRequestsGraphQLSchema, stdout, 'listOpenPRs');
+      const connection = parsed.data.repository?.pullRequests;
+      if (!connection) {
+        throw new Error(`GitHub repository not found: ${owner}/${repo}`);
       }
 
-      // Filter out PRs created before the workspace (prevents branch name collisions)
-      const filteredPRs = workspaceCreatedAt
-        ? prs.filter((pr) => new Date(pr.createdAt) >= workspaceCreatedAt)
-        : prs;
+      prs.push(...connection.nodes);
+      if (!connection.pageInfo.hasNextPage) {
+        return prs;
+      }
 
-      const pr = filteredPRs[0];
-      if (!pr) {
-        return null;
+      const nextCursor = connection.pageInfo.endCursor;
+      if (!nextCursor) {
+        throw new Error('GitHub open PR page is missing an end cursor');
       }
-      return { url: pr.url, number: pr.number };
-    } catch (error) {
-      const errorType = classifyError(error);
-      if (errorType !== 'cli_not_installed' && errorType !== 'auth_required') {
-        logger.debug('No PR found for branch', { owner, repo, branchName });
+      if (seenCursors.has(nextCursor)) {
+        throw new Error('GitHub open PR pagination repeated a cursor');
       }
-      return null;
+      seenCursors.add(nextCursor);
+      afterCursor = nextCursor;
     }
   }
 
@@ -1177,6 +1173,7 @@ export type {
   GitHubCLIErrorType,
   GitHubCLIHealthStatus,
   GitHubIssue,
+  OpenPullRequest,
   PRInfo,
   PRStatusFromGitHub,
   ReviewRequestedPR,

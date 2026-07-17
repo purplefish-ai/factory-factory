@@ -29,7 +29,11 @@ vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () => ({
   configureDomainBridges: vi.fn(),
 }));
 vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
-  createEventCollectorOrchestrator: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  createEventCollectorOrchestrator: vi.fn(() => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+    removeWorkspace: vi.fn(),
+  })),
 }));
 vi.mock('@/backend/orchestration/health.service', () => ({ healthService: {} }));
 vi.mock('@/backend/orchestration/linear-config.helper', () => ({
@@ -72,11 +76,6 @@ vi.mock('@/backend/services/auto-iteration', () => ({
 }));
 vi.mock('@/backend/services/config.service', () => ({ configService: {} }));
 vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
-vi.mock('@/backend/services/factory-config.service', () => ({
-  FactoryConfigService: { readConfig: vi.fn() },
-}));
-vi.mock('@/backend/services/git-clone.service', () => ({ gitCloneService: {} }));
-vi.mock('@/backend/services/git-ops.service', () => ({ gitOpsService: {} }));
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {},
   prFetchRegistry: {},
@@ -104,11 +103,10 @@ vi.mock('@/backend/services/ratchet', () => ({ fixerSessionService: {}, ratchetS
 vi.mock('@/backend/services/rate-limiter.service', () => ({ rateLimiter: {} }));
 vi.mock('@/backend/services/run-script', () => ({
   createRunScriptService: vi.fn(() => ({})),
+  FactoryConfigService: { readConfig: vi.fn() },
+  runScriptConfigPersistenceService: {},
   runScriptStateMachine: {},
   startupScriptService: {},
-}));
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
-  runScriptConfigPersistenceService: {},
 }));
 vi.mock('@/backend/services/server-instance.service', () => ({
   createServerInstanceService: vi.fn(() => ({})),
@@ -134,6 +132,8 @@ vi.mock('@/backend/services/workspace', () => ({
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>
     applicationGraphMocks.deriveWorkspaceFlowStateFromWorkspace(...args),
   getWorkspaceInitPolicy: vi.fn(),
+  gitCloneService: {},
+  gitOpsService: {},
   kanbanStateService: {},
   projectManagementService: {},
   userSettingsQueryService: {},
@@ -143,11 +143,12 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {},
   workspaceNotificationAccessor: {},
   workspaceQueryService: {},
+  workspaceSnapshotStore: {},
   workspaceStateMachine: {},
   worktreeLifecycleService: {},
 }));
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {},
+vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  workspaceGitStateService: { stop: vi.fn() },
 }));
 
 import type {
@@ -161,7 +162,10 @@ import { cliHealthService } from '@/backend/orchestration/cli-health.service';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
-import { createEventCollectorOrchestrator } from '@/backend/orchestration/event-collector.orchestrator';
+import {
+  createEventCollectorOrchestrator,
+  type EventCollectorOrchestrator,
+} from '@/backend/orchestration/event-collector.orchestrator';
 import { healthService } from '@/backend/orchestration/health.service';
 import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
@@ -191,9 +195,6 @@ import {
 } from '@/backend/services/auto-iteration';
 import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitCloneService } from '@/backend/services/git-clone.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
@@ -203,10 +204,11 @@ import { fixerSessionService, ratchetService } from '@/backend/services/ratchet'
 import { rateLimiter } from '@/backend/services/rate-limiter.service';
 import {
   createRunScriptService,
+  FactoryConfigService,
+  runScriptConfigPersistenceService,
   runScriptStateMachine,
   startupScriptService,
 } from '@/backend/services/run-script';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { createServerInstanceService } from '@/backend/services/server-instance.service';
 import {
   acpRuntimeManager,
@@ -225,6 +227,8 @@ import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   getWorkspaceInitPolicy,
+  gitCloneService,
+  gitOpsService,
   kanbanStateService,
   projectManagementService,
   userSettingsQueryService,
@@ -233,10 +237,11 @@ import {
   workspaceDataService,
   workspaceNotificationAccessor,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
 const fakeSystemConfig = {
   baseDir: '/tmp/factory-factory',
@@ -258,6 +263,7 @@ const fakeSystemConfig = {
   },
   healthCheckIntervalMs: 1000,
   maxSessionsPerWorkspace: 2,
+  prDiscovery: { candidateLimit: 50, repositoryLimit: 10 },
   logger: { level: 'debug' as const, prettyPrint: false, serviceName: 'test' },
   rateLimiter: {
     claudeRequestsPerMinute: 10,
@@ -282,6 +288,7 @@ export interface FakeApplicationGraph extends ApplicationDependencies {
 }
 
 export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph {
+  let graphEventCollector: EventCollectorOrchestrator | null = null;
   const graphAcpRuntimeManager = Object.assign({}, acpRuntimeManager, {
     setAcpStartupTimeoutMs: vi.fn(),
     configureEnvironment: vi.fn(),
@@ -310,6 +317,8 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     chatEventForwarderService: graphChatEventForwarderService,
     chatMessageHandlerService,
     cleanupWorkspaceRuntimeResources,
+    cleanupWorkspaceScopedCaches: (workspaceId: string) =>
+      graphEventCollector?.removeWorkspace(workspaceId),
     cliHealthService,
     configService: graphConfigService,
     computePendingRequestType,
@@ -368,12 +377,15 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     workspaceAccessor,
     workspaceActivityService,
     workspaceDataService,
+    workspaceGitStateService,
     workspaceNotificationAccessor,
     workspaceQueryService,
     workspaceSnapshotStore,
     workspaceStateMachine,
     worktreeLifecycleService,
   } satisfies ApplicationServices;
+
+  graphEventCollector = createEventCollectorOrchestrator(services);
 
   const lifecycle = {
     database: prisma,
@@ -383,7 +395,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       stop: stopInterceptors,
     },
     wireDomainBridges: vi.fn<typeof configureDomainBridges>(),
-    eventCollector: createEventCollectorOrchestrator(services),
+    eventCollector: graphEventCollector,
     snapshotReconciliation: new SnapshotReconciliationService({
       createLogger: services.createLogger,
       gitOpsService: services.gitOpsService,

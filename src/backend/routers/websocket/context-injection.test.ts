@@ -23,10 +23,7 @@ const TRANSPORT_FILES = [
 
 const ALLOWED_PURE_RUNTIME_IMPORTS = new Map<string, ReadonlySet<string>>([
   ['src/backend/services/session', new Set(['CHAT_BROADCAST_EVENT', 'SESSION_OUTBOUND_EVENT'])],
-  [
-    'src/backend/services/workspace-snapshot-store.service',
-    new Set(['SNAPSHOT_CHANGED', 'SNAPSHOT_REMOVED']),
-  ],
+  ['src/backend/services/workspace', new Set(['SNAPSHOT_CHANGED', 'SNAPSHOT_REMOVED'])],
 ]);
 
 const LONG_LIVED_BACKEND_ROOT_MODULES = new Set([
@@ -535,7 +532,7 @@ describe('HTTP and WebSocket application context injection', () => {
               CHAT_BROADCAST_EVENT,
               type SessionOutboundEvent,
             } from '@/backend/services/session';
-            import { SNAPSHOT_CHANGED } from '@/backend/services/workspace-snapshot-store.service';
+            import { SNAPSHOT_CHANGED } from '@/backend/services/workspace';
           `
         )
       ).toEqual([]);

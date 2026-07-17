@@ -1,8 +1,8 @@
 import type { ChildProcess } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configService } from '@/backend/services/config.service';
 import { authenticateRequest } from '@/shared/proxy-utils';
-import { configService } from './config.service';
 
 const mockStartCloudflaredTunnel = vi.hoisted(() => vi.fn());
 const mockKillProcessWithTimeout = vi.hoisted(() => vi.fn(async () => undefined));
@@ -22,7 +22,7 @@ vi.mock('@/shared/proxy-utils', () => ({
   killProcessWithTimeout: mockKillProcessWithTimeout,
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     warn: vi.fn(),

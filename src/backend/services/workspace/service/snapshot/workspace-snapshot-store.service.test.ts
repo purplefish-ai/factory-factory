@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serviceNames } from '@/backend/services/registry';
 
 // Mock logger (standard pattern)
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('./logger.service', () => ({
 }));
 
 import { KanbanColumn } from '@/shared/core';
+import { WorkspaceSnapshotEntrySchema } from '@/shared/workspace-snapshot';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -286,6 +287,28 @@ describe('WorkspaceSnapshotStore', () => {
   // Removal tombstones: stale reconcile passes must not resurrect entries
   // -------------------------------------------------------------------------
   describe('Removal tombstones', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('expires removal protection after the configured grace period', () => {
+      vi.setSystemTime(1000);
+      store.remove('ws-1', 900);
+      vi.advanceTimersByTime(10 * 60_000);
+      expect(store.removalTombstoneCount()).toBe(0);
+    });
+
+    it('repeated removal preserves the newest logical timestamp', () => {
+      store.remove('ws-1', 200);
+      store.remove('ws-1', 150);
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 175);
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+    });
+
     it('ignores upserts whose timestamp predates the removal', () => {
       store.upsert('ws-1', makeUpdate(), 'test', 100);
       store.remove('ws-1', 200);
@@ -313,6 +336,41 @@ describe('WorkspaceSnapshotStore', () => {
       store.remove('ws-1', 250);
       store.upsert('ws-1', makeUpdate(), 'test', 260);
       expect(store.getByWorkspaceId('ws-1')).toBeDefined();
+    });
+
+    it('preserves the tombstone when a newer first upsert is structurally invalid', () => {
+      store.remove('ws-1', 200);
+
+      expect(() => store.upsert('ws-1', { name: 'Invalid' }, 'test', 300)).toThrow(
+        'projectId is required on first upsert'
+      );
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 150);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+    });
+
+    it('cancels tombstone expiry when a valid newer update recreates the workspace', () => {
+      const isolatedStore = new WorkspaceSnapshotStore();
+      isolatedStore.configure({
+        deriveFlowState: (_input) => ({
+          phase: 'NO_PR' as const,
+          ciObservation: 'CHECKS_UNKNOWN' as const,
+          hasActivePr: false,
+          isWorking: false,
+          shouldAnimateRatchetButton: false,
+        }),
+        computeKanbanColumn: (_input) => KanbanColumn.WORKING,
+        deriveSidebarStatus: (_input) => ({
+          activityState: 'IDLE' as const,
+          ciState: 'NONE' as const,
+        }),
+      });
+      isolatedStore.remove('ws-1', 200);
+      expect(vi.getTimerCount()).toBe(1);
+
+      isolatedStore.upsert('ws-1', makeUpdate(), 'test', 300);
+
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('records a tombstone even when the store has no entry for the workspace', () => {
@@ -752,6 +810,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(event.projectId).toBe('proj-A');
       expect(event.entry).toBeDefined();
       expect(event.entry.workspaceId).toBe('ws-1');
+      expect(() => WorkspaceSnapshotEntrySchema.parse(event.entry)).not.toThrow();
     });
 
     it('emits snapshot_removed on remove', () => {

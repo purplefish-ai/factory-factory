@@ -35,6 +35,7 @@ vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
   workspaceAccessor: { create: vi.fn(), findRawById: vi.fn(), update: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
+  workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
     markSessionIdle: vi.fn(),
@@ -124,9 +125,9 @@ import {
   workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { reconciliationService } from './reconciliation.service';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
@@ -387,16 +388,16 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.registerFetch('ws1');
-      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1');
+      bridge.github.registerFetch('ws1', 1);
+      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1', 1);
     });
 
     it('github bridge delegates cancelFetch to prFetchRegistry', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.cancelFetch('ws1');
-      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1');
+      bridge.github.cancelFetch('ws1', 1);
+      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1', 1);
     });
   });
 

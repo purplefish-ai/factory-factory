@@ -68,6 +68,7 @@ export function createServer(application: Application, requestedPort?: number): 
     sessionService,
     terminalService,
     workspaceAccessor,
+    workspaceGitStateService,
   } = services;
   const {
     database,
@@ -443,6 +444,7 @@ export function createServer(application: Application, requestedPort?: number): 
       await schedulerService.stop();
       eventCollector.stop();
       await snapshotReconciliation.stop();
+      workspaceGitStateService.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
       await reconciliationService.stopPeriodicCleanup();

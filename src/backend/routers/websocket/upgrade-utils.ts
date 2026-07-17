@@ -83,7 +83,7 @@ export function validateTrustedLocalWebSocketRequest({
   }
 
   const forwardedClientAddressHeaders = getForwardedClientAddressHeaders(request);
-  if (forwardedClientAddressHeaders.length > 0) {
+  if (!corsConfig.trustProxyHeaders && forwardedClientAddressHeaders.length > 0) {
     logger.warn(`Rejected ${connectionName} connection with forwarded client address headers`, {
       forwardedClientAddressHeaders,
       remoteAddress,

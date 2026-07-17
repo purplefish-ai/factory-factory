@@ -36,9 +36,6 @@ import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
-import { FactoryConfigService } from './services/factory-config.service';
-import { gitCloneService } from './services/git-clone.service';
-import { gitOpsService } from './services/git-ops.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
@@ -48,11 +45,12 @@ import { fixerSessionService, ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
+  FactoryConfigService,
   type RunScriptService,
+  runScriptConfigPersistenceService,
   runScriptStateMachine,
   startupScriptService,
 } from './services/run-script';
-import { runScriptConfigPersistenceService } from './services/run-script-config-persistence.service';
 import {
   createServerInstanceService,
   type ServerInstanceService,
@@ -76,6 +74,8 @@ import { terminalService } from './services/terminal';
 import {
   computePendingRequestType,
   getWorkspaceInitPolicy,
+  gitCloneService,
+  gitOpsService,
   kanbanStateService,
   projectManagementService,
   userSettingsQueryService,
@@ -85,10 +85,11 @@ import {
   workspaceDataService,
   workspaceNotificationAccessor,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from './services/workspace';
-import { workspaceSnapshotStore } from './services/workspace-snapshot-store.service';
+import { workspaceGitStateService } from './services/workspace-git-state.service';
 
 export type ApplicationServices = BridgeServices & {
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -128,11 +129,13 @@ export type ApplicationServices = BridgeServices & {
   terminalService: typeof terminalService;
   userSettingsQueryService: typeof userSettingsQueryService;
   workspaceDataService: typeof workspaceDataService;
+  workspaceGitStateService: typeof workspaceGitStateService;
   workspaceNotificationAccessor: typeof workspaceNotificationAccessor;
   worktreeLifecycleService: typeof worktreeLifecycleService;
   computePendingRequestType: typeof computePendingRequestType;
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
+  cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: typeof createChildWorkspace;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
@@ -175,6 +178,7 @@ const defaultRunScriptService = createRunScriptService({
 });
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
+  let eventCollector: EventCollectorOrchestrator | null = null;
   const services: ApplicationServices = {
     acpRuntimeManager,
     acpTraceLogger,
@@ -233,6 +237,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceAccessor,
     workspaceActivityService,
     workspaceDataService,
+    workspaceGitStateService,
     workspaceNotificationAccessor,
     workspaceQueryService,
     workspaceSnapshotStore,
@@ -240,6 +245,12 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     worktreeLifecycleService,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,
+    cleanupWorkspaceScopedCaches: (workspaceId) => {
+      if (!eventCollector) {
+        throw new Error('Event collector is not initialized');
+      }
+      eventCollector.removeWorkspace(workspaceId);
+    },
     createChildWorkspace,
     createWorkspaceCreationService: (creationDependencies) =>
       new WorkspaceCreationService(creationDependencies),
@@ -248,6 +259,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     persistParentNotification,
     retryQueuedDispatchAfterWorkspaceReady,
   };
+
+  eventCollector = createEventCollectorOrchestrator(services);
 
   return {
     services,
@@ -259,7 +272,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         stop: stopInterceptors,
       },
       wireDomainBridges: configureDomainBridges,
-      eventCollector: createEventCollectorOrchestrator(services),
+      eventCollector,
       snapshotReconciliation: new SnapshotReconciliationService({
         createLogger: services.createLogger,
         gitOpsService: services.gitOpsService,

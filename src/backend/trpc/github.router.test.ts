@@ -127,16 +127,19 @@ describe('githubRouter', () => {
       { number: 55, title: 'Has workspace' },
       { number: 56, title: 'No workspace' },
       { number: 57, title: 'Archived workspace' },
+      { number: 58, title: 'Archiving workspace' },
     ]);
     mockWorkspaceDataService.findByProjectId.mockResolvedValue([
       { githubIssueNumber: 55, status: 'READY' },
       { githubIssueNumber: 57, status: 'ARCHIVED' },
+      { githubIssueNumber: 58, status: 'ARCHIVING' },
     ]);
 
     await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
       issues: [
         { number: 56, title: 'No workspace' },
         { number: 57, title: 'Archived workspace' },
+        { number: 58, title: 'Archiving workspace' },
       ],
       health: { isInstalled: true, isAuthenticated: true },
       error: null,

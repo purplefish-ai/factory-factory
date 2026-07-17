@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -9,27 +10,39 @@ function git(worktreePath: string, args: string[]): Promise<{ stdout: string; st
 
 /** Stage all changes and commit with a message. Returns the short commit SHA. */
 export async function commitAll(worktreePath: string, message: string): Promise<string> {
-  await git(worktreePath, ['add', '-A']);
-  await unstageLogbook(worktreePath);
-  await unstageInsights(worktreePath);
-  await git(worktreePath, ['commit', '-m', message, '--allow-empty']);
+  try {
+    await git(worktreePath, ['add', '-A']);
+    await unstageLogbook(worktreePath);
+    await unstageInsights(worktreePath);
+    await git(worktreePath, ['commit', '-m', message, '--allow-empty']);
+  } finally {
+    workspaceGitStateService.invalidate(worktreePath);
+  }
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
 }
 
 /** Amend the most recent commit with staged changes. Returns the updated short commit SHA. */
 export async function amendHead(worktreePath: string): Promise<string> {
-  await git(worktreePath, ['add', '-A']);
-  await unstageLogbook(worktreePath);
-  await unstageInsights(worktreePath);
-  await git(worktreePath, ['commit', '--amend', '--no-edit']);
+  try {
+    await git(worktreePath, ['add', '-A']);
+    await unstageLogbook(worktreePath);
+    await unstageInsights(worktreePath);
+    await git(worktreePath, ['commit', '--amend', '--no-edit']);
+  } finally {
+    workspaceGitStateService.invalidate(worktreePath);
+  }
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
 }
 
 /** Revert the most recent commit. */
 export async function revertHead(worktreePath: string): Promise<void> {
-  await git(worktreePath, ['revert', 'HEAD', '--no-edit']);
+  try {
+    await git(worktreePath, ['revert', 'HEAD', '--no-edit']);
+  } finally {
+    workspaceGitStateService.invalidate(worktreePath);
+  }
 }
 
 /** Get the diff of the most recent commit. Works on root commits too. */
@@ -40,8 +53,12 @@ export async function getHeadDiff(worktreePath: string): Promise<string> {
 
 /** Discard all uncommitted changes (staged and unstaged). */
 export async function discardUncommittedChanges(worktreePath: string): Promise<void> {
-  await git(worktreePath, ['reset', '--hard', 'HEAD']);
-  await git(worktreePath, ['clean', '-fd']);
+  try {
+    await git(worktreePath, ['reset', '--hard', 'HEAD']);
+    await git(worktreePath, ['clean', '-fd']);
+  } finally {
+    workspaceGitStateService.invalidate(worktreePath);
+  }
 }
 
 /** Check if there are any uncommitted changes. */

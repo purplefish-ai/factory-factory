@@ -1,9 +1,9 @@
-import type { WorkspaceSessionSummary } from '@/backend/services/workspace-snapshot-store.service';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
   hasWorkingSessionSummary as hasWorkingRuntimeSessionSummary,
   isSessionSummaryWorking as isRuntimeSessionSummaryWorking,
   type SessionRuntimeState,
+  type SessionSummary,
 } from '@/shared/session-runtime';
 
 interface SessionLike {
@@ -18,7 +18,7 @@ interface SessionLike {
 export function buildWorkspaceSessionSummaries(
   sessions: SessionLike[],
   getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState
-): WorkspaceSessionSummary[] {
+): SessionSummary[] {
   return sessions.map((session) => {
     const runtime = getRuntimeSnapshot(session.id);
     return {
@@ -38,10 +38,10 @@ export function buildWorkspaceSessionSummaries(
   });
 }
 
-export function isSessionSummaryWorking(summary: WorkspaceSessionSummary): boolean {
+export function isSessionSummaryWorking(summary: SessionSummary): boolean {
   return isRuntimeSessionSummaryWorking(summary);
 }
 
-export function hasWorkingSessionSummary(summaries: WorkspaceSessionSummary[]): boolean {
+export function hasWorkingSessionSummary(summaries: SessionSummary[]): boolean {
   return hasWorkingRuntimeSessionSummary(summaries);
 }

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 
 // ---------------------------------------------------------------------------
 // Mock store helper type
@@ -30,6 +30,12 @@ vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
+  workspaceSnapshotStore: {
+    upsert: vi.fn(),
+    getByWorkspaceId: vi.fn(),
+    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
+    remove: vi.fn(),
+  },
   computePendingRequestType: vi.fn().mockReturnValue(null),
 }));
 
@@ -40,6 +46,7 @@ vi.mock('@/backend/services/github', () => ({
     off: vi.fn(),
     refreshWorkspace: vi.fn().mockResolvedValue({ success: false, reason: 'no_pr_url' }),
   },
+  prFetchRegistry: { removeWorkspace: vi.fn() },
 }));
 
 vi.mock('@/backend/services/ratchet', () => ({
@@ -87,15 +94,6 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {
-    upsert: vi.fn(),
-    getByWorkspaceId: vi.fn(),
-    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
-    remove: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -113,7 +111,7 @@ vi.mock('./linear-config.helper', () => ({
   getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
 }));
 
-import { prSnapshotService } from '@/backend/services/github';
+import { prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { ratchetService } from '@/backend/services/ratchet';
 import { runScriptStateMachine } from '@/backend/services/run-script';
@@ -127,9 +125,9 @@ import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   workspaceActivityService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import {
   createEventCollectorOrchestrator,
   EventCoalescer,
@@ -147,6 +145,7 @@ function configureEventCollector(): void {
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext,
     linearStateSyncService,
+    prFetchRegistry,
     prSnapshotService,
     ratchetService,
     runScriptStateMachine,
@@ -197,6 +196,17 @@ describe('EventCoalescer', () => {
       { status: 'READY' },
       'event:workspace_state_changed'
     );
+  });
+
+  it('cancels a pending update when a workspace is removed', () => {
+    const coalescer = new EventCoalescer(mockStore, 150);
+
+    coalescer.enqueue('ws-1', { isWorking: true }, 'test');
+    coalescer.removeWorkspace('ws-1');
+    vi.advanceTimersByTime(150);
+
+    expect(mockStore.remove).toHaveBeenCalledWith('ws-1');
+    expect(mockStore.upsert).not.toHaveBeenCalled();
   });
 
   it('coalesces rapid-fire events for same workspace into single upsert', () => {
@@ -559,6 +569,7 @@ describe('configureEventCollector', () => {
     // store.remove() called immediately, not through coalescer
     expect(workspaceSnapshotStore.remove).toHaveBeenCalledWith('ws-archived');
     expect(workspaceActivityService.clearWorkspace).toHaveBeenCalledWith('ws-archived');
+    expect(prFetchRegistry.removeWorkspace).toHaveBeenCalledWith('ws-archived');
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-archived');
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();

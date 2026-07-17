@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
-import { parseGithubUrl } from '@/backend/services/git-clone.service';
+import { parseGithubUrl } from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {

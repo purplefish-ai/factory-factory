@@ -16,8 +16,13 @@ import {
   SNAPSHOT_REMOVED,
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
-} from '@/backend/services/workspace-snapshot-store.service';
+} from '@/backend/services/workspace';
 import { WorkspaceStatus } from '@/shared/core';
+import type {
+  SnapshotChangedMessage,
+  SnapshotFullMessage,
+  SnapshotRemovedMessage,
+} from '@/shared/workspace-snapshot';
 import { createWebSocketUpgradeHandler } from './upgrade-utils';
 
 type SnapshotHandlerServices = Pick<
@@ -61,7 +66,7 @@ class SnapshotStoreSubscriptionState {
     // field is absent, so replaying it would regress the baseline's count.
     const fanOutToProject = (
       projectId: string,
-      payload: Record<string, unknown>,
+      payload: SnapshotChangedMessage | SnapshotRemovedMessage,
       description: string
     ) => {
       const projectClients = connections.subscribers(projectId);
@@ -85,7 +90,9 @@ class SnapshotStoreSubscriptionState {
     };
 
     const changedListener = (event: SnapshotChangedEvent) => {
-      const payload = isHiddenWorkspaceStatus(event.entry.status)
+      const payload: SnapshotChangedMessage | SnapshotRemovedMessage = isHiddenWorkspaceStatus(
+        event.entry.status
+      )
         ? {
             type: 'snapshot_removed',
             workspaceId: event.workspaceId,
@@ -254,17 +261,13 @@ export function createSnapshotsUpgradeHandler(
         const entries = workspaceSnapshotStore
           .getByProjectId(projectId)
           .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-        const baselineSent = safeSend(
-          ws,
-          JSON.stringify({
-            type: 'snapshot_full',
-            projectId,
-            entries,
-            reviewCount,
-          }),
-          logger,
-          'full snapshot'
-        );
+        const message: SnapshotFullMessage = {
+          type: 'snapshot_full',
+          projectId,
+          entries,
+          reviewCount,
+        };
+        const baselineSent = safeSend(ws, JSON.stringify(message), logger, 'full snapshot');
         if (!baselineSent) {
           // The client has no baseline, so deltas must not start flowing.
           return;

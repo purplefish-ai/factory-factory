@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { FactoryConfigService } from './factory-config.service';
 
 const mockSpawn = vi.fn();
 const mockTreeKill = vi.fn();
@@ -63,13 +63,13 @@ vi.mock('./run-script-state-machine.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/port-allocation.service', () => ({
+vi.mock('./port-allocation.service', () => ({
   PortAllocationService: {
     findFreePort: (...args: unknown[]) => mockFindFreePort(...args),
   },
 }));
 
-vi.mock('@/backend/services/run-script-proxy.service', () => ({
+vi.mock('./run-script-proxy.service', () => ({
   runScriptProxyService: {
     ensureTunnel: (...args: unknown[]) => mockEnsureTunnel(...args),
     stopTunnel: (...args: unknown[]) => mockStopTunnel(...args),
@@ -88,7 +88,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
+vi.mock('./run-script-config-persistence.service', () => ({
   runScriptConfigPersistenceService: {
     reconcileWorkspaceCommandCache: (...args: unknown[]) =>
       mockReconcileWorkspaceCommandCache(...args),

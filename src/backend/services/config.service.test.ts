@@ -28,6 +28,54 @@ describe('configService environment accessors', () => {
     expect(configService.getBackendHost()).toBeUndefined();
   });
 
+  it('reads PR discovery limits from validated config', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '25';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '4';
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 25,
+      repositoryLimit: 4,
+    });
+  });
+
+  it('defaults PR discovery limits when environment variables are absent', () => {
+    Reflect.deleteProperty(process.env, 'PR_DISCOVERY_CANDIDATE_LIMIT');
+    Reflect.deleteProperty(process.env, 'PR_DISCOVERY_REPOSITORY_LIMIT');
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 100,
+      repositoryLimit: 10,
+    });
+  });
+
+  it('rejects non-positive PR discovery limits', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '0';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '-1';
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 100,
+      repositoryLimit: 10,
+    });
+  });
+
+  it('returns defensive copies of PR discovery limits', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '25';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '4';
+    configService.reload();
+
+    const limits = configService.getPRDiscoveryLimits();
+    limits.candidateLimit = 1;
+    limits.repositoryLimit = 1;
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 25,
+      repositoryLimit: 4,
+    });
+  });
+
   it('defaults shell path when SHELL is not provided', () => {
     Reflect.deleteProperty(process.env, 'SHELL');
     configService.reload();
@@ -83,6 +131,7 @@ describe('configService environment accessors', () => {
     process.env.NOTIFICATION_QUIET_HOURS_END = '7';
     process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:9999, https://example.com';
     process.env.TRUSTED_LOCAL_CIDRS = '172.17.0.1/32, 172.18.0.0/16';
+    process.env.TRUST_PROXY_HEADERS = 'true';
     process.env.BRANCH_RENAME_MESSAGE_THRESHOLD = '4';
     process.env.EVENT_COMPRESSION_ENABLED = 'false';
     process.env.WEB_CONCURRENCY = '3';
@@ -137,6 +186,7 @@ describe('configService environment accessors', () => {
     expect(configService.getCorsConfig()).toEqual({
       allowedOrigins: ['http://localhost:9999', 'https://example.com'],
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],
+      trustProxyHeaders: true,
     });
     expect(configService.getDebugConfig()).toEqual({ chatWebSocket: true });
     expect(configService.getCompressionConfig()).toEqual({ enabled: false });

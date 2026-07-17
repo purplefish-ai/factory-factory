@@ -1,6 +1,8 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext, ApplicationServices } from '@/backend/app-context';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 
@@ -180,6 +182,16 @@ function createCaller(requestTrust?: {
       fakeGraph.services.workspaceQueryService,
       mockWorkspaceQueryService
     ),
+    runScriptConfigPersistenceService: Object.assign(
+      {},
+      fakeGraph.services.runScriptConfigPersistenceService,
+      {
+        refreshFactoryConfigs: (...args: unknown[]) =>
+          mockWorkspaceQueryService.refreshFactoryConfigs(...args),
+        getFactoryConfig: (...args: unknown[]) =>
+          mockWorkspaceQueryService.getFactoryConfig(...args),
+      }
+    ),
     workspaceAccessor: Object.assign({}, fakeGraph.services.workspaceAccessor, {
       findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
       findChildrenWithStatus: vi.fn(async () => []),
@@ -227,6 +239,7 @@ function createCaller(requestTrust?: {
     runScriptService: composedRunScriptService,
     terminalService: composedTerminalService,
     cliHealthService,
+    eventCollector: fakeGraph.lifecycle.eventCollector,
   };
 }
 
@@ -347,6 +360,44 @@ describe('workspaceRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+  });
+
+  it('includes error codes for individual bulk archive failures', async () => {
+    mockWorkspaceQueryService.listWithKanbanState.mockResolvedValue([
+      { id: 'w-success' },
+      { id: 'w-blocked' },
+      { id: 'w-missing' },
+    ]);
+    mockArchiveWorkspace
+      .mockResolvedValueOnce({ archived: true })
+      .mockRejectedValueOnce(new ApplicationError('PRECONDITION_FAILED', 'Uncommitted changes'))
+      .mockRejectedValueOnce(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
+    const { caller } = createCaller();
+
+    await expect(
+      caller.bulkArchive({
+        projectId: 'p1',
+        kanbanColumn: 'WAITING',
+        commitUncommitted: false,
+      })
+    ).resolves.toEqual({
+      results: [
+        { id: 'w-success', success: true },
+        {
+          id: 'w-blocked',
+          success: false,
+          error: 'Uncommitted changes',
+          code: 'PRECONDITION_FAILED',
+        },
+        {
+          id: 'w-missing',
+          success: false,
+          error: 'Workspace not found',
+          code: 'NOT_FOUND',
+        },
+      ],
+      total: 3,
+    });
   });
 
   it('rejects privileged workspace mutations from untrusted requests', async () => {
@@ -610,7 +661,8 @@ describe('workspaceRouter', () => {
     mockWorkspaceQueryService.syncAllPRStatuses.mockResolvedValue({ synced: 10 });
     mockWorkspaceQueryService.hasChanges.mockResolvedValue({ hasChanges: true });
 
-    const { caller, sessionService, runScriptService, terminalService } = createCaller();
+    const { caller, sessionService, runScriptService, terminalService, eventCollector } =
+      createCaller();
 
     await expect(caller.delete({ id: 'w1' })).resolves.toEqual({ deleted: true });
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
@@ -632,7 +684,7 @@ describe('workspaceRouter', () => {
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
-    expect(mockClearWorkspaceActivity).toHaveBeenCalledWith('w1');
+    expect(eventCollector.removeWorkspace).toHaveBeenCalledWith('w1');
 
     await expect(caller.refreshFactoryConfigs({ projectId: 'p1' })).resolves.toEqual({
       refreshed: 3,
@@ -657,6 +709,15 @@ describe('workspaceRouter', () => {
     expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not clean workspace caches when database deletion fails', async () => {
+    mockWorkspaceDataService.delete.mockRejectedValue(new Error('database delete failed'));
+    const { caller, eventCollector } = createCaller();
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow('database delete failed');
+
+    expect(eventCollector.removeWorkspace).not.toHaveBeenCalled();
   });
 
   it('does not delete when workspace session cleanup throws', async () => {

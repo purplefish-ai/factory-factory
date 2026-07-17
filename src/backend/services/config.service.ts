@@ -70,6 +70,13 @@ export interface NotificationConfig {
 export interface CorsConfig {
   allowedOrigins: string[];
   trustedLocalCidrs?: string[];
+  /**
+   * When true, WebSocket upgrades carrying client-address headers
+   * (x-forwarded-for, cf-connecting-ip, etc.) are accepted instead of
+   * rejected. Enable only when the backend sits behind a trusted reverse
+   * proxy that is the sole path to it (e.g. nginx -> 127.0.0.1).
+   */
+  trustProxyHeaders?: boolean;
 }
 
 /**
@@ -84,6 +91,14 @@ export interface DebugConfig {
  */
 export interface CompressionConfig {
   enabled: boolean;
+}
+
+/**
+ * Pull request discovery configuration
+ */
+export interface PRDiscoveryLimits {
+  candidateLimit: number;
+  repositoryLimit: number;
 }
 
 /**
@@ -120,6 +135,9 @@ interface SystemConfig {
 
   // Session limits
   maxSessionsPerWorkspace: number;
+
+  // Pull request discovery limits
+  prDiscovery: PRDiscoveryLimits;
 
   // Logger settings
   logger: LoggerConfig;
@@ -250,6 +268,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
           .map((cidr) => cidr.trim())
           .filter(Boolean)
       : [],
+    trustProxyHeaders: env.TRUST_PROXY_HEADERS,
   };
 }
 
@@ -310,6 +329,12 @@ function loadSystemConfig(): SystemConfig {
 
     // Session limits
     maxSessionsPerWorkspace: env.MAX_SESSIONS_PER_WORKSPACE,
+
+    // Pull request discovery limits
+    prDiscovery: {
+      candidateLimit: env.PR_DISCOVERY_CANDIDATE_LIMIT,
+      repositoryLimit: env.PR_DISCOVERY_REPOSITORY_LIMIT,
+    },
 
     // Logger settings
     logger: buildLoggerConfig(nodeEnv, env),
@@ -522,6 +547,13 @@ class ConfigService {
   }
 
   /**
+   * Get pull request discovery limits
+   */
+  getPRDiscoveryLimits(): PRDiscoveryLimits {
+    return { ...this.config.prDiscovery };
+  }
+
+  /**
    * Get available model options
    */
   getAvailableModels(): { alias: string; model: string }[] {
@@ -556,6 +588,7 @@ class ConfigService {
     return {
       allowedOrigins: [...this.config.cors.allowedOrigins],
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
+      trustProxyHeaders: this.config.cors.trustProxyHeaders,
     };
   }
 

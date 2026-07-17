@@ -1,8 +1,9 @@
 import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import { gitOpsService } from './git-ops.service';
 
 export class WorktreePathSafetyError extends Error {
   constructor(message: string) {
@@ -132,6 +133,7 @@ class WorktreeLifecycleService {
 
     const worktreeExists = await pathExists(worktreePath);
     if (!worktreeExists) {
+      workspaceGitStateService.remove(worktreePath);
       return;
     }
 

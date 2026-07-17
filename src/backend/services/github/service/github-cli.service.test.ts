@@ -504,33 +504,6 @@ describe('GitHubCLIService', () => {
       });
     });
 
-    describe('findPRForBranch with malformed data', () => {
-      it('should return null and log error when PR list items have wrong structure', async () => {
-        const malformedData = [
-          {
-            number: 123,
-            url: 'https://github.com/owner/repo/pull/123',
-            // missing state and createdAt fields
-          },
-        ];
-
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(malformedData),
-          stderr: '',
-        });
-
-        const result = await githubCLIService.findPRForBranch('owner', 'repo', 'test-branch');
-
-        expect(result).toBeNull();
-        expect(mockLoggerError).toHaveBeenCalledWith(
-          'Invalid gh CLI JSON response',
-          expect.objectContaining({
-            context: 'findPRForBranch',
-          })
-        );
-      });
-    });
-
     describe('getReviewComments with malformed data', () => {
       it('should throw error when comment structure is invalid', async () => {
         const malformedData = [
@@ -929,86 +902,108 @@ describe('GitHubCLIService', () => {
     });
   });
 
-  describe('findPRForBranch', () => {
-    it('should return open PR when created after workspace', async () => {
-      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
+  describe('listOpenPRs', () => {
+    const page = (
+      nodes: Array<{
+        number: number;
+        url: string;
+        createdAt: string;
+        headRefName?: string;
+      }>,
+      pageInfo: { hasNextPage: boolean; endCursor: string | null }
+    ) =>
+      JSON.stringify({
+        data: {
+          repository: {
+            pullRequests: { nodes, pageInfo },
+          },
+        },
+      });
+
+    it('lists open pull requests through the repository connection', async () => {
       const prs = [
         {
           number: 11,
-          url: 'https://github.com/o/r/pull/11',
-          state: 'OPEN',
+          url: 'https://github.com/Owner/Repo/pull/11',
           createdAt: '2024-01-02T00:00:00Z',
+          headRefName: 'feature/one',
         },
       ];
+      mockExecFile.mockResolvedValue({
+        stdout: page(prs, { hasNextPage: false, endCursor: null }),
+        stderr: '',
+      });
 
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch(
-        'o',
-        'r',
-        'feature',
-        workspaceCreatedAt
+      await expect(githubCLIService.listOpenPRs('Owner', 'Repo')).resolves.toEqual(prs);
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        [
+          'api',
+          'graphql',
+          '-f',
+          expect.stringContaining('repository(owner: "Owner", name: "Repo")'),
+        ],
+        expect.objectContaining({ timeout: expect.any(Number) })
       );
-      expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
     });
 
-    it('should filter out PRs created before workspace', async () => {
-      const workspaceCreatedAt = new Date('2024-01-15T00:00:00Z');
-      const prs = [
-        {
-          number: 10,
-          url: 'https://github.com/o/r/pull/10',
-          state: 'OPEN',
-          createdAt: '2024-01-01T00:00:00Z',
-        },
-      ];
+    it('continues paging beyond 1,000 open pull requests', async () => {
+      for (let pageIndex = 0; pageIndex < 11; pageIndex++) {
+        const prs = Array.from({ length: 100 }, (_, itemIndex) => {
+          const number = pageIndex * 100 + itemIndex + 1;
+          return {
+            number,
+            url: `https://github.com/owner/repo/pull/${number}`,
+            createdAt: '2024-01-02T00:00:00Z',
+            headRefName: `feature/${number}`,
+          };
+        });
+        mockExecFile.mockResolvedValueOnce({
+          stdout: page(prs, {
+            hasNextPage: pageIndex < 10,
+            endCursor: pageIndex < 10 ? `cursor-${pageIndex + 1}` : null,
+          }),
+          stderr: '',
+        });
+      }
 
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
+      const result = await githubCLIService.listOpenPRs('owner', 'repo');
 
-      const result = await githubCLIService.findPRForBranch(
-        'o',
-        'r',
-        'feature',
-        workspaceCreatedAt
+      expect(result).toHaveLength(1100);
+      expect(result.at(-1)).toMatchObject({ number: 1100, headRefName: 'feature/1100' });
+      expect(mockExecFile).toHaveBeenCalledTimes(11);
+      expect(mockExecFile).toHaveBeenLastCalledWith(
+        'gh',
+        ['api', 'graphql', '-f', expect.stringContaining('after: "cursor-10"')],
+        expect.objectContaining({ timeout: expect.any(Number) })
       );
-      expect(result).toBeNull();
     });
 
-    it('should return null when no open PRs exist (empty result from --state open)', async () => {
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify([]), stderr: '' });
+    it('rejects malformed repository pull request data', async () => {
+      mockExecFile.mockResolvedValue({
+        stdout: page(
+          [
+            {
+              number: 11,
+              url: 'https://github.com/owner/repo/pull/11',
+              createdAt: '2024-01-02T00:00:00Z',
+            },
+          ],
+          { hasNextPage: false, endCursor: null }
+        ),
+        stderr: '',
+      });
 
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
+      await expect(githubCLIService.listOpenPRs('owner', 'repo')).rejects.toThrow();
     });
 
-    it('should return null when no PRs exist for the branch', async () => {
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify([]), stderr: '' });
+    it('propagates repository listing failures', async () => {
+      mockExecFile.mockRejectedValue(new Error('repository unavailable'));
 
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
-    });
-
-    it('should return null when CLI error is not auth-related', async () => {
-      mockExecFile.mockRejectedValue(new Error('some random error'));
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
-    });
-
-    it('should work without workspace createdAt parameter', async () => {
-      const prs = [
-        {
-          number: 11,
-          url: 'https://github.com/o/r/pull/11',
-          state: 'OPEN',
-          createdAt: '2024-01-02T00:00:00Z',
-        },
-      ];
-
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
+      await expect(githubCLIService.listOpenPRs('owner', 'repo')).rejects.toThrow(
+        'repository unavailable'
+      );
     });
   });
 

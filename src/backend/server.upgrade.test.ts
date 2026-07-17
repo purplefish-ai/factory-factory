@@ -133,6 +133,9 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     workspaceAccessor: {
       resetStaleAutoIterationStatuses: vi.fn(async () => []),
     },
+    workspaceGitStateService: {
+      stop: vi.fn(),
+    },
   };
 
   const lifecycle = {
@@ -663,6 +666,10 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.periodicTaskService.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
+    expect(
+      harness.lifecycle.snapshotReconciliation.stop.mock.invocationCallOrder[0] ?? 0
+    ).toBeLessThan(harness.services.workspaceGitStateService.stop.mock.invocationCallOrder[0] ?? 0);
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
@@ -703,6 +710,7 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.periodicTaskService.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();
+    expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();

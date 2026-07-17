@@ -5,10 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type {
-  SnapshotChangedEvent,
-  SnapshotRemovedEvent,
-} from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotChangedEvent, SnapshotRemovedEvent } from '@/backend/services/workspace';
 import {
   createSnapshotsUpgradeHandler,
   disposeSnapshotsHandlerState,

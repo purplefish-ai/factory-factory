@@ -20,9 +20,11 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
+import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
+  type prFetchRegistry,
   type prSnapshotService,
 } from '@/backend/services/github';
 import type { linearStateSyncService } from '@/backend/services/linear';
@@ -46,17 +48,15 @@ import type {
   sessionService,
 } from '@/backend/services/session';
 import type { terminalService } from '@/backend/services/terminal';
+import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
   type computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   type workspaceActivityService,
+  type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import type {
-  SnapshotUpdateInput,
-  workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 
@@ -108,6 +108,7 @@ export type EventCollectorDependencies = {
   createLogger(component: string): Logger;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   linearStateSyncService: typeof linearStateSyncService;
+  prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   runScriptStateMachine: typeof runScriptStateMachine;
@@ -248,6 +249,15 @@ export class EventCoalescer {
     this.pending.clear();
   }
 
+  removeWorkspace(workspaceId: string): void {
+    const pending = this.pending.get(workspaceId);
+    if (pending?.timer) {
+      clearTimeout(pending.timer);
+    }
+    this.pending.delete(workspaceId);
+    this.store.remove(workspaceId);
+  }
+
   /**
    * Number of workspaces with pending updates (for testing).
    */
@@ -263,11 +273,23 @@ export class EventCoalescer {
 class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
+  lastIdlePrRefreshByWorkspace = new Map<string, number>();
   teardownListeners: Array<() => void> = [];
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
   }
+}
+
+function removeWorkspaceWithState(state: EventCollectorState, workspaceId: string): void {
+  if (state.activeCoalescer) {
+    state.activeCoalescer.removeWorkspace(workspaceId);
+  } else {
+    state.dependencies.workspaceSnapshotStore.remove(workspaceId);
+  }
+  state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
+  state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
+  state.dependencies.prFetchRegistry.removeWorkspace(workspaceId);
 }
 
 async function refreshWorkspaceSessionSummaries(
@@ -442,15 +464,24 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     state.logger
   );
   state.activeCoalescer = coalescer;
-  const lastIdlePrRefreshByWorkspace = new Map<string, number>();
+  state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
     const now = Date.now();
-    const lastRefresh = lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
+    const lastRefresh = state.lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
     if (now - lastRefresh < IDLE_PR_REFRESH_COOLDOWN_MS) {
       return;
     }
-    lastIdlePrRefreshByWorkspace.set(workspaceId, now);
+    if (
+      !state.lastIdlePrRefreshByWorkspace.has(workspaceId) &&
+      state.lastIdlePrRefreshByWorkspace.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
+    ) {
+      const oldestWorkspaceId = state.lastIdlePrRefreshByWorkspace.keys().next().value;
+      if (oldestWorkspaceId !== undefined) {
+        state.lastIdlePrRefreshByWorkspace.delete(oldestWorkspaceId);
+      }
+    }
+    state.lastIdlePrRefreshByWorkspace.set(workspaceId, now);
 
     void dependencies.prSnapshotService
       .refreshWorkspace(workspaceId)
@@ -475,8 +506,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
       // Immediate removal for UI feedback -- no coalescing delay
-      dependencies.workspaceSnapshotStore.remove(event.workspaceId);
-      dependencies.workspaceActivityService.clearWorkspace(event.workspaceId);
+      removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
         dependencies.sessionService.stopWorkspaceSessions(event.workspaceId),
         Promise.resolve().then(() => {
@@ -726,6 +756,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
+    state.lastIdlePrRefreshByWorkspace.clear();
     state.logger.info('Event collector stopped');
   }
 }
@@ -743,6 +774,10 @@ export class EventCollectorOrchestrator {
 
   stop(): void {
     stopEventCollectorWithState(this.state);
+  }
+
+  removeWorkspace(workspaceId: string): void {
+    removeWorkspaceWithState(this.state, workspaceId);
   }
 }
 

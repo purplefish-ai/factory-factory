@@ -15,7 +15,6 @@ const TRPC_RUNTIME_FILES = discoverProductionTypeScriptFiles(TRPC_ROOT);
 
 const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
   ['src/backend/services/github', new Set(['classifyGitHubCLIError'])],
-  ['src/backend/services/git-clone.service', new Set(['parseGithubUrl'])],
   [
     'src/backend/services/workspace',
     new Set([
@@ -23,6 +22,7 @@ const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
       'computePendingRequestType',
       'deriveWorkspaceFlowStateFromWorkspace',
       'getWorkspaceInitPolicy',
+      'parseGithubUrl',
     ]),
   ],
 ]);
@@ -121,12 +121,12 @@ describe('tRPC context dependencies', () => {
         import {
           parseGithubUrl,
           unknownRuntime as renamedRuntime,
-        } from '@/backend/services/git-clone.service';
+        } from '@/backend/services/workspace';
         import type { WorkspaceWithProject } from '@/backend/orchestration/types';
       `;
 
       expect(findForbiddenBackendImports(source)).toEqual([
-        'src/backend/services/git-clone.service#unknownRuntime',
+        'src/backend/services/workspace#unknownRuntime',
       ]);
     });
 
@@ -169,7 +169,7 @@ describe('tRPC context dependencies', () => {
             classifyGitHubCLIError,
             type GitHubCLIHealthStatus,
           } from '@/backend/services/github';
-          import { parseGithubUrl as parseRepositoryUrl } from '@/backend/services/git-clone.service';
+          import { parseGithubUrl as parseRepositoryUrl } from '@/backend/services/workspace';
         `)
       ).toEqual([]);
     });
