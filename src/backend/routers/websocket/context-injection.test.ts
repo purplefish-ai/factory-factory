@@ -42,11 +42,21 @@ const LONG_LIVED_BACKEND_ROOT_MODULES = new Set([
   'src/backend/fatal-error-handlers',
   'src/backend/interceptors',
   'src/backend/migrate',
+  'src/backend/server',
 ]);
+
+const APPLICATION_FACTORY_MODULES = new Set(['src/backend/app-context', 'src/backend/server']);
+const APPLICATION_FACTORY_EXPORTS = new Set(['createApplication', 'createAppContext']);
 
 type BoundaryViolation = {
   readonly kind: 'composition' | 'import';
   readonly detail: string;
+};
+
+type ImportTracking = {
+  readonly applicationFactoryBindings: Set<string>;
+  readonly applicationFactoryNamespaces: Set<string>;
+  readonly restrictedBindings: Set<string>;
 };
 
 function normalizeRepositoryPath(path: string): string {
@@ -143,21 +153,63 @@ function bindingSelectsGraphSection(name: ts.BindingName): boolean {
   });
 }
 
+function trackFactoryModuleBinding(
+  modulePath: string,
+  binding: string,
+  tracking: ImportTracking,
+  directFactory: boolean
+): void {
+  if (!APPLICATION_FACTORY_MODULES.has(modulePath)) {
+    return;
+  }
+  tracking.applicationFactoryNamespaces.add(binding);
+  if (directFactory) {
+    tracking.applicationFactoryBindings.add(binding);
+  }
+}
+
+function classifyNamedRuntimeImports(
+  modulePath: string,
+  namedImports: ts.NamedImports,
+  tracking: ImportTracking
+): BoundaryViolation[] {
+  const violations: BoundaryViolation[] = [];
+  const allowedBindings = ALLOWED_PURE_RUNTIME_IMPORTS.get(modulePath);
+  for (const element of namedImports.elements) {
+    if (element.isTypeOnly) {
+      continue;
+    }
+    const importedName = element.propertyName?.text ?? element.name.text;
+    if (!allowedBindings?.has(importedName)) {
+      tracking.restrictedBindings.add(element.name.text);
+      if (
+        APPLICATION_FACTORY_MODULES.has(modulePath) &&
+        APPLICATION_FACTORY_EXPORTS.has(importedName)
+      ) {
+        tracking.applicationFactoryBindings.add(element.name.text);
+      }
+      violations.push(importViolation(modulePath, importedName));
+    }
+  }
+  return violations;
+}
+
 function classifyRuntimeImport(
   modulePath: string,
   importClause: ts.ImportClause | undefined,
-  restrictedImportBindings: Set<string>
+  tracking: ImportTracking
 ): BoundaryViolation[] {
-  const violations: BoundaryViolation[] = [];
   if (!importClause) {
     return [importViolation(modulePath, 'side-effect')];
   }
   if (importClause.isTypeOnly) {
-    return violations;
+    return [];
   }
 
+  const violations: BoundaryViolation[] = [];
   if (importClause.name) {
-    restrictedImportBindings.add(importClause.name.text);
+    tracking.restrictedBindings.add(importClause.name.text);
+    trackFactoryModuleBinding(modulePath, importClause.name.text, tracking, true);
     violations.push(importViolation(modulePath, 'default'));
   }
 
@@ -166,29 +218,20 @@ function classifyRuntimeImport(
     return violations;
   }
   if (ts.isNamespaceImport(namedBindings)) {
-    restrictedImportBindings.add(namedBindings.name.text);
+    tracking.restrictedBindings.add(namedBindings.name.text);
+    trackFactoryModuleBinding(modulePath, namedBindings.name.text, tracking, false);
     violations.push(importViolation(modulePath, '*'));
     return violations;
   }
 
-  const allowedBindings = ALLOWED_PURE_RUNTIME_IMPORTS.get(modulePath);
-  for (const element of namedBindings.elements) {
-    if (element.isTypeOnly) {
-      continue;
-    }
-    const importedName = element.propertyName?.text ?? element.name.text;
-    if (!allowedBindings?.has(importedName)) {
-      restrictedImportBindings.add(element.name.text);
-      violations.push(importViolation(modulePath, importedName));
-    }
-  }
+  violations.push(...classifyNamedRuntimeImports(modulePath, namedBindings, tracking));
   return violations;
 }
 
 function findImportViolations(
   importer: string,
   sourceFile: ts.SourceFile,
-  restrictedImportBindings: Set<string>
+  tracking: ImportTracking
 ): BoundaryViolation[] {
   const violations: BoundaryViolation[] = [];
   for (const statement of sourceFile.statements) {
@@ -199,9 +242,7 @@ function findImportViolations(
     if (!(modulePath && isLongLivedRuntimeModule(modulePath))) {
       continue;
     }
-    violations.push(
-      ...classifyRuntimeImport(modulePath, statement.importClause, restrictedImportBindings)
-    );
+    violations.push(...classifyRuntimeImport(modulePath, statement.importClause, tracking));
   }
   return violations;
 }
@@ -220,21 +261,163 @@ function variableSelectsGraph(
   );
 }
 
+function accessedMemberName(expression: ts.Expression): string | null {
+  if (ts.isPropertyAccessExpression(expression)) {
+    return expression.name.text;
+  }
+  if (
+    ts.isElementAccessExpression(expression) &&
+    expression.argumentExpression &&
+    ts.isStringLiteral(expression.argumentExpression)
+  ) {
+    return expression.argumentExpression.text;
+  }
+  return null;
+}
+
+function accessedReceiver(expression: ts.Expression): ts.Expression | null {
+  return ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)
+    ? expression.expression
+    : null;
+}
+
+function collectDomainWiringBindings(
+  declaration: ts.VariableDeclaration,
+  graphBindings: ReadonlySet<string>,
+  domainWiringBindings: Set<string>
+): void {
+  const initializer = declaration.initializer;
+  if (!initializer) {
+    return;
+  }
+
+  if (
+    ts.isIdentifier(declaration.name) &&
+    accessedMemberName(initializer) === 'wireDomainBridges'
+  ) {
+    const receiver = accessedReceiver(initializer);
+    if (receiver && isGraphExpression(receiver, graphBindings)) {
+      domainWiringBindings.add(declaration.name.text);
+    }
+  }
+
+  if (
+    !(ts.isObjectBindingPattern(declaration.name) && isGraphExpression(initializer, graphBindings))
+  ) {
+    return;
+  }
+  for (const element of declaration.name.elements) {
+    const selectedName = element.propertyName?.getText() ?? element.name.getText();
+    if (selectedName === 'wireDomainBridges') {
+      collectBindingNames(element.name, domainWiringBindings);
+    }
+  }
+}
+
+function collectApplicationFactoryBindings(
+  declaration: ts.VariableDeclaration,
+  tracking: ImportTracking
+): void {
+  const initializer = declaration.initializer;
+  if (!initializer) {
+    return;
+  }
+
+  if (ts.isIdentifier(initializer) && tracking.applicationFactoryBindings.has(initializer.text)) {
+    collectBindingNames(declaration.name, tracking.applicationFactoryBindings);
+    return;
+  }
+
+  const factoryName = accessedMemberName(initializer);
+  const receiver = accessedReceiver(initializer);
+  const root = receiver ? expressionPath(receiver)?.[0] : undefined;
+  if (
+    factoryName &&
+    APPLICATION_FACTORY_EXPORTS.has(factoryName) &&
+    root &&
+    tracking.applicationFactoryNamespaces.has(root)
+  ) {
+    collectBindingNames(declaration.name, tracking.applicationFactoryBindings);
+    return;
+  }
+
+  if (
+    !(
+      ts.isObjectBindingPattern(declaration.name) &&
+      ts.isIdentifier(initializer) &&
+      tracking.applicationFactoryNamespaces.has(initializer.text)
+    )
+  ) {
+    return;
+  }
+  for (const element of declaration.name.elements) {
+    const selectedName = element.propertyName?.getText() ?? element.name.getText();
+    if (APPLICATION_FACTORY_EXPORTS.has(selectedName)) {
+      collectBindingNames(element.name, tracking.applicationFactoryBindings);
+    }
+  }
+}
+
+function applicationFactoryViolationForCall(
+  node: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+  tracking: ImportTracking
+): BoundaryViolation | null {
+  if (
+    ts.isIdentifier(node.expression) &&
+    tracking.applicationFactoryBindings.has(node.expression.text)
+  ) {
+    return { kind: 'composition', detail: `${node.expression.getText(sourceFile)}()` };
+  }
+
+  const factoryName = accessedMemberName(node.expression);
+  const receiver = accessedReceiver(node.expression);
+  const root = receiver ? expressionPath(receiver)?.[0] : undefined;
+  if (
+    factoryName &&
+    APPLICATION_FACTORY_EXPORTS.has(factoryName) &&
+    root &&
+    tracking.applicationFactoryNamespaces.has(root)
+  ) {
+    return { kind: 'composition', detail: `${node.expression.getText(sourceFile)}()` };
+  }
+  return null;
+}
+
 function compositionViolationForCall(
   node: ts.CallExpression,
   sourceFile: ts.SourceFile,
   graphBindings: ReadonlySet<string>,
-  restrictedImportBindings: ReadonlySet<string>
+  domainWiringBindings: ReadonlySet<string>,
+  tracking: ImportTracking
 ): BoundaryViolation | null {
-  if (
-    !(ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'configure')
-  ) {
+  const applicationFactoryViolation = applicationFactoryViolationForCall(
+    node,
+    sourceFile,
+    tracking
+  );
+  if (applicationFactoryViolation) {
+    return applicationFactoryViolation;
+  }
+
+  if (ts.isIdentifier(node.expression) && domainWiringBindings.has(node.expression.text)) {
+    return { kind: 'composition', detail: node.expression.getText(sourceFile) };
+  }
+
+  const calledMember = accessedMemberName(node.expression);
+  const receiver = accessedReceiver(node.expression);
+  if (!receiver) {
     return null;
   }
-  const receiver = node.expression.expression;
+  if (calledMember === 'wireDomainBridges' && isGraphExpression(receiver, graphBindings)) {
+    return { kind: 'composition', detail: node.expression.getText(sourceFile) };
+  }
+  if (calledMember !== 'configure') {
+    return null;
+  }
   const root = expressionPath(receiver)?.[0];
   if (
-    !(isGraphExpression(receiver, graphBindings) || (root && restrictedImportBindings.has(root)))
+    !(isGraphExpression(receiver, graphBindings) || (root && tracking.restrictedBindings.has(root)))
   ) {
     return null;
   }
@@ -246,14 +429,19 @@ function compositionViolationForCall(
 
 function findCompositionViolations(
   sourceFile: ts.SourceFile,
-  restrictedImportBindings: ReadonlySet<string>
+  tracking: ImportTracking
 ): BoundaryViolation[] {
   const violations: BoundaryViolation[] = [];
+  const domainWiringBindings = new Set<string>();
   const graphBindings = new Set<string>();
 
   const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && variableSelectsGraph(node, graphBindings)) {
-      collectBindingNames(node.name, graphBindings);
+    if (ts.isVariableDeclaration(node)) {
+      collectApplicationFactoryBindings(node, tracking);
+      collectDomainWiringBindings(node, graphBindings, domainWiringBindings);
+      if (variableSelectsGraph(node, graphBindings)) {
+        collectBindingNames(node.name, graphBindings);
+      }
     }
 
     if (ts.isCallExpression(node)) {
@@ -261,7 +449,8 @@ function findCompositionViolations(
         node,
         sourceFile,
         graphBindings,
-        restrictedImportBindings
+        domainWiringBindings,
+        tracking
       );
       if (violation) {
         violations.push(violation);
@@ -283,11 +472,15 @@ function findBoundaryViolations(importer: string, source: string): BoundaryViola
     true,
     ts.ScriptKind.TS
   );
-  const restrictedImportBindings = new Set<string>();
+  const tracking: ImportTracking = {
+    applicationFactoryBindings: new Set(),
+    applicationFactoryNamespaces: new Set(),
+    restrictedBindings: new Set(),
+  };
 
   return [
-    ...findImportViolations(importer, sourceFile, restrictedImportBindings),
-    ...findCompositionViolations(sourceFile, restrictedImportBindings),
+    ...findImportViolations(importer, sourceFile, tracking),
+    ...findCompositionViolations(sourceFile, tracking),
   ];
 }
 
@@ -409,6 +602,91 @@ describe('HTTP and WebSocket application context injection', () => {
           `
         )
       ).toEqual([]);
+    });
+
+    it('rejects application construction through the server re-export', () => {
+      expect(
+        findBoundaryViolations(
+          'src/backend/routers/websocket/new.handler.ts',
+          `
+            import { createApplication } from '@/backend/server';
+            const application = createApplication();
+          `
+        )
+      ).toEqual([
+        importViolation('src/backend/server', 'createApplication'),
+        { kind: 'composition', detail: 'createApplication()' },
+      ]);
+    });
+
+    it('rejects an aliased application factory imported through a relative server path', () => {
+      expect(
+        findBoundaryViolations(
+          'src/backend/routers/websocket/new.handler.ts',
+          `
+            import { createApplication as buildApplication } from '../../server';
+            const application = buildApplication();
+          `
+        )
+      ).toEqual([
+        importViolation('src/backend/server', 'createApplication'),
+        { kind: 'composition', detail: 'buildApplication()' },
+      ]);
+    });
+
+    it('rejects application construction through namespace and default server imports', () => {
+      expect(
+        findBoundaryViolations(
+          'src/backend/routers/websocket/new.handler.ts',
+          `
+            import serverFactory from '../../server';
+            import * as serverModule from '../../server';
+            const { createApplication: buildFromServer } = serverModule;
+            serverFactory();
+            serverModule.createApplication();
+            buildFromServer();
+          `
+        )
+      ).toEqual([
+        importViolation('src/backend/server', 'default'),
+        importViolation('src/backend/server', '*'),
+        { kind: 'composition', detail: 'serverFactory()' },
+        { kind: 'composition', detail: 'serverModule.createApplication()' },
+        { kind: 'composition', detail: 'buildFromServer()' },
+      ]);
+    });
+
+    it('rejects direct bridge wiring through graph-derived lifecycle and services', () => {
+      expect(
+        findBoundaryViolations(
+          'src/backend/routers/websocket/new.handler.ts',
+          `
+            function wire(application: Application) {
+              const { lifecycle, services } = application;
+              lifecycle.wireDomainBridges(services);
+            }
+          `
+        )
+      ).toEqual([{ kind: 'composition', detail: 'lifecycle.wireDomainBridges' }]);
+    });
+
+    it('rejects graph-derived bridge wiring through lifecycle and method aliases', () => {
+      expect(
+        findBoundaryViolations(
+          'src/backend/routers/websocket/new.handler.ts',
+          `
+            function wire(runtimeGraph: Application) {
+              const { lifecycle: runtimeLifecycle, services: runtimeServices } = runtimeGraph;
+              runtimeLifecycle.wireDomainBridges(runtimeServices);
+              const { wireDomainBridges: wireBridges } = runtimeLifecycle;
+              wireBridges(runtimeServices);
+            }
+          `
+        )
+      ).toEqual([
+        { kind: 'composition', detail: 'runtimeLifecycle.wireDomainBridges' },
+        { kind: 'composition', detail: 'wireBridges' },
+      ]);
     });
   });
 
