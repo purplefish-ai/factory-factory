@@ -155,6 +155,13 @@ type WorkspaceWithAgentSessionsAndProject = Prisma.WorkspaceGetPayload<{
 // Type for Workspace with sessions and project included (used by reconciliation)
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
+export interface PRDiscoveryClaim {
+  branchName: string;
+  checkedAt: Date;
+  retryCount: number;
+  nextCheckAt: Date;
+}
+
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
@@ -616,6 +623,35 @@ class WorkspaceAccessor {
         prDiscoveryLastCheckedAt: attempt.checkedAt,
         prDiscoveryRetryCount: { increment: 1 },
         prDiscoveryNextCheckAt: attempt.nextCheckAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Atomically attach a discovered PR only while the claim that produced it is
+   * still current. A concurrent reset, branch rename, status change, or PR
+   * attachment makes this update a no-op.
+   */
+  async attachDiscoveredPRIfClaimMatches(
+    id: string,
+    prUrl: string,
+    claim: PRDiscoveryClaim,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: claim.branchName,
+        prDiscoveryLastCheckedAt: claim.checkedAt,
+        prDiscoveryRetryCount: claim.retryCount,
+        prDiscoveryNextCheckAt: claim.nextCheckAt,
+      },
+      data: {
+        prUrl,
+        prUpdatedAt,
       },
     });
     return result.count > 0;

@@ -203,6 +203,43 @@ describe('workspaceAccessor', () => {
       );
     });
 
+    it('attaches a discovered PR only while the exact discovery claim remains current', async () => {
+      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
+      const nextCheckAt = new Date('2026-07-17T12:06:00.000Z');
+      const prUpdatedAt = new Date('2026-07-17T12:01:00.000Z');
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceAccessor.attachDiscoveredPRIfClaimMatches(
+          'ws-1',
+          'https://github.com/org/repo/pull/12',
+          {
+            branchName: 'feature/pr-discovery',
+            checkedAt,
+            retryCount: 2,
+            nextCheckAt,
+          },
+          prUpdatedAt
+        )
+      ).resolves.toBe(true);
+
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ws-1',
+          status: 'READY',
+          prUrl: null,
+          branchName: 'feature/pr-discovery',
+          prDiscoveryLastCheckedAt: checkedAt,
+          prDiscoveryRetryCount: 2,
+          prDiscoveryNextCheckAt: nextCheckAt,
+        },
+        data: {
+          prUrl: 'https://github.com/org/repo/pull/12',
+          prUpdatedAt,
+        },
+      });
+    });
+
     it('resets discovery backoff only while the workspace remains eligible', async () => {
       mockUpdateMany.mockResolvedValue({ count: 1 });
 

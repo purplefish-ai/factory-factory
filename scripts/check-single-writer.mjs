@@ -211,6 +211,10 @@ const workspaceMutationRules = {
       'prDiscoveryNextCheckAt',
     ],
   },
+  attachDiscoveredPRIfClaimMatches: {
+    type: 'static',
+    fields: ['prUrl', 'prUpdatedAt'],
+  },
   resetPRDiscoveryBackoff: {
     type: 'static',
     fields: [

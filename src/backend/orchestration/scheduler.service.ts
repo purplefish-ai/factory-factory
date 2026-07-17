@@ -11,7 +11,11 @@ import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
-import { computePRDiscoveryNextCheckAt, workspaceAccessor } from '@/backend/services/workspace';
+import {
+  computePRDiscoveryNextCheckAt,
+  type PRDiscoveryClaim,
+  workspaceAccessor,
+} from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
 
@@ -27,10 +31,16 @@ interface ClaimablePRDiscoveryCandidate {
   branchName: string;
 }
 
-interface PRDiscoveryRepositoryGroup {
+interface ClaimedPRDiscoveryCandidate extends ClaimablePRDiscoveryCandidate {
+  claim: PRDiscoveryClaim;
+}
+
+interface PRDiscoveryRepositoryGroup<
+  Candidate extends ClaimablePRDiscoveryCandidate = ClaimablePRDiscoveryCandidate,
+> {
   owner: string;
   repo: string;
-  candidates: ClaimablePRDiscoveryCandidate[];
+  candidates: Candidate[];
 }
 
 class SchedulerService {
@@ -153,25 +163,29 @@ class SchedulerService {
         const claimedCandidates = await Promise.all(
           group.candidates.map(async (candidate) => {
             const { workspace, branchName } = candidate;
+            const retryCount = workspace.prDiscoveryRetryCount + 1;
+            const nextCheckAt = computePRDiscoveryNextCheckAt(checkedAt, retryCount);
             const claimed = await workspaceAccessor.claimPRDiscoveryAttempt(workspace.id, {
               branchName,
               expectedUpdatedAt: workspace.updatedAt,
               expectedRetryCount: workspace.prDiscoveryRetryCount,
               expectedNextCheckAt: workspace.prDiscoveryNextCheckAt,
               checkedAt,
-              nextCheckAt: computePRDiscoveryNextCheckAt(
-                checkedAt,
-                workspace.prDiscoveryRetryCount + 1
-              ),
+              nextCheckAt,
             });
-            return claimed ? candidate : null;
+            return claimed
+              ? {
+                  ...candidate,
+                  claim: { branchName, checkedAt, retryCount, nextCheckAt },
+                }
+              : null;
           })
         );
 
         return {
           ...group,
           candidates: claimedCandidates.filter(
-            (candidate): candidate is ClaimablePRDiscoveryCandidate => candidate !== null
+            (candidate): candidate is ClaimedPRDiscoveryCandidate => candidate !== null
           ),
         };
       })
@@ -203,7 +217,7 @@ class SchedulerService {
   }
 
   private async discoverPRsForRepository(
-    group: PRDiscoveryRepositoryGroup
+    group: PRDiscoveryRepositoryGroup<ClaimedPRDiscoveryCandidate>
   ): Promise<{ discovered: number; failed: boolean }> {
     try {
       const prs = await githubCLIService.listOpenPRs(group.owner, group.repo);
@@ -230,7 +244,11 @@ class SchedulerService {
         }
 
         unmatched.delete(candidate);
-        const result = await prSnapshotService.attachAndRefreshPR(candidate.workspace.id, pr.url);
+        const result = await prSnapshotService.attachDiscoveredPRAndRefresh(
+          candidate.workspace.id,
+          pr.url,
+          candidate.claim
+        );
         if (result.success || result.reason === 'fetch_failed') {
           discovered += 1;
         } else {

@@ -6,7 +6,7 @@ const mockFindNeedingPRDiscovery = vi.fn();
 const mockClaimPRDiscoveryAttempt = vi.fn();
 const mockListOpenPRs = vi.fn();
 const mockRefreshWorkspace = vi.fn();
-const mockAttachAndRefreshPR = vi.fn();
+const mockAttachDiscoveredPRAndRefresh = vi.fn();
 const mockGetPRDiscoveryLimits = vi.fn();
 const mockLoggerInfo = vi.fn();
 
@@ -32,7 +32,7 @@ vi.mock('@/backend/services/github', () => ({
   },
   prSnapshotService: {
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
-    attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
+    attachDiscoveredPRAndRefresh: (...args: unknown[]) => mockAttachDiscoveredPRAndRefresh(...args),
   },
   prFetchRegistry: {
     isRecentlyFetched: () => false,
@@ -104,6 +104,10 @@ describe('SchedulerService', () => {
     vi.clearAllMocks();
     mockGetPRDiscoveryLimits.mockReturnValue({ candidateLimit: 100, repositoryLimit: 10 });
     mockClaimPRDiscoveryAttempt.mockResolvedValue(true);
+    mockAttachDiscoveredPRAndRefresh.mockResolvedValue({
+      success: true,
+      snapshot: { prNumber: 1 },
+    });
   });
 
   describe('syncPRStatuses', () => {
@@ -179,7 +183,7 @@ describe('SchedulerService', () => {
       expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledTimes(candidates.length);
       expect(mockListOpenPRs).toHaveBeenCalledTimes(repositories.length);
       expect(mockListOpenPRs.mock.calls).toEqual(repositories.map((repo) => ['org', repo]));
-      expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+      expect(mockAttachDiscoveredPRAndRefresh).not.toHaveBeenCalled();
     });
 
     it('claims and checks multiple workspaces through one case-insensitive repository batch', async () => {
@@ -209,8 +213,6 @@ describe('SchedulerService', () => {
           headRefName: 'two',
         },
       ]);
-      mockAttachAndRefreshPR.mockResolvedValue({ success: true, snapshot: { prNumber: 1 } });
-
       await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
         discovered: 2,
         checked: 2,
@@ -232,6 +234,16 @@ describe('SchedulerService', () => {
       expect(mockListOpenPRs).toHaveBeenCalledWith('Owner', 'Repo');
       expect(Math.max(...mockClaimPRDiscoveryAttempt.mock.invocationCallOrder)).toBeLessThan(
         mockListOpenPRs.mock.invocationCallOrder[0] ?? 0
+      );
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
+        'ws-2',
+        'https://github.com/Owner/Repo/pull/2',
+        {
+          branchName: 'two',
+          checkedAt,
+          retryCount: 2,
+          nextCheckAt: expect.any(Date),
+        }
       );
     });
 
@@ -290,16 +302,15 @@ describe('SchedulerService', () => {
           },
         ]);
       });
-      mockAttachAndRefreshPR.mockResolvedValue({ success: true, snapshot: { prNumber: 2 } });
-
       await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
         discovered: 1,
         checked: 2,
       });
       expect(mockListOpenPRs).toHaveBeenCalledTimes(2);
-      expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
         'found',
-        'https://github.com/org/working/pull/2'
+        'https://github.com/org/working/pull/2',
+        expect.objectContaining({ branchName: 'same' })
       );
     });
 
@@ -318,17 +329,17 @@ describe('SchedulerService', () => {
           },
         ])
       );
-      mockAttachAndRefreshPR.mockResolvedValue({ success: true, snapshot: { prNumber: 1 } });
-
       await schedulerService.discoverNewPRs();
 
-      expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
         'ws-a',
-        'https://github.com/org/a/pull/1'
+        'https://github.com/org/a/pull/1',
+        expect.objectContaining({ branchName: 'shared' })
       );
-      expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
         'ws-b',
-        'https://github.com/org/b/pull/2'
+        'https://github.com/org/b/pull/2',
+        expect.objectContaining({ branchName: 'shared' })
       );
     });
 
@@ -359,13 +370,19 @@ describe('SchedulerService', () => {
           headRefName: 'reused',
         },
       ]);
-      mockAttachAndRefreshPR.mockResolvedValue({ success: true, snapshot: { prNumber: 1 } });
-
       await schedulerService.discoverNewPRs();
 
-      expect(mockAttachAndRefreshPR.mock.calls).toEqual([
-        ['older-workspace', 'https://github.com/org/repo/pull/1'],
-        ['newer-workspace', 'https://github.com/org/repo/pull/2'],
+      expect(mockAttachDiscoveredPRAndRefresh.mock.calls).toEqual([
+        [
+          'older-workspace',
+          'https://github.com/org/repo/pull/1',
+          expect.objectContaining({ branchName: 'reused' }),
+        ],
+        [
+          'newer-workspace',
+          'https://github.com/org/repo/pull/2',
+          expect.objectContaining({ branchName: 'reused' }),
+        ],
       ]);
     });
 
@@ -397,7 +414,7 @@ describe('SchedulerService', () => {
         checked: 1,
       });
       expect(mockListOpenPRs).toHaveBeenCalledWith('org', 'repo');
-      expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+      expect(mockAttachDiscoveredPRAndRefresh).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -413,9 +430,30 @@ describe('SchedulerService', () => {
           headRefName: 'feature',
         },
       ]);
-      mockAttachAndRefreshPR.mockResolvedValue(attachment);
+      mockAttachDiscoveredPRAndRefresh.mockResolvedValue(attachment);
 
       await expect(schedulerService.discoverNewPRs()).resolves.toEqual({ discovered, checked: 1 });
+    });
+
+    it('does not count a PR when activity invalidated its discovery claim', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([discoveryWorkspace({ id: 'ws-1' })]);
+      mockListOpenPRs.mockResolvedValue([
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
+        },
+      ]);
+      mockAttachDiscoveredPRAndRefresh.mockResolvedValue({
+        success: false,
+        reason: 'claim_stale',
+      });
+
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: 1,
+      });
     });
   });
 

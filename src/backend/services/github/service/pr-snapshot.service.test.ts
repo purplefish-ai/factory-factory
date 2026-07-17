@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindById = vi.fn();
 const mockUpdate = vi.fn();
+const mockAttachDiscoveredPRIfClaimMatches = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
@@ -9,6 +10,8 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
+    attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
+      mockAttachDiscoveredPRIfClaimMatches(...args),
   },
 }));
 
@@ -122,6 +125,91 @@ describe('PRSnapshotService', () => {
       );
 
       expect(result).toEqual({ success: false, reason: 'error' });
+    });
+  });
+
+  describe('attachDiscoveredPRAndRefresh', () => {
+    const claim = {
+      branchName: 'feature/pr-discovery',
+      checkedAt: new Date('2026-07-17T12:00:00.000Z'),
+      retryCount: 2,
+      nextCheckAt: new Date('2026-07-17T12:06:00.000Z'),
+    };
+
+    it('does not attach or fetch when activity invalidated the discovery claim', async () => {
+      mockAttachDiscoveredPRIfClaimMatches.mockResolvedValue(false);
+
+      await expect(
+        prSnapshotService.attachDiscoveredPRAndRefresh(
+          'w1',
+          'https://github.com/org/repo/pull/1',
+          claim
+        )
+      ).resolves.toEqual({ success: false, reason: 'claim_stale' });
+
+      expect(mockAttachDiscoveredPRIfClaimMatches).toHaveBeenCalledWith(
+        'w1',
+        'https://github.com/org/repo/pull/1',
+        claim,
+        expect.any(Date)
+      );
+      expect(mockFetchAndComputePRState).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockUpdateCachedKanbanColumn).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the snapshot without correcting a newer branch after guarded attachment', async () => {
+      mockAttachDiscoveredPRIfClaimMatches.mockResolvedValue(true);
+      mockFetchAndComputePRState.mockResolvedValue({
+        prNumber: 123,
+        prState: 'OPEN',
+        prReviewState: 'APPROVED',
+        prCiStatus: 'SUCCESS',
+        headRefName: 'feature/pr-discovery',
+      });
+
+      await expect(
+        prSnapshotService.attachDiscoveredPRAndRefresh(
+          'w1',
+          'https://github.com/org/repo/pull/123',
+          claim
+        )
+      ).resolves.toEqual({
+        success: true,
+        snapshot: {
+          prNumber: 123,
+          prState: 'OPEN',
+          prReviewState: 'APPROVED',
+          prCiStatus: 'SUCCESS',
+        },
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+        prNumber: 123,
+        prState: 'OPEN',
+        prReviewState: 'APPROVED',
+        prCiStatus: 'SUCCESS',
+        prUpdatedAt: expect.any(Date),
+      });
+      expect(mockUpdate).not.toHaveBeenCalledWith(
+        'w1',
+        expect.objectContaining({ branchName: expect.anything() })
+      );
+    });
+
+    it('keeps the guarded PR attachment when snapshot fetch fails', async () => {
+      mockAttachDiscoveredPRIfClaimMatches.mockResolvedValue(true);
+      mockFetchAndComputePRState.mockResolvedValue(null);
+
+      await expect(
+        prSnapshotService.attachDiscoveredPRAndRefresh(
+          'w1',
+          'https://github.com/org/repo/pull/1',
+          claim
+        )
+      ).resolves.toEqual({ success: false, reason: 'fetch_failed' });
+
+      expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w1');
     });
   });
 
