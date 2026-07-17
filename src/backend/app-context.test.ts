@@ -18,28 +18,8 @@ describe('createApplication', () => {
     expect(vi.mocked(second.lifecycle.wireDomainBridges).mock.calls[0]?.[0]).toBe(
       secondDependencies.services
     );
-    expect(first.lifecycle.eventCollector.configure).toHaveBeenCalledWith(first.services);
-    expect(second.lifecycle.eventCollector.configure).toHaveBeenCalledWith(second.services);
-
-    const firstSnapshotBridges = vi.mocked(first.lifecycle.snapshotReconciliation.configure).mock
-      .calls[0]?.[0];
-    const secondSnapshotBridges = vi.mocked(second.lifecycle.snapshotReconciliation.configure).mock
-      .calls[0]?.[0];
-    firstSnapshotBridges?.session.getRuntimeSnapshot('first-session');
-    firstSnapshotBridges?.session.getAllPendingRequests();
-    expect(first.services.sessionService.getRuntimeSnapshot).toHaveBeenCalledWith('first-session');
-    expect(first.services.chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
-    expect(second.services.sessionService.getRuntimeSnapshot).not.toHaveBeenCalled();
-    expect(second.services.chatEventForwarderService.getAllPendingRequests).not.toHaveBeenCalled();
-
-    secondSnapshotBridges?.session.getRuntimeSnapshot('second-session');
-    secondSnapshotBridges?.session.getAllPendingRequests();
-    expect(second.services.sessionService.getRuntimeSnapshot).toHaveBeenCalledWith(
-      'second-session'
-    );
-    expect(second.services.chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(
-      1
-    );
+    expect(first.lifecycle.eventCollector.start).toHaveBeenCalledOnce();
+    expect(second.lifecycle.eventCollector.start).toHaveBeenCalledOnce();
     expect(Object.isFrozen(first)).toBe(true);
     expect(Object.isFrozen(first.services)).toBe(true);
     expect(Object.isFrozen(first.lifecycle)).toBe(true);

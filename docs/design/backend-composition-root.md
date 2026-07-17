@@ -43,7 +43,8 @@ Production construction follows this order:
 2. `createApplication()` configures the supplied ACP runtime manager from the supplied config
    service.
 3. It passes the complete service graph to the supplied `wireDomainBridges` function.
-4. It configures the graph-owned event collector and snapshot reconciliation participants.
+4. It starts the graph-owned event collector. Event collection and snapshot reconciliation already
+   hold immutable constructor-selected dependencies; snapshot reconciliation starts with the server.
 5. It snapshots system configuration and returns the frozen application containers.
 
 All dependency wiring is complete before `createServer()` returns and before `ServerInstance.start()`
@@ -62,8 +63,11 @@ adapters only from the supplied graph. The composition root is the sole producti
 
 Several capsules still expose mutable `.configure()` APIs internally. The bridge composer calls
 those compatibility APIs during graph construction; server lifecycle and transports never call
-them. The event collector and snapshot reconciliation objects are likewise configured during
-composition and started or stopped later through graph-owned lifecycle references.
+them. The bridge composer itself uses the graph's logger and worktree-initialization ports. Event
+collection and snapshot reconciliation use immutable constructor dependencies instead of mutable
+configuration: each graph owns its event sources, snapshot store, database accessor, Git port, and
+session ports. Event collection starts during composition and snapshot reconciliation starts with
+the server; both stop through graph-owned lifecycle references.
 
 This boundary is intentional: it centralizes current mutation without pretending it has already
 become constructor injection. Compatibility singleton exports also still exist for capsule-internal
@@ -131,8 +135,10 @@ test. In particular:
 - pass the returned application unchanged to server and transport factories.
 
 Creating graph A and graph B invokes each graph's wiring function with only its own services.
-Snapshot adapters captured during each composition continue to delegate to their corresponding
-graph. Because custom dependencies are complete, neither graph can silently obtain a missing
+Their event collectors subscribe only to their own event sources and mutate only their own stores;
+`stop()` detaches every registered listener and supports an idempotent start-stop-restart cycle.
+Their snapshot reconciliation services read only their own accessors, Git ports, session ports, and
+stores. Because custom dependencies are complete, neither graph can silently obtain a missing
 production instance.
 
 Narrow transport unit tests may use a typed fixture containing only the ports exercised by that
@@ -155,7 +161,7 @@ a fully constructor-injected directed acyclic graph. Follow-up migrations should
    orchestration coordinators or domain events.
 4. Move remaining transport compatibility broadcasters and registries behind per-application
    factories where external APIs permit it.
-5. Delete compatibility singleton exports, `AppContext` aliases, and legacy configure wrappers once
+5. Delete remaining compatibility singleton exports, `AppContext` aliases, and legacy configure wrappers once
    their final consumers have migrated.
 
 Until those stages are complete, new code must not add another registry or default-merging bridge.

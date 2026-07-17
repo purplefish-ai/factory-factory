@@ -107,6 +107,7 @@ vi.mock('./workspace-init.orchestrator', () => ({
 // --- Import mocked modules to get references ---
 
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
@@ -152,6 +153,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    createLogger,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
@@ -171,6 +173,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceQueryService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    initializeWorkspaceWorktree,
     ...overrides,
   };
 }
@@ -186,6 +189,21 @@ describe('configureDomainBridges', () => {
     expect(ratchetService.configure).toHaveBeenCalledTimes(1);
     expect(fixerSessionService.configure).toHaveBeenCalledTimes(1);
     expect(reconciliationService.configure).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the supplied worktree initializer for reconciliation', async () => {
+    const injectedInitializer = vi.fn().mockResolvedValue(undefined);
+    configureDomainBridges(
+      createBridgeServices({ initializeWorkspaceWorktree: injectedInitializer })
+    );
+
+    const bridge = getBridge(reconciliationService.configure);
+    await bridge.workspace.initializeWorktree('ws-injected', { useExistingBranch: true });
+
+    expect(injectedInitializer).toHaveBeenCalledWith('ws-injected', {
+      useExistingBranch: true,
+    });
+    expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
   });
 
   it('configures workspace domain services', () => {

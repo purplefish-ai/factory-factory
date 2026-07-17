@@ -29,14 +29,16 @@ vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () => ({
   configureDomainBridges: vi.fn(),
 }));
 vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
-  createEventCollectorOrchestrator: vi.fn(() => ({ configure: vi.fn(), stop: vi.fn() })),
+  createEventCollectorOrchestrator: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
 }));
 vi.mock('@/backend/orchestration/health.service', () => ({ healthService: {} }));
+vi.mock('@/backend/orchestration/linear-config.helper', () => ({
+  getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
+}));
 vi.mock('@/backend/orchestration/reconciliation.service', () => ({ reconciliationService: {} }));
 vi.mock('@/backend/orchestration/scheduler.service', () => ({ schedulerService: {} }));
 vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
   SnapshotReconciliationService: class {
-    configure = vi.fn();
     start = vi.fn();
     stop = vi.fn(async () => undefined);
   },
@@ -74,12 +76,16 @@ vi.mock('@/backend/services/factory-config.service', () => ({
   FactoryConfigService: { readConfig: vi.fn() },
 }));
 vi.mock('@/backend/services/git-clone.service', () => ({ gitCloneService: {} }));
+vi.mock('@/backend/services/git-ops.service', () => ({ gitOpsService: {} }));
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {},
   prFetchRegistry: {},
   prSnapshotService: {},
 }));
-vi.mock('@/backend/services/linear', () => ({ linearClientService: {} }));
+vi.mock('@/backend/services/linear', () => ({
+  linearClientService: {},
+  linearStateSyncService: {},
+}));
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
@@ -157,6 +163,7 @@ import { decisionLogQueryService } from '@/backend/orchestration/decision-log-qu
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
 import { createEventCollectorOrchestrator } from '@/backend/orchestration/event-collector.orchestrator';
 import { healthService } from '@/backend/orchestration/health.service';
+import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
 import { schedulerService } from '@/backend/orchestration/scheduler.service';
 import { SnapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
@@ -186,8 +193,9 @@ import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitCloneService } from '@/backend/services/git-clone.service';
+import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
-import { linearClientService } from '@/backend/services/linear';
+import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { periodicTaskAccessor, periodicTaskService } from '@/backend/services/periodic-task';
 import { findAvailablePort } from '@/backend/services/port.service';
@@ -215,6 +223,7 @@ import {
 } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import {
+  computePendingRequestType,
   getWorkspaceInitPolicy,
   kanbanStateService,
   projectManagementService,
@@ -303,6 +312,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     cleanupWorkspaceRuntimeResources,
     cliHealthService,
     configService: graphConfigService,
+    computePendingRequestType,
     createChildWorkspace,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
@@ -317,14 +327,17 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     fixerSessionService,
     getLogFilePath,
     getQuickAction,
+    getWorkspaceLinearContext,
     getWorkspaceInitPolicy,
     gitCloneService,
+    gitOpsService,
     githubCLIService,
     healthService,
     initializeWorkspaceWorktree,
     insightsService,
     kanbanStateService,
     linearClientService,
+    linearStateSyncService,
     listQuickActions,
     logbookService,
     periodicTaskAccessor,
@@ -370,8 +383,17 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       stop: stopInterceptors,
     },
     wireDomainBridges: vi.fn<typeof configureDomainBridges>(),
-    eventCollector: createEventCollectorOrchestrator(),
-    snapshotReconciliation: new SnapshotReconciliationService(),
+    eventCollector: createEventCollectorOrchestrator(services),
+    snapshotReconciliation: new SnapshotReconciliationService({
+      createLogger: services.createLogger,
+      gitOpsService: services.gitOpsService,
+      session: {
+        getRuntimeSnapshot: services.sessionService.getRuntimeSnapshot,
+        getAllPendingRequests: services.chatEventForwarderService.getAllPendingRequests,
+      },
+      workspaceAccessor: services.workspaceAccessor,
+      workspaceSnapshotStore: services.workspaceSnapshotStore,
+    }),
     recoverStaleArchivingWorkspaces,
   } satisfies ApplicationLifecycle;
 

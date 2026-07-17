@@ -12,6 +12,7 @@ import {
   type EventCollectorOrchestrator,
 } from './orchestration/event-collector.orchestrator';
 import { healthService } from './orchestration/health.service';
+import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
 import { reconciliationService } from './orchestration/reconciliation.service';
 import { schedulerService } from './orchestration/scheduler.service';
 import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
@@ -37,8 +38,9 @@ import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { FactoryConfigService } from './services/factory-config.service';
 import { gitCloneService } from './services/git-clone.service';
+import { gitOpsService } from './services/git-ops.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
-import { linearClientService } from './services/linear';
+import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskAccessor, periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
@@ -72,6 +74,7 @@ import {
 } from './services/session';
 import { terminalService } from './services/terminal';
 import {
+  computePendingRequestType,
   getWorkspaceInitPolicy,
   kanbanStateService,
   projectManagementService,
@@ -101,12 +104,15 @@ export type ApplicationServices = BridgeServices & {
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
   gitCloneService: typeof gitCloneService;
+  gitOpsService: typeof gitOpsService;
   getLogFilePath: typeof getLogFilePath;
   getQuickAction: typeof getQuickAction;
+  getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   healthService: typeof healthService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   insightsService: typeof insightsService;
   linearClientService: typeof linearClientService;
+  linearStateSyncService: typeof linearStateSyncService;
   listQuickActions: typeof listQuickActions;
   periodicTaskAccessor: typeof periodicTaskAccessor;
   projectManagementService: typeof projectManagementService;
@@ -124,6 +130,7 @@ export type ApplicationServices = BridgeServices & {
   workspaceDataService: typeof workspaceDataService;
   workspaceNotificationAccessor: typeof workspaceNotificationAccessor;
   worktreeLifecycleService: typeof worktreeLifecycleService;
+  computePendingRequestType: typeof computePendingRequestType;
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
   createChildWorkspace: typeof createChildWorkspace;
@@ -168,76 +175,82 @@ const defaultRunScriptService = createRunScriptService({
 });
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
+  const services: ApplicationServices = {
+    acpRuntimeManager,
+    acpTraceLogger,
+    autoIterationService,
+    chatEventForwarderService,
+    chatMessageHandlerService,
+    cliHealthService,
+    configService,
+    computePendingRequestType,
+    cryptoService,
+    createLogger,
+    dataBackupService,
+    decisionLogQueryService,
+    executeStartupScriptPipeline,
+    fetchCodexModelCatalogFromAppServer,
+    factoryConfigService: FactoryConfigService,
+    findAvailablePort,
+    gitCloneService,
+    gitOpsService,
+    getLogFilePath,
+    getQuickAction,
+    getWorkspaceLinearContext,
+    healthService,
+    initializeWorkspaceWorktree,
+    insightsService,
+    fixerSessionService,
+    getWorkspaceInitPolicy,
+    githubCLIService,
+    kanbanStateService,
+    logbookService,
+    linearClientService,
+    linearStateSyncService,
+    listQuickActions,
+    periodicTaskAccessor,
+    periodicTaskService,
+    projectManagementService,
+    prFetchRegistry,
+    prSnapshotService,
+    ratchetService,
+    rateLimiter,
+    runScriptConfigPersistenceService,
+    reconciliationService,
+    runScriptService: defaultRunScriptService,
+    runScriptStateMachine,
+    schedulerService,
+    serverInstanceService: createServerInstanceService(),
+    sessionDataService,
+    sessionDomainService,
+    sessionEventBus,
+    sessionFileLogger,
+    sessionProviderResolverService,
+    sessionService,
+    startupScriptService,
+    terminalService,
+    userSettingsQueryService,
+    workspaceAccessor,
+    workspaceActivityService,
+    workspaceDataService,
+    workspaceNotificationAccessor,
+    workspaceQueryService,
+    workspaceSnapshotStore,
+    workspaceStateMachine,
+    worktreeLifecycleService,
+    archiveWorkspace,
+    cleanupWorkspaceRuntimeResources,
+    createChildWorkspace,
+    createWorkspaceCreationService: (creationDependencies) =>
+      new WorkspaceCreationService(creationDependencies),
+    fireLifecycleNotification,
+    persistChildNotification,
+    persistParentNotification,
+    retryQueuedDispatchAfterWorkspaceReady,
+  };
+
   return {
-    services: {
-      acpRuntimeManager,
-      acpTraceLogger,
-      autoIterationService,
-      chatEventForwarderService,
-      chatMessageHandlerService,
-      cliHealthService,
-      configService,
-      cryptoService,
-      createLogger,
-      dataBackupService,
-      decisionLogQueryService,
-      executeStartupScriptPipeline,
-      fetchCodexModelCatalogFromAppServer,
-      factoryConfigService: FactoryConfigService,
-      findAvailablePort,
-      gitCloneService,
-      getLogFilePath,
-      getQuickAction,
-      healthService,
-      initializeWorkspaceWorktree,
-      insightsService,
-      fixerSessionService,
-      getWorkspaceInitPolicy,
-      githubCLIService,
-      kanbanStateService,
-      logbookService,
-      linearClientService,
-      listQuickActions,
-      periodicTaskAccessor,
-      periodicTaskService,
-      projectManagementService,
-      prFetchRegistry,
-      prSnapshotService,
-      ratchetService,
-      rateLimiter,
-      runScriptConfigPersistenceService,
-      reconciliationService,
-      runScriptService: defaultRunScriptService,
-      runScriptStateMachine,
-      schedulerService,
-      serverInstanceService: createServerInstanceService(),
-      sessionDataService,
-      sessionDomainService,
-      sessionEventBus,
-      sessionFileLogger,
-      sessionProviderResolverService,
-      sessionService,
-      startupScriptService,
-      terminalService,
-      userSettingsQueryService,
-      workspaceAccessor,
-      workspaceActivityService,
-      workspaceDataService,
-      workspaceNotificationAccessor,
-      workspaceQueryService,
-      workspaceSnapshotStore,
-      workspaceStateMachine,
-      worktreeLifecycleService,
-      archiveWorkspace,
-      cleanupWorkspaceRuntimeResources,
-      createChildWorkspace,
-      createWorkspaceCreationService: (creationDependencies) =>
-        new WorkspaceCreationService(creationDependencies),
-      fireLifecycleNotification,
-      persistChildNotification,
-      persistParentNotification,
-      retryQueuedDispatchAfterWorkspaceReady,
-    },
+    services,
     lifecycle: {
       database: prisma,
       interceptors: {
@@ -246,8 +259,17 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         stop: stopInterceptors,
       },
       wireDomainBridges: configureDomainBridges,
-      eventCollector: createEventCollectorOrchestrator(),
-      snapshotReconciliation: new SnapshotReconciliationService(),
+      eventCollector: createEventCollectorOrchestrator(services),
+      snapshotReconciliation: new SnapshotReconciliationService({
+        createLogger: services.createLogger,
+        gitOpsService: services.gitOpsService,
+        session: {
+          getRuntimeSnapshot: (id) => services.sessionService.getRuntimeSnapshot(id),
+          getAllPendingRequests: () => services.chatEventForwarderService.getAllPendingRequests(),
+        },
+        workspaceAccessor: services.workspaceAccessor,
+        workspaceSnapshotStore: services.workspaceSnapshotStore,
+      }),
       recoverStaleArchivingWorkspaces,
     },
   };
@@ -265,13 +287,7 @@ export function createApplication(
     childProcessEnvProvider: () => services.configService.getChildProcessEnv(),
   });
   lifecycle.wireDomainBridges(services);
-  lifecycle.eventCollector.configure(services);
-  lifecycle.snapshotReconciliation.configure({
-    session: {
-      getRuntimeSnapshot: (id) => services.sessionService.getRuntimeSnapshot(id),
-      getAllPendingRequests: () => services.chatEventForwarderService.getAllPendingRequests(),
-    },
-  });
+  lifecycle.eventCollector.start();
 
   return Object.freeze({
     services: Object.freeze({ ...services }),

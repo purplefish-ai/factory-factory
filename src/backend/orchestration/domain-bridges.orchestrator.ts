@@ -22,7 +22,7 @@ import type {
   prFetchRegistry,
   prSnapshotService,
 } from '@/backend/services/github';
-import { createLogger } from '@/backend/services/logger.service';
+import type { createLogger } from '@/backend/services/logger.service';
 import type { periodicTaskService } from '@/backend/services/periodic-task';
 import type {
   fixerSessionService,
@@ -54,9 +54,7 @@ import type { workspaceSnapshotStore } from '@/backend/services/workspace-snapsh
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
-
-const logger = createLogger('domain-bridges');
+import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 type SessionService = typeof sessionService;
 type WorkspaceAccessor = typeof workspaceAccessor;
@@ -65,9 +63,11 @@ export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
+  createLogger: typeof createLogger;
   fixerSessionService: typeof fixerSessionService;
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
+  initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
   periodicTaskService: typeof periodicTaskService;
@@ -141,9 +141,11 @@ export function configureDomainBridges(services: BridgeServices): void {
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
+    createLogger,
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
+    initializeWorkspaceWorktree,
     kanbanStateService,
     logbookService,
     periodicTaskService,
@@ -161,6 +163,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceSnapshotStore,
     workspaceStateMachine,
   } = services;
+  const logger = createLogger('domain-bridges');
 
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
