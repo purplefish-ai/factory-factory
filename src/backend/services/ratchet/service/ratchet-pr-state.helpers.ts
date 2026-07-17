@@ -122,6 +122,20 @@ export function isIgnoredReviewAuthor(
   return authorLogin === authenticatedUsername;
 }
 
+function getLastApprovedReviewIndexByAuthor(
+  reviews: Array<{ author: { login: string }; state?: string }>
+): Map<string, number> {
+  const lastApprovedIndexByAuthor = new Map<string, number>();
+
+  reviews.forEach((review, index) => {
+    if (review.state?.toUpperCase() === 'APPROVED') {
+      lastApprovedIndexByAuthor.set(review.author.login, index);
+    }
+  });
+
+  return lastApprovedIndexByAuthor;
+}
+
 export function computeLatestReviewActivityAtMs(
   prDetails: {
     reviews: Array<{
@@ -136,9 +150,14 @@ export function computeLatestReviewActivityAtMs(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
+  const lastApprovedIndexByAuthor = getLastApprovedReviewIndexByAuthor(prDetails.reviews);
   const entries = [
     ...prDetails.reviews
-      .filter((review) => {
+      .filter((review, index) => {
+        if ((lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index) {
+          return false;
+        }
+
         const state = review.state?.toUpperCase();
         return (
           state === 'CHANGES_REQUESTED' ||
@@ -181,15 +200,7 @@ export function buildReviewSummariesForPrompt(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
-  // A CHANGES_REQUESTED review is stale once the same reviewer approves later,
-  // even if they leave further COMMENTED reviews after the approval.
-  const lastApprovedIndexByAuthor = new Map<string, number>();
-
-  prDetails.reviews.forEach((review, index) => {
-    if (review.state?.toUpperCase() === 'APPROVED') {
-      lastApprovedIndexByAuthor.set(review.author.login, index);
-    }
-  });
+  const lastApprovedIndexByAuthor = getLastApprovedReviewIndexByAuthor(prDetails.reviews);
 
   return prDetails.reviews
     .filter((review, index) => {
@@ -199,10 +210,7 @@ export function buildReviewSummariesForPrompt(
 
       const state = review.state?.toUpperCase() ?? '';
 
-      if (
-        state === 'CHANGES_REQUESTED' &&
-        (lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index
-      ) {
+      if ((lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index) {
         return false;
       }
 

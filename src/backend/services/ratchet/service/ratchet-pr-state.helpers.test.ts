@@ -714,6 +714,30 @@ describe('buildReviewSummariesForPrompt', () => {
     ]);
   });
 
+  it('excludes stale commented reviews after the same reviewer approves', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'COMMENTED',
+            body: 'Please fix the first-round issue',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+        ],
+      },
+      null,
+      'ALL_REVIEW_FEEDBACK'
+    );
+
+    expect(summaries).toEqual([]);
+  });
+
   it('keeps changes-requested reviews when they are the reviewer latest state', () => {
     const summaries = buildReviewSummariesForPrompt(
       {
@@ -911,6 +935,33 @@ describe('computeLatestReviewActivityAtMs', () => {
         'ALL_REVIEW_FEEDBACK'
       )
     ).toBe(Date.parse('2026-01-02T00:00:00Z'));
+  });
+
+  it('ignores stale commented review activity after the same reviewer approves', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Please fix the first-round issue',
+            },
+            {
+              submittedAt: '2026-01-03T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBeNull();
   });
 
   it('always includes inline review comment activity', () => {
