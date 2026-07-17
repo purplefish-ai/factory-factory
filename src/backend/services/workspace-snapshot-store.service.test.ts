@@ -295,8 +295,7 @@ describe('WorkspaceSnapshotStore', () => {
     });
 
     it('expires removal protection after the configured grace period', () => {
-      // biome-ignore lint/style/useNumericSeparators: Match the issue's specified test value.
-      vi.setSystemTime(1_000);
+      vi.setSystemTime(1000);
       store.remove('ws-1', 900);
       vi.advanceTimersByTime(10 * 60_000);
       expect(store.removalTombstoneCount()).toBe(0);
