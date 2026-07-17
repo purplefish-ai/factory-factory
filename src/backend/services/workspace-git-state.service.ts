@@ -430,7 +430,7 @@ export class WorkspaceGitStateService {
     const mergeBase = await this.findMergeBase(input);
     const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
     const numstatResult = await this.runGit(diffArgs, input.worktreePath);
-    const base: WorkspaceGitStateSnapshot['base'] = {
+    const base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats } = {
       mergeBase,
       noMergeBase: mergeBase === null,
       stats:
@@ -470,12 +470,12 @@ export class WorkspaceGitStateService {
   }
 
   private async populateFallbackFileTotal(
-    base: WorkspaceGitStateSnapshot['base'],
+    base: WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats },
     numstatResult: ExecResult,
     nameStatusResult: ExecResult | null,
     worktreePath: string
   ): Promise<void> {
-    if (numstatResult.code === 0 || !base.stats) {
+    if (numstatResult.code === 0) {
       return;
     }
 
