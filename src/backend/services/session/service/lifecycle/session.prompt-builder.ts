@@ -24,6 +24,24 @@ export type BuildPromptResult = {
   injectedBranchRename: boolean;
 };
 
+export function buildChildWorkspaceContext(input: {
+  parentWorkspaceName?: string | null;
+  parentProjectName?: string | null;
+  reportBackOn?: string | null;
+}): string {
+  const parentName = input.parentWorkspaceName ?? 'unknown';
+  const projectName = input.parentProjectName ?? 'unknown project';
+  let context =
+    `## Child Workspace Context\n` +
+    `You are working in a child workspace created by the parent workspace "${parentName}" (project: ${projectName}). ` +
+    `When you have completed your task or reached a significant milestone — especially if you produced a PR, a finding, or are blocked — ` +
+    `use the \`send_message_to_parent\` tool to report back. Include a brief summary of what was done and any next steps the parent workspace should be aware of.`;
+  if (input.reportBackOn) {
+    context += `\nReport back when: ${input.reportBackOn}`;
+  }
+  return `${context}\n`;
+}
+
 export class SessionPromptBuilder {
   /**
    * Workflow prompts reserved for automated helper sessions.
@@ -77,18 +95,12 @@ export class SessionPromptBuilder {
     }
 
     if (workspace.parentWorkspaceId) {
-      const parentName = workspace.parentWorkspaceName ?? 'unknown';
-      const projectName = workspace.parentProjectName ?? 'unknown project';
-      let childContext =
-        `\n\n## Child Workspace Context\n` +
-        `You are working in a child workspace created by the parent workspace "${parentName}" (project: ${projectName}). ` +
-        `When you have completed your task or reached a significant milestone — especially if you produced a PR, a finding, or are blocked — ` +
-        `use the \`send_message_to_parent\` tool to report back. Include a brief summary of what was done and any next steps the parent workspace should be aware of.`;
-      if (workspace.reportBackOn) {
-        childContext += `\nReport back when: ${workspace.reportBackOn}`;
-      }
-      childContext += '\n';
-      systemPrompt = (systemPrompt ?? '') + childContext;
+      const childContext = buildChildWorkspaceContext({
+        parentWorkspaceName: workspace.parentWorkspaceName,
+        parentProjectName: workspace.parentProjectName,
+        reportBackOn: workspace.reportBackOn,
+      });
+      systemPrompt = `${systemPrompt ?? ''}\n\n${childContext}`;
     }
 
     return { workflowPrompt, systemPrompt, injectedBranchRename };

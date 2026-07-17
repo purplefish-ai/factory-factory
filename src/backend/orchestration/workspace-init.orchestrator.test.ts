@@ -19,6 +19,10 @@ vi.mock('@/backend/services/run-script', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
+  buildChildWorkspaceContext: vi.fn(
+    (input: { reportBackOn?: string | null }) =>
+      `## Child Workspace Context\nUse send_message_to_parent.${input.reportBackOn ? `\nReport back when: ${input.reportBackOn}` : ''}\n`
+  ),
   chatMessageHandlerService: {
     tryDispatchNextMessage: vi.fn(),
   },
