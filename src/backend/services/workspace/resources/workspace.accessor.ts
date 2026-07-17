@@ -109,6 +109,16 @@ interface UpdateWorkspaceInput {
   autoIterationSessionId?: string | null;
 }
 
+export interface PrSnapshotPersistenceInput {
+  prUrl?: string | null;
+  prNumber: number;
+  prState: PRState;
+  prReviewState: string | null;
+  prCiStatus: CIStatus;
+  prUpdatedAt: Date;
+  branchName?: string;
+}
+
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
   excludeStatuses?: WorkspaceStatus[];
@@ -606,6 +616,63 @@ class WorkspaceAccessor {
       data: { ratchetActiveSessionId: null, ratchetDispatchOutcome: outcome },
     });
     return result.count > 0;
+  }
+
+  /**
+   * Persist a PR aggregate and clear ownership from a settled dispatch when
+   * the newly fetched aggregate changed. The conditional update writes the
+   * aggregate and reset atomically. Identical periodic refreshes use the plain
+   * snapshot update and leave settled metadata untouched; RUNNING ownership is
+   * never eligible for the reset.
+   * ratchetLastCiRunId deliberately remains the richer dispatch snapshot key;
+   * the Ratchet still uses it to decide whether the changed aggregate warrants
+   * another fixer.
+   */
+  async applyPrSnapshotWithDispatchReset(
+    workspaceId: string,
+    observation: PrSnapshotPersistenceInput
+  ): Promise<boolean> {
+    const snapshotData: UpdateWorkspaceInput = {
+      ...(observation.prUrl !== undefined ? { prUrl: observation.prUrl } : {}),
+      prNumber: observation.prNumber,
+      prState: observation.prState,
+      prReviewState: observation.prReviewState,
+      prCiStatus: observation.prCiStatus,
+      prUpdatedAt: observation.prUpdatedAt,
+      ...(observation.branchName !== undefined ? { branchName: observation.branchName } : {}),
+    };
+    return await prisma.$transaction(async (transaction) => {
+      const current = await transaction.workspace.findUniqueOrThrow({
+        where: { id: workspaceId },
+        select: {
+          prUrl: true,
+          prNumber: true,
+          prState: true,
+          prReviewState: true,
+          prCiStatus: true,
+          ratchetDispatchOutcome: true,
+        },
+      });
+      const aggregateChanged =
+        current.prNumber !== observation.prNumber ||
+        current.prState !== observation.prState ||
+        current.prReviewState !== observation.prReviewState ||
+        current.prCiStatus !== observation.prCiStatus ||
+        (observation.prUrl !== undefined && current.prUrl !== observation.prUrl);
+      const shouldReset =
+        aggregateChanged &&
+        (current.ratchetDispatchOutcome === 'COMPLETED' ||
+          current.ratchetDispatchOutcome === 'DIED');
+
+      await transaction.workspace.update({
+        where: { id: workspaceId },
+        data: {
+          ...snapshotData,
+          ...(shouldReset ? { ratchetDispatchOutcome: null, ratchetDispatchRetryCount: 0 } : {}),
+        },
+      });
+      return shouldReset;
+    });
   }
 
   /**

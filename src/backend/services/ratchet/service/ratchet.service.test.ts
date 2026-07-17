@@ -3529,6 +3529,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         id: 'ws-enable',
         ratchetState: RatchetState.CI_FAILED,
         ratchetActiveSessionId: null,
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 2,
       } as never);
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
@@ -3549,6 +3551,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           workspaceId: 'ws-enable',
           enabled: true,
           ratchetState: RatchetState.CI_FAILED,
+          ratchetDispatchOutcome: 'DIED',
+          ratchetDispatchRetryCount: 2,
         },
       ]);
       expect(stateEvents).toHaveLength(0);
@@ -3593,6 +3597,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
           workspaceId: 'ws-disable',
           enabled: false,
           ratchetState: RatchetState.IDLE,
+          ratchetDispatchOutcome: null,
+          ratchetDispatchRetryCount: 0,
         },
       ]);
     });

@@ -78,11 +78,13 @@ const workspaceFieldOwners = {
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
   ratchetDispatchOutcome: new Set([
+    'src/backend/services/github/service/pr-snapshot.service.ts',
     'src/backend/services/ratchet/service/ratchet.service.ts',
     'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
   ratchetDispatchRetryCount: new Set([
+    'src/backend/services/github/service/pr-snapshot.service.ts',
     'src/backend/services/ratchet/service/ratchet.service.ts',
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
@@ -212,6 +214,20 @@ const workspaceMutationRules = {
   recordRatchetSessionEnd: {
     type: 'static',
     fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
+  },
+  applyPrSnapshotWithDispatchReset: {
+    type: 'static',
+    fields: [
+      'prUrl',
+      'prNumber',
+      'prState',
+      'prReviewState',
+      'prCiStatus',
+      'prUpdatedAt',
+      'branchName',
+      'ratchetDispatchOutcome',
+      'ratchetDispatchRetryCount',
+    ],
   },
   recordRatchetDispatchIfEnabled: {
     type: 'static',
@@ -515,7 +531,8 @@ function collectWorkspaceMutatingMethods(workspaceAccessorText, filePath = WORKS
         if (
           ts.isPropertyAccessExpression(methodTarget) &&
           ts.isIdentifier(methodTarget.expression) &&
-          methodTarget.expression.text === 'prisma' &&
+          (methodTarget.expression.text === 'prisma' ||
+            methodTarget.expression.text === 'transaction') &&
           methodTarget.name.text === 'workspace' &&
           (inner.expression.name.text === 'update' || inner.expression.name.text === 'updateMany')
         ) {

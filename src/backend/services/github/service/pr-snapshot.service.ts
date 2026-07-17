@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
@@ -39,6 +40,8 @@ export interface PRSnapshotUpdatedEvent {
   prState: string;
   prCiStatus: string;
   prReviewState: string | null;
+  ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount?: number;
 }
 
 interface CIObservationInput {
@@ -251,14 +254,13 @@ class PRSnapshotService extends EventEmitter {
     options: ApplySnapshotOptions = {}
   ): Promise<void> {
     const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
-
-    await workspaceAccessor.update(workspaceId, {
+    const dispatchReset = await workspaceAccessor.applyPrSnapshotWithDispatchReset(workspaceId, {
+      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
       ...(options.branchName !== undefined ? { branchName: options.branchName } : {}),
     });
 
@@ -271,6 +273,7 @@ class PRSnapshotService extends EventEmitter {
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,
       prReviewState: snapshot.prReviewState,
+      ...(dispatchReset ? { ratchetDispatchOutcome: null, ratchetDispatchRetryCount: 0 } : {}),
     } satisfies PRSnapshotUpdatedEvent);
   }
 }

@@ -4,8 +4,10 @@ const mockCreate = vi.fn();
 const mockFindMany = vi.fn();
 const mockFindUnique = vi.fn();
 const mockFindFirst = vi.fn();
+const mockUpdate = vi.fn();
 const mockUpdateMany = vi.fn();
 const mockExecuteRaw = vi.fn();
+const mockTransaction = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -14,9 +16,11 @@ vi.mock('@/backend/db', () => ({
       findMany: (...args: unknown[]) => mockFindMany(...args),
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
       findFirst: (...args: unknown[]) => mockFindFirst(...args),
+      update: (...args: unknown[]) => mockUpdate(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
 }));
 
@@ -166,6 +170,86 @@ describe('workspaceAccessor', () => {
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: { id: 'ws-1', ratchetActiveSessionId: 'session-1' },
       data: { ratchetActiveSessionId: null, ratchetDispatchOutcome: 'DIED' },
+    });
+  });
+
+  it('atomically persists a changed PR aggregate with settled dispatch reset', async () => {
+    const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
+    mockFindUnique.mockResolvedValue({
+      prUrl: null,
+      prNumber: 41,
+      prState: 'CHANGES_REQUESTED',
+      prCiStatus: 'FAILURE',
+      prReviewState: 'CHANGES_REQUESTED',
+      ratchetDispatchOutcome: 'DIED',
+    });
+    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        workspace: { findUniqueOrThrow: mockFindUnique, update: mockUpdate },
+      })
+    );
+
+    await expect(
+      workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+        prUpdatedAt,
+      })
+    ).resolves.toBe(true);
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      data: {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+        prUpdatedAt,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      },
+    });
+  });
+
+  it('persists an identical PR aggregate without clearing settled dispatch metadata', async () => {
+    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
+    mockFindUnique.mockResolvedValue({
+      prUrl: 'https://github.com/org/repo/pull/42',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prReviewState: null,
+      ratchetDispatchOutcome: 'DIED',
+    });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        workspace: { findUniqueOrThrow: mockFindUnique, update: mockUpdate },
+      })
+    );
+
+    await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+      prUrl: 'https://github.com/org/repo/pull/42',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prReviewState: null,
+      prUpdatedAt,
+    });
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      data: {
+        prUrl: 'https://github.com/org/repo/pull/42',
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        prReviewState: null,
+        prUpdatedAt,
+      },
     });
   });
 

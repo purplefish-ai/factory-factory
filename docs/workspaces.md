@@ -113,7 +113,11 @@ The exhausted-retry rule deliberately overrides an otherwise active Ratchet flow
 `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries` (currently 3). A `COMPLETED` dispatch outcome by
 itself does not force `WAITING`. After a fixer exits cleanly, Ratchet continues monitoring PR and
 CI state but suppresses another fixer dispatch while the dispatch snapshot is unchanged. A later
-snapshot change re-enables normal Ratchet evaluation.
+PR identity, state, CI-status, or review-decision aggregate change clears settled dispatch
+ownership immediately, returning an exhausted workspace to normal automation ownership before
+the next Ratchet poll. Identical periodic refreshes do not clear exhaustion. The richer
+`ratchetLastCiRunId` snapshot key remains intact so Ratchet still decides whether the changed
+aggregate actually warrants another fixer.
 
 Archived workspaces retain their last pre-archive `cachedKanbanColumn`; the live derivation
 returns `null` so they remain off the active board unless archived items are explicitly shown.
@@ -127,8 +131,11 @@ exhausted-retry rule as full workspace queries.
 Ratchet dispatch changes publish `ratchet_dispatch_changed` after successful dispatch-record
 mutations. The event collector immediately updates both snapshot fields and starts a
 fire-and-forget refresh of the durable cached Kanban column. Ratchet state and toggle events use
-the same cache-refresh path. Session activity remains a live overlay and is the only source of
-the public `isWorking` flag.
+the same cache-refresh path; toggle events carry authoritative dispatch fields so disabling
+Ratchet clears exhausted ownership in the live snapshot as well as the database. Event-collector
+timestamps are strictly monotonic so later same-millisecond Ratchet events cannot be rejected as
+stale by the snapshot store. Session activity remains a live overlay and is the only source of the
+public `isWorking` flag.
 
 ## Ratchet Animation
 

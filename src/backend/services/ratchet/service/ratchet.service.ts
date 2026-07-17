@@ -80,6 +80,8 @@ export interface RatchetToggledEvent {
   workspaceId: string;
   enabled: boolean;
   ratchetState: RatchetState;
+  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount: number;
 }
 
 export interface RatchetCheckOptions {
@@ -411,6 +413,8 @@ class RatchetService extends EventEmitter {
         workspaceId,
         enabled: true,
         ratchetState: workspace.ratchetState,
+        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
       } satisfies RatchetToggledEvent);
       return;
     }
@@ -440,6 +444,8 @@ class RatchetService extends EventEmitter {
       workspaceId,
       enabled: false,
       ratchetState: RatchetState.IDLE,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
     } satisfies RatchetToggledEvent);
   }
 

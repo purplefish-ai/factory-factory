@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindById = vi.fn();
 const mockUpdate = vi.fn();
+const mockApplyPrSnapshotWithDispatchReset = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
@@ -9,6 +10,8 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
+    applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
+      mockApplyPrSnapshotWithDispatchReset(...args),
   },
 }));
 
@@ -36,6 +39,7 @@ import {
 describe('PRSnapshotService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockApplyPrSnapshotWithDispatchReset.mockResolvedValue(false);
     // Configure bridge with mock kanban dependency
     prSnapshotService.configure({
       kanban: {
@@ -100,7 +104,7 @@ describe('PRSnapshotService', () => {
       });
 
       // Verify atomic update with all PR fields including prUrl
-      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w1', {
         prNumber: 123,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
@@ -174,7 +178,7 @@ describe('PRSnapshotService', () => {
         },
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w1', {
         prNumber: 123,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
@@ -192,7 +196,7 @@ describe('PRSnapshotService', () => {
         prCiStatus: 'SUCCESS',
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w2', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w2', {
         prNumber: 50,
         prState: 'MERGED',
         prReviewState: null,
@@ -286,6 +290,53 @@ describe('PRSnapshotService', () => {
         prCiStatus: 'SUCCESS',
         prReviewState: null,
       });
+    });
+
+    it('publishes an authoritative dispatch reset after the PR aggregate changes', async () => {
+      mockApplyPrSnapshotWithDispatchReset.mockResolvedValue(true);
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-exhausted', {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+      });
+
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith(
+        'ws-exhausted',
+        expect.objectContaining({
+          prNumber: 42,
+          prState: 'OPEN',
+          prCiStatus: 'PENDING',
+          prReviewState: 'CHANGES_REQUESTED',
+          prUpdatedAt: expect.any(Date),
+        })
+      );
+      expect(events[0]).toMatchObject({
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      });
+    });
+
+    it('does not publish a dispatch reset for an identical PR aggregate refresh', async () => {
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-identical', {
+        prNumber: 42,
+        prState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prReviewState: 'CHANGES_REQUESTED',
+      });
+
+      expect(events[0]).not.toHaveProperty('ratchetDispatchOutcome');
+      expect(events[0]).not.toHaveProperty('ratchetDispatchRetryCount');
     });
 
     it('does not include prUrl in event when applySnapshot is called without prUrl options', async () => {

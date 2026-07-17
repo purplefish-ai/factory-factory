@@ -355,6 +355,93 @@ describe('resource accessors integration', () => {
       expect(cleared.ratchetDispatchOutcome).toBe('DIED');
     });
 
+    it('resets settled Ratchet ownership only for changed PR aggregates', async () => {
+      const project = await createProjectFixture();
+      const workspace = await createWorkspaceFixture(project.id, {
+        prNumber: 42,
+        prState: PRState.CHANGES_REQUESTED,
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: CIStatus.FAILURE,
+        ratchetLastCiRunId: 'rich-dispatch-snapshot',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+
+      const identical = await workspaceAccessor.applyPrSnapshotWithDispatchReset(workspace.id, {
+        prNumber: 42,
+        prState: PRState.CHANGES_REQUESTED,
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: CIStatus.FAILURE,
+        prUpdatedAt: new Date('2026-07-17T12:00:00.000Z'),
+      });
+      expect(identical).toBe(false);
+      expect(
+        (await workspaceAccessor.findRawByIdOrThrow(workspace.id)).ratchetDispatchOutcome
+      ).toBe('DIED');
+
+      const changed = await workspaceAccessor.applyPrSnapshotWithDispatchReset(workspace.id, {
+        prNumber: 42,
+        prState: PRState.OPEN,
+        prReviewState: null,
+        prCiStatus: CIStatus.PENDING,
+        prUpdatedAt: new Date('2026-07-17T12:01:00.000Z'),
+      });
+      expect(changed).toBe(true);
+      const reset = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      expect(reset.ratchetDispatchOutcome).toBeNull();
+      expect(reset.ratchetDispatchRetryCount).toBe(0);
+      expect(reset.ratchetLastCiRunId).toBe('rich-dispatch-snapshot');
+
+      await workspaceAccessor.update(workspace.id, {
+        prState: PRState.OPEN,
+        prReviewState: null,
+        prCiStatus: CIStatus.PENDING,
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+      await expect(
+        workspaceAccessor.applyPrSnapshotWithDispatchReset(workspace.id, {
+          prNumber: 42,
+          prState: PRState.OPEN,
+          prReviewState: null,
+          prCiStatus: CIStatus.FAILURE,
+          prUpdatedAt: new Date('2026-07-17T12:02:00.000Z'),
+        })
+      ).resolves.toBe(true);
+
+      await workspaceAccessor.update(workspace.id, {
+        prCiStatus: CIStatus.FAILURE,
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+      await expect(
+        workspaceAccessor.applyPrSnapshotWithDispatchReset(workspace.id, {
+          prNumber: 42,
+          prState: PRState.CHANGES_REQUESTED,
+          prReviewState: 'CHANGES_REQUESTED',
+          prCiStatus: CIStatus.FAILURE,
+          prUpdatedAt: new Date('2026-07-17T12:03:00.000Z'),
+        })
+      ).resolves.toBe(true);
+
+      await workspaceAccessor.update(workspace.id, {
+        ratchetDispatchOutcome: 'RUNNING',
+        ratchetDispatchRetryCount: 1,
+      });
+      await expect(
+        workspaceAccessor.applyPrSnapshotWithDispatchReset(workspace.id, {
+          prNumber: 43,
+          prState: PRState.OPEN,
+          prReviewState: null,
+          prCiStatus: CIStatus.SUCCESS,
+          prUpdatedAt: new Date('2026-07-17T12:04:00.000Z'),
+        })
+      ).resolves.toBe(false);
+      expect(
+        (await workspaceAccessor.findRawByIdOrThrow(workspace.id)).ratchetDispatchOutcome
+      ).toBe('RUNNING');
+    });
+
     it('throws when mutually exclusive status filters are passed', async () => {
       const project = await createProjectFixture();
 

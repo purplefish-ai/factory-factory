@@ -161,7 +161,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -190,7 +191,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY', ratchetState: 'CI_RUNNING', isWorking: true },
-      'event:workspace_state_changed+event:ratchet_state_changed+event:workspace_active'
+      'event:workspace_state_changed+event:ratchet_state_changed+event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -206,12 +208,14 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-2',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -238,7 +242,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -267,7 +272,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.any(Object),
-      'event:workspace_state_changed+event:ratchet_state_changed'
+      'event:workspace_state_changed+event:ratchet_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -312,7 +318,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
     expect(coalescer.pendingCount).toBe(0);
   });
@@ -342,7 +349,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -374,7 +382,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetState: 'CI_RUNNING' },
-      'event:ratchet_state_changed'
+      'event:ratchet_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -390,7 +399,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
-      'event:ratchet_toggled'
+      'event:ratchet_toggled',
+      expect.any(Number)
     );
   });
 
@@ -406,7 +416,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { runScriptStatus: 'RUNNING' },
-      'event:run_script_status_changed'
+      'event:run_script_status_changed',
+      expect.any(Number)
     );
   });
 
@@ -418,7 +429,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -430,7 +442,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: false },
-      'event:workspace_idle'
+      'event:workspace_idle',
+      expect.any(Number)
     );
   });
 });
@@ -611,7 +624,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({ status: 'READY' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -658,7 +672,8 @@ describe('configureEventCollector', () => {
         branchName: 'feature/test',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -699,7 +714,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-new',
       expect.objectContaining({ status: 'PROVISIONING', projectId: 'proj-1' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -727,7 +743,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetState: 'MERGED' },
-      'event:ratchet_state_changed'
+      'event:ratchet_state_changed',
+      expect.any(Number)
     );
     expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
@@ -759,7 +776,8 @@ describe('configureEventCollector', () => {
         ratchetDispatchOutcome: 'DIED',
         ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
       },
-      'event:ratchet_dispatch_changed'
+      'event:ratchet_dispatch_changed',
+      expect.any(Number)
     );
     expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
@@ -823,7 +841,50 @@ describe('configureEventCollector', () => {
         prState: 'OPEN',
         prCiStatus: 'SUCCESS',
       },
-      'event:pr_snapshot_updated'
+      'event:pr_snapshot_updated',
+      expect.any(Number)
+    );
+  });
+
+  it('pr_snapshot_updated immediately clears exhausted dispatch ownership after an aggregate change', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    configureEventCollector();
+
+    const handler = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated')![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      ratchetDispatchOutcome: null;
+      ratchetDispatchRetryCount: number;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-exhausted',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-exhausted',
+      {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      },
+      'event:pr_snapshot_updated',
+      expect.any(Number)
     );
   });
 
@@ -1065,18 +1126,28 @@ describe('configureEventCollector', () => {
       workspaceId: string;
       enabled: boolean;
       ratchetState: string;
+      ratchetDispatchOutcome: null;
+      ratchetDispatchRetryCount: number;
     }) => void;
 
     handler({
       workspaceId: 'ws-1',
       enabled: true,
       ratchetState: 'CI_RUNNING',
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
     });
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
-      'event:ratchet_toggled'
+      {
+        ratchetEnabled: true,
+        ratchetState: 'CI_RUNNING',
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      },
+      'event:ratchet_toggled',
+      expect.any(Number)
     );
     expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
@@ -1125,7 +1196,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({ status: 'READY' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -1145,7 +1217,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true, hasHadSessions: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
@@ -1166,7 +1239,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: false, hasHadSessions: true },
-      'event:workspace_idle'
+      'event:workspace_idle',
+      expect.any(Number)
     );
     expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
@@ -1235,7 +1309,8 @@ describe('configureEventCollector', () => {
           }),
         ]),
       }),
-      expect.stringContaining('event:session_activity_changed')
+      expect.stringContaining('event:session_activity_changed'),
+      expect.any(Number)
     );
   });
 
@@ -1280,7 +1355,8 @@ describe('configureEventCollector', () => {
           }),
         ]),
       }),
-      expect.stringContaining('event:session_runtime_changed')
+      expect.stringContaining('event:session_runtime_changed'),
+      expect.any(Number)
     );
   });
 
@@ -1323,7 +1399,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { pendingRequestType: 'permission_request' },
-      'event:pending_request_changed'
+      'event:pending_request_changed',
+      expect.any(Number)
     );
     expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
   });

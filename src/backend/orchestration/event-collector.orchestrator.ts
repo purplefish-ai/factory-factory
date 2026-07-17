@@ -68,7 +68,12 @@ import { getWorkspaceLinearContext } from './linear-config.helper';
 // ---------------------------------------------------------------------------
 
 export interface StoreInterface {
-  upsert(workspaceId: string, update: SnapshotUpdateInput, source: string): void;
+  upsert(
+    workspaceId: string,
+    update: SnapshotUpdateInput,
+    source: string,
+    timestamp?: number
+  ): void;
   getByWorkspaceId(workspaceId: string): { projectId: string } | undefined;
   remove(workspaceId: string): boolean;
 }
@@ -101,6 +106,13 @@ const logger = createLogger('event-collector');
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
+let lastCoalescerTimestamp = 0;
+
+function nextCoalescerTimestamp(): number {
+  const timestamp = Math.max(Date.now(), lastCoalescerTimestamp + 1);
+  lastCoalescerTimestamp = timestamp;
+  return timestamp;
+}
 
 function refreshCachedKanbanColumn(workspaceId: string): void {
   void kanbanStateService.updateCachedKanbanColumn(workspaceId).catch((error) => {
@@ -227,7 +239,7 @@ export class EventCoalescer {
     }
 
     const source = [...pending.sources].join('+');
-    this.store.upsert(workspaceId, pending.fields, source);
+    this.store.upsert(workspaceId, pending.fields, source, nextCoalescerTimestamp());
   }
 
   /**
@@ -249,7 +261,7 @@ export class EventCoalescer {
       }
 
       const source = [...pending.sources].join('+');
-      this.store.upsert(workspaceId, pending.fields, source);
+      this.store.upsert(workspaceId, pending.fields, source, nextCoalescerTimestamp());
     }
     this.pending.clear();
   }
@@ -535,6 +547,12 @@ function configureEventCollectorWithState(
       prNumber: event.prNumber,
       prState: event.prState as PRState,
       prCiStatus: event.prCiStatus as CIStatus,
+      ...(event.ratchetDispatchOutcome !== undefined
+        ? { ratchetDispatchOutcome: event.ratchetDispatchOutcome }
+        : {}),
+      ...(event.ratchetDispatchRetryCount !== undefined
+        ? { ratchetDispatchRetryCount: event.ratchetDispatchRetryCount }
+        : {}),
     };
 
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
@@ -592,7 +610,12 @@ function configureEventCollectorWithState(
   ratchetService.on(RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
     coalescer.enqueue(
       event.workspaceId,
-      { ratchetEnabled: event.enabled, ratchetState: event.ratchetState },
+      {
+        ratchetEnabled: event.enabled,
+        ratchetState: event.ratchetState,
+        ratchetDispatchOutcome: event.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: event.ratchetDispatchRetryCount,
+      },
       'event:ratchet_toggled',
       { immediate: true }
     );
