@@ -8,22 +8,22 @@ Make every root backend service an intentional, documented infrastructure capabi
 
 `scripts/check-service-registry.ts` derives `infraServiceFileNames` from every root TypeScript file in `src/backend/services`. A capsule import such as `@/backend/services/example.service` is therefore exempt whenever a matching root file happens to exist. The exemption is based on filename and location rather than an architectural decision.
 
-Four of the fourteen root services have clear domain ownership:
+Seven of the fourteen root services have clear domain ownership:
 
-- `run-script-config-persistence.service.ts` and `run-script-proxy.service.ts` belong to run-script.
-- `workspace-snapshot-store.service.ts` and `git-ops.service.ts` belong to workspace.
+- `factory-config.service.ts`, `port-allocation.service.ts`, `run-script-config-persistence.service.ts`, and `run-script-proxy.service.ts` belong to run-script.
+- `git-clone.service.ts`, `workspace-snapshot-store.service.ts`, and `git-ops.service.ts` belong to workspace.
 
-The remaining ten root services are cross-cutting application infrastructure: central configuration, cryptography, factory config file access, repository cloning, logging, notifications, port allocation/probing, rate limiting, and server-instance state.
+The remaining seven root services are cross-cutting application infrastructure: central environment/application configuration, cryptography, logging, notifications, backend port probing, rate limiting, and server-instance state.
 
 ## Considered Approaches
 
 ### 1. Explicit infrastructure registry plus capsule moves (selected)
 
-Declare the ten infrastructure services by module name and description in `src/backend/services/registry.ts`. Move the four domain services and their tests into their owning capsules, expose them through capsule barrels, and update consumers. The checker compares actual root `*.service.ts` files with the declared infrastructure registry and uses only that registry for import exemptions.
+Declare the seven infrastructure services by module name and description in `src/backend/services/registry.ts`. Move the seven domain services and their tests into their owning capsules, expose them through capsule barrels, and update consumers. The checker compares actual root `*.service.ts` files with the declared infrastructure registry and uses only that registry for import exemptions.
 
 This makes additions fail closed, documents every exception next to the capsule dependency graph, and follows existing capsule/barrel conventions.
 
-### 2. Register all fourteen roots as infrastructure capabilities
+### 2. Keep domain utilities at the root and register all fourteen as infrastructure
 
 This minimizes file movement, but it preserves the architectural problem: domain services remain globally importable capabilities and capsule dependencies through them remain absent from `dependsOn`. It does not satisfy the intent of making the graph complete.
 
@@ -40,11 +40,11 @@ This makes those capabilities first-class dependency nodes, but each currently s
 3. reject any registry entry whose corresponding file is absent; and
 4. exempt capsule imports only when their first service path segment is an exact infrastructure registry key.
 
-Run-script config persistence and proxy logic will move under `src/backend/services/run-script/service/`. Workspace snapshot storage will move under `src/backend/services/workspace/service/snapshot/`, and git operations under `src/backend/services/workspace/service/worktree/`. Public consumers will import these APIs from `@/backend/services/run-script` or `@/backend/services/workspace`; same-capsule consumers will use relative imports where appropriate.
+Factory config access, port allocation, config persistence, and proxy logic will move under `src/backend/services/run-script/service/`. Workspace snapshot storage will move under `src/backend/services/workspace/service/snapshot/`, and repository clone and git operations under `src/backend/services/workspace/service/worktree/`. Public consumers will import these APIs from `@/backend/services/run-script` or `@/backend/services/workspace`; same-capsule consumers will use relative imports where appropriate.
 
 ## Dependency Flow
 
-Run-script already declares a dependency on workspace. Workspace currently calls run-script config persistence directly when refreshing cached commands, which would create a workspace-to-run-script import and a registry cycle after the move. The workspace query service will instead consume a narrow `WorkspaceRunScriptConfigBridge`. `configureDomainBridges` will adapt the run-script persistence service to that interface. The dependency remains orchestration-to-both-capsules, while the capsule graph stays acyclic.
+Run-script already declares a dependency on workspace. Workspace currently reads factory config and calls run-script config persistence when refreshing cached commands, which would create a workspace-to-run-script import and a registry cycle after the move. Those configuration query operations will move from `WorkspaceQueryService` to the run-script config persistence service. The workspace tRPC endpoints will call the run-script barrel, and run-script will use workspace accessors through its existing declared dependency. The capsule graph stays acyclic and accurately records `run-script -> workspace`.
 
 The workspace snapshot store and git operations are workspace-owned APIs. Moving them into the workspace capsule does not introduce new cross-capsule dependencies. The `src/backend/lib/session-summaries.ts` type import will point directly at the shared session runtime contract so that the low-level lib layer does not depend on the workspace barrel.
 
@@ -59,7 +59,7 @@ Mocks and tests will follow the new barrel paths. Dependency Cruiser remains the
 - Add an integration-style checker regression test that creates a temporary root `*.service.ts`, runs `check:service-registry`, asserts failure with the classification message, and always removes the file.
 - Extend run-script and workspace barrel smoke tests to cover the moved public services.
 - Move existing unit tests with their implementations and update mocks/import paths.
-- Add bridge wiring coverage proving workspace receives run-script config synchronization through orchestration.
+- Move workspace-query configuration tests to the run-script config persistence suite and keep the tRPC behavior unchanged.
 - Run focused Vitest tests, `pnpm check:service-registry`, and `pnpm deps:check` during implementation.
 - Run the required final sequence: `pnpm typecheck && pnpm check:fix && pnpm test && pnpm build`.
 
@@ -69,5 +69,5 @@ Mocks and tests will follow the new barrel paths. Dependency Cruiser remains the
 - A stale registry entry must fail even if nothing imports it.
 - A similarly prefixed module name must not match an infrastructure capability; matching is exact.
 - Moving services must not allow external consumers to deep-import capsule internals.
-- Bridge configuration must be present in production and test setup before `refreshFactoryConfigs` is called.
+- Factory-config query endpoints must keep their existing response and error behavior after ownership moves to run-script.
 - Temporary checker-test files must be removed in `finally` cleanup so interrupted assertions do not dirty the worktree.
