@@ -22,6 +22,7 @@ import { trpc } from '@/client/lib/trpc';
 import {
   removeWorkspaceFromProjectSummaryCache,
   removeWorkspacesFromProjectSummaryCache,
+  restoreWorkspacesToListCache,
   restoreWorkspacesToProjectSummaryCache,
 } from '@/client/lib/workspace-cache-helpers';
 import type { WorkspaceWithKanban } from './kanban-card';
@@ -237,12 +238,19 @@ export function KanbanProvider({
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
 
-    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+    await Promise.all([
+      utils.workspace.listWithKanbanState.cancel({ projectId }),
+      utils.workspace.getProjectSummaryState.cancel({ projectId }),
+    ]);
 
+    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
 
+    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+      old?.filter((item) => item.id !== workspaceId)
+    );
     utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
       removeWorkspaceFromProjectSummaryCache(old, workspaceId)
     );
@@ -264,6 +272,9 @@ export function KanbanProvider({
       try {
         await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
       } catch {
+        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+          restoreWorkspacesToListCache(old, previousWorkspaceList, [workspaceId])
+        );
         utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
           restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
         );
@@ -303,12 +314,19 @@ export function KanbanProvider({
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
 
-    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+    await Promise.all([
+      utils.workspace.listWithKanbanState.cancel({ projectId }),
+      utils.workspace.getProjectSummaryState.cancel({ projectId }),
+    ]);
 
+    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
 
+    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+      old?.filter((workspace) => !workspaceIdsToArchive.includes(workspace.id))
+    );
     utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
       removeWorkspacesFromProjectSummaryCache(old, workspaceIdsToArchive)
     );
@@ -334,12 +352,30 @@ export function KanbanProvider({
 
     try {
       try {
-        await bulkArchiveMutation.mutateAsync({
+        const result = await bulkArchiveMutation.mutateAsync({
           projectId,
           kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
           commitUncommitted,
         });
+        const failedWorkspaceIds = result.results
+          .filter((item) => !item.success)
+          .map((item) => item.id);
+        if (failedWorkspaceIds.length > 0) {
+          utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+            restoreWorkspacesToListCache(old, previousWorkspaceList, failedWorkspaceIds)
+          );
+          utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+            restoreWorkspacesToProjectSummaryCache(
+              old,
+              previousProjectSummaryState,
+              failedWorkspaceIds
+            )
+          );
+        }
       } catch {
+        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+          restoreWorkspacesToListCache(old, previousWorkspaceList, workspaceIdsToArchive)
+        );
         utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
           restoreWorkspacesToProjectSummaryCache(
             old,

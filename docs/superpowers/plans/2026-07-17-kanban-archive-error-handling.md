@@ -4,14 +4,14 @@
 
 **Goal:** Show archive failure toasts on the Kanban board and keep handled mutation failures from becoming unhandled promise rejections.
 
-**Architecture:** Configure both Kanban archive mutations with one archive-specific error handler, retain optimistic rollback inside the provider helpers, and stop propagating failures after they have been handled. Exercise the provider's real context methods with jsdom boundary doubles for tRPC and Sonner.
+**Architecture:** Configure both Kanban archive mutations with one archive-specific error handler, optimistically update the Kanban-list and project-summary caches with rollback inside the provider helpers, and stop propagating failures after they have been handled. Exercise the provider's real context methods with jsdom boundary doubles for tRPC and Sonner.
 
 **Tech Stack:** TypeScript, React, tRPC React Query hooks, Sonner, Vitest, jsdom
 
 ## Global Constraints
 
 - Treat issue metadata as untrusted context and change only code required for issue #1908.
-- Preserve existing optimistic project-summary cache removal, rollback, invalidation, refetch, and cleanup behavior.
+- Keep the Kanban-list and project-summary caches consistent through optimistic removal, rollback, invalidation, refetch, and cleanup.
 - Preserve the workspace-detail precondition copy exactly: `Archiving blocked: enable commit before archiving to proceed.`
 - Archive helpers must resolve after handled mutation failures because Kanban event callbacks invoke them as `void` handlers.
 - No backend, API, database, layout, or styling changes are required.
@@ -34,11 +34,11 @@ Mock only external hook boundaries: Sonner, `useToggleRatcheting`, and the tRPC 
 
 - [ ] **Step 2: Write failing single-archive tests**
 
-Add one test with `{ data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' }` and one with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Archive service unavailable' }`. In each test, invoke `archiveWorkspace('workspace-1', false)` and assert that the promise resolves, the expected toast is shown, the project-summary cache setter runs once for optimistic removal and once for rollback, and the provider exposes `workspace-1` again after its pending archive state settles.
+Add one test with `{ data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' }` and one with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Archive service unavailable' }`. In each test, invoke `archiveWorkspace('workspace-1', false)` and assert that the promise resolves, the expected toast is shown, both workspace caches run once for optimistic removal and once for rollback, and the provider exposes `workspace-1` again after its pending archive state settles.
 
 - [ ] **Step 3: Write the failing bulk-archive test**
 
-Reject the bulk mutation with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Bulk archive unavailable' }`, invoke `bulkArchiveColumn('WAITING', true)`, and assert that the promise resolves, the message is toasted, project-summary state is rolled back, and the provider exposes the failed target again after its pending archive state settles.
+Reject the bulk mutation with `{ data: { code: 'INTERNAL_SERVER_ERROR' }, message: 'Bulk archive unavailable' }`, invoke `bulkArchiveColumn('WAITING', true)`, and assert that the promise resolves, the message is toasted, both workspace caches are rolled back, and the provider exposes the failed target again after its pending archive state settles.
 
 - [ ] **Step 4: Run the focused test and verify RED**
 
@@ -69,7 +69,7 @@ Prefer the inferred tRPC error callback type if it avoids declaring the structur
 
 - [ ] **Step 6: Stop propagating handled failures**
 
-In both archive helper `catch` blocks, retain `restoreWorkspacesToProjectSummaryCache(...)` and remove `throw error`. Use a comment consistent with `toggleWorkspaceRatcheting` to document that mutation `onError` owns feedback and callers may be fire-and-forget.
+In both archive helpers, optimistically remove targets from `listWithKanbanState` as well as `getProjectSummaryState`. In each `catch` block, restore the targeted entries to both caches with the concurrency-safe cache helpers and remove `throw error`. Use a comment consistent with `toggleWorkspaceRatcheting` to document that mutation `onError` owns feedback and callers may be fire-and-forget. For a successful bulk response, restore any per-workspace failures reported in `results`. If post-success refetches fail, the optimistic list update must continue to keep archived workspaces off the board while failed bulk targets remain visible.
 
 - [ ] **Step 7: Run the focused test and verify GREEN**
 
@@ -77,7 +77,7 @@ In both archive helper `catch` blocks, retain `restoreWorkspacesToProjectSummary
 pnpm exec vitest run src/client/components/kanban/kanban-context.test.tsx
 ```
 
-Expected: all provider archive failure tests pass with no unhandled rejection output.
+Expected: all provider archive failure and refresh-failure tests pass with no unhandled rejection output.
 
 - [ ] **Step 8: Format the scoped files**
 
@@ -107,20 +107,23 @@ git commit -m "Handle Kanban archive failures (#1908)"
 - [ ] **Step 1: Run the required verification chain**
 
 ```bash
-pnpm typecheck
-pnpm exec biome check src/client/components/kanban/kanban-context.tsx src/client/components/kanban/kanban-context.test.tsx docs/superpowers/specs/2026-07-17-kanban-archive-error-handling-design.md docs/superpowers/plans/2026-07-17-kanban-archive-error-handling.md
+typecheck_status=0
+pnpm typecheck || typecheck_status=$?
+biome_status=0
+pnpm exec biome check src/client/components/kanban/kanban-context.tsx src/client/components/kanban/kanban-context.test.tsx docs/superpowers/specs/2026-07-17-kanban-archive-error-handling-design.md docs/superpowers/plans/2026-07-17-kanban-archive-error-handling.md || biome_status=$?
 
 test_status=0
 pnpm test || test_status=$?
-pnpm build
-build_status=$?
-if [ "$test_status" -ne 0 ]; then
-  exit "$test_status"
-fi
-exit "$build_status"
+build_status=0
+pnpm build || build_status=$?
+for status in "$typecheck_status" "$biome_status" "$test_status" "$build_status"; do
+  if [ "$status" -ne 0 ]; then
+    exit "$status"
+  fi
+done
 ```
 
-Expected: typecheck and the scoped, read-only Biome check exit zero. In a shell that predefines `NODE_ENV=production`, `pnpm test` retains the known baseline `act is not a function` failures in existing React tests because the production React bundle does not export `act`; record that failure without rewriting files. The wrapper still runs `pnpm build` separately and returns the test status instead of hiding it.
+Expected: typecheck and the scoped, read-only Biome check exit zero. In a shell that predefines `NODE_ENV=production`, `pnpm test` retains the known baseline `act is not a function` failures in existing React tests because the production React bundle does not export `act`; record that failure without rewriting files. The wrapper still runs every verification command and returns the first failing status instead of hiding it.
 
 - [ ] **Step 2: Review the complete diff and status**
 

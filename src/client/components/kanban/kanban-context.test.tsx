@@ -16,6 +16,19 @@ interface ProjectSummaryState {
   reviewCount: number;
 }
 
+interface WorkspaceListItem {
+  id: string;
+  kanbanColumn: 'WORKING' | 'WAITING';
+  githubIssueNumber: null;
+  linearIssueId: null;
+}
+
+interface BulkArchiveResult {
+  id: string;
+  success: boolean;
+  error?: string;
+}
+
 interface MutationOptions {
   onError?: (error: ArchiveError) => void;
 }
@@ -23,7 +36,11 @@ interface MutationOptions {
 const mocks = vi.hoisted(() => ({
   archiveError: undefined as ArchiveError | undefined,
   bulkArchiveError: undefined as ArchiveError | undefined,
+  bulkArchiveResults: [] as BulkArchiveResult[],
   toastErrorMock: vi.fn(),
+  workspaceListCancelMock: vi.fn(),
+  workspaceListGetDataMock: vi.fn(),
+  workspaceListSetDataMock: vi.fn(),
   projectSummaryCancelMock: vi.fn(),
   projectSummaryGetDataMock: vi.fn(),
   projectSummarySetDataMock: vi.fn(),
@@ -32,6 +49,7 @@ const mocks = vi.hoisted(() => ({
   refetchWorkspacesMock: vi.fn(),
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
+  workspaceListState: [] as WorkspaceListItem[],
   projectSummaryState: undefined as ProjectSummaryState | undefined,
 }));
 
@@ -47,13 +65,16 @@ vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
   }),
 }));
 
-function rejectingMutation(getError: () => ArchiveError | undefined) {
+function rejectingMutation(
+  getError: () => ArchiveError | undefined,
+  getSuccessData: () => unknown = () => undefined
+) {
   return {
     useMutation: (options: MutationOptions = {}) => ({
       mutateAsync: vi.fn(() => {
         const error = getError();
         if (!error) {
-          return Promise.resolve();
+          return Promise.resolve(getSuccessData());
         }
         options.onError?.(error);
         return Promise.reject(error);
@@ -70,6 +91,11 @@ vi.mock('@/client/lib/trpc', () => ({
         checkCLIHealth: {},
       },
       workspace: {
+        listWithKanbanState: {
+          cancel: mocks.workspaceListCancelMock,
+          getData: mocks.workspaceListGetDataMock,
+          setData: mocks.workspaceListSetDataMock,
+        },
         get: {
           invalidate: mocks.workspaceGetInvalidateMock,
         },
@@ -102,20 +128,7 @@ vi.mock('@/client/lib/trpc', () => ({
     workspace: {
       listWithKanbanState: {
         useQuery: () => ({
-          data: [
-            {
-              id: 'workspace-1',
-              kanbanColumn: 'WAITING',
-              githubIssueNumber: null,
-              linearIssueId: null,
-            },
-            {
-              id: 'workspace-2',
-              kanbanColumn: 'WORKING',
-              githubIssueNumber: null,
-              linearIssueId: null,
-            },
-          ],
+          data: mocks.workspaceListState,
           isLoading: false,
           isError: false,
           error: null,
@@ -129,7 +142,10 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({ mutateAsync: vi.fn() }),
       },
       archive: rejectingMutation(() => mocks.archiveError),
-      bulkArchive: rejectingMutation(() => mocks.bulkArchiveError),
+      bulkArchive: rejectingMutation(
+        () => mocks.bulkArchiveError,
+        () => ({ results: mocks.bulkArchiveResults, total: mocks.bulkArchiveResults.length })
+      ),
     },
   },
 }));
@@ -142,17 +158,21 @@ function Probe() {
   return null;
 }
 
+function providerElement(children: ReactNode = <Probe />) {
+  return (
+    <KanbanProvider projectId="project-1" projectSlug="project" issueProvider="GITHUB">
+      {children}
+    </KanbanProvider>
+  );
+}
+
 function renderProvider(children: ReactNode = <Probe />) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
 
   flushSync(() => {
-    root?.render(
-      <KanbanProvider projectId="project-1" projectSlug="project" issueProvider="GITHUB">
-        {children}
-      </KanbanProvider>
-    );
+    root?.render(providerElement(children));
   });
 
   if (!context) {
@@ -160,6 +180,10 @@ function renderProvider(children: ReactNode = <Probe />) {
   }
 
   return context;
+}
+
+function rerenderProvider() {
+  flushSync(() => root?.render(providerElement()));
 }
 
 async function expectArchiveToResolve(action: () => Promise<void>) {
@@ -175,6 +199,31 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.archiveError = undefined;
   mocks.bulkArchiveError = undefined;
+  mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
+  mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
+  mocks.workspaceListState = [
+    {
+      id: 'workspace-1',
+      kanbanColumn: 'WAITING',
+      githubIssueNumber: null,
+      linearIssueId: null,
+    },
+    {
+      id: 'workspace-2',
+      kanbanColumn: 'WORKING',
+      githubIssueNumber: null,
+      linearIssueId: null,
+    },
+  ];
+  mocks.workspaceListGetDataMock.mockImplementation(() => mocks.workspaceListState);
+  mocks.workspaceListSetDataMock.mockImplementation(
+    (
+      _input: { projectId: string },
+      updater: (old: WorkspaceListItem[] | undefined) => WorkspaceListItem[] | undefined
+    ) => {
+      mocks.workspaceListState = updater(mocks.workspaceListState) ?? [];
+    }
+  );
   mocks.projectSummaryState = {
     workspaces: [{ id: 'workspace-1' }, { id: 'workspace-2' }],
     reviewCount: 0,
@@ -209,6 +258,11 @@ describe('KanbanProvider archive failure handling', () => {
     expect(mocks.toastErrorMock).toHaveBeenCalledWith(
       'Archiving blocked: enable commit before archiving to proceed.'
     );
+    expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
+      'workspace-1',
+      'workspace-2',
+    ]);
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
     expect(mocks.projectSummaryState?.workspaces).toEqual([
       { id: 'workspace-1' },
@@ -227,6 +281,11 @@ describe('KanbanProvider archive failure handling', () => {
     await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1', false));
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Archive service unavailable');
+    expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
+      'workspace-1',
+      'workspace-2',
+    ]);
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
     expect(mocks.projectSummaryState?.workspaces).toEqual([
       { id: 'workspace-1' },
@@ -245,6 +304,11 @@ describe('KanbanProvider archive failure handling', () => {
     await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
 
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Bulk archive unavailable');
+    expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
+      'workspace-1',
+      'workspace-2',
+    ]);
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
     expect(mocks.projectSummaryState?.workspaces).toEqual([
       { id: 'workspace-1' },
@@ -258,9 +322,13 @@ describe('KanbanProvider archive failure handling', () => {
     const kanban = renderProvider();
 
     await expectArchiveToResolve(() => kanban.archiveWorkspace('workspace-1', false));
+    rerenderProvider();
 
+    expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(1);
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual(['workspace-2']);
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(1);
     expect(mocks.projectSummaryState?.workspaces).toEqual([{ id: 'workspace-2' }]);
+    expectVisibleWorkspaceIds(['workspace-2']);
   });
 
   it('keeps a successful bulk archive removed when cache invalidation fails', async () => {
@@ -268,8 +336,32 @@ describe('KanbanProvider archive failure handling', () => {
     const kanban = renderProvider();
 
     await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
+    rerenderProvider();
 
+    expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(1);
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual(['workspace-2']);
     expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(1);
     expect(mocks.projectSummaryState?.workspaces).toEqual([{ id: 'workspace-2' }]);
+    expectVisibleWorkspaceIds(['workspace-2']);
+  });
+
+  it('restores bulk items that fail when post-archive refreshes also fail', async () => {
+    mocks.bulkArchiveResults = [{ id: 'workspace-1', success: false, error: 'blocked' }];
+    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+    mocks.projectSummaryInvalidateMock.mockRejectedValueOnce(new Error('Invalidation failed'));
+    const kanban = renderProvider();
+
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
+    rerenderProvider();
+
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
+      'workspace-1',
+      'workspace-2',
+    ]);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([
+      { id: 'workspace-1' },
+      { id: 'workspace-2' },
+    ]);
+    expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
   });
 });
