@@ -35,7 +35,7 @@ export function GitSummaryPanel({ workspaceId }: GitSummaryPanelProps) {
 
   const { data, isLoading, error } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    { refetchInterval: 15_000, staleTime: 10_000 }
+    { staleTime: 10_000 }
   );
 
   if (isLoading) {

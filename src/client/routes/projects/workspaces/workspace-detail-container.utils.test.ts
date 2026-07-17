@@ -6,6 +6,7 @@ import {
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
   type SessionForRuntimeOverlay,
+  shouldFetchArchiveGitStatus,
 } from './workspace-detail-container.utils';
 
 describe('getVisibleInitBanner', () => {
@@ -31,6 +32,12 @@ describe('getVisibleInitBanner', () => {
 });
 
 describe('workspace detail container utils', () => {
+  it('fetches archive Git status only while the dialog is visible for a worktree', () => {
+    expect(shouldFetchArchiveGitStatus(false, '/repo/w1')).toBe(false);
+    expect(shouldFetchArchiveGitStatus(true, null)).toBe(false);
+    expect(shouldFetchArchiveGitStatus(true, '/repo/w1')).toBe(true);
+  });
+
   it('returns true when the transcript has a user message and no agent message', () => {
     expect(hasUserMessageWithoutAgentMessage([{ source: 'user' }])).toBe(true);
   });

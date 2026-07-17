@@ -24,6 +24,7 @@ import {
   buildSessionSummariesById,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
+  shouldFetchArchiveGitStatus,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
@@ -86,7 +87,11 @@ export function WorkspaceDetailContainer() {
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
+    {
+      enabled: shouldFetchArchiveGitStatus(archiveDialogOpen, workspace?.worktreePath),
+      staleTime: 10_000,
+      refetchOnWindowFocus: false,
+    }
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
