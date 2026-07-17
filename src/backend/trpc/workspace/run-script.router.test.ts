@@ -4,11 +4,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
+const mockSetCommands = vi.hoisted(() => vi.fn());
 const mockWriteFactoryConfigAndSyncWorkspace = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+  },
+  workspaceRunScriptService: {
+    setCommands: (...args: unknown[]) => mockSetCommands(...args),
   },
 }));
 
@@ -65,7 +69,8 @@ describe('workspaceRunScriptRouter', () => {
     workspaceDir = mkdtempSync(join(tmpdir(), 'ff-ws-'));
     repoDir = mkdtempSync(join(tmpdir(), 'ff-repo-'));
     mockWriteFactoryConfigAndSyncWorkspace.mockImplementation(
-      (input: {
+      async (input: {
+        workspaceId: string;
         config: {
           scripts: {
             run?: string;
@@ -82,11 +87,13 @@ describe('workspaceRunScriptRouter', () => {
         if (input.projectRepoPath) {
           writeFileSync(join(input.projectRepoPath, 'factory-factory.json'), configContent, 'utf8');
         }
-        return {
+        const commands = {
           runScriptCommand: input.config.scripts.run ?? null,
           runScriptPostRunCommand: input.config.scripts.postRun ?? null,
           runScriptCleanupCommand: input.config.scripts.cleanup ?? null,
         };
+        await input.persistWorkspaceCommands?.(input.workspaceId, commands);
+        return commands;
       }
     );
   });
@@ -131,6 +138,11 @@ describe('workspaceRunScriptRouter', () => {
         },
       },
       persistWorkspaceCommands: expect.any(Function),
+    });
+    expect(mockSetCommands).toHaveBeenCalledWith('w1', {
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: 'pkill node',
     });
   });
 

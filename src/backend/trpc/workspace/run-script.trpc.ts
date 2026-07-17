@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
-import { workspaceDataService } from '@/backend/services/workspace';
+import { workspaceDataService, workspaceRunScriptService } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
@@ -38,12 +38,7 @@ export const workspaceRunScriptRouter = router({
           projectRepoPath: workspace.project?.repoPath,
           config: input.config,
           persistWorkspaceCommands: (id, commands) =>
-            workspaceDataService.setRunScriptCommands(
-              id,
-              commands.runScriptCommand,
-              commands.runScriptPostRunCommand,
-              commands.runScriptCleanupCommand
-            ),
+            workspaceRunScriptService.setCommands(id, commands),
         });
 
         return { success: true };

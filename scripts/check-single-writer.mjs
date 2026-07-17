@@ -140,17 +140,14 @@ const workspaceFieldOwners = {
   runScriptCommand: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
-    'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptPostRunCommand: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
-    'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptCleanupCommand: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
-    'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptPid: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
