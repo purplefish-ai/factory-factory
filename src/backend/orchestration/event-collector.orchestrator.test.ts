@@ -825,6 +825,35 @@ describe('configureEventCollector', () => {
     expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
 
+  it('projects the direct CI status carried by a dispatch invalidation', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'CI_RUNNING',
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    } as never);
+    configureEventCollector();
+
+    const handler = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_dispatch_invalidated')![1] as (event: {
+      workspaceId: string;
+      prCiStatus: string;
+    }) => void;
+    handler({ workspaceId: 'ws-direct-ci', prCiStatus: 'PENDING' });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-direct-ci',
+      { prCiStatus: 'PENDING' },
+      'event:pr_dispatch_invalidated',
+      expect.any(Number)
+    );
+  });
+
   it('does not recreate an archived snapshot after an in-flight Ratchet projection', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
@@ -958,6 +987,32 @@ describe('configureEventCollector', () => {
     expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reset the projection failure budget for repeated invalidations', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
   });
 
   it('cancels an authoritative projection retry when stopped', async () => {

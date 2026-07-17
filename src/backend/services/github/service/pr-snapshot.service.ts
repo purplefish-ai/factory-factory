@@ -46,6 +46,7 @@ export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
 
 export interface PRDispatchInvalidatedEvent {
   workspaceId: string;
+  prCiStatus: SnapshotData['prCiStatus'];
 }
 
 export interface PRSnapshotUpdatedEvent {
@@ -124,7 +125,10 @@ class PRSnapshotService extends EventEmitter {
         return;
       }
       if (result.dispatchReset) {
-        this.emit(PR_DISPATCH_INVALIDATED, { workspaceId } satisfies PRDispatchInvalidatedEvent);
+        this.emit(PR_DISPATCH_INVALIDATED, {
+          workspaceId,
+          prCiStatus: input.ciStatus,
+        } satisfies PRDispatchInvalidatedEvent);
       }
       await this.kanban.updateCachedKanbanColumn(workspaceId);
     });

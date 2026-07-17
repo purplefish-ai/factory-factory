@@ -462,7 +462,7 @@ describe('PRSnapshotService', () => {
         observedAt: new Date('2026-07-17T12:00:00.000Z'),
       });
 
-      expect(events).toEqual([{ workspaceId: 'ws-exhausted' }]);
+      expect(events).toEqual([{ workspaceId: 'ws-exhausted', prCiStatus: 'PENDING' }]);
     });
 
     it('publishes a direct CI reset before a cache refresh rejection', async () => {
@@ -478,7 +478,7 @@ describe('PRSnapshotService', () => {
         prSnapshotService.recordCIObservation('ws-cache-failure', { ciStatus: 'PENDING' })
       ).rejects.toThrow('cache failed');
 
-      expect(events).toEqual([{ workspaceId: 'ws-cache-failure' }]);
+      expect(events).toEqual([{ workspaceId: 'ws-cache-failure', prCiStatus: 'PENDING' }]);
     });
 
     it('does not invalidate or refresh from a direct CI observation rejected by the guard', async () => {

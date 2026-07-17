@@ -226,7 +226,6 @@ async function runRatchetProjectionRefresh(params: {
       failedAttempts += 1;
       if (newerRevision !== null) {
         targetRevision = newerRevision;
-        failedAttempts = 0;
       }
       if (!isActive()) {
         break;
@@ -791,6 +790,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prDispatchInvalidatedHandler = (event: PRDispatchInvalidatedEvent) => {
+    coalescer.enqueue(
+      event.workspaceId,
+      { prCiStatus: event.prCiStatus },
+      'event:pr_dispatch_invalidated',
+      { immediate: true }
+    );
     requestAuthoritativeRatchetProjection(event.workspaceId);
     refreshCachedKanbanColumn(state, event.workspaceId);
   };
