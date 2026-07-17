@@ -3,8 +3,8 @@ import {
   type AgentSessionRecord,
   agentSessionAccessor,
 } from '@/backend/services/session/resources/agent-session.accessor';
+import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
-import { sessionDataService } from '../data/session-data.service';
 
 type SessionUpdateData = Partial<
   Pick<

@@ -23,7 +23,7 @@ class WorkspaceNotificationService {
 
   async listPendingForDelivery(workspaceId: string) {
     const notifications = await workspaceNotificationAccessor.findPending(workspaceId);
-    return notifications.toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return [...notifications].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
   markDelivered(ids: string[]): Promise<void> {
