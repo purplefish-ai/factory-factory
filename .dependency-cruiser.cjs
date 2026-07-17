@@ -170,6 +170,15 @@ module.exports = {
       to: { path: '^src/backend/(routers|trpc)/' },
     },
     {
+      name: 'no-trpc-server-in-services-or-orchestration',
+      severity: 'error',
+      comment: 'Services and orchestration must use transport-neutral application errors.',
+      from: { path: '^src/backend/(services|orchestration)/' },
+      to: {
+        path: '^node_modules/(?:\\.pnpm/[^/]+/node_modules/@trpc/server|@trpc/server)(?:/|$)',
+      },
+    },
+    {
       name: 'no-services-importing-agents',
       severity: 'error',
       comment: 'Services should not depend on agent orchestration internals.',

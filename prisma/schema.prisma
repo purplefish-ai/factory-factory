@@ -247,6 +247,11 @@ model Workspace {
   prCiStatus          CIStatus          @default(UNKNOWN)  // CI check status
   prUpdatedAt         DateTime?         // Last PR sync time
 
+  // PR discovery scheduling
+  prDiscoveryLastCheckedAt DateTime?
+  prDiscoveryRetryCount    Int       @default(0)
+  prDiscoveryNextCheckAt   DateTime?
+
   // CI failure tracking
   prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
   prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
@@ -299,6 +304,7 @@ model Workspace {
   @@index([projectId, updatedAt])
   @@index([projectId, createdAt])
   @@index([status, prUrl])
+  @@index([status, prUrl, prDiscoveryNextCheckAt])
   @@index([status, prUpdatedAt])
   @@index([status, ratchetEnabled, ratchetLastCheckedAt])
 }

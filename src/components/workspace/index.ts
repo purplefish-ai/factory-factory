@@ -5,7 +5,6 @@ export * from './diff-viewer';
 export * from './file-browser-panel';
 export * from './file-tree';
 export * from './file-viewer';
-export * from './git-summary-panel';
 export * from './main-view-content';
 export * from './main-view-tab-bar';
 export * from './quick-actions-menu';

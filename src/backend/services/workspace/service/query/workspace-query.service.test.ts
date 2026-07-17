@@ -17,6 +17,7 @@ const mockFindByProjectId = vi.fn();
 const mockFindById = vi.fn();
 const mockFindByIdWithProject = vi.fn();
 const mockWorkspaceUpdate = vi.fn();
+const mockResetPRDiscoveryBackoff = vi.fn();
 const mockProjectFindById = vi.fn();
 const mockDeriveWorkspaceRuntimeState = vi.fn();
 const mockReadConfig = vi.fn();
@@ -29,6 +30,7 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
     findByProjectId: (...args: unknown[]) => mockFindByProjectId(...args),
     findById: (...args: unknown[]) => mockFindById(...args),
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+    resetPRDiscoveryBackoff: (...args: unknown[]) => mockResetPRDiscoveryBackoff(...args),
     update: (...args: unknown[]) => mockWorkspaceUpdate(...args),
   },
 }));
@@ -453,6 +455,7 @@ describe('WorkspaceQueryService', () => {
       isWorking: false,
       gitStats: expect.objectContaining({ total: 3 }),
     });
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
 
     // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
     await new Promise((resolve) => setImmediate(resolve));
@@ -665,6 +668,31 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('syncPRStatus resets discovery backoff before returning no_pr_url', async () => {
+    mockFindById.mockResolvedValue({ id: 'w1', prUrl: null });
+    mockResetPRDiscoveryBackoff.mockResolvedValue(true);
+
+    await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
+      success: false,
+      reason: 'no_pr_url',
+    });
+
+    expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledOnce();
+    expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledWith('w1');
+    expect(mockRefreshWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('syncAllPRStatuses does not reset discovery backoff for workspaces without PRs', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      { id: 'w1', prUrl: null },
+      { id: 'w2', prUrl: null },
+    ]);
+
+    await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
+
+    expect(mockResetPRDiscoveryBackoff).not.toHaveBeenCalled();
+  });
+
   it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
     let resolveLookup:
       | ((workspaces: Array<{ id: string; prUrl: string | null }>) => void)
@@ -728,6 +756,7 @@ describe('WorkspaceQueryService', () => {
   it('hasChanges checks workspace metadata and git stats safely', async () => {
     mockFindByIdWithProject.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -741,6 +770,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -754,6 +784,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(true);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',

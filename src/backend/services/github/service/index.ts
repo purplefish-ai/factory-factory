@@ -11,6 +11,7 @@ export {
   type GitHubCLIHealthStatus,
   type GitHubIssue,
   githubCLIService,
+  type OpenPullRequest,
   type PRInfo,
   type PRStatusFromGitHub,
   type ReviewRequestedPR,
