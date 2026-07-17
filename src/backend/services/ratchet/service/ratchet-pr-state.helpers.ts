@@ -95,6 +95,7 @@ export function computeCiSnapshotKey(
 }
 
 export function computeDispatchSnapshotKey(
+  prNumber: number,
   ciStatus: CIStatus,
   hasChangesRequested: boolean,
   latestReviewActivityAtMs: number | null,
@@ -106,7 +107,7 @@ export function computeDispatchSnapshotKey(
     latestReviewActivityAtMs ?? 'none'
   }`;
   const mergeKey = hasMergeConflict ? 'conflict' : 'clean';
-  return `${ciKey}|${reviewKey}|merge:${mergeKey}`;
+  return `pr:${prNumber}|${ciKey}|${reviewKey}|merge:${mergeKey}`;
 }
 
 export function isIgnoredReviewAuthor(
@@ -422,6 +423,7 @@ export async function fetchPRState(params: {
       authenticatedUsername
     );
     const snapshotKey = computeDispatchSnapshotKey(
+      prDetails.number,
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,
