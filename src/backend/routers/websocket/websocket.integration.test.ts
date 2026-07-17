@@ -40,8 +40,8 @@ let createSnapshotsUpgradeHandler: typeof import('./snapshots.handler').createSn
 let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeHandler;
 
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
-let snapshotConnections: typeof import('./snapshots.handler').snapshotConnections;
-let detachChatTransportForTests: typeof import('./chat-connection-registry').detachChatTransportForTests;
+let disposeSnapshotsHandlerState: typeof import('./snapshots.handler').disposeSnapshotsHandlerState;
+let disposeChatTransportForApplication: typeof import('./chat-connection-registry').disposeChatTransportForApplication;
 let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
 let workspaceQueryService: typeof import('@/backend/services/workspace').workspaceQueryService;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
@@ -53,6 +53,7 @@ let counter = 0;
 const allowedOrigin = 'http://localhost:3000';
 const openServers = new Set<WebSocketTestServer>();
 const openSockets = new Set<WebSocket>();
+const transportApplications = new Set<AppContext>();
 
 beforeAll(async () => {
   db = await createIntegrationDatabase();
@@ -65,11 +66,11 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./dev-logs.handler')>('./dev-logs.handler'));
   ({ createPostRunLogsUpgradeHandler } =
     await vi.importActual<typeof import('./post-run-logs.handler')>('./post-run-logs.handler'));
-  ({ createSnapshotsUpgradeHandler, snapshotConnections } =
+  ({ createSnapshotsUpgradeHandler, disposeSnapshotsHandlerState } =
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
     await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
-  ({ detachChatTransportForTests } = await vi.importActual<
+  ({ disposeChatTransportForApplication } = await vi.importActual<
     typeof import('./chat-connection-registry')
   >('./chat-connection-registry'));
   ({ workspaceSnapshotStore } = await vi.importActual<
@@ -98,8 +99,11 @@ afterEach(async () => {
   }
 
   terminalConnections.clear();
-  snapshotConnections.clear();
-  detachChatTransportForTests();
+  for (const application of transportApplications) {
+    disposeChatTransportForApplication(application);
+    disposeSnapshotsHandlerState(application);
+  }
+  transportApplications.clear();
   workspaceSnapshotStore.clear();
 
   await clearIntegrationDatabase(prisma);
@@ -218,6 +222,11 @@ function createConfigService() {
   };
 }
 
+function trackTransportApplication(application: AppContext): AppContext {
+  transportApplications.add(application);
+  return application;
+}
+
 function createChatAppContext(worktreeBaseDir: string) {
   const appContext = unsafeCoerce<AppContext>({
     services: {
@@ -251,6 +260,8 @@ function createChatAppContext(worktreeBaseDir: string) {
       },
     },
   });
+
+  trackTransportApplication(appContext);
 
   return appContext;
 }
@@ -341,15 +352,17 @@ describe('websocket integration', () => {
       url: '/snapshots?projectId=project-1',
       createHandler: () =>
         createSnapshotsUpgradeHandler(
-          unsafeCoerce<AppContext>({
-            services: {
-              configService: createConfigService(),
-              createLogger: () => createLogger(),
-              workspaceQueryService,
-              workspaceSnapshotStore,
-            },
-            lifecycle: { snapshotReconciliation: snapshotReconciliationService },
-          })
+          trackTransportApplication(
+            unsafeCoerce<AppContext>({
+              services: {
+                configService: createConfigService(),
+                createLogger: () => createLogger(),
+                workspaceQueryService,
+                workspaceSnapshotStore,
+              },
+              lifecycle: { snapshotReconciliation: snapshotReconciliationService },
+            })
+          )
         ),
     },
   ])('rejects unauthorized Origin for $name websocket upgrades', async ({
@@ -538,6 +551,7 @@ describe('websocket integration', () => {
       },
       lifecycle: { snapshotReconciliation: snapshotReconciliationService },
     });
+    trackTransportApplication(appContext);
 
     const handler = createSnapshotsUpgradeHandler(appContext);
     const server = await createWebSocketTestServer(handler, '/snapshots');

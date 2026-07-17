@@ -1,22 +1,23 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import {
+  discoverProductionTypeScriptFiles,
+  parseTypeScriptImports,
+  REPOSITORY_ROOT,
+  resolveRepositoryModule,
+} from '@/backend/testing/typescript-import-test-utils';
 
-const TRPC_ROOT = resolve(process.cwd(), 'src/backend/trpc');
+const TRPC_ROOT = resolve(REPOSITORY_ROOT, 'src/backend/trpc');
 
-const TRPC_RUNTIME_FILES = [
-  ...readdirSync(TRPC_ROOT, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.trpc.ts'))
-    .map((entry) => relative(process.cwd(), join(entry.parentPath, entry.name))),
-  'src/backend/trpc/workspace/workspace-helpers.ts',
-].sort();
+const TRPC_RUNTIME_FILES = discoverProductionTypeScriptFiles(TRPC_ROOT);
 
 const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
-  ['@/backend/services/github', new Set(['classifyGitHubCLIError'])],
-  ['@/backend/services/git-clone.service', new Set(['parseGithubUrl'])],
+  ['src/backend/services/github', new Set(['classifyGitHubCLIError'])],
+  ['src/backend/services/git-clone.service', new Set(['parseGithubUrl'])],
   [
-    '@/backend/services/workspace',
+    'src/backend/services/workspace',
     new Set([
       'computeKanbanColumn',
       'computePendingRequestType',
@@ -26,8 +27,8 @@ const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
   ],
 ]);
 
-function isBackendRuntimeModule(moduleSpecifier: string): boolean {
-  return /^@\/backend\/(?:services|orchestration|db)(?:\/|$)/.test(moduleSpecifier);
+function isBackendRuntimeModule(repositoryPath: string): boolean {
+  return /^src\/backend\/(?:services|orchestration|db)(?:\/|$)/.test(repositoryPath);
 }
 
 function importViolation(moduleSpecifier: string, binding: string): string {
@@ -55,13 +56,16 @@ function findNamedBindingViolations(
   });
 }
 
-function findImportDeclarationViolations(statement: ts.ImportDeclaration): string[] {
+function findImportDeclarationViolations(
+  importer: string,
+  statement: ts.ImportDeclaration
+): string[] {
   if (!ts.isStringLiteral(statement.moduleSpecifier)) {
     return [];
   }
 
-  const moduleSpecifier = statement.moduleSpecifier.text;
-  if (!isBackendRuntimeModule(moduleSpecifier)) {
+  const moduleSpecifier = resolveRepositoryModule(importer, statement.moduleSpecifier.text);
+  if (!(moduleSpecifier && isBackendRuntimeModule(moduleSpecifier))) {
     return [];
   }
 
@@ -80,24 +84,34 @@ function findImportDeclarationViolations(statement: ts.ImportDeclaration): strin
   return violations;
 }
 
-function findForbiddenBackendImports(source: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    'trpc-runtime-imports.ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS
-  );
-  return sourceFile.statements.flatMap((statement) =>
-    ts.isImportDeclaration(statement) ? findImportDeclarationViolations(statement) : []
+function findForbiddenBackendImports(
+  source: string,
+  importer = 'src/backend/trpc/runtime-imports.ts'
+): string[] {
+  const { importDeclarations } = parseTypeScriptImports(source, importer);
+  return importDeclarations.flatMap((statement) =>
+    findImportDeclarationViolations(importer, statement)
   );
 }
 
 describe('tRPC context dependencies', () => {
-  it.each(TRPC_RUNTIME_FILES)('%s uses context runtime dependencies', (file) => {
-    const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+  it('discovers all production tRPC modules and helpers', () => {
+    expect(TRPC_RUNTIME_FILES).toEqual(
+      expect.arrayContaining([
+        'src/backend/trpc/index.ts',
+        'src/backend/trpc/issue-filter.ts',
+        'src/backend/trpc/log-file-reader.ts',
+        'src/backend/trpc/procedures/project-scoped.ts',
+        'src/backend/trpc/trpc.ts',
+      ])
+    );
+    expect(TRPC_RUNTIME_FILES.some((file) => file.endsWith('.test.ts'))).toBe(false);
+  });
 
-    expect(findForbiddenBackendImports(source), file).toEqual([]);
+  it.each(TRPC_RUNTIME_FILES)('%s uses context runtime dependencies', (file) => {
+    const source = readFileSync(resolve(REPOSITORY_ROOT, file), 'utf8');
+
+    expect(findForbiddenBackendImports(source, file), file).toEqual([]);
   });
 
   describe('import classification', () => {
@@ -112,7 +126,7 @@ describe('tRPC context dependencies', () => {
       `;
 
       expect(findForbiddenBackendImports(source)).toEqual([
-        '@/backend/services/git-clone.service#unknownRuntime',
+        'src/backend/services/git-clone.service#unknownRuntime',
       ]);
     });
 
@@ -124,9 +138,26 @@ describe('tRPC context dependencies', () => {
           import '@/backend/orchestration/reconciliation.service';
         `)
       ).toEqual([
-        '@/backend/services/session#default',
-        '@/backend/services/workspace#*',
-        '@/backend/orchestration/reconciliation.service#side-effect',
+        'src/backend/services/session#default',
+        'src/backend/services/workspace#*',
+        'src/backend/orchestration/reconciliation.service#side-effect',
+      ]);
+    });
+
+    it('rejects relative and absolute imports of backend runtime modules', () => {
+      const absoluteSessionPath = resolve(process.cwd(), 'src/backend/services/session/index.ts');
+
+      expect(
+        findForbiddenBackendImports(
+          `
+            import { workspaceService } from '../services/workspace';
+            import sessionRuntime from '${absoluteSessionPath}';
+          `,
+          'src/backend/trpc/new.trpc.ts'
+        )
+      ).toEqual([
+        'src/backend/services/workspace#workspaceService',
+        'src/backend/services/session/index#default',
       ]);
     });
 

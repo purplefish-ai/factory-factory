@@ -156,7 +156,7 @@ export class ChatConnectionRegistry {
     }
   }
 
-  /** Drop all connections and subscriptions. Intended for tests. */
+  /** Drop all connections and subscriptions. */
   clear(): void {
     for (const entry of this.connections.values()) {
       entry.unsubscribe?.();
@@ -165,7 +165,6 @@ export class ChatConnectionRegistry {
   }
 }
 
-export const chatConnectionRegistry = new ChatConnectionRegistry();
 const applicationChatConnectionRegistries = new WeakMap<Application, ChatConnectionRegistry>();
 
 export function getChatConnectionRegistryForApplication(
@@ -197,7 +196,7 @@ interface ChatTransportAttachment {
 
 const chatTransportAttachments = new WeakMap<ChatConnectionRegistry, ChatTransportAttachment>();
 
-function detachChatTransport(registry: ChatConnectionRegistry): void {
+export function detachChatTransport(registry: ChatConnectionRegistry): void {
   const attachment = chatTransportAttachments.get(registry);
   if (!attachment) {
     registry.clear();
@@ -222,7 +221,7 @@ function detachChatTransport(registry: ChatConnectionRegistry): void {
  */
 export function attachChatTransport(
   deps: ChatTransportDeps,
-  registry: ChatConnectionRegistry = chatConnectionRegistry
+  registry: ChatConnectionRegistry
 ): void {
   const existing = chatTransportAttachments.get(registry);
   if (
@@ -262,8 +261,11 @@ export function attachChatTransport(
   });
 }
 
-export function detachChatTransportForTests(
-  registry: ChatConnectionRegistry = chatConnectionRegistry
-): void {
+export function disposeChatTransportForApplication(application: Application): void {
+  const registry = applicationChatConnectionRegistries.get(application);
+  if (!registry) {
+    return;
+  }
   detachChatTransport(registry);
+  applicationChatConnectionRegistries.delete(application);
 }

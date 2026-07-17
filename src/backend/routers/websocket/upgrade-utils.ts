@@ -1,14 +1,17 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import type { AppServices } from '@/backend/app-context';
+import type { ApplicationServices } from '@/backend/app-context';
 import { toError } from '@/backend/lib/error-utils';
 import { isOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-trust';
 import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
 
-type WebSocketOriginLogger = Pick<ReturnType<AppServices['createLogger']>, 'warn'>;
-type WebSocketUpgradeLogger = Pick<ReturnType<AppServices['createLogger']>, 'warn' | 'error'>;
-type WebSocketOriginConfigService = Pick<AppServices['configService'], 'getCorsConfig'>;
+type WebSocketOriginLogger = Pick<ReturnType<ApplicationServices['createLogger']>, 'warn'>;
+type WebSocketUpgradeLogger = Pick<
+  ReturnType<ApplicationServices['createLogger']>,
+  'warn' | 'error'
+>;
+type WebSocketOriginConfigService = Pick<ApplicationServices['configService'], 'getCorsConfig'>;
 
 function getForwardedClientAddressHeaders(request: IncomingMessage): string[] {
   return FORWARDED_CLIENT_ADDRESS_HEADERS.filter((header) => request.headers[header] !== undefined);

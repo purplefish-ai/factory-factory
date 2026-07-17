@@ -35,6 +35,8 @@ import {
   createSetupTerminalUpgradeHandler,
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
+  disposeChatTransportForApplication,
+  disposeSnapshotsHandlerState,
 } from './routers/websocket';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
@@ -179,6 +181,15 @@ export function createServer(application: Application, requestedPort?: number): 
         }
         resolve();
       });
+    });
+  };
+
+  const closeWebSocketServer = async (): Promise<void> => {
+    for (const ws of wss.clients) {
+      ws.terminate();
+    }
+    await new Promise<void>((resolve) => {
+      wss.close(() => resolve());
     });
   };
 
@@ -416,8 +427,9 @@ export function createServer(application: Application, requestedPort?: number): 
       }
       await interceptors.stop();
 
-      // Close WebSocket server
-      wss.close();
+      await closeWebSocketServer();
+      disposeChatTransportForApplication(application);
+      disposeSnapshotsHandlerState(application);
       await closeBoundServer();
 
       // Stop all Claude clients via sessionService (unified lifecycle management)

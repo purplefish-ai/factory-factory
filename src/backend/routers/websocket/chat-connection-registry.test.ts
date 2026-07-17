@@ -8,7 +8,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
-import type { ApplicationServices } from '@/backend/app-context';
+import type { Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE, type WsReadyState } from '@/backend/constants/websocket';
 import { SESSION_OUTBOUND_EVENT, sessionEventBus } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
@@ -16,8 +16,9 @@ import {
   attachChatTransport,
   ChatConnectionRegistry,
   type ConnectionInfo,
-  chatConnectionRegistry,
-  detachChatTransportForTests,
+  detachChatTransport,
+  disposeChatTransportForApplication,
+  getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
 
 class MockWebSocket extends EventEmitter {
@@ -237,15 +238,21 @@ describe('ChatConnectionRegistry', () => {
 });
 
 describe('attachChatTransport', () => {
+  let registry: ChatConnectionRegistry;
+
+  beforeEach(() => {
+    registry = new ChatConnectionRegistry();
+  });
+
   afterEach(() => {
-    detachChatTransportForTests();
+    detachChatTransport(registry);
   });
 
   it('delivers session events published on the bus to viewing connections', () => {
-    attachChatTransport(createTransportDeps());
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
@@ -258,10 +265,10 @@ describe('attachChatTransport', () => {
   });
 
   it('delivers all-client broadcasts published on the bus', () => {
-    attachChatTransport(createTransportDeps());
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: null,
       workingDir: null,
@@ -275,11 +282,11 @@ describe('attachChatTransport', () => {
   });
 
   it('answers viewer-count queries from the domain', () => {
-    attachChatTransport(createTransportDeps());
+    attachChatTransport(createTransportDeps(), registry);
 
     expect(sessionEventBus.countViewers('s1')).toBe(0);
 
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(new MockWebSocket()),
       dbSessionId: 's1',
       workingDir: null,
@@ -289,11 +296,11 @@ describe('attachChatTransport', () => {
   });
 
   it('is idempotent and does not double-deliver after repeated attach', () => {
-    attachChatTransport(createTransportDeps());
-    attachChatTransport(createTransportDeps());
+    attachChatTransport(createTransportDeps(), registry);
+    attachChatTransport(createTransportDeps(), registry);
 
     const ws = new MockWebSocket();
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(ws),
       dbSessionId: 's1',
       workingDir: null,
@@ -310,14 +317,15 @@ describe('attachChatTransport', () => {
   it('logs OUT_TO_CLIENT via the injected sessionFileLogger only when a client received the payload', () => {
     const fileLogger = { log: vi.fn() };
     attachChatTransport(
-      createTransportDeps(fileLogger as unknown as { log: ReturnType<typeof vi.fn> })
+      createTransportDeps(fileLogger as unknown as { log: ReturnType<typeof vi.fn> }),
+      registry
     );
 
     const payload = asMessage({ type: 'session_delta', data: { type: 'noop' } });
     sessionEventBus.publishToSession('s1', payload);
     expect(fileLogger.log).not.toHaveBeenCalled();
 
-    chatConnectionRegistry.register('conn-1', {
+    registry.register('conn-1', {
       ws: asWs(new MockWebSocket()),
       dbSessionId: 's1',
       workingDir: null,
@@ -331,8 +339,8 @@ describe('attachChatTransport', () => {
     const unrelatedListener = vi.fn();
     sessionEventBus.on(SESSION_OUTBOUND_EVENT, unrelatedListener);
     try {
-      attachChatTransport(createTransportDeps());
-      detachChatTransportForTests();
+      attachChatTransport(createTransportDeps(), registry);
+      detachChatTransport(registry);
 
       sessionEventBus.publishToSession(
         's1',
@@ -343,5 +351,33 @@ describe('attachChatTransport', () => {
     } finally {
       sessionEventBus.off(SESSION_OUTBOUND_EVENT, unrelatedListener);
     }
+  });
+
+  it('disposes application listeners, viewer state, and registry identity idempotently', () => {
+    const application = {} as Application;
+    const applicationRegistry = getChatConnectionRegistryForApplication(application);
+    const initialListenerCount = sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT);
+    attachChatTransport(createTransportDeps(), applicationRegistry);
+    applicationRegistry.register('conn-1', {
+      ws: asWs(new MockWebSocket()),
+      dbSessionId: 's1',
+      workingDir: null,
+    });
+
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount + 1);
+    expect(sessionEventBus.countViewers('s1')).toBe(1);
+
+    disposeChatTransportForApplication(application);
+    disposeChatTransportForApplication(application);
+
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount);
+    expect(sessionEventBus.countViewers('s1')).toBe(0);
+    const restartedRegistry = getChatConnectionRegistryForApplication(application);
+    expect(restartedRegistry).not.toBe(applicationRegistry);
+
+    attachChatTransport(createTransportDeps(), restartedRegistry);
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount + 1);
+    disposeChatTransportForApplication(application);
+    expect(sessionEventBus.listenerCount(SESSION_OUTBOUND_EVENT)).toBe(initialListenerCount);
   });
 });

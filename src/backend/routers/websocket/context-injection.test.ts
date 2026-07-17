@@ -1,25 +1,18 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import {
+  discoverProductionTypeScriptFiles,
+  parseTypeScriptImports,
+  REPOSITORY_ROOT,
+  resolveRepositoryModule,
+} from '@/backend/testing/typescript-import-test-utils';
 
-const REPOSITORY_ROOT = process.cwd();
 const WEBSOCKET_ROOT = resolve(REPOSITORY_ROOT, 'src/backend/routers/websocket');
 
-function isProductionTypeScriptFile(fileName: string): boolean {
-  return (
-    fileName.endsWith('.ts') &&
-    !fileName.endsWith('.test.ts') &&
-    !fileName.endsWith('.spec.ts') &&
-    !fileName.endsWith('.d.ts')
-  );
-}
-
 function discoverProductionWebSocketFiles(): string[] {
-  return readdirSync(WEBSOCKET_ROOT, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && isProductionTypeScriptFile(entry.name))
-    .map((entry) => relative(REPOSITORY_ROOT, join(entry.parentPath, entry.name)))
-    .sort();
+  return discoverProductionTypeScriptFiles(WEBSOCKET_ROOT);
 }
 
 const TRANSPORT_FILES = [
@@ -59,26 +52,11 @@ type ImportTracking = {
   readonly restrictedBindings: Set<string>;
 };
 
-function normalizeRepositoryPath(path: string): string {
-  return path
-    .split(sep)
-    .join('/')
-    .replace(/\.(?:[cm]?ts|[cm]?js)x?$/, '');
-}
-
 function resolveBackendModule(importer: string, moduleSpecifier: string): string | null {
-  let absolutePath: string;
-  if (moduleSpecifier.startsWith('@/')) {
-    absolutePath = resolve(REPOSITORY_ROOT, 'src', moduleSpecifier.slice(2));
-  } else if (moduleSpecifier.startsWith('.')) {
-    absolutePath = resolve(dirname(resolve(REPOSITORY_ROOT, importer)), moduleSpecifier);
-  } else if (isAbsolute(moduleSpecifier)) {
-    absolutePath = moduleSpecifier;
-  } else {
+  const repositoryPath = resolveRepositoryModule(importer, moduleSpecifier);
+  if (!repositoryPath) {
     return null;
   }
-
-  const repositoryPath = normalizeRepositoryPath(relative(REPOSITORY_ROOT, absolutePath));
   return repositoryPath.startsWith('src/backend/') ? repositoryPath : null;
 }
 
@@ -230,12 +208,12 @@ function classifyRuntimeImport(
 
 function findImportViolations(
   importer: string,
-  sourceFile: ts.SourceFile,
+  importDeclarations: readonly ts.ImportDeclaration[],
   tracking: ImportTracking
 ): BoundaryViolation[] {
   const violations: BoundaryViolation[] = [];
-  for (const statement of sourceFile.statements) {
-    if (!(ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier))) {
+  for (const statement of importDeclarations) {
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) {
       continue;
     }
     const modulePath = resolveBackendModule(importer, statement.moduleSpecifier.text);
@@ -465,13 +443,7 @@ function findCompositionViolations(
 }
 
 function findBoundaryViolations(importer: string, source: string): BoundaryViolation[] {
-  const sourceFile = ts.createSourceFile(
-    importer,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS
-  );
+  const { importDeclarations, sourceFile } = parseTypeScriptImports(source, importer);
   const tracking: ImportTracking = {
     applicationFactoryBindings: new Set(),
     applicationFactoryNamespaces: new Set(),
@@ -479,7 +451,7 @@ function findBoundaryViolations(importer: string, source: string): BoundaryViola
   };
 
   return [
-    ...findImportViolations(importer, sourceFile, tracking),
+    ...findImportViolations(importer, importDeclarations, tracking),
     ...findCompositionViolations(sourceFile, tracking),
   ];
 }

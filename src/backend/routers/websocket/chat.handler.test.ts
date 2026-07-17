@@ -12,12 +12,12 @@ import { SessionEventBus, sessionEventBus } from '@/backend/services/session';
 import { createChatUpgradeHandler } from './chat.handler';
 import {
   type ChatConnectionRegistry,
-  detachChatTransportForTests,
+  disposeChatTransportForApplication,
   getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
 
 const allowedOrigin = 'http://localhost:3000';
-const testRegistries = new Set<ChatConnectionRegistry>();
+const testApplications = new Set<AppContext>();
 let chatConnectionRegistry: ChatConnectionRegistry;
 
 class MockWebSocket extends EventEmitter {
@@ -72,8 +72,8 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
       },
     },
   } as unknown as AppContext;
+  testApplications.add(appContext);
   chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
-  testRegistries.add(chatConnectionRegistry);
 
   return {
     appContext,
@@ -94,10 +94,10 @@ describe('createChatUpgradeHandler', () => {
   });
 
   afterEach(() => {
-    for (const registry of testRegistries) {
-      detachChatTransportForTests(registry);
+    for (const application of testApplications) {
+      disposeChatTransportForApplication(application);
     }
-    testRegistries.clear();
+    testApplications.clear();
     vi.restoreAllMocks();
   });
 

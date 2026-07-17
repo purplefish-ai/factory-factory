@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
 import type { Application } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-const { handlers, handlerFactories } = vi.hoisted(() => {
+const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
   const upgradeHandlers = {
     chat: vi.fn(),
     terminal: vi.fn(),
@@ -27,6 +28,10 @@ const { handlers, handlerFactories } = vi.hoisted(() => {
       postRunLogs: vi.fn(() => upgradeHandlers.postRunLogs),
       snapshots: vi.fn(() => upgradeHandlers.snapshots),
     },
+    transportDisposers: {
+      chat: vi.fn(),
+      snapshots: vi.fn(),
+    },
   };
 });
 
@@ -37,6 +42,8 @@ vi.mock('@/backend/routers/websocket', () => ({
   createDevLogsUpgradeHandler: handlerFactories.devLogs,
   createPostRunLogsUpgradeHandler: handlerFactories.postRunLogs,
   createSnapshotsUpgradeHandler: handlerFactories.snapshots,
+  disposeChatTransportForApplication: transportDisposers.chat,
+  disposeSnapshotsHandlerState: transportDisposers.snapshots,
 }));
 
 vi.mock('@/backend/trpc/index', () => ({
@@ -699,6 +706,37 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(harness.services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+    expect(transportDisposers.chat).toHaveBeenCalledWith(harness.application);
+    expect(transportDisposers.snapshots).toHaveBeenCalledWith(harness.application);
+  });
+
+  it('closes active WebSocket clients before completing server cleanup', async () => {
+    handlers.chat.mockImplementationOnce((request, socket, head, _url, wss) => {
+      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+        wss.emit('connection', ws, request);
+      });
+    });
+    const harness = createTestHarness({ backendHost: '127.0.0.1' });
+    const server = createTestServer(harness.application, 0);
+    await server.start();
+    const address = server.getHttpServer().address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('Expected the server to listen on a TCP port');
+    }
+
+    const client = new WebSocket(`ws://127.0.0.1:${address.port}/chat`, {
+      headers: { Origin: 'http://localhost:3000' },
+    });
+    await new Promise<void>((resolve, reject) => {
+      client.once('open', resolve);
+      client.once('error', reject);
+    });
+    const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
+
+    await server.stop();
+    await closed;
+
+    expect(client.readyState).toBe(WebSocket.CLOSED);
   });
 
   it('starts and idempotently stops only the supplied application graph', async () => {

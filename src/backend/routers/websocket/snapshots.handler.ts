@@ -20,20 +20,6 @@ import {
 import { WorkspaceStatus } from '@/shared/core';
 import { createWebSocketUpgradeHandler } from './upgrade-utils';
 
-// ============================================================================
-// State
-// ============================================================================
-
-/** Snapshot WebSocket connections, keyed by project ID. */
-let broadcasterLogger: Pick<ReturnType<ApplicationServices['createLogger']>, 'error'> = {
-  error: () => undefined,
-};
-
-export const snapshotConnections = new TopicBroadcaster<string>(
-  { error: (...args) => broadcasterLogger.error(...args) },
-  'snapshot message'
-);
-
 type SnapshotHandlerServices = Pick<
   ApplicationServices,
   'workspaceQueryService' | 'workspaceSnapshotStore'
@@ -134,7 +120,7 @@ class SnapshotStoreSubscriptionState {
     logger.info('Snapshot WebSocket store subscription active');
   }
 
-  reset(): void {
+  dispose(): void {
     const storeWithOff = this.store as
       | (ApplicationServices['workspaceSnapshotStore'] & {
           off?: (event: string, listener: (...args: unknown[]) => unknown) => unknown;
@@ -205,15 +191,14 @@ function getSnapshotReviewCount(
   }
 }
 
-export function resetSnapshotsHandlerStateForTests(application?: Application): void {
-  if (application) {
-    const state = applicationSnapshotHandlerStates.get(application);
-    state?.connections.clear();
-    state?.subscriptionState.reset();
-    applicationSnapshotHandlerStates.delete(application);
+export function disposeSnapshotsHandlerState(application: Application): void {
+  const state = applicationSnapshotHandlerStates.get(application);
+  if (!state) {
     return;
   }
-  snapshotConnections.clear();
+  state.connections.clear();
+  state.subscriptionState.dispose();
+  applicationSnapshotHandlerStates.delete(application);
 }
 
 // ============================================================================
@@ -231,7 +216,6 @@ export function createSnapshotsUpgradeHandler(
   const { configService, workspaceQueryService, workspaceSnapshotStore } = appContext.services;
   const snapshotReconciliation = appContext.lifecycle.snapshotReconciliation;
   const services: SnapshotHandlerServices = { workspaceQueryService, workspaceSnapshotStore };
-  broadcasterLogger = logger;
   const applicationState = getSnapshotHandlerState(appContext, logger);
   const connections = options.connections ?? applicationState.connections;
   const subscriptionState =

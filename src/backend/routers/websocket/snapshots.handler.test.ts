@@ -11,8 +11,8 @@ import type {
 } from '@/backend/services/workspace-snapshot-store.service';
 import {
   createSnapshotsUpgradeHandler,
+  disposeSnapshotsHandlerState,
   getSnapshotConnectionsForApplication,
-  resetSnapshotsHandlerStateForTests,
 } from './snapshots.handler';
 
 const allowedOrigin = 'http://localhost:3000';
@@ -144,10 +144,9 @@ describe('createSnapshotsUpgradeHandler', () => {
 
   afterEach(() => {
     for (const application of testApplications) {
-      resetSnapshotsHandlerStateForTests(application);
+      disposeSnapshotsHandlerState(application);
     }
     testApplications.clear();
-    resetSnapshotsHandlerStateForTests();
     storeListeners.clear();
     mockWaitForInProgress.mockImplementation(() => Promise.resolve());
   });
@@ -710,5 +709,27 @@ describe('createSnapshotsUpgradeHandler', () => {
     // Project entry should remain with one connection
     expect(connections?.subscriberCount('proj-1')).toBe(1);
     expect(connections?.subscribers('proj-1').has(ws2 as unknown as WebSocket)).toBe(true);
+  });
+
+  it('disposes store listeners and per-application connection state idempotently', () => {
+    const application = createAppContextMock();
+    const handler = createSnapshotsUpgradeHandler(application);
+    callHandler(handler, new MockWebSocket(), 'proj-1');
+
+    expect(snapshotStoreEmitter.listenerCount('snapshot_changed')).toBe(1);
+    expect(snapshotStoreEmitter.listenerCount('snapshot_removed')).toBe(1);
+    expect(getSnapshotConnectionsForApplication(application)).toBeDefined();
+
+    disposeSnapshotsHandlerState(application);
+    disposeSnapshotsHandlerState(application);
+
+    expect(snapshotStoreEmitter.listenerCount('snapshot_changed')).toBe(0);
+    expect(snapshotStoreEmitter.listenerCount('snapshot_removed')).toBe(0);
+    expect(getSnapshotConnectionsForApplication(application)).toBeUndefined();
+
+    const restartedHandler = createSnapshotsUpgradeHandler(application);
+    callHandler(restartedHandler, new MockWebSocket(), 'proj-1');
+    expect(snapshotStoreEmitter.listenerCount('snapshot_changed')).toBe(1);
+    expect(snapshotStoreEmitter.listenerCount('snapshot_removed')).toBe(1);
   });
 });
