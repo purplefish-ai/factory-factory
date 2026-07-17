@@ -185,6 +185,10 @@ const workspaceMutationRules = {
     requireStaticPayload: false,
     fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],
   },
+  finishAutoIterationIfSessionMatches: {
+    type: 'static',
+    fields: ['autoIterationStatus', 'autoIterationSessionId'],
+  },
   startProvisioningRetryIfAllowed: {
     type: 'static',
     fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage', 'initScriptPid'],
