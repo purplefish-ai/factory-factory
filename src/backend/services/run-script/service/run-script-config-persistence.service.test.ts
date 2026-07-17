@@ -195,12 +195,10 @@ describe('runScriptConfigPersistenceService', () => {
     await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).resolves.toBeNull();
   });
 
-  it('surfaces malformed project factory config errors', async () => {
+  it('logs malformed project factory config errors as a missing config', async () => {
     mockFindProjectById.mockResolvedValue({ id: 'p1', repoPath: repoDir });
     writeFileSync(join(repoDir, 'factory-factory.json'), '{invalid', 'utf8');
 
-    await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).rejects.toThrow(
-      'Invalid JSON'
-    );
+    await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).resolves.toBeNull();
   });
 });

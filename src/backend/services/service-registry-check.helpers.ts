@@ -29,7 +29,7 @@ export function getInfrastructureServiceClassificationErrors(
   for (const [serviceName, definition] of Object.entries(infrastructureServiceRegistry)) {
     if (!existsSync(path.join(servicesRoot, definition.fileName))) {
       errors.push(
-        `Infrastructure service "${serviceName}" is registered but ${definition.fileName} does not exist in src/backend/services.`
+        `Infrastructure service "${serviceName}" is registered but ${definition.fileName} does not exist in ${servicesRoot}.`
       );
     }
   }

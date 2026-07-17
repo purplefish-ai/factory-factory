@@ -44,4 +44,16 @@ describe('check-service-registry root infrastructure classification', () => {
       'unclassified-link.service.ts is a root service that is not registered as infrastructure. Move it into its owning service capsule or add an intentional entry to infrastructureServiceRegistry.'
     );
   });
+
+  it('reports the checked services root when a registered service is missing', () => {
+    const missingRegistry = {
+      'missing.service': { fileName: 'missing.service.ts' },
+    };
+
+    const errors = getInfrastructureServiceClassificationErrors(servicesRoot, missingRegistry);
+
+    expect(errors).toContain(
+      `Infrastructure service "missing.service" is registered but missing.service.ts does not exist in ${servicesRoot}.`
+    );
+  });
 });

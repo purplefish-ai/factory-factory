@@ -95,7 +95,15 @@ class RunScriptConfigPersistenceService {
       throw new Error('Project not found');
     }
 
-    return FactoryConfigService.readConfig(project.repoPath);
+    try {
+      return await FactoryConfigService.readConfig(project.repoPath);
+    } catch (error) {
+      logger.error('Failed to read factory config', {
+        projectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   async syncWorkspaceCommandsFromFactoryConfig(input: {
