@@ -3,10 +3,14 @@ import * as path from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { GitClientFactory } from '@/backend/clients/git.client';
 import { pathExists } from '@/backend/lib/file-helpers';
-import { getWorkspaceGitStats } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
+import {
+  getStats,
+  type WorkspaceGitStats,
+  workspaceGitStateService,
+} from '@/backend/services/workspace-git-state.service';
 
-export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>;
+export type { WorkspaceGitStats };
 
 interface ProjectPaths {
   repoPath: string;
@@ -24,8 +28,12 @@ class GitOpsService {
     return branchName;
   }
 
-  getWorkspaceGitStats(worktreePath: string, defaultBranch: string): Promise<WorkspaceGitStats> {
-    return getWorkspaceGitStats(worktreePath, defaultBranch);
+  async getWorkspaceGitStats(
+    worktreePath: string,
+    defaultBranch: string
+  ): Promise<WorkspaceGitStats | null> {
+    const snapshot = await workspaceGitStateService.getSnapshot({ worktreePath, defaultBranch });
+    return getStats(snapshot);
   }
 
   /**
@@ -68,24 +76,28 @@ class GitOpsService {
       });
     }
 
-    const addResult = await gitCommand(['add', '-A'], worktreePath);
-    if (addResult.code !== 0) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
-      });
-    }
+    try {
+      const addResult = await gitCommand(['add', '-A'], worktreePath);
+      if (addResult.code !== 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Git add failed: ${addResult.stderr || addResult.stdout}`,
+        });
+      }
 
-    const commitMessage = `Archive workspace ${workspaceName}`;
-    const commitResult = await gitCommand(
-      ['commit', '-m', commitMessage, '--no-verify'],
-      worktreePath
-    );
-    if (commitResult.code !== 0) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
-      });
+      const commitMessage = `Archive workspace ${workspaceName}`;
+      const commitResult = await gitCommand(
+        ['commit', '-m', commitMessage, '--no-verify'],
+        worktreePath
+      );
+      if (commitResult.code !== 0) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
+        });
+      }
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
     }
   }
 
@@ -106,13 +118,25 @@ class GitOpsService {
       (entry) => path.resolve(entry.path) === expectedWorktreePath
     );
     if (registeredWorktree) {
-      await gitClient.deleteWorktree(worktreeName);
+      try {
+        await gitClient.deleteWorktree(worktreeName);
+      } catch (error) {
+        workspaceGitStateService.invalidate(worktreePath);
+        throw error;
+      }
+      workspaceGitStateService.remove(worktreePath);
       return;
     }
 
     if (await pathExists(worktreePath)) {
-      await fs.rm(worktreePath, { recursive: true, force: true });
+      try {
+        await fs.rm(worktreePath, { recursive: true, force: true });
+      } catch (error) {
+        workspaceGitStateService.invalidate(worktreePath);
+        throw error;
+      }
     }
+    workspaceGitStateService.remove(worktreePath);
   }
 
   async ensureBaseBranchExists(
@@ -158,10 +182,13 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-    return { worktreePath, branchName: worktreeInfo.branchName };
+    try {
+      const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
+      return { worktreePath, branchName: worktreeInfo.branchName };
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
+    }
   }
 
   async createWorktreeFromExistingBranch(
@@ -174,10 +201,16 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
-    const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(worktreeName, branchRef);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
-
-    return { worktreePath, branchName: worktreeInfo.branchName };
+    try {
+      const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(
+        worktreeName,
+        branchRef
+      );
+      return { worktreePath, branchName: worktreeInfo.branchName };
+    } finally {
+      workspaceGitStateService.invalidate(worktreePath);
+    }
   }
 
   async isBranchCheckedOut(project: ProjectPaths, branchName: string): Promise<boolean> {

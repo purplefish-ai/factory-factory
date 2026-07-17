@@ -19,6 +19,7 @@ import {
 } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { runScriptStateMachine } from '@/backend/services/run-script';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const handlers = vi.hoisted(() => ({
@@ -80,6 +81,12 @@ vi.mock('@/backend/services/run-script', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  workspaceGitStateService: {
+    stop: vi.fn(),
+  },
+}));
 
 vi.mock('@/backend/interceptors', () => ({
   registerInterceptors: vi.fn(),
@@ -671,6 +678,10 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
     expect(stopEventCollector).toHaveBeenCalledOnce();
     expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
+    expect(workspaceGitStateService.stop).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(snapshotReconciliationService.stop).mock.invocationCallOrder[0] ?? 0
+    ).toBeLessThan(vi.mocked(workspaceGitStateService.stop).mock.invocationCallOrder[0] ?? 0);
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(prisma.$disconnect).toHaveBeenCalledOnce();
@@ -710,6 +721,7 @@ describe('server websocket upgrade routing', () => {
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
     expect(stopEventCollector).toHaveBeenCalledOnce();
     expect(snapshotReconciliationService.stop).toHaveBeenCalledOnce();
+    expect(workspaceGitStateService.stop).toHaveBeenCalledOnce();
     expect(harness.services.ratchetService.stop).toHaveBeenCalledOnce();
     expect(reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(prisma.$disconnect).toHaveBeenCalledOnce();

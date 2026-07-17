@@ -141,6 +141,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       open: true,
       setOpen: vi.fn(),
       hasUncommitted: false,
+      isCheckingGitStatus: false,
       activeChildCount,
       onConfirm: vi.fn(),
     },

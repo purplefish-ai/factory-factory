@@ -22,6 +22,7 @@ import {
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
+  getArchiveGitStatusQueryOptions,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
 } from './workspace-detail-container.utils';
@@ -84,9 +85,9 @@ export function WorkspaceDetailContainer() {
     setSelectedProvider(effectiveDefaultProvider);
   }, [effectiveDefaultProvider]);
 
-  const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
+  const { data: gitStatus, isFetching: isGitStatusFetching } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    { enabled: !!workspace?.worktreePath, refetchInterval: 15_000, staleTime: 10_000 }
+    getArchiveGitStatusQueryOptions(archiveDialogOpen, workspace?.worktreePath)
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
@@ -384,6 +385,7 @@ export function WorkspaceDetailContainer() {
           open: archiveDialogOpen,
           setOpen: setArchiveDialogOpen,
           hasUncommitted: hasUncommitted && !isDoneOrMergedWorkspace,
+          isCheckingGitStatus: isGitStatusFetching && !isDoneOrMergedWorkspace,
           activeChildCount,
           onConfirm: handleArchive,
         }}
