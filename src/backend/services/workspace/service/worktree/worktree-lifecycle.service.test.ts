@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gitOpsService } from '@/backend/services/git-ops.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   assertWorktreePathSafe,

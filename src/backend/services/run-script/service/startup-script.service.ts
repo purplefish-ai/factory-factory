@@ -12,7 +12,7 @@ import type { Project, Workspace } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceRunScriptService } from '@/backend/services/workspace';
 import type { RunScriptWorkspaceBridge } from './bridges';
 
 const logger = createLogger('startup-script');
@@ -102,7 +102,7 @@ class StartupScriptService {
     const timeoutMs = (project.startupScriptTimeout ?? 300) * 1000;
 
     // Clear any previous output from retry attempts
-    await workspaceAccessor.clearInitOutput(workspace.id);
+    await workspaceRunScriptService.clearInitOutput(workspace.id);
 
     // Create output streaming callback with debouncing
     const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(
@@ -233,7 +233,7 @@ class StartupScriptService {
       const proc = spawn('bash', bashArgs.args, spawnOptions);
       let recordPidPromise: Promise<void> = Promise.resolve();
       if (proc.pid !== undefined) {
-        recordPidPromise = workspaceAccessor
+        recordPidPromise = workspaceRunScriptService
           .setInitScriptPid(workspaceId, proc.pid)
           .catch((error) => {
             logger.warn('Failed to record startup script PID', {
@@ -257,7 +257,7 @@ class StartupScriptService {
         if (proc.pid !== undefined) {
           await recordPidPromise;
           try {
-            await workspaceAccessor.clearInitScriptPid(workspaceId, proc.pid);
+            await workspaceRunScriptService.clearInitScriptPid(workspaceId, proc.pid);
           } catch (error) {
             logger.warn('Failed to clear startup script PID', {
               workspaceId,
@@ -429,7 +429,7 @@ class StartupScriptService {
 
       // Write to database and wait for completion
       try {
-        await workspaceAccessor.appendInitOutput(workspaceId, output);
+        await workspaceRunScriptService.appendInitOutput(workspaceId, output);
       } catch (error) {
         logger.warn('Failed to append init output', { workspaceId, error });
       }

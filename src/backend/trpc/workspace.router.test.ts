@@ -5,6 +5,7 @@ import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByProjectId: vi.fn(),
   findById: vi.fn(),
+  findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
   update: vi.fn(),
   delete: vi.fn(),
 }));
@@ -51,8 +52,12 @@ const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   workspaceQueryService: mockWorkspaceQueryService,
-  workspaceAccessor: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+  workspaceRelationshipsService: {
+    findChildrenWithStatus: vi.fn(),
+    findParent: vi.fn(),
+  },
+  workspaceNotificationService: {
+    countPending: vi.fn(),
   },
   workspaceActivityService: {
     clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),

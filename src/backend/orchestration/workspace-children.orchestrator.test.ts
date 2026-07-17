@@ -12,18 +12,19 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  projectAccessor: {
+  projectManagementService: {
     findById: vi.fn(),
   },
   WorkspaceCreationService: class {
     create = vi.fn();
   },
-  workspaceAccessor: {
+  workspaceDataService: {
     findByIdWithProject: vi.fn(),
-    findRawById: vi.fn(),
+    findById: vi.fn(),
   },
-  workspaceNotificationAccessor: {
-    create: vi.fn(),
+  workspaceNotificationService: {
+    notifyParent: vi.fn(),
+    notifyChild: vi.fn(),
   },
 }));
 
@@ -31,15 +32,16 @@ vi.mock('./workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
 }));
 
-import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
+import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 import {
   persistChildNotification,
   persistParentNotification,
 } from './workspace-children.orchestrator';
 
-const mockFindByIdWithProject = vi.mocked(workspaceAccessor.findByIdWithProject);
-const mockFindRawById = vi.mocked(workspaceAccessor.findRawById);
-const mockNotificationCreate = vi.mocked(workspaceNotificationAccessor.create);
+const mockFindByIdWithProject = vi.mocked(workspaceDataService.findByIdWithProject);
+const mockFindById = vi.mocked(workspaceDataService.findById);
+const mockNotifyParent = vi.mocked(workspaceNotificationService.notifyParent);
+const mockNotifyChild = vi.mocked(workspaceNotificationService.notifyChild);
 
 describe('persistChildNotification', () => {
   beforeEach(() => {
@@ -52,9 +54,9 @@ describe('persistChildNotification', () => {
       name: 'Child WS',
       project: { name: 'Child Project' },
     } as never);
-    mockFindRawById.mockResolvedValue({ id: 'parent-1' } as never);
+    mockFindById.mockResolvedValue({ id: 'parent-1' } as never);
     const createdNotification = { id: 'notif-1', message: 'hello' };
-    mockNotificationCreate.mockResolvedValue(createdNotification as never);
+    mockNotifyParent.mockResolvedValue(createdNotification as never);
 
     const result = await persistChildNotification({
       parentWorkspaceId: 'parent-1',
@@ -62,7 +64,7 @@ describe('persistChildNotification', () => {
       message: 'hello',
     });
 
-    expect(mockNotificationCreate).toHaveBeenCalledWith({
+    expect(mockNotifyParent).toHaveBeenCalledWith({
       workspaceId: 'parent-1',
       sourceWorkspaceId: 'child-1',
       sourceWorkspaceName: 'Child WS',
@@ -74,7 +76,7 @@ describe('persistChildNotification', () => {
 
   it('returns null without creating when a workspace is missing', async () => {
     mockFindByIdWithProject.mockResolvedValue(null as never);
-    mockFindRawById.mockResolvedValue({ id: 'parent-1' } as never);
+    mockFindById.mockResolvedValue({ id: 'parent-1' } as never);
 
     const result = await persistChildNotification({
       parentWorkspaceId: 'parent-1',
@@ -82,7 +84,7 @@ describe('persistChildNotification', () => {
       message: 'hello',
     });
 
-    expect(mockNotificationCreate).not.toHaveBeenCalled();
+    expect(mockNotifyParent).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
 });
@@ -98,9 +100,9 @@ describe('persistParentNotification', () => {
       name: 'Parent WS',
       project: { name: 'Parent Project' },
     } as never);
-    mockFindRawById.mockResolvedValue({ id: 'child-1' } as never);
+    mockFindById.mockResolvedValue({ id: 'child-1' } as never);
     const createdNotification = { id: 'notif-2', message: 'do this' };
-    mockNotificationCreate.mockResolvedValue(createdNotification as never);
+    mockNotifyChild.mockResolvedValue(createdNotification as never);
 
     const result = await persistParentNotification({
       parentWorkspaceId: 'parent-1',
@@ -108,13 +110,12 @@ describe('persistParentNotification', () => {
       message: 'do this',
     });
 
-    expect(mockNotificationCreate).toHaveBeenCalledWith({
+    expect(mockNotifyChild).toHaveBeenCalledWith({
       workspaceId: 'child-1',
       sourceWorkspaceId: 'parent-1',
       sourceWorkspaceName: 'Parent WS',
       sourceProjectName: 'Parent Project',
       message: 'do this',
-      direction: 'PARENT_TO_CHILD',
     });
     expect(result).toBe(createdNotification);
   });
@@ -125,7 +126,7 @@ describe('persistParentNotification', () => {
       name: 'Parent WS',
       project: { name: 'Parent Project' },
     } as never);
-    mockFindRawById.mockResolvedValue(null as never);
+    mockFindById.mockResolvedValue(null as never);
 
     const result = await persistParentNotification({
       parentWorkspaceId: 'parent-1',
@@ -133,7 +134,7 @@ describe('persistParentNotification', () => {
       message: 'do this',
     });
 
-    expect(mockNotificationCreate).not.toHaveBeenCalled();
+    expect(mockNotifyChild).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
 });

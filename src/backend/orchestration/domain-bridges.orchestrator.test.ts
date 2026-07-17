@@ -10,6 +10,8 @@ const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
+const mockWorkspaceCreationService = vi.hoisted(() => ({ create: vi.fn() }));
+
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mockLogger,
 }));
@@ -29,7 +31,18 @@ vi.mock('./reconciliation.service', () => ({
 
 vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
-  workspaceAccessor: { create: vi.fn(), findRawById: vi.fn(), update: vi.fn() },
+  WorkspaceCreationService: class {
+    create = mockWorkspaceCreationService.create;
+  },
+  workspaceAutoIterationService: {
+    getState: vi.fn(),
+    setStatus: vi.fn(),
+    setProgress: vi.fn(),
+    setSession: vi.fn(),
+    finishSessionIfMatching: vi.fn(),
+    clearSessionIfMatching: vi.fn(),
+  },
+  workspaceDataService: { findById: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
@@ -116,8 +129,9 @@ import {
 import {
   getWorkspaceInitPolicy,
   kanbanStateService,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceAutoIterationService,
+  workspaceDataService,
   workspaceQueryService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -399,8 +413,8 @@ describe('configureDomainBridges', () => {
     it('creates periodic task workspaces and logs background init failures', async () => {
       const workspace = {
         id: 'ws-periodic',
-      } as Awaited<ReturnType<typeof workspaceAccessor.create>>;
-      vi.mocked(workspaceAccessor.create).mockResolvedValue(workspace);
+      } as Awaited<ReturnType<typeof mockWorkspaceCreationService.create>>;
+      mockWorkspaceCreationService.create.mockResolvedValue(workspace);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'session-1',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
@@ -419,16 +433,13 @@ describe('configureDomainBridges', () => {
       ).resolves.toEqual({ workspaceId: 'ws-periodic' });
       await Promise.resolve();
 
-      expect(workspaceAccessor.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectId: 'project-1',
-          name: 'Periodic task run',
-          creationSource: 'PERIODIC_TASK',
-          periodicTaskId: 'periodic-task-1',
-          ratchetEnabled: true,
-          creationMetadata: { initialPrompt: 'Do the recurring work' },
-        })
-      );
+      expect(mockWorkspaceCreationService.create).toHaveBeenCalledWith({
+        type: 'PERIODIC_TASK',
+        projectId: 'project-1',
+        name: 'Periodic task run',
+        periodicTaskId: 'periodic-task-1',
+        initialPrompt: 'Do the recurring work',
+      });
       expect(sessionDataService.createAgentSession).toHaveBeenCalledWith({
         workspaceId: 'ws-periodic',
         workflow: 'implement',
@@ -442,12 +453,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('includes agent working state in periodic task workspace status', async () => {
-      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findById).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
         { id: 'session-2' },
@@ -468,12 +479,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('treats queued periodic task session messages as active agent work', async () => {
-      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findById).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
         { id: 'session-2' },
@@ -497,12 +508,12 @@ describe('configureDomainBridges', () => {
     });
 
     it('does not read queued messages for stopped periodic task sessions', async () => {
-      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      vi.mocked(workspaceDataService.findById).mockResolvedValue({
         status: 'READY',
         prUrl: null,
         prNumber: null,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
-      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      } as Awaited<ReturnType<typeof workspaceDataService.findById>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
@@ -524,13 +535,10 @@ describe('configureDomainBridges', () => {
     it('cleans up a recycled session when handoff send fails', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
       const sendError = new Error('prompt failed');
-      vi.mocked(workspaceAccessor.findRawById)
-        .mockResolvedValueOnce({
-          autoIterationSessionId: 'old-session',
-        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>)
-        .mockResolvedValueOnce({
-          autoIterationSessionId: 'new-session',
-        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(workspaceAutoIterationService.getState).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getState>>);
+      vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(true);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
@@ -548,30 +556,26 @@ describe('configureDomainBridges', () => {
       expect(sessionService.startSession).toHaveBeenCalledWith('new-session', {
         startupModePreset: 'non_interactive',
       });
-      expect(workspaceAccessor.update).toHaveBeenNthCalledWith(1, 'ws-1', {
-        autoIterationSessionId: 'new-session',
-      });
+      expect(workspaceAutoIterationService.setSession).toHaveBeenCalledWith('ws-1', 'new-session');
       expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
         { type: 'text', text: 'handoff prompt' },
       ]);
       expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
-      expect(workspaceAccessor.update).toHaveBeenNthCalledWith(2, 'ws-1', {
-        autoIterationSessionId: null,
-      });
-      expect(vi.mocked(workspaceAccessor.update).mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]!
+      expect(workspaceAutoIterationService.clearSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'new-session'
       );
+      expect(
+        vi.mocked(workspaceAutoIterationService.setSession).mock.invocationCallOrder[0]
+      ).toBeLessThan(vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]!);
     });
 
     it('does not clear a newer auto-iteration session after recycle cleanup', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
-      vi.mocked(workspaceAccessor.findRawById)
-        .mockResolvedValueOnce({
-          autoIterationSessionId: 'old-session',
-        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>)
-        .mockResolvedValueOnce({
-          autoIterationSessionId: 'newer-session',
-        } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(workspaceAutoIterationService.getState).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getState>>);
+      vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(false);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
@@ -586,10 +590,11 @@ describe('configureDomainBridges', () => {
       );
 
       expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
-      expect(workspaceAccessor.update).toHaveBeenCalledTimes(1);
-      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-1', {
-        autoIterationSessionId: 'new-session',
-      });
+      expect(workspaceAutoIterationService.setSession).toHaveBeenCalledTimes(1);
+      expect(workspaceAutoIterationService.clearSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'new-session'
+      );
     });
   });
 

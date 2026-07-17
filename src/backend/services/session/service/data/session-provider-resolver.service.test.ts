@@ -1,7 +1,7 @@
 import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
 vi.mock('@/backend/services/workspace');
@@ -61,7 +61,7 @@ describe('sessionProviderResolverService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(createWorkspace());
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(createWorkspace() as never);
     vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
@@ -93,13 +93,13 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(workspaceAccessor.findRawById).not.toHaveBeenCalled();
+    expect(workspaceDataService.findById).not.toHaveBeenCalled();
     expect(userSettingsService.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('uses workspace default when configured', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(
-      createWorkspace({ defaultSessionProvider: 'CODEX' })
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(
+      createWorkspace({ defaultSessionProvider: 'CODEX' }) as never
     );
 
     const provider = await sessionProviderResolverService.resolveSessionProvider({

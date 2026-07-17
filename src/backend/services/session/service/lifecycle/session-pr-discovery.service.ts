@@ -1,6 +1,6 @@
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -14,7 +14,7 @@ export async function maybeDiscoverPROnSessionEnd(
   logger: Logger
 ): Promise<void> {
   try {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
     if (!workspace) {
       return;
     }

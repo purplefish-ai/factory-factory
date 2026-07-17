@@ -1,7 +1,7 @@
 import type { RatchetDispatchOutcome, SessionProvider } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceRatchetService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import type { ActiveFixerCheckResult, WorkspaceWithPR } from './ratchet.types';
@@ -95,7 +95,7 @@ export async function checkActiveFixerSession(params: {
     reason: string
   ): Promise<ActiveFixerCheckResult> => {
     signal?.throwIfAborted();
-    const settled = await workspaceAccessor.recordRatchetSessionEnd(
+    const settled = await workspaceRatchetService.recordSessionEnd(
       workspace.id,
       sessionId,
       outcome

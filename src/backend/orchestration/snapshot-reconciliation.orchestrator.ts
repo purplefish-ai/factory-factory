@@ -26,7 +26,10 @@ import {
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { chatEventForwarderService, sessionService } from '@/backend/services/session';
-import { computePendingRequestType, workspaceAccessor } from '@/backend/services/workspace';
+import {
+  computePendingRequestType,
+  workspaceMaintenanceService,
+} from '@/backend/services/workspace';
 import {
   type SnapshotUpdateInput,
   type WorkspaceSnapshotEntry,
@@ -235,7 +238,7 @@ export class SnapshotReconciliationService {
    */
   private buildAuthoritativeFields(
     ws: Awaited<
-      ReturnType<typeof workspaceAccessor.findAllNonArchivedWithSessionsAndProject>
+      ReturnType<typeof workspaceMaintenanceService.findActiveWithSessionsAndProject>
     >[number],
     allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>,
     gitStatsMap: Map<
@@ -308,7 +311,7 @@ export class SnapshotReconciliationService {
     const pollStartTs = Date.now();
 
     // 1. Fetch all non-archived workspaces from DB
-    const workspaces = await workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
+    const workspaces = await workspaceMaintenanceService.findActiveWithSessionsAndProject();
 
     // 2. Get pending requests from bridges
     const allPendingRequests = this.bridges.session.getAllPendingRequests();

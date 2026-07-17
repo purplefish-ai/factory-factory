@@ -72,6 +72,15 @@ export type WorkspaceCreationSource =
       description?: string;
       initialPrompt?: string;
       reportBackOn?: string;
+    }
+  | {
+      type: 'PERIODIC_TASK';
+      projectId: string;
+      periodicTaskId: string;
+      name: string;
+      description?: string;
+      initialPrompt: string;
+      ratchetEnabled?: boolean;
     };
 
 /**
@@ -104,6 +113,7 @@ type PreparedWorkspaceCreation = {
     mode?: 'STANDARD' | 'AUTO_ITERATION';
     autoIterationConfig?: Prisma.InputJsonValue;
     parentWorkspaceId?: string;
+    periodicTaskId?: string;
   };
   initMode?: {
     useExistingBranch: boolean;
@@ -173,6 +183,8 @@ export class WorkspaceCreationService {
         return this.prepareLinearIssueCreation(source);
       case 'CHILD_WORKSPACE':
         return await this.prepareChildWorkspaceCreation(source);
+      case 'PERIODIC_TASK':
+        return this.preparePeriodicTaskCreation(source);
     }
   }
 
@@ -366,6 +378,21 @@ export class WorkspaceCreationService {
         creationSource: 'CHILD_WORKSPACE',
         creationMetadata: metadata as Prisma.InputJsonValue,
         parentWorkspaceId: source.parentWorkspaceId,
+      },
+    };
+  }
+
+  private preparePeriodicTaskCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'PERIODIC_TASK' }>
+  ): PreparedWorkspaceCreation {
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        periodicTaskId: source.periodicTaskId,
+        name: source.name,
+        description: source.description,
+        creationSource: 'PERIODIC_TASK',
+        creationMetadata: { initialPrompt: source.initialPrompt },
       },
     };
   }

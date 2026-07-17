@@ -50,10 +50,16 @@ vi.mock('@/backend/services/workspace', () => ({
     getInitMode: mocks.getInitMode,
     clearInitMode: mocks.clearInitMode,
   },
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: mocks.findById,
     findByIdWithProject: mocks.findByIdWithProject,
-    update: mocks.updateWorkspace,
+  },
+  workspaceRelationshipsService: {
+    findParent: vi.fn(),
+  },
+  workspaceRunScriptService: {
+    registerInitializedWorktree: mocks.updateWorkspace,
+    setCommands: mocks.updateWorkspace,
   },
 }));
 

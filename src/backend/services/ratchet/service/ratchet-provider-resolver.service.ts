@@ -1,6 +1,6 @@
 import type { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { resolveRatchetProviderFromWorkspace } from './provider-selection';
 
 type RatchetProviderWorkspace = {
@@ -14,7 +14,7 @@ class RatchetProviderResolverService {
     workspaceId: string;
     workspace?: RatchetProviderWorkspace;
   }): Promise<SessionProvider> {
-    const workspace = params.workspace ?? (await workspaceAccessor.findRawById(params.workspaceId));
+    const workspace = params.workspace ?? (await workspaceDataService.findById(params.workspaceId));
     if (!workspace) {
       throw new Error(`Workspace not found: ${params.workspaceId}`);
     }

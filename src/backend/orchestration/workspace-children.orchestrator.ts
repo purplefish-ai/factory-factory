@@ -4,10 +4,10 @@ import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import {
-  projectAccessor,
+  projectManagementService,
   WorkspaceCreationService,
-  workspaceAccessor,
-  workspaceNotificationAccessor,
+  workspaceDataService,
+  workspaceNotificationService,
 } from '@/backend/services/workspace';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
@@ -36,7 +36,7 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
   });
 
   // Validate that the target project exists
-  const project = await projectAccessor.findById(input.projectId);
+  const project = await projectManagementService.findById(input.projectId);
   if (!project) {
     throw new TRPCError({ code: 'NOT_FOUND', message: `Project not found: ${input.projectId}` });
   }
@@ -92,8 +92,8 @@ export async function persistChildNotification(input: {
   message: string;
 }): Promise<WorkspaceNotification | null> {
   const [sourceWorkspace, parentWorkspace] = await Promise.all([
-    workspaceAccessor.findByIdWithProject(input.sourceWorkspaceId),
-    workspaceAccessor.findRawById(input.parentWorkspaceId),
+    workspaceDataService.findByIdWithProject(input.sourceWorkspaceId),
+    workspaceDataService.findById(input.parentWorkspaceId),
   ]);
 
   if (!(sourceWorkspace && parentWorkspace)) {
@@ -101,7 +101,7 @@ export async function persistChildNotification(input: {
     return null;
   }
 
-  return workspaceNotificationAccessor.create({
+  return workspaceNotificationService.notifyParent({
     workspaceId: input.parentWorkspaceId,
     sourceWorkspaceId: input.sourceWorkspaceId,
     sourceWorkspaceName: sourceWorkspace.name,
@@ -125,8 +125,8 @@ export async function persistParentNotification(input: {
   message: string;
 }): Promise<WorkspaceNotification | null> {
   const [parentWorkspace, childWorkspace] = await Promise.all([
-    workspaceAccessor.findByIdWithProject(input.parentWorkspaceId),
-    workspaceAccessor.findRawById(input.targetChildWorkspaceId),
+    workspaceDataService.findByIdWithProject(input.parentWorkspaceId),
+    workspaceDataService.findById(input.targetChildWorkspaceId),
   ]);
 
   if (!(parentWorkspace && childWorkspace)) {
@@ -134,13 +134,12 @@ export async function persistParentNotification(input: {
     return null;
   }
 
-  return workspaceNotificationAccessor.create({
+  return workspaceNotificationService.notifyChild({
     workspaceId: input.targetChildWorkspaceId,
     sourceWorkspaceId: input.parentWorkspaceId,
     sourceWorkspaceName: parentWorkspace.name,
     sourceProjectName: parentWorkspace.project.name,
     message: input.message,
-    direction: 'PARENT_TO_CHILD',
   });
 }
 
@@ -153,7 +152,7 @@ export async function fireLifecycleNotification(
   childWorkspaceId: string,
   message: string
 ): Promise<void> {
-  const child = await workspaceAccessor.findByIdWithProject(childWorkspaceId);
+  const child = await workspaceDataService.findByIdWithProject(childWorkspaceId);
   if (!child?.parentWorkspaceId) {
     return;
   }

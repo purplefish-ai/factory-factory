@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
-    findRawById: vi.fn(),
+  workspaceDataService: {
+    findById: vi.fn(),
   },
 }));
 
@@ -14,7 +14,7 @@ vi.mock('@/backend/services/settings', () => ({
 }));
 
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
 describe('ratchetProviderResolverService', () => {
@@ -24,7 +24,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('uses ratchet provider when workspace overrides it', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'CODEX',
       defaultSessionProvider: 'CLAUDE',
@@ -39,7 +39,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('falls back to workspace default when ratchet provider is WORKSPACE_DEFAULT', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
       defaultSessionProvider: 'CODEX',
@@ -54,7 +54,7 @@ describe('ratchetProviderResolverService', () => {
   });
 
   it('falls back to user default when workspace defers provider selection', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
       id: 'ws-1',
       ratchetSessionProvider: 'WORKSPACE_DEFAULT',
       defaultSessionProvider: 'WORKSPACE_DEFAULT',
@@ -79,11 +79,11 @@ describe('ratchetProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(workspaceAccessor.findRawById).not.toHaveBeenCalled();
+    expect(workspaceDataService.findById).not.toHaveBeenCalled();
   });
 
   it('throws when workspace cannot be found', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(null);
+    vi.mocked(workspaceDataService.findById).mockResolvedValue(null);
 
     await expect(
       ratchetProviderResolverService.resolveRatchetProvider({

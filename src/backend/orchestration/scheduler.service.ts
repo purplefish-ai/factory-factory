@@ -10,7 +10,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceMaintenanceService } from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
 
@@ -82,7 +82,7 @@ class SchedulerService {
       return { synced: 0, failed: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findNeedingPRSync(
+    const workspaces = await workspaceMaintenanceService.findNeedingPRSync(
       SERVICE_THRESHOLDS.schedulerStaleMinutes
     );
 
@@ -113,7 +113,7 @@ class SchedulerService {
       return { discovered: 0, checked: 0 };
     }
 
-    const workspaces = await workspaceAccessor.findNeedingPRDiscovery();
+    const workspaces = await workspaceMaintenanceService.findNeedingPRDiscovery();
 
     if (workspaces.length === 0) {
       return { discovered: 0, checked: 0 };

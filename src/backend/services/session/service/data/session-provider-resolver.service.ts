@@ -2,7 +2,7 @@ import type { SessionProvider, Workspace } from '@prisma-gen/client';
 import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 
 class SessionProviderResolverService {
   async resolveSessionDefaults(params: {
@@ -41,7 +41,7 @@ class SessionProviderResolverService {
       return params.explicitProvider;
     }
 
-    const workspace = params.workspace ?? (await workspaceAccessor.findRawById(params.workspaceId));
+    const workspace = params.workspace ?? (await workspaceDataService.findById(params.workspaceId));
     if (!workspace) {
       throw new Error(`Workspace not found: ${params.workspaceId}`);
     }

@@ -44,7 +44,7 @@ vi.mock('tree-kill', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: (...args: unknown[]) => mockFindById(...args),
   },
 }));

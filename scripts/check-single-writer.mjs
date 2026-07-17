@@ -27,7 +27,9 @@ const workspaceFieldOwners = {
   initErrorMessage: new Set([
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
-  initOutput: new Set(['src/backend/services/run-script/service/startup-script.service.ts']),
+  initOutput: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
+  ]),
   initStartedAt: new Set([
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
@@ -35,7 +37,7 @@ const workspaceFieldOwners = {
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
   initScriptPid: new Set([
-    'src/backend/services/run-script/service/startup-script.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
   initRetryCount: new Set([
@@ -54,37 +56,57 @@ const workspaceFieldOwners = {
   creationSource: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
   creationMetadata: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
 
-  prUrl: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prNumber: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prState: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prReviewState: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prCiStatus: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prUpdatedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prCiFailedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prCiLastNotifiedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prReviewLastCheckedAt: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
-  prReviewLastCommentId: new Set(['src/backend/services/github/service/pr-snapshot.service.ts']),
+  prUrl: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prNumber: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prState: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prReviewState: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prCiStatus: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prUpdatedAt: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prCiFailedAt: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prCiLastNotifiedAt: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prReviewLastCheckedAt: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
+  prReviewLastCommentId: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+  ]),
 
-  ratchetEnabled: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetState: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
-  ratchetLastCheckedAt: new Set(['src/backend/services/ratchet/service/ratchet.service.ts']),
+  ratchetEnabled: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
+  ]),
+  ratchetState: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
+  ]),
+  ratchetLastCheckedAt: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
+  ]),
   ratchetActiveSessionId: new Set([
-    'src/backend/services/ratchet/service/ratchet.service.ts',
-    'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
-    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
   ]),
   ratchetLastCiRunId: new Set([
-    'src/backend/services/ratchet/service/ratchet.service.ts',
-    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
   ]),
   ratchetDispatchOutcome: new Set([
-    'src/backend/services/ratchet/service/ratchet.service.ts',
-    'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
-    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
   ]),
   ratchetDispatchRetryCount: new Set([
-    'src/backend/services/ratchet/service/ratchet.service.ts',
-    'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
   ]),
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
@@ -93,64 +115,66 @@ const workspaceFieldOwners = {
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
 
-  hasHadSessions: new Set(['src/backend/services/session/service/lifecycle/session.repository.ts']),
+  hasHadSessions: new Set([
+    'src/backend/services/workspace/service/lifecycle/data.service.ts',
+  ]),
   cachedKanbanColumn: new Set(['src/backend/services/workspace/service/state/kanban-state.ts']),
   stateComputedAt: new Set(['src/backend/services/workspace/service/state/kanban-state.ts']),
 
   worktreePath: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
   branchName: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/interceptors/branch-rename.interceptor.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
-    'src/backend/services/github/service/pr-snapshot.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
   ]),
   isAutoGeneratedBranch: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
 
   runScriptCommand: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptPostRunCommand: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptCleanupCommand: new Set([
-    'src/backend/orchestration/workspace-init.orchestrator.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
   runScriptPid: new Set([
-    'src/backend/services/run-script/service/run-script-state-machine.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
   ]),
   runScriptPort: new Set([
-    'src/backend/services/run-script/service/run-script-state-machine.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
   ]),
   runScriptStartedAt: new Set([
-    'src/backend/services/run-script/service/run-script-state-machine.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
   ]),
   runScriptStatus: new Set([
-    'src/backend/services/run-script/service/run-script-state-machine.service.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
   ]),
 
   mode: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
   autoIterationStatus: new Set([
-    'src/backend/orchestration/domain-bridges.orchestrator.ts',
-    'src/backend/server.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
   ]),
   autoIterationConfig: new Set(['src/backend/orchestration/domain-bridges.orchestrator.ts']),
-  autoIterationProgress: new Set(['src/backend/orchestration/domain-bridges.orchestrator.ts']),
+  autoIterationProgress: new Set([
+    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
+  ]),
   autoIterationSessionId: new Set([
-    'src/backend/orchestration/domain-bridges.orchestrator.ts',
-    'src/backend/server.ts',
+    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
   ]),
 };
 
@@ -188,6 +212,10 @@ const workspaceMutationRules = {
   finishAutoIterationIfSessionMatches: {
     type: 'static',
     fields: ['autoIterationStatus', 'autoIterationSessionId'],
+  },
+  clearAutoIterationSessionIfMatches: {
+    type: 'static',
+    fields: ['autoIterationSessionId'],
   },
   startProvisioningRetryIfAllowed: {
     type: 'static',

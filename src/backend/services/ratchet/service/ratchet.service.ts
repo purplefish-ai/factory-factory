@@ -9,7 +9,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService, workspaceRatchetService } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import type {
@@ -226,7 +226,7 @@ class RatchetService extends EventEmitter {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
 
-    const workspaces = await workspaceAccessor.findWithPRsForRatchet();
+    const workspaces = await workspaceRatchetService.findCandidates();
 
     if (workspaces.length === 0) {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
@@ -260,7 +260,7 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const workspace = await workspaceAccessor.findForRatchetById(workspaceId);
+    const workspace = await workspaceRatchetService.findCandidateById(workspaceId);
     if (!workspace) {
       return null;
     }
@@ -272,7 +272,7 @@ class RatchetService extends EventEmitter {
     // service's fetch was actively in flight. Rerun once now that the
     // concurrent work has settled so the bypass actually applies.
     if (opts?.bypassPrFetchCooldown && isRecentlyFetchedWaitResult(result)) {
-      const freshWorkspace = await workspaceAccessor.findForRatchetById(workspaceId);
+      const freshWorkspace = await workspaceRatchetService.findCandidateById(workspaceId);
       if (!freshWorkspace) {
         return result;
       }
@@ -292,7 +292,7 @@ class RatchetService extends EventEmitter {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
-    await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
+    await workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome);
   }
 
   /**
@@ -312,14 +312,14 @@ class RatchetService extends EventEmitter {
   async markPrClosed(workspaceId: string): Promise<void> {
     const maxCasAttempts = 3;
     for (let attempt = 0; attempt < maxCasAttempts; attempt++) {
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace?.ratchetEnabled || workspace.ratchetState === RatchetState.IDLE) {
         return;
       }
 
       const fromState = workspace.ratchetState;
       assertValidRatchetTransition(workspaceId, fromState, RatchetState.IDLE);
-      const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+      const updated = await workspaceRatchetService.transitionStateIfEnabled(
         workspaceId,
         fromState,
         {
@@ -374,15 +374,13 @@ class RatchetService extends EventEmitter {
   }
 
   async setWorkspaceRatcheting(workspaceId: string, enabled: boolean): Promise<void> {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
     }
 
     if (enabled) {
-      await workspaceAccessor.update(workspaceId, {
-        ratchetEnabled: true,
-      });
+      await workspaceRatchetService.enable(workspaceId);
       this.emit(RATCHET_TOGGLED, {
         workspaceId,
         enabled: true,
@@ -391,14 +389,7 @@ class RatchetService extends EventEmitter {
       return;
     }
 
-    await workspaceAccessor.update(workspaceId, {
-      ratchetEnabled: false,
-      ratchetState: RatchetState.IDLE,
-      ratchetActiveSessionId: null,
-      ratchetLastCiRunId: null,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
-    });
+    await workspaceRatchetService.disable(workspaceId);
 
     // Stops every running ratchet-workflow session, including the one the
     // (now cleared) active-session pointer named.
@@ -446,7 +437,7 @@ class RatchetService extends EventEmitter {
       // CAS on the pre-read fromState: a lost swap means another path already
       // settled (or re-enabled) the workspace, and that path emitted its own
       // event, so emitting here with this fromState would be stale.
-      const settled = await workspaceAccessor.settleRatchetIdleWhileDisabled(
+      const settled = await workspaceRatchetService.settleIdleWhileDisabled(
         workspace.id,
         fromState
       );
@@ -880,7 +871,7 @@ class RatchetService extends EventEmitter {
 
     signal.throwIfAborted();
     assertValidRatchetTransition(workspace.id, workspace.ratchetState, nextState);
-    const updated = await workspaceAccessor.transitionRatchetStateIfEnabled(
+    const updated = await workspaceRatchetService.transitionStateIfEnabled(
       workspace.id,
       workspace.ratchetState,
       {
@@ -894,7 +885,7 @@ class RatchetService extends EventEmitter {
       // The CAS refused the write: either ratcheting was disabled mid-check,
       // or another path (markPrClosed, disable+re-enable) transitioned the
       // state away from the one this check ran against.
-      const fresh = await workspaceAccessor.findById(workspace.id);
+      const fresh = await workspaceDataService.findById(workspace.id);
       signal.throwIfAborted();
       return fresh?.ratchetEnabled ? 'superseded' : 'disabled';
     }

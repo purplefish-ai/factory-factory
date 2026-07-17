@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService, workspacePrSnapshotService } from '@/backend/services/workspace';
 import type { GitHubKanbanBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 
@@ -79,7 +79,7 @@ class PRSnapshotService extends EventEmitter {
    * This is the canonical write path for CI tracking fields.
    */
   async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
-    await workspaceAccessor.update(workspaceId, {
+    await workspacePrSnapshotService.record(workspaceId, {
       prCiStatus: input.ciStatus,
       prUpdatedAt: input.observedAt ?? new Date(),
       ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
@@ -91,7 +91,7 @@ class PRSnapshotService extends EventEmitter {
    * Record that CI failure notification was sent.
    */
   async recordCINotification(workspaceId: string, notifiedAt = new Date()): Promise<void> {
-    await workspaceAccessor.update(workspaceId, {
+    await workspacePrSnapshotService.record(workspaceId, {
       prCiLastNotifiedAt: notifiedAt,
     });
   }
@@ -101,7 +101,7 @@ class PRSnapshotService extends EventEmitter {
    */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
     const checkedAt = input.checkedAt === null ? null : (input.checkedAt ?? new Date());
-    await workspaceAccessor.update(workspaceId, {
+    await workspacePrSnapshotService.record(workspaceId, {
       prReviewLastCheckedAt: checkedAt,
       ...(input.latestCommentId !== undefined
         ? { prReviewLastCommentId: input.latestCommentId }
@@ -120,7 +120,7 @@ class PRSnapshotService extends EventEmitter {
   async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
     try {
       // Verify workspace exists
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace) {
         return { success: false, reason: 'workspace_not_found' };
       }
@@ -129,7 +129,7 @@ class PRSnapshotService extends EventEmitter {
       const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
       if (!snapshot) {
         // Still attach the URL even if we can't fetch details
-        await workspaceAccessor.update(workspaceId, {
+        await workspacePrSnapshotService.record(workspaceId, {
           prUrl,
           prUpdatedAt: new Date(),
         });
@@ -200,7 +200,7 @@ class PRSnapshotService extends EventEmitter {
       let prUrl = explicitPrUrl;
 
       if (!prUrl) {
-        const workspace = await workspaceAccessor.findById(workspaceId);
+        const workspace = await workspaceDataService.findById(workspaceId);
         if (!workspace) {
           return { success: false, reason: 'workspace_not_found' };
         }
@@ -252,7 +252,7 @@ class PRSnapshotService extends EventEmitter {
   ): Promise<void> {
     const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
 
-    await workspaceAccessor.update(workspaceId, {
+    await workspacePrSnapshotService.record(workspaceId, {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,

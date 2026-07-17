@@ -2,7 +2,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
@@ -100,7 +100,7 @@ class FixerSessionService {
     const { workspaceId, workflow } = input;
 
     try {
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace?.worktreePath) {
         logger.warn('Workspace not ready for fixer session', { workspaceId, workflow });
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };

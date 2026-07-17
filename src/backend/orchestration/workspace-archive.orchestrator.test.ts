@@ -8,8 +8,8 @@ vi.mock('./workspace-children.orchestrator', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
-    findStaleArchivingWithProject: vi.fn(),
+  workspaceMaintenanceService: {
+    findStaleArchiving: vi.fn(),
   },
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import {
-  workspaceAccessor,
+  workspaceMaintenanceService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -101,7 +101,7 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'READY' })
     );
-    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([]);
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([]);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
@@ -489,7 +489,7 @@ describe('archiveWorkspace', () => {
 describe('recoverStaleArchivingWorkspaces', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([]);
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([]);
     vi.mocked(workspaceStateMachine.markArchived).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' })
     );
@@ -509,13 +509,13 @@ describe('recoverStaleArchivingWorkspaces', () => {
     const result = await recoverStaleArchivingWorkspaces(services);
 
     expect(result).toEqual({ archived: [], failed: [] });
-    expect(workspaceAccessor.findStaleArchivingWithProject).toHaveBeenCalledOnce();
+    expect(workspaceMaintenanceService.findStaleArchiving).toHaveBeenCalledOnce();
     expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
   });
 
   it('resumes stale ARCHIVING workspaces without starting archiving again', async () => {
     const workspace = makeWorkspace({ status: 'ARCHIVING' as never });
-    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([workspace]);
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([workspace]);
 
     const result = await recoverStaleArchivingWorkspaces(services);
 
@@ -533,7 +533,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
 
   it('marks a stale ARCHIVING workspace as FAILED when recovery cannot complete', async () => {
     const workspace = makeWorkspace({ status: 'ARCHIVING' as never });
-    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([workspace]);
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([workspace]);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
       new Error('worktree cleanup failed')
     );
@@ -553,7 +553,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
   it('continues recovering remaining stale workspaces after one failure', async () => {
     const failedWorkspace = makeWorkspace({ id: 'ws-failed', status: 'ARCHIVING' as never });
     const archivedWorkspace = makeWorkspace({ id: 'ws-archived', status: 'ARCHIVING' as never });
-    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([
       failedWorkspace,
       archivedWorkspace,
     ]);

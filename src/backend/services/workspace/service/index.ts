@@ -15,7 +15,6 @@ export {
   type WorkspaceCreationSource,
 } from './lifecycle/creation.service';
 export { workspaceDataService } from './lifecycle/data.service';
-
 // --- Workspace lifecycle ---
 export {
   type StartProvisioningOptions,
@@ -25,8 +24,15 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
+export { workspaceAutoIterationService } from './lifecycle/workspace-auto-iteration.service';
+export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
+export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
+export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';
+export { workspaceRunScriptService } from './lifecycle/workspace-run-script.service';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
+export { workspaceMaintenanceService } from './query/workspace-maintenance.service';
+export { workspaceNotificationService } from './query/workspace-notification.service';
 export { workspaceQueryService } from './query/workspace-query.service';
 // --- State derivation (pure functions) ---
 export {

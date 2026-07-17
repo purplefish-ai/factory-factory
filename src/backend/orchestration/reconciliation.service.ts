@@ -2,7 +2,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { terminalSessionService } from '@/backend/services/terminal';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceMaintenanceService } from '@/backend/services/workspace';
 
 const logger = createLogger('reconciliation');
 
@@ -136,7 +136,7 @@ class ReconciliationService {
    * in which case the workspace is skipped (init is genuinely in progress).
    */
   private async reconcileWorkspaces(): Promise<void> {
-    const workspacesNeedingWorktree = await workspaceAccessor.findNeedingWorktree();
+    const workspacesNeedingWorktree = await workspaceMaintenanceService.findNeedingWorktree();
 
     for (const workspace of workspacesNeedingWorktree) {
       if (workspace.status === 'PROVISIONING') {

@@ -89,10 +89,10 @@ describe('check-single-writer', () => {
     );
   });
 
-  it('allows ratchet-owned recordRatchetSessionEnd writes', () => {
+  it('allows workspace ratchet capability recordRatchetSessionEnd writes', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/ratchet/service/ratchet.service.ts',
+        relPath: 'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
         content: `
           async function settleFromRatchet(workspaceAccessor) {
             await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');

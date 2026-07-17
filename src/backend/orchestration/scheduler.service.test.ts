@@ -3,16 +3,14 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 
 const mockFindNeedingPRSync = vi.fn();
 const mockFindNeedingPRDiscovery = vi.fn();
-const mockWorkspaceUpdate = vi.fn();
 const mockFindPRForBranch = vi.fn();
 const mockRefreshWorkspace = vi.fn();
 const mockAttachAndRefreshPR = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceMaintenanceService: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
     findNeedingPRDiscovery: () => mockFindNeedingPRDiscovery(),
-    update: (...args: unknown[]) => mockWorkspaceUpdate(...args),
   },
 }));
 

@@ -15,7 +15,7 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { workspaceNotificationAccessor } from '@/backend/services/workspace';
+import { workspaceNotificationService } from '@/backend/services/workspace';
 import {
   type AgentContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -663,7 +663,7 @@ class ChatMessageHandlerService {
 
   private async isNotificationRowDelivered(notificationId: string): Promise<boolean> {
     try {
-      const notification = await workspaceNotificationAccessor.findById(notificationId);
+      const notification = await workspaceNotificationService.findForDelivery(notificationId);
       return notification?.deliveredAt != null;
     } catch (error) {
       logger.warn('[Chat WS] Failed to check workspace notification delivery state', {
@@ -695,7 +695,7 @@ class ChatMessageHandlerService {
     }
 
     try {
-      await workspaceNotificationAccessor.markDelivered([notificationId]);
+      await workspaceNotificationService.markDelivered([notificationId]);
     } catch (error) {
       logger.warn('[Chat WS] Failed to mark workspace notification delivered', {
         messageId,

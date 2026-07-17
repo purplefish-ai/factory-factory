@@ -4,7 +4,7 @@
  */
 
 import { cryptoService } from '@/backend/services/crypto.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 
 export function getDecryptedLinearConfig(
@@ -26,7 +26,7 @@ export function getDecryptedLinearConfig(
 export async function getWorkspaceLinearContext(
   workspaceId: string
 ): Promise<{ apiKey: string; linearIssueId: string } | null> {
-  const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
   if (!workspace?.linearIssueId) {
     return null;
   }

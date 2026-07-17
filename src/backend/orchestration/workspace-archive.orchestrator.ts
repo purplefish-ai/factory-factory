@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { createLogger } from '@/backend/services/logger.service';
 import {
-  workspaceAccessor,
+  workspaceMaintenanceService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -211,7 +211,7 @@ export async function recoverStaleArchivingWorkspaces(
   services: ArchiveWorkspaceDependencies,
   options: WorktreeCleanupOptions = { commitUncommitted: true }
 ): Promise<ArchiveRecoveryResult> {
-  const staleWorkspaces = await workspaceAccessor.findStaleArchivingWithProject();
+  const staleWorkspaces = await workspaceMaintenanceService.findStaleArchiving();
   const result: ArchiveRecoveryResult = { archived: [], failed: [] };
 
   if (staleWorkspaces.length === 0) {

@@ -6,9 +6,11 @@ const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceAccessor: {
+  workspaceDataService: {
     findById: (...args: unknown[]) => mockFindById(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
+  },
+  workspacePrSnapshotService: {
+    record: (...args: unknown[]) => mockUpdate(...args),
   },
 }));
 

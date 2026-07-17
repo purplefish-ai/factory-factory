@@ -40,9 +40,11 @@ import {
   deriveWorkspaceFlowState,
   getWorkspaceInitPolicy,
   kanbanStateService,
+  WorkspaceCreationService,
   type WorkspaceInitPolicyInput,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceAutoIterationService,
+  workspaceDataService,
   workspaceQueryService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
@@ -55,7 +57,7 @@ import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 const logger = createLogger('domain-bridges');
 
 type SessionService = typeof sessionService;
-type WorkspaceAccessor = typeof workspaceAccessor;
+type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
 
 type BridgeServices = {
   autoIterationService: typeof autoIterationService;
@@ -74,7 +76,9 @@ type BridgeServices = {
   sessionDomainService: typeof sessionDomainService;
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
-  workspaceAccessor: typeof workspaceAccessor;
+  workspaceAutoIterationService: typeof workspaceAutoIterationService;
+  workspaceCreationService: WorkspaceCreationService;
+  workspaceDataService: typeof workspaceDataService;
   workspaceActivityService: typeof workspaceActivityService;
   workspaceQueryService: typeof workspaceQueryService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
@@ -98,8 +102,10 @@ const defaultServices: BridgeServices = {
   sessionDomainService,
   sessionService,
   startupScriptService,
-  workspaceAccessor,
   workspaceActivityService,
+  workspaceAutoIterationService,
+  workspaceCreationService: new WorkspaceCreationService({ logger }),
+  workspaceDataService,
   workspaceQueryService,
   workspaceSnapshotStore,
   workspaceStateMachine,
@@ -131,15 +137,12 @@ async function stopPreviousAutoIterationSession(
 }
 
 async function clearAutoIterationSessionIfMatching(
-  workspaceAccessor: WorkspaceAccessor,
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
 ): Promise<void> {
   try {
-    const latestWorkspace = await workspaceAccessor.findRawById(workspaceId);
-    if (latestWorkspace?.autoIterationSessionId === sessionId) {
-      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: null });
-    }
+    await workspaceAutoIterationService.clearSessionIfMatching(workspaceId, sessionId);
   } catch {
     // Preserve the original handoff or persistence error
   }
@@ -147,12 +150,12 @@ async function clearAutoIterationSessionIfMatching(
 
 async function cleanupRecycledAutoIterationSession(
   sessionService: SessionService,
-  workspaceAccessor: WorkspaceAccessor,
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
 ): Promise<void> {
   await stopSessionBestEffort(sessionService, sessionId);
-  await clearAutoIterationSessionIfMatching(workspaceAccessor, workspaceId, sessionId);
+  await clearAutoIterationSessionIfMatching(workspaceAutoIterationService, workspaceId, sessionId);
 }
 
 export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
@@ -174,8 +177,10 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     sessionDomainService,
     sessionService,
     startupScriptService,
-    workspaceAccessor,
     workspaceActivityService,
+    workspaceAutoIterationService,
+    workspaceCreationService,
+    workspaceDataService,
     workspaceQueryService,
     workspaceSnapshotStore,
     workspaceStateMachine,
@@ -323,26 +328,27 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   // === Auto-iteration domain bridges ===
   const autoIterationWorkspaceBridge: AutoIterationWorkspaceBridge = {
     async getWorktreePath(workspaceId) {
-      const ws = await workspaceAccessor.findRawById(workspaceId);
+      const ws = await workspaceAutoIterationService.getState(workspaceId);
       if (!ws?.worktreePath) {
         throw new Error(`Workspace ${workspaceId} has no worktree path`);
       }
       return ws.worktreePath;
     },
     async updateAutoIterationStatus(workspaceId, status) {
-      await workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
+      await workspaceAutoIterationService.setStatus(workspaceId, status);
     },
     async updateAutoIterationProgress(workspaceId, progress) {
       const parsedProgress = autoIterationProgressSchema.parse(progress);
-      await workspaceAccessor.update(workspaceId, {
-        autoIterationProgress: parsedProgress as unknown as Prisma.InputJsonValue,
-      });
+      await workspaceAutoIterationService.setProgress(
+        workspaceId,
+        parsedProgress as unknown as Prisma.InputJsonValue
+      );
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {
-      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
+      await workspaceAutoIterationService.setSession(workspaceId, sessionId);
     },
     finishAutoIterationIfSessionMatches(workspaceId, sessionId, status) {
-      return workspaceAccessor.finishAutoIterationIfSessionMatches(workspaceId, sessionId, status);
+      return workspaceAutoIterationService.finishSessionIfMatching(workspaceId, sessionId, status);
     },
   };
 
@@ -405,7 +411,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       return Promise.resolve('');
     },
     async recycleSession(workspaceId, handoffPrompt) {
-      const ws = await workspaceAccessor.findRawById(workspaceId);
+      const ws = await workspaceAutoIterationService.getState(workspaceId);
       if (ws?.autoIterationSessionId) {
         await stopPreviousAutoIterationSession(sessionService, ws.autoIterationSessionId);
       }
@@ -421,12 +427,12 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         throw err;
       }
       try {
-        await workspaceAccessor.update(workspaceId, { autoIterationSessionId: newSession.id });
+        await workspaceAutoIterationService.setSession(workspaceId, newSession.id);
         await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
       } catch (err) {
         await cleanupRecycledAutoIterationSession(
           sessionService,
-          workspaceAccessor,
+          workspaceAutoIterationService,
           workspaceId,
           newSession.id
         );
@@ -448,14 +454,12 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   periodicTaskService.configure({
     workspace: {
       async createWorkspaceForTask({ projectId, name, prompt, periodicTaskId }) {
-        // Create workspace directly with periodicTaskId and PERIODIC_TASK source
-        const workspace = await workspaceAccessor.create({
+        const workspace = await workspaceCreationService.create({
+          type: 'PERIODIC_TASK',
           projectId,
           name,
-          creationSource: 'PERIODIC_TASK',
           periodicTaskId,
-          ratchetEnabled: true,
-          creationMetadata: { initialPrompt: prompt },
+          initialPrompt: prompt,
         });
 
         // Create default session
@@ -477,7 +481,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
     status: {
       async getWorkspaceStatus(workspaceId) {
-        const ws = await workspaceAccessor.findRawById(workspaceId);
+        const ws = await workspaceDataService.findById(workspaceId);
         if (!ws) {
           return null;
         }

@@ -19,7 +19,7 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor, workspaceNotificationAccessor } from '@/backend/services/workspace';
+import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus, type WorkspaceStatus } from '@/shared/core';
@@ -889,7 +889,7 @@ export class SessionLifecycleService {
     }
 
     const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
-    const workspace = await workspaceAccessor.findById(session.workspaceId);
+    const workspace = await workspaceDataService.findById(session.workspaceId);
     if (!workspace?.worktreePath) {
       logger.warn('Cannot persist ratchet transcript: no worktree path', {
         sessionId,
@@ -1099,7 +1099,7 @@ export class SessionLifecycleService {
     stopGeneration = this.getStopGeneration(sessionId)
   ): Promise<number> {
     try {
-      const pending = await workspaceNotificationAccessor.findPending(workspaceId);
+      const pending = await workspaceNotificationService.listPendingForDelivery(workspaceId);
       this.assertStartupAllowed(sessionId, stopGeneration);
       if (pending.length === 0) {
         return 0;
@@ -1264,7 +1264,7 @@ export class SessionLifecycleService {
     notificationId: string
   ): Promise<void> {
     try {
-      await workspaceNotificationAccessor.markDelivered([notificationId]);
+      await workspaceNotificationService.markDelivered([notificationId]);
     } catch (error) {
       logger.warn('Failed to mark already-transcripted workspace notification delivered', {
         sessionId,

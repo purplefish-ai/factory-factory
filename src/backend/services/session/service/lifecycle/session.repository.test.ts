@@ -33,7 +33,7 @@ describe('SessionRepository', () => {
 
   const workspaces = {
     findById: vi.fn<() => Promise<Workspace | null>>(),
-    markHasHadSessions: vi.fn<() => Promise<void>>(),
+    recordSessionPresence: vi.fn<() => Promise<void>>(),
   };
 
   const projects = {

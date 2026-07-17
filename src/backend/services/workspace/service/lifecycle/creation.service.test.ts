@@ -411,6 +411,27 @@ describe('WorkspaceCreationService', () => {
       });
     });
 
+    describe('PERIODIC_TASK source', () => {
+      it('creates through canonical defaults and persists the periodic task identity', async () => {
+        await service.create({
+          type: 'PERIODIC_TASK',
+          projectId: 'proj-1',
+          periodicTaskId: 'task-123',
+          name: 'Nightly maintenance',
+          initialPrompt: 'Update dependencies',
+        });
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith({
+          projectId: 'proj-1',
+          periodicTaskId: 'task-123',
+          name: 'Nightly maintenance',
+          creationSource: 'PERIODIC_TASK',
+          creationMetadata: { initialPrompt: 'Update dependencies' },
+          ratchetEnabled: true,
+        });
+      });
+    });
+
     describe('GITHUB_ISSUE source', () => {
       it('should create workspace from GitHub issue source', async () => {
         const source: WorkspaceCreationSource = {

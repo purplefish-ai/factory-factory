@@ -33,11 +33,11 @@ import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
-  workspaceAccessor,
   workspaceActivityService,
   workspaceDataService,
-  workspaceNotificationAccessor,
+  workspaceNotificationService,
   workspaceQueryService,
+  workspaceRelationshipsService,
 } from '@/backend/services/workspace';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
@@ -535,7 +535,9 @@ export const workspaceRouter = router({
   listChildren: publicProcedure
     .input(z.object({ parentWorkspaceId: z.string() }))
     .query(async ({ input }) => {
-      const children = await workspaceAccessor.findChildrenWithStatus(input.parentWorkspaceId);
+      const children = await workspaceRelationshipsService.findChildrenWithStatus(
+        input.parentWorkspaceId
+      );
       return children.map((child) => ({
         id: child.id,
         name: child.name,
@@ -555,7 +557,7 @@ export const workspaceRouter = router({
   getParent: publicProcedure
     .input(z.object({ childWorkspaceId: z.string() }))
     .query(async ({ input }) => {
-      const parent = await workspaceAccessor.findParentWorkspace(input.childWorkspaceId);
+      const parent = await workspaceRelationshipsService.findParent(input.childWorkspaceId);
       if (!parent) {
         return null;
       }
@@ -577,7 +579,7 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -675,7 +677,7 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -689,7 +691,7 @@ export const workspaceRouter = router({
         });
       }
 
-      const parent = await workspaceAccessor.findByIdWithProject(input.parentWorkspaceId);
+      const parent = await workspaceDataService.findByIdWithProject(input.parentWorkspaceId);
 
       // Persist first so the message survives if live delivery races a dying
       // session; successful dispatch marks the row delivered.
@@ -772,7 +774,7 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
+      const child = await workspaceDataService.findByIdWithProject(input.childWorkspaceId);
       if (!child) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -795,7 +797,7 @@ export const workspaceRouter = router({
   // Get count of undelivered notifications for a workspace
   getPendingNotificationCount: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(({ input }) => workspaceNotificationAccessor.countPending(input.workspaceId)),
+    .query(({ input }) => workspaceNotificationService.countPending(input.workspaceId)),
 
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,

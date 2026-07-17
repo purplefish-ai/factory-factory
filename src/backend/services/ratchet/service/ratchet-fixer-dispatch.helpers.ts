@@ -2,7 +2,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { createLogger } from '@/backend/services/logger.service';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceRatchetService } from '@/backend/services/workspace';
 import type { RatchetSessionBridge } from './bridges';
 import { type AcquireAndDispatchResult, fixerSessionService } from './fixer-session.service';
 import type { PRStateInfo, RatchetAction, WorkspaceWithPR } from './ratchet.types';
@@ -63,7 +63,7 @@ async function handleStartedFixerResult(params: {
       sessionId: result.sessionId,
     });
     signal?.throwIfAborted();
-    await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+    await workspaceRatchetService.clearActiveSession(workspace.id);
     signal?.throwIfAborted();
     if (sessionBridge.isSessionRunning(result.sessionId)) {
       signal?.throwIfAborted();
@@ -78,7 +78,7 @@ async function handleStartedFixerResult(params: {
 
   signal?.throwIfAborted();
   commitSideEffects();
-  const recorded = await workspaceAccessor.recordRatchetDispatchIfEnabled(workspace.id, {
+  const recorded = await workspaceRatchetService.recordDispatchIfEnabled(workspace.id, {
     sessionId: result.sessionId,
     snapshotKey: prStateInfo.snapshotKey,
     retryCount,
@@ -116,7 +116,7 @@ async function handleAlreadyActiveFixerResult(params: {
   // not be marked as dispatched.
   signal?.throwIfAborted();
   commitSideEffects();
-  const adopted = await workspaceAccessor.adoptRatchetActiveSessionIfEnabled(
+  const adopted = await workspaceRatchetService.adoptActiveSessionIfEnabled(
     workspace.id,
     result.sessionId
   );
@@ -139,7 +139,7 @@ async function cleanUpUnrecordedStartedFixer(params: {
 }): Promise<void> {
   const { workspaceId, sessionId, sessionBridge } = params;
   try {
-    await workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, 'COMPLETED');
+    await workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, 'COMPLETED');
   } catch (error) {
     logger.warn('Failed to settle unrecorded ratchet fixer during cleanup', {
       workspaceId,

@@ -51,7 +51,7 @@ import {
 } from './routers/websocket';
 import { periodicTaskService } from './services/periodic-task';
 import { runScriptStateMachine } from './services/run-script';
-import { workspaceAccessor } from './services/workspace';
+import { workspaceAutoIterationService } from './services/workspace';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
@@ -394,7 +394,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   };
 
   const recoverStaleAutoIterationOnStartup = async (): Promise<void> => {
-    const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
+    const recovered = await workspaceAutoIterationService.recoverStaleStatuses();
     if (recovered.length > 0) {
       logger.info('Recovered stale auto-iteration states on startup', {
         count: recovered.length,

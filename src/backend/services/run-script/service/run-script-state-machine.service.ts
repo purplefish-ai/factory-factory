@@ -21,7 +21,7 @@
 import { EventEmitter } from 'node:events';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceRunScriptService } from '@/backend/services/workspace';
 import type { RunScriptStatus } from '@/shared/core';
 
 const logger = createLogger('run-script-state-machine');
@@ -92,7 +92,7 @@ class RunScriptStateMachineService extends EventEmitter {
     options?: TransitionOptions
   ): Promise<Workspace> {
     // First read to validate the transition and get current status for logging
-    const workspace = await workspaceAccessor.findRawById(workspaceId);
+    const workspace = await workspaceRunScriptService.getState(workspaceId);
 
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
@@ -145,7 +145,7 @@ class RunScriptStateMachineService extends EventEmitter {
 
     // Atomic compare-and-swap: only update if status hasn't changed since we read it.
     // This prevents two concurrent callers from both passing validation and racing to write.
-    const result = await workspaceAccessor.casRunScriptStatusUpdate(
+    const result = await workspaceRunScriptService.transitionStatusIfCurrent(
       workspaceId,
       currentStatus,
       updateData
@@ -153,7 +153,7 @@ class RunScriptStateMachineService extends EventEmitter {
 
     if (result.count === 0) {
       // Status changed between read and write -- refetch to report the actual conflict
-      const refreshed = await workspaceAccessor.findRawById(workspaceId);
+      const refreshed = await workspaceRunScriptService.getState(workspaceId);
       throw new RunScriptStateMachineError(
         workspaceId,
         refreshed?.runScriptStatus ?? currentStatus,
@@ -169,7 +169,7 @@ class RunScriptStateMachineService extends EventEmitter {
     });
 
     // Fetch and return the updated workspace (updateMany doesn't return the record)
-    const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
+    const updated = await workspaceRunScriptService.getStateOrThrow(workspaceId);
 
     this.emit(RUN_SCRIPT_STATUS_CHANGED, {
       workspaceId,
@@ -255,7 +255,7 @@ class RunScriptStateMachineService extends EventEmitter {
    * Should be called once at server startup.
    */
   async recoverStaleStates(): Promise<void> {
-    const recovered = await workspaceAccessor.resetStaleRunScriptStatuses();
+    const recovered = await workspaceRunScriptService.recoverStaleStatuses();
 
     if (recovered.length === 0) {
       return;
@@ -280,7 +280,7 @@ class RunScriptStateMachineService extends EventEmitter {
    * @returns Current status (possibly updated)
    */
   async verifyRunning(workspaceId: string): Promise<RunScriptStatus> {
-    const workspace = await workspaceAccessor.findRawById(workspaceId);
+    const workspace = await workspaceRunScriptService.getState(workspaceId);
 
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
@@ -309,7 +309,7 @@ class RunScriptStateMachineService extends EventEmitter {
             error: stateError,
           });
           // Refetch to get current state
-          const updated = await workspaceAccessor.findRawById(workspaceId);
+          const updated = await workspaceRunScriptService.getState(workspaceId);
           return updated?.runScriptStatus ?? workspace.runScriptStatus;
         }
       }

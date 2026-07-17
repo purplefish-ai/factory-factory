@@ -24,13 +24,16 @@ import {
 let db: IntegrationDatabase;
 let prisma: PrismaClient;
 
-let workspaceAccessor: typeof import('@/backend/services/workspace').workspaceAccessor;
-let projectAccessor: typeof import('@/backend/services/workspace').projectAccessor;
+let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
+let workspaceMaintenanceService: typeof import('@/backend/services/workspace').workspaceMaintenanceService;
+let workspaceRatchetService: typeof import('@/backend/services/workspace').workspaceRatchetService;
+let workspaceRunScriptService: typeof import('@/backend/services/workspace').workspaceRunScriptService;
+let workspaceStateMachine: typeof import('@/backend/services/workspace').workspaceStateMachine;
+let projectManagementService: typeof import('@/backend/services/workspace').projectManagementService;
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let userSettingsAccessor: typeof import('@/backend/services/settings').userSettingsAccessor;
 let decisionLogAccessor: typeof import('@/backend/services/decision-log').decisionLogAccessor;
-let GitClientFactory: typeof import('@/backend/clients/git.client').GitClientFactory;
 
 let counter = 0;
 const tempRepoDirs = new Set<string>();
@@ -39,10 +42,14 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   prisma = db.prisma;
 
-  ({ workspaceAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
-    '@/backend/services/workspace'
-  ));
-  ({ projectAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
+  ({
+    projectManagementService,
+    workspaceDataService,
+    workspaceMaintenanceService,
+    workspaceRatchetService,
+    workspaceRunScriptService,
+    workspaceStateMachine,
+  } = await vi.importActual<typeof import('@/backend/services/workspace')>(
     '@/backend/services/workspace'
   ));
   ({ sessionDataService } = await vi.importActual<typeof import('@/backend/services/session')>(
@@ -57,11 +64,6 @@ beforeAll(async () => {
   ({ decisionLogAccessor } = await vi.importActual<
     typeof import('@/backend/services/decision-log')
   >('@/backend/services/decision-log'));
-
-  const gitClientModule = await vi.importActual<typeof import('@/backend/clients/git.client')>(
-    '@/backend/clients/git.client'
-  );
-  ({ GitClientFactory } = gitClientModule);
 }, 30_000);
 
 afterEach(async () => {
@@ -142,28 +144,26 @@ function setOriginHead(repoPath: string, branch: string): void {
   );
 }
 
+async function findWorkspaceOrThrow(workspaceId: string) {
+  const workspace = await workspaceDataService.findById(workspaceId);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+  return workspace;
+}
+
 describe('resource accessors integration', () => {
-  describe('workspaceAccessor', () => {
-    it('enforces compare-and-swap status transitions', async () => {
+  describe('workspace services', () => {
+    it('persists validated status transitions through the state machine', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, { status: WorkspaceStatus.NEW });
 
-      const changed = await workspaceAccessor.transitionWithCas(workspace.id, WorkspaceStatus.NEW, {
-        status: WorkspaceStatus.PROVISIONING,
-      });
-      const unchanged = await workspaceAccessor.transitionWithCas(
-        workspace.id,
-        WorkspaceStatus.NEW,
-        {
-          status: WorkspaceStatus.READY,
-        }
-      );
+      await workspaceStateMachine.transition(workspace.id, WorkspaceStatus.PROVISIONING);
+      await workspaceStateMachine.transition(workspace.id, WorkspaceStatus.READY);
 
-      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const reloaded = await findWorkspaceOrThrow(workspace.id);
 
-      expect(changed.count).toBe(1);
-      expect(unchanged.count).toBe(0);
-      expect(reloaded.status).toBe(WorkspaceStatus.PROVISIONING);
+      expect(reloaded.status).toBe(WorkspaceStatus.READY);
     });
 
     it('enforces compare-and-swap run script transitions', async () => {
@@ -172,7 +172,7 @@ describe('resource accessors integration', () => {
         runScriptStatus: RunScriptStatus.IDLE,
       });
 
-      const started = await workspaceAccessor.casRunScriptStatusUpdate(
+      const started = await workspaceRunScriptService.transitionStatusIfCurrent(
         workspace.id,
         RunScriptStatus.IDLE,
         {
@@ -180,7 +180,7 @@ describe('resource accessors integration', () => {
         }
       );
 
-      const duplicate = await workspaceAccessor.casRunScriptStatusUpdate(
+      const duplicate = await workspaceRunScriptService.transitionStatusIfCurrent(
         workspace.id,
         RunScriptStatus.IDLE,
         {
@@ -188,7 +188,7 @@ describe('resource accessors integration', () => {
         }
       );
 
-      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const reloaded = await findWorkspaceOrThrow(workspace.id);
       expect(started.count).toBe(1);
       expect(duplicate.count).toBe(0);
       expect(reloaded.runScriptStatus).toBe(RunScriptStatus.STARTING);
@@ -206,17 +206,18 @@ describe('resource accessors integration', () => {
         initRetryCount: 3,
       });
 
-      const eligibleResult = await workspaceAccessor.startProvisioningRetryIfAllowed(
-        eligible.id,
-        3
-      );
-      const maxedResult = await workspaceAccessor.startProvisioningRetryIfAllowed(maxed.id, 3);
+      const eligibleResult = await workspaceStateMachine.startProvisioning(eligible.id, {
+        maxRetries: 3,
+      });
+      const maxedResult = await workspaceStateMachine.startProvisioning(maxed.id, {
+        maxRetries: 3,
+      });
 
-      const eligibleReloaded = await workspaceAccessor.findRawByIdOrThrow(eligible.id);
-      const maxedReloaded = await workspaceAccessor.findRawByIdOrThrow(maxed.id);
+      const eligibleReloaded = await findWorkspaceOrThrow(eligible.id);
+      const maxedReloaded = await findWorkspaceOrThrow(maxed.id);
 
-      expect(eligibleResult.count).toBe(1);
-      expect(maxedResult.count).toBe(0);
+      expect(eligibleResult).not.toBeNull();
+      expect(maxedResult).toBeNull();
       expect(eligibleReloaded.status).toBe(WorkspaceStatus.PROVISIONING);
       expect(eligibleReloaded.cachedKanbanColumn).toBe(KanbanColumn.WORKING);
       expect(eligibleReloaded.initRetryCount).toBe(2);
@@ -239,7 +240,7 @@ describe('resource accessors integration', () => {
         initStartedAt: new Date(),
       });
 
-      const needingWorktree = await workspaceAccessor.findNeedingWorktree();
+      const needingWorktree = await workspaceMaintenanceService.findNeedingWorktree();
       const ids = new Set(needingWorktree.map((workspace) => workspace.id));
 
       expect(ids.has(newWorkspace.id)).toBe(true);
@@ -275,7 +276,7 @@ describe('resource accessors integration', () => {
         ratchetState: RatchetState.MERGED,
       });
 
-      const ratchetCandidates = await workspaceAccessor.findWithPRsForRatchet();
+      const ratchetCandidates = await workspaceRatchetService.findCandidates();
 
       expect(ratchetCandidates.map((workspace) => workspace.id)).toEqual([included.id]);
     });
@@ -284,9 +285,9 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
 
-      await workspaceAccessor.appendInitOutput(workspace.id, 'a'.repeat(80), 50);
+      await workspaceRunScriptService.appendInitOutput(workspace.id, 'a'.repeat(80), 50);
 
-      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const reloaded = await findWorkspaceOrThrow(workspace.id);
       expect(reloaded.initOutput).toBeTruthy();
       expect((reloaded.initOutput || '').length).toBeLessThanOrEqual(50);
       expect(reloaded.initOutput?.startsWith('[...truncated...]\n')).toBe(true);
@@ -298,10 +299,12 @@ describe('resource accessors integration', () => {
       const chunks = Array.from({ length: 40 }, (_, index) => `chunk-${index}\n`);
 
       await Promise.all(
-        chunks.map((chunk) => workspaceAccessor.appendInitOutput(workspace.id, chunk, 10 * 1024))
+        chunks.map((chunk) =>
+          workspaceRunScriptService.appendInitOutput(workspace.id, chunk, 10 * 1024)
+        )
       );
 
-      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const reloaded = await findWorkspaceOrThrow(workspace.id);
       const output = reloaded.initOutput ?? '';
 
       expect(output.length).toBeGreaterThan(0);
@@ -322,9 +325,9 @@ describe('resource accessors integration', () => {
         WHERE "id" = ${workspace.id}
       `;
 
-      await workspaceAccessor.appendInitOutput(workspace.id, 'hello\n');
+      await workspaceRunScriptService.appendInitOutput(workspace.id, 'hello\n');
 
-      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const reloaded = await findWorkspaceOrThrow(workspace.id);
       expect(reloaded.updatedAt.getTime()).toBeGreaterThan(staleUpdatedAt.getTime());
     });
 
@@ -334,44 +337,33 @@ describe('resource accessors integration', () => {
         ratchetActiveSessionId: 'session-1',
       });
 
-      const mismatch = await workspaceAccessor.recordRatchetSessionEnd(
+      const mismatch = await workspaceRatchetService.recordSessionEnd(
         workspace.id,
         'different-session',
         'DIED'
       );
       expect(mismatch).toBe(false);
-      const unchanged = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const unchanged = await findWorkspaceOrThrow(workspace.id);
       expect(unchanged.ratchetActiveSessionId).toBe('session-1');
       expect(unchanged.ratchetDispatchOutcome).toBeNull();
 
-      const settled = await workspaceAccessor.recordRatchetSessionEnd(
+      const settled = await workspaceRatchetService.recordSessionEnd(
         workspace.id,
         'session-1',
         'DIED'
       );
       expect(settled).toBe(true);
-      const cleared = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const cleared = await findWorkspaceOrThrow(workspace.id);
       expect(cleared.ratchetActiveSessionId).toBeNull();
       expect(cleared.ratchetDispatchOutcome).toBe('DIED');
     });
-
-    it('throws when mutually exclusive status filters are passed', async () => {
-      const project = await createProjectFixture();
-
-      expect(() =>
-        workspaceAccessor.findByProjectIdWithSessions(project.id, {
-          status: WorkspaceStatus.READY,
-          excludeStatuses: [WorkspaceStatus.NEW],
-        })
-      ).toThrow('Cannot specify both status and excludeStatuses filters');
-    });
   });
 
-  describe('projectAccessor', () => {
+  describe('projectManagementService', () => {
     it('auto-detects GitHub owner/repo from git remote during create', async () => {
       const repoPath = createGitRepository('git@github.com:purplefish-ai/factory-factory.git');
 
-      const project = await projectAccessor.create(
+      const project = await projectManagementService.create(
         {
           repoPath,
         },
@@ -389,7 +381,7 @@ describe('resource accessors integration', () => {
       createGitCommit(repoPath);
       setOriginHead(repoPath, 'unstable');
 
-      const project = await projectAccessor.create(
+      const project = await projectManagementService.create(
         {
           repoPath,
         },
@@ -405,7 +397,7 @@ describe('resource accessors integration', () => {
       const repoPath = createGitRepository();
       execFileSync('git', ['checkout', '-b', 'develop'], { cwd: repoPath });
 
-      const project = await projectAccessor.create(
+      const project = await projectManagementService.create(
         {
           repoPath,
         },
@@ -421,7 +413,7 @@ describe('resource accessors integration', () => {
       const repoPath = mkdtempSync(join(tmpdir(), 'ff-nongit-'));
       tempRepoDirs.add(repoPath);
 
-      const project = await projectAccessor.create(
+      const project = await projectManagementService.create(
         {
           repoPath,
         },
@@ -436,7 +428,7 @@ describe('resource accessors integration', () => {
     it('retries slug creation when a slug collision occurs', async () => {
       const repoPath = createGitRepository();
 
-      const first = await projectAccessor.create(
+      const first = await projectManagementService.create(
         {
           repoPath,
         },
@@ -445,7 +437,7 @@ describe('resource accessors integration', () => {
         }
       );
 
-      const second = await projectAccessor.create(
+      const second = await projectManagementService.create(
         {
           repoPath,
         },
@@ -463,27 +455,15 @@ describe('resource accessors integration', () => {
       const nonGitDir = mkdtempSync(join(tmpdir(), 'ff-nongit-'));
       tempRepoDirs.add(nonGitDir);
 
-      const valid = await projectAccessor.validateRepoPath(gitRepo);
-      const invalid = await projectAccessor.validateRepoPath(nonGitDir);
-      const missing = await projectAccessor.validateRepoPath('/path/that/does/not/exist');
+      const valid = await projectManagementService.validateRepoPath(gitRepo);
+      const invalid = await projectManagementService.validateRepoPath(nonGitDir);
+      const missing = await projectManagementService.validateRepoPath('/path/that/does/not/exist');
 
       expect(valid.valid).toBe(true);
       expect(invalid.valid).toBe(false);
       expect(invalid.error).toContain('not a git repository');
       expect(missing.valid).toBe(false);
       expect(missing.error).toContain('does not exist');
-    });
-
-    it('evicts git client cache on project delete', async () => {
-      const project = await createProjectFixture();
-      const removeSpy = vi.spyOn(GitClientFactory, 'removeProject').mockImplementation(() => false);
-
-      await projectAccessor.delete(project.id);
-
-      expect(removeSpy).toHaveBeenCalledWith({
-        repoPath: project.repoPath,
-        worktreeBasePath: project.worktreeBasePath,
-      });
     });
   });
 

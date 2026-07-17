@@ -337,6 +337,14 @@ class WorkspaceAccessor {
     return result.count === 1;
   }
 
+  async clearAutoIterationSessionIfMatches(id: string, sessionId: string): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id, autoIterationSessionId: sessionId },
+      data: { autoIterationSessionId: null },
+    });
+    return result.count === 1;
+  }
+
   /**
    * Find workspaces with auto-iteration status RUNNING and reset them to FAILED.
    * Called at server startup to recover states left in-flight by a server crash or restart.

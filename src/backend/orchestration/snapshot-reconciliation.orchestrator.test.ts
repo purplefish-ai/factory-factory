@@ -15,9 +15,8 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
   return {
     ...actual,
-    workspaceAccessor: {
-      findAllNonArchivedWithSessionsAndProject: (...args: unknown[]) =>
-        mockFindAllNonArchived(...args),
+    workspaceMaintenanceService: {
+      findActiveWithSessionsAndProject: (...args: unknown[]) => mockFindAllNonArchived(...args),
     },
   };
 });

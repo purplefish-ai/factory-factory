@@ -8,7 +8,7 @@ import {
   runScriptConfigPersistenceService,
 } from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { RunScriptOutputBuffer } from './run-script-output-buffer';
 import {
   runCleanupScriptProcess,
@@ -49,7 +49,7 @@ export class RunScriptService {
     error?: string;
   }> {
     try {
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace) {
         throw new Error('Workspace not found');
       }
@@ -69,7 +69,7 @@ export class RunScriptService {
       const started = await runScriptStateMachine.start(workspaceId);
       if (!started) {
         // Re-read workspace for current pid/port after verify
-        const fresh = await workspaceAccessor.findById(workspaceId);
+        const fresh = await workspaceDataService.findById(workspaceId);
         return {
           success: false,
           error: 'Run script is already running',
@@ -308,7 +308,7 @@ export class RunScriptService {
     }
 
     try {
-      const refreshed = await workspaceAccessor.findById(workspaceId);
+      const refreshed = await workspaceDataService.findById(workspaceId);
       const status = refreshed?.runScriptStatus;
       const isConsistent = status === 'IDLE' || status === 'COMPLETED' || status === 'FAILED';
       if (isConsistent) {
@@ -327,7 +327,7 @@ export class RunScriptService {
     workspaceId: string,
     code: number | null
   ): Promise<void> {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found while persisting run script exit: ${workspaceId}`);
     }
@@ -431,7 +431,7 @@ export class RunScriptService {
     markRunningError: unknown
   ): Promise<{ success: boolean; port?: number; pid?: number; proxyUrl?: string; error?: string }> {
     // Check if the process already exited and the exit handler transitioned the state
-    const ws = await workspaceAccessor.findById(workspaceId);
+    const ws = await workspaceDataService.findById(workspaceId);
     const currentStatus = ws?.runScriptStatus;
     if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
       logger.info('Process exited before markRunning -- exit handler already transitioned state', {
@@ -470,7 +470,7 @@ export class RunScriptService {
     // If the error is a state machine error (e.g., concurrent start), don't mark as FAILED
     if (error.name !== 'RunScriptStateMachineError') {
       try {
-        const workspace = await workspaceAccessor.findById(workspaceId);
+        const workspace = await workspaceDataService.findById(workspaceId);
         if (workspace?.runScriptStatus === 'STARTING') {
           await runScriptStateMachine.markFailed(workspaceId);
         }
@@ -494,7 +494,7 @@ export class RunScriptService {
     error?: string;
   }> {
     try {
-      const workspace = await workspaceAccessor.findById(workspaceId);
+      const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace) {
         throw new Error('Workspace not found');
       }
@@ -609,7 +609,7 @@ export class RunScriptService {
       return false; // No race -- continue with stop flow
     } catch (error) {
       // Race: state moved to a terminal state between our read and the CAS write.
-      const fresh = await workspaceAccessor.findById(workspaceId);
+      const fresh = await workspaceDataService.findById(workspaceId);
       const freshStatus = fresh?.runScriptStatus;
       if (
         freshStatus === 'COMPLETED' ||
@@ -632,7 +632,7 @@ export class RunScriptService {
       await runScriptStateMachine.completeStopping(workspaceId);
     } catch (error) {
       // Exit handler may have raced and already completed STOPPING -> IDLE.
-      const fresh = await workspaceAccessor.findById(workspaceId);
+      const fresh = await workspaceDataService.findById(workspaceId);
       if (fresh?.runScriptStatus === 'IDLE') {
         logger.debug('completeStopping raced with exit handler, already IDLE', {
           workspaceId,
@@ -824,7 +824,7 @@ export class RunScriptService {
    * Get the status of the run script for a workspace
    */
   async getRunScriptStatus(workspaceId: string) {
-    const workspace = await workspaceAccessor.findById(workspaceId);
+    const workspace = await workspaceDataService.findById(workspaceId);
     if (!workspace) {
       throw new Error('Workspace not found');
     }
@@ -833,7 +833,7 @@ export class RunScriptService {
     const status = await runScriptStateMachine.verifyRunning(workspaceId);
 
     // Refetch workspace to get fresh data after potential state transition
-    const freshWorkspace = await workspaceAccessor.findById(workspaceId);
+    const freshWorkspace = await workspaceDataService.findById(workspaceId);
     if (!freshWorkspace) {
       throw new Error('Workspace not found');
     }
