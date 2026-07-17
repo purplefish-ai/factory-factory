@@ -447,10 +447,18 @@ export class AcpRuntimeManager {
     }
 
     try {
+      let terminationObserved = false;
       const exitPromise = new Promise<void>((resolve) => {
-        child.on('exit', () => resolve());
-        if (hasExited()) {
+        const resolveOnTermination = () => {
+          terminationObserved = true;
+          child.removeListener('exit', resolveOnTermination);
+          child.removeListener('close', resolveOnTermination);
           resolve();
+        };
+        child.once('exit', resolveOnTermination);
+        child.once('close', resolveOnTermination);
+        if (hasExited()) {
+          resolveOnTermination();
         }
       });
 
@@ -458,7 +466,7 @@ export class AcpRuntimeManager {
 
       await raceWithSoftTimeout(exitPromise, 5000);
 
-      if (!hasExited()) {
+      if (!(terminationObserved || hasExited())) {
         child.kill('SIGKILL');
       }
     } catch {

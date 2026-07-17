@@ -380,7 +380,6 @@ describe('AcpRuntimeManager', () => {
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {
       const child = createMockChildProcess();
-      exitChildAfterSigterm(child);
       mockSpawn.mockReturnValue(child);
       mockInitialize.mockImplementation(
         () =>
@@ -389,26 +388,48 @@ describe('AcpRuntimeManager', () => {
           })
       );
 
-      const handlers = defaultHandlers();
-      const createPromise = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        handlers,
-        defaultContext()
-      );
-      await vi.waitFor(() => {
+      vi.useFakeTimers();
+
+      try {
+        const handlers = defaultHandlers();
+        const createResult = manager
+          .getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext())
+          .then(
+            (handle) => ({ handle }),
+            (error: unknown) => ({ error })
+          );
+        let creationSettled = false;
+        void createResult.then(() => {
+          creationSettled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(0);
         expect(mockSpawn).toHaveBeenCalledTimes(1);
-      });
 
-      const spawnError = Object.assign(new Error('spawn claude-agent-acp ENOENT'), {
-        code: 'ENOENT',
-      });
-      child.emit('error', spawnError);
+        const spawnError = Object.assign(new Error('spawn claude-agent-acp ENOENT'), {
+          code: 'ENOENT',
+        });
+        child.emit('error', spawnError);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
 
-      await expect(createPromise).rejects.toThrow(
-        /Failed to spawn ACP adapter ".*": spawn claude-agent-acp ENOENT/
-      );
-      expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+        child.emit('close', -2, null);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(creationSettled).toBe(true);
+        await expect(createResult).resolves.toMatchObject({
+          error: {
+            message: expect.stringMatching(
+              /Failed to spawn ACP adapter ".*": spawn claude-agent-acp ENOENT/
+            ),
+          },
+        });
+        expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
+        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+      } finally {
+        await vi.advanceTimersByTimeAsync(5000);
+        vi.useRealTimers();
+      }
     });
 
     it('allows the subprocess to exit during the SIGTERM grace period after initialization fails', async () => {
