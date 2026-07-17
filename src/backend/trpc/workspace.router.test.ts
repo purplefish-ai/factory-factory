@@ -1,4 +1,5 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
@@ -322,6 +323,38 @@ describe('workspaceRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+  });
+
+  it('includes error codes for individual bulk archive failures', async () => {
+    mockWorkspaceQueryService.listWithKanbanState.mockResolvedValue([
+      { id: 'w-success' },
+      { id: 'w-blocked' },
+    ]);
+    mockArchiveWorkspace
+      .mockResolvedValueOnce({ archived: true })
+      .mockRejectedValueOnce(
+        new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Uncommitted changes' })
+      );
+    const { caller } = createCaller();
+
+    await expect(
+      caller.bulkArchive({
+        projectId: 'p1',
+        kanbanColumn: 'WAITING',
+        commitUncommitted: false,
+      })
+    ).resolves.toEqual({
+      results: [
+        { id: 'w-success', success: true },
+        {
+          id: 'w-blocked',
+          success: false,
+          error: 'Uncommitted changes',
+          code: 'PRECONDITION_FAILED',
+        },
+      ],
+      total: 2,
+    });
   });
 
   it('rejects privileged workspace mutations from untrusted requests', async () => {

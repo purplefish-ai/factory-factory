@@ -27,6 +27,7 @@ interface BulkArchiveResult {
   id: string;
   success: boolean;
   error?: string;
+  code?: string;
 }
 
 interface MutationOptions {
@@ -346,7 +347,14 @@ describe('KanbanProvider archive failure handling', () => {
   });
 
   it('restores bulk items that fail when post-archive refreshes also fail', async () => {
-    mocks.bulkArchiveResults = [{ id: 'workspace-1', success: false, error: 'blocked' }];
+    mocks.bulkArchiveResults = [
+      {
+        id: 'workspace-1',
+        success: false,
+        error: 'blocked',
+        code: 'PRECONDITION_FAILED',
+      },
+    ];
     mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     mocks.projectSummaryInvalidateMock.mockRejectedValueOnce(new Error('Invalidation failed'));
     const kanban = renderProvider();
@@ -363,5 +371,35 @@ describe('KanbanProvider archive failure handling', () => {
       { id: 'workspace-2' },
     ]);
     expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith(
+      'Archiving blocked: enable commit before archiving to proceed.'
+    );
+  });
+
+  it('restores selected workspaces omitted from the bulk archive results', async () => {
+    mocks.workspaceListState.push({
+      id: 'workspace-3',
+      kanbanColumn: 'WAITING',
+      githubIssueNumber: null,
+      linearIssueId: null,
+    });
+    mocks.projectSummaryState?.workspaces.push({ id: 'workspace-3' });
+    mocks.refetchWorkspacesMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
+    mocks.projectSummaryInvalidateMock.mockRejectedValueOnce(new Error('Invalidation failed'));
+    const kanban = renderProvider();
+
+    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
+    rerenderProvider();
+
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
+      'workspace-2',
+      'workspace-3',
+    ]);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([
+      { id: 'workspace-2' },
+      { id: 'workspace-3' },
+    ]);
+    expectVisibleWorkspaceIds(['workspace-2', 'workspace-3']);
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to archive workspace');
   });
 });

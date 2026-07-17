@@ -357,9 +357,22 @@ export function KanbanProvider({
           kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
           commitUncommitted,
         });
-        const failedWorkspaceIds = result.results
-          .filter((item) => !item.success)
-          .map((item) => item.id);
+        const successfulWorkspaceIds = new Set(
+          result.results.filter((item) => item.success).map((item) => item.id)
+        );
+        const failedResultsById = new Map(
+          result.results.filter((item) => !item.success).map((item) => [item.id, item] as const)
+        );
+        const failedWorkspaceIds = workspaceIdsToArchive.filter(
+          (workspaceId) => !successfulWorkspaceIds.has(workspaceId)
+        );
+        for (const workspaceId of failedWorkspaceIds) {
+          const failedResult = failedResultsById.get(workspaceId);
+          handleArchiveError({
+            data: { code: failedResult?.code },
+            message: failedResult?.error,
+          });
+        }
         if (failedWorkspaceIds.length > 0) {
           utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
             restoreWorkspacesToListCache(old, previousWorkspaceList, failedWorkspaceIds)
