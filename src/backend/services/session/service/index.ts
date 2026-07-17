@@ -2,6 +2,7 @@
 // Public API for the session domain module.
 // Consumers should import from '@/backend/services/session' only.
 
+export type { AgentSessionRecord } from '@/backend/services/session/types';
 // ACP runtime (Phase 19+)
 export type { AcpClientOptions, AcpRuntimeEventHandlers, AcpSessionState } from './acp';
 export {
@@ -19,7 +20,6 @@ export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges'
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export { chatMessageHandlerService } from './chat/chat-message-handlers.service';
-export type { AgentSessionRecord } from './data/session-data.service';
 export { sessionDataService } from './data/session-data.service';
 export { sessionProviderResolverService } from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';

@@ -16,8 +16,6 @@ import type {
 import type { SessionStatus } from '@/shared/core';
 import { sessionProviderResolverService } from './session-provider-resolver.service';
 
-export type { AgentSessionRecord } from '@/backend/services/session/types';
-
 function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
   return {
     id: session.id,
