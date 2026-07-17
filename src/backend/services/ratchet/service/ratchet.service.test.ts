@@ -705,7 +705,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
-  it('dispatches for PR review summary feedback without changes requested', async () => {
+  it('dispatches for PR review summary feedback in all-feedback mode', async () => {
     const workspace = {
       id: 'ws-review-summary',
       prUrl: 'https://github.com/example/repo/pull/57',
@@ -721,30 +721,37 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.spyOn(
-      unsafeCoerce<{
-        fetchPRState: (...args: unknown[]) => Promise<unknown>;
-      }>(ratchetService),
-      'fetchPRState'
-    ).mockResolvedValue({
-      ciStatus: CIStatus.SUCCESS,
-      snapshotKey: 'ci:SUCCESS|no-changes-requested:1767315600000|merge:clean',
-      hasChangesRequested: false,
-      hasMergeConflict: false,
-      latestReviewActivityAtMs: new Date('2026-01-02T01:00:00Z').getTime(),
-      statusCheckRollup: null,
-      prState: 'OPEN',
-      prNumber: 57,
-      reviewComments: [
-        {
-          author: 'cubic-dev-ai',
-          body: 'Please fix the hydration edge case.',
-          path: 'PR review',
-          line: null,
-          url: 'https://github.com/example/repo/pull/57#pullrequestreview-1',
-        },
-      ],
-    });
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+      ratchetReplyToPrComments: true,
+      ratchetPermissions: 'YOLO',
+    } as never);
+    const fetchPRStateSpy = vi
+      .spyOn(
+        unsafeCoerce<{
+          fetchPRState: (...args: unknown[]) => Promise<unknown>;
+        }>(ratchetService),
+        'fetchPRState'
+      )
+      .mockResolvedValue({
+        ciStatus: CIStatus.SUCCESS,
+        snapshotKey: 'ci:SUCCESS|no-changes-requested:1767315600000|merge:clean',
+        hasChangesRequested: false,
+        hasMergeConflict: false,
+        latestReviewActivityAtMs: new Date('2026-01-02T01:00:00Z').getTime(),
+        statusCheckRollup: null,
+        prState: 'OPEN',
+        prNumber: 57,
+        reviewComments: [
+          {
+            author: 'cubic-dev-ai',
+            body: 'Please fix the hydration edge case.',
+            path: 'PR review',
+            line: null,
+            url: 'https://github.com/example/repo/pull/57#pullrequestreview-1',
+          },
+        ],
+      });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
@@ -762,6 +769,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       newState: RatchetState.READY,
     });
     expect(fixerSessionService.acquireAndDispatch).toHaveBeenCalled();
+    expect(fetchPRStateSpy).toHaveBeenCalledWith(
+      workspace,
+      null,
+      expect.objectContaining({ reviewTriggerMode: 'ALL_REVIEW_FEEDBACK' }),
+      expect.any(AbortSignal)
+    );
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
@@ -1654,13 +1667,22 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     const latestActivity = computeLatestReviewActivityAtMs(
       {
         reviews: [
-          { submittedAt: '2026-01-02T00:00:00Z', author: { login: 'ratchet-bot' } },
-          { submittedAt: '2026-01-01T00:00:00Z', author: { login: 'reviewer' } },
+          {
+            submittedAt: '2026-01-02T00:00:00Z',
+            author: { login: 'ratchet-bot' },
+            state: 'CHANGES_REQUESTED',
+          },
+          {
+            submittedAt: '2026-01-01T00:00:00Z',
+            author: { login: 'reviewer' },
+            state: 'CHANGES_REQUESTED',
+          },
         ],
         comments: [{ updatedAt: '2026-01-02T01:00:00Z', author: { login: 'ratchet-bot' } }],
       },
       [{ updatedAt: '2026-01-01T02:00:00Z', author: { login: 'reviewer2' } }],
-      'ratchet-bot'
+      'ratchet-bot',
+      'CHANGES_REQUESTED'
     );
 
     expect(latestActivity).toBe(new Date('2026-01-01T02:00:00Z').getTime());
@@ -1822,7 +1844,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('computeLatestReviewActivityAtMs edge cases', () => {
     type PRDetails = {
-      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
+      reviews: Array<{
+        submittedAt: string | null;
+        author: { login: string };
+        state?: string;
+      }>;
       comments: Array<{ updatedAt: string; author: { login: string } }>;
     };
     type ReviewComment = { updatedAt: string; author: { login: string } };
@@ -1831,7 +1857,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prDetails: PRDetails,
       reviewComments: ReviewComment[],
       authenticatedUsername: string | null
-    ) => computeLatestReviewActivityAtMs(prDetails, reviewComments, authenticatedUsername);
+    ) =>
+      computeLatestReviewActivityAtMs(
+        prDetails,
+        reviewComments,
+        authenticatedUsername,
+        'CHANGES_REQUESTED'
+      );
 
     it('returns null when there are no reviews or comments', () => {
       expect(callCompute({ reviews: [], comments: [] }, [], null)).toBeNull();
@@ -1841,7 +1873,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(
         callCompute(
           {
-            reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'me' } }],
+            reviews: [
+              {
+                submittedAt: '2026-01-01T00:00:00Z',
+                author: { login: 'me' },
+                state: 'CHANGES_REQUESTED',
+              },
+            ],
             comments: [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'me' } }],
           },
           [{ updatedAt: '2026-01-03T00:00:00Z', author: { login: 'me' } }],
@@ -1853,7 +1891,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('does not filter when authenticatedUsername is null', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'bot' } }],
+          reviews: [
+            {
+              submittedAt: '2026-01-01T00:00:00Z',
+              author: { login: 'bot' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [],
         },
         [],
@@ -1862,28 +1906,40 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(result).toBe(new Date('2026-01-01T00:00:00Z').getTime());
     });
 
-    it('ignores reviews that have null submittedAt', () => {
+    it('ignores reviews with null submittedAt and ordinary PR comments', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: null, author: { login: 'reviewer' } }],
+          reviews: [
+            {
+              submittedAt: null,
+              author: { login: 'reviewer' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'commenter' } }],
         },
         [],
         null
       );
-      expect(result).toBe(new Date('2026-01-02T00:00:00Z').getTime());
+      expect(result).toBeNull();
     });
 
     it('returns the latest timestamp across all sources', () => {
       const result = callCompute(
         {
-          reviews: [{ submittedAt: '2026-01-01T00:00:00Z', author: { login: 'a' } }],
+          reviews: [
+            {
+              submittedAt: '2026-01-01T00:00:00Z',
+              author: { login: 'a' },
+              state: 'CHANGES_REQUESTED',
+            },
+          ],
           comments: [{ updatedAt: '2026-01-03T00:00:00Z', author: { login: 'b' } }],
         },
         [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'c' } }],
         null
       );
-      expect(result).toBe(new Date('2026-01-03T00:00:00Z').getTime());
+      expect(result).toBe(new Date('2026-01-02T00:00:00Z').getTime());
     });
   });
 

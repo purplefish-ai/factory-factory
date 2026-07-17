@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
+import type { RatchetDispatchOutcome, RatchetReviewTriggerMode } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -472,6 +473,8 @@ class RatchetService extends EventEmitter {
 
     try {
       signal.throwIfAborted();
+      const userSettings = await userSettingsAccessor.get();
+      signal.throwIfAborted();
       const authenticatedUsername = await this.getAuthenticatedUsernameCached(signal);
       signal.throwIfAborted();
       const prStateResult = await this.fetchPRState(
@@ -479,6 +482,7 @@ class RatchetService extends EventEmitter {
         authenticatedUsername,
         {
           bypassRecentFetchCooldown: opts?.bypassPrFetchCooldown,
+          reviewTriggerMode: userSettings.ratchetReviewTriggerMode,
         },
         signal
       );
@@ -939,12 +943,16 @@ class RatchetService extends EventEmitter {
   private async fetchPRState(
     workspace: WorkspaceWithPR,
     authenticatedUsername: string | null,
-    opts?: { bypassRecentFetchCooldown?: boolean },
+    opts?: {
+      bypassRecentFetchCooldown?: boolean;
+      reviewTriggerMode?: RatchetReviewTriggerMode;
+    },
     signal?: AbortSignal
   ): Promise<PRStateFetchResult> {
     return await fetchPRStateHelper({
       workspace,
       authenticatedUsername,
+      reviewTriggerMode: opts?.reviewTriggerMode ?? 'CHANGES_REQUESTED',
       github: this.github,
       backoff: this.backoff,
       signal,

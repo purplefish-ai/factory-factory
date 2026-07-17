@@ -1,3 +1,4 @@
+import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
@@ -123,21 +124,30 @@ export function isIgnoredReviewAuthor(
 
 export function computeLatestReviewActivityAtMs(
   prDetails: {
-    reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
+    reviews: Array<{
+      submittedAt: string | null;
+      author: { login: string };
+      state?: string;
+    }>;
     comments: Array<{ updatedAt: string; author: { login: string } }>;
   },
   reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
-  authenticatedUsername: string | null
+  authenticatedUsername: string | null,
+  reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
   const entries = [
-    ...prDetails.reviews.map((review) => ({
-      authorLogin: review.author.login,
-      timestamp: review.submittedAt,
-    })),
-    ...prDetails.comments.map((comment) => ({
-      authorLogin: comment.author.login,
-      timestamp: comment.updatedAt,
-    })),
+    ...prDetails.reviews
+      .filter((review) => {
+        const state = review.state?.toUpperCase();
+        return (
+          state === 'CHANGES_REQUESTED' ||
+          (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+        );
+      })
+      .map((review) => ({
+        authorLogin: review.author.login,
+        timestamp: review.submittedAt,
+      })),
     ...reviewComments.map((reviewComment) => ({
       authorLogin: reviewComment.author.login,
       timestamp: reviewComment.updatedAt,
@@ -155,8 +165,6 @@ export function computeLatestReviewActivityAtMs(
   return timestamps.length > 0 ? Math.max(...timestamps) : null;
 }
 
-const ACTIONABLE_REVIEW_STATES = new Set(['COMMENTED', 'CHANGES_REQUESTED']);
-
 export function buildReviewSummariesForPrompt(
   prDetails: {
     url: string;
@@ -167,7 +175,8 @@ export function buildReviewSummariesForPrompt(
       url?: string;
     }>;
   },
-  authenticatedUsername: string | null
+  authenticatedUsername: string | null,
+  reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
   // A CHANGES_REQUESTED review is stale once the same reviewer approves later,
   // even if they leave further COMMENTED reviews after the approval.
@@ -194,7 +203,10 @@ export function buildReviewSummariesForPrompt(
         return false;
       }
 
-      if (!ACTIONABLE_REVIEW_STATES.has(state)) {
+      if (
+        state !== 'CHANGES_REQUESTED' &&
+        !(reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+      ) {
         return false;
       }
 
@@ -341,6 +353,7 @@ export function resolveRatchetPrContext(
 export async function fetchPRState(params: {
   workspace: WorkspaceWithPR;
   authenticatedUsername: string | null;
+  reviewTriggerMode: RatchetReviewTriggerMode;
   github: RatchetGitHubBridge;
   backoff: RateLimitBackoff;
   signal?: AbortSignal;
@@ -353,7 +366,7 @@ export async function fetchPRState(params: {
    */
   bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
-  const { workspace, authenticatedUsername, github, backoff, signal } = params;
+  const { workspace, authenticatedUsername, reviewTriggerMode, github, backoff, signal } = params;
   signal?.throwIfAborted();
   const prContext = resolveRatchetPrContext(workspace, github);
   if (!prContext) {
@@ -421,7 +434,8 @@ export async function fetchPRState(params: {
     const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
       prDetails,
       reviewComments,
-      authenticatedUsername
+      authenticatedUsername,
+      reviewTriggerMode
     );
     const snapshotKey = computeDispatchSnapshotKey(
       prDetails.number,
@@ -458,7 +472,11 @@ export async function fetchPRState(params: {
         resolvedThreadCommentIds: resolvedReviewCommentIds.size,
       });
     }
-    const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
+    const reviewSummaries = buildReviewSummariesForPrompt(
+      prDetails,
+      authenticatedUsername,
+      reviewTriggerMode
+    );
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
     signal?.throwIfAborted();
