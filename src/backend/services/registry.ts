@@ -55,6 +55,10 @@ export const infrastructureServiceRegistry = {
     fileName: 'server-instance.service.ts',
     description: 'Active HTTP server instance state',
   },
+  'workspace-git-state.service': {
+    fileName: 'workspace-git-state.service.ts',
+    description: 'Process-wide workspace Git snapshot cache and invalidation',
+  },
 } as const;
 
 export type InfrastructureServiceName = keyof typeof infrastructureServiceRegistry;

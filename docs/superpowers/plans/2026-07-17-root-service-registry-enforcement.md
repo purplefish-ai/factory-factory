@@ -4,7 +4,7 @@
 
 **Goal:** Replace the filename-derived root-service exemption with an explicit infrastructure registry and relocate domain-owned services into the run-script and workspace capsules.
 
-**Architecture:** Seven truly cross-cutting root services and two shared root helper modules remain as documented infrastructure capabilities. Seven domain services move behind capsule barrels; factory-config endpoints move from workspace query ownership into run-script so the existing `run-script -> workspace` dependency stays acyclic and complete.
+**Architecture:** Eight truly cross-cutting root services and two shared root helper modules remain as documented infrastructure capabilities. Seven domain services move behind capsule barrels; factory-config endpoints move from workspace query ownership into run-script so the existing `run-script -> workspace` dependency stays acyclic and complete.
 
 **Tech Stack:** TypeScript, Vitest, Express/tRPC, service-capsule registry checker, Dependency Cruiser, Biome, pnpm.
 
@@ -74,7 +74,7 @@ Expected: FAIL because the current classification logic returns no error for the
 
 - [ ] **Step 3: Add the explicit registry and bidirectional validation**
 
-Add `infrastructureServiceRegistry` entries for the seven root services plus the two root helper modules imported by capsules. Each entry records its exact filename:
+Add `infrastructureServiceRegistry` entries for the eight root services plus the two root helper modules imported by capsules. Each entry records its exact filename:
 
 ```ts
 export const infrastructureServiceRegistry = {
@@ -87,6 +87,7 @@ export const infrastructureServiceRegistry = {
   'rate-limit-backoff': { fileName: 'rate-limit-backoff.ts', description: 'Shared API rate-limit retry policy' },
   'rate-limiter.service': { fileName: 'rate-limiter.service.ts', description: 'Process-wide API request rate limiting' },
   'server-instance.service': { fileName: 'server-instance.service.ts', description: 'Active HTTP server instance state' },
+  'workspace-git-state.service': { fileName: 'workspace-git-state.service.ts', description: 'Process-wide workspace Git snapshot cache and invalidation' },
 } as const;
 ```
 
