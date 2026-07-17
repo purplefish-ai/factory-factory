@@ -153,6 +153,43 @@ describe('check-service-accessor-boundaries', () => {
     expect(star.output).toContain('workspaceAccessor');
   });
 
+  it('rejects accessor aliases declared in resource modules and re-exported from barrels', () => {
+    const namedAlias = runChecker([
+      {
+        path: 'src/backend/services/workspace/resources/workspace.accessor.ts',
+        content: 'const workspaceAccessor = {};\nexport { workspaceAccessor as persistence };\n',
+      },
+      {
+        path: 'src/backend/services/workspace/service/reexports.ts',
+        content:
+          "export { persistence as workspaceStore } from '../resources/workspace.accessor';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export { workspaceStore } from './service/reexports';\n",
+      },
+    ]);
+    const defaultAlias = runChecker([
+      {
+        path: 'src/backend/services/workspace/resources/workspace.accessor.ts',
+        content: 'const workspaceAccessor = {};\nexport default workspaceAccessor;\n',
+      },
+      {
+        path: 'src/backend/services/workspace/service/reexports.ts',
+        content: "export { default as persistence } from '../resources/workspace.accessor';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export { persistence } from './service/reexports';\n",
+      },
+    ]);
+
+    expect(namedAlias.status).toBe(1);
+    expect(namedAlias.output).toContain('workspaceAccessor');
+    expect(defaultAlias.status).toBe(1);
+    expect(defaultAlias.output).toContain('workspaceAccessor');
+  });
+
   it('rejects type-only raw accessor imports from capsule barrels', () => {
     const result = runChecker([
       {
@@ -272,5 +309,29 @@ describe('check-service-accessor-boundaries', () => {
     expect(allowed.status).toBe(0);
     expect(denied.status).toBe(1);
     expect(denied.output).toContain('cross-owner raw persistence accessor');
+  });
+
+  it('does not extend the backup import exception to accessor re-exports', () => {
+    const direct = runChecker([
+      {
+        path: 'src/backend/orchestration/data-backup.service.ts',
+        content:
+          "export { dataBackupAccessor } from '@/backend/services/settings/resources/data-backup.accessor';\n",
+      },
+    ]);
+    const importedThenExported = runChecker([
+      {
+        path: 'src/backend/orchestration/data-backup.service.ts',
+        content:
+          "import { dataBackupAccessor } from '@/backend/services/settings/resources/data-backup.accessor';\nexport { dataBackupAccessor };\n",
+      },
+    ]);
+
+    expect(direct.status).toBe(1);
+    expect(direct.output).toContain('cross-owner raw persistence accessor');
+    expect(direct.output).toContain('dataBackupAccessor');
+    expect(importedThenExported.status).toBe(1);
+    expect(importedThenExported.output).toContain('cross-owner re-export');
+    expect(importedThenExported.output).toContain('dataBackupAccessor');
   });
 });

@@ -186,6 +186,13 @@ function parseModuleRecords(sourceFiles, rootDir) {
       }
 
       if (!ts.isExportDeclaration(statement)) {
+        if (
+          ts.isExportAssignment(statement) &&
+          !statement.isExportEquals &&
+          ts.isIdentifier(statement.expression)
+        ) {
+          record.localExports.push({ local: statement.expression.text, exported: 'default' });
+        }
         continue;
       }
 
@@ -265,6 +272,10 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
     for (const record of records.values()) {
       const moduleExports = exportsByModule.get(record.modulePath);
       const localBindings = new Map();
+      const ownAccessorPolicy = POLICY_BY_MODULE.get(record.modulePath);
+      if (ownAccessorPolicy) {
+        localBindings.set(ownAccessorPolicy.binding, ownAccessorPolicy.binding);
+      }
 
       for (const importedBinding of record.imports) {
         const importedModule = resolveSourceModule(importedBinding.modulePath, records);
@@ -321,15 +332,21 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
   }
 
   for (const record of records.values()) {
-    if (!isCapsuleBarrel(record.filePath)) {
-      continue;
-    }
-
     const exposedAccessors = new Set(exportsByModule.get(record.modulePath)?.values() ?? []);
     for (const accessorBinding of exposedAccessors) {
-      violations.push(
-        `${record.filePath}: capsule barrel exposes raw persistence accessor ${accessorBinding}`
-      );
+      if (isCapsuleBarrel(record.filePath)) {
+        violations.push(
+          `${record.filePath}: capsule barrel exposes raw persistence accessor ${accessorBinding}`
+        );
+        continue;
+      }
+
+      const policy = ACCESSOR_POLICIES[accessorBinding];
+      if (policy && capsuleOwner(record.filePath) !== policy.owner) {
+        violations.push(
+          `${record.filePath}: cross-owner re-export of raw persistence accessor ${accessorBinding}`
+        );
+      }
     }
   }
 }
@@ -338,7 +355,12 @@ function isExactException(importerPath, modulePath) {
   return CROSS_OWNER_EXCEPTIONS.has(`${importerPath}::${modulePath}`);
 }
 
-function checkDeepAccessorReference(importerPath, modulePath, violations) {
+function checkDeepAccessorReference(
+  importerPath,
+  modulePath,
+  violations,
+  allowExactImportException = false
+) {
   if (!isAccessorModule(modulePath)) {
     return;
   }
@@ -353,7 +375,7 @@ function checkDeepAccessorReference(importerPath, modulePath, violations) {
 
   if (
     capsuleOwner(importerPath) !== policy.owner &&
-    !isExactException(importerPath, modulePath)
+    !(allowExactImportException && isExactException(importerPath, modulePath))
   ) {
     violations.push(
       `${importerPath}: cross-owner raw persistence accessor ${policy.binding} belongs to ${policy.owner}`
@@ -427,7 +449,7 @@ function checkSourceFile(absolutePath, rootDir, violations) {
         continue;
       }
 
-      checkDeepAccessorReference(importerPath, modulePath, violations);
+      checkDeepAccessorReference(importerPath, modulePath, violations, true);
       checkBarrelBindings(importerPath, modulePath, importedNames(statement), violations);
       continue;
     }
