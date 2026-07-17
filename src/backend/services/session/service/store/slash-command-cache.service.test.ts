@@ -2,11 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { slashCommandCacheService } from './slash-command-cache.service';
 
-vi.mock('@/backend/services/settings');
+const { compareAndSetCachedSlashCommandsMock } = vi.hoisted(() => ({
+  compareAndSetCachedSlashCommandsMock: vi.fn(),
+}));
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsAccessor: {
+    get: vi.fn(),
+    update: vi.fn(),
+    compareAndSetCachedSlashCommands: compareAndSetCachedSlashCommandsMock,
+  },
+}));
 
 describe('slashCommandCacheService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    compareAndSetCachedSlashCommandsMock.mockResolvedValue(true);
   });
 
   it('reads versioned provider-scoped command cache payloads', async () => {
@@ -52,25 +63,26 @@ describe('slashCommandCacheService', () => {
   });
 
   it('writes versioned global command cache payloads', async () => {
+    const updatedAt = new Date('2026-07-17T00:00:00.000Z');
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
       cachedSlashCommands: null,
+      updatedAt,
     } as never);
 
     await slashCommandCacheService.setCachedCommands('CLAUDE', [
       { name: '/help', description: 'Help', argumentHint: 'topic' },
     ]);
 
-    expect(userSettingsAccessor.update).toHaveBeenCalledWith({
-      cachedSlashCommands: {
-        version: 2,
-        global: {
-          CLAUDE: [{ name: '/help', description: 'Help', argumentHint: 'topic' }],
-        },
+    expect(compareAndSetCachedSlashCommandsMock).toHaveBeenCalledWith(updatedAt, {
+      version: 2,
+      global: {
+        CLAUDE: [{ name: '/help', description: 'Help', argumentHint: 'topic' }],
       },
     });
   });
 
   it('treats empty versioned provider cache payloads as cache misses', async () => {
+    const updatedAt = new Date('2026-07-17T00:00:00.000Z');
     vi.mocked(userSettingsAccessor.get)
       .mockResolvedValueOnce({
         cachedSlashCommands: {
@@ -79,6 +91,7 @@ describe('slashCommandCacheService', () => {
             CLAUDE: [],
           },
         },
+        updatedAt,
       } as never)
       .mockResolvedValueOnce({
         cachedSlashCommands: {
@@ -88,19 +101,71 @@ describe('slashCommandCacheService', () => {
             CODEX: [{ name: '/status', description: 'Status' }],
           },
         },
+        updatedAt,
       } as never);
 
     await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toBeNull();
 
     await slashCommandCacheService.setCachedCommands('CLAUDE', []);
 
-    expect(userSettingsAccessor.update).toHaveBeenCalledWith({
-      cachedSlashCommands: {
-        version: 2,
-        global: {
-          CODEX: [{ name: '/status', description: 'Status' }],
-        },
+    expect(compareAndSetCachedSlashCommandsMock).toHaveBeenCalledWith(updatedAt, {
+      version: 2,
+      global: {
+        CODEX: [{ name: '/status', description: 'Status' }],
       },
     });
+  });
+
+  it('preserves concurrent provider cache updates', async () => {
+    let cachedSlashCommands: unknown = {
+      version: 2,
+      global: {
+        CLAUDE: [{ name: '/claude-old', description: 'Claude old' }],
+        CODEX: [{ name: '/codex-old', description: 'Codex old' }],
+      },
+    };
+    let updatedAt = new Date('2026-07-17T00:00:00.000Z');
+
+    vi.mocked(userSettingsAccessor.get).mockImplementation(() => {
+      return Promise.resolve({
+        cachedSlashCommands: structuredClone(cachedSlashCommands),
+        updatedAt: new Date(updatedAt),
+      } as never);
+    });
+    vi.mocked(userSettingsAccessor.update).mockImplementation(
+      ({ cachedSlashCommands: nextCachedSlashCommands }) => {
+        cachedSlashCommands = structuredClone(nextCachedSlashCommands);
+        updatedAt = new Date(updatedAt.getTime() + 1);
+        return Promise.resolve({} as never);
+      }
+    );
+    compareAndSetCachedSlashCommandsMock.mockImplementation(
+      (expectedUpdatedAt: Date, nextCachedSlashCommands: unknown) => {
+        if (expectedUpdatedAt.getTime() !== updatedAt.getTime()) {
+          return Promise.resolve(false);
+        }
+        cachedSlashCommands = structuredClone(nextCachedSlashCommands);
+        updatedAt = new Date(updatedAt.getTime() + 1);
+        return Promise.resolve(true);
+      }
+    );
+
+    await Promise.all([
+      slashCommandCacheService.setCachedCommands('CLAUDE', [
+        { name: '/claude-new', description: 'Claude new' },
+      ]),
+      slashCommandCacheService.setCachedCommands('CODEX', [
+        { name: '/codex-new', description: 'Codex new' },
+      ]),
+    ]);
+
+    expect(cachedSlashCommands).toEqual({
+      version: 2,
+      global: {
+        CLAUDE: [{ name: '/claude-new', description: 'Claude new' }],
+        CODEX: [{ name: '/codex-new', description: 'Codex new' }],
+      },
+    });
+    expect(compareAndSetCachedSlashCommandsMock).toHaveBeenCalledTimes(3);
   });
 });
