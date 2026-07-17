@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { serviceNames } from '@/backend/services/registry';
+import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
 
 // Mock logger (standard pattern)
 vi.mock('./logger.service', () => ({
@@ -13,7 +15,7 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
-import { KanbanColumn } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus, KanbanColumn } from '@/shared/core';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -41,6 +43,8 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     prUpdatedAt: null,
     ratchetEnabled: false,
     ratchetState: 'IDLE',
+    ratchetDispatchOutcome: null,
+    ratchetDispatchRetryCount: 0,
     runScriptStatus: 'IDLE',
     hasHadSessions: false,
     isWorking: false,
@@ -507,6 +511,50 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.isWorking).toBe(false);
       expect(entry!.sidebarStatus.activityState).toBe('IDLE');
       expect(entry!.kanbanColumn).toBe('WAITING');
+    });
+
+    it('moves exhausted Ratchet dispatches to waiting without reporting live agent work', () => {
+      store.configure({
+        deriveFlowState: (input) =>
+          deriveWorkspaceFlowState({
+            ...input,
+            prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+          }),
+        computeKanbanColumn,
+        deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+      });
+      store.upsert(
+        'ws-1',
+        makeUpdate({
+          prUrl: 'https://github.com/org/repo/pull/1',
+          prState: 'OPEN',
+          ratchetEnabled: true,
+          isWorking: false,
+        }),
+        'test',
+        100
+      );
+
+      const transitions: SnapshotUpdateInput[] = [
+        { prCiStatus: 'PENDING', ratchetState: 'CI_RUNNING' },
+        { prCiStatus: 'FAILURE', ratchetState: 'CI_RUNNING' },
+        { ratchetState: 'CI_FAILED', ratchetDispatchOutcome: 'RUNNING' },
+        {
+          ratchetState: 'CI_FAILED',
+          ratchetDispatchOutcome: 'DIED',
+          ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+        },
+      ];
+      const columns: Array<string | null> = [];
+
+      for (const [index, update] of transitions.entries()) {
+        store.upsert('ws-1', update, 'test', 200 + index);
+        const entry = store.getByWorkspaceId('ws-1');
+        expect(entry?.isWorking).toBe(false);
+        columns.push(entry?.kanbanColumn ?? null);
+      }
+
+      expect(columns).toEqual(['WORKING', 'WORKING', 'WORKING', 'WAITING']);
     });
 
     it('ratchetButtonAnimated reflects flow state', () => {

@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
+import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
 import type {
   SnapshotUpdateInput,
   WorkspaceSnapshotEntry,
 } from '@/backend/services/workspace-snapshot-store.service';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 // ---------------------------------------------------------------------------
@@ -92,6 +95,8 @@ function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<st
     prUpdatedAt: new Date('2026-01-02T00:00:00Z'),
     ratchetEnabled: true,
     ratchetState: 'IDLE',
+    ratchetDispatchOutcome: 'DIED',
+    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
     runScriptStatus: 'IDLE',
     agentSessions: [
       {
@@ -152,6 +157,8 @@ function createSnapshotEntry(
     prUpdatedAt: '2026-01-02T00:00:00Z',
     ratchetEnabled: true,
     ratchetState: 'IDLE',
+    ratchetDispatchOutcome: 'DIED',
+    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
     runScriptStatus: 'IDLE',
     hasHadSessions: true,
     isWorking: false,
@@ -249,6 +256,33 @@ describe('detectDrift', () => {
     ]);
   });
 
+  it.each([
+    {
+      field: 'ratchetDispatchOutcome' as const,
+      snapshotValue: 'RUNNING' as const,
+      authoritativeValue: 'DIED' as const,
+    },
+    {
+      field: 'ratchetDispatchRetryCount' as const,
+      snapshotValue: 1,
+      authoritativeValue: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+    },
+  ])('detects Ratchet drift when $field changes', (drift) => {
+    const existing = createSnapshotEntry({ [drift.field]: drift.snapshotValue });
+    const authoritative: SnapshotUpdateInput = {
+      [drift.field]: drift.authoritativeValue,
+    };
+
+    expect(detectDrift(existing, authoritative)).toEqual([
+      {
+        field: drift.field,
+        group: 'ratchet',
+        snapshotValue: drift.snapshotValue,
+        authoritativeValue: drift.authoritativeValue,
+      },
+    ]);
+  });
+
   it('ignores undefined authoritative fields', () => {
     const existing = createSnapshotEntry({ status: 'NEW', prState: 'OPEN' });
     const authoritative: SnapshotUpdateInput = { status: 'READY' };
@@ -336,6 +370,29 @@ describe('SnapshotReconciliationService', () => {
       expect(fields.branchName).toBe('feature/test');
       expect(fields.prState).toBe('OPEN');
       expect(fields.ratchetEnabled).toBe(true);
+      expect(fields.ratchetDispatchOutcome).toBe('DIED');
+      expect(fields.ratchetDispatchRetryCount).toBe(SERVICE_THRESHOLDS.ratchetDispatchMaxRetries);
+
+      const { WorkspaceSnapshotStore } = await vi.importActual<
+        typeof import('@/backend/services/workspace-snapshot-store.service')
+      >('@/backend/services/workspace-snapshot-store.service');
+      const snapshotStore = new WorkspaceSnapshotStore();
+      snapshotStore.configure({
+        deriveFlowState: (input) =>
+          deriveWorkspaceFlowState({
+            ...input,
+            prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+          }),
+        computeKanbanColumn,
+        deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+      });
+      snapshotStore.upsert('ws-1', fields, 'reconciliation', 100);
+      const snapshot = snapshotStore.getByWorkspaceId('ws-1');
+      expect(snapshot).toMatchObject({
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+        kanbanColumn: 'WAITING',
+      });
 
       // Verify second workspace was also upserted
       const secondCall = mockUpsert.mock.calls[1]!;

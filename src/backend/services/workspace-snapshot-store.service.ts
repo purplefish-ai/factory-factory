@@ -80,6 +80,8 @@ export interface WorkspaceSnapshotEntry {
   prUpdatedAt: string | null;
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
+  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount: number;
   runScriptStatus: RunScriptStatus;
   hasHadSessions: boolean;
 
@@ -139,6 +141,8 @@ export interface SnapshotUpdateInput {
   // Ratchet fields (group: 'ratchet')
   ratchetEnabled?: boolean;
   ratchetState?: RatchetState;
+  ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount?: number;
 
   // Run-script fields (group: 'runScript')
   runScriptStatus?: RunScriptStatus;
@@ -225,7 +229,12 @@ const WORKSPACE_FIELDS = [
 ] as const;
 const PR_FIELDS = ['prUrl', 'prNumber', 'prState', 'prCiStatus', 'prUpdatedAt'] as const;
 const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
-const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState'] as const;
+const RATCHET_FIELDS = [
+  'ratchetEnabled',
+  'ratchetState',
+  'ratchetDispatchOutcome',
+  'ratchetDispatchRetryCount',
+] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
@@ -334,6 +343,8 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       prUpdatedAt: null,
       ratchetEnabled: false,
       ratchetState: 'IDLE' as RatchetState,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
       runScriptStatus: 'IDLE' as RunScriptStatus,
       hasHadSessions: false,
       isWorking: false,
@@ -408,8 +419,8 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
+        ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
         runScriptStatus: entry.runScriptStatus,
         flowState,
       },
