@@ -210,6 +210,7 @@ describe('validateTrustedLocalWebSocketRequest', () => {
     });
 
     expect(isValid).toBe(false);
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
     expect(socket.destroy).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
