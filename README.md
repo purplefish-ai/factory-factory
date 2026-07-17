@@ -86,6 +86,15 @@ ff db:studio        # Inspect the local database with Prisma Studio
 
 `ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically runs database migrations, finds an available port, and opens the browser when the server is ready.
 
+### Hosting behind your own reverse proxy
+
+To serve Factory Factory from your own domain (e.g. `https://ff.example.com`) via nginx, Caddy, or another reverse proxy:
+
+- Set `CORS_ALLOWED_ORIGINS` to the exact public origin(s), comma-separated: `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates both HTTP CORS and WebSocket upgrades; non-loopback origins must match exactly (scheme + host + non-default port, no trailing slash).
+- Keep `BACKEND_HOST` bound to `localhost`/`127.0.0.1` so only your proxy can reach the server.
+
+By default the server rejects WebSocket upgrades that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.), because it expects to sit behind an authenticated proxy that strips them. If your reverse proxy adds these headers, either strip them before forwarding, or set `TRUST_PROXY_HEADERS=true` to accept them. **Only enable `TRUST_PROXY_HEADERS` when the backend is reachable solely through your trusted proxy** (i.e. bound to loopback) — otherwise clients could spoof address headers. The remote-address trust check (loopback / `TRUSTED_LOCAL_CIDRS`) still applies.
+
 ## Security
 
 > [!WARNING]
