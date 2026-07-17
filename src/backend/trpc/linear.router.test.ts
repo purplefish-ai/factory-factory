@@ -111,10 +111,12 @@ describe('linearRouter', () => {
       { id: 'issue-1', identifier: 'FF-1' },
       { id: 'issue-2', identifier: 'FF-2' },
       { id: 'issue-3', identifier: 'FF-3' },
+      { id: 'issue-4', identifier: 'FF-4' },
     ]);
     mockFindWorkspacesByProjectId.mockResolvedValue([
       { linearIssueId: 'issue-1', status: 'READY' },
       { linearIssueId: 'issue-3', status: 'ARCHIVED' },
+      { linearIssueId: 'issue-4', status: 'ARCHIVING' },
     ]);
 
     const caller = createCaller();
@@ -122,6 +124,7 @@ describe('linearRouter', () => {
       issues: [
         { id: 'issue-2', identifier: 'FF-2' },
         { id: 'issue-3', identifier: 'FF-3' },
+        { id: 'issue-4', identifier: 'FF-4' },
       ],
       error: null,
     });

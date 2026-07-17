@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 
 const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockGetSnapshot = vi.hoisted(() => vi.fn());
@@ -79,13 +80,6 @@ describe('gitOpsService', () => {
 
     mockGitCommand
       .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
-      .mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'status failed' });
-    await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1', true)).rejects.toMatchObject({
-      code: 'INTERNAL_SERVER_ERROR',
-    });
-
-    mockGitCommand
-      .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
     await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1', true)).resolves.toBeUndefined();
 
@@ -113,17 +107,43 @@ describe('gitOpsService', () => {
   });
 
   it('invalidates staged archive changes when the commit fails', async () => {
+    const commitResult = { code: 1, stdout: '', stderr: 'commit failed' };
     mockGitCommand
       .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: ' M file.ts\n', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
-      .mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'commit failed' });
+      .mockResolvedValueOnce(commitResult);
 
     await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1', true)).rejects.toMatchObject({
-      code: 'INTERNAL_SERVER_ERROR',
+      code: 'INTERNAL_ERROR',
+      message: 'Git commit failed',
+      cause: commitResult,
     });
     expect(mockGitStateInvalidate).toHaveBeenCalledOnce();
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
+  });
+
+  it('sanitizes git command failures while retaining the raw result as the cause', async () => {
+    const statusResult = {
+      code: 1,
+      stdout: 'status stdout SECRET_STDERR_TOKEN',
+      stderr: 'status stderr SECRET_STDERR_TOKEN',
+    };
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
+      .mockResolvedValueOnce(statusResult);
+
+    const error = await gitOpsService
+      .commitIfNeeded('/repo/w1', 'W1', true)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Git status failed',
+      cause: statusResult,
+    });
+    expect((error as Error).message).not.toContain('SECRET_STDERR_TOKEN');
   });
 
   it('removeWorktree uses git when registered and fs fallback otherwise', async () => {
