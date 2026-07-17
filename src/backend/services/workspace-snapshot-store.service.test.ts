@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serviceNames } from '@/backend/services/registry';
 
 // Mock logger (standard pattern)
@@ -286,6 +286,29 @@ describe('WorkspaceSnapshotStore', () => {
   // Removal tombstones: stale reconcile passes must not resurrect entries
   // -------------------------------------------------------------------------
   describe('Removal tombstones', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('expires removal protection after the configured grace period', () => {
+      // biome-ignore lint/style/useNumericSeparators: Match the issue's specified test value.
+      vi.setSystemTime(1_000);
+      store.remove('ws-1', 900);
+      vi.advanceTimersByTime(10 * 60_000);
+      expect(store.removalTombstoneCount()).toBe(0);
+    });
+
+    it('repeated removal preserves the newest logical timestamp', () => {
+      store.remove('ws-1', 200);
+      store.remove('ws-1', 150);
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 175);
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+    });
+
     it('ignores upserts whose timestamp predates the removal', () => {
       store.upsert('ws-1', makeUpdate(), 'test', 100);
       store.remove('ws-1', 200);

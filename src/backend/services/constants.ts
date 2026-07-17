@@ -30,6 +30,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
 export const SERVICE_CACHE_TTL_MS = Object.freeze({
   ratchetAuthenticatedUsername: 5 * 60_000,
   cliHealth: 30_000,
+  workspaceSnapshotRemovalGrace: 10 * 60_000,
 } as const);
 
 export const SERVICE_THRESHOLDS = Object.freeze({

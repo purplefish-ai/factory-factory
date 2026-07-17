@@ -31,6 +31,7 @@ import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
+import { SERVICE_CACHE_TTL_MS } from './constants';
 import { createLogger } from './logger.service';
 
 // ---------------------------------------------------------------------------
@@ -232,6 +233,8 @@ const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
+type RemovalTombstone = { removedAt: number; expiresAt: number; timer: NodeJS.Timeout };
+
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
   fields: readonly SnapshotField[];
@@ -338,7 +341,15 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * than the removal is ignored, so a reconcile pass that read the DB before
    * an archive committed cannot momentarily resurrect the removed entry.
    */
-  private removalTimestamps = new Map<string, number>();
+  private removalTimestamps = new Map<string, RemovalTombstone>();
+
+  private clearRemovalTombstone(workspaceId: string): void {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      clearTimeout(tombstone.timer);
+    }
+    this.removalTimestamps.delete(workspaceId);
+  }
 
   private assignField<K extends SnapshotField>(
     entry: WorkspaceSnapshotEntry,
@@ -573,16 +584,16 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   ): SnapshotUpsertResult {
     const ts = timestamp ?? Date.now();
 
-    const removedAt = this.removalTimestamps.get(workspaceId);
-    if (removedAt !== undefined) {
-      if (ts <= removedAt) {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      if (ts <= tombstone.removedAt) {
         logger.debug('Snapshot update ignored (workspace removed after update was computed)', {
           workspaceId,
           source,
         });
         return { accepted: false, changed: false, emitted: false };
       }
-      this.removalTimestamps.delete(workspaceId);
+      this.clearRemovalTombstone(workspaceId);
     }
 
     let entry = this.entries.get(workspaceId);
@@ -645,7 +656,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * been upserted here.
    */
   remove(workspaceId: string, timestamp?: number): boolean {
-    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
+    const priorTombstone = this.removalTimestamps.get(workspaceId);
+    const removedAt = Math.max(
+      priorTombstone?.removedAt ?? Number.NEGATIVE_INFINITY,
+      timestamp ?? Date.now()
+    );
+    this.clearRemovalTombstone(workspaceId);
+
+    const expiresAt = Date.now() + SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace;
+    const timer = setTimeout(() => {
+      const tombstone = this.removalTimestamps.get(workspaceId);
+      if (tombstone?.expiresAt === expiresAt) {
+        this.removalTimestamps.delete(workspaceId);
+      }
+    }, SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace);
+    timer.unref();
+    this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -720,12 +746,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   }
 
   /**
+   * Get the number of retained removal tombstones (for testing/debugging).
+   */
+  removalTombstoneCount(): number {
+    return this.removalTimestamps.size;
+  }
+
+  /**
    * Clear all entries and indexes. Useful for testing and server shutdown.
    */
   clear(): void {
     this.entries.clear();
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
+    for (const tombstone of this.removalTimestamps.values()) {
+      clearTimeout(tombstone.timer);
+    }
     this.removalTimestamps.clear();
     logger.info('Snapshot store cleared');
   }
