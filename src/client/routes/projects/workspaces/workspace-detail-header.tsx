@@ -134,7 +134,7 @@ export function WorkspaceDetailHeaderSlot({
               className="min-w-0 max-w-[18rem] text-sm font-semibold bg-transparent border-b border-primary outline-none"
             />
           ) : (
-            <div className="group flex items-center gap-0.5">
+            <div className="group flex min-w-0 items-center gap-0.5">
               <WorkspaceSwitcherDropdown
                 projectSlug={slug}
                 projectId={workspace.projectId}
