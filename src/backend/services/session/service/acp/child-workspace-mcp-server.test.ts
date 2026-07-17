@@ -1,9 +1,18 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../../');
+const TSX_BIN = join(
+  REPO_ROOT,
+  'node_modules',
+  '.bin',
+  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+);
 
 const toolResponseSchema = z.object({
   result: z.object({
@@ -34,7 +43,7 @@ async function callToolWithHttpResponse(options: {
       throw new Error('Expected the test HTTP server to listen on a TCP port');
     }
     const child = spawn(
-      process.execPath,
+      TSX_BIN,
       [fileURLToPath(new URL('./child-workspace-mcp-server.ts', import.meta.url))],
       {
         env: {
