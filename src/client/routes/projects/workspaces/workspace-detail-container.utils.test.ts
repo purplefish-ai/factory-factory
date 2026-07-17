@@ -3,6 +3,7 @@ import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/sess
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,
+  getArchiveGitStatusQueryOptions,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
   type SessionForRuntimeOverlay,
@@ -36,6 +37,15 @@ describe('workspace detail container utils', () => {
     expect(shouldFetchArchiveGitStatus(false, '/repo/w1')).toBe(false);
     expect(shouldFetchArchiveGitStatus(true, null)).toBe(false);
     expect(shouldFetchArchiveGitStatus(true, '/repo/w1')).toBe(true);
+  });
+
+  it('treats archive Git status as stale whenever the dialog reopens', () => {
+    expect(getArchiveGitStatusQueryOptions(true, '/repo/w1')).toEqual({
+      enabled: true,
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    });
+    expect(getArchiveGitStatusQueryOptions(false, '/repo/w1').enabled).toBe(false);
   });
 
   it('returns true when the transcript has a user message and no agent message', () => {

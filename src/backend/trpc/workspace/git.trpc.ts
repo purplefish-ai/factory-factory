@@ -68,8 +68,8 @@ export const workspaceGitRouter = router({
       if (!snapshot) {
         return { added: [], modified: [], deleted: [], noMergeBase: false };
       }
-      if (snapshot.base.error) {
-        throw new Error(`Git diff failed: ${snapshot.base.error}`);
+      if (snapshot.base.changesError) {
+        throw new Error(`Git diff failed: ${snapshot.base.changesError}`);
       }
       if (snapshot.base.noMergeBase) {
         logger.warn(

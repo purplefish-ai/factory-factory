@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { gitCommand, gitCommandC } from '@/backend/lib/shell';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { WORKSPACE_WORDS } from '@/shared/workspace-words';
 
 /**
@@ -468,6 +469,7 @@ export class GitClient {
         `Failed to merge branch ${sourceBranch}: ${mergeResult.stderr || mergeResult.stdout}`
       );
     }
+    workspaceGitStateService.invalidate(worktreePath);
 
     // Get the merge commit SHA
     const revResult = await gitCommand(['rev-parse', 'HEAD'], worktreePath);
@@ -491,6 +493,7 @@ export class GitClient {
     if (result.code !== 0) {
       throw new Error(`Failed to push branch: ${result.stderr || result.stdout}`);
     }
+    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**
@@ -501,6 +504,7 @@ export class GitClient {
     if (result.code !== 0) {
       throw new Error(`Failed to push branch with upstream: ${result.stderr || result.stdout}`);
     }
+    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**
@@ -511,6 +515,7 @@ export class GitClient {
     if (result.code !== 0) {
       throw new Error(`Failed to fetch: ${result.stderr || result.stdout}`);
     }
+    workspaceGitStateService.invalidate(worktreePath);
   }
 
   /**

@@ -137,7 +137,7 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
   });
 
-  it('recalculates a snapshot with a transient section error', async () => {
+  it('reuses a degraded snapshot before its 5000 ms retry boundary', async () => {
     let statusAttempts = 0;
     runGit.mockImplementation((args) => {
       if (args[0] === 'status' && statusAttempts++ === 0) {
@@ -147,9 +147,30 @@ describe('WorkspaceGitStateService', () => {
     });
 
     const degraded = await service.getSnapshot(input);
-    const recovered = await service.getSnapshot(input);
+    now += 4999;
+    const cached = await service.getSnapshot(input);
 
     expect(degraded.status.error).toBe('status temporarily unavailable');
+    expect(cached).toBe(degraded);
+    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
+  });
+
+  it('recalculates a degraded snapshot at exactly 5000 ms', async () => {
+    let statusAttempts = 0;
+    runGit.mockImplementation((args) => {
+      if (args[0] === 'status' && statusAttempts++ === 0) {
+        return resolvedResult('', 1, 'status temporarily unavailable');
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const degraded = await service.getSnapshot(input);
+    now += 4999;
+    expect(await service.getSnapshot(input)).toBe(degraded);
+    now += 1;
+    const recovered = await service.getSnapshot(input);
+
+    expect(recovered).not.toBe(degraded);
     expect(recovered.status.error).toBeUndefined();
     expect(recovered.status.files).toEqual([{ path: 'src/a.ts', status: 'M', staged: false }]);
     expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
@@ -406,8 +427,45 @@ describe('WorkspaceGitStateService', () => {
     const snapshot = await service.getSnapshot(input);
 
     expect(snapshot.status.error).toBe('status broke');
-    expect(snapshot.base.error).toBe('base diff broke');
+    expect(snapshot.base.changesError).toBe('base diff broke');
     expect(snapshot.upstream.error).toBe('upstream diff broke');
     expect(getStats(snapshot)).toBeNull();
+  });
+
+  it('keeps base change metadata available when aggregate stats fail', async () => {
+    runGit.mockImplementation((args) => {
+      if (args[1] === '--numstat') {
+        return resolvedResult('', 2, 'stats diff broke');
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const snapshot = await service.getSnapshot(input);
+
+    expect(snapshot.base.stats).toBeNull();
+    expect(snapshot.base.statsError).toBe('stats diff broke');
+    expect(snapshot.base.changesError).toBeUndefined();
+    expect(snapshot.base.added).toEqual([{ path: 'new.ts', status: 'added' }]);
+    expect(getStats(snapshot)).toBeNull();
+  });
+
+  it('keeps aggregate stats available when base change metadata fails', async () => {
+    runGit.mockImplementation((args) => {
+      if (args[1] === '--name-status') {
+        return resolvedResult('', 2, 'change metadata broke');
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const snapshot = await service.getSnapshot(input);
+
+    expect(snapshot.base.changesError).toBe('change metadata broke');
+    expect(snapshot.base.statsError).toBeUndefined();
+    expect(getStats(snapshot)).toEqual({
+      total: 2,
+      additions: 2,
+      deletions: 1,
+      hasUncommitted: true,
+    });
   });
 });

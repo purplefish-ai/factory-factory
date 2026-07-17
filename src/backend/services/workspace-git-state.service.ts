@@ -36,7 +36,8 @@ export interface WorkspaceGitStateSnapshot {
     added: Array<{ path: string; status: 'added' }>;
     modified: Array<{ path: string; status: 'modified' }>;
     deleted: Array<{ path: string; status: 'deleted' }>;
-    error?: string;
+    statsError?: string;
+    changesError?: string;
   };
   upstream: {
     ref: string | null;
@@ -79,6 +80,7 @@ interface WatcherRecord {
 }
 
 const WATCH_DEBOUNCE_MS = 100;
+const DEGRADED_TTL_MS = 5000;
 const FALLBACK_TTL_MS = 300_000;
 
 const defaultWatchPath: WatchPath = (filePath, options, listener) =>
@@ -92,6 +94,15 @@ function hasErrorCode(error: unknown, code: string): boolean {
 
 function commandError(result: ExecResult): string {
   return result.stderr.trim() || result.stdout.trim() || 'Git command failed';
+}
+
+function isDegraded(snapshot: WorkspaceGitStateSnapshot): boolean {
+  return Boolean(
+    snapshot.status.error ||
+      snapshot.base.statsError ||
+      snapshot.base.changesError ||
+      snapshot.upstream.error
+  );
 }
 
 function parseNameStatus(
@@ -121,7 +132,7 @@ function parseNameStatus(
 }
 
 export function getStats(snapshot: WorkspaceGitStateSnapshot): WorkspaceGitStats | null {
-  if (snapshot.status.error || snapshot.base.error) {
+  if (snapshot.status.error || snapshot.base.statsError) {
     return null;
   }
   return snapshot.base.stats;
@@ -150,11 +161,15 @@ export class WorkspaceGitStateService {
     const watcher = this.ensureWatcher(normalizedInput.worktreePath);
     const key = this.cacheKey(normalizedInput);
     const cached = this.cache.get(key);
-    if (
-      cached &&
-      (watcher.mode === 'healthy' || this.now() - cached.snapshot.computedAt < FALLBACK_TTL_MS)
-    ) {
-      return Promise.resolve(cached.snapshot);
+    if (cached) {
+      const ttl = isDegraded(cached.snapshot)
+        ? DEGRADED_TTL_MS
+        : watcher.mode === 'healthy'
+          ? Number.POSITIVE_INFINITY
+          : FALLBACK_TTL_MS;
+      if (this.now() - cached.snapshot.computedAt < ttl) {
+        return Promise.resolve(cached.snapshot);
+      }
     }
     if (cached) {
       this.cache.delete(key);
@@ -170,8 +185,7 @@ export class WorkspaceGitStateService {
     const calculation = watcher.setup
       .then(() => this.calculate(normalizedInput))
       .then((snapshot) => {
-        const hasError = snapshot.status.error || snapshot.base.error || snapshot.upstream.error;
-        if ((this.generations.get(key) ?? 0) === generation && !hasError) {
+        if ((this.generations.get(key) ?? 0) === generation) {
           this.cache.set(key, { snapshot });
         }
         return snapshot;
@@ -394,7 +408,7 @@ export class WorkspaceGitStateService {
       deleted: [],
     };
     if (numstatResult.code !== 0) {
-      base.error = commandError(numstatResult);
+      base.statsError = commandError(numstatResult);
     }
 
     if (mergeBase) {
@@ -405,7 +419,7 @@ export class WorkspaceGitStateService {
       if (nameStatusResult.code === 0) {
         Object.assign(base, parseNameStatus(nameStatusResult.stdout));
       } else {
-        base.error ??= commandError(nameStatusResult);
+        base.changesError = commandError(nameStatusResult);
       }
     }
 

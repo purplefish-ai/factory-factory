@@ -210,7 +210,10 @@ describe('workspaceGitRouter', () => {
     });
 
     mockGetSnapshot.mockResolvedValue(
-      makeSnapshot({ base: { error: 'base failed' }, upstream: { error: 'upstream failed' } })
+      makeSnapshot({
+        base: { statsError: 'stats failed', changesError: 'changes failed' },
+        upstream: { error: 'upstream failed' },
+      })
     );
     await expect(caller.getGitStatus({ workspaceId: 'w1' })).resolves.toMatchObject({
       hasUncommitted: true,
@@ -227,7 +230,7 @@ describe('workspaceGitRouter', () => {
     });
 
     mockGetSnapshot.mockResolvedValue(
-      makeSnapshot({ status: { error: 'status failed' }, base: { error: 'base failed' } })
+      makeSnapshot({ status: { error: 'status failed' }, base: { changesError: 'changes failed' } })
     );
     await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toMatchObject({
       hasUpstream: true,
@@ -241,10 +244,16 @@ describe('workspaceGitRouter', () => {
       'Git status failed: status failed'
     );
 
-    mockGetSnapshot.mockResolvedValue(makeSnapshot({ base: { error: 'base failed' } }));
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ base: { changesError: 'changes failed' } }));
     await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).rejects.toThrow(
-      'Git diff failed: base failed'
+      'Git diff failed: changes failed'
     );
+
+    mockGetSnapshot.mockResolvedValue(makeSnapshot({ base: { statsError: 'stats failed' } }));
+    await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toMatchObject({
+      added: [{ path: 'new.ts', status: 'added' }],
+      noMergeBase: false,
+    });
 
     mockGetSnapshot.mockResolvedValue(makeSnapshot({ upstream: { error: 'upstream failed' } }));
     await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).rejects.toThrow(

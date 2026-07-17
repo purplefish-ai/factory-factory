@@ -22,9 +22,9 @@ import {
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
+  getArchiveGitStatusQueryOptions,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
-  shouldFetchArchiveGitStatus,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
@@ -87,11 +87,7 @@ export function WorkspaceDetailContainer() {
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    {
-      enabled: shouldFetchArchiveGitStatus(archiveDialogOpen, workspace?.worktreePath),
-      staleTime: 10_000,
-      refetchOnWindowFocus: false,
-    }
+    getArchiveGitStatusQueryOptions(archiveDialogOpen, workspace?.worktreePath)
   );
   const hasUncommitted = gitStatus?.hasUncommitted === true;
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);

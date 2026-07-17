@@ -23,7 +23,7 @@ Add `workspace-git-state.service.ts` as a cross-cutting backend infrastructure s
 - upstream presence/ref and files changed by local, unpushed commits;
 - computation timestamp and section-specific errors.
 
-Status, base-relative, and upstream sections retain independent error state. An upstream lookup failure that means “no configured upstream” produces an empty successful upstream section. A genuine upstream diff failure is recorded for that section but does not make status or aggregate stats unavailable. Existing tRPC endpoints translate only their relevant section error into their existing thrown error behavior.
+Status, base aggregate stats, base-relative change metadata, and upstream sections retain independent error state. Base failures use `statsError` for numstat and `changesError` for name-status so either valid result remains usable when the other command fails. An upstream lookup failure that means “no configured upstream” produces an empty successful upstream section. A genuine upstream diff failure is recorded for that section but does not make status or aggregate stats unavailable. Existing tRPC endpoints translate only their relevant section error into their existing thrown error behavior.
 
 The cache key is the normalized worktree path plus default branch. A per-key generation increments on invalidation. Concurrent misses share one promise. If invalidation happens while a calculation is in flight, that result is returned to its original callers but is not installed as the new cached value, preventing a stale calculation from repopulating the cache.
 
@@ -31,7 +31,9 @@ The cache key is the normalized worktree path plus default branch. A per-key gen
 
 The first request for a worktree installs recursive file-system watching for the worktree plus Git metadata where available. Events are debounced briefly and invalidate every base-branch variant for that worktree. App-owned Git mutations explicitly invalidate after successful commits, worktree creation/removal, merges, pushes, fetches, auto-iteration Git mutations, and branch renames. App-owned file deletion invalidates after success.
 
-When recursive watching cannot be installed or later reports an error, the service marks that worktree as fallback-only. Fallback cache entries expire after five minutes and are refreshed only when a consumer asks for them. With a healthy watcher, warm entries have no time-based expiry. Active changes panels request the snapshot every 15 seconds, so external edits become visible within approximately 16 seconds (watch debounce plus the client interval). Archive confirmation requests status when the dialog opens. Hidden panels and inactive workspaces do not create 15-second polling traffic. Reconciliation may continue on its existing safety-net schedule, but it receives warm cached snapshots rather than spawning Git processes.
+When recursive watching cannot be installed or later reports an error, the service marks that worktree as fallback-only. Healthy fallback cache entries expire after five minutes and are refreshed only when a consumer asks for them. With a healthy watcher, healthy warm entries have no time-based expiry. A degraded snapshot containing any command error is cached for exactly five seconds before the next requesting consumer retries it, preventing request storms without persisting transient failures indefinitely.
+
+Active changes panels request the snapshot every 15 seconds, so watcher-observed external edits become visible within approximately 16 seconds (100 ms watch debounce plus the client interval). App-owned mutations explicitly invalidate immediately after success and become visible on the next request. Archive confirmation requests fresh status whenever the dialog opens (`staleTime: 0`). Hidden panels and inactive workspaces do not create 15-second polling traffic. Reconciliation may continue on its existing safety-net schedule, but it receives warm cached snapshots rather than spawning Git processes.
 
 `remove(worktreePath)` closes watchers, removes all cached and in-flight bookkeeping for the path, and advances its generation. Worktree cleanup calls it whether removal uses Git or the file-system fallback. Server shutdown closes all watchers.
 
@@ -59,7 +61,7 @@ Add focused service unit tests with injected Git and watcher dependencies for:
 
 - concurrent single-flight requests and warm-cache reuse;
 - explicit and watcher-driven invalidation, including invalidation during flight;
-- watcher setup/error fallback and five-minute expiry;
+- watcher setup/error fallback, five-minute healthy expiry, and exact five-second degraded retry;
 - separate cache entries for different base branches;
 - origin/local merge-base fallback and no merge base;
 - missing upstreams and upstream diff failures;

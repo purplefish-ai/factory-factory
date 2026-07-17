@@ -9,6 +9,7 @@ import { gitCommand } from '@/backend/lib/shell';
 import { extractInputValue, isString } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceDataService } from '@/backend/services/workspace';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('branch-rename');
@@ -30,6 +31,7 @@ export const branchRenameInterceptor: ToolInterceptor = {
     if (!(command && /\bgit\s+branch\s+-[mM]\b/.test(command))) {
       return;
     }
+    workspaceGitStateService.invalidate(context.workingDir);
 
     logger.info('Detected git branch rename command', {
       workspaceId: context.workspaceId,
