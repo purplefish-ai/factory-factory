@@ -165,7 +165,7 @@ function parseNameStatus(
 }
 
 export function getStats(snapshot: WorkspaceGitStateSnapshot): WorkspaceGitStats | null {
-  if (snapshot.status.error || snapshot.base.statsError) {
+  if (snapshot.status.error) {
     return null;
   }
   return snapshot.base.stats;
@@ -436,7 +436,7 @@ export class WorkspaceGitStateService {
       stats:
         numstatResult.code === 0
           ? { ...parseNumstatOutput(numstatResult.stdout), hasUncommitted: status.hasUncommitted }
-          : null,
+          : { total: 0, additions: 0, deletions: 0, hasUncommitted: status.hasUncommitted },
       added: [],
       modified: [],
       deleted: [],
@@ -445,8 +445,9 @@ export class WorkspaceGitStateService {
       base.statsError = commandError(numstatResult);
     }
 
+    let nameStatusResult: ExecResult | null = null;
     if (mergeBase) {
-      const nameStatusResult = await this.runGit(
+      nameStatusResult = await this.runGit(
         ['diff', '--name-status', mergeBase],
         input.worktreePath
       );
@@ -456,6 +457,7 @@ export class WorkspaceGitStateService {
         base.changesError = commandError(nameStatusResult);
       }
     }
+    await this.populateFallbackFileTotal(base, numstatResult, nameStatusResult, input.worktreePath);
 
     const upstream = await this.calculateUpstream(input.worktreePath);
     return {
@@ -465,6 +467,25 @@ export class WorkspaceGitStateService {
       base,
       upstream,
     };
+  }
+
+  private async populateFallbackFileTotal(
+    base: WorkspaceGitStateSnapshot['base'],
+    numstatResult: ExecResult,
+    nameStatusResult: ExecResult | null,
+    worktreePath: string
+  ): Promise<void> {
+    if (numstatResult.code === 0 || !base.stats) {
+      return;
+    }
+
+    const fileListResult =
+      nameStatusResult ?? (await this.runGit(['diff', '--name-only'], worktreePath));
+    if (fileListResult.code === 0) {
+      base.stats.total = fileListResult.stdout
+        .split('\n')
+        .filter((line) => line.trim().length > 0).length;
+    }
   }
 
   private async findMergeBase(input: WorkspaceGitStateInput): Promise<string | null> {

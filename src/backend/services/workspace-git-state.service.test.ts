@@ -518,14 +518,53 @@ describe('WorkspaceGitStateService', () => {
 
     const snapshot = await service.getSnapshot(input);
 
-    expect(snapshot.base.stats).toBeNull();
+    expect(snapshot.base.stats).toEqual({
+      total: 4,
+      additions: 0,
+      deletions: 0,
+      hasUncommitted: true,
+    });
     expect(snapshot.base.statsError).toBe('stats diff broke');
     expect(snapshot.base.changesError).toBeUndefined();
     expect(snapshot.base.added).toEqual([
       { path: 'new.ts', status: 'added' },
       { path: 'new-name.ts', status: 'added' },
     ]);
-    expect(getStats(snapshot)).toBeNull();
+    expect(getStats(snapshot)).toEqual({
+      total: 4,
+      additions: 0,
+      deletions: 0,
+      hasUncommitted: true,
+    });
+  });
+
+  it('falls back to a name-only file count when aggregate stats fail without a merge base', async () => {
+    runGit.mockImplementation((args) => {
+      if (isStatusCommand(args)) {
+        return resolvedResult('?? new.ts\n');
+      }
+      if (args[0] === 'merge-base' || args[0] === 'rev-parse') {
+        return resolvedResult('', 1);
+      }
+      if (args[1] === '--numstat') {
+        return resolvedResult('', 2, 'stats diff broke');
+      }
+      if (args[1] === '--name-only') {
+        return resolvedResult('new.ts\nsecond.ts\n');
+      }
+      return resolvedResult();
+    });
+
+    const snapshot = await service.getSnapshot(input);
+
+    expect(snapshot.base.statsError).toBe('stats diff broke');
+    expect(getStats(snapshot)).toEqual({
+      total: 2,
+      additions: 0,
+      deletions: 0,
+      hasUncommitted: true,
+    });
+    expect(runGit).toHaveBeenCalledWith(['diff', '--name-only'], '/repo/w1');
   });
 
   it('keeps aggregate stats available when base change metadata fails', async () => {
