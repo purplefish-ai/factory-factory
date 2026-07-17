@@ -68,22 +68,6 @@ vi.mock('./workspace/workspace-helpers', () => ({
   })),
 }));
 
-vi.mock('./workspace/files.trpc', () => ({
-  workspaceFilesRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/git.trpc', () => ({
-  workspaceGitRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/ide.trpc', () => ({
-  workspaceIdeRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/init.trpc', () => ({
-  workspaceInitRouter: { _def: { procedures: {} } },
-}));
-vi.mock('./workspace/run-script.trpc', () => ({
-  workspaceRunScriptRouter: { _def: { procedures: {} } },
-}));
-
 import { workspaceCoreRouter } from './workspace.trpc';
 
 function createCaller(requestTrust?: {

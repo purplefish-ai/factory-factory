@@ -1,24 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 
 const mockFindByProjectId = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceWithWorktree = vi.hoisted(() => vi.fn());
-
-vi.mock('@/backend/services/workspace', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/backend/services/workspace')>();
-  return {
-    ...original,
-    workspaceDataService: {
-      ...original.workspaceDataService,
-      findByProjectId: mockFindByProjectId,
-    },
-    workspaceNotificationAccessor: {
-      ...original.workspaceNotificationAccessor,
-      countPending: mockCountPending,
-    },
-  };
-});
 
 vi.mock('@/backend/trpc/workspace/workspace-helpers', async (importOriginal) => {
   const original =
@@ -50,17 +36,24 @@ describe('workspace router composition', () => {
   });
 
   it('keeps core, child-workspace, and file procedures on the public flat caller', async () => {
+    const fakeGraph = createFakeApplicationGraph('workspace-composition');
+    const services = {
+      ...fakeGraph.services,
+      workspaceDataService: Object.assign({}, fakeGraph.services.workspaceDataService, {
+        findByProjectId: mockFindByProjectId,
+      }),
+      workspaceNotificationAccessor: Object.assign(
+        {},
+        fakeGraph.services.workspaceNotificationAccessor,
+        { countPending: mockCountPending }
+      ),
+    };
     const caller = workspaceRouter.createCaller(
       unsafeCoerce({
         appContext: {
-          services: {
-            createLogger: () => ({
-              debug: vi.fn(),
-              info: vi.fn(),
-              warn: vi.fn(),
-              error: vi.fn(),
-            }),
-          },
+          services,
+          lifecycle: fakeGraph.lifecycle,
+          config: fakeGraph.config,
         },
       })
     );
