@@ -3139,6 +3139,106 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   });
 
   describe('triggerFixer error handling', () => {
+    it('commits the workspace check as soon as the fixer session starts', async () => {
+      const commitSideEffects = vi.fn();
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockImplementation(async (input) => {
+        await input.afterStart?.({ sessionId: 'started-session', prompt: 'prompt' });
+        return {
+          status: 'started',
+          sessionId: 'started-session',
+          promptSent: true,
+        };
+      });
+
+      const result = await unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-started-dispatch',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        new AbortController().signal,
+        commitSideEffects
+      );
+
+      expect(result).toMatchObject({
+        type: 'TRIGGERED_FIXER',
+        sessionId: 'started-session',
+      });
+      expect(commitSideEffects).toHaveBeenCalledTimes(2);
+    });
+
+    it('cleans up a fixer when cancellation races with session startup', async () => {
+      const controller = new AbortController();
+      const timeoutError = new Error('Workspace check timed out');
+      const commitSideEffects = vi.fn();
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockImplementation(async (input) => {
+        controller.abort(timeoutError);
+        try {
+          await input.afterStart?.({ sessionId: 'cancelled-startup-session', prompt: 'prompt' });
+          return {
+            status: 'started',
+            sessionId: 'cancelled-startup-session',
+            promptSent: true,
+          };
+        } catch (error) {
+          return {
+            status: 'error',
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      });
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+
+      const trigger = unsafeCoerce<{
+        triggerFixer: (
+          w: unknown,
+          prStateInfo: unknown,
+          retryCount: number,
+          signal: AbortSignal,
+          commitSideEffects: () => void
+        ) => Promise<unknown>;
+      }>(ratchetService).triggerFixer(
+        {
+          id: 'ws-cancelled-startup',
+          prUrl: 'https://github.com/example/repo/pull/20',
+        },
+        {
+          ciStatus: CIStatus.FAILURE,
+          snapshotKey: 'failed:20',
+          prNumber: 20,
+          reviewComments: [],
+          hasMergeConflict: false,
+        },
+        0,
+        controller.signal,
+        commitSideEffects
+      );
+
+      await expect(trigger).rejects.toBe(timeoutError);
+      expect(commitSideEffects).toHaveBeenCalledTimes(1);
+      expect(workspaceAccessor.recordRatchetSessionEnd).toHaveBeenCalledWith(
+        'ws-cancelled-startup',
+        'cancelled-startup-session',
+        'COMPLETED'
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('cancelled-startup-session');
+    });
+
     it('does not clean up a fixer after its dispatch record is persisted', async () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');

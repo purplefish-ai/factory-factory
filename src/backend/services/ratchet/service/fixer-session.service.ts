@@ -221,9 +221,9 @@ class FixerSessionService {
         startupModePreset: 'non_interactive',
       });
 
-      const promptSent = await this.sendMessageSafely(acquisitionResult.sessionId, prompt);
-
       await input.afterStart?.({ sessionId: acquisitionResult.sessionId, prompt });
+
+      const promptSent = await this.sendMessageSafely(acquisitionResult.sessionId, prompt);
 
       return {
         status: 'started',

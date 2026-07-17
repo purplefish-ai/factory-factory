@@ -161,6 +161,51 @@ describe('FixerSessionService', () => {
     });
   });
 
+  it('calls afterStart after startup and before awaiting the agent turn', async () => {
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'created',
+      sessionId: 's-new',
+    });
+    vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
+
+    const events: string[] = [];
+    let finishTurn!: () => void;
+    vi.mocked(mockSessionBridge.startSession).mockImplementation(() => {
+      events.push('started');
+      return Promise.resolve();
+    });
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.sendSessionMessage).mockImplementation(async () => {
+      events.push('turn-started');
+      await new Promise<void>((resolve) => {
+        finishTurn = resolve;
+      });
+    });
+
+    const dispatch = fixerSessionService.acquireAndDispatch({
+      workspaceId: 'w1',
+      workflow: 'ratchet',
+      sessionName: 'Ratchet',
+      runningIdleAction: 'restart',
+      dispatchMode: 'start_empty_and_send',
+      buildPrompt: () => 'prompt',
+      afterStart: () => {
+        events.push('after-start');
+      },
+    });
+
+    await vi.waitFor(() => expect(mockSessionBridge.sendSessionMessage).toHaveBeenCalled());
+    finishTurn();
+
+    await expect(dispatch).resolves.toEqual({
+      status: 'started',
+      sessionId: 's-new',
+      promptSent: true,
+    });
+    expect(events).toEqual(['started', 'after-start', 'turn-started']);
+  });
+
   it('restarts an existing running idle session when configured', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
     vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
