@@ -9,6 +9,7 @@ function createBaseResetState(): Pick<
   | 'gitBranch'
   | 'pendingRequest'
   | 'toolUseIdToIndex'
+  | 'agentMessageOrderToIndex'
   | 'latestThinking'
   | 'pendingMessages'
   | 'lastRejectedMessage'
@@ -36,6 +37,7 @@ function createBaseResetState(): Pick<
     gitBranch: null,
     pendingRequest: { type: 'none' },
     toolUseIdToIndex: new Map(),
+    agentMessageOrderToIndex: new Map(),
     latestThinking: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,
@@ -68,6 +70,7 @@ function createSessionSwitchResetState(): Pick<
   | 'gitBranch'
   | 'pendingRequest'
   | 'toolUseIdToIndex'
+  | 'agentMessageOrderToIndex'
   | 'latestThinking'
   | 'pendingMessages'
   | 'lastRejectedMessage'
@@ -120,6 +123,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
+    agentMessageOrderToIndex: new Map(),
     latestThinking: null,
     pendingMessages: new Map(),
     lastRejectedMessage: null,

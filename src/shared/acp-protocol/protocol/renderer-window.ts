@@ -40,7 +40,11 @@ export function trimTranscriptForRenderer(
   messages: ChatMessage[],
   limit = DEFAULT_RENDERER_TRANSCRIPT_LIMIT
 ): ChatMessage[] {
-  const sortedMessages = [...messages].sort((a, b) => a.order - b.order);
+  const isOrdered = messages.every(
+    (message, index) =>
+      index === 0 || (messages[index - 1]?.order ?? message.order) <= message.order
+  );
+  const sortedMessages = isOrdered ? messages : [...messages].sort((a, b) => a.order - b.order);
   if (sortedMessages.length <= limit) {
     return sortedMessages;
   }

@@ -859,6 +859,165 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
+  // WS_ASSISTANT_TEXT_DELTA Action
+  // -------------------------------------------------------------------------
+
+  describe('WS_ASSISTANT_TEXT_DELTA action', () => {
+    function textDelta(
+      offset: number,
+      text: string,
+      options: { messageId?: string; order?: number } = {}
+    ): ChatAction {
+      return unsafeCoerce<ChatAction>({
+        type: 'WS_ASSISTANT_TEXT_DELTA',
+        payload: {
+          messageId: options.messageId ?? 'session-1-7',
+          order: options.order ?? 7,
+          offset,
+          text,
+        },
+      });
+    }
+
+    function assistantText(state: ChatState): string | undefined {
+      const content = state.messages[0]?.message?.message?.content;
+      if (!Array.isArray(content)) {
+        return undefined;
+      }
+      const first = content[0];
+      return first?.type === 'text' ? first.text : undefined;
+    }
+
+    it('maps assistant text delta websocket messages to reducer actions', () => {
+      expect(
+        createActionFromWebSocketMessage({
+          type: 'assistant_text_delta',
+          messageId: 'session-1-7',
+          order: 7,
+          offset: 5,
+          text: ' world',
+        })
+      ).toEqual({
+        type: 'WS_ASSISTANT_TEXT_DELTA',
+        payload: {
+          messageId: 'session-1-7',
+          order: 7,
+          offset: 5,
+          text: ' world',
+        },
+      });
+    });
+
+    it('creates a stable assistant Markdown message from the first delta', () => {
+      const next = chatReducer(initialState, textDelta(0, '**Hello**'));
+
+      expect(next.messages).toHaveLength(1);
+      expect(next.messages[0]).toMatchObject({
+        id: 'session-1-7',
+        source: 'agent',
+        order: 7,
+        message: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: '**Hello**' }],
+          },
+        },
+      });
+      expect(next.agentMessageOrderToIndex.get(7)).toBe(0);
+    });
+
+    it('applies many sequential deltas to one indexed assistant message', () => {
+      let state = initialState;
+      for (let offset = 0; offset < 200; offset += 1) {
+        state = chatReducer(state, textDelta(offset, 'x'));
+      }
+
+      expect(state.messages).toHaveLength(1);
+      expect(assistantText(state)).toBe('x'.repeat(200));
+      expect(state.agentMessageOrderToIndex.get(7)).toBe(0);
+    });
+
+    it('deduplicates full and partially overlapping deltas', () => {
+      const first = chatReducer(initialState, textDelta(0, 'Hello'));
+      const duplicate = chatReducer(first, textDelta(0, 'Hello'));
+      const overlap = chatReducer(duplicate, textDelta(3, 'lo world'));
+
+      expect(duplicate).toBe(first);
+      expect(assistantText(overlap)).toBe('Hello world');
+    });
+
+    it('ignores forward gaps, conflicting overlaps, and identifier mismatches', () => {
+      const first = chatReducer(initialState, textDelta(0, 'Hello'));
+
+      expect(chatReducer(first, textDelta(10, ' gap'))).toBe(first);
+      expect(chatReducer(first, textDelta(3, 'XX'))).toBe(first);
+      expect(chatReducer(first, textDelta(5, ' world', { messageId: 'different-message' }))).toBe(
+        first
+      );
+    });
+
+    it('extends a full replayed assistant message and ignores stale replay overlap', () => {
+      const replayed = chatReducer(initialState, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'agent_message',
+              messageId: 'session-1-7',
+              order: 7,
+              data: {
+                type: 'assistant',
+                message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] },
+              },
+            },
+          ],
+        },
+      });
+      const stale = chatReducer(replayed, textDelta(0, 'Hello'));
+      const extended = chatReducer(stale, textDelta(5, ' world'));
+
+      expect(stale).toBe(replayed);
+      expect(assistantText(extended)).toBe('Hello world');
+      expect(extended.messages[0]?.id).toBe('session-1-7');
+    });
+
+    it('does not rebuild tool or queue indexes when extending known text', () => {
+      let state = chatReducer(initialState, textDelta(0, 'Hello'));
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createTestToolUseMessage('tool-1'), order: 8 },
+      });
+      state = {
+        ...state,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'queued-1',
+            text: 'queued',
+            timestamp: '2026-02-01T00:00:00.000Z',
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          },
+        ]),
+      };
+      const toolIndex = state.toolUseIdToIndex;
+      const orderIndex = state.agentMessageOrderToIndex;
+      const queue = state.queuedMessages;
+
+      const next = chatReducer(state, textDelta(5, ' world'));
+
+      expect(assistantText(next)).toBe('Hello world');
+      expect(next.toolUseIdToIndex).toBe(toolIndex);
+      expect(next.agentMessageOrderToIndex).toBe(orderIndex);
+      expect(next.queuedMessages).toBe(queue);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // WS_ERROR Action
   // -------------------------------------------------------------------------
 

@@ -89,7 +89,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   fetchAndComputePRState: vi.fn(),
   isRecentlyFetched: vi.fn(),
   isFetchInFlight: vi.fn(),
-  startFetch: vi.fn(),
+  startFetch: vi.fn(() => 41),
   registerFetch: vi.fn(),
   cancelFetch: vi.fn(),
 };

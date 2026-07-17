@@ -13,37 +13,100 @@
  * from racing past the check and issuing duplicate GitHub API calls.
  */
 
+import { SERVICE_CACHE_TTL_MS, SERVICE_LIMITS } from '@/backend/services/constants';
+
 const DEFAULT_COOLDOWN_MS = 90_000; // 90 seconds
 
-class PRFetchRegistry {
+interface InFlightFetchClaim {
+  startedAt: number;
+  claimToken: number;
+}
+
+export class PRFetchRegistry {
+  // Completed timestamps cannot be age-pruned because callers may supply any cooldown.
+  // Explicit cleanup and oldest-workspace capacity eviction bound their retention.
   private readonly lastFetchedAt = new Map<string, number>();
-  private readonly inFlight = new Set<string>();
+  private readonly inFlightClaims = new Map<string, InFlightFetchClaim>();
+  private nextClaimToken = 0;
+
+  private pruneExpiredInFlight(now: number): void {
+    for (const [workspaceId, claim] of this.inFlightClaims) {
+      if (now - claim.startedAt >= SERVICE_CACHE_TTL_MS.workspacePrFetchInFlight) {
+        this.inFlightClaims.delete(workspaceId);
+      }
+    }
+  }
+
+  private ensureCapacityFor(workspaceId: string): void {
+    if (this.lastFetchedAt.has(workspaceId) || this.inFlightClaims.has(workspaceId)) {
+      return;
+    }
+
+    const workspaceIds = new Set([...this.lastFetchedAt.keys(), ...this.inFlightClaims.keys()]);
+    if (workspaceIds.size < SERVICE_LIMITS.workspaceScopedCacheMaxEntries) {
+      return;
+    }
+
+    let oldestWorkspaceId: string | undefined;
+    let oldestTimestamp = Number.POSITIVE_INFINITY;
+    for (const [candidateWorkspaceId, timestamp] of this.lastFetchedAt) {
+      if (timestamp < oldestTimestamp) {
+        oldestWorkspaceId = candidateWorkspaceId;
+        oldestTimestamp = timestamp;
+      }
+    }
+    for (const [candidateWorkspaceId, claim] of this.inFlightClaims) {
+      if (claim.startedAt < oldestTimestamp) {
+        oldestWorkspaceId = candidateWorkspaceId;
+        oldestTimestamp = claim.startedAt;
+      }
+    }
+
+    if (oldestWorkspaceId !== undefined) {
+      this.lastFetchedAt.delete(oldestWorkspaceId);
+      this.inFlightClaims.delete(oldestWorkspaceId);
+    }
+  }
 
   /**
    * Claim this workspace synchronously before starting an async fetch.
-   * Subsequent `isRecentlyFetched` calls will return true until `register` or
-   * `cancelFetch` is called.
+   * Subsequent `isRecentlyFetched` calls will return true until the claim is
+   * registered, canceled, expired, evicted at capacity, or removed by cleanup.
    */
-  startFetch(workspaceId: string): void {
-    this.inFlight.add(workspaceId);
+  startFetch(workspaceId: string): number {
+    const now = Date.now();
+    this.pruneExpiredInFlight(now);
+    this.ensureCapacityFor(workspaceId);
+    this.nextClaimToken += 1;
+    const claimToken = this.nextClaimToken;
+    this.inFlightClaims.set(workspaceId, { startedAt: now, claimToken });
+    return claimToken;
   }
 
   /**
    * Record that a GitHub PR fetch was performed for a workspace.
-   * Clears any in-flight claim set by `startFetch`.
+   * Clears only the matching in-flight claim set by `startFetch`.
    * Call this after a successful fetch.
    */
-  register(workspaceId: string): void {
-    this.inFlight.delete(workspaceId);
-    this.lastFetchedAt.set(workspaceId, Date.now());
+  register(workspaceId: string, claimToken: number): void {
+    const now = Date.now();
+    this.pruneExpiredInFlight(now);
+    if (this.inFlightClaims.get(workspaceId)?.claimToken !== claimToken) {
+      return;
+    }
+    this.inFlightClaims.delete(workspaceId);
+    this.lastFetchedAt.set(workspaceId, now);
   }
 
   /**
-   * Release an in-flight claim without recording a successful fetch timestamp.
+   * Release the matching in-flight claim without recording a successful fetch timestamp.
    * Call this when a fetch fails so the workspace becomes eligible again.
    */
-  cancelFetch(workspaceId: string): void {
-    this.inFlight.delete(workspaceId);
+  cancelFetch(workspaceId: string, claimToken: number): void {
+    this.pruneExpiredInFlight(Date.now());
+    if (this.inFlightClaims.get(workspaceId)?.claimToken === claimToken) {
+      this.inFlightClaims.delete(workspaceId);
+    }
   }
 
   /**
@@ -51,14 +114,16 @@ class PRFetchRegistry {
    * the cooldown window. Use this to skip redundant fetches.
    */
   isRecentlyFetched(workspaceId: string, cooldownMs = DEFAULT_COOLDOWN_MS): boolean {
-    if (this.inFlight.has(workspaceId)) {
+    const now = Date.now();
+    this.pruneExpiredInFlight(now);
+    if (this.inFlightClaims.has(workspaceId)) {
       return true;
     }
     const lastFetch = this.lastFetchedAt.get(workspaceId);
     if (lastFetch === undefined) {
       return false;
     }
-    return Date.now() - lastFetch < cooldownMs;
+    return now - lastFetch < cooldownMs;
   }
 
   /**
@@ -67,15 +132,36 @@ class PRFetchRegistry {
    * avoid issuing a duplicate concurrent GitHub call.
    */
   isFetchInFlight(workspaceId: string): boolean {
-    return this.inFlight.has(workspaceId);
+    this.pruneExpiredInFlight(Date.now());
+    return this.inFlightClaims.has(workspaceId);
   }
 
   /**
-   * Clear all entries. Useful in tests.
+   * Remove all state retained for one workspace.
+   */
+  removeWorkspace(workspaceId: string): void {
+    this.pruneExpiredInFlight(Date.now());
+    this.lastFetchedAt.delete(workspaceId);
+    this.inFlightClaims.delete(workspaceId);
+  }
+
+  /**
+   * Return retained entry counts after discarding expired in-flight claims.
+   */
+  size(): { completed: number; inFlight: number } {
+    this.pruneExpiredInFlight(Date.now());
+    return {
+      completed: this.lastFetchedAt.size,
+      inFlight: this.inFlightClaims.size,
+    };
+  }
+
+  /**
+   * Clear all entries without resetting claim identity. Useful in tests.
    */
   clear(): void {
     this.lastFetchedAt.clear();
-    this.inFlight.clear();
+    this.inFlightClaims.clear();
   }
 }
 

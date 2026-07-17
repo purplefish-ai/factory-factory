@@ -28,6 +28,54 @@ describe('configService environment accessors', () => {
     expect(configService.getBackendHost()).toBeUndefined();
   });
 
+  it('reads PR discovery limits from validated config', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '25';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '4';
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 25,
+      repositoryLimit: 4,
+    });
+  });
+
+  it('defaults PR discovery limits when environment variables are absent', () => {
+    Reflect.deleteProperty(process.env, 'PR_DISCOVERY_CANDIDATE_LIMIT');
+    Reflect.deleteProperty(process.env, 'PR_DISCOVERY_REPOSITORY_LIMIT');
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 100,
+      repositoryLimit: 10,
+    });
+  });
+
+  it('rejects non-positive PR discovery limits', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '0';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '-1';
+    configService.reload();
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 100,
+      repositoryLimit: 10,
+    });
+  });
+
+  it('returns defensive copies of PR discovery limits', () => {
+    process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '25';
+    process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '4';
+    configService.reload();
+
+    const limits = configService.getPRDiscoveryLimits();
+    limits.candidateLimit = 1;
+    limits.repositoryLimit = 1;
+
+    expect(configService.getPRDiscoveryLimits()).toEqual({
+      candidateLimit: 25,
+      repositoryLimit: 4,
+    });
+  });
+
   it('defaults shell path when SHELL is not provided', () => {
     Reflect.deleteProperty(process.env, 'SHELL');
     configService.reload();

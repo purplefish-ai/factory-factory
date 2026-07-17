@@ -9,6 +9,7 @@ import {
   MAX_FILE_SIZE,
   searchFilesRecursive,
 } from '@/backend/lib/file-helpers';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import { getLanguageFromPath } from '@/lib/language-detection';
 import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
@@ -21,7 +22,7 @@ const SCREENSHOT_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 async function validateScreenshotPath(
   workspaceId: string,
   screenshotPath: string
-): Promise<string> {
+): Promise<{ fullPath: string; worktreePath: string }> {
   if (!screenshotPath.startsWith('.factory-factory/screenshots/')) {
     throw new Error('Invalid screenshot path');
   }
@@ -37,7 +38,7 @@ async function validateScreenshotPath(
     throw new Error('Invalid image format');
   }
 
-  return path.join(worktreePath, screenshotPath);
+  return { fullPath: path.join(worktreePath, screenshotPath), worktreePath };
 }
 
 export const workspaceFilesRouter = router({
@@ -276,7 +277,7 @@ export const workspaceFilesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+      const { fullPath } = await validateScreenshotPath(input.workspaceId, input.path);
       const buffer = await readFile(fullPath);
       const ext = path.extname(input.path).toLowerCase();
 
@@ -303,8 +304,12 @@ export const workspaceFilesRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+      const { fullPath, worktreePath } = await validateScreenshotPath(
+        input.workspaceId,
+        input.path
+      );
       await unlink(fullPath);
+      workspaceGitStateService.invalidate(worktreePath);
       return { success: true };
     }),
 });

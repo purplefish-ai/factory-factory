@@ -63,6 +63,9 @@ export interface ReconciliationBridges {
 }
 
 export interface ReconciliationResult {
+  workspacesScanned: number;
+  workspacesChanged: number;
+  deltasEmitted: number;
   workspacesReconciled: number;
   driftsDetected: number;
   staleEntriesRemoved: number;
@@ -175,6 +178,9 @@ export class SnapshotReconciliationService {
       .catch((err) => {
         logger.error('Initial reconciliation failed', { error: String(err) });
         return {
+          workspacesScanned: 0,
+          workspacesChanged: 0,
+          deltasEmitted: 0,
           workspacesReconciled: 0,
           driftsDetected: 0,
           staleEntriesRemoved: 0,
@@ -195,6 +201,9 @@ export class SnapshotReconciliationService {
         .catch((err) => {
           logger.error('Reconciliation tick failed', { error: String(err) });
           return {
+            workspacesScanned: 0,
+            workspacesChanged: 0,
+            deltasEmitted: 0,
             workspacesReconciled: 0,
             driftsDetected: 0,
             staleEntriesRemoved: 0,
@@ -290,19 +299,21 @@ export class SnapshotReconciliationService {
   /**
    * Remove snapshot entries for workspaces no longer in the DB.
    */
-  private removeStaleEntries(dbWorkspaceIds: Set<string>): number {
+  private removeStaleEntries(dbWorkspaceIds: Set<string>): {
+    staleEntriesRemoved: number;
+    deltasEmitted: number;
+  } {
     const storeWorkspaceIds = workspaceSnapshotStore.getAllWorkspaceIds();
     let removed = 0;
 
     for (const storeId of storeWorkspaceIds) {
-      if (!dbWorkspaceIds.has(storeId)) {
-        workspaceSnapshotStore.remove(storeId);
+      if (!dbWorkspaceIds.has(storeId) && workspaceSnapshotStore.remove(storeId)) {
         removed++;
         logger.info('Removed stale snapshot entry', { workspaceId: storeId });
       }
     }
 
-    return removed;
+    return { staleEntriesRemoved: removed, deltasEmitted: removed };
   }
 
   async reconcile(): Promise<ReconciliationResult> {
@@ -342,6 +353,8 @@ export class SnapshotReconciliationService {
     // 4. Reconcile each workspace
     let driftsDetected = 0;
     let gitStatsComputed = 0;
+    let workspacesChanged = 0;
+    let deltasEmitted = 0;
 
     for (const ws of workspaces) {
       const authoritativeFields = this.buildAuthoritativeFields(
@@ -374,26 +387,44 @@ export class SnapshotReconciliationService {
       }
 
       // Upsert with pollStartTs (RCNL-03)
-      workspaceSnapshotStore.upsert(ws.id, authoritativeFields, 'reconciliation', pollStartTs);
+      const upsertResult = workspaceSnapshotStore.upsert(
+        ws.id,
+        authoritativeFields,
+        'reconciliation',
+        pollStartTs
+      );
+      if (upsertResult.changed) {
+        workspacesChanged++;
+      }
+      if (upsertResult.emitted) {
+        deltasEmitted++;
+      }
     }
 
     // 5. Stale entry cleanup
-    const staleEntriesRemoved = this.removeStaleEntries(new Set(workspaces.map((w) => w.id)));
+    const staleCleanup = this.removeStaleEntries(new Set(workspaces.map((w) => w.id)));
+    deltasEmitted += staleCleanup.deltasEmitted;
 
     // 6. Log summary
     const durationMs = Date.now() - pollStartTs;
     logger.info('Reconciliation complete', {
+      workspacesScanned: workspaces.length,
+      workspacesChanged,
+      deltasEmitted,
       workspacesReconciled: workspaces.length,
       driftsDetected,
-      staleEntriesRemoved,
+      staleEntriesRemoved: staleCleanup.staleEntriesRemoved,
       gitStatsComputed,
       durationMs,
     });
 
     return {
+      workspacesScanned: workspaces.length,
+      workspacesChanged,
+      deltasEmitted,
       workspacesReconciled: workspaces.length,
       driftsDetected,
-      staleEntriesRemoved,
+      staleEntriesRemoved: staleCleanup.staleEntriesRemoved,
       gitStatsComputed,
       durationMs,
     };

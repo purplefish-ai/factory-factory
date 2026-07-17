@@ -334,6 +334,8 @@ describe('SnapshotReconciliationService', () => {
     mockFindAllNonArchived.mockResolvedValue([]);
     mockGetAllWorkspaceIds.mockReturnValue([]);
     mockGetByWorkspaceId.mockReturnValue(undefined);
+    mockUpsert.mockReturnValue({ accepted: true, changed: true, emitted: true });
+    mockRemove.mockReturnValue(true);
   });
 
   afterEach(async () => {
@@ -794,11 +796,54 @@ describe('SnapshotReconciliationService', () => {
 
       const result = await service.reconcile();
 
+      expect(result.workspacesScanned).toBe(2);
+      expect(result.workspacesChanged).toBe(2);
+      expect(result.deltasEmitted).toBe(3);
       expect(result.workspacesReconciled).toBe(2);
       expect(result.driftsDetected).toBeGreaterThan(0);
       expect(result.staleEntriesRemoved).toBe(1);
       expect(result.gitStatsComputed).toBe(1);
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'Reconciliation complete',
+        expect.objectContaining({
+          workspacesScanned: 2,
+          workspacesChanged: 2,
+          deltasEmitted: 3,
+        })
+      );
+    });
+
+    it('reports zero changes and deltas for repeated unchanged reconciliation', async () => {
+      mockFindAllNonArchived.mockResolvedValue([
+        createMockWorkspace({ id: 'ws-1', worktreePath: null }),
+      ]);
+      mockGetByWorkspaceId.mockReturnValue(createSnapshotEntry());
+      mockUpsert
+        .mockReturnValueOnce({ accepted: true, changed: true, emitted: true })
+        .mockReturnValue({ accepted: true, changed: false, emitted: false });
+
+      const initial = await service.reconcile();
+      const unchanged = await service.reconcile();
+
+      expect(initial).toMatchObject({
+        workspacesScanned: 1,
+        workspacesChanged: 1,
+        deltasEmitted: 1,
+      });
+      expect(unchanged).toMatchObject({
+        workspacesScanned: 1,
+        workspacesChanged: 0,
+        deltasEmitted: 0,
+      });
+      expect(mockLoggerInfo).toHaveBeenLastCalledWith(
+        'Reconciliation complete',
+        expect.objectContaining({
+          workspacesScanned: 1,
+          workspacesChanged: 0,
+          deltasEmitted: 0,
+        })
+      );
     });
   });
 

@@ -16,6 +16,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { isDeepStrictEqual } from 'node:util';
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type {
@@ -30,86 +31,18 @@ import type { SessionSummary } from '@/shared/session-runtime';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
+import { SERVICE_CACHE_TTL_MS } from './constants';
 import { createLogger } from './logger.service';
+
+export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * String literal union for timestamp group keys.
- * Represents coherent groups of fields that update together from a single
- * event source (grouped by update source, not per-field).
- */
-export type SnapshotFieldGroup =
-  | 'workspace'
-  | 'pr'
-  | 'session'
-  | 'ratchet'
-  | 'runScript'
-  | 'reconciliation';
 export type WorkspaceSessionSummary = SessionSummary;
-
-/**
- * The full snapshot entry shape for a workspace.
- * Matches the output of getProjectSummaryState() with additional versioning,
- * debug metadata, and field-level timestamps for concurrent update safety.
- */
-export interface WorkspaceSnapshotEntry {
-  // Identity
-  workspaceId: string;
-  projectId: string;
-
-  // Versioning (STORE-02): monotonically increasing per entry
-  version: number;
-
-  // Debug metadata (STORE-03)
-  computedAt: string; // ISO timestamp
-  source: string; // e.g. 'event:workspace_state_change', 'reconciliation'
-
-  // Raw workspace state
-  name: string;
-  status: WorkspaceStatus;
-  createdAt: string;
-  branchName: string | null;
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prCiStatus: CIStatus;
-  prUpdatedAt: string | null;
-  ratchetEnabled: boolean;
-  ratchetState: RatchetState;
-  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-  ratchetDispatchRetryCount: number;
-  runScriptStatus: RunScriptStatus;
-  hasHadSessions: boolean;
-
-  // In-memory state (from session domain)
-  isWorking: boolean;
-  pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
-  sessionSummaries: WorkspaceSessionSummary[];
-
-  // Reconciliation-only state
-  gitStats: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-  lastActivityAt: string | null;
-
-  // Derived state (STORE-05): recomputed on every upsert
-  sidebarStatus: WorkspaceSidebarStatus;
-  kanbanColumn: KanbanColumn | null;
-  flowPhase: WorkspaceFlowPhase;
-  ciObservation: WorkspaceCiObservation;
-  ratchetButtonAnimated: boolean;
-  statusReason: WorkspaceStatusReason;
-
-  // Field-level timestamps for concurrent update safety
-  fieldTimestamps: Record<SnapshotFieldGroup, number>;
-}
 
 /**
  * Input type for upsert(). Contains optional versions of all raw + session +
@@ -215,6 +148,12 @@ export interface SnapshotRemovedEvent {
   projectId: string;
 }
 
+export interface SnapshotUpsertResult {
+  accepted: boolean;
+  changed: boolean;
+  emitted: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Field-to-group mapping
 // ---------------------------------------------------------------------------
@@ -239,6 +178,8 @@ const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
+
+type RemovalTombstone = { removedAt: number; expiresAt: number; timer: NodeJS.Timeout };
 
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
@@ -275,6 +216,63 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
   };
 }
 
+type GitStats = NonNullable<WorkspaceSnapshotEntry['gitStats']>;
+
+function gitStatsEqual(left: GitStats | null, right: GitStats | null): boolean {
+  return (
+    left === right ||
+    (left !== null &&
+      right !== null &&
+      left.total === right.total &&
+      left.additions === right.additions &&
+      left.deletions === right.deletions &&
+      left.hasUncommitted === right.hasUncommitted)
+  );
+}
+
+function sessionSummariesEqual(
+  left: WorkspaceSessionSummary[],
+  right: WorkspaceSessionSummary[]
+): boolean {
+  return isDeepStrictEqual(
+    [...left].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
+    [...right].sort((a, b) => a.sessionId.localeCompare(b.sessionId))
+  );
+}
+
+function sidebarStatusesEqual(
+  left: WorkspaceSidebarStatus,
+  right: WorkspaceSidebarStatus
+): boolean {
+  return left.activityState === right.activityState && left.ciState === right.ciState;
+}
+
+function statusReasonsEqual(left: WorkspaceStatusReason, right: WorkspaceStatusReason): boolean {
+  return (
+    left.code === right.code &&
+    left.label === right.label &&
+    left.tone === right.tone &&
+    left.needsUser === right.needsUser
+  );
+}
+
+function snapshotFieldValuesEqual(
+  field: SnapshotField,
+  left: WorkspaceSnapshotEntry[SnapshotField],
+  right: WorkspaceSnapshotEntry[SnapshotField]
+): boolean {
+  if (field === 'gitStats') {
+    return gitStatsEqual(left as GitStats | null, right as GitStats | null);
+  }
+  if (field === 'sessionSummaries') {
+    return sessionSummariesEqual(
+      left as WorkspaceSessionSummary[],
+      right as WorkspaceSessionSummary[]
+    );
+  }
+  return Object.is(left, right);
+}
+
 // ---------------------------------------------------------------------------
 // WorkspaceSnapshotStore class
 // ---------------------------------------------------------------------------
@@ -289,17 +287,51 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * than the removal is ignored, so a reconcile pass that read the DB before
    * an archive committed cannot momentarily resurrect the removed entry.
    */
-  private removalTimestamps = new Map<string, number>();
+  private removalTimestamps = new Map<string, RemovalTombstone>();
+
+  private clearRemovalTombstone(workspaceId: string): void {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      clearTimeout(tombstone.timer);
+    }
+    this.removalTimestamps.delete(workspaceId);
+  }
 
   private assignField<K extends SnapshotField>(
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     field: K
-  ): void {
+  ): boolean {
     const value = update[field];
-    if (value !== undefined) {
-      entry[field] = value as WorkspaceSnapshotEntry[K];
+    if (value === undefined) {
+      return false;
     }
+    const nextValue = value as WorkspaceSnapshotEntry[K];
+    if (snapshotFieldValuesEqual(field, entry[field], nextValue)) {
+      return false;
+    }
+    entry[field] = nextValue;
+    return true;
+  }
+
+  private assignRawField(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    field: SnapshotField
+  ): boolean {
+    if (field !== 'isWorking') {
+      return this.assignField(entry, update, field);
+    }
+
+    const nextIsWorking = update.isWorking;
+    if (
+      nextIsWorking === undefined ||
+      nextIsWorking === this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId)
+    ) {
+      return false;
+    }
+    this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, nextIsWorking);
+    return true;
   }
 
   /**
@@ -375,30 +407,30 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     ts: number
-  ): boolean {
-    let merged = false;
+  ): { accepted: boolean; rawChanged: boolean } {
+    let accepted = false;
+    let rawChanged = false;
     for (const mapping of FIELD_GROUP_MAPPINGS) {
       const hasFieldsInGroup = mapping.fields.some((field) => update[field] !== undefined);
       if (!hasFieldsInGroup || ts <= entry.fieldTimestamps[mapping.group]) {
         continue;
       }
-      merged = true;
+      accepted = true;
       entry.fieldTimestamps[mapping.group] = ts;
       for (const field of mapping.fields) {
-        this.assignField(entry, update, field);
-      }
-      if (mapping.group === 'session' && update.isWorking !== undefined) {
-        this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, update.isWorking);
+        if (this.assignRawField(entry, update, field)) {
+          rawChanged = true;
+        }
       }
     }
-    return merged;
+    return { accepted, rawChanged };
   }
 
   /**
    * Recompute all derived state fields on an entry using the injected
    * derivation functions.
    */
-  private recomputeDerivedState(entry: WorkspaceSnapshotEntry): void {
+  private recomputeDerivedState(entry: WorkspaceSnapshotEntry): boolean {
     const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
       prUrl: entry.prUrl,
@@ -430,13 +462,36 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       }
     );
 
-    entry.isWorking = derivedState.isWorking;
-    entry.flowPhase = derivedState.flowPhase;
-    entry.ciObservation = derivedState.ciObservation;
-    entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
-    entry.statusReason = derivedState.statusReason;
-    entry.kanbanColumn = derivedState.kanbanColumn;
-    entry.sidebarStatus = derivedState.sidebarStatus;
+    let changed = false;
+    if (entry.isWorking !== derivedState.isWorking) {
+      entry.isWorking = derivedState.isWorking;
+      changed = true;
+    }
+    if (entry.flowPhase !== derivedState.flowPhase) {
+      entry.flowPhase = derivedState.flowPhase;
+      changed = true;
+    }
+    if (entry.ciObservation !== derivedState.ciObservation) {
+      entry.ciObservation = derivedState.ciObservation;
+      changed = true;
+    }
+    if (entry.ratchetButtonAnimated !== derivedState.ratchetButtonAnimated) {
+      entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
+      changed = true;
+    }
+    if (!statusReasonsEqual(entry.statusReason, derivedState.statusReason)) {
+      entry.statusReason = derivedState.statusReason;
+      changed = true;
+    }
+    if (entry.kanbanColumn !== derivedState.kanbanColumn) {
+      entry.kanbanColumn = derivedState.kanbanColumn;
+      changed = true;
+    }
+    if (!sidebarStatusesEqual(entry.sidebarStatus, derivedState.sidebarStatus)) {
+      entry.sidebarStatus = derivedState.sidebarStatus;
+      changed = true;
+    }
+    return changed;
   }
 
   /**
@@ -476,19 +531,18 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     update: SnapshotUpdateInput,
     source: string,
     timestamp?: number
-  ): void {
+  ): SnapshotUpsertResult {
     const ts = timestamp ?? Date.now();
 
-    const removedAt = this.removalTimestamps.get(workspaceId);
-    if (removedAt !== undefined) {
-      if (ts <= removedAt) {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      if (ts <= tombstone.removedAt) {
         logger.debug('Snapshot update ignored (workspace removed after update was computed)', {
           workspaceId,
           source,
         });
-        return;
+        return { accepted: false, changed: false, emitted: false };
       }
-      this.removalTimestamps.delete(workspaceId);
     }
 
     let entry = this.entries.get(workspaceId);
@@ -503,17 +557,25 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       }
       entry = this.createDefaultEntry(workspaceId, update.projectId);
     }
-
-    // Field-level timestamp merge
-    const didMerge = this.mergeFieldGroups(entry, update, ts);
-
-    if (!(isNewEntry || didMerge)) {
-      logger.debug('Snapshot update ignored (stale/no-op)', { workspaceId, source });
-      return;
+    if (tombstone) {
+      this.clearRemovalTombstone(workspaceId);
     }
 
-    // Recompute derived state from raw fields
-    this.recomputeDerivedState(entry);
+    // Field-level timestamp merge
+    const mergeResult = this.mergeFieldGroups(entry, update, ts);
+
+    if (!(isNewEntry || mergeResult.accepted)) {
+      logger.debug('Snapshot update ignored (stale)', { workspaceId, source });
+      return { accepted: false, changed: false, emitted: false };
+    }
+
+    // Accepted raw values can produce time-sensitive derived changes even when
+    // the raw values themselves are equal (for example, CI grace periods).
+    const derivedChanged = this.recomputeDerivedState(entry);
+    if (!(isNewEntry || mergeResult.rawChanged || derivedChanged)) {
+      logger.debug('Snapshot update accepted without value changes', { workspaceId, source });
+      return { accepted: true, changed: false, emitted: false };
+    }
 
     // Bump version and update metadata
     entry.version += 1;
@@ -532,6 +594,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     } satisfies SnapshotChangedEvent);
 
     logger.debug('Snapshot updated', { workspaceId, version: entry.version, source });
+    return { accepted: true, changed: true, emitted: true };
   }
 
   /**
@@ -545,7 +608,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * been upserted here.
    */
   remove(workspaceId: string, timestamp?: number): boolean {
-    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
+    const priorTombstone = this.removalTimestamps.get(workspaceId);
+    const removedAt = Math.max(
+      priorTombstone?.removedAt ?? Number.NEGATIVE_INFINITY,
+      timestamp ?? Date.now()
+    );
+    this.clearRemovalTombstone(workspaceId);
+
+    const expiresAt = Date.now() + SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace;
+    const timer = setTimeout(() => {
+      const tombstone = this.removalTimestamps.get(workspaceId);
+      if (tombstone?.expiresAt === expiresAt) {
+        this.removalTimestamps.delete(workspaceId);
+      }
+    }, SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace);
+    timer.unref();
+    this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -620,12 +698,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   }
 
   /**
+   * Get the number of retained removal tombstones (for testing/debugging).
+   */
+  removalTombstoneCount(): number {
+    return this.removalTimestamps.size;
+  }
+
+  /**
    * Clear all entries and indexes. Useful for testing and server shutdown.
    */
   clear(): void {
     this.entries.clear();
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
+    for (const tombstone of this.removalTimestamps.values()) {
+      clearTimeout(tombstone.timer);
+    }
     this.removalTimestamps.clear();
     logger.info('Snapshot store cleared');
   }
