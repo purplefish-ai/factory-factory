@@ -67,17 +67,23 @@ export function parseGitStatusOutput(output: string): GitStatusFile[] {
 }
 
 /**
- * Parse git diff --numstat output to get total additions and deletions.
+ * Parse git diff --numstat output to get file, addition, and deletion totals.
  */
-export function parseNumstatOutput(output: string): { additions: number; deletions: number } {
+export function parseNumstatOutput(output: string): {
+  total: number;
+  additions: number;
+  deletions: number;
+} {
+  let total = 0;
   let additions = 0;
   let deletions = 0;
 
   if (!output.trim()) {
-    return { additions, deletions };
+    return { total, additions, deletions };
   }
 
   for (const line of output.trim().split('\n')) {
+    total += 1;
     const [add, del] = line.split('\t');
     // Binary files show as '-' for add/del
     if (add !== '-') {
@@ -88,7 +94,7 @@ export function parseNumstatOutput(output: string): { additions: number; deletio
     }
   }
 
-  return { additions, deletions };
+  return { total, additions, deletions };
 }
 
 /**
