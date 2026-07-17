@@ -558,6 +558,33 @@ describe('PRSnapshotService', () => {
       expect(events[0]).toMatchObject({ ratchetDispatchChanged: true });
     });
 
+    it('publishes the ownership change even when the cache refresh fails', async () => {
+      mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: true,
+      });
+      mockUpdateCachedKanbanColumn.mockRejectedValueOnce(new Error('cache failed'));
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await expect(
+        prSnapshotService.applySnapshot('ws-cache-failure', {
+          prNumber: 42,
+          prState: 'OPEN',
+          prCiStatus: 'SUCCESS',
+          prReviewState: null,
+        })
+      ).rejects.toThrow('cache failed');
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        workspaceId: 'ws-cache-failure',
+        ratchetDispatchChanged: true,
+      });
+    });
+
     it('does not publish or refresh from a PR snapshot rejected by the aggregate guard', async () => {
       mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
         applied: false,

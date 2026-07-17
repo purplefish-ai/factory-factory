@@ -110,6 +110,7 @@ interface PendingRequestChangedEvent {
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
+const PROJECTION_RETRY_BASE_MS = 1000;
 const MAX_PROJECTION_RETRY_BACKOFF_EXPONENT = 6;
 let lastCoalescerTimestamp = 0;
 
@@ -614,7 +615,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
             projectionRetryWaiters.delete(waiter);
             resolve();
           },
-          10 * 2 ** attempt
+          PROJECTION_RETRY_BASE_MS * 2 ** attempt
         ),
         resolve,
       };

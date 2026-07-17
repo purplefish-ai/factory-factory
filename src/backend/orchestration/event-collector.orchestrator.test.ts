@@ -892,7 +892,7 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-retry' });
     await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(1000);
 
     await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2));
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
@@ -901,6 +901,26 @@ describe('configureEventCollector', () => {
       'projection:ratchet_authoritative',
       expect.any(Number)
     );
+  });
+
+  it('backs off materially after a persistent authoritative projection failure', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-persistent-failure' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
   });
 
   it('cancels an authoritative projection retry when stopped', async () => {

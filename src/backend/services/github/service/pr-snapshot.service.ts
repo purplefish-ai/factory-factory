@@ -418,8 +418,6 @@ class PRSnapshotService extends EventEmitter {
       return false;
     }
 
-    await this.kanban.updateCachedKanbanColumn(workspaceId);
-
     this.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId,
       ...(eventPrUrl !== undefined ? { prUrl: eventPrUrl } : {}),
@@ -429,6 +427,8 @@ class PRSnapshotService extends EventEmitter {
       prReviewState: snapshot.prReviewState,
       ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
     } satisfies PRSnapshotUpdatedEvent);
+
+    await this.kanban.updateCachedKanbanColumn(workspaceId);
     return true;
   }
 }
