@@ -116,8 +116,7 @@ describe('check-service-accessor-boundaries', () => {
     const result = runChecker([
       {
         path: 'src/backend/services/workspace/index.ts',
-        content:
-          "export * as persistence from './resources/workspace.accessor';\n",
+        content: "export * as persistence from './resources/workspace.accessor';\n",
       },
     ]);
 
@@ -180,6 +179,61 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('cross-owner raw persistence accessor');
     expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it('rejects cross-owner accessor references in import types', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/resources.integration.test.ts',
+        content:
+          "let accessor: typeof import('@/backend/services/session/resources/agent-session.accessor').agentSessionAccessor;\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('cross-owner raw persistence accessor');
+    expect(result.output).toContain('agentSessionAccessor');
+  });
+
+  it('rejects cross-owner dynamic imports of accessor modules', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/resources.integration.test.ts',
+        content:
+          "async function load() { return import('@/backend/services/terminal/resources/terminal-session.accessor'); }\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('cross-owner raw persistence accessor');
+    expect(result.output).toContain('terminalSessionAccessor');
+  });
+
+  it('rejects accessor module strings passed to loader calls', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/resources.integration.test.ts',
+        content:
+          "await vi.importActual('@/backend/services/session/resources/closed-session.accessor');\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('cross-owner raw persistence accessor');
+    expect(result.output).toContain('closedSessionAccessor');
+  });
+
+  it('allows ordinary capsule barrel mocks with accessor-shaped properties', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/ratchet/service/fixer-session.service.test.ts',
+        content:
+          "vi.mock('@/backend/services/session', () => ({ agentSessionAccessor: { findById: vi.fn() } }));\n",
+      },
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('Service accessor boundaries check passed.');
   });
 
   it.each([

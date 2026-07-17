@@ -26,8 +26,8 @@ let prisma: PrismaClient;
 
 let workspaceAccessor: typeof import('@/backend/services/workspace').workspaceAccessor;
 let projectAccessor: typeof import('@/backend/services/workspace').projectAccessor;
-let agentSessionAccessor: typeof import('@/backend/services/session/resources/agent-session.accessor').agentSessionAccessor;
-let terminalSessionAccessor: typeof import('@/backend/services/terminal/resources/terminal-session.accessor').terminalSessionAccessor;
+let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
+let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let userSettingsAccessor: typeof import('@/backend/services/settings').userSettingsAccessor;
 let decisionLogAccessor: typeof import('@/backend/services/decision-log').decisionLogAccessor;
 let GitClientFactory: typeof import('@/backend/clients/git.client').GitClientFactory;
@@ -45,12 +45,12 @@ beforeAll(async () => {
   ({ projectAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
     '@/backend/services/workspace'
   ));
-  ({ agentSessionAccessor } = await vi.importActual<
-    typeof import('@/backend/services/session/resources/agent-session.accessor')
-  >('@/backend/services/session/resources/agent-session.accessor'));
-  ({ terminalSessionAccessor } = await vi.importActual<
-    typeof import('@/backend/services/terminal/resources/terminal-session.accessor')
-  >('@/backend/services/terminal/resources/terminal-session.accessor'));
+  ({ sessionDataService } = await vi.importActual<typeof import('@/backend/services/session')>(
+    '@/backend/services/session'
+  ));
+  ({ terminalSessionService } = await vi.importActual<typeof import('@/backend/services/terminal')>(
+    '@/backend/services/terminal'
+  ));
   ({ userSettingsAccessor } = await vi.importActual<typeof import('@/backend/services/settings')>(
     '@/backend/services/settings'
   ));
@@ -487,7 +487,7 @@ describe('resource accessors integration', () => {
     });
   });
 
-  describe('agentSessionAccessor', () => {
+  describe('sessionDataService', () => {
     it('returns existing RUNNING fixer session instead of creating a new one', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
@@ -502,13 +502,12 @@ describe('resource accessors integration', () => {
         },
       });
 
-      const acquired = await agentSessionAccessor.acquireFixerSession({
+      const acquired = await sessionDataService.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 3,
         provider: 'CLAUDE',
-        model: 'sonnet',
         providerProjectPath: '/tmp/worktree',
       });
 
@@ -542,13 +541,12 @@ describe('resource accessors integration', () => {
         ],
       });
 
-      const acquired = await agentSessionAccessor.acquireFixerSession({
+      const acquired = await sessionDataService.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 2,
         provider: 'CLAUDE',
-        model: 'sonnet',
         providerProjectPath: null,
       });
 
@@ -578,13 +576,12 @@ describe('resource accessors integration', () => {
         ],
       });
 
-      const acquired = await agentSessionAccessor.acquireFixerSession({
+      const acquired = await sessionDataService.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 2,
         provider: 'CLAUDE',
-        model: 'sonnet',
         providerProjectPath: null,
       });
 
@@ -605,13 +602,12 @@ describe('resource accessors integration', () => {
         },
       });
 
-      const acquired = await agentSessionAccessor.acquireFixerSession({
+      const acquired = await sessionDataService.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 5,
         provider: 'CLAUDE',
-        model: 'sonnet',
         providerProjectPath: '/tmp/worktree',
       });
 
@@ -628,7 +624,7 @@ describe('resource accessors integration', () => {
     });
   });
 
-  describe('terminalSessionAccessor', () => {
+  describe('terminalSessionService', () => {
     it('clears pid only for matching terminal names in the requested workspace', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
@@ -643,7 +639,7 @@ describe('resource accessors integration', () => {
         ],
       });
 
-      await terminalSessionAccessor.clearPid(workspace.id, 'terminal-a');
+      await terminalSessionService.clearPid(workspace.id, 'terminal-a');
 
       const all = await prisma.terminalSession.findMany({ orderBy: { name: 'asc' } });
       const target = all.filter(
@@ -670,7 +666,7 @@ describe('resource accessors integration', () => {
         data: { workspaceId: workspace.id, name: 'idle', pid: null },
       });
 
-      const withPid = await terminalSessionAccessor.findWithPid();
+      const withPid = await terminalSessionService.findWithPid();
 
       expect(withPid.map((session) => session.id)).toEqual([live.id]);
     });

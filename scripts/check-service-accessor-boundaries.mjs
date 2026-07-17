@@ -377,6 +377,36 @@ function checkBarrelBindings(importerPath, modulePath, names, violations) {
   }
 }
 
+function checkDeepAccessorModuleText(importerPath, moduleSpecifier, violations) {
+  const modulePath = canonicalModule(importerPath, moduleSpecifier);
+  if (modulePath) {
+    checkDeepAccessorReference(importerPath, modulePath, violations);
+  }
+}
+
+function checkNestedModuleReferences(sourceFile, importerPath, violations) {
+  function visit(node) {
+    if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteralLike(node.argument.literal)
+    ) {
+      checkDeepAccessorModuleText(importerPath, node.argument.literal.text, violations);
+    }
+
+    if (ts.isCallExpression(node)) {
+      const moduleArgument = node.arguments[0];
+      if (moduleArgument && ts.isStringLiteralLike(moduleArgument)) {
+        checkDeepAccessorModuleText(importerPath, moduleArgument.text, violations);
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+}
+
 function checkSourceFile(absolutePath, rootDir, violations) {
   const importerPath = toPosix(path.relative(rootDir, absolutePath));
   const sourceText = readFileSync(absolutePath, 'utf8');
@@ -387,6 +417,8 @@ function checkSourceFile(absolutePath, rootDir, violations) {
     true,
     importerPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   );
+
+  checkNestedModuleReferences(sourceFile, importerPath, violations);
 
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {

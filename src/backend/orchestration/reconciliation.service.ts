@@ -182,9 +182,7 @@ class ReconciliationService {
     }
   }
 
-  /**
-   * Cleanup orphaned Claude processes on startup
-   */
+  /** Cleanup orphaned terminal processes on startup. */
   async cleanupOrphans(): Promise<void> {
     // Bail early if shutdown has started to avoid accessing prisma after disconnect
     if (this.isShuttingDown) {
