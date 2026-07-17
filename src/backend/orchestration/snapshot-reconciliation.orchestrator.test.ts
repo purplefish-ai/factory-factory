@@ -289,7 +289,7 @@ describe('detectDrift', () => {
 // ---------------------------------------------------------------------------
 
 describe('configureSnapshotReconciliation', () => {
-  it('preserves legacy configure-and-start behavior', () => {
+  it('configures and starts the default singleton', () => {
     const configure = vi
       .spyOn(snapshotReconciliationService, 'configure')
       .mockImplementation(() => undefined);

@@ -11,6 +11,14 @@ interface ServerInstance {
   stop(): Promise<void>;
 }
 
+interface Application {
+  services: {
+    serverInstanceService: {
+      setInstance(instance: ServerInstance): void;
+    };
+  };
+}
+
 /**
  * ServerManager handles the lifecycle of the backend server
  * for the Electron application.
@@ -102,9 +110,12 @@ export class ServerManager {
       console.log('[electron] Starting backend server...');
       const serverPath = join(backendDistPath, 'server.js');
       const serverModule = await this.dynamicImport<{
-        createServer: () => ServerInstance;
+        createApplication: () => Application;
+        createServer: (application: Application) => ServerInstance;
       }>(this.toModuleImportSpecifier(serverPath));
-      const serverInstance = serverModule.createServer();
+      const application = serverModule.createApplication();
+      const serverInstance = serverModule.createServer(application);
+      application.services.serverInstanceService.setInstance(serverInstance);
 
       try {
         const url = await serverInstance.start();

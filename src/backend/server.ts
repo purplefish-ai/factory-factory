@@ -20,26 +20,13 @@ import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from './app-context';
-import { prisma } from './db';
-import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import type { Application } from './app-context';
 import { toError } from './lib/error-utils';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
   securityMiddleware,
 } from './middleware';
-import { configureDomainBridges } from './orchestration/domain-bridges.orchestrator';
-import {
-  configureEventCollector,
-  stopEventCollector,
-} from './orchestration/event-collector.orchestrator';
-import { reconciliationService } from './orchestration/reconciliation.service';
-import {
-  configureSnapshotReconciliation,
-  snapshotReconciliationService,
-} from './orchestration/snapshot-reconciliation.orchestrator';
-import { recoverStaleArchivingWorkspaces } from './orchestration/workspace-archive.orchestrator';
 import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
@@ -49,34 +36,44 @@ import {
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
-import { periodicTaskService } from './services/periodic-task';
-import { runScriptStateMachine } from './services/run-script';
-import { workspaceAccessor } from './services/workspace';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
+export { createApplication } from './app-context';
 export type { ServerInstance };
 
 /**
  * Create and configure the backend server.
  * Environment variables must be set before calling this function.
  *
+ * @param application - Fully composed application graph
  * @param requestedPort - Port to listen on (default: from BACKEND_PORT env or 3001)
  * @returns ServerInstance with start/stop methods
  */
-export function createServer(requestedPort?: number, appContext?: AppContext): ServerInstance {
-  const context = appContext ?? createAppContext();
+export function createServer(application: Application, requestedPort?: number): ServerInstance {
+  const { lifecycle, services } = application;
   const {
     acpTraceLogger,
     configService,
     createLogger,
+    periodicTaskService,
     ratchetService,
     rateLimiter,
+    reconciliationService,
+    runScriptStateMachine,
     schedulerService,
     sessionFileLogger,
     sessionService,
     terminalService,
-  } = context.services;
+    workspaceAccessor,
+  } = services;
+  const {
+    database,
+    eventCollector,
+    interceptors,
+    recoverStaleArchivingWorkspaces,
+    snapshotReconciliation,
+  } = lifecycle;
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
@@ -94,12 +91,12 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // Create HTTP server and WebSocket server
   const server = createHttpServer(app);
   const wss = new WebSocketServer({ noServer: true });
-  const chatUpgradeHandler = createChatUpgradeHandler(context);
-  const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
-  const setupTerminalUpgradeHandler = createSetupTerminalUpgradeHandler(context);
-  const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
-  const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(context);
-  const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
+  const chatUpgradeHandler = createChatUpgradeHandler(application);
+  const terminalUpgradeHandler = createTerminalUpgradeHandler(application);
+  const setupTerminalUpgradeHandler = createSetupTerminalUpgradeHandler(application);
+  const devLogsUpgradeHandler = createDevLogsUpgradeHandler(application);
+  const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(application);
+  const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(application);
   const websocketUpgradeHandlers = new Map<string, typeof chatUpgradeHandler>([
     ['/chat', chatUpgradeHandler],
     ['/terminal', terminalUpgradeHandler],
@@ -207,8 +204,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // Middleware
   // ============================================================================
   app.use(securityMiddleware);
-  app.use(createCorsMiddleware(context));
-  app.use(createRequestLoggerMiddleware(context));
+  app.use(createCorsMiddleware(application));
+  app.use(createRequestLoggerMiddleware(application));
   app.use(express.json({ limit: '10mb' }));
   app.use((_req, res, next) => {
     if (!explicitStartupStarted || startupComplete) {
@@ -226,17 +223,17 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   // Initialize Interceptors
   // ============================================================================
-  registerInterceptors();
+  interceptors.register();
 
   // ============================================================================
   // Mount HTTP Routes
   // ============================================================================
-  app.use('/health', createHealthRouter(context));
+  app.use('/health', createHealthRouter(application));
   app.use(
     '/api/trpc',
     createExpressMiddleware({
       router: appRouter,
-      createContext: createContext(context),
+      createContext: createContext(application),
     })
   );
 
@@ -384,7 +381,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   };
 
   const recoverStaleArchivingOnStartup = async (): Promise<void> => {
-    const recovered = await recoverStaleArchivingWorkspaces(context.services);
+    const recovered = await recoverStaleArchivingWorkspaces(services);
     if (recovered.archived.length > 0 || recovered.failed.length > 0) {
       logger.info('Recovered stale archiving workspaces on startup', {
         archived: recovered.archived,
@@ -417,7 +414,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         clearInterval(indexHtmlReloadInterval);
         indexHtmlReloadInterval = null;
       }
-      await stopInterceptors();
+      await interceptors.stop();
 
       // Close WebSocket server
       wss.close();
@@ -432,12 +429,12 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       await rateLimiter.stop();
 
       await schedulerService.stop();
-      stopEventCollector();
-      await snapshotReconciliationService.stop();
+      eventCollector.stop();
+      await snapshotReconciliation.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
       await reconciliationService.stopPeriodicCleanup();
-      await prisma.$disconnect();
+      await database.$disconnect();
 
       logger.info('Graceful cleanup completed');
     })();
@@ -503,13 +500,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       };
 
       try {
-        configureDomainBridges(context.services);
-        configureEventCollector(context.services);
-
         await bindServerWithPortFallback();
         await runStartupReconciliation();
 
-        configureSnapshotReconciliation(context.services);
+        snapshotReconciliation.start();
 
         logger.info('Backend server started', {
           port: actualPort,
@@ -521,7 +515,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
-        await startInterceptors();
+        await interceptors.start();
         reconciliationService.startPeriodicCleanup();
         rateLimiter.start();
         schedulerService.start();
