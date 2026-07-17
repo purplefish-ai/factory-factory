@@ -460,6 +460,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
           name,
           periodicTaskId,
           initialPrompt: prompt,
+          ratchetEnabled: true,
         });
 
         // Create default session

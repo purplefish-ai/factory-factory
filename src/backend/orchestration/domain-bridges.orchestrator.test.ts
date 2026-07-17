@@ -439,6 +439,7 @@ describe('configureDomainBridges', () => {
         name: 'Periodic task run',
         periodicTaskId: 'periodic-task-1',
         initialPrompt: 'Do the recurring work',
+        ratchetEnabled: true,
       });
       expect(sessionDataService.createAgentSession).toHaveBeenCalledWith({
         workspaceId: 'ws-periodic',
