@@ -439,6 +439,7 @@ const messageHandlers: MessageHandlerMap = {
   session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
   session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   agent_message: handleClaudeMessageAction,
+  assistant_text_delta: null,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
   chat_capabilities: handleChatCapabilitiesMessage,
