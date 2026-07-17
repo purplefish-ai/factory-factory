@@ -32,6 +32,16 @@ type PendingAcpToolCall = {
 };
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
+const DEFAULT_TEXT_FLUSH_INTERVAL_MS = 25;
+
+type AcpTextStreamState = {
+  messageId: string;
+  textOrder: number;
+  accText: string;
+  pendingText: string;
+  pendingOffset: number;
+  flushTimer?: ReturnType<typeof setTimeout>;
+};
 
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;
@@ -40,6 +50,7 @@ export type AcpEventProcessorDependencies = {
   sessionConfigService: SessionConfigService;
   onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
   toolCallTimeoutMs?: number;
+  textFlushIntervalMs?: number;
 };
 
 export class AcpEventProcessor {
@@ -54,11 +65,12 @@ export class AcpEventProcessor {
     toolName: string
   ) => void;
   private readonly toolCallTimeoutMs: number;
+  private readonly textFlushIntervalMs: number;
   /** Per-session, per-tool-call timers. Cleared on completion or session teardown. */
   private readonly toolCallTimers = new Map<string, Map<string, ReturnType<typeof setTimeout>>>();
 
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
-  readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  readonly acpStreamState = new Map<string, AcpTextStreamState>();
   /** Per-session ACP tool calls that have started but not yet been completed by tool_result. */
   readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
   /**
@@ -80,6 +92,7 @@ export class AcpEventProcessor {
     this.sessionConfigService = options.sessionConfigService;
     this.onToolCallTimeout = options.onToolCallTimeout;
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
+    this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
   }
 
   createRuntimeEventHandler(
@@ -149,7 +162,7 @@ export class AcpEventProcessor {
   }
 
   clearStreamingState(sessionId: string): void {
-    this.acpStreamState.delete(sessionId);
+    this.finishAcpTextBlock(sessionId);
   }
 
   clearReplaySuppression(sessionId: string): void {
@@ -175,7 +188,12 @@ export class AcpEventProcessor {
   }
 
   beginPromptTurn(sessionId: string): void {
+    this.finishAcpTextBlock(sessionId);
     this.pendingAcpToolCalls.set(sessionId, new Map());
+  }
+
+  finishPromptTurn(sessionId: string): void {
+    this.finishAcpTextBlock(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {
@@ -230,8 +248,8 @@ export class AcpEventProcessor {
       return;
     }
 
-    // Non-text agent_message (thinking, tool_use, result): reset text accumulator
-    this.acpStreamState.delete(sid);
+    // Non-text agent_message (thinking, tool_use, result): close the text block first.
+    this.finishAcpTextBlock(sid);
     // Persist to transcript + allocate order in one step
     const order = this.sessionDomainService.appendClaudeEvent(sid, data);
     this.sessionDomainService.emitDelta(sid, { ...delta, order });
@@ -364,22 +382,76 @@ export class AcpEventProcessor {
       Array.isArray(content) && content[0]?.type === 'text'
         ? (content[0] as { text: string }).text
         : '';
+    if (chunkText.length === 0) {
+      return;
+    }
     let ss = this.acpStreamState.get(sid);
     if (!ss) {
-      ss = { textOrder: this.sessionDomainService.allocateOrder(sid), accText: '' };
+      const textOrder = this.sessionDomainService.allocateOrder(sid);
+      ss = {
+        messageId: `${sid}-${textOrder}`,
+        textOrder,
+        accText: '',
+        pendingText: '',
+        pendingOffset: 0,
+      };
       this.acpStreamState.set(sid, ss);
     }
+    if (ss.pendingText.length === 0) {
+      ss.pendingOffset = ss.accText.length;
+    }
     ss.accText += chunkText;
+    ss.pendingText += chunkText;
     const accMsg: AgentMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
     };
     this.sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
+    this.scheduleAcpTextFlush(sid, ss);
+  }
+
+  private scheduleAcpTextFlush(sid: string, streamState: AcpTextStreamState): void {
+    if (streamState.flushTimer) {
+      return;
+    }
+    streamState.flushTimer = setTimeout(() => {
+      streamState.flushTimer = undefined;
+      if (this.acpStreamState.get(sid) !== streamState) {
+        return;
+      }
+      this.flushAcpTextDelta(sid, streamState);
+    }, this.textFlushIntervalMs);
+  }
+
+  private flushAcpTextDelta(sid: string, streamState: AcpTextStreamState): void {
+    if (streamState.flushTimer) {
+      clearTimeout(streamState.flushTimer);
+      streamState.flushTimer = undefined;
+    }
+    if (streamState.pendingText.length === 0) {
+      return;
+    }
+
+    const text = streamState.pendingText;
+    const offset = streamState.pendingOffset;
+    streamState.pendingText = '';
+    streamState.pendingOffset = streamState.accText.length;
     this.sessionDomainService.emitDelta(sid, {
-      type: 'agent_message',
-      data: accMsg,
-      order: ss.textOrder,
-    } as SessionDeltaEvent & { order: number });
+      type: 'assistant_text_delta',
+      messageId: streamState.messageId,
+      order: streamState.textOrder,
+      offset,
+      text,
+    });
+  }
+
+  private finishAcpTextBlock(sid: string): void {
+    const streamState = this.acpStreamState.get(sid);
+    if (!streamState) {
+      return;
+    }
+    this.flushAcpTextDelta(sid, streamState);
+    this.acpStreamState.delete(sid);
   }
 
   private trackPendingAcpToolCalls(sid: string, delta: SessionDeltaEvent): void {

@@ -99,6 +99,57 @@ describe('isWebSocketMessage', () => {
     );
   });
 
+  it('accepts direct and nested assistant text delta payloads', () => {
+    const delta = {
+      type: 'assistant_text_delta',
+      messageId: 'session-1-7',
+      order: 7,
+      offset: 5,
+      text: ' world',
+    };
+
+    expect(isWebSocketMessage(delta)).toBe(true);
+    expect(isWebSocketMessage({ type: 'session_delta', data: delta })).toBe(true);
+  });
+
+  it('rejects malformed assistant text delta payloads', () => {
+    expect(
+      isWebSocketMessage({
+        type: 'assistant_text_delta',
+        messageId: '',
+        order: 7,
+        offset: 5,
+        text: ' world',
+      })
+    ).toBe(false);
+    expect(
+      isWebSocketMessage({
+        type: 'assistant_text_delta',
+        messageId: 'session-1-7',
+        order: -1,
+        offset: 5,
+        text: ' world',
+      })
+    ).toBe(false);
+    expect(
+      isWebSocketMessage({
+        type: 'assistant_text_delta',
+        messageId: 'session-1-7',
+        order: 7,
+        offset: 1.5,
+        text: ' world',
+      })
+    ).toBe(false);
+    expect(
+      isWebSocketMessage({
+        type: 'assistant_text_delta',
+        messageId: 'session-1-7',
+        order: 7,
+        offset: 5,
+      })
+    ).toBe(false);
+  });
+
   it('rejects non-delta nested payload types inside session_delta', () => {
     expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'session_snapshot' } })).toBe(
       false

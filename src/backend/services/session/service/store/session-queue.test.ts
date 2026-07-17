@@ -13,6 +13,7 @@ function createStore(): SessionStore {
     sessionId: 's1',
     initialized: true,
     transcript: [],
+    transcriptIdToIndex: new Map(),
     queue: [],
     recentRejections: [],
     pendingInteractiveRequest: null,

@@ -146,23 +146,76 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
   return transcript;
 }
 
-export function upsertTranscriptMessage(store: SessionStore, message: ChatMessage): void {
-  const idx = store.transcript.findIndex((m) => m.id === message.id);
-  if (idx >= 0) {
-    store.transcript[idx] = message;
-  } else {
-    store.transcript.push(message);
+export function rebuildTranscriptIndex(store: SessionStore): void {
+  store.transcriptIdToIndex.clear();
+  for (const [index, message] of store.transcript.entries()) {
+    store.transcriptIdToIndex.set(message.id, index);
   }
-  store.transcript.sort(messageSort);
+}
+
+function reindexTranscriptFrom(store: SessionStore, startIndex: number): void {
+  for (let index = startIndex; index < store.transcript.length; index += 1) {
+    const message = store.transcript[index];
+    if (message) {
+      store.transcriptIdToIndex.set(message.id, index);
+    }
+  }
+}
+
+function findTranscriptInsertionIndex(transcript: ChatMessage[], order: number): number {
+  let low = 0;
+  let high = transcript.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const middleMessage = transcript[middle];
+    if (middleMessage && middleMessage.order <= order) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}
+
+function insertTranscriptMessage(store: SessionStore, message: ChatMessage): void {
+  const lastMessage = store.transcript.at(-1);
+  if (!lastMessage || lastMessage.order <= message.order) {
+    store.transcriptIdToIndex.set(message.id, store.transcript.length);
+    store.transcript.push(message);
+    return;
+  }
+
+  const insertionIndex = findTranscriptInsertionIndex(store.transcript, message.order);
+  store.transcript.splice(insertionIndex, 0, message);
+  reindexTranscriptFrom(store, insertionIndex);
+}
+
+export function upsertTranscriptMessage(store: SessionStore, message: ChatMessage): void {
+  const existingIndex = store.transcriptIdToIndex.get(message.id);
+  const existingMessage = existingIndex === undefined ? undefined : store.transcript[existingIndex];
+  if (existingIndex !== undefined && existingMessage?.id === message.id) {
+    if (existingMessage.order === message.order) {
+      store.transcript[existingIndex] = message;
+      return;
+    }
+
+    store.transcript.splice(existingIndex, 1);
+    store.transcriptIdToIndex.delete(message.id);
+    reindexTranscriptFrom(store, existingIndex);
+  }
+
+  insertTranscriptMessage(store, message);
 }
 
 export function removeTranscriptMessageById(store: SessionStore, messageId: string): boolean {
-  const idx = store.transcript.findIndex((message) => message.id === messageId);
-  if (idx < 0) {
+  const index = store.transcriptIdToIndex.get(messageId);
+  if (index === undefined || store.transcript[index]?.id !== messageId) {
     return false;
   }
 
-  store.transcript.splice(idx, 1);
+  store.transcript.splice(index, 1);
+  store.transcriptIdToIndex.delete(messageId);
+  reindexTranscriptFrom(store, index);
   return true;
 }
 
@@ -276,6 +329,7 @@ export function appendClaudeEvent(
   };
 
   store.transcript.push(entry);
+  store.transcriptIdToIndex.set(entry.id, store.transcript.length - 1);
   options.onParityTrace({
     path: 'live_stream_persisted',
     order,

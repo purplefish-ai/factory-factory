@@ -31,7 +31,9 @@ interface WebSocketMessageCommon {
   }>;
   text?: string;
   id?: string;
+  messageId?: string;
   order?: number;
+  offset?: number;
   newState?: MessageState;
   messages?: ChatMessage[];
   sessionRuntime?: SessionRuntimeState;
@@ -83,8 +85,20 @@ interface WebSocketMessagePayloadByType {
   };
   agent_message: {
     data: import('./messages').AgentMessage;
+    /** Stable backend transcript identifier when emitted from snapshot/replay. */
+    messageId?: string;
     /** Backend-assigned order for agent_message and message_used_as_response events */
     order?: number;
+  };
+  assistant_text_delta: {
+    /** Stable backend transcript identifier for the assistant text block. */
+    messageId: string;
+    /** Stable backend-assigned transcript order for the assistant text block. */
+    order: number;
+    /** UTF-16 offset where this text begins in the authoritative message. */
+    offset: number;
+    /** Newly generated assistant text only. */
+    text: string;
   };
   error: {
     message: string;
@@ -261,6 +275,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   session_runtime_snapshot: true,
   session_runtime_updated: true,
   agent_message: true,
+  assistant_text_delta: true,
   error: true,
   sessions: true,
   agent_metadata: true,

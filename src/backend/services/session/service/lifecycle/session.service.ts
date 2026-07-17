@@ -379,6 +379,7 @@ export class SessionService {
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       promptCompleted = true;
+      this.acpEventProcessor.finishPromptTurn(sessionId);
       this.acpEventProcessor.finalizeOrphanedToolCalls(
         sessionId,
         `stop_reason:${result.stopReason}`
@@ -393,6 +394,7 @@ export class SessionService {
     } catch (error) {
       promptError = error;
       promptErrorSet = true;
+      this.acpEventProcessor.finishPromptTurn(sessionId);
       this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
