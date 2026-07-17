@@ -131,44 +131,46 @@ function parseSubmittedAtMs(submittedAt: string | null | undefined): number | nu
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function getLatestApprovedReviewAtMsByAuthor(
+function getApprovedReviewsByAuthor(
   reviews: Array<{
     submittedAt?: string | null;
     author: { login: string };
     state?: string;
   }>
-): Map<string, number> {
-  const latestApprovedReviewAtMsByAuthor = new Map<string, number>();
+): Map<string, Array<{ index: number; submittedAtMs: number | null }>> {
+  const approvedReviewsByAuthor = new Map<
+    string,
+    Array<{ index: number; submittedAtMs: number | null }>
+  >();
 
-  for (const review of reviews) {
+  reviews.forEach((review, index) => {
     if (review.state?.toUpperCase() !== 'APPROVED') {
-      continue;
+      return;
     }
 
-    const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
-    if (submittedAtMs === null) {
-      continue;
-    }
+    const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
+    approvedReviews.push({ index, submittedAtMs: parseSubmittedAtMs(review.submittedAt) });
+    approvedReviewsByAuthor.set(review.author.login, approvedReviews);
+  });
 
-    const latestApprovedAtMs = latestApprovedReviewAtMsByAuthor.get(review.author.login);
-    if (latestApprovedAtMs === undefined || submittedAtMs > latestApprovedAtMs) {
-      latestApprovedReviewAtMsByAuthor.set(review.author.login, submittedAtMs);
-    }
-  }
-
-  return latestApprovedReviewAtMsByAuthor;
+  return approvedReviewsByAuthor;
 }
 
 function wasReviewSupersededByApproval(
   review: { submittedAt?: string | null; author: { login: string } },
-  latestApprovedReviewAtMsByAuthor: Map<string, number>
+  reviewIndex: number,
+  approvedReviewsByAuthor: Map<string, Array<{ index: number; submittedAtMs: number | null }>>
 ): boolean {
   const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
-  const latestApprovedAtMs = latestApprovedReviewAtMsByAuthor.get(review.author.login);
+  const approvedReviews = approvedReviewsByAuthor.get(review.author.login) ?? [];
 
-  return (
-    submittedAtMs !== null && latestApprovedAtMs !== undefined && latestApprovedAtMs > submittedAtMs
-  );
+  return approvedReviews.some((approval) => {
+    if (submittedAtMs !== null && approval.submittedAtMs !== null) {
+      return approval.submittedAtMs > submittedAtMs;
+    }
+
+    return approval.index > reviewIndex;
+  });
 }
 
 export function computeLatestReviewActivityAtMs(
@@ -185,11 +187,11 @@ export function computeLatestReviewActivityAtMs(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
-  const latestApprovedReviewAtMsByAuthor = getLatestApprovedReviewAtMsByAuthor(prDetails.reviews);
+  const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
   const entries = [
     ...prDetails.reviews
-      .filter((review) => {
-        if (wasReviewSupersededByApproval(review, latestApprovedReviewAtMsByAuthor)) {
+      .filter((review, index) => {
+        if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
           return false;
         }
 
@@ -236,17 +238,17 @@ export function buildReviewSummariesForPrompt(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
-  const latestApprovedReviewAtMsByAuthor = getLatestApprovedReviewAtMsByAuthor(prDetails.reviews);
+  const approvedReviewsByAuthor = getApprovedReviewsByAuthor(prDetails.reviews);
 
   return prDetails.reviews
-    .filter((review) => {
+    .filter((review, index) => {
       if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
         return false;
       }
 
       const state = review.state?.toUpperCase() ?? '';
 
-      if (wasReviewSupersededByApproval(review, latestApprovedReviewAtMsByAuthor)) {
+      if (wasReviewSupersededByApproval(review, index, approvedReviewsByAuthor)) {
         return false;
       }
 

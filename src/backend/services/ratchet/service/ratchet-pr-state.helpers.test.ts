@@ -743,6 +743,30 @@ describe('buildReviewSummariesForPrompt', () => {
     expect(summaries).toEqual([]);
   });
 
+  it('uses response order when stale feedback and approval timestamps are missing', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer-a' },
+            state: 'COMMENTED',
+            body: 'Please fix the first-round issue',
+          },
+          {
+            author: { login: 'reviewer-a' },
+            state: 'APPROVED',
+            body: '',
+          },
+        ],
+      },
+      null,
+      'ALL_REVIEW_FEEDBACK'
+    );
+
+    expect(summaries).toEqual([]);
+  });
+
   it('keeps changes-requested reviews when they are the reviewer latest state', () => {
     const summaries = buildReviewSummariesForPrompt(
       {
@@ -997,6 +1021,33 @@ describe('computeLatestReviewActivityAtMs', () => {
             },
             {
               submittedAt: '2026-01-03T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBeNull();
+  });
+
+  it('uses response order when an approval timestamp is unparseable', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Please fix the first-round issue',
+            },
+            {
+              submittedAt: 'not-a-timestamp',
               author: { login: 'reviewer-a' },
               state: 'APPROVED',
               body: '',
