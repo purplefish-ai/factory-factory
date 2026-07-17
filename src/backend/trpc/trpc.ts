@@ -16,15 +16,8 @@ export type RequestTrustInfo = {
   isLocal: boolean;
 };
 
-/**
- * Context for tRPC procedures.
- * Contains optional project/top-level task scoping from request headers.
- */
+/** Context for tRPC procedures. */
 export type Context = {
-  /** Project ID from X-Project-Id header */
-  projectId?: string;
-  /** Top-level Task ID from X-Top-Level-Task-Id header */
-  topLevelTaskId?: string;
   /** Request trust metadata for privileged state-changing procedures */
   requestTrust?: RequestTrustInfo;
   /** App-level services and config */
@@ -44,23 +37,13 @@ function buildRequestTrust(req: Request): RequestTrustInfo {
   };
 }
 
-/**
- * Creates tRPC context from Express request.
- * Extracts project and top-level task scope from headers.
- */
+/** Creates tRPC context from an Express request. */
 export const createContext =
   (appContext: AppContext) =>
-  ({ req }: { req: Request }): Context => {
-    const projectId = req.headers['x-project-id'];
-    const topLevelTaskId = req.headers['x-top-level-task-id'];
-
-    return {
-      projectId: typeof projectId === 'string' ? projectId : undefined,
-      topLevelTaskId: typeof topLevelTaskId === 'string' ? topLevelTaskId : undefined,
-      requestTrust: buildRequestTrust(req),
-      appContext,
-    };
-  };
+  ({ req }: { req: Request }): Context => ({
+    requestTrust: buildRequestTrust(req),
+    appContext,
+  });
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -68,7 +51,6 @@ const t = initTRPC.context<Context>().create({
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
-export const middleware = t.middleware;
 
 function isTrustedLocalContext(ctx: Context): boolean {
   // In-process callers, including tests and orchestration code using createCaller,

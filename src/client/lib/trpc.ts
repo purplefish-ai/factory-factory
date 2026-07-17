@@ -14,29 +14,13 @@ export const getBaseUrl = () => {
   return '';
 };
 
-/**
- * Creates a tRPC client with a context getter function.
- * The getter is called on each request to get fresh context values.
- */
-export function createTrpcClient(
-  getContext: () => { projectId?: string; taskId?: string }
-): TRPCClient<AppRouter> {
+/** Creates the shared tRPC client. */
+export function createTrpcClient(): TRPCClient<AppRouter> {
   return trpc.createClient({
     links: [
       httpBatchLink({
         url: `${getBaseUrl()}/api/trpc`,
         transformer: superjson,
-        headers() {
-          const { projectId, taskId } = getContext();
-          const headers: Record<string, string> = {};
-          if (projectId) {
-            headers['X-Project-Id'] = projectId;
-          }
-          if (taskId) {
-            headers['X-Task-Id'] = taskId;
-          }
-          return headers;
-        },
       }),
     ],
   });

@@ -18,4 +18,22 @@ describe('createContext request trust', () => {
       isLocal: false,
     });
   });
+
+  it('does not add unused request-scope headers to context', () => {
+    const headers: Request['headers'] = {
+      'x-project-id': 'project-1',
+      'x-top-level-task-id': 'task-1',
+    };
+    const contextFactory = createContext({} as never);
+    const ctx = contextFactory({
+      req: {
+        headers,
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as Request,
+    });
+
+    expect(ctx).not.toHaveProperty('projectId');
+    expect(ctx).not.toHaveProperty('topLevelTaskId');
+  });
 });
