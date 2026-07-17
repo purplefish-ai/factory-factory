@@ -162,6 +162,17 @@ class UserSettingsAccessor {
     });
   }
 
+  async compareAndSetCachedSlashCommands(
+    expectedUpdatedAt: Date,
+    cachedSlashCommands: Prisma.InputJsonValue
+  ): Promise<boolean> {
+    const result = await prisma.userSettings.updateMany({
+      where: { userId: 'default', updatedAt: expectedUpdatedAt },
+      data: { cachedSlashCommands },
+    });
+    return result.count === 1;
+  }
+
   /**
    * Get the workspace order for a specific project.
    */
