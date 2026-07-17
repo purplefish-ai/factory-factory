@@ -18,7 +18,7 @@ Goals:
 - `prCiStatus`: cached CI snapshot (`UNKNOWN`, `PENDING`, `SUCCESS`, `FAILURE`).
 - `ratchetEnabled`: workspace-level toggle for automated PR progression.
 - `ratchetState`: Ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`,
-  `REVIEW_PENDING`, `READY`, `MERGED`).
+  `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, `MERGED`).
 - `flowPhase`: derived PR/Ratchet phase (`NO_PR`, `CI_WAIT`, `RATCHET_VERIFY`,
   `RATCHET_FIXING`, `READY`, `MERGED`).
 - `ciObservation`: interpretation of the cached CI snapshot:
@@ -111,7 +111,9 @@ The rules are evaluated in this order:
 
 The exhausted-retry rule deliberately overrides an otherwise active Ratchet flow. The limit is
 `SERVICE_THRESHOLDS.ratchetDispatchMaxRetries` (currently 3). A `COMPLETED` dispatch outcome by
-itself does not force `WAITING`.
+itself does not force `WAITING`. After a fixer exits cleanly, Ratchet continues monitoring PR and
+CI state but suppresses another fixer dispatch while the dispatch snapshot is unchanged. A later
+snapshot change re-enables normal Ratchet evaluation.
 
 Archived workspaces retain their last pre-archive `cachedKanbanColumn`; the live derivation
 returns `null` so they remain off the active board unless archived items are explicitly shown.
