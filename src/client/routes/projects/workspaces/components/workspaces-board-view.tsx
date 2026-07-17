@@ -5,6 +5,7 @@ import {
 } from '@/client/components/app-header-context';
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/components/kanban';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import type { IssueProvider } from '@/shared/core';
 
 function BoardHeaderSlot({
   selectedProjectSlug,
@@ -53,7 +54,7 @@ export function WorkspacesBoardView({
   onCurrentProjectSelect: () => void;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
   slug: string;
-  issueProvider: string;
+  issueProvider: IssueProvider;
 }) {
   return (
     <KanbanProvider projectId={projectId} projectSlug={slug} issueProvider={issueProvider}>

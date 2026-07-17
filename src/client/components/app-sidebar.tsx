@@ -16,7 +16,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { InlineWorkspaceForm } from '@/client/components/kanban/inline-workspace-form';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
-import { useSidebarIssues } from '@/client/hooks/use-sidebar-issues';
+import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -390,11 +390,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   }, []);
 
   // Fetch issues for the Todo section
-  const { issues } = useSidebarIssues(
-    navData.selectedProjectId,
-    navData.issueProvider,
-    navData.serverWorkspaces
-  );
+  const { issues } = useProjectIssues(navData.selectedProjectId, navData.issueProvider);
 
   // Group workspaces by kanban column, sorted by createdAt descending (newest first)
   const { waiting, working, done } = useMemo(() => {
