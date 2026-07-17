@@ -89,7 +89,8 @@ function ScriptBanner({
   setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
 }) {
-  if (isScriptFailed && setupWarningDismissed === false) {
+  const isDismissible = workspaceInitStatus?.chatBanner?.showDismiss === true;
+  if (isScriptFailed && (!isDismissible || setupWarningDismissed === false)) {
     return (
       <ScriptFailedBanner
         workspaceId={workspaceId}

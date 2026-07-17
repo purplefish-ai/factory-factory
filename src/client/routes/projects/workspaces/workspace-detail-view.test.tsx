@@ -71,6 +71,28 @@ function createMutationLike() {
   };
 }
 
+function createInitStatus(
+  showDismiss: boolean
+): NonNullable<WorkspaceDetailViewProps['workspaceState']['workspaceInitStatus']> {
+  return {
+    status: 'READY',
+    initErrorMessage: 'Setup failed',
+    initOutput: null,
+    initStartedAt: null,
+    initCompletedAt: null,
+    phase: 'READY_WITH_WARNING',
+    chatBanner: {
+      kind: 'warning',
+      message: 'Setup failed',
+      showRetry: true,
+      showPlay: false,
+      showDismiss,
+    },
+    hasStartupScript: true,
+    hasWorktreePath: true,
+  };
+}
+
 function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   return {
     workspaceState: {
@@ -169,11 +191,25 @@ describe('WorkspaceDetailView', () => {
   it('does not render the script warning before dismissal state hydrates', () => {
     const props = createViewProps(0);
     props.workspaceState.isScriptFailed = true;
+    props.workspaceState.workspaceInitStatus = createInitStatus(true);
     props.workspaceState.setupWarningDismissed = null;
 
     const { container, root } = renderView(props);
 
     expect(container.textContent).not.toContain('Script failed');
+
+    root.unmount();
+  });
+
+  it('keeps non-dismissible script warnings visible during dismissal hydration', () => {
+    const props = createViewProps(0);
+    props.workspaceState.isScriptFailed = true;
+    props.workspaceState.workspaceInitStatus = createInitStatus(false);
+    props.workspaceState.setupWarningDismissed = null;
+
+    const { container, root } = renderView(props);
+
+    expect(container.textContent).toContain('Script failed');
 
     root.unmount();
   });
