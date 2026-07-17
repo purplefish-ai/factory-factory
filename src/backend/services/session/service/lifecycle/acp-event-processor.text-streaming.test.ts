@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SessionDomainService } from '@/backend/services/session';
 import type { AgentMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
-import { SessionDomainService } from '../session-domain.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
