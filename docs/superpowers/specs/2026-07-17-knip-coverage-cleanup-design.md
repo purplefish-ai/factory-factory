@@ -10,7 +10,7 @@ Make Knip analyze backend root services and orchestration files, remove obsolete
 - Remove the redundant explicit `src/client/main.tsx` entry; Vite discovers it.
 - Delete the unused `src/backend/clients/index.ts` compatibility barrel exposed by broader analysis.
 - Remove `projectId` and `topLevelTaskId` from tRPC request context, stop parsing their headers, delete the unused `projectScopedProcedure`, remove the client provider state and header generation that fed those headers, and remove the headers from CORS.
-- Replace the broad `src/components/ui/**` exclusion with exact paths for the 19 currently unused generated shadcn primitives. Document the generated-catalog reason beside those paths so newly added UI files are analyzed by default.
+- Replace the broad `src/components/ui/**` exclusion with exact paths for the 19 currently unused generated shadcn primitives. Document the generated-catalog reason in `docs/knip.md` so newly added UI files are analyzed by default.
 
 ## Approaches Considered
 
@@ -20,7 +20,7 @@ Make Knip analyze backend root services and orchestration files, remove obsolete
 
 ## Design
 
-Knip remains configured around runtime/framework entry discovery. Backend root services and orchestration modules are ordinary project files and receive no special exclusion. The remaining file ignores name only currently unused generated shadcn UI primitives, with their shared reason in the configuration.
+Knip remains configured around runtime/framework entry discovery. Backend root services and orchestration modules are ordinary project files and receive no special exclusion. The remaining file ignores name only currently unused generated shadcn UI primitives, with their shared reason in `docs/knip.md`.
 
 The tRPC context retains only request trust metadata and the application context. Project selection continues to be supplied explicitly in individual procedure inputs, which is already the production pattern; the client no longer tracks ambient tRPC project/task state or sends unused scope headers, and CORS no longer advertises them.
 
@@ -36,4 +36,4 @@ The tRPC context retains only request trust metadata and the application context
 - Do not remove explicit project IDs from procedure input schemas; only ambient, unused request headers are removed.
 - Do not turn test-only imports into production entry declarations. Test files remain discovered by the Vitest plugin.
 - Keep the existing tRPC provider and query client lifetimes stable while removing their now-unused context wrapper and refs.
-- Verify JSON comments are accepted by Knip before relying on an inline explanation for the remaining exact ignores.
+- Keep `knip.json` strict JSON for Biome compatibility; document exclusions outside the configuration rather than relying on JSON comments.

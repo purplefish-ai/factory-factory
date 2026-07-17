@@ -117,6 +117,7 @@ git commit -m "Remove unused tRPC request scope (#1963)"
 
 **Files:**
 - Modify: `knip.json`
+- Create: `docs/knip.md`
 - Delete: `src/backend/clients/index.ts`
 
 **Interfaces:**
@@ -133,9 +134,8 @@ Expected: PASS with no backend findings. A separate all-ignores-removed diagnost
 
 Remove `src/client/main.tsx` from `workspaces["."].entry`. Replace the broad `ignore` list with the 19 exact generated primitive paths:
 
-```jsonc
+```json
 "ignore": [
-  // Generated shadcn primitives form a reusable catalog; these exact files do not require current consumers.
   "src/components/ui/accordion.tsx",
   "src/components/ui/aspect-ratio.tsx",
   "src/components/ui/avatar.tsx",
@@ -158,6 +158,8 @@ Remove `src/client/main.tsx` from `workspaces["."].entry`. Replace the broad `ig
 ]
 ```
 
+Create `docs/knip.md` explaining that these exact paths are generated shadcn catalog primitives that do not require current consumers, while exact matching keeps new UI and all non-UI source files analyzed by default.
+
 Delete `src/backend/clients/index.ts` rather than declaring it an entry or excluding it.
 
 - [ ] **Step 3: Verify Knip is green and hint-free**
@@ -169,7 +171,7 @@ Expected: both commands exit 0 with no unused files and no configuration hints.
 - [ ] **Step 4: Commit the dead-code coverage cleanup**
 
 ```bash
-git add knip.json src/backend/clients/index.ts
+git add knip.json docs/knip.md src/backend/clients/index.ts docs/superpowers
 git commit -m "Tighten Knip backend coverage (#1963)"
 ```
 
