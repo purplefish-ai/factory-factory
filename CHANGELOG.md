@@ -5,6 +5,38 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-17
+
+### Added
+
+- Add configurable Ratchet review-trigger modes for changes-requested feedback, unresolved inline threads, and optional commented review summaries (#1969)
+- Add `TRUST_PROXY_HEADERS` support for deployments behind trusted reverse proxies (#1976)
+
+### Changed
+
+- Derive Kanban columns from next-action ownership so automated CI and Ratchet work remains in Working while explicit human attention moves to Waiting (#1978)
+- Centralize workspace Git reads behind a shared, invalidation-aware snapshot cache (#1968)
+- Batch pull-request discovery by repository with bounded backoff, jitter, and non-overlapping scheduling (#1974)
+- Consolidate backend composition, service ownership, persistence boundaries, application errors, shared snapshot contracts, project issue loading, and child-workspace messaging (#1970, #1972, #1973, #1975, #1979, #1980, #1981)
+- Tighten backend dead-code coverage and remove unused dependencies and request-scoping residue (#1971)
+
+### Fixed
+
+- Harden ACP rendering, initialization cleanup, thinking-budget validation, completed tool-call persistence, and assistant-text streaming (#1925, #1927, #1930, #1938, #1954)
+- Preserve concurrent slash-command caches, reset reopened palette selection, and revalidate file mentions at the live cursor (#1926, #1929, #1935)
+- Preserve closed-session tabs, prevent dismissed setup-warning flashes, keep workspace links from changing selection, and prevent header overlap on smaller displays (#1928, #1931, #1933, #1937)
+- Use unsaved custom IDE commands during testing and preserve agent-selected Codex branch renames (#1939, #1940)
+- Prevent stale auto-iteration cleanup from deleting replacement loops (#1936)
+- Scope pull-request synchronization and Ratchet dispatch snapshots correctly across projects and pull requests (#1932, #1951)
+- Deliver child-workspace report-back instructions and surface actionable child-workspace errors (#1941, #1950)
+- Handle Kanban archive failures, suppress no-op snapshot fan-out, and bound archived-workspace caches (#1952, #1953, #1967)
+- Throttle hidden-workspace log updates while preserving bounded output and live status indicators (#1955)
+- Preserve live Ratchet fixer turns after ACP startup (#1977)
+
+### Documentation
+
+- Refresh the README and product screenshot, and correct chat-flow, child-message-delivery, and coverage documentation (#1934, #1964, #1965, #1966)
+
 ## [0.4.0] - 2026-07-16
 
 ### Added
