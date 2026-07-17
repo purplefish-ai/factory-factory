@@ -119,6 +119,39 @@ export interface PrSnapshotPersistenceInput {
   branchName?: string;
 }
 
+export interface CIObservationPersistenceInput {
+  prCiStatus: CIStatus;
+  prUpdatedAt: Date;
+  prCiFailedAt?: Date | null;
+}
+
+type PrAggregatePersistenceInput = Partial<
+  Pick<
+    UpdateWorkspaceInput,
+    | 'prUrl'
+    | 'prNumber'
+    | 'prState'
+    | 'prReviewState'
+    | 'prCiStatus'
+    | 'prCiFailedAt'
+    | 'branchName'
+  >
+> & { prUpdatedAt: Date };
+
+export type KanbanOwnershipTuple = Pick<
+  Workspace,
+  | 'status'
+  | 'prUrl'
+  | 'prState'
+  | 'prCiStatus'
+  | 'prUpdatedAt'
+  | 'ratchetEnabled'
+  | 'ratchetState'
+  | 'ratchetDispatchOutcome'
+  | 'ratchetDispatchRetryCount'
+  | 'cachedKanbanColumn'
+>;
+
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
   excludeStatuses?: WorkspaceStatus[];
@@ -299,6 +332,30 @@ class WorkspaceAccessor {
       where: { id },
       data,
     });
+  }
+
+  async updateCachedKanbanColumnIfOwnershipMatches(
+    id: string,
+    expected: KanbanOwnershipTuple,
+    data: Pick<UpdateWorkspaceInput, 'cachedKanbanColumn' | 'stateComputedAt'>
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: expected.status,
+        prUrl: expected.prUrl,
+        prState: expected.prState,
+        prCiStatus: expected.prCiStatus,
+        prUpdatedAt: expected.prUpdatedAt,
+        ratchetEnabled: expected.ratchetEnabled,
+        ratchetState: expected.ratchetState,
+        ratchetDispatchOutcome: expected.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: expected.ratchetDispatchRetryCount,
+        cachedKanbanColumn: expected.cachedKanbanColumn,
+      },
+      data,
+    });
+    return result.count === 1;
   }
 
   /**
@@ -630,16 +687,33 @@ class WorkspaceAccessor {
    * the Ratchet still uses it to decide whether the changed aggregate warrants
    * another fixer.
    */
-  async applyPrSnapshotWithDispatchReset(
+  applyPrSnapshotWithDispatchReset(
     workspaceId: string,
     observation: PrSnapshotPersistenceInput
   ): Promise<boolean> {
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+  }
+
+  applyCIObservationWithDispatchReset(
+    workspaceId: string,
+    observation: CIObservationPersistenceInput
+  ): Promise<boolean> {
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+  }
+
+  private async applyPrAggregateUpdateWithDispatchReset(
+    workspaceId: string,
+    observation: PrAggregatePersistenceInput
+  ): Promise<boolean> {
     const snapshotData: UpdateWorkspaceInput = {
       ...(observation.prUrl !== undefined ? { prUrl: observation.prUrl } : {}),
-      prNumber: observation.prNumber,
-      prState: observation.prState,
-      prReviewState: observation.prReviewState,
-      prCiStatus: observation.prCiStatus,
+      ...(observation.prNumber !== undefined ? { prNumber: observation.prNumber } : {}),
+      ...(observation.prState !== undefined ? { prState: observation.prState } : {}),
+      ...(observation.prReviewState !== undefined
+        ? { prReviewState: observation.prReviewState }
+        : {}),
+      ...(observation.prCiStatus !== undefined ? { prCiStatus: observation.prCiStatus } : {}),
+      ...(observation.prCiFailedAt !== undefined ? { prCiFailedAt: observation.prCiFailedAt } : {}),
       prUpdatedAt: observation.prUpdatedAt,
       ...(observation.branchName !== undefined ? { branchName: observation.branchName } : {}),
     };
@@ -659,10 +733,11 @@ class WorkspaceAccessor {
         },
       });
       const aggregateChanged =
-        current.prNumber !== observation.prNumber ||
-        current.prState !== observation.prState ||
-        current.prReviewState !== observation.prReviewState ||
-        current.prCiStatus !== observation.prCiStatus ||
+        (observation.prNumber !== undefined && current.prNumber !== observation.prNumber) ||
+        (observation.prState !== undefined && current.prState !== observation.prState) ||
+        (observation.prReviewState !== undefined &&
+          current.prReviewState !== observation.prReviewState) ||
+        (observation.prCiStatus !== undefined && current.prCiStatus !== observation.prCiStatus) ||
         (observation.prUrl !== undefined && current.prUrl !== observation.prUrl);
       const shouldReset =
         aggregateChanged &&

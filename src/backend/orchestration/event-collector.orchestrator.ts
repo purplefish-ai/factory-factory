@@ -16,12 +16,16 @@
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
+import type { EventEmitter } from 'node:events';
+
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import {
+  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  type PRDispatchInvalidatedEvent,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
 } from '@/backend/services/github';
@@ -128,11 +132,11 @@ async function projectAuthoritativeRatchetState(
   coalescer: EventCoalescer,
   workspaceId: string,
   isActive: () => boolean
-): Promise<void> {
+): Promise<boolean> {
   try {
     const workspace = await workspaceAccessor.findRawById(workspaceId);
     if (!(workspace && isActive())) {
-      return;
+      return true;
     }
     coalescer.enqueue(
       workspaceId,
@@ -145,11 +149,45 @@ async function projectAuthoritativeRatchetState(
       'projection:ratchet_authoritative',
       { immediate: true }
     );
+    return true;
   } catch (error) {
     logger.warn('Failed to refresh authoritative Ratchet snapshot projection', {
       workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return false;
+  }
+}
+
+async function runRatchetProjectionRefresh(params: {
+  coalescer: EventCoalescer;
+  workspaceId: string;
+  refresh: { dirty: boolean };
+  refreshes: Map<string, { dirty: boolean }>;
+  isActive: () => boolean;
+  waitForRetry: (attempt: number) => Promise<void>;
+}): Promise<void> {
+  const { coalescer, workspaceId, refresh, refreshes, isActive, waitForRetry } = params;
+  let failedAttempts = 0;
+  try {
+    while (refresh.dirty && isActive()) {
+      refresh.dirty = false;
+      const succeeded = await projectAuthoritativeRatchetState(coalescer, workspaceId, isActive);
+      if (succeeded) {
+        failedAttempts = 0;
+        continue;
+      }
+      failedAttempts += 1;
+      if (failedAttempts >= 3) {
+        break;
+      }
+      refresh.dirty = true;
+      await waitForRetry(failedAttempts - 1);
+    }
+  } finally {
+    if (refreshes.get(workspaceId) === refresh) {
+      refreshes.delete(workspaceId);
+    }
   }
 }
 
@@ -296,6 +334,15 @@ export class EventCoalescer {
     this.pending.clear();
   }
 
+  cancelAll(): void {
+    for (const pending of this.pending.values()) {
+      if (pending.timer) {
+        clearTimeout(pending.timer);
+      }
+    }
+    this.pending.clear();
+  }
+
   /**
    * Number of workspaces with pending updates (for testing).
    */
@@ -315,6 +362,18 @@ class EventCollectorState {
   ratchetDispatchChangedHandler: ((event: RatchetDispatchChangedEvent) => void) | null = null;
   eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
   listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null = null;
+  listenerCleanups: Array<() => void> = [];
+  stopRatchetProjection: (() => void) | null = null;
+}
+
+function registerEventListener(
+  state: EventCollectorState,
+  emitter: EventEmitter,
+  event: string,
+  listener: Parameters<EventEmitter['on']>[1]
+): void {
+  emitter.on(event, listener);
+  state.listenerCleanups.push(() => emitter.off(event, listener));
 }
 
 async function refreshWorkspaceSessionSummaries(
@@ -479,6 +538,12 @@ function configureEventCollectorWithState(
   state: EventCollectorState,
   services: Partial<EventCollectorSessionServices> = {}
 ): void {
+  for (const cleanup of state.listenerCleanups.splice(0)) {
+    cleanup();
+  }
+  state.stopRatchetProjection?.();
+  state.stopRatchetProjection = null;
+  state.activeCoalescer?.cancelAll();
   const previousSessionDomainService =
     state.listenerSessionDomainService ?? state.eventCollectorSessionServices.sessionDomainService;
 
@@ -504,6 +569,35 @@ function configureEventCollectorWithState(
   state.activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
   const ratchetProjectionRefreshes = new Map<string, { dirty: boolean }>();
+  let projectionActive = true;
+  const projectionRetryWaiters = new Set<{
+    timer: NodeJS.Timeout;
+    resolve: () => void;
+  }>();
+  state.stopRatchetProjection = () => {
+    projectionActive = false;
+    for (const waiter of projectionRetryWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+    projectionRetryWaiters.clear();
+    ratchetProjectionRefreshes.clear();
+  };
+
+  const waitForProjectionRetry = (attempt: number): Promise<void> =>
+    new Promise((resolve) => {
+      const waiter = {
+        timer: setTimeout(
+          () => {
+            projectionRetryWaiters.delete(waiter);
+            resolve();
+          },
+          10 * 2 ** attempt
+        ),
+        resolve,
+      };
+      projectionRetryWaiters.add(waiter);
+    });
 
   const requestAuthoritativeRatchetProjection = (workspaceId: string): void => {
     const existing = ratchetProjectionRefreshes.get(workspaceId);
@@ -514,22 +608,14 @@ function configureEventCollectorWithState(
 
     const refresh = { dirty: true };
     ratchetProjectionRefreshes.set(workspaceId, refresh);
-    void (async () => {
-      try {
-        while (refresh.dirty) {
-          refresh.dirty = false;
-          await projectAuthoritativeRatchetState(
-            coalescer,
-            workspaceId,
-            () => state.activeCoalescer === coalescer
-          );
-        }
-      } finally {
-        if (ratchetProjectionRefreshes.get(workspaceId) === refresh) {
-          ratchetProjectionRefreshes.delete(workspaceId);
-        }
-      }
-    })();
+    void runRatchetProjectionRefresh({
+      coalescer,
+      workspaceId,
+      refresh,
+      refreshes: ratchetProjectionRefreshes,
+      isActive: () => projectionActive && state.activeCoalescer === coalescer,
+      waitForRetry: waitForProjectionRetry,
+    });
   };
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -560,110 +646,135 @@ function configureEventCollectorWithState(
   };
 
   // 1. Workspace state changes
-  workspaceStateMachine.on(WORKSPACE_STATE_CHANGED, (event: WorkspaceStateChangedEvent) => {
-    if (event.toStatus === 'ARCHIVED') {
-      // Immediate removal for UI feedback -- no coalescing delay
-      workspaceSnapshotStore.remove(event.workspaceId);
-      workspaceActivityService.clearWorkspace(event.workspaceId);
-      void Promise.allSettled([
-        state.eventCollectorSessionServices.sessionService.stopWorkspaceSessions(event.workspaceId),
-        Promise.resolve().then(() => {
-          state.eventCollectorSessionServices.terminalService.destroyWorkspaceTerminals(
+  registerEventListener(
+    state,
+    workspaceStateMachine,
+    WORKSPACE_STATE_CHANGED,
+    (event: WorkspaceStateChangedEvent) => {
+      if (event.toStatus === 'ARCHIVED') {
+        // Immediate removal for UI feedback -- no coalescing delay
+        workspaceSnapshotStore.remove(event.workspaceId);
+        workspaceActivityService.clearWorkspace(event.workspaceId);
+        void Promise.allSettled([
+          state.eventCollectorSessionServices.sessionService.stopWorkspaceSessions(
             event.workspaceId
+          ),
+          Promise.resolve().then(() => {
+            state.eventCollectorSessionServices.terminalService.destroyWorkspaceTerminals(
+              event.workspaceId
+            );
+          }),
+        ]).then((results) => {
+          const cleanupErrors = results.flatMap((result) =>
+            result.status === 'rejected' ? [result.reason] : []
           );
-        }),
-      ]).then((results) => {
-        const cleanupErrors = results.flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : []
-        );
 
-        if (cleanupErrors.length > 0) {
-          logger.warn('Failed to cleanup archived workspace resources from state change event', {
-            workspaceId: event.workspaceId,
-            errors: cleanupErrors.map((error) =>
-              error instanceof Error ? error.message : String(error)
-            ),
-          });
-        }
-      });
-      return;
+          if (cleanupErrors.length > 0) {
+            logger.warn('Failed to cleanup archived workspace resources from state change event', {
+              workspaceId: event.workspaceId,
+              errors: cleanupErrors.map((error) =>
+                error instanceof Error ? error.message : String(error)
+              ),
+            });
+          }
+        });
+        return;
+      }
+      coalescer.enqueue(
+        event.workspaceId,
+        buildWorkspaceStateChangeFields(event),
+        'event:workspace_state_changed',
+        { immediate: true }
+      );
     }
-    coalescer.enqueue(
-      event.workspaceId,
-      buildWorkspaceStateChangeFields(event),
-      'event:workspace_state_changed',
-      { immediate: true }
-    );
-  });
+  );
 
   // 2. PR snapshot updates
-  prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
-    const previousSnapshot = workspaceSnapshotStore.getByWorkspaceId(event.workspaceId);
-    const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
-    const snapshotUpdate: SnapshotUpdateInput = {
-      ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
-      prNumber: event.prNumber,
-      prState: event.prState as PRState,
-      prCiStatus: event.prCiStatus as CIStatus,
-    };
+  registerEventListener(
+    state,
+    prSnapshotService,
+    PR_SNAPSHOT_UPDATED,
+    (event: PRSnapshotUpdatedEvent) => {
+      const previousSnapshot = workspaceSnapshotStore.getByWorkspaceId(event.workspaceId);
+      const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
+      const snapshotUpdate: SnapshotUpdateInput = {
+        ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
+        prNumber: event.prNumber,
+        prState: event.prState as PRState,
+        prCiStatus: event.prCiStatus as CIStatus,
+      };
 
-    coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
-      immediate: true,
-    });
+      coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
+        immediate: true,
+      });
 
-    if (event.ratchetDispatchChanged) {
-      requestAuthoritativeRatchetProjection(event.workspaceId);
-    }
+      if (event.ratchetDispatchChanged) {
+        requestAuthoritativeRatchetProjection(event.workspaceId);
+      }
 
-    if (shouldRefreshRatchet) {
-      // Bypass the PR-fetch cooldown: this event was emitted by a sync that
-      // just registered its own fetch, so a plain check would be deduped into
-      // a no-op and the "immediate" refresh would wait for the next poll.
-      void ratchetService
-        .checkWorkspaceById(event.workspaceId, { bypassPrFetchCooldown: true })
-        .catch((error) => {
-          logger.warn('Failed immediate ratchet refresh after PR switch', {
+      if (shouldRefreshRatchet) {
+        // Bypass the PR-fetch cooldown: this event was emitted by a sync that
+        // just registered its own fetch, so a plain check would be deduped into
+        // a no-op and the "immediate" refresh would wait for the next poll.
+        void ratchetService
+          .checkWorkspaceById(event.workspaceId, { bypassPrFetchCooldown: true })
+          .catch((error) => {
+            logger.warn('Failed immediate ratchet refresh after PR switch', {
+              workspaceId: event.workspaceId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
+
+      // Closed PRs are excluded from the ratchet poll set, so the poll loop can no
+      // longer settle their ratchet state; reset it directly (no GitHub fetch needed).
+      if (event.prState === 'CLOSED') {
+        void ratchetService.markPrClosed(event.workspaceId).catch((error) => {
+          logger.warn('Failed to reset ratchet state for closed PR', {
             workspaceId: event.workspaceId,
             error: error instanceof Error ? error.message : String(error),
           });
         });
-    }
+      }
 
-    // Closed PRs are excluded from the ratchet poll set, so the poll loop can no
-    // longer settle their ratchet state; reset it directly (no GitHub fetch needed).
-    if (event.prState === 'CLOSED') {
-      void ratchetService.markPrClosed(event.workspaceId).catch((error) => {
-        logger.warn('Failed to reset ratchet state for closed PR', {
-          workspaceId: event.workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      // Transition linked Linear issue to completed when PR is merged
+      if (event.prState === 'MERGED') {
+        void handleLinearIssueCompletedOnMerge(event.workspaceId);
+      }
     }
+  );
 
-    // Transition linked Linear issue to completed when PR is merged
-    if (event.prState === 'MERGED') {
-      void handleLinearIssueCompletedOnMerge(event.workspaceId);
+  registerEventListener(
+    state,
+    prSnapshotService,
+    PR_DISPATCH_INVALIDATED,
+    (event: PRDispatchInvalidatedEvent) => {
+      requestAuthoritativeRatchetProjection(event.workspaceId);
+      refreshCachedKanbanColumn(event.workspaceId);
     }
-  });
+  );
 
   // 3. Ratchet state changes
-  ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      {
-        ratchetState: event.toState,
-        // Include fresh prCiStatus when the ratchet observed a CI status change.
-        // Prevents stale "CI Running" display after CI completes between scheduler polls.
-        ...(event.prCiStatus !== undefined ? { prCiStatus: event.prCiStatus } : {}),
-      },
-      'event:ratchet_state_changed',
-      { immediate: true }
-    );
-    refreshCachedKanbanColumn(event.workspaceId);
-  });
+  registerEventListener(
+    state,
+    ratchetService,
+    RATCHET_STATE_CHANGED,
+    (event: RatchetStateChangedEvent) => {
+      if (event.prCiStatus !== undefined) {
+        coalescer.enqueue(
+          event.workspaceId,
+          { prCiStatus: event.prCiStatus },
+          'event:ratchet_state_changed',
+          { immediate: true }
+        );
+      }
+      requestAuthoritativeRatchetProjection(event.workspaceId);
+      refreshCachedKanbanColumn(event.workspaceId);
+    }
+  );
 
   // 4. Ratchet enabled/disabled toggles
-  ratchetService.on(RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
+  registerEventListener(state, ratchetService, RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
     coalescer.enqueue(
       event.workspaceId,
       {
@@ -682,40 +793,62 @@ function configureEventCollectorWithState(
     requestAuthoritativeRatchetProjection(event.workspaceId);
     refreshCachedKanbanColumn(event.workspaceId);
   };
-  ratchetService.on(RATCHET_DISPATCH_CHANGED, state.ratchetDispatchChangedHandler);
+  registerEventListener(
+    state,
+    ratchetService,
+    RATCHET_DISPATCH_CHANGED,
+    state.ratchetDispatchChangedHandler
+  );
 
   // 6. Run-script status changes
-  runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      { runScriptStatus: event.toStatus },
-      'event:run_script_status_changed'
-    );
-  });
+  registerEventListener(
+    state,
+    runScriptStateMachine,
+    RUN_SCRIPT_STATUS_CHANGED,
+    (event: RunScriptStatusChangedEvent) => {
+      coalescer.enqueue(
+        event.workspaceId,
+        { runScriptStatus: event.toStatus },
+        'event:run_script_status_changed'
+      );
+    }
+  );
 
   // 7. Workspace activity (active)
-  workspaceActivityService.on('workspace_active', ({ workspaceId }: { workspaceId: string }) => {
-    coalescer.enqueue(
-      workspaceId,
-      { isWorking: true, hasHadSessions: true },
-      'event:workspace_active',
-      { immediate: true }
-    );
-  });
+  registerEventListener(
+    state,
+    workspaceActivityService,
+    'workspace_active',
+    ({ workspaceId }: { workspaceId: string }) => {
+      coalescer.enqueue(
+        workspaceId,
+        { isWorking: true, hasHadSessions: true },
+        'event:workspace_active',
+        { immediate: true }
+      );
+    }
+  );
 
   // 8. Workspace activity (idle)
-  workspaceActivityService.on('workspace_idle', ({ workspaceId }: { workspaceId: string }) => {
-    coalescer.enqueue(
-      workspaceId,
-      { isWorking: false, hasHadSessions: true },
-      'event:workspace_idle',
-      { immediate: true }
-    );
-    refreshPrSnapshotOnIdle(workspaceId);
-  });
+  registerEventListener(
+    state,
+    workspaceActivityService,
+    'workspace_idle',
+    ({ workspaceId }: { workspaceId: string }) => {
+      coalescer.enqueue(
+        workspaceId,
+        { isWorking: false, hasHadSessions: true },
+        'event:workspace_idle',
+        { immediate: true }
+      );
+      refreshPrSnapshotOnIdle(workspaceId);
+    }
+  );
 
   // 9. Session-level activity changes (running/idle transitions)
-  workspaceActivityService.on(
+  registerEventListener(
+    state,
+    workspaceActivityService,
     'session_activity_changed',
     ({ workspaceId }: { workspaceId: string; sessionId: string; isWorking: boolean }) => {
       void refreshWorkspaceSessionSummaries(
@@ -751,7 +884,9 @@ function configureEventCollectorWithState(
       'event:pending_request_changed'
     );
   };
-  state.eventCollectorSessionServices.sessionDomainService.on(
+  registerEventListener(
+    state,
+    state.eventCollectorSessionServices.sessionDomainService,
     'pending_request_changed',
     state.pendingRequestChangedHandler
   );
@@ -763,13 +898,15 @@ function configureEventCollectorWithState(
       'event:session_runtime_changed'
     );
   };
-  state.eventCollectorSessionServices.sessionDomainService.on(
+  registerEventListener(
+    state,
+    state.eventCollectorSessionServices.sessionDomainService,
     'runtime_changed',
     state.runtimeChangedHandler
   );
   state.listenerSessionDomainService = state.eventCollectorSessionServices.sessionDomainService;
 
-  logger.info('Event collector configured with 11 event subscriptions');
+  logger.info('Event collector configured with 12 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------
@@ -781,6 +918,11 @@ function configureEventCollectorWithState(
  * Called during server shutdown before domain services stop.
  */
 function stopEventCollectorWithState(state: EventCollectorState): void {
+  for (const cleanup of state.listenerCleanups.splice(0)) {
+    cleanup();
+  }
+  state.stopRatchetProjection?.();
+  state.stopRatchetProjection = null;
   const sessionDomainService =
     state.listenerSessionDomainService ?? state.eventCollectorSessionServices.sessionDomainService;
 

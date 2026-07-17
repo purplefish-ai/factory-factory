@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindById = vi.fn();
 const mockUpdate = vi.fn();
 const mockApplyPrSnapshotWithDispatchReset = vi.fn();
+const mockApplyCIObservationWithDispatchReset = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
@@ -12,6 +13,8 @@ vi.mock('@/backend/services/workspace', () => ({
     update: (...args: unknown[]) => mockUpdate(...args),
     applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
       mockApplyPrSnapshotWithDispatchReset(...args),
+    applyCIObservationWithDispatchReset: (...args: unknown[]) =>
+      mockApplyCIObservationWithDispatchReset(...args),
   },
 }));
 
@@ -31,6 +34,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import {
+  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
@@ -40,6 +44,7 @@ describe('PRSnapshotService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockApplyPrSnapshotWithDispatchReset.mockResolvedValue(false);
+    mockApplyCIObservationWithDispatchReset.mockResolvedValue(false);
     // Configure bridge with mock kanban dependency
     prSnapshotService.configure({
       kanban: {
@@ -216,7 +221,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-1', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
         prCiStatus: 'SUCCESS',
         prUpdatedAt: observedAt,
       });
@@ -232,7 +237,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-2', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
         prCiStatus: 'SUCCESS',
         prUpdatedAt: observedAt,
       });
@@ -248,7 +253,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-3', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
         prCiStatus: 'SUCCESS',
         prCiFailedAt: null,
         prUpdatedAt: observedAt,
@@ -260,6 +265,19 @@ describe('PRSnapshotService', () => {
   describe('event emission', () => {
     afterEach(() => {
       prSnapshotService.removeAllListeners();
+    });
+
+    it('invalidates dispatch ownership when a direct CI observation resets it', async () => {
+      mockApplyCIObservationWithDispatchReset.mockResolvedValue(true);
+      const events: Array<{ workspaceId: string }> = [];
+      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+
+      await prSnapshotService.recordCIObservation('ws-exhausted', {
+        ciStatus: 'PENDING',
+        observedAt: new Date('2026-07-17T12:00:00.000Z'),
+      });
+
+      expect(events).toEqual([{ workspaceId: 'ws-exhausted' }]);
     });
 
     it('emits pr_snapshot_updated after successful applySnapshot', async () => {

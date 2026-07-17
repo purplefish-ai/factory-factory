@@ -31,6 +31,11 @@ export type AttachAndRefreshResult =
   | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
+export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
+
+export interface PRDispatchInvalidatedEvent {
+  workspaceId: string;
+}
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
@@ -81,12 +86,15 @@ class PRSnapshotService extends EventEmitter {
    * This is the canonical write path for CI tracking fields.
    */
   async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
-    await workspaceAccessor.update(workspaceId, {
+    const dispatchReset = await workspaceAccessor.applyCIObservationWithDispatchReset(workspaceId, {
       prCiStatus: input.ciStatus,
       prUpdatedAt: input.observedAt ?? new Date(),
       ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
     });
     await this.kanban.updateCachedKanbanColumn(workspaceId);
+    if (dispatchReset) {
+      this.emit(PR_DISPATCH_INVALIDATED, { workspaceId } satisfies PRDispatchInvalidatedEvent);
+    }
   }
 
   /**

@@ -12,6 +12,11 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
+    updateCachedKanbanColumnIfOwnershipMatches: (
+      workspaceId: string,
+      _expected: unknown,
+      data: unknown
+    ) => mockUpdate(workspaceId, data),
   },
 }));
 
@@ -134,6 +139,7 @@ describe('kanbanStateService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdate.mockResolvedValue(true);
     kanbanStateService.configure({ session: sessionBridge });
   });
 
@@ -375,6 +381,67 @@ describe('kanbanStateService', () => {
       'w-race',
       expect.objectContaining({ cachedKanbanColumn: 'WAITING' })
     );
+  });
+
+  it('retries a failed cached-column refresh without another invalidation', async () => {
+    mockFindById.mockRejectedValueOnce(new Error('read failed')).mockResolvedValue({
+      id: 'w-retry',
+      status: WorkspaceStatus.READY,
+      prState: PRState.OPEN,
+      ratchetState: RatchetState.IDLE,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      cachedKanbanColumn: 'WORKING',
+    });
+    mockDeriveFlowStateFromWorkspace.mockReturnValue({ isWorking: false });
+
+    await kanbanStateService.updateCachedKanbanColumn('w-retry');
+
+    expect(mockFindById).toHaveBeenCalledTimes(2);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'w-retry',
+      expect.objectContaining({ cachedKanbanColumn: 'WAITING' })
+    );
+  });
+
+  it('reruns after a lifecycle race and preserves the archived cached column', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'w-archive-race',
+        status: WorkspaceStatus.READY,
+        prState: PRState.OPEN,
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+        cachedKanbanColumn: 'WORKING',
+      })
+      .mockResolvedValueOnce({
+        id: 'w-archive-race',
+        status: WorkspaceStatus.ARCHIVED,
+        cachedKanbanColumn: 'WORKING',
+      });
+    mockDeriveFlowStateFromWorkspace.mockReturnValue({ isWorking: false });
+    mockUpdate.mockResolvedValueOnce(false);
+
+    await kanbanStateService.updateCachedKanbanColumn('w-archive-race');
+
+    expect(mockFindById).toHaveBeenCalledTimes(2);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a failed refresh retry when reconfigured', async () => {
+    vi.useFakeTimers();
+    mockFindById.mockRejectedValue(new Error('read failed'));
+
+    const refresh = kanbanStateService.updateCachedKanbanColumn('w-cancel');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockFindById).toHaveBeenCalledTimes(1);
+    kanbanStateService.configure({ session: sessionBridge });
+    await refresh;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(mockFindById).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it('caches WORKING for pending CI without a live session', async () => {

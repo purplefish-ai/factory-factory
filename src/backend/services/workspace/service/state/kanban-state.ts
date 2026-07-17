@@ -92,8 +92,16 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 class KanbanStateService {
   private sessionBridge: WorkspaceSessionBridge | null = null;
   private readonly cachedColumnRefreshes = new Map<string, Promise<void>>();
+  private refreshGeneration = 0;
+  private readonly retryWaiters = new Set<{ timer: NodeJS.Timeout; resolve: () => void }>();
 
   configure(bridges: { session: WorkspaceSessionBridge }): void {
+    this.refreshGeneration += 1;
+    for (const waiter of this.retryWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+    this.retryWaiters.clear();
     this.sessionBridge = bridges.session;
   }
 
@@ -206,12 +214,13 @@ class KanbanStateService {
    * Only updates stateComputedAt when the column actually changes.
    */
   async updateCachedKanbanColumn(workspaceId: string): Promise<void> {
+    const generation = this.refreshGeneration;
     const previousRefresh = this.cachedColumnRefreshes.get(workspaceId) ?? Promise.resolve();
     const refresh = previousRefresh
       .catch(() => {
         // A failed refresh must not prevent a later request from reading fresh state.
       })
-      .then(() => this.refreshCachedKanbanColumn(workspaceId));
+      .then(() => this.refreshCachedKanbanColumnWithRetry(workspaceId, generation));
     this.cachedColumnRefreshes.set(workspaceId, refresh);
 
     try {
@@ -223,11 +232,49 @@ class KanbanStateService {
     }
   }
 
-  private async refreshCachedKanbanColumn(workspaceId: string): Promise<void> {
+  private waitForRetry(attempt: number): Promise<void> {
+    return new Promise((resolve) => {
+      const waiter = {
+        timer: setTimeout(
+          () => {
+            this.retryWaiters.delete(waiter);
+            resolve();
+          },
+          10 * 2 ** attempt
+        ),
+        resolve,
+      };
+      this.retryWaiters.add(waiter);
+    });
+  }
+
+  private async refreshCachedKanbanColumnWithRetry(
+    workspaceId: string,
+    generation: number
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (generation !== this.refreshGeneration) {
+        return;
+      }
+      try {
+        const updated = await this.refreshCachedKanbanColumn(workspaceId);
+        if (updated) {
+          return;
+        }
+      } catch (error) {
+        if (attempt === 2) {
+          throw error;
+        }
+        await this.waitForRetry(attempt);
+      }
+    }
+  }
+
+  private async refreshCachedKanbanColumn(workspaceId: string): Promise<boolean> {
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (!workspace) {
       logger.warn('Cannot update cached kanban column: workspace not found', { workspaceId });
-      return;
+      return true;
     }
 
     // Don't update cached column for archived workspaces - preserve pre-archive state
@@ -235,7 +282,7 @@ class KanbanStateService {
       workspace.status === WorkspaceStatus.ARCHIVING ||
       workspace.status === WorkspaceStatus.ARCHIVED
     ) {
-      return;
+      return true;
     }
 
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
@@ -256,12 +303,28 @@ class KanbanStateService {
 
     // Only update stateComputedAt if the column actually changed
     const columnChanged = workspace.cachedKanbanColumn !== newColumn;
-    await workspaceAccessor.update(workspaceId, {
-      cachedKanbanColumn: newColumn,
-      ...(columnChanged && { stateComputedAt: new Date() }),
-    });
+    const updated = await workspaceAccessor.updateCachedKanbanColumnIfOwnershipMatches(
+      workspaceId,
+      {
+        status: workspace.status,
+        prUrl: workspace.prUrl,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        prUpdatedAt: workspace.prUpdatedAt,
+        ratchetEnabled: workspace.ratchetEnabled,
+        ratchetState: workspace.ratchetState,
+        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
+        cachedKanbanColumn: workspace.cachedKanbanColumn,
+      },
+      {
+        cachedKanbanColumn: newColumn,
+        ...(columnChanged && { stateComputedAt: new Date() }),
+      }
+    );
 
     logger.debug('Updated cached kanban column', { workspaceId, cachedColumn, columnChanged });
+    return updated;
   }
 
   /**

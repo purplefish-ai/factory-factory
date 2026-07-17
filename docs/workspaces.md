@@ -133,11 +133,20 @@ dispatch-record mutations. PR resets and Ratchet toggles use the same invalidati
 event collector serializes and coalesces those invalidations per workspace, re-reads the
 authoritative Ratchet fields from the database, and reruns the projection when another mutation
 lands during a read. This prevents a delayed older callback from overwriting a newer dispatch or
-reset. Fresh `prCiStatus` observations still travel directly on Ratchet state events. Durable
-cached-column refreshes serialize their complete read/derive/write operation per workspace, so a
-slow old read cannot finish after and overwrite a newer refresh. Event-collector timestamps are
-strictly monotonic so later same-millisecond Ratchet events cannot be rejected as stale by the
-snapshot store. Session activity remains a live overlay and is the only source of the public
+reset. Direct Ratchet CI observations use the same aggregate-change reset and full dispatch-tuple
+compare-and-swap as scheduled PR snapshots, so `FAILURE` to `PENDING` clears exhausted ownership
+without overwriting a concurrent `RUNNING` fixer. Fresh `prCiStatus` observations still travel
+directly on Ratchet state events, while `ratchetState` is always re-read authoritatively. Projection
+reads retry transient failures with bounded backoff and are cancelled on collector stop or
+reconfiguration.
+
+Durable cached-column refreshes serialize their complete read/derive/write operation per
+workspace and retry transient failures. Their final write is conditional on the lifecycle and
+ownership tuple that was read; a lifecycle or Ratchet race causes a fresh derivation instead of a
+stale write, preserving archived columns. Event-collector timestamps are strictly monotonic so
+later same-millisecond updates cannot be rejected as stale by the snapshot store. The collector
+owns and removes every domain listener and cancels pending projection/coalescer work on stop or
+reconfiguration. Session activity remains a live overlay and is the only source of the public
 `isWorking` flag.
 
 ## Ratchet Animation

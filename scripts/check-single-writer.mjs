@@ -215,7 +215,7 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
   },
-  applyPrSnapshotWithDispatchReset: {
+  applyPrAggregateUpdateWithDispatchReset: {
     type: 'static',
     fields: [
       'prUrl',
@@ -224,10 +224,15 @@ const workspaceMutationRules = {
       'prReviewState',
       'prCiStatus',
       'prUpdatedAt',
+      'prCiFailedAt',
       'branchName',
       'ratchetDispatchOutcome',
       'ratchetDispatchRetryCount',
     ],
+  },
+  updateCachedKanbanColumnIfOwnershipMatches: {
+    type: 'static',
+    fields: ['cachedKanbanColumn', 'stateComputedAt'],
   },
   recordRatchetDispatchIfEnabled: {
     type: 'static',

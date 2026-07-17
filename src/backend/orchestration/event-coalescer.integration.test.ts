@@ -3,12 +3,12 @@ import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { EventCoalescer } from './event-collector.orchestrator';
 
-describe('EventCoalescer store integration', () => {
+describe('authoritative Ratchet projection integration', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('preserves same-millisecond Ratchet event order in the real snapshot store', () => {
+  it('moves exhausted failure back to WORKING after direct CI becomes pending', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(1000));
 
@@ -47,7 +47,7 @@ describe('EventCoalescer store integration', () => {
         ratchetDispatchOutcome: 'DIED',
         ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
       },
-      'event:ratchet_dispatch_changed',
+      'projection:ratchet_authoritative',
       { immediate: true }
     );
     expect(store.getByWorkspaceId('ws-1')?.kanbanColumn).toBe('WAITING');
@@ -59,7 +59,7 @@ describe('EventCoalescer store integration', () => {
         ratchetDispatchOutcome: null,
         ratchetDispatchRetryCount: 0,
       },
-      'event:pr_snapshot_updated',
+      'projection:ratchet_authoritative',
       { immediate: true }
     );
 

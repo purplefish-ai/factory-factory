@@ -288,6 +288,81 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  it('resets settled ownership for a changed direct CI observation', async () => {
+    const observedAt = new Date('2026-07-17T12:00:00.000Z');
+    mockFindUnique.mockResolvedValue({
+      prUrl: 'https://github.com/org/repo/pull/42',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'FAILURE',
+      prReviewState: null,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'failure:42',
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
+    });
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        workspace: {
+          findUniqueOrThrow: mockFindUnique,
+          update: mockUpdate,
+          updateMany: mockUpdateMany,
+        },
+      })
+    );
+
+    await expect(
+      workspaceAccessor.applyCIObservationWithDispatchReset('ws-1', {
+        prCiStatus: 'PENDING',
+        prUpdatedAt: observedAt,
+      })
+    ).resolves.toBe(true);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        id: 'ws-1',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      }),
+      data: {
+        prCiStatus: 'PENDING',
+        prUpdatedAt: observedAt,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      },
+    });
+  });
+
+  it('conditionally writes a cached column against the ownership tuple', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+    const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
+
+    await expect(
+      workspaceAccessor.updateCachedKanbanColumnIfOwnershipMatches(
+        'ws-1',
+        {
+          status: 'READY',
+          prUrl: 'https://github.com/org/repo/pull/42',
+          prState: 'OPEN',
+          prCiStatus: 'PENDING',
+          prUpdatedAt,
+          ratchetEnabled: true,
+          ratchetState: 'CI_RUNNING',
+          ratchetDispatchOutcome: null,
+          ratchetDispatchRetryCount: 0,
+          cachedKanbanColumn: 'WORKING',
+        },
+        { cachedKanbanColumn: 'WAITING' }
+      )
+    ).resolves.toBe(false);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ status: 'READY', prUpdatedAt }),
+      data: { cachedKanbanColumn: 'WAITING' },
+    });
+  });
+
   it('persists an identical PR aggregate without clearing settled dispatch metadata', async () => {
     mockUpdate.mockResolvedValue({ id: 'ws-1' });
     const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
