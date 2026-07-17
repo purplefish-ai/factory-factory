@@ -376,7 +376,7 @@ describe('KanbanProvider archive failure handling', () => {
     );
   });
 
-  it('restores selected workspaces omitted from the bulk archive results', async () => {
+  it('keeps workspaces omitted from bulk archive results removed', async () => {
     mocks.workspaceListState.push({
       id: 'workspace-3',
       kanbanColumn: 'WAITING',
@@ -391,15 +391,9 @@ describe('KanbanProvider archive failure handling', () => {
     await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING', true));
     rerenderProvider();
 
-    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual([
-      'workspace-2',
-      'workspace-3',
-    ]);
-    expect(mocks.projectSummaryState?.workspaces).toEqual([
-      { id: 'workspace-2' },
-      { id: 'workspace-3' },
-    ]);
-    expectVisibleWorkspaceIds(['workspace-2', 'workspace-3']);
-    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to archive workspace');
+    expect(mocks.workspaceListState.map((workspace) => workspace.id)).toEqual(['workspace-2']);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([{ id: 'workspace-2' }]);
+    expectVisibleWorkspaceIds(['workspace-2']);
+    expect(mocks.toastErrorMock).not.toHaveBeenCalled();
   });
 });
