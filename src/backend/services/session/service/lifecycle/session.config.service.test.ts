@@ -539,7 +539,6 @@ describe('SessionConfigService', () => {
         configOptions,
       })
     );
-    runtimeManager.setConfigOption.mockResolvedValue(configOptions);
 
     await service.setSessionThinkingBudget('session-1', 10_000);
 
