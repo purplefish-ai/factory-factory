@@ -455,6 +455,7 @@ export const workspaceRouter = router({
             id: workspaceWithState.id,
             success: false,
             error: error instanceof Error ? error.message : String(error),
+            code: error instanceof TRPCError ? error.code : 'INTERNAL_SERVER_ERROR',
           });
         }
       }
