@@ -4,7 +4,7 @@ import { WorkspaceStatus } from '@/shared/core';
 
 const mockUpdateExecution = vi.hoisted(() => vi.fn());
 const mockCreateExecution = vi.hoisted(() => vi.fn());
-const mockCreateExecutionAndMarkDispatched = vi.hoisted(() => vi.fn());
+const mockReserveExecutionAndMarkDispatched = vi.hoisted(() => vi.fn());
 const mockMarkDispatched = vi.hoisted(() => vi.fn());
 const mockListByProject = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
@@ -27,8 +27,8 @@ vi.mock('@/backend/services/periodic-task/resources/periodic-task.accessor', () 
     listExecutionsByWorkspacePeriodicTask: (...args: unknown[]) =>
       mockListExecutionsByWorkspacePeriodicTask(...args),
     createExecution: (...args: unknown[]) => mockCreateExecution(...args),
-    createExecutionAndMarkDispatched: (...args: unknown[]) =>
-      mockCreateExecutionAndMarkDispatched(...args),
+    reserveExecutionAndMarkDispatched: (...args: unknown[]) =>
+      mockReserveExecutionAndMarkDispatched(...args),
     markDispatched: (...args: unknown[]) => mockMarkDispatched(...args),
     updateExecution: (...args: unknown[]) => mockUpdateExecution(...args),
   },
@@ -145,7 +145,7 @@ describe('PeriodicTaskService', () => {
       workspaceId: 'workspace-1',
       status: 'RUNNING',
     });
-    mockCreateExecutionAndMarkDispatched.mockResolvedValue({
+    mockReserveExecutionAndMarkDispatched.mockResolvedValue({
       id: 'exec-1',
       periodicTaskId: 'task-1',
       workspaceId: null,
@@ -193,6 +193,22 @@ describe('PeriodicTaskService', () => {
     await service.create(input);
 
     expect(mockCreate).toHaveBeenCalledWith(input);
+  });
+
+  it('validates schedules at the service boundary', () => {
+    const service = new PeriodicTaskService(logger);
+
+    expect(() =>
+      service.create({
+        projectId: 'project-1',
+        name: 'Daily cleanup',
+        prompt: 'Clean up stale data',
+        cadence: 'DAILY',
+        scheduledTime: '25:00',
+        timezone: 'UTC',
+      })
+    ).toThrow('scheduledTime must use HH:MM');
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('updates a periodic task', async () => {
@@ -256,7 +272,7 @@ describe('PeriodicTaskService', () => {
 
     await dispatchTask(service);
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalledWith(
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalledWith(
       {
         periodicTaskId: 'task-1',
         workspaceId: null,
@@ -280,7 +296,7 @@ describe('PeriodicTaskService', () => {
     });
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
-    const [persistDispatchOrder] = mockCreateExecutionAndMarkDispatched.mock.invocationCallOrder;
+    const [persistDispatchOrder] = mockReserveExecutionAndMarkDispatched.mock.invocationCallOrder;
     const [createWorkspaceOrder] = createWorkspaceForTask.mock.invocationCallOrder;
     expect(persistDispatchOrder).toBeDefined();
     expect(createWorkspaceOrder).toBeDefined();
@@ -298,7 +314,7 @@ describe('PeriodicTaskService', () => {
 
     await expect(dispatchTask(service)).rejects.toThrow('default session create failed');
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalled();
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalled();
     expect(mockUpdateExecution).toHaveBeenCalledWith(
       'exec-1',
       expect.objectContaining({
@@ -313,16 +329,27 @@ describe('PeriodicTaskService', () => {
   it('does not create a workspace when dispatch reservation fails', async () => {
     const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
     const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
-    mockCreateExecutionAndMarkDispatched.mockRejectedValue(
+    mockReserveExecutionAndMarkDispatched.mockRejectedValue(
       new Error('dispatch persistence failed')
     );
 
     await expect(dispatchTask(service)).rejects.toThrow('dispatch persistence failed');
 
-    expect(mockCreateExecutionAndMarkDispatched).toHaveBeenCalled();
+    expect(mockReserveExecutionAndMarkDispatched).toHaveBeenCalled();
     expect(createWorkspaceForTask).not.toHaveBeenCalled();
     expect(mockCreateExecution).not.toHaveBeenCalled();
     expect(mockMarkDispatched).not.toHaveBeenCalled();
+  });
+
+  it('does not create a workspace when another poller claims the reservation', async () => {
+    const createWorkspaceForTask = vi.fn().mockResolvedValue({ workspaceId: 'workspace-1' });
+    const service = createServiceWithWorkspaceBridge(createWorkspaceForTask);
+    mockReserveExecutionAndMarkDispatched.mockResolvedValue(null);
+
+    await dispatchTask(service);
+
+    expect(createWorkspaceForTask).not.toHaveBeenCalled();
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
   });
 
   it('marks stale workspace reservations as failed', async () => {

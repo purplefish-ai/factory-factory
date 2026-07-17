@@ -4,7 +4,7 @@
 
 **Goal:** Hide raw persistence accessors behind capsule-owned application APIs and prevent future accessor leakage.
 
-**Architecture:** Keep accessors private to their owning capsule. Extend existing services and add intent-focused services where public use cases are missing; transport and cross-service callers import only capsule barrels. A TypeScript-AST guard rejects raw re-exports, aliases and indirect re-export chains, dynamic `CallExpression` imports, and cross-owner imports, with one exact backup-orchestration exception.
+**Architecture:** Keep accessors private to their owning capsule. Extend existing services and add intent-focused services where public use cases are missing; transport and cross-service callers import only capsule barrels. A TypeScript-AST guard rejects raw re-exports, aliases and indirect re-export chains, dynamic imports and supported loader calls, and cross-owner imports, with one exact backup-orchestration exception.
 
 **Tech Stack:** TypeScript, Express/tRPC, Prisma, Vitest, TypeScript compiler API, Biome, pnpm
 
@@ -48,7 +48,7 @@ Expected: FAIL because `scripts/check-service-accessor-boundaries.mjs` does not 
 
 - [ ] **Step 3: Implement the AST checker and wire it into ownership checks**
 
-Use an explicit owner map for `projectAccessor`, `workspaceAccessor`, `workspaceNotificationAccessor`, `agentSessionAccessor`, `closedSessionAccessor`, `userSettingsAccessor`, `healthAccessor`, `dataBackupAccessor`, `terminalSessionAccessor`, `decisionLogAccessor`, and `periodicTaskAccessor`. Parse import/export declarations with TypeScript, include type-only imports and dynamic `CallExpression` module references, propagate accessor identity through local aliases and indirect re-export chains, and keep the exception keyed by exact importer and exact module.
+Use an explicit owner map for `projectAccessor`, `workspaceAccessor`, `workspaceNotificationAccessor`, `agentSessionAccessor`, `closedSessionAccessor`, `userSettingsAccessor`, `healthAccessor`, `dataBackupAccessor`, `terminalSessionAccessor`, `decisionLogAccessor`, and `periodicTaskAccessor`. Parse import/export declarations with TypeScript, include type-only imports, dynamic imports, and explicitly supported loader calls, propagate accessor identity through local aliases and indirect re-export chains, and keep the exception keyed by exact importer and exact module.
 
 Update:
 
@@ -133,7 +133,7 @@ git commit -m "Own settings and decision log APIs (#1956)"
 - Modify: `src/backend/trpc/periodic-task.trpc.ts`
 
 **Interfaces:**
-- Produces: periodic-task administration and query operations plus scheduler-owned execution reservation and dispatch APIs. The service owns schedule validation, next-run calculation, default query limits, and atomic execution state transitions.
+- Produces: periodic-task administration and query operations plus scheduler-owned execution reservation and dispatch APIs. The service owns schedule validation, default query limits, and dispatch orchestration; the capsule resource computes persisted next-run state and conditionally reserves execution in one transaction.
 
 - [ ] **Step 1: Write failing service API tests**
 
@@ -147,7 +147,7 @@ Expected: FAIL because the application operations and their invariants are absen
 
 - [ ] **Step 3: Implement methods and migrate tRPC**
 
-Expose administration, query, and scheduler operations from `PeriodicTaskService`; keep validation and execution-state invariants inside the capsule. Replace every router accessor call with the service API and stop exporting the accessor from the capsule barrel.
+Expose administration, query, and scheduler operations from `PeriodicTaskService`; validate schedules at the service boundary and keep conditional reservation plus next-run persistence atomic inside the capsule resource. Replace every router accessor call with the service API and stop exporting the accessor from the capsule barrel.
 
 - [ ] **Step 4: Verify GREEN**
 

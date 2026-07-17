@@ -446,30 +446,37 @@ export const periodicTaskAccessor = {
     });
   },
 
-  async createExecutionAndMarkDispatched(
+  async reserveExecutionAndMarkDispatched(
     input: {
       periodicTaskId: string;
       workspaceId: string | null;
       status: PeriodicTaskExecutionStatus;
     },
     schedule: PeriodicTaskDispatchSchedule
-  ): Promise<PeriodicTaskExecution> {
+  ): Promise<PeriodicTaskExecution | null> {
     const data = await buildDispatchedTaskData(input.periodicTaskId, schedule);
-    const [execution] = await prisma.$transaction([
-      prisma.periodicTaskExecution.create({
+    return prisma.$transaction(async (transaction) => {
+      const reservation = await transaction.periodicTask.updateMany({
+        where: {
+          id: input.periodicTaskId,
+          isEnabled: true,
+          nextRunAt: { lte: data.lastRunAt },
+          executions: { none: { status: 'RUNNING' } },
+        },
+        data,
+      });
+      if (reservation.count === 0) {
+        return null;
+      }
+
+      return transaction.periodicTaskExecution.create({
         data: {
           periodicTaskId: input.periodicTaskId,
           workspaceId: input.workspaceId,
           status: input.status,
         },
-      }),
-      prisma.periodicTask.update({
-        where: { id: input.periodicTaskId },
-        data,
-      }),
-    ]);
-
-    return execution;
+      });
+    });
   },
 
   async updateExecution(

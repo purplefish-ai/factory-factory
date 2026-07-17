@@ -638,7 +638,7 @@ describe('resource accessors integration', () => {
         ],
       });
 
-      await terminalSessionService.clearPid(workspace.id, 'terminal-a');
+      await terminalSessionService.releaseSessionPid(workspace.id, 'terminal-a');
 
       const all = await prisma.terminalSession.findMany({ orderBy: { name: 'asc' } });
       const target = all.filter(
@@ -665,7 +665,7 @@ describe('resource accessors integration', () => {
         data: { workspaceId: workspace.id, name: 'idle', pid: null },
       });
 
-      const withPid = await terminalSessionService.findWithPid();
+      const withPid = await terminalSessionService.listPidBackedSessions();
 
       expect(withPid.map((session) => session.id)).toEqual([live.id]);
     });

@@ -25,8 +25,8 @@ vi.mock('@/backend/services/terminal', async (importOriginal) => {
     ...actual,
     terminalSessionService: {
       ...actual.terminalSessionService,
-      clearPid: (...args: unknown[]) => mockClearTerminalPid(...args),
-      create: vi.fn(),
+      releaseSessionPid: (...args: unknown[]) => mockClearTerminalPid(...args),
+      registerSession: vi.fn(),
     },
   };
 });
@@ -544,7 +544,7 @@ describe('createTerminalUpgradeHandler', () => {
       cols: 120,
       rows: 40,
     });
-    expect(terminalSessionService.create).toHaveBeenCalledWith({
+    expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
       workspaceId,
       name: 'terminal-1',
       pid: 4321,
@@ -811,7 +811,9 @@ describe('createTerminalUpgradeHandler', () => {
       id: workspaceId,
       worktreePath: '/tmp/worktree',
     } as never);
-    vi.mocked(terminalSessionService.create).mockRejectedValueOnce(new Error('database locked'));
+    vi.mocked(terminalSessionService.registerSession).mockRejectedValueOnce(
+      new Error('database locked')
+    );
 
     const terminalInstances = new Map<string, { id: string; pid: number }>();
     const { terminalService } = createTerminalService();
@@ -860,7 +862,7 @@ describe('createTerminalUpgradeHandler', () => {
     ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
 
     await vi.waitFor(() => {
-      expect(terminalSessionService.create).toHaveBeenCalledWith({
+      expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
         workspaceId,
         name: 'terminal-1',
         pid: 4321,

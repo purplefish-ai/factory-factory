@@ -191,7 +191,7 @@ export const adminRouter = router({
     const mergedAgentSessions = mergeAgentSessions(activeDbSessions, agentSessionsWithPid);
 
     // Get terminal sessions with PIDs from database
-    const terminalSessionsWithPid = await terminalSessionService.findWithPid();
+    const terminalSessionsWithPid = await terminalSessionService.listPidBackedSessions();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([

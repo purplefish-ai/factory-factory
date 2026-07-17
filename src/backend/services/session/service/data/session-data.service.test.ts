@@ -108,4 +108,10 @@ describe('sessionDataService', () => {
       },
     });
   });
+
+  it('returns null when the persistence session does not exist', async () => {
+    vi.mocked(agentSessionAccessor.findById).mockResolvedValue(null);
+
+    await expect(sessionDataService.findAgentSessionById('missing-session')).resolves.toBeNull();
+  });
 });

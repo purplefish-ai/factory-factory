@@ -143,7 +143,7 @@ async function handleCreateMessage(
   });
 
   try {
-    await terminalSessionService.create({
+    await terminalSessionService.registerSession({
       workspaceId,
       name: terminalId,
       pid,
@@ -215,7 +215,7 @@ async function clearTerminalPidWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await terminalSessionService.clearPid(workspaceId, terminalId);
+      await terminalSessionService.releaseSessionPid(workspaceId, terminalId);
       return;
     } catch (error) {
       const retryDelayMs = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS[attempt - 1];

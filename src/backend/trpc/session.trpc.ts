@@ -256,7 +256,7 @@ export const sessionRouter = router({
     .query(({ ctx, input }) => {
       const { terminalSessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
-      return terminalSessionService.findByWorkspaceId(workspaceId, filters);
+      return terminalSessionService.findWorkspaceSessions(workspaceId, filters);
     }),
 
   // Get terminal session by ID
@@ -264,7 +264,7 @@ export const sessionRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const { terminalSessionService } = ctx.appContext.services;
-      const session = await terminalSessionService.findById(input.id);
+      const session = await terminalSessionService.findSession(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
       }
@@ -281,7 +281,7 @@ export const sessionRouter = router({
     )
     .mutation(({ ctx, input }) => {
       const { terminalSessionService } = ctx.appContext.services;
-      return terminalSessionService.create(input);
+      return terminalSessionService.registerSession(input);
     }),
 
   // Update a terminal session
@@ -289,19 +289,18 @@ export const sessionRouter = router({
     .input(
       z.object({
         id: z.string(),
-        name: z.string().optional(),
+        name: z.string(),
       })
     )
     .mutation(({ ctx, input }) => {
       const { terminalSessionService } = ctx.appContext.services;
-      const { id, ...updates } = input;
-      return terminalSessionService.update(id, updates);
+      return terminalSessionService.renameSession(input.id, input.name);
     }),
 
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ ctx, input }) => {
-      return ctx.appContext.services.terminalSessionService.delete(input.id);
+      return ctx.appContext.services.terminalSessionService.removeSession(input.id);
     }),
 });

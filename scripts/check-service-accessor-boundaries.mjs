@@ -154,6 +154,17 @@ function unwrapTransparentExpression(expression) {
   return current;
 }
 
+function aliasTarget(expression) {
+  const target = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(target)) {
+    return target.text;
+  }
+  if (ts.isPropertyAccessExpression(target) && ts.isIdentifier(target.expression)) {
+    return target.expression.text;
+  }
+  return null;
+}
+
 function parseModuleRecords(sourceFiles, rootDir) {
   const records = new Map();
 
@@ -209,14 +220,11 @@ function parseModuleRecords(sourceFiles, rootDir) {
             const initializer = declaration.initializer
               ? unwrapTransparentExpression(declaration.initializer)
               : null;
-            if (
-              ts.isIdentifier(declaration.name) &&
-              initializer &&
-              ts.isIdentifier(initializer)
-            ) {
+            const target = initializer ? aliasTarget(initializer) : null;
+            if (ts.isIdentifier(declaration.name) && target) {
               record.localAliases.push({
                 local: declaration.name.text,
-                target: initializer.text,
+                target,
               });
               if (isExported) {
                 record.localExports.push({
@@ -232,6 +240,22 @@ function parseModuleRecords(sourceFiles, rootDir) {
           const expression = unwrapTransparentExpression(statement.expression);
           if (ts.isIdentifier(expression)) {
             record.localExports.push({ local: expression.text, exported: 'default' });
+          }
+        }
+
+
+        if (
+          ts.isExpressionStatement(statement) &&
+          ts.isBinaryExpression(statement.expression) &&
+          statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isIdentifier(statement.expression.left)
+        ) {
+          const target = aliasTarget(statement.expression.right);
+          if (target) {
+            record.localAliases.push({
+              local: statement.expression.left.text,
+              target,
+            });
           }
         }
         continue;
@@ -293,6 +317,30 @@ function resolveSourceModule(modulePath, records) {
   return records.has(indexModule) ? indexModule : modulePath;
 }
 
+function mergeAccessorBindings(bindingsByName, name, accessorBindings) {
+  if (!accessorBindings || accessorBindings.size === 0) {
+    return false;
+  }
+
+  const existing = bindingsByName.get(name) ?? new Set();
+  const previousSize = existing.size;
+  for (const accessorBinding of accessorBindings) {
+    existing.add(accessorBinding);
+  }
+  bindingsByName.set(name, existing);
+  return existing.size !== previousSize;
+}
+
+function allAccessorBindings(moduleExports) {
+  const bindings = new Set();
+  for (const accessorBindings of moduleExports?.values() ?? []) {
+    for (const accessorBinding of accessorBindings) {
+      bindings.add(accessorBinding);
+    }
+  }
+  return bindings;
+}
+
 function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
   const records = parseModuleRecords(sourceFiles, rootDir);
   const exportsByModule = new Map(
@@ -302,7 +350,7 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
   for (const [binding, policy] of Object.entries(ACCESSOR_POLICIES)) {
     const modulePath = resolveSourceModule(policy.module, records);
     const moduleExports = exportsByModule.get(modulePath) ?? new Map();
-    moduleExports.set(binding, binding);
+    moduleExports.set(binding, new Set([binding]));
     exportsByModule.set(modulePath, moduleExports);
   }
 
@@ -315,68 +363,69 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
       const localBindings = new Map();
       const ownAccessorPolicy = POLICY_BY_MODULE.get(record.modulePath);
       if (ownAccessorPolicy) {
-        localBindings.set(ownAccessorPolicy.binding, ownAccessorPolicy.binding);
+        localBindings.set(ownAccessorPolicy.binding, new Set([ownAccessorPolicy.binding]));
       }
 
       for (const importedBinding of record.imports) {
         const importedModule = resolveSourceModule(importedBinding.modulePath, records);
-        const accessorBinding = exportsByModule.get(importedModule)?.get(importedBinding.imported);
-        if (accessorBinding) {
-          localBindings.set(importedBinding.local, accessorBinding);
-        }
+        const accessorBindings = exportsByModule
+          .get(importedModule)
+          ?.get(importedBinding.imported);
+        mergeAccessorBindings(localBindings, importedBinding.local, accessorBindings);
       }
 
       for (const namespaceImport of record.namespaceImports) {
         const importedModule = resolveSourceModule(namespaceImport.modulePath, records);
-        const accessorBinding = exportsByModule.get(importedModule)?.values().next().value;
-        if (accessorBinding) {
-          localBindings.set(namespaceImport.local, accessorBinding);
-        }
+        mergeAccessorBindings(
+          localBindings,
+          namespaceImport.local,
+          allAccessorBindings(exportsByModule.get(importedModule))
+        );
       }
 
       let aliasesChanged = true;
       while (aliasesChanged) {
         aliasesChanged = false;
         for (const alias of record.localAliases) {
-          const accessorBinding = localBindings.get(alias.target);
-          if (accessorBinding && !localBindings.has(alias.local)) {
-            localBindings.set(alias.local, accessorBinding);
+          const accessorBindings = localBindings.get(alias.target);
+          if (mergeAccessorBindings(localBindings, alias.local, accessorBindings)) {
             aliasesChanged = true;
           }
         }
       }
 
       for (const localExport of record.localExports) {
-        const accessorBinding = localBindings.get(localExport.local);
-        if (accessorBinding && !moduleExports.has(localExport.exported)) {
-          moduleExports.set(localExport.exported, accessorBinding);
+        const accessorBindings = localBindings.get(localExport.local);
+        if (mergeAccessorBindings(moduleExports, localExport.exported, accessorBindings)) {
           changed = true;
         }
       }
 
       for (const reExport of record.namedReExports) {
         const reExportedModule = resolveSourceModule(reExport.modulePath, records);
-        const accessorBinding = exportsByModule.get(reExportedModule)?.get(reExport.imported);
-        if (accessorBinding && !moduleExports.has(reExport.exported)) {
-          moduleExports.set(reExport.exported, accessorBinding);
+        const accessorBindings = exportsByModule
+          .get(reExportedModule)
+          ?.get(reExport.imported);
+        if (mergeAccessorBindings(moduleExports, reExport.exported, accessorBindings)) {
           changed = true;
         }
       }
 
       for (const reExport of record.namespaceReExports) {
         const reExportedModule = resolveSourceModule(reExport.modulePath, records);
-        const accessorBinding = exportsByModule.get(reExportedModule)?.values().next().value;
-        if (accessorBinding && !moduleExports.has(reExport.exported)) {
-          moduleExports.set(reExport.exported, accessorBinding);
+        const accessorBindings = allAccessorBindings(exportsByModule.get(reExportedModule));
+        if (mergeAccessorBindings(moduleExports, reExport.exported, accessorBindings)) {
           changed = true;
         }
       }
 
       for (const starModule of record.starReExports) {
         const reExportedModule = resolveSourceModule(starModule, records);
-        for (const [exported, accessorBinding] of exportsByModule.get(reExportedModule) ?? []) {
-          if (exported !== 'default' && !moduleExports.has(exported)) {
-            moduleExports.set(exported, accessorBinding);
+        for (const [exported, accessorBindings] of exportsByModule.get(reExportedModule) ?? []) {
+          if (
+            exported !== 'default' &&
+            mergeAccessorBindings(moduleExports, exported, accessorBindings)
+          ) {
             changed = true;
           }
         }
@@ -385,7 +434,7 @@ function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
   }
 
   for (const record of records.values()) {
-    const exposedAccessors = new Set(exportsByModule.get(record.modulePath)?.values() ?? []);
+    const exposedAccessors = allAccessorBindings(exportsByModule.get(record.modulePath));
     for (const accessorBinding of exposedAccessors) {
       if (isCapsuleBarrel(record.filePath)) {
         violations.push(
@@ -460,6 +509,21 @@ function checkDeepAccessorModuleText(importerPath, moduleSpecifier, violations) 
 }
 
 function checkNestedModuleReferences(sourceFile, importerPath, violations) {
+  function isSupportedModuleLoader(expression) {
+    if (ts.isImportKeyword(expression)) {
+      return true;
+    }
+    if (ts.isIdentifier(expression)) {
+      return expression.text === 'require';
+    }
+    if (!ts.isPropertyAccessExpression(expression)) {
+      return false;
+    }
+    return new Set(['importActual', 'importMock', 'requireActual', 'requireMock']).has(
+      expression.name.text
+    );
+  }
+
   function visit(node) {
     if (
       ts.isImportTypeNode(node) &&
@@ -469,7 +533,7 @@ function checkNestedModuleReferences(sourceFile, importerPath, violations) {
       checkDeepAccessorModuleText(importerPath, node.argument.literal.text, violations);
     }
 
-    if (ts.isCallExpression(node)) {
+    if (ts.isCallExpression(node) && isSupportedModuleLoader(node.expression)) {
       const moduleArgument = node.arguments[0];
       if (moduleArgument && ts.isStringLiteralLike(moduleArgument)) {
         checkDeepAccessorModuleText(importerPath, moduleArgument.text, violations);

@@ -201,6 +201,37 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('workspaceAccessor');
   });
 
+  it('tracks every accessor exposed through a namespace re-export', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/service/persistence.ts',
+        content:
+          "export { workspaceAccessor } from '../resources/workspace.accessor';\nexport { projectAccessor } from '../resources/project.accessor';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export * as persistence from './service/persistence';\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('workspaceAccessor');
+    expect(result.output).toContain('projectAccessor');
+  });
+
+  it('rejects accessors assigned to exported bindings after declaration', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import { workspaceAccessor } from './resources/workspace.accessor';\nlet persistence;\npersistence = workspaceAccessor;\nexport { persistence };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
   it('rejects indirect named and star accessor re-exports from capsule barrels', () => {
     const named = runChecker([
       {
@@ -334,6 +365,18 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('cross-owner raw persistence accessor');
     expect(result.output).toContain('closedSessionAccessor');
+  });
+
+  it('allows accessor-shaped strings passed to ordinary functions', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/resources.integration.test.ts',
+        content: "normalize('@/backend/services/session/resources/closed-session.accessor');\n",
+      },
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('Service accessor boundaries check passed.');
   });
 
   it('allows ordinary capsule barrel mocks with accessor-shaped properties', () => {

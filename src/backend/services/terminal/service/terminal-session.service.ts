@@ -6,37 +6,38 @@ import { SessionStatus } from '@/shared/core';
 export type { TerminalSession } from '@prisma-gen/client';
 
 class TerminalSessionService {
-  findById(id: string) {
+  findSession(id: string) {
     return terminalSessionAccessor.findById(id);
   }
 
-  findByWorkspaceId(
+  findWorkspaceSessions(
     workspaceId: string,
     filters?: { status?: SessionStatus; limit?: number }
   ): Promise<TerminalSession[]> {
     return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
 
-  create(data: { workspaceId: string; name?: string; pid?: number }): Promise<TerminalSession> {
+  registerSession(data: {
+    workspaceId: string;
+    name?: string;
+    pid?: number;
+  }): Promise<TerminalSession> {
     return terminalSessionAccessor.create(data);
   }
 
-  update(
-    id: string,
-    data: { name?: string; status?: SessionStatus; pid?: number | null }
-  ): Promise<TerminalSession> {
-    return terminalSessionAccessor.update(id, data);
+  renameSession(id: string, name: string): Promise<TerminalSession> {
+    return terminalSessionAccessor.update(id, { name });
   }
 
-  delete(id: string): Promise<TerminalSession> {
+  removeSession(id: string): Promise<TerminalSession> {
     return terminalSessionAccessor.delete(id);
   }
 
-  findWithPid(): Promise<TerminalSession[]> {
+  listPidBackedSessions(): Promise<TerminalSession[]> {
     return terminalSessionAccessor.findWithPid();
   }
 
-  clearPid(workspaceId: string, name: string): Promise<void> {
+  releaseSessionPid(workspaceId: string, name: string): Promise<void> {
     return terminalSessionAccessor.clearPid(workspaceId, name);
   }
 

@@ -96,8 +96,8 @@ vi.mock('@/backend/services/terminal', () => ({
     onExit: mocks.onExit,
   },
   terminalSessionService: {
-    create: mocks.createTerminalSession,
-    clearPid: mocks.clearTerminalPid,
+    registerSession: mocks.createTerminalSession,
+    releaseSessionPid: mocks.clearTerminalPid,
   },
 }));
 

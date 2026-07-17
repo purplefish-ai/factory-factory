@@ -55,8 +55,8 @@ vi.mock('@/backend/services/terminal', () => ({
     onExit: vi.fn(),
   },
   terminalSessionService: {
-    create: vi.fn(),
-    clearPid: vi.fn(),
+    registerSession: vi.fn(),
+    releaseSessionPid: vi.fn(),
   },
 }));
 
@@ -209,8 +209,8 @@ function setupHappyPath(overrides = {}) {
   vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
   vi.mocked(sessionService.startSession).mockResolvedValue(undefined as never);
   vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
-  vi.mocked(terminalSessionService.create).mockResolvedValue(unsafeCoerce({}));
-  vi.mocked(terminalSessionService.clearPid).mockResolvedValue(undefined);
+  vi.mocked(terminalSessionService.registerSession).mockResolvedValue(unsafeCoerce({}));
+  vi.mocked(terminalSessionService.releaseSessionPid).mockResolvedValue(undefined);
   vi.mocked(terminalService.createTerminal).mockResolvedValue({
     terminalId: 'term-default',
     pid: 12_345,
@@ -345,7 +345,7 @@ describe('initializeWorkspaceWorktree', () => {
         workspaceId: WORKSPACE_ID,
         workingDir: '/worktrees/workspace-ws-1',
       });
-      expect(terminalSessionService.create).toHaveBeenCalledWith({
+      expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
         workspaceId: WORKSPACE_ID,
         name: 'term-default',
         pid: 12_345,
@@ -403,12 +403,14 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
-      expect(terminalSessionService.create).not.toHaveBeenCalled();
+      expect(terminalSessionService.registerSession).not.toHaveBeenCalled();
     });
 
     it('destroys the spawned terminal when session persistence fails', async () => {
       setupHappyPath();
-      vi.mocked(terminalSessionService.create).mockRejectedValue(new Error('db unavailable'));
+      vi.mocked(terminalSessionService.registerSession).mockRejectedValue(
+        new Error('db unavailable')
+      );
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -426,7 +428,7 @@ describe('initializeWorkspaceWorktree', () => {
       const createTerminalSessionDeferred = createDeferredPromise<unknown>();
       let exitListener: ((exitCode: number) => void) | undefined;
 
-      vi.mocked(terminalSessionService.create).mockImplementation(
+      vi.mocked(terminalSessionService.registerSession).mockImplementation(
         () => createTerminalSessionDeferred.promise as never
       );
       vi.mocked(terminalService.onExit).mockImplementation((_, listener) => {
@@ -442,12 +444,15 @@ describe('initializeWorkspaceWorktree', () => {
       expect(exitListener).toBeDefined();
 
       exitListener?.(0);
-      expect(terminalSessionService.clearPid).not.toHaveBeenCalled();
+      expect(terminalSessionService.releaseSessionPid).not.toHaveBeenCalled();
 
       createTerminalSessionDeferred.resolve(unsafeCoerce({}));
       await initializationPromise;
 
-      expect(terminalSessionService.clearPid).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
+      expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'term-default'
+      );
     });
   });
 
@@ -1602,7 +1607,10 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
-      expect(terminalSessionService.clearPid).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
+      expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'term-default'
+      );
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
 
@@ -1620,7 +1628,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
       expect(terminalService.destroyTerminal).not.toHaveBeenCalled();
-      expect(terminalSessionService.clearPid).not.toHaveBeenCalled();
+      expect(terminalSessionService.releaseSessionPid).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });

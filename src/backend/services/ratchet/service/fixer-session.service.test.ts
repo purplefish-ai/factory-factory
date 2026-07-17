@@ -165,6 +165,7 @@ describe('FixerSessionService', () => {
     });
 
     expect(result).toEqual({ status: 'started', sessionId: 's-new' });
+    expect(mockWorkspaceBridge.findFixerContext).toHaveBeenCalledOnce();
     expect(mockSessionBridge.startSession).toHaveBeenCalledWith('s-new', {
       initialPrompt: 'prompt',
       startupModePreset: 'non_interactive',

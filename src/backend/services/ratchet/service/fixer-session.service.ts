@@ -125,7 +125,7 @@ class FixerSessionService {
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
       }
 
-      const acquisitionResult = await this.acquireSessionDecision(input);
+      const acquisitionResult = await this.acquireSessionDecision(input, workspace);
 
       if (acquisitionResult.action === 'limit_reached') {
         return { status: 'skipped', reason: 'Workspace session limit reached' };
@@ -143,12 +143,9 @@ class FixerSessionService {
   }
 
   private async acquireSessionDecision(
-    input: AcquireAndDispatchInput
+    input: AcquireAndDispatchInput,
+    workspace: NonNullable<Awaited<ReturnType<RatchetWorkspaceBridge['findFixerContext']>>>
   ): Promise<SessionAcquisitionDecision> {
-    const workspace = await this.workspace.findFixerContext(input.workspaceId);
-    if (!workspace) {
-      return { action: 'limit_reached' };
-    }
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
       workspace,
