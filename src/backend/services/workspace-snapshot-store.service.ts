@@ -205,6 +205,12 @@ export interface SnapshotRemovedEvent {
   projectId: string;
 }
 
+export interface SnapshotUpsertResult {
+  accepted: boolean;
+  changed: boolean;
+  emitted: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Field-to-group mapping
 // ---------------------------------------------------------------------------
@@ -260,6 +266,94 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
   };
 }
 
+type GitStats = NonNullable<WorkspaceSnapshotEntry['gitStats']>;
+
+function gitStatsEqual(left: GitStats | null, right: GitStats | null): boolean {
+  return (
+    left === right ||
+    (left !== null &&
+      right !== null &&
+      left.total === right.total &&
+      left.additions === right.additions &&
+      left.deletions === right.deletions &&
+      left.hasUncommitted === right.hasUncommitted)
+  );
+}
+
+function sessionSummariesEqual(
+  left: WorkspaceSessionSummary[],
+  right: WorkspaceSessionSummary[]
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((summary, index) => {
+    const other = right[index];
+    if (!other) {
+      return false;
+    }
+    const exitsEqual =
+      summary.lastExit === other.lastExit ||
+      (summary.lastExit !== null &&
+        other.lastExit !== null &&
+        summary.lastExit.code === other.lastExit.code &&
+        summary.lastExit.timestamp === other.lastExit.timestamp &&
+        summary.lastExit.unexpected === other.lastExit.unexpected);
+
+    return (
+      summary.sessionId === other.sessionId &&
+      summary.name === other.name &&
+      summary.workflow === other.workflow &&
+      summary.model === other.model &&
+      summary.provider === other.provider &&
+      summary.persistedStatus === other.persistedStatus &&
+      summary.runtimePhase === other.runtimePhase &&
+      summary.processState === other.processState &&
+      summary.activity === other.activity &&
+      summary.updatedAt === other.updatedAt &&
+      exitsEqual &&
+      summary.errorMessage === other.errorMessage
+    );
+  });
+}
+
+function sidebarStatusesEqual(
+  left: WorkspaceSidebarStatus,
+  right: WorkspaceSidebarStatus
+): boolean {
+  return left.activityState === right.activityState && left.ciState === right.ciState;
+}
+
+function statusReasonsEqual(left: WorkspaceStatusReason, right: WorkspaceStatusReason): boolean {
+  return (
+    left.code === right.code &&
+    left.label === right.label &&
+    left.tone === right.tone &&
+    left.needsUser === right.needsUser
+  );
+}
+
+function snapshotFieldValuesEqual(
+  field: SnapshotField,
+  left: WorkspaceSnapshotEntry[SnapshotField],
+  right: WorkspaceSnapshotEntry[SnapshotField]
+): boolean {
+  if (field === 'gitStats') {
+    return gitStatsEqual(left as GitStats | null, right as GitStats | null);
+  }
+  if (field === 'sessionSummaries') {
+    return sessionSummariesEqual(
+      left as WorkspaceSessionSummary[],
+      right as WorkspaceSessionSummary[]
+    );
+  }
+  return Object.is(left, right);
+}
+
 // ---------------------------------------------------------------------------
 // WorkspaceSnapshotStore class
 // ---------------------------------------------------------------------------
@@ -280,11 +374,37 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     field: K
-  ): void {
+  ): boolean {
     const value = update[field];
-    if (value !== undefined) {
-      entry[field] = value as WorkspaceSnapshotEntry[K];
+    if (value === undefined) {
+      return false;
     }
+    const nextValue = value as WorkspaceSnapshotEntry[K];
+    if (snapshotFieldValuesEqual(field, entry[field], nextValue)) {
+      return false;
+    }
+    entry[field] = nextValue;
+    return true;
+  }
+
+  private assignRawField(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    field: SnapshotField
+  ): boolean {
+    if (field !== 'isWorking') {
+      return this.assignField(entry, update, field);
+    }
+
+    const nextIsWorking = update.isWorking;
+    if (
+      nextIsWorking === undefined ||
+      nextIsWorking === this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId)
+    ) {
+      return false;
+    }
+    this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, nextIsWorking);
+    return true;
   }
 
   /**
@@ -358,30 +478,30 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     ts: number
-  ): boolean {
-    let merged = false;
+  ): { accepted: boolean; rawChanged: boolean } {
+    let accepted = false;
+    let rawChanged = false;
     for (const mapping of FIELD_GROUP_MAPPINGS) {
       const hasFieldsInGroup = mapping.fields.some((field) => update[field] !== undefined);
       if (!hasFieldsInGroup || ts <= entry.fieldTimestamps[mapping.group]) {
         continue;
       }
-      merged = true;
+      accepted = true;
       entry.fieldTimestamps[mapping.group] = ts;
       for (const field of mapping.fields) {
-        this.assignField(entry, update, field);
-      }
-      if (mapping.group === 'session' && update.isWorking !== undefined) {
-        this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, update.isWorking);
+        if (this.assignRawField(entry, update, field)) {
+          rawChanged = true;
+        }
       }
     }
-    return merged;
+    return { accepted, rawChanged };
   }
 
   /**
    * Recompute all derived state fields on an entry using the injected
    * derivation functions.
    */
-  private recomputeDerivedState(entry: WorkspaceSnapshotEntry): void {
+  private recomputeDerivedState(entry: WorkspaceSnapshotEntry): boolean {
     const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
       prUrl: entry.prUrl,
@@ -411,13 +531,36 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       }
     );
 
-    entry.isWorking = derivedState.isWorking;
-    entry.flowPhase = derivedState.flowPhase;
-    entry.ciObservation = derivedState.ciObservation;
-    entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
-    entry.statusReason = derivedState.statusReason;
-    entry.kanbanColumn = derivedState.kanbanColumn;
-    entry.sidebarStatus = derivedState.sidebarStatus;
+    let changed = false;
+    if (entry.isWorking !== derivedState.isWorking) {
+      entry.isWorking = derivedState.isWorking;
+      changed = true;
+    }
+    if (entry.flowPhase !== derivedState.flowPhase) {
+      entry.flowPhase = derivedState.flowPhase;
+      changed = true;
+    }
+    if (entry.ciObservation !== derivedState.ciObservation) {
+      entry.ciObservation = derivedState.ciObservation;
+      changed = true;
+    }
+    if (entry.ratchetButtonAnimated !== derivedState.ratchetButtonAnimated) {
+      entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
+      changed = true;
+    }
+    if (!statusReasonsEqual(entry.statusReason, derivedState.statusReason)) {
+      entry.statusReason = derivedState.statusReason;
+      changed = true;
+    }
+    if (entry.kanbanColumn !== derivedState.kanbanColumn) {
+      entry.kanbanColumn = derivedState.kanbanColumn;
+      changed = true;
+    }
+    if (!sidebarStatusesEqual(entry.sidebarStatus, derivedState.sidebarStatus)) {
+      entry.sidebarStatus = derivedState.sidebarStatus;
+      changed = true;
+    }
+    return changed;
   }
 
   /**
@@ -457,7 +600,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     update: SnapshotUpdateInput,
     source: string,
     timestamp?: number
-  ): void {
+  ): SnapshotUpsertResult {
     const ts = timestamp ?? Date.now();
 
     const removedAt = this.removalTimestamps.get(workspaceId);
@@ -467,7 +610,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
           workspaceId,
           source,
         });
-        return;
+        return { accepted: false, changed: false, emitted: false };
       }
       this.removalTimestamps.delete(workspaceId);
     }
@@ -486,15 +629,20 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     }
 
     // Field-level timestamp merge
-    const didMerge = this.mergeFieldGroups(entry, update, ts);
+    const mergeResult = this.mergeFieldGroups(entry, update, ts);
 
-    if (!(isNewEntry || didMerge)) {
-      logger.debug('Snapshot update ignored (stale/no-op)', { workspaceId, source });
-      return;
+    if (!(isNewEntry || mergeResult.accepted)) {
+      logger.debug('Snapshot update ignored (stale)', { workspaceId, source });
+      return { accepted: false, changed: false, emitted: false };
     }
 
-    // Recompute derived state from raw fields
-    this.recomputeDerivedState(entry);
+    // Accepted raw values can produce time-sensitive derived changes even when
+    // the raw values themselves are equal (for example, CI grace periods).
+    const derivedChanged = this.recomputeDerivedState(entry);
+    if (!(isNewEntry || mergeResult.rawChanged || derivedChanged)) {
+      logger.debug('Snapshot update accepted without value changes', { workspaceId, source });
+      return { accepted: true, changed: false, emitted: false };
+    }
 
     // Bump version and update metadata
     entry.version += 1;
@@ -513,6 +661,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     } satisfies SnapshotChangedEvent);
 
     logger.debug('Snapshot updated', { workspaceId, version: entry.version, source });
+    return { accepted: true, changed: true, emitted: true };
   }
 
   /**

@@ -20,6 +20,7 @@ import {
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
   type SnapshotUpdateInput,
+  type WorkspaceSessionSummary,
   WorkspaceSnapshotStore,
 } from './workspace-snapshot-store.service';
 
@@ -47,6 +48,30 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     pendingRequestType: null,
     gitStats: null,
     lastActivityAt: null,
+    ...overrides,
+  };
+}
+
+function makeSessionSummary(
+  overrides: Partial<WorkspaceSessionSummary> = {}
+): WorkspaceSessionSummary {
+  return {
+    sessionId: 'session-1',
+    name: 'Chat 1',
+    workflow: 'followup',
+    model: 'claude-sonnet',
+    provider: 'CLAUDE',
+    persistedStatus: 'IDLE',
+    runtimePhase: 'idle',
+    processState: 'alive',
+    activity: 'IDLE',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    lastExit: {
+      code: 0,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      unexpected: false,
+    },
+    errorMessage: null,
     ...overrides,
   };
 }
@@ -141,18 +166,18 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.version).toBe(1);
     });
 
-    it('version increments on each upsert', () => {
-      for (let i = 0; i < 5; i++) {
-        store.upsert('ws-1', makeUpdate(), 'test', 100 + i);
-      }
+    it('version increments only when snapshot values change', () => {
+      store.upsert('ws-1', makeUpdate({ name: 'one' }), 'test', 100);
+      store.upsert('ws-1', makeUpdate({ name: 'one' }), 'test', 200);
+      store.upsert('ws-1', makeUpdate({ name: 'two' }), 'test', 300);
 
       const entry = store.getByWorkspaceId('ws-1');
-      expect(entry!.version).toBe(5);
+      expect(entry!.version).toBe(2);
     });
 
     it('each workspace has independent version counter', () => {
       store.upsert('ws-A', makeUpdate(), 'test', 100);
-      store.upsert('ws-A', makeUpdate(), 'test', 200);
+      store.upsert('ws-A', makeUpdate({ name: 'Updated' }), 'test', 200);
       store.upsert('ws-B', makeUpdate(), 'test', 100);
 
       expect(store.getByWorkspaceId('ws-A')!.version).toBe(2);
@@ -190,11 +215,11 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.source).toBe('event:pr_state_change');
     });
 
-    it('updates computedAt and source on each upsert', () => {
+    it('updates computedAt and source on each changed upsert', () => {
       store.upsert('ws-1', makeUpdate(), 'source-1', 100);
       const firstComputedAt = store.getByWorkspaceId('ws-1')!.computedAt;
 
-      store.upsert('ws-1', makeUpdate(), 'source-2', 200);
+      store.upsert('ws-1', makeUpdate({ name: 'Updated' }), 'source-2', 200);
       const entry2 = store.getByWorkspaceId('ws-1');
 
       expect(entry2!.source).toBe('source-2');
@@ -316,6 +341,84 @@ describe('WorkspaceSnapshotStore', () => {
   // STORE-06: Field-level timestamps for concurrent update safety
   // -------------------------------------------------------------------------
   describe('STORE-06: Field-level timestamps for concurrent update safety', () => {
+    it('advances ordering metadata without changing the public snapshot for equal scalars', () => {
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      store.upsert('ws-1', makeUpdate({ name: 'authoritative' }), 'seed', 100);
+      const before = store.getByWorkspaceId('ws-1')!;
+      const beforeVersion = before.version;
+      const beforeComputedAt = before.computedAt;
+
+      const result = store.upsert('ws-1', { name: 'authoritative' }, 'reconciliation', 200);
+
+      const after = store.getByWorkspaceId('ws-1')!;
+      expect(result).toEqual({ accepted: true, changed: false, emitted: false });
+      expect(after.fieldTimestamps.workspace).toBe(200);
+      expect(after.version).toBe(beforeVersion);
+      expect(after.computedAt).toBe(beforeComputedAt);
+      expect(after.source).toBe('seed');
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      const staleResult = store.upsert('ws-1', { name: 'delayed' }, 'event', 150);
+      expect(staleResult).toEqual({ accepted: false, changed: false, emitted: false });
+      expect(store.getByWorkspaceId('ws-1')!.name).toBe('authoritative');
+    });
+
+    it('treats equal structured reconciliation and session fields as no-ops', () => {
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      const gitStats = { total: 3, additions: 2, deletions: 1, hasUncommitted: true };
+      const sessionSummaries = [makeSessionSummary()];
+      store.upsert('ws-1', makeUpdate({ gitStats, sessionSummaries }), 'seed', 100);
+
+      const result = store.upsert(
+        'ws-1',
+        {
+          gitStats: { ...gitStats },
+          sessionSummaries: [
+            makeSessionSummary({ lastExit: { ...sessionSummaries[0]!.lastExit! } }),
+          ],
+        },
+        'reconciliation',
+        200
+      );
+
+      const entry = store.getByWorkspaceId('ws-1')!;
+      expect(result).toEqual({ accepted: true, changed: false, emitted: false });
+      expect(entry.version).toBe(1);
+      expect(entry.fieldTimestamps.reconciliation).toBe(200);
+      expect(entry.fieldTimestamps.session).toBe(200);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits exactly once when a structured field changes', () => {
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      store.upsert('ws-1', makeUpdate({ sessionSummaries: [makeSessionSummary()] }), 'seed', 100);
+      handler.mockClear();
+
+      const result = store.upsert(
+        'ws-1',
+        {
+          sessionSummaries: [
+            makeSessionSummary({
+              lastExit: {
+                code: 1,
+                timestamp: '2026-01-01T00:00:00.000Z',
+                unexpected: true,
+              },
+            }),
+          ],
+        },
+        'event:session_state_change',
+        200
+      );
+
+      expect(result).toEqual({ accepted: true, changed: true, emitted: true });
+      expect(store.getByWorkspaceId('ws-1')!.version).toBe(2);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
     it('newer timestamp overwrites fields', () => {
       store.upsert('ws-1', makeUpdate({ name: 'old' }), 'test', 100);
       store.upsert('ws-1', { name: 'new' }, 'test', 200);
@@ -565,6 +668,32 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.sidebarStatus.activityState).toBe('IDLE');
       expect(entry!.kanbanColumn).toBe('WAITING');
     });
+
+    it('emits when only the time-sensitive derived candidate changes', () => {
+      let flowPhase: 'NO_PR' | 'CI_WAIT' = 'NO_PR';
+      store.configure({
+        deriveFlowState: () => ({
+          phase: flowPhase,
+          ciObservation: 'CHECKS_UNKNOWN',
+          hasActivePr: flowPhase !== 'NO_PR',
+          isWorking: false,
+          shouldAnimateRatchetButton: false,
+        }),
+        computeKanbanColumn: () => KanbanColumn.WAITING,
+        deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
+      });
+      store.upsert('ws-1', makeUpdate(), 'seed', 100);
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      flowPhase = 'CI_WAIT';
+
+      const result = store.upsert('ws-1', makeUpdate(), 'reconciliation', 200);
+
+      expect(result).toEqual({ accepted: true, changed: true, emitted: true });
+      expect(store.getByWorkspaceId('ws-1')!.flowPhase).toBe('CI_WAIT');
+      expect(store.getByWorkspaceId('ws-1')!.version).toBe(2);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -639,15 +768,15 @@ describe('WorkspaceSnapshotStore', () => {
       expect(event.entry.flowPhase).toBe('CI_WAIT');
     });
 
-    it('emits one event per upsert call', () => {
+    it('emits only for upserts that change snapshot values', () => {
       const handler = vi.fn();
       store.on(SNAPSHOT_CHANGED, handler);
 
       store.upsert('ws-1', makeUpdate(), 'test', 100);
       store.upsert('ws-1', makeUpdate(), 'test', 200);
-      store.upsert('ws-1', makeUpdate(), 'test', 300);
+      store.upsert('ws-1', makeUpdate({ name: 'Updated' }), 'test', 300);
 
-      expect(handler).toHaveBeenCalledTimes(3);
+      expect(handler).toHaveBeenCalledTimes(2);
     });
 
     it('does not emit or bump version when stale update is fully ignored', () => {
