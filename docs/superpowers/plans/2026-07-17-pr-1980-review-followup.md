@@ -31,12 +31,17 @@
 Run: `git status --short`
 Expected: only this plan is untracked before staging, with no unrelated user changes.
 
-- [ ] **Step 2: Merge the fetched base branch**
+- [ ] **Step 2: Fetch the latest base branch**
+
+Run: `git fetch origin main`
+Expected: `origin/main` is updated from the remote repository.
+
+- [ ] **Step 3: Merge the fetched base branch**
 
 Run: `git merge --no-edit origin/main`
 Expected: a clean merge, or conflicts limited to files changed by both branches.
 
-- [ ] **Step 3: Resolve and inspect any merge conflicts**
+- [ ] **Step 4: Resolve and inspect any merge conflicts**
 
 Run: `git diff --check && git status --short`
 Expected: no unmerged paths and no whitespace errors.
@@ -94,7 +99,7 @@ Expected: exit code 0 for every command.
 Run: `git diff --check && git status --short && git diff --stat origin/main...HEAD`
 Expected: no whitespace errors or unrelated changes.
 
-Run: `git add docs/superpowers/plans/2026-07-17-pr-1980-review-followup.md src/backend/trpc/workspace/composition.test.ts && git commit -m "Stabilize workspace router composition test (#1960)"`
+Run: `git add docs/superpowers/plans/2026-07-17-pr-1980-review-followup.md && git commit -m "Fix PR review follow-up plan (#1960)"`
 Expected: commit hooks pass and a focused commit is created.
 
 - [ ] **Step 3: Push and re-fetch PR review threads**
