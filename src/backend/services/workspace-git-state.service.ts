@@ -119,9 +119,8 @@ function shouldIgnoreWorktreeWatchEvent(filename: string | null): boolean {
     return false;
   }
 
-  return filename
-    .split(/[\\/]+/)
-    .some((segment) => IGNORED_WORKTREE_WATCH_DIRECTORIES.has(segment));
+  const [topLevelDirectory] = filename.split(/[\\/]+/);
+  return IGNORED_WORKTREE_WATCH_DIRECTORIES.has(topLevelDirectory ?? '');
 }
 
 function parseNameStatus(

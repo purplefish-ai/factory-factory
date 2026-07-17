@@ -313,16 +313,16 @@ describe('WorkspaceGitStateService', () => {
     }
   });
 
-  it('ignores generated-directory events but still invalidates source and Git metadata events', async () => {
+  it('ignores top-level generated directories but invalidates nested names and Git metadata', async () => {
     vi.useFakeTimers();
     try {
       const first = await service.getSnapshot(input);
 
-      watchers.get('/repo/w1')?.listener('change', 'packages/app/dist/bundle.js');
+      watchers.get('/repo/w1')?.listener('change', 'dist/bundle.js');
       await vi.advanceTimersByTimeAsync(100);
       expect(await service.getSnapshot(input)).toBe(first);
 
-      watchers.get('/repo/w1')?.listener('change', 'src/a.ts');
+      watchers.get('/repo/w1')?.listener('change', 'src/build/tracked.ts');
       await vi.advanceTimersByTimeAsync(100);
       const afterSourceChange = await service.getSnapshot(input);
       expect(afterSourceChange).not.toBe(first);
