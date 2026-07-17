@@ -4,6 +4,21 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 type MessageSourceOnly = Pick<ChatMessage, 'source'>;
 
+interface DismissibleInitBanner {
+  showDismiss?: boolean;
+}
+
+export function getVisibleInitBanner<T extends DismissibleInitBanner>(
+  banner: T | null | undefined,
+  setupWarningDismissed: boolean | null
+): T | null {
+  if (!banner || (banner.showDismiss === true && setupWarningDismissed !== false)) {
+    return null;
+  }
+
+  return banner;
+}
+
 export interface SessionForRuntimeOverlay {
   id: string;
   name: string | null;
