@@ -174,8 +174,7 @@ describe('WorkspaceStateMachineService', () => {
         where: { id: 'ws-1', status: 'PROVISIONING' },
         data: expect.objectContaining({
           status: 'FAILED',
-          cachedKanbanColumn: 'WORKING',
-          stateComputedAt: expect.any(Date),
+          cachedKanbanColumn: 'WAITING',
           initCompletedAt: expect.any(Date),
           initErrorMessage: 'Git clone failed',
         }),
@@ -184,7 +183,7 @@ describe('WorkspaceStateMachineService', () => {
 
     it('should update cached kanban column when transitioning to FAILED', async () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING', cachedKanbanColumn: 'WAITING' };
-      const updatedWorkspace = { ...workspace, status: 'FAILED', cachedKanbanColumn: 'WORKING' };
+      const updatedWorkspace = { ...workspace, status: 'FAILED', cachedKanbanColumn: 'WAITING' };
 
       mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
@@ -196,8 +195,7 @@ describe('WorkspaceStateMachineService', () => {
         where: { id: 'ws-1', status: 'PROVISIONING' },
         data: expect.objectContaining({
           status: 'FAILED',
-          cachedKanbanColumn: 'WORKING',
-          stateComputedAt: expect.any(Date),
+          cachedKanbanColumn: 'WAITING',
         }),
       });
     });

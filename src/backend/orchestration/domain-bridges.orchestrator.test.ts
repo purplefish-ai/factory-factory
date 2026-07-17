@@ -438,6 +438,14 @@ describe('configureDomainBridges', () => {
       expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalled();
     });
 
+    it('kanban session bridge delegates getRuntimeSnapshot', () => {
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(kanbanStateService.configure);
+
+      bridge.session.getRuntimeSnapshot('s1');
+      expect(sessionService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
+    });
+
     it('workspaceQueryService gets github bridge with checkHealth', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);

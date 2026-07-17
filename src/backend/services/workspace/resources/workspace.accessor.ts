@@ -112,6 +112,54 @@ interface UpdateWorkspaceInput {
   autoIterationSessionId?: string | null;
 }
 
+export interface PrSnapshotPersistenceInput {
+  prUrl?: string | null;
+  prNumber: number;
+  prState: PRState;
+  prReviewState: string | null;
+  prCiStatus: CIStatus;
+  prUpdatedAt: Date;
+  branchName?: string;
+}
+
+export interface CIObservationPersistenceInput {
+  prCiStatus: CIStatus;
+  prUpdatedAt: Date;
+  prCiFailedAt?: Date | null;
+}
+
+export interface PrAggregatePersistenceResult {
+  applied: boolean;
+  dispatchReset: boolean;
+}
+
+type PrAggregatePersistenceInput = Partial<
+  Pick<
+    UpdateWorkspaceInput,
+    | 'prUrl'
+    | 'prNumber'
+    | 'prState'
+    | 'prReviewState'
+    | 'prCiStatus'
+    | 'prCiFailedAt'
+    | 'branchName'
+  >
+> & { prUpdatedAt: Date };
+
+export type KanbanOwnershipTuple = Pick<
+  Workspace,
+  | 'status'
+  | 'prUrl'
+  | 'prState'
+  | 'prCiStatus'
+  | 'prUpdatedAt'
+  | 'ratchetEnabled'
+  | 'ratchetState'
+  | 'ratchetDispatchOutcome'
+  | 'ratchetDispatchRetryCount'
+  | 'cachedKanbanColumn'
+>;
+
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
   excludeStatuses?: WorkspaceStatus[];
@@ -306,6 +354,30 @@ class WorkspaceAccessor {
       where: { id },
       data,
     });
+  }
+
+  async updateCachedKanbanColumnIfOwnershipMatches(
+    id: string,
+    expected: KanbanOwnershipTuple,
+    data: Pick<UpdateWorkspaceInput, 'cachedKanbanColumn' | 'stateComputedAt'>
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: expected.status,
+        prUrl: expected.prUrl,
+        prState: expected.prState,
+        prCiStatus: expected.prCiStatus,
+        prUpdatedAt: expected.prUpdatedAt,
+        ratchetEnabled: expected.ratchetEnabled,
+        ratchetState: expected.ratchetState,
+        ratchetDispatchOutcome: expected.ratchetDispatchOutcome,
+        ratchetDispatchRetryCount: expected.ratchetDispatchRetryCount,
+        cachedKanbanColumn: expected.cachedKanbanColumn,
+      },
+      data,
+    });
+    return result.count === 1;
   }
 
   /**
@@ -727,6 +799,113 @@ class WorkspaceAccessor {
       data: { ratchetActiveSessionId: null, ratchetDispatchOutcome: outcome },
     });
     return result.count > 0;
+  }
+
+  /**
+   * Persist a PR aggregate and clear ownership from a settled dispatch when
+   * the newly fetched aggregate changed. The conditional update writes the
+   * aggregate and reset atomically. The reset compares all dispatch metadata
+   * read in the transaction; if a newer dispatch wins that race, only the PR
+   * aggregate is written and its ownership is preserved. Identical periodic
+   * refreshes use the plain snapshot update and leave settled metadata
+   * untouched; RUNNING ownership is never eligible for the reset.
+   * ratchetLastCiRunId deliberately remains the richer dispatch snapshot key;
+   * the Ratchet still uses it to decide whether the changed aggregate warrants
+   * another fixer.
+   */
+  applyPrSnapshotWithDispatchReset(
+    workspaceId: string,
+    observation: PrSnapshotPersistenceInput
+  ): Promise<PrAggregatePersistenceResult> {
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+  }
+
+  applyCIObservationWithDispatchReset(
+    workspaceId: string,
+    observation: CIObservationPersistenceInput
+  ): Promise<PrAggregatePersistenceResult> {
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+  }
+
+  private async applyPrAggregateUpdateWithDispatchReset(
+    workspaceId: string,
+    observation: PrAggregatePersistenceInput
+  ): Promise<PrAggregatePersistenceResult> {
+    const snapshotData: UpdateWorkspaceInput = {
+      ...(observation.prUrl !== undefined ? { prUrl: observation.prUrl } : {}),
+      ...(observation.prNumber !== undefined ? { prNumber: observation.prNumber } : {}),
+      ...(observation.prState !== undefined ? { prState: observation.prState } : {}),
+      ...(observation.prReviewState !== undefined
+        ? { prReviewState: observation.prReviewState }
+        : {}),
+      ...(observation.prCiStatus !== undefined ? { prCiStatus: observation.prCiStatus } : {}),
+      ...(observation.prCiFailedAt !== undefined ? { prCiFailedAt: observation.prCiFailedAt } : {}),
+      prUpdatedAt: observation.prUpdatedAt,
+      ...(observation.branchName !== undefined ? { branchName: observation.branchName } : {}),
+    };
+    return await prisma.$transaction(async (transaction) => {
+      const current = await transaction.workspace.findUniqueOrThrow({
+        where: { id: workspaceId },
+        select: {
+          prUrl: true,
+          prNumber: true,
+          prState: true,
+          prReviewState: true,
+          prCiStatus: true,
+          prUpdatedAt: true,
+          ratchetActiveSessionId: true,
+          ratchetLastCiRunId: true,
+          ratchetDispatchOutcome: true,
+          ratchetDispatchRetryCount: true,
+        },
+      });
+      const aggregateChanged =
+        (observation.prNumber !== undefined && current.prNumber !== observation.prNumber) ||
+        (observation.prState !== undefined && current.prState !== observation.prState) ||
+        (observation.prReviewState !== undefined &&
+          current.prReviewState !== observation.prReviewState) ||
+        (observation.prCiStatus !== undefined && current.prCiStatus !== observation.prCiStatus) ||
+        (observation.prUrl !== undefined && current.prUrl !== observation.prUrl);
+      const shouldReset =
+        aggregateChanged &&
+        (current.ratchetDispatchOutcome === 'COMPLETED' ||
+          current.ratchetDispatchOutcome === 'DIED');
+      const aggregateGuard = {
+        prUrl: current.prUrl,
+        prNumber: current.prNumber,
+        prState: current.prState,
+        prReviewState: current.prReviewState,
+        prCiStatus: current.prCiStatus,
+        prUpdatedAt: current.prUpdatedAt,
+      };
+
+      if (shouldReset) {
+        const reset = await transaction.workspace.updateMany({
+          where: {
+            id: workspaceId,
+            ...aggregateGuard,
+            ratchetActiveSessionId: current.ratchetActiveSessionId,
+            ratchetLastCiRunId: current.ratchetLastCiRunId,
+            ratchetDispatchOutcome: current.ratchetDispatchOutcome,
+            ratchetDispatchRetryCount: current.ratchetDispatchRetryCount,
+          },
+          data: {
+            ...snapshotData,
+            ratchetDispatchOutcome: null,
+            ratchetDispatchRetryCount: 0,
+          },
+        });
+        if (reset.count > 0) {
+          return { applied: true, dispatchReset: true };
+        }
+      }
+
+      const fallback = await transaction.workspace.updateMany({
+        where: { id: workspaceId, ...aggregateGuard },
+        data: snapshotData,
+      });
+      return { applied: fallback.count > 0, dispatchReset: false };
+    });
   }
 
   /**

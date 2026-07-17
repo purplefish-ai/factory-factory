@@ -21,7 +21,9 @@ export { prFetchRegistry } from './pr-fetch-registry';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,
+  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  type PRDispatchInvalidatedEvent,
   type PRSnapshotRefreshResult,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,

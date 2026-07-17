@@ -81,8 +81,9 @@ export async function checkActiveFixerSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<ActiveFixerCheckResult> {
-  const { workspace, sessionBridge, signal } = params;
+  const { workspace, sessionBridge, signal, onDispatchChanged } = params;
   signal?.throwIfAborted();
 
   const sessionId = workspace.ratchetActiveSessionId;
@@ -100,6 +101,11 @@ export async function checkActiveFixerSession(params: {
       sessionId,
       outcome
     );
+    if (settled) {
+      onDispatchChanged?.({
+        workspaceId: workspace.id,
+      });
+    }
     signal?.throwIfAborted();
     if (!settled) {
       logger.debug('Ratchet dispatch record was settled concurrently', {

@@ -20,6 +20,8 @@ export function makeWorkspaceSnapshotEntry(
     prUpdatedAt: null,
     ratchetEnabled: false,
     ratchetState: 'IDLE',
+    ratchetDispatchOutcome: null,
+    ratchetDispatchRetryCount: 0,
     runScriptStatus: 'IDLE',
     hasHadSessions: false,
     isWorking: false,

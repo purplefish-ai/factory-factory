@@ -10,12 +10,11 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 export interface WorkspaceSessionBridge {
   isAnySessionWorking(sessionIds: string[]): boolean;
   getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState;
 }
 
 /** Session capabilities needed by workspace query paths */
-export interface WorkspaceQuerySessionBridge extends WorkspaceSessionBridge {
-  getRuntimeSnapshot(sessionId: string): SessionRuntimeState;
-}
+export type WorkspaceQuerySessionBridge = WorkspaceSessionBridge;
 
 /** GitHub capabilities needed by workspace domain */
 export interface WorkspaceGitHubBridge {

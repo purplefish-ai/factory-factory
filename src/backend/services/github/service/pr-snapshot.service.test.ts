@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 const mockFindById = vi.fn();
 const mockUpdate = vi.fn();
+const mockApplyPrSnapshotWithDispatchReset = vi.fn();
+const mockApplyCIObservationWithDispatchReset = vi.fn();
 const mockAttachDiscoveredPRIfClaimMatches = vi.fn();
 const mockUpdatePRSnapshotIfUrlMatches = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
@@ -11,6 +21,10 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
+    applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
+      mockApplyPrSnapshotWithDispatchReset(...args),
+    applyCIObservationWithDispatchReset: (...args: unknown[]) =>
+      mockApplyCIObservationWithDispatchReset(...args),
     attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
       mockAttachDiscoveredPRIfClaimMatches(...args),
     updatePRSnapshotIfUrlMatches: (...args: unknown[]) => mockUpdatePRSnapshotIfUrlMatches(...args),
@@ -33,6 +47,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import {
+  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
@@ -41,6 +56,14 @@ import {
 describe('PRSnapshotService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
+      applied: true,
+      dispatchReset: false,
+    });
+    mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+      applied: true,
+      dispatchReset: false,
+    });
     mockUpdatePRSnapshotIfUrlMatches.mockResolvedValue(true);
     // Configure bridge with mock kanban dependency
     prSnapshotService.configure({
@@ -106,7 +129,7 @@ describe('PRSnapshotService', () => {
       });
 
       // Verify atomic update with all PR fields including prUrl
-      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w1', {
         prNumber: 123,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
@@ -306,7 +329,7 @@ describe('PRSnapshotService', () => {
         },
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w1', {
         prNumber: 123,
         prState: 'OPEN',
         prReviewState: 'APPROVED',
@@ -324,7 +347,7 @@ describe('PRSnapshotService', () => {
         prCiStatus: 'SUCCESS',
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w2', {
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith('w2', {
         prNumber: 50,
         prState: 'MERGED',
         prReviewState: null,
@@ -332,6 +355,42 @@ describe('PRSnapshotService', () => {
         prUpdatedAt: expect.any(Date),
       });
       expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w2');
+    });
+
+    it('applies newer direct CI observations after an older delayed PR refresh', async () => {
+      mockFindById.mockResolvedValue({
+        id: 'w-ordered',
+        prUrl: 'https://github.com/org/repo/pull/123',
+      });
+      const pendingFetch = deferred<{
+        prNumber: number;
+        prState: 'OPEN';
+        prReviewState: null;
+        prCiStatus: 'SUCCESS';
+      }>();
+      mockFetchAndComputePRState.mockReturnValue(pendingFetch.promise);
+
+      const refresh = prSnapshotService.refreshWorkspace('w-ordered');
+      await vi.waitFor(() => expect(mockFetchAndComputePRState).toHaveBeenCalledTimes(1));
+      const directObservation = prSnapshotService.recordCIObservation('w-ordered', {
+        ciStatus: 'FAILURE',
+        observedAt: new Date('2026-07-17T12:01:00.000Z'),
+      });
+      await Promise.resolve();
+
+      expect(mockApplyCIObservationWithDispatchReset).not.toHaveBeenCalled();
+
+      pendingFetch.resolve({
+        prNumber: 123,
+        prState: 'OPEN',
+        prReviewState: null,
+        prCiStatus: 'SUCCESS',
+      });
+      await Promise.all([refresh, directObservation]);
+
+      expect(mockApplyPrSnapshotWithDispatchReset.mock.invocationCallOrder[0]).toBeLessThan(
+        mockApplyCIObservationWithDispatchReset.mock.invocationCallOrder[0]!
+      );
     });
   });
 
@@ -344,7 +403,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-1', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
         prCiStatus: 'SUCCESS',
         prUpdatedAt: observedAt,
       });
@@ -360,7 +419,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-2', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
         prCiStatus: 'SUCCESS',
         prUpdatedAt: observedAt,
       });
@@ -376,7 +435,7 @@ describe('PRSnapshotService', () => {
         observedAt,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith('w-ci-3', {
+      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
         prCiStatus: 'SUCCESS',
         prCiFailedAt: null,
         prUpdatedAt: observedAt,
@@ -388,6 +447,55 @@ describe('PRSnapshotService', () => {
   describe('event emission', () => {
     afterEach(() => {
       prSnapshotService.removeAllListeners();
+    });
+
+    it('invalidates dispatch ownership when a direct CI observation resets it', async () => {
+      mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: true,
+      });
+      const events: Array<{ workspaceId: string }> = [];
+      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+
+      await prSnapshotService.recordCIObservation('ws-exhausted', {
+        ciStatus: 'PENDING',
+        observedAt: new Date('2026-07-17T12:00:00.000Z'),
+      });
+
+      expect(events).toEqual([{ workspaceId: 'ws-exhausted', prCiStatus: 'PENDING' }]);
+    });
+
+    it('publishes a direct CI reset before a cache refresh rejection', async () => {
+      mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: true,
+      });
+      mockUpdateCachedKanbanColumn.mockRejectedValueOnce(new Error('cache failed'));
+      const events: Array<{ workspaceId: string }> = [];
+      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+
+      await expect(
+        prSnapshotService.recordCIObservation('ws-cache-failure', { ciStatus: 'PENDING' })
+      ).rejects.toThrow('cache failed');
+
+      expect(events).toEqual([{ workspaceId: 'ws-cache-failure', prCiStatus: 'PENDING' }]);
+    });
+
+    it('does not invalidate or refresh from a direct CI observation rejected by the guard', async () => {
+      mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+        applied: false,
+        dispatchReset: false,
+      });
+      const events: Array<{ workspaceId: string }> = [];
+      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+
+      await prSnapshotService.recordCIObservation('ws-stale-ci', {
+        ciStatus: 'SUCCESS',
+        observedAt: new Date('2026-07-17T12:01:00.000Z'),
+      });
+
+      expect(mockUpdateCachedKanbanColumn).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
     });
 
     it('emits pr_snapshot_updated after successful applySnapshot', async () => {
@@ -418,6 +526,100 @@ describe('PRSnapshotService', () => {
         prCiStatus: 'SUCCESS',
         prReviewState: null,
       });
+    });
+
+    it('publishes an authoritative dispatch reset after the PR aggregate changes', async () => {
+      mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: true,
+      });
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-exhausted', {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: 'CHANGES_REQUESTED',
+      });
+
+      expect(mockApplyPrSnapshotWithDispatchReset).toHaveBeenCalledWith(
+        'ws-exhausted',
+        expect.objectContaining({
+          prNumber: 42,
+          prState: 'OPEN',
+          prCiStatus: 'PENDING',
+          prReviewState: 'CHANGES_REQUESTED',
+          prUpdatedAt: expect.any(Date),
+        })
+      );
+      expect(events[0]).toMatchObject({ ratchetDispatchChanged: true });
+    });
+
+    it('publishes the ownership change even when the cache refresh fails', async () => {
+      mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: true,
+      });
+      mockUpdateCachedKanbanColumn.mockRejectedValueOnce(new Error('cache failed'));
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await expect(
+        prSnapshotService.applySnapshot('ws-cache-failure', {
+          prNumber: 42,
+          prState: 'OPEN',
+          prCiStatus: 'SUCCESS',
+          prReviewState: null,
+        })
+      ).rejects.toThrow('cache failed');
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        workspaceId: 'ws-cache-failure',
+        ratchetDispatchChanged: true,
+      });
+    });
+
+    it('does not publish or refresh from a PR snapshot rejected by the aggregate guard', async () => {
+      mockApplyPrSnapshotWithDispatchReset.mockResolvedValue({
+        applied: false,
+        dispatchReset: false,
+      });
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-stale', {
+        prNumber: 41,
+        prState: 'OPEN',
+        prCiStatus: 'SUCCESS',
+        prReviewState: null,
+      });
+
+      expect(mockUpdateCachedKanbanColumn).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
+    });
+
+    it('does not publish a dispatch reset for an identical PR aggregate refresh', async () => {
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-identical', {
+        prNumber: 42,
+        prState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prReviewState: 'CHANGES_REQUESTED',
+      });
+
+      expect(events[0]).not.toHaveProperty('ratchetDispatchChanged');
     });
 
     it('does not include prUrl in event when applySnapshot is called without prUrl options', async () => {

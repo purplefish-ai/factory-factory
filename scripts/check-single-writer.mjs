@@ -96,11 +96,13 @@ const workspaceFieldOwners = {
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
   ratchetDispatchOutcome: new Set([
+    'src/backend/services/github/service/pr-snapshot.service.ts',
     'src/backend/services/ratchet/service/ratchet.service.ts',
     'src/backend/services/ratchet/service/ratchet-active-session.helpers.ts',
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
   ratchetDispatchRetryCount: new Set([
+    'src/backend/services/github/service/pr-snapshot.service.ts',
     'src/backend/services/ratchet/service/ratchet.service.ts',
     'src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts',
   ]),
@@ -252,6 +254,25 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
   },
+  applyPrAggregateUpdateWithDispatchReset: {
+    type: 'static',
+    fields: [
+      'prUrl',
+      'prNumber',
+      'prState',
+      'prReviewState',
+      'prCiStatus',
+      'prUpdatedAt',
+      'prCiFailedAt',
+      'branchName',
+      'ratchetDispatchOutcome',
+      'ratchetDispatchRetryCount',
+    ],
+  },
+  updateCachedKanbanColumnIfOwnershipMatches: {
+    type: 'static',
+    fields: ['cachedKanbanColumn', 'stateComputedAt'],
+  },
   recordRatchetDispatchIfEnabled: {
     type: 'static',
     fields: [
@@ -284,6 +305,17 @@ const workspaceMutationRules = {
   resetStaleAutoIterationStatuses: {
     type: 'static',
     fields: ['autoIterationStatus', 'autoIterationSessionId'],
+  },
+};
+
+const workspaceMutationAliasRules = {
+  applyPrSnapshotWithDispatchReset: {
+    type: 'static',
+    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
+  },
+  applyCIObservationWithDispatchReset: {
+    type: 'static',
+    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
   },
 };
 
@@ -470,7 +502,7 @@ function getWorkspaceMutationCall(node) {
   }
 
   const method = node.expression.name.text;
-  const rule = workspaceMutationRules[method];
+  const rule = workspaceMutationRules[method] ?? workspaceMutationAliasRules[method];
   if (!rule) {
     return null;
   }
@@ -554,7 +586,8 @@ function collectWorkspaceMutatingMethods(workspaceAccessorText, filePath = WORKS
         if (
           ts.isPropertyAccessExpression(methodTarget) &&
           ts.isIdentifier(methodTarget.expression) &&
-          methodTarget.expression.text === 'prisma' &&
+          (methodTarget.expression.text === 'prisma' ||
+            methodTarget.expression.text === 'transaction') &&
           methodTarget.name.text === 'workspace' &&
           (inner.expression.name.text === 'update' || inner.expression.name.text === 'updateMany')
         ) {

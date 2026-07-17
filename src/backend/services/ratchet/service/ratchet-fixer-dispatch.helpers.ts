@@ -43,6 +43,7 @@ async function handleStartedFixerResult(params: {
   commitSideEffects: () => void;
   onRecorded: () => void;
   onCleaned: () => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
   const {
     workspace,
@@ -54,6 +55,7 @@ async function handleStartedFixerResult(params: {
     commitSideEffects,
     onRecorded,
     onCleaned,
+    onDispatchChanged,
   } = params;
   signal?.throwIfAborted();
   const promptSent = result.promptSent ?? true;
@@ -85,6 +87,7 @@ async function handleStartedFixerResult(params: {
   });
   if (recorded) {
     onRecorded();
+    onDispatchChanged?.({ workspaceId: workspace.id });
     if (result.promptCompletion) {
       void settleFailedPromptCompletion({
         workspaceId: workspace.id,
@@ -144,8 +147,9 @@ async function handleAlreadyActiveFixerResult(params: {
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
   commitSideEffects: () => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
-  const { workspace, result, sessionBridge, signal, commitSideEffects } = params;
+  const { workspace, result, sessionBridge, signal, commitSideEffects, onDispatchChanged } = params;
   // Adopt (pointer + RUNNING outcome) rather than record a full dispatch: the
   // session is working on an earlier prompt, so the current snapshot key must
   // not be marked as dispatched.
@@ -155,6 +159,9 @@ async function handleAlreadyActiveFixerResult(params: {
     workspace.id,
     result.sessionId
   );
+  if (adopted) {
+    onDispatchChanged?.({ workspaceId: workspace.id });
+  }
   signal?.throwIfAborted();
   if (!adopted) {
     return await stopUnrecordedFixerSession({
@@ -203,6 +210,7 @@ export async function triggerRatchetFixer(params: {
   sessionBridge: RatchetSessionBridge;
   signal?: AbortSignal;
   commitSideEffects?: () => void;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<RatchetAction> {
   const {
     workspace,
@@ -210,6 +218,7 @@ export async function triggerRatchetFixer(params: {
     retryCount,
     sessionBridge,
     signal,
+    onDispatchChanged,
     commitSideEffects = () => {
       // Direct helper callers do not have a coordinator timeout to disable.
     },
@@ -263,6 +272,7 @@ export async function triggerRatchetFixer(params: {
         onCleaned: () => {
           startedFixerCleaned = true;
         },
+        onDispatchChanged,
       });
       signal?.throwIfAborted();
       return action;
@@ -275,6 +285,7 @@ export async function triggerRatchetFixer(params: {
         sessionBridge,
         signal,
         commitSideEffects,
+        onDispatchChanged,
       });
     }
 

@@ -2,13 +2,25 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 // ---------------------------------------------------------------------------
 // Mock store helper type
 // ---------------------------------------------------------------------------
 
 interface MockStore {
   upsert: ReturnType<
-    typeof vi.fn<(id: string, update: SnapshotUpdateInput, source: string) => void>
+    typeof vi.fn<
+      (id: string, update: SnapshotUpdateInput, source: string, timestamp?: number) => void
+    >
   >;
   getByWorkspaceId: ReturnType<typeof vi.fn<(id: string) => { projectId: string } | undefined>>;
   remove: ReturnType<typeof vi.fn<(id: string) => boolean>>;
@@ -16,7 +28,10 @@ interface MockStore {
 
 function createMockStore(): MockStore {
   return {
-    upsert: vi.fn<(id: string, update: SnapshotUpdateInput, source: string) => void>(),
+    upsert:
+      vi.fn<
+        (id: string, update: SnapshotUpdateInput, source: string, timestamp?: number) => void
+      >(),
     getByWorkspaceId: vi
       .fn<(id: string) => { projectId: string } | undefined>()
       .mockReturnValue({ projectId: 'proj-1' }),
@@ -30,6 +45,8 @@ vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
+  kanbanStateService: { updateCachedKanbanColumn: vi.fn().mockResolvedValue(undefined) },
+  workspaceAccessor: { findRawById: vi.fn() },
   workspaceSnapshotStore: {
     upsert: vi.fn(),
     getByWorkspaceId: vi.fn(),
@@ -40,6 +57,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/github', () => ({
+  PR_DISPATCH_INVALIDATED: 'pr_dispatch_invalidated',
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   prSnapshotService: {
     on: vi.fn(),
@@ -50,6 +68,7 @@ vi.mock('@/backend/services/github', () => ({
 }));
 
 vi.mock('@/backend/services/ratchet', () => ({
+  RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
   ratchetService: {
@@ -124,6 +143,8 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
+  kanbanStateService,
+  workspaceAccessor,
   workspaceActivityService,
   workspaceSnapshotStore,
   workspaceStateMachine,
@@ -144,6 +165,7 @@ function configureEventCollector(): void {
     computePendingRequestType,
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext,
+    kanbanStateService,
     linearStateSyncService,
     prFetchRegistry,
     prSnapshotService,
@@ -154,6 +176,7 @@ function configureEventCollector(): void {
     sessionService,
     terminalService,
     workspaceActivityService,
+    workspaceAccessor,
     workspaceSnapshotStore,
     workspaceStateMachine,
   });
@@ -194,7 +217,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -234,7 +258,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY', ratchetState: 'CI_RUNNING', isWorking: true },
-      'event:workspace_state_changed+event:ratchet_state_changed+event:workspace_active'
+      'event:workspace_state_changed+event:ratchet_state_changed+event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -250,12 +275,14 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-2',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -282,7 +309,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -311,7 +339,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.any(Object),
-      'event:workspace_state_changed+event:ratchet_state_changed'
+      'event:workspace_state_changed+event:ratchet_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -356,7 +385,8 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
     expect(coalescer.pendingCount).toBe(0);
   });
@@ -386,7 +416,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { status: 'READY' },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -418,7 +449,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetState: 'CI_RUNNING' },
-      'event:ratchet_state_changed'
+      'event:ratchet_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -434,7 +466,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
-      'event:ratchet_toggled'
+      'event:ratchet_toggled',
+      expect.any(Number)
     );
   });
 
@@ -450,7 +483,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { runScriptStatus: 'RUNNING' },
-      'event:run_script_status_changed'
+      'event:run_script_status_changed',
+      expect.any(Number)
     );
   });
 
@@ -462,7 +496,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
   });
 
@@ -474,7 +509,8 @@ describe('Event-to-field mapping', () => {
     expect(mockStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: false },
-      'event:workspace_idle'
+      'event:workspace_idle',
+      expect.any(Number)
     );
   });
 });
@@ -494,7 +530,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 10 event listeners on domain singletons', () => {
+  it('registers 12 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -503,12 +539,20 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // prSnapshotService: 1 listener (PR_SNAPSHOT_UPDATED)
+    // prSnapshotService: PR updates and dispatch invalidation
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_snapshot_updated', expect.any(Function));
+    expect(prSnapshotService.on).toHaveBeenCalledWith(
+      'pr_dispatch_invalidated',
+      expect.any(Function)
+    );
 
-    // ratchetService: 2 listeners (RATCHET_STATE_CHANGED + RATCHET_TOGGLED)
+    // ratchetService: state, toggle, and dispatch ownership
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_state_changed', expect.any(Function));
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_toggled', expect.any(Function));
+    expect(ratchetService.on).toHaveBeenCalledWith(
+      'ratchet_dispatch_changed',
+      expect.any(Function)
+    );
 
     // runScriptStateMachine: 1 listener (RUN_SCRIPT_STATUS_CHANGED)
     expect(runScriptStateMachine.on).toHaveBeenCalledWith(
@@ -613,7 +657,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({ status: 'READY' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -660,7 +705,8 @@ describe('configureEventCollector', () => {
         branchName: 'feature/test',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -701,14 +747,22 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-new',
       expect.objectContaining({ status: 'PROVISIONING', projectId: 'proj-1' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
-  it('ratchet_state_changed is applied immediately', () => {
+  it('ratchet_state_changed projects state authoritatively', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'MERGED',
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    } as never);
     configureEventCollector();
 
     const onCall = vi
@@ -726,11 +780,259 @@ describe('configureEventCollector', () => {
       toState: 'MERGED',
     });
 
-    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
-      'ws-1',
-      { ratchetState: 'MERGED' },
-      'event:ratchet_state_changed'
+    await vi.waitFor(() =>
+      expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+        'ws-1',
+        expect.objectContaining({ ratchetState: 'MERGED' }),
+        'projection:ratchet_authoritative',
+        expect.any(Number)
+      )
     );
+    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('ratchet_dispatch_changed publishes authoritative ownership and refreshes the cache', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'CI_FAILED',
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
+    } as never);
+    configureEventCollector();
+
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+    handler({ workspaceId: 'ws-1' });
+
+    await vi.waitFor(() =>
+      expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+        'ws-1',
+        expect.objectContaining({
+          ratchetDispatchOutcome: 'DIED',
+          ratchetDispatchRetryCount: 3,
+        }),
+        'projection:ratchet_authoritative',
+        expect.any(Number)
+      )
+    );
+    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('projects the direct CI status carried by a dispatch invalidation', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'CI_RUNNING',
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    } as never);
+    configureEventCollector();
+
+    const handler = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_dispatch_invalidated')![1] as (event: {
+      workspaceId: string;
+      prCiStatus: string;
+    }) => void;
+    handler({ workspaceId: 'ws-direct-ci', prCiStatus: 'PENDING' });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-direct-ci',
+      { prCiStatus: 'PENDING' },
+      'event:pr_dispatch_invalidated',
+      expect.any(Number)
+    );
+  });
+
+  it('does not recreate an archived snapshot after an in-flight Ratchet projection', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    const pendingRead = deferred<never>();
+    vi.mocked(workspaceAccessor.findRawById).mockReturnValue(pendingRead.promise);
+    configureEventCollector();
+
+    const dispatchHandler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+    const workspaceHandler = vi
+      .mocked(workspaceStateMachine.on)
+      .mock.calls.find((call) => call[0] === 'workspace_state_changed')![1] as (event: {
+      workspaceId: string;
+      fromStatus: string;
+      toStatus: string;
+    }) => void;
+
+    dispatchHandler({ workspaceId: 'ws-archived-race' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    workspaceHandler({
+      workspaceId: 'ws-archived-race',
+      fromStatus: 'READY',
+      toStatus: 'ARCHIVED',
+    });
+    pendingRead.resolve({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'CI_FAILED',
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
+    } as never);
+    await Promise.resolve();
+
+    expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalledWith(
+      'ws-archived-race',
+      expect.anything(),
+      'projection:ratchet_authoritative',
+      expect.any(Number)
+    );
+  });
+
+  it('retries a failed authoritative projection without another invalidation', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById)
+      .mockRejectedValueOnce(new Error('read failed'))
+      .mockResolvedValue({
+        status: 'READY',
+        ratchetEnabled: true,
+        ratchetState: 'CI_FAILED',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      } as never);
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-retry' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2));
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-retry',
+      expect.objectContaining({ ratchetDispatchOutcome: 'DIED' }),
+      'projection:ratchet_authoritative',
+      expect.any(Number)
+    );
+  });
+
+  it('backs off materially after a persistent authoritative projection failure', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-persistent-failure' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+  });
+
+  it('backs off when an invalidation arrives during a failed projection read', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    const pendingRead = deferred<never>();
+    vi.mocked(workspaceAccessor.findRawById)
+      .mockReturnValueOnce(pendingRead.promise)
+      .mockResolvedValue({
+        status: 'READY',
+        ratchetEnabled: true,
+        ratchetState: 'CI_FAILED',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      } as never);
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-concurrent-invalidation' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    handler({ workspaceId: 'ws-concurrent-invalidation' });
+    pendingRead.reject(new Error('read failed'));
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reset the projection failure budget for repeated invalidations', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    handler({ workspaceId: 'ws-invalidation-stream' });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(3);
+  });
+
+  it('cancels an authoritative projection retry when stopped', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceAccessor.findRawById).mockRejectedValue(new Error('read failed'));
+    configureEventCollector();
+    const handler = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_dispatch_changed')![1] as (event: {
+      workspaceId: string;
+    }) => void;
+
+    handler({ workspaceId: 'ws-stop-retry' });
+    await vi.waitFor(() => expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1));
+    stopEventCollector();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(workspaceAccessor.findRawById).toHaveBeenCalledTimes(1);
   });
 
   it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {
@@ -767,7 +1069,8 @@ describe('configureEventCollector', () => {
         prState: 'OPEN',
         prCiStatus: 'SUCCESS',
       },
-      'event:pr_snapshot_updated'
+      'event:pr_snapshot_updated',
+      expect.any(Number)
     );
   });
 
@@ -1021,7 +1324,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
-      'event:ratchet_toggled'
+      'event:ratchet_toggled',
+      expect.any(Number)
     );
   });
 
@@ -1069,7 +1373,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({ status: 'READY' }),
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      expect.any(Number)
     );
   });
 
@@ -1089,7 +1394,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: true, hasHadSessions: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
@@ -1110,7 +1416,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { isWorking: false, hasHadSessions: true },
-      'event:workspace_idle'
+      'event:workspace_idle',
+      expect.any(Number)
     );
     expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
@@ -1179,7 +1486,8 @@ describe('configureEventCollector', () => {
           }),
         ]),
       }),
-      expect.stringContaining('event:session_activity_changed')
+      expect.stringContaining('event:session_activity_changed'),
+      expect.any(Number)
     );
   });
 
@@ -1224,7 +1532,8 @@ describe('configureEventCollector', () => {
           }),
         ]),
       }),
-      expect.stringContaining('event:session_runtime_changed')
+      expect.stringContaining('event:session_runtime_changed'),
+      expect.any(Number)
     );
   });
 
@@ -1267,7 +1576,8 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       { pendingRequestType: 'permission_request' },
-      'event:pending_request_changed'
+      'event:pending_request_changed',
+      expect.any(Number)
     );
     expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
   });
@@ -1318,7 +1628,8 @@ describe('per-graph event collector lifecycle', () => {
     expect(firstStore.upsert).toHaveBeenCalledWith(
       'first',
       { isWorking: true, hasHadSessions: true },
-      'event:workspace_active'
+      'event:workspace_active',
+      expect.any(Number)
     );
     expect(secondStore.upsert).not.toHaveBeenCalled();
 

@@ -25,6 +25,8 @@ type CommonSnapshotWorkspace = {
   prCiStatus: WorkspaceSnapshotEntry['prCiStatus'];
   ratchetEnabled: boolean;
   ratchetState: WorkspaceSnapshotEntry['ratchetState'];
+  ratchetDispatchOutcome: WorkspaceSnapshotEntry['ratchetDispatchOutcome'];
+  ratchetDispatchRetryCount: number;
   runScriptStatus: WorkspaceSnapshotEntry['runScriptStatus'];
   isWorking: boolean;
   sessionSummaries: WorkspaceSnapshotEntry['sessionSummaries'];
@@ -64,6 +66,8 @@ function projectSnapshotToCommonWorkspace(entry: WorkspaceSnapshotEntry): Common
     prCiStatus: entry.prCiStatus,
     ratchetEnabled: entry.ratchetEnabled,
     ratchetState: entry.ratchetState,
+    ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
+    ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
     runScriptStatus: entry.runScriptStatus,
     isWorking: entry.isWorking,
     sessionSummaries: entry.sessionSummaries,
@@ -135,8 +139,6 @@ function newKanbanWorkspaceDefaults(createdAt: Date): KanbanWorkspaceDefaults {
     ratchetLastCheckedAt: null,
     ratchetActiveSessionId: null,
     ratchetLastCiRunId: null,
-    ratchetDispatchOutcome: null,
-    ratchetDispatchRetryCount: 0,
     stateComputedAt: null,
     mode: 'STANDARD',
     autoIterationStatus: null,

@@ -232,6 +232,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     session: {
       isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
+      getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
     },
   });
 
