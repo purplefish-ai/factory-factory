@@ -1,11 +1,12 @@
 import { toError } from '@/backend/lib/error-utils';
 import { autoIterationService } from '@/backend/services/auto-iteration';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import {
+  FactoryConfigService,
+  runScriptConfigPersistenceService,
+} from '@/backend/services/run-script';
 import {
   agentSessionAccessor,
   buildChildWorkspaceContext,
@@ -17,6 +18,7 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   assertWorktreePathSafe,
+  gitOpsService,
   workspaceAccessor,
   workspaceStateMachine,
   worktreeLifecycleService,

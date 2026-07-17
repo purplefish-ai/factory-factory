@@ -7,15 +7,19 @@ import {
   deriveWorkspaceFlowState,
   deriveWorkspaceFlowStateFromWorkspace,
   getWorkspaceInitPolicy,
+  gitCloneService,
+  gitOpsService,
   kanbanStateService,
   // Lifecycle
   WorkspaceCreationService,
+  WorkspaceSnapshotStore,
   WorkspaceStateMachineError,
   WorktreePathSafetyError,
   workspaceActivityService,
   workspaceDataService,
   // Query
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from './index';
@@ -81,6 +85,13 @@ describe('Workspace domain exports', () => {
 
   it('exports WorktreePathSafetyError as a constructor', () => {
     expect(typeof WorktreePathSafetyError).toBe('function');
+  });
+
+  it('exports workspace git and snapshot services', () => {
+    expect(gitCloneService).toBeDefined();
+    expect(gitOpsService).toBeDefined();
+    expect(typeof WorkspaceSnapshotStore).toBe('function');
+    expect(workspaceSnapshotStore).toBeDefined();
   });
 
   // --- Query ---

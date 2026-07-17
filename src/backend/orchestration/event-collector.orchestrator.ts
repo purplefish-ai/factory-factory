@@ -12,7 +12,7 @@
  *
  * Import rules (EVNT-07 + circular dep avoidance):
  * - Domain singletons and event constants from domain barrels
- * - Store from @/backend/services/workspace-snapshot-store.service
+ * - Store from @/backend/services/workspace
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
@@ -50,15 +50,13 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
+  type SnapshotUpdateInput,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import {
-  type SnapshotUpdateInput,
-  workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 

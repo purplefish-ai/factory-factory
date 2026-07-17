@@ -29,6 +29,21 @@ export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 export { projectManagementService } from './query/project-management.service';
 export { userSettingsQueryService } from './query/user-settings-query.service';
 export { workspaceQueryService } from './query/workspace-query.service';
+// --- Workspace snapshots ---
+export {
+  SNAPSHOT_CHANGED,
+  SNAPSHOT_REMOVED,
+  type SnapshotChangedEvent,
+  type SnapshotDerivationFns,
+  type SnapshotFieldGroup,
+  type SnapshotRemovedEvent,
+  type SnapshotUpdateInput,
+  type SnapshotUpsertResult,
+  type WorkspaceSessionSummary,
+  type WorkspaceSnapshotEntry,
+  WorkspaceSnapshotStore,
+  workspaceSnapshotStore,
+} from './snapshot/workspace-snapshot-store.service';
 // --- State derivation (pure functions) ---
 export {
   deriveWorkspaceFlowState,
@@ -55,6 +70,13 @@ export {
   type WorkspacePendingRequestType,
 } from './state/pending-request-type';
 // --- Worktree management ---
+export {
+  type ExistingCloneStatus,
+  type GithubRepo,
+  gitCloneService,
+  parseGithubUrl,
+} from './worktree/git-clone.service';
+export { gitOpsService, type WorkspaceGitStats } from './worktree/git-ops.service';
 export {
   assertWorktreePathSafe,
   WorktreePathSafetyError,

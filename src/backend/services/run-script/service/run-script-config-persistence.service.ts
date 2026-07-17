@@ -1,8 +1,9 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { projectAccessor, workspaceDataService } from '@/backend/services/workspace';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
+import { FactoryConfigService } from './factory-config.service';
 
 const logger = createLogger('run-script-config-persistence');
 const FACTORY_CONFIG_FILENAME = 'factory-factory.json';
@@ -48,6 +49,63 @@ function commandsEqual(a: RunScriptCommandCache, b: RunScriptCommandCache): bool
 }
 
 class RunScriptConfigPersistenceService {
+  async refreshFactoryConfigs(projectId: string): Promise<{
+    updatedCount: number;
+    totalWorkspaces: number;
+    errors: Array<{ workspaceId: string; error: string }>;
+  }> {
+    const workspaces = await workspaceDataService.findByProjectId(projectId);
+    let updatedCount = 0;
+    const errors: Array<{ workspaceId: string; error: string }> = [];
+
+    for (const workspace of workspaces) {
+      if (!workspace.worktreePath) {
+        continue;
+      }
+
+      try {
+        await this.syncWorkspaceCommandsFromWorktreeConfig({
+          workspaceId: workspace.id,
+          worktreePath: workspace.worktreePath,
+          persistWorkspaceCommands: (id, commands) =>
+            workspaceDataService.setRunScriptCommands(
+              id,
+              commands.runScriptCommand,
+              commands.runScriptPostRunCommand,
+              commands.runScriptCleanupCommand
+            ),
+        });
+        updatedCount++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push({ workspaceId: workspace.id, error: message });
+        logger.error('Failed to refresh factory config for workspace', {
+          workspaceId: workspace.id,
+          error: message,
+        });
+      }
+    }
+
+    return { updatedCount, totalWorkspaces: workspaces.length, errors };
+  }
+
+  async getFactoryConfig(projectId: string): Promise<FactoryConfig | null> {
+    const project = await projectAccessor.findById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    try {
+      return await FactoryConfigService.readConfig(project.repoPath);
+    } catch (error) {
+      logger.error('Failed to read factory config', {
+        projectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   async syncWorkspaceCommandsFromFactoryConfig(input: {
     workspaceId: string;
     factoryConfig: FactoryConfig | null;
