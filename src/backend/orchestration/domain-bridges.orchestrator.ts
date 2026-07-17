@@ -328,7 +328,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
   // === Auto-iteration domain bridges ===
   const autoIterationWorkspaceBridge: AutoIterationWorkspaceBridge = {
     async getWorktreePath(workspaceId) {
-      const ws = await workspaceAutoIterationService.getState(workspaceId);
+      const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
       if (!ws?.worktreePath) {
         throw new Error(`Workspace ${workspaceId} has no worktree path`);
       }
@@ -411,7 +411,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       return Promise.resolve('');
     },
     async recycleSession(workspaceId, handoffPrompt) {
-      const ws = await workspaceAutoIterationService.getState(workspaceId);
+      const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
       if (ws?.autoIterationSessionId) {
         await stopPreviousAutoIterationSession(sessionService, ws.autoIterationSessionId);
       }

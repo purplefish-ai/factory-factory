@@ -1,5 +1,8 @@
 import type { Prisma } from '@prisma-gen/client';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import {
+  type RunScriptExecutionState,
+  workspaceAccessor,
+} from '@/backend/services/workspace/resources/workspace.accessor';
 import type { RunScriptStatus } from '@/shared/core';
 
 type RunScriptTransitionUpdate = Pick<
@@ -44,12 +47,12 @@ class WorkspaceRunScriptService {
     });
   }
 
-  getState(workspaceId: string) {
-    return workspaceAccessor.findRawById(workspaceId);
+  findExecutionState(workspaceId: string): Promise<RunScriptExecutionState | null> {
+    return workspaceAccessor.findRunScriptExecutionState(workspaceId);
   }
 
-  getStateOrThrow(workspaceId: string) {
-    return workspaceAccessor.findRawByIdOrThrow(workspaceId);
+  getExecutionStateOrThrow(workspaceId: string): Promise<RunScriptExecutionState> {
+    return workspaceAccessor.findRunScriptExecutionStateOrThrow(workspaceId);
   }
 
   transitionStatusIfCurrent(
@@ -87,3 +90,4 @@ class WorkspaceRunScriptService {
 }
 
 export const workspaceRunScriptService = new WorkspaceRunScriptService();
+export type { RunScriptExecutionState };

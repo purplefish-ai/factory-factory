@@ -1,10 +1,13 @@
 import type { Prisma } from '@prisma-gen/client';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import {
+  type AutoIterationExecutionContext,
+  workspaceAccessor,
+} from '@/backend/services/workspace/resources/workspace.accessor';
 import type { AutoIterationStatus } from '@/shared/core';
 
 class WorkspaceAutoIterationService {
-  getState(workspaceId: string) {
-    return workspaceAccessor.findRawById(workspaceId);
+  getExecutionContext(workspaceId: string): Promise<AutoIterationExecutionContext | null> {
+    return workspaceAccessor.findAutoIterationExecutionContext(workspaceId);
   }
 
   setStatus(workspaceId: string, status: AutoIterationStatus) {

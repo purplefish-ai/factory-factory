@@ -169,7 +169,9 @@ const workspaceFieldOwners = {
   autoIterationStatus: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
   ]),
-  autoIterationConfig: new Set(['src/backend/orchestration/domain-bridges.orchestrator.ts']),
+  autoIterationConfig: new Set([
+    'src/backend/services/workspace/service/lifecycle/creation.service.ts',
+  ]),
   autoIterationProgress: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
   ]),

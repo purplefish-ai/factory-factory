@@ -25,6 +25,7 @@ let db: IntegrationDatabase;
 let prisma: PrismaClient;
 
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
+let workspaceAutoIterationService: typeof import('@/backend/services/workspace').workspaceAutoIterationService;
 let workspaceMaintenanceService: typeof import('@/backend/services/workspace').workspaceMaintenanceService;
 let workspaceRatchetService: typeof import('@/backend/services/workspace').workspaceRatchetService;
 let workspaceRunScriptService: typeof import('@/backend/services/workspace').workspaceRunScriptService;
@@ -44,6 +45,7 @@ beforeAll(async () => {
 
   ({
     projectManagementService,
+    workspaceAutoIterationService,
     workspaceDataService,
     workspaceMaintenanceService,
     workspaceRatchetService,
@@ -356,6 +358,23 @@ describe('resource accessors integration', () => {
       const cleared = await findWorkspaceOrThrow(workspace.id);
       expect(cleared.ratchetActiveSessionId).toBeNull();
       expect(cleared.ratchetDispatchOutcome).toBe('DIED');
+    });
+
+    it('clears auto-iteration session only when the expected pointer still matches', async () => {
+      const project = await createProjectFixture();
+      const workspace = await createWorkspaceFixture(project.id, {
+        autoIterationSessionId: 'session-1',
+      });
+
+      await expect(
+        workspaceAutoIterationService.clearSessionIfMatching(workspace.id, 'different-session')
+      ).resolves.toBe(false);
+      expect((await findWorkspaceOrThrow(workspace.id)).autoIterationSessionId).toBe('session-1');
+
+      await expect(
+        workspaceAutoIterationService.clearSessionIfMatching(workspace.id, 'session-1')
+      ).resolves.toBe(true);
+      expect((await findWorkspaceOrThrow(workspace.id)).autoIterationSessionId).toBeNull();
     });
   });
 

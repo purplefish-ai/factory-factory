@@ -35,7 +35,7 @@ vi.mock('@/backend/services/workspace', () => ({
     create = mockWorkspaceCreationService.create;
   },
   workspaceAutoIterationService: {
-    getState: vi.fn(),
+    getExecutionContext: vi.fn(),
     setStatus: vi.fn(),
     setProgress: vi.fn(),
     setSession: vi.fn(),
@@ -535,9 +535,9 @@ describe('configureDomainBridges', () => {
     it('cleans up a recycled session when handoff send fails', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
       const sendError = new Error('prompt failed');
-      vi.mocked(workspaceAutoIterationService.getState).mockResolvedValue({
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
         autoIterationSessionId: 'old-session',
-      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getState>>);
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
       vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(true);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
@@ -572,9 +572,9 @@ describe('configureDomainBridges', () => {
 
     it('does not clear a newer auto-iteration session after recycle cleanup', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
-      vi.mocked(workspaceAutoIterationService.getState).mockResolvedValue({
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
         autoIterationSessionId: 'old-session',
-      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getState>>);
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
       vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(false);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',

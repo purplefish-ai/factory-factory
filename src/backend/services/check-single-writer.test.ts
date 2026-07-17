@@ -106,6 +106,41 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
+  it('allows creation service to own auto-iteration configuration writes', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/services/workspace/service/lifecycle/creation.service.ts',
+        content: `
+          async function createAutoIteration(workspaceAccessor) {
+            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('rejects orchestration writes to auto-iteration configuration', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/orchestration/domain-bridges.orchestrator.ts',
+        content: `
+          async function configure(workspaceAccessor) {
+            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('unauthorized write of workspace field "autoIterationConfig"');
+  });
+
   it('checks ownership for updateMany payload mutators', () => {
     const tempRoot = createTempBackend([
       {

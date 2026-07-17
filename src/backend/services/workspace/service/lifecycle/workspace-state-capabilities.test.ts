@@ -6,6 +6,9 @@ import { workspaceRunScriptService } from './workspace-run-script.service';
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
+    findAutoIterationExecutionContext: vi.fn(),
+    findRunScriptExecutionState: vi.fn(),
+    findRunScriptExecutionStateOrThrow: vi.fn(),
     finishAutoIterationIfSessionMatches: vi.fn(),
     casRunScriptStatusUpdate: vi.fn(),
     recordRatchetDispatchIfEnabled: vi.fn(),
@@ -27,6 +30,34 @@ describe('workspace state capabilities', () => {
       'session-1',
       'COMPLETED'
     );
+  });
+
+  it('reads only the auto-iteration execution context', async () => {
+    vi.mocked(workspaceAccessor.findAutoIterationExecutionContext).mockResolvedValue({
+      worktreePath: '/tmp/worktree',
+      autoIterationSessionId: 'session-1',
+    });
+
+    await expect(workspaceAutoIterationService.getExecutionContext('ws-1')).resolves.toEqual({
+      worktreePath: '/tmp/worktree',
+      autoIterationSessionId: 'session-1',
+    });
+    expect(workspaceAccessor.findAutoIterationExecutionContext).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('reads only run-script execution state', async () => {
+    vi.mocked(workspaceAccessor.findRunScriptExecutionState).mockResolvedValue({
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 123,
+      runScriptPort: 3000,
+      runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    await expect(workspaceRunScriptService.findExecutionState('ws-1')).resolves.toMatchObject({
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 123,
+    });
+    expect(workspaceAccessor.findRunScriptExecutionState).toHaveBeenCalledWith('ws-1');
   });
 
   it('transitions run-script state with compare-and-swap', async () => {

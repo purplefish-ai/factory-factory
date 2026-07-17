@@ -15,6 +15,26 @@ import type {
 } from '@/shared/core';
 import { KanbanColumn } from '@/shared/core';
 
+const autoIterationExecutionContextSelect = {
+  worktreePath: true,
+  autoIterationSessionId: true,
+} satisfies Prisma.WorkspaceSelect;
+
+const runScriptExecutionStateSelect = {
+  runScriptStatus: true,
+  runScriptPid: true,
+  runScriptPort: true,
+  runScriptStartedAt: true,
+} satisfies Prisma.WorkspaceSelect;
+
+export type AutoIterationExecutionContext = Prisma.WorkspaceGetPayload<{
+  select: typeof autoIterationExecutionContextSelect;
+}>;
+
+export type RunScriptExecutionState = Prisma.WorkspaceGetPayload<{
+  select: typeof runScriptExecutionStateSelect;
+}>;
+
 /**
  * Threshold for considering a PROVISIONING workspace as stale.
  * Workspaces in PROVISIONING state for longer than this are considered
@@ -206,6 +226,27 @@ class WorkspaceAccessor {
   findRawByIdOrThrow(id: string): Promise<Workspace> {
     return prisma.workspace.findUniqueOrThrow({
       where: { id },
+    });
+  }
+
+  findAutoIterationExecutionContext(id: string): Promise<AutoIterationExecutionContext | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: autoIterationExecutionContextSelect,
+    });
+  }
+
+  findRunScriptExecutionState(id: string): Promise<RunScriptExecutionState | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+      select: runScriptExecutionStateSelect,
+    });
+  }
+
+  findRunScriptExecutionStateOrThrow(id: string): Promise<RunScriptExecutionState> {
+    return prisma.workspace.findUniqueOrThrow({
+      where: { id },
+      select: runScriptExecutionStateSelect,
     });
   }
 
