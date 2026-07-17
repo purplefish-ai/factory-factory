@@ -26,7 +26,7 @@ vi.mock('@/backend/services/github', () => ({
   },
   prFetchRegistry: {
     isRecentlyFetched: () => false,
-    startFetch: vi.fn(),
+    startFetch: vi.fn(() => 41),
     cancelFetch: vi.fn(),
     register: vi.fn(),
   },
@@ -41,6 +41,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+import { prFetchRegistry } from '@/backend/services/github';
 import { schedulerService } from './scheduler.service';
 
 function createDeferred<T>() {
@@ -89,6 +90,9 @@ describe('SchedulerService', () => {
 
       expect(result).toEqual({ synced: 2, failed: 0 });
       expect(mockRefreshWorkspace).toHaveBeenCalledTimes(2);
+      expect(prFetchRegistry.startFetch).toHaveBeenCalledTimes(2);
+      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(1, 'ws-1', 41);
+      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(2, 'ws-2', 41);
     });
 
     it('counts failed syncs', async () => {
@@ -102,6 +106,7 @@ describe('SchedulerService', () => {
       const result = await schedulerService.syncPRStatuses();
 
       expect(result).toEqual({ synced: 0, failed: 2 });
+      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
     });
   });
 

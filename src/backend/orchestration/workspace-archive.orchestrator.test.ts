@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 
+const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
+
+vi.mock('./event-collector.orchestrator', () => ({
+  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
+}));
+
 vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
 }));
@@ -168,6 +174,18 @@ describe('archiveWorkspace', () => {
       expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
       expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
       expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
+    });
+
+    it('cleans workspace caches after the archived state is persisted', async () => {
+      await archiveWorkspace(makeWorkspace(), defaultOptions);
+
+      expect(mockCleanupWorkspaceScopedCaches).toHaveBeenCalledWith('ws-1');
+      const archivedCallOrder = vi.mocked(workspaceStateMachine.markArchived).mock
+        .invocationCallOrder[0];
+      const cleanupCallOrder = mockCleanupWorkspaceScopedCaches.mock.invocationCallOrder[0];
+      expect(archivedCallOrder).toBeDefined();
+      expect(cleanupCallOrder).toBeDefined();
+      expect(cleanupCallOrder!).toBeGreaterThan(archivedCallOrder!);
     });
 
     it('returns the archived workspace', async () => {

@@ -222,16 +222,16 @@ class SchedulerService {
 
     // Claim the workspace synchronously before yielding to the event loop so that
     // concurrent callers see it as in-flight and skip their own redundant fetches.
-    prFetchRegistry.startFetch(workspaceId);
+    const claimToken = prFetchRegistry.startFetch(workspaceId);
     try {
       const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
       if (!prResult.success) {
         logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
-        prFetchRegistry.cancelFetch(workspaceId);
+        prFetchRegistry.cancelFetch(workspaceId, claimToken);
         return { success: false, reason: 'fetch_failed' };
       }
 
-      prFetchRegistry.register(workspaceId);
+      prFetchRegistry.register(workspaceId, claimToken);
 
       logger.debug('PR status synced', {
         workspaceId,
@@ -242,7 +242,7 @@ class SchedulerService {
 
       return { success: true };
     } catch (error) {
-      prFetchRegistry.cancelFetch(workspaceId);
+      prFetchRegistry.cancelFetch(workspaceId, claimToken);
       logger.error('PR sync failed for workspace', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }

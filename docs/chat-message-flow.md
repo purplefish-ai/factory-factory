@@ -19,16 +19,24 @@ The chat system uses a unified `SessionStore` model with `SessionDomainService` 
 │   SessionDomainService ◀───────── subscribe()                            │
 │   (SessionStore)                       │                                 │
 │         │                              │                                 │
-│         │ emitDelta()                  │ forwardToSession()              │
-│         │                              │                                 │
+│         │ emitDelta()                  │ publishToSession()              │
+│         │ (via SessionPublisher →      │                                 │
+│         │  sessionEventBus)            │                                 │
 │         └──────────────────────────────┼─────────────────────────────┐   │
 │                                        │                             │   │
 │                                        ▼                             ▼   │
-│                          ┌─────────────────────────┐                    │
-│                          │ ChatConnectionService   │                    │
-│                          │ forwardToSession()      │ ◀── SINGLE PATH   │
-│                          │ (THE ONLY BROADCAST)    │                    │
-│                          └─────────────────────────┘                    │
+│                          ┌─────────────────────────────┐               │
+│                          │ SessionEventBus              │               │
+│                          │ publishToSession()           │ ◀── DOMAIN   │
+│                          │ (transport-free outbound)    │    SURFACE    │
+│                          └─────────────────────────────┘               │
+│                                        │                                 │
+│                                        ▼                                 │
+│                          ┌─────────────────────────────┐               │
+│                          │ ChatConnectionRegistry       │ ◀── TRANSPORT│
+│                          │ broadcastToSession()         │    ADAPTER   │
+│                          │ (THE ONLY BROADCAST)         │               │
+│                          └─────────────────────────────┘               │
 │                                        │                                 │
 └────────────────────────────────────────┼─────────────────────────────────┘
                                          │ WebSocket
@@ -42,17 +50,23 @@ The chat system uses a unified `SessionStore` model with `SessionDomainService` 
 
 ## Core Principle: Single Broadcast Point
 
-**All messages to the frontend go through `chatConnectionService.forwardToSession()`.**
+**All messages to the frontend go through `sessionEventBus.publishToSession()`, which the WebSocket adapter (`ChatConnectionRegistry`) consumes and delivers via `broadcastToSession()`.**
 
-This function:
-1. Broadcasts to ALL WebSocket connections viewing a specific session
-2. Serializes the message once, sends to multiple connections
-3. Logs every message for debugging via `sessionFileLogger`
+This keeps the session domain free of any `ws` imports: domain code publishes transport-free outbound events on `sessionEventBus`, and `ChatConnectionRegistry` (in `routers/websocket/`) owns the socket registry, serialization, and delivery. `sessionFileLogger` records each payload that actually reaches at least one client.
 
-Location: `src/backend/services/session/service/chat/chat-connection.service.ts`
+The adapter:
+1. Broadcasts to all WebSocket connections subscribed to a specific session (indexed per-session for O(viewers) fan-out)
+2. Serializes the message once and sends to every subscriber
+3. Logs every delivered message for debugging via `sessionFileLogger`
+
+Adapter location: `src/backend/routers/websocket/chat-connection-registry.ts`
+Domain event bus: `src/backend/services/session/service/session-event-bus.ts`
 
 ```typescript
-forwardToSession(dbSessionId: string | null, data: unknown, exclude?: WebSocket): void
+// Domain side (transport-free)
+sessionEventBus.publishToSession(dbSessionId: string, payload: WebSocketMessage): void
+// Transport side (owns sockets)
+chatConnectionRegistry.broadcastToSession(dbSessionId: string, payload: WebSocketMessage): number
 ```
 
 ## Event Flow Pattern
@@ -60,9 +74,11 @@ forwardToSession(dbSessionId: string | null, data: unknown, exclude?: WebSocket)
 Every event from Claude is emitted before forwarding:
 
 ```typescript
-// In chat-event-forwarder.service.ts
+// In session-domain.service.ts (delegates to SessionPublisher → sessionEventBus)
 sessionDomainService.emitDelta(sessionId, event);
-chatConnectionService.forwardToSession(sessionId, event);
+// The publisher inside SessionDomainService calls:
+sessionEventBus.publishToSession(sessionId, { type: 'session_delta', data: event });
+// The WebSocket adapter (ChatConnectionRegistry) subscribes to the bus and delivers to sockets.
 ```
 
 This pattern appears for:
@@ -111,8 +127,8 @@ User sends message
 └───────────────────┘     └──────────────────┘
                                    │
                                    │ For each event:
-                                   │ 1. emitDelta()
-                                   │ 2. forwardToSession()
+                                   │ 1. emitDelta() (→ sessionEventBus.publishToSession)
+                                   │ 2. ChatConnectionRegistry delivers to sockets
                                    ▼
                           ┌──────────────────┐
                           │ All Connected    │
@@ -135,7 +151,7 @@ Frontend reconnects via WebSocket
 └───────────────────────────────────────────┘
         │
         │ subscribe() emits session_snapshot
-        │ or session_replay_batch via forwardToSession()
+        │ or session_replay_batch via sessionEventBus → ChatConnectionRegistry
         ▼
 ┌───────────────────────────────────────────┐
 │ Frontend receives session_snapshot or     │
@@ -191,16 +207,28 @@ Key methods:
 - `emitDelta(sessionId, event)` - Broadcast incremental updates
 - `subscribe(sessionId, runtime)` - Subscribe to session and get snapshot
 
-### ChatConnectionService
+### SessionEventBus
 
-**Purpose:** Manages WebSocket connections and provides the single broadcast point.
+**Purpose:** Transport-free outbound event surface for the session domain. Domain code (e.g. `SessionPublisher`, `ChatEventForwarderService`) publishes session-scoped payloads here; the WebSocket adapter owns the socket registry, serialization, and delivery. This keeps `ws` imports out of the session domain entirely. Viewer-count queries flow the other way: the transport adapter registers a provider so domain code can ask how many clients are viewing a session without knowing about sockets.
 
-**Location:** `src/backend/services/session/service/chat/chat-connection.service.ts`
+**Location:** `src/backend/services/session/service/session-event-bus.ts`
 
 Key methods:
-- `register(connectionId, info)` - Track a new WebSocket connection
+- `publishToSession(sessionId, payload)` - **DOMAIN-SIDE PUBLISH POINT** (consumed by the transport adapter)
+- `publishToAllClients(payload)` - Publish a payload to every connected chat client
+- `registerViewerCountProvider(provider | null)` - Called by the transport adapter at startup/teardown
+- `countViewers(sessionId)` - Number of clients currently viewing a session
+
+### ChatConnectionRegistry (WebSocket adapter)
+
+**Purpose:** Transport-side counterpart of `SessionEventBus`. Tracks chat WebSocket connections by connection ID, maintains a per-session topic index so fan-out is O(viewers) rather than O(all connections), serializes and delivers session-scoped payloads published by the session domain, and answers viewer-count queries from the domain via the event bus. Includes OUT_TO_CLIENT session file logging for payloads that actually reached at least one client.
+
+**Location:** `src/backend/routers/websocket/chat-connection-registry.ts`
+
+Key methods:
+- `register(connectionId, info)` - Track a new WebSocket connection (subscribes it to its session's topic)
 - `unregister(connectionId)` - Remove a closed connection
-- `forwardToSession(sessionId, data, exclude?)` - **THE SINGLE BROADCAST POINT**
+- `broadcastToSession(dbSessionId, payload)` - **THE ONLY BROADCAST** (invoked by the `sessionEventBus` outbound listener)
 
 ### ChatEventForwarderService
 
@@ -331,7 +359,9 @@ The architecture guarantees:
 | Service | Path |
 |---------|------|
 | SessionDomainService | `src/backend/services/session/service/session-domain.service.ts` |
-| ChatConnectionService | `src/backend/services/session/service/chat/chat-connection.service.ts` |
+| SessionEventBus | `src/backend/services/session/service/session-event-bus.ts` |
+| SessionPublisher | `src/backend/services/session/service/store/session-publisher.ts` |
+| ChatConnectionRegistry (WS adapter) | `src/backend/routers/websocket/chat-connection-registry.ts` |
 | ChatEventForwarderService | `src/backend/services/session/service/chat/chat-event-forwarder.service.ts` |
 | ChatMessageHandlerService | `src/backend/services/session/service/chat/chat-message-handlers.service.ts` |
 | Chat WebSocket Handler | `src/backend/routers/websocket/chat.handler.ts` |
