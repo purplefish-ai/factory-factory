@@ -175,8 +175,21 @@ export function KanbanProvider({
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
-  const archiveMutation = trpc.workspace.archive.useMutation();
-  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
+  const handleArchiveError = (error: {
+    data?: { code?: string | null } | null;
+    message?: string;
+  }) => {
+    if (error.data?.code === 'PRECONDITION_FAILED') {
+      toast.error('Archiving blocked: enable commit before archiving to proceed.');
+    } else {
+      toast.error(error.message || 'Failed to archive workspace');
+    }
+  };
+
+  const archiveMutation = trpc.workspace.archive.useMutation({ onError: handleArchiveError });
+  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation({
+    onError: handleArchiveError,
+  });
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
   const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
@@ -254,11 +267,12 @@ export function KanbanProvider({
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
-    } catch (error) {
+    } catch {
       utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
         restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
       );
-      throw error;
+      // Error feedback is surfaced by the mutation's onError toast;
+      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setArchivingWorkspaceIds((prev) => {
         if (!prev.has(workspaceId)) {
@@ -324,7 +338,7 @@ export function KanbanProvider({
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
       ]);
-    } catch (error) {
+    } catch {
       utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
         restoreWorkspacesToProjectSummaryCache(
           old,
@@ -332,7 +346,8 @@ export function KanbanProvider({
           workspaceIdsToArchive
         )
       );
-      throw error;
+      // Error feedback is surfaced by the mutation's onError toast;
+      // callers fire-and-forget, so don't propagate an unhandled rejection.
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);

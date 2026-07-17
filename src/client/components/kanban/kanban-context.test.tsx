@@ -1,0 +1,243 @@
+// @vitest-environment jsdom
+
+import type { ReactNode } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KanbanProvider, useKanban } from './kanban-context';
+
+interface ArchiveError {
+  data?: { code?: string | null };
+  message?: string;
+}
+
+interface ProjectSummaryState {
+  workspaces: Array<{ id: string }>;
+  reviewCount: number;
+}
+
+interface MutationOptions {
+  onError?: (error: ArchiveError) => void;
+}
+
+const mocks = vi.hoisted(() => ({
+  archiveError: undefined as ArchiveError | undefined,
+  bulkArchiveError: undefined as ArchiveError | undefined,
+  toastErrorMock: vi.fn(),
+  projectSummaryCancelMock: vi.fn(),
+  projectSummaryGetDataMock: vi.fn(),
+  projectSummarySetDataMock: vi.fn(),
+  projectSummaryInvalidateMock: vi.fn(),
+  workspaceGetInvalidateMock: vi.fn(),
+  refetchWorkspacesMock: vi.fn(),
+  refetchGitHubIssuesMock: vi.fn(),
+  refetchLinearIssuesMock: vi.fn(),
+  projectSummaryState: undefined as ProjectSummaryState | undefined,
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: mocks.toastErrorMock,
+  },
+}));
+
+vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
+  useToggleRatcheting: () => ({
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+function rejectingMutation(getError: () => ArchiveError | undefined) {
+  return {
+    useMutation: (options: MutationOptions = {}) => ({
+      mutateAsync: vi.fn(() => {
+        const error = getError();
+        if (!error) {
+          return Promise.resolve();
+        }
+        options.onError?.(error);
+        return Promise.reject(error);
+      }),
+      isPending: false,
+    }),
+  };
+}
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    useUtils: () => ({
+      admin: {
+        checkCLIHealth: {},
+      },
+      workspace: {
+        get: {
+          invalidate: mocks.workspaceGetInvalidateMock,
+        },
+        getProjectSummaryState: {
+          cancel: mocks.projectSummaryCancelMock,
+          getData: mocks.projectSummaryGetDataMock,
+          setData: mocks.projectSummarySetDataMock,
+          invalidate: mocks.projectSummaryInvalidateMock,
+        },
+      },
+    }),
+    github: {
+      listIssuesForProject: {
+        useQuery: () => ({
+          data: { issues: [] },
+          isLoading: false,
+          refetch: mocks.refetchGitHubIssuesMock,
+        }),
+      },
+    },
+    linear: {
+      listIssuesForProject: {
+        useQuery: () => ({
+          data: { issues: [] },
+          isLoading: false,
+          refetch: mocks.refetchLinearIssuesMock,
+        }),
+      },
+    },
+    workspace: {
+      listWithKanbanState: {
+        useQuery: () => ({
+          data: [
+            {
+              id: 'workspace-1',
+              kanbanColumn: 'WAITING',
+              githubIssueNumber: null,
+              linearIssueId: null,
+            },
+            {
+              id: 'workspace-2',
+              kanbanColumn: 'WORKING',
+              githubIssueNumber: null,
+              linearIssueId: null,
+            },
+          ],
+          isLoading: false,
+          isError: false,
+          error: null,
+          refetch: mocks.refetchWorkspacesMock,
+        }),
+      },
+      syncAllPRStatuses: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      rename: {
+        useMutation: () => ({ mutateAsync: vi.fn() }),
+      },
+      archive: rejectingMutation(() => mocks.archiveError),
+      bulkArchive: rejectingMutation(() => mocks.bulkArchiveError),
+    },
+  },
+}));
+
+let root: Root | undefined;
+let context: ReturnType<typeof useKanban> | undefined;
+
+function Probe() {
+  context = useKanban();
+  return null;
+}
+
+function renderProvider(children: ReactNode = <Probe />) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+
+  flushSync(() => {
+    root?.render(
+      <KanbanProvider projectId="project-1" projectSlug="project" issueProvider="GITHUB">
+        {children}
+      </KanbanProvider>
+    );
+  });
+
+  if (!context) {
+    throw new Error('Kanban context was not captured');
+  }
+
+  return context;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.archiveError = undefined;
+  mocks.bulkArchiveError = undefined;
+  mocks.projectSummaryState = {
+    workspaces: [{ id: 'workspace-1' }, { id: 'workspace-2' }],
+    reviewCount: 0,
+  };
+  mocks.projectSummaryGetDataMock.mockImplementation(() => mocks.projectSummaryState);
+  mocks.projectSummarySetDataMock.mockImplementation(
+    (
+      _input: { projectId: string },
+      updater: (old: ProjectSummaryState | undefined) => ProjectSummaryState | undefined
+    ) => {
+      mocks.projectSummaryState = updater(mocks.projectSummaryState);
+    }
+  );
+});
+
+afterEach(() => {
+  if (root) {
+    flushSync(() => root?.unmount());
+  }
+  root = undefined;
+  context = undefined;
+  document.body.innerHTML = '';
+});
+
+describe('KanbanProvider archive failure handling', () => {
+  it('handles an archive precondition failure and rolls back the optimistic removal', async () => {
+    mocks.archiveError = { data: { code: 'PRECONDITION_FAILED' }, message: 'blocked' };
+    const kanban = renderProvider();
+
+    await expect(kanban.archiveWorkspace('workspace-1', false)).resolves.toBeUndefined();
+
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith(
+      'Archiving blocked: enable commit before archiving to proceed.'
+    );
+    expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([
+      { id: 'workspace-1' },
+      { id: 'workspace-2' },
+    ]);
+  });
+
+  it('handles an archive service failure and rolls back the optimistic removal', async () => {
+    mocks.archiveError = {
+      data: { code: 'INTERNAL_SERVER_ERROR' },
+      message: 'Archive service unavailable',
+    };
+    const kanban = renderProvider();
+
+    await expect(kanban.archiveWorkspace('workspace-1', false)).resolves.toBeUndefined();
+
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Archive service unavailable');
+    expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([
+      { id: 'workspace-1' },
+      { id: 'workspace-2' },
+    ]);
+  });
+
+  it('handles a bulk archive failure and rolls back the optimistic removals', async () => {
+    mocks.bulkArchiveError = {
+      data: { code: 'INTERNAL_SERVER_ERROR' },
+      message: 'Bulk archive unavailable',
+    };
+    const kanban = renderProvider();
+
+    await expect(kanban.bulkArchiveColumn('WAITING', true)).resolves.toBeUndefined();
+
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Bulk archive unavailable');
+    expect(mocks.projectSummarySetDataMock).toHaveBeenCalledTimes(2);
+    expect(mocks.projectSummaryState?.workspaces).toEqual([
+      { id: 'workspace-1' },
+      { id: 'workspace-2' },
+    ]);
+  });
+});
