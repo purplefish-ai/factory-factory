@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <strong>Run multiple ACP agent sessions in parallel with isolated git worktrees.</strong>
+  <strong>Run Claude Code and Codex in parallel, each in an isolated git workspace.</strong>
 </p>
 
 <p align="center">
-  Work on multiple features simultaneously, each in its own branch. Let ACP-connected agents progress PRs automatically.
+  Turn issues into branches, steer multiple agents, review changes, and keep pull requests moving from one local command center.
 </p>
 
 <p align="center">
@@ -18,396 +18,104 @@
 </p>
 
 <p align="center">
-  <img src="public/working.png" alt="Factory Factory Screenshot" width="800">
+  <img src="public/working.png" alt="Factory Factory workspace with parallel agents, code changes, and an integrated terminal" width="1000">
 </p>
 
----
+Factory Factory is a local workspace manager for AI coding agents. Every workspace gets its own git worktree and branch, so agents can work on separate tasks without stepping on each other. The UI brings chat, diffs, files, terminals, issues, and pull request status together in one place.
 
-## Table of Contents
+## Quick start
 
-- [Installation](#installation)
-- [Running](#running)
-- [Quick Start](#quick-start)
-- [CLI Reference](#cli-reference)
-- [Architecture](#architecture)
-- [Feature Highlights](#feature-highlights)
-  - [Ratchet (Automatic PR Progression)](#-ratchet-automatic-pr-progression)
-  - [GitHub Integration](#-github-integration)
-  - [Linear Integration](#-linear-integration)
-  - [Kanban Board](#-kanban-board)
-  - [Quick Actions](#-quick-actions)
-- [Development](#development)
-- [Desktop App (Electron)](#desktop-app-electron)
-- [Security Considerations](#security-considerations)
-- [Troubleshooting](#troubleshooting)
-- [Acknowledgements](#acknowledgements)
+You will need:
 
----
+- Node.js 20.19+, 22.12+, or 24+
+- A local git repository
+- At least one agent provider:
+  - Claude Code, authenticated with `claude login`
+  - A ChatGPT/Codex account configured for Codex sessions
+- The authenticated [GitHub CLI](https://cli.github.com/) for GitHub issues and pull requests
 
-## Installation
-
-**Prerequisites:**
-- Node.js 20.19+ (or 22.12+, or 24+)
-- GitHub CLI (`gh`) - authenticated
-- Claude Code (for Claude provider) - authenticated via `claude login`
-- ChatGPT/Codex account (for Codex provider)
-- Linear API key (optional, only if using Linear issue intake)
-
-### Option 1: Run with npx (Recommended)
-
-No installation needed! Run Factory Factory directly:
+Start Factory Factory without installing it:
 
 ```bash
 npx factory-factory@latest serve
 ```
 
-### Option 2: Install globally
+Factory Factory opens in your browser and stores its database in `~/factory-factory/` by default.
+
+Then:
+
+1. Add a project by selecting a local git repository.
+2. Create a workspace, or start one from a GitHub or Linear issue.
+3. Choose Claude or Codex and start a session.
+4. Review the agent's changes, use the integrated terminal when needed, and open a pull request.
+
+## What it does
+
+- **Parallel, isolated work:** Each task runs in a dedicated worktree and branch while your main checkout stays untouched.
+- **One workspace for the whole task:** Chat with agents, inspect files and diffs, run commands, and track PR state without switching tools.
+- **Claude and Codex sessions:** Factory Factory connects to both providers through the Agent Client Protocol (ACP), with resumable sessions and runtime model options.
+- **Issue-to-PR workflow:** Pull assigned work from GitHub or Linear, link it to a workspace, and follow it through to merge.
+- **Automatic PR progression:** Ratchet watches open pull requests and can dispatch follow-up agents for failing CI and actionable review feedback.
+- **Repeatable automation:** Quick actions, periodic tasks, and child workspaces help split up or repeat common workflows.
+
+The core model is intentionally small:
+
+```text
+Project (a local git repository)
+└── Workspace (an isolated worktree and branch)
+    ├── Agent sessions (Claude or Codex over ACP)
+    └── Terminal, files, changes, and pull request state
+```
+
+## Install and run
+
+For regular use, install the CLI globally:
 
 ```bash
 npm install -g factory-factory
 ff serve
 ```
 
-### Option 3: Install from source (for development)
+Useful commands:
+
+```bash
+ff serve --help     # Ports, database path, host, and other options
+ff proxy --private  # Share the app through a password-protected Cloudflare tunnel
+ff db:studio        # Inspect the local database with Prisma Studio
+```
+
+`ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically runs database migrations, finds an available port, and opens the browser when the server is ready.
+
+## Security
+
+> [!WARNING]
+> Factory Factory runs coding agents that can execute commands and modify files without manual confirmation. Workspaces isolate git branches; they are not containers or security sandboxes.
+
+Use Factory Factory only with repositories and agent instructions you trust. Review changes before merging, protect your GitHub and Linear credentials, and consider a VM or container when working with untrusted code.
+
+## Development
 
 ```bash
 git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
-pnpm link --global
-```
-
-## Running
-
-### Web App
-
-```bash
-# Using npx (no install required)
-npx factory-factory@latest serve
-
-# Using installed CLI
-ff serve
-
-# Development mode with hot reload
-ff serve --dev
-# or with pnpm (for local development)
 pnpm dev
 ```
 
-The server automatically:
-- Creates the data directory (`~/factory-factory/`)
-- Runs database migrations
-- Finds available ports if defaults are in use
-- Opens your browser when ready
-
-### Desktop App (Electron)
+Before opening a pull request, run the standard checks:
 
 ```bash
-# Development with hot reload
-pnpm dev:electron
-
-# Build distributable
-pnpm build:electron
+pnpm test
+pnpm typecheck
+pnpm check
 ```
 
-The Electron app stores data in the standard location for your OS:
-- **macOS:** `~/Library/Application Support/Factory Factory/`
-- **Windows:** `%APPDATA%/Factory Factory/`
-- **Linux:** `~/.config/Factory Factory/`
-
-## CLI Reference
-
-```bash
-# Start the server
-ff serve [options]
-# or
-npx factory-factory@latest serve [options]
-
-Options:
-  -p, --port <port>           Frontend port (default: 3000)
-  --backend-port <port>       Backend port in --dev mode (default: 3001)
-  -d, --database-path <path>  SQLite database path (default: ~/factory-factory/data.db)
-  --host <host>               Host to bind to (default: localhost)
-  --dev                       Development mode with hot reloading
-  --no-open                   Don't open browser automatically
-  -v, --verbose               Enable verbose logging
-```
-
-In production mode (`ff serve` without `--dev`), Factory Factory serves frontend and API on a single port.
-
-```bash
-# Start a public Cloudflare tunnel (starts server + tunnel)
-ff proxy [options]
-# or
-npx factory-factory@latest proxy [options]
-
-Options:
-  --private                   Enable generated-password auth
-```
-
-**Other CLI commands:**
-```bash
-ff proxy        # Start a public tunnel to your local FF server
-ff build        # Build for production
-ff db:migrate   # Run database migrations
-ff db:studio    # Open Prisma Studio
-```
-
-**Examples:**
-```bash
-# Quick start with npx
-npx factory-factory@latest serve
-
-# Development mode with custom port
-ff serve --dev --port 8080
-
-# Production mode without auto-opening browser
-ff serve --no-open
-
-# Custom database location
-ff serve --database-path /path/to/data.db
-
-# Public tunnel with password auth
-ff proxy --private
-```
-
-**Tunnel prerequisite (`ff proxy`):**
-`cloudflared` must be installed and available in your `PATH`.
-
-## Quick Start
-
-1. **Authenticate required tools:**
-   ```bash
-   gh auth login        # GitHub CLI
-   claude login         # Claude provider (required for CLAUDE sessions)
-   ```
-   For CODEX sessions, ensure your ChatGPT/Codex credentials are configured.
-
-2. **Run Factory Factory:**
-   ```bash
-   npx factory-factory@latest serve
-   ```
-
-3. **Create your first workspace:**
-   - Open the web UI (automatically opens at http://localhost:3000)
-   - Configure your project with a local git repository
-   - Optional: in Admin, choose an issue provider per project (GitHub Issues or Linear Issues)
-   - Click "New Workspace" to create your first isolated worktree
-   - Start chatting with your selected ACP provider (CLAUDE or CODEX)
-
-## Development
-
-### Development Commands
-
-```bash
-# Server
-pnpm dev                     # Start dev server with hot reload
-pnpm dev -- --no-open        # Without browser auto-open
-pnpm dev -- --verbose        # With detailed logging
-pnpm build                   # Build for production
-pnpm start                   # Start production server
-
-# Electron
-pnpm dev:electron            # Start Electron with hot reload
-pnpm build:electron          # Build distributable package
-
-# Quality
-pnpm test                    # Run tests
-pnpm test:watch              # Run tests in watch mode
-pnpm test:coverage           # Run tests with coverage and critical coverage guardrails
-pnpm typecheck               # TypeScript checking
-pnpm check                   # Standard guardrails: Biome, env, ownership, dependency boundaries, Codex schema
-pnpm check:fix               # Lint + format with Biome
-pnpm check:prisma-schema     # Prisma schema guardrail: generate, service imports, typecheck
-
-# Database
-pnpm db:migrate              # Run migrations
-pnpm db:studio               # Open Prisma Studio
-pnpm db:generate             # Regenerate Prisma client
-
-# Other
-pnpm storybook               # Start Storybook for UI components
-pnpm deps:check              # Check dependency rules
-```
-
-## Architecture
-
-```
-Project (repository configuration)
-    └── Workspace (isolated git worktree)
-            ├── Session (ACP provider session: CLAUDE or CODEX)
-            └── Terminal (PTY terminal)
-```
-
-**Key capabilities:**
-- **Isolated workspaces:** Each workspace gets its own git worktree and branch for true parallel development
-- **Real-time streaming:** WebSocket-based communication with ACP adapter subprocesses
-- **ACP runtime:** Each session runs through ACP (`@agentclientprotocol/sdk`) and negotiates provider capabilities (models/modes/config options) at runtime
-- **Persistent sessions:** Resume and review previous conversations
-- **Terminal access:** Full PTY terminal per workspace
-- **Issue tracking integration:** Use GitHub or Linear as the per-project issue provider
-- **Kanban board:** Visual project management with provider-specific issue intake
-
-## Feature Highlights
-
-### 🔄 Ratchet (Automatic PR Progression)
-
-Ratchet automatically moves pull requests toward merge by monitoring and fixing issues.
-
-- **Automatic monitoring:** Checks READY workspaces with open PRs every minute
-- **Smart PR classification:** Tracks PR state as `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, or `MERGED`
-- **Auto-fix agents:** Creates agent sessions to automatically fix CI failures and address review comments
-- **Conflict resolution:** Agents sync with main branch before applying fixes
-- **Configurable behavior:** Control CI fixes, review fixes, allowed reviewers, and auto-merge in Admin → Ratchet
-
-### 🔗 GitHub Integration
-
-Seamless integration with GitHub via the authenticated `gh` CLI.
-
-- **Issue import:** Start workspaces directly from GitHub issues with one-click import
-- **PR tracking:** Automatic PR state monitoring and status updates
-- **Linked workspaces:** Issues are automatically linked to their workspaces (prevents duplicates)
-- **Kanban intake:** GitHub Issues column shows issues assigned to `@me` for easy triage
-
-### 📐 Linear Integration
-
-Configure Linear as the issue provider per project in Admin settings.
-
-- **Per-project provider:** Choose GitHub Issues or Linear Issues per project
-- **Secure API key storage:** Linear API keys are encrypted at rest in project issue tracker config
-- **Team-scoped intake:** Kanban intake uses your assigned Linear issues for the configured team
-- **Linked workspaces:** Starting from a Linear issue stores `linearIssueId`, `linearIssueIdentifier`, and `linearIssueUrl`
-- **State sync:** Linear issues are best-effort transitioned when work starts and when PRs merge
-
-### 📋 Kanban Board
-
-Real-time visual project management with automatic column placement.
-
-- **Smart columns:** Issues intake (GitHub Issues or Linear Issues) → Working → Waiting → Done
-- **Auto-categorization:**
-  - **Working:** Provisioning, new, failed, or actively running sessions
-  - **Waiting:** Idle workspaces that have completed at least one session
-  - **Done:** Workspaces with merged PRs
-- **Live updates:** Real-time workspace status and PR state changes
-- **Mobile responsive:** Optimized layout for mobile devices
-
-### ⚡ Quick Actions
-
-One-click prompts for common workflows, fully customizable via markdown.
-
-- **Agent-driven:** Each action creates a new ACP session with a predefined prompt
-- **Extensible:** Add custom actions by creating markdown files in `prompts/quick-actions/`
-- **Built-in actions:** Review code, simplify implementations, sync with main, rename branches, and more
-
-## Security Considerations
-
-> **⚠️ Important:** Factory Factory runs ACP adapters (for example Claude Code ACP and Codex ACP) with automatic command execution enabled by default. Agents can execute bash commands, write and modify files, and perform operations without manual confirmation.
-
-This design enables seamless parallel workflows, but you should understand:
-
-- **Workspace isolation:** Each workspace operates in its own git worktree with a dedicated branch
-- **Filesystem access:** Active agent runtimes have full access to files within each workspace
-- **Automatic execution:** Commands run without approval prompts for uninterrupted operation
-- **System-level access:** Isolation is at the git worktree level, not containerized
-
-**Best practices:**
-- ✅ Only use with repositories you trust
-- ✅ Review changes carefully before merging PRs
-- ✅ Keep your GitHub authentication secure
-- ✅ Keep Linear API keys scoped and rotated if using Linear integration
-- ✅ Monitor Ratchet auto-fix behavior in Admin settings
-- ✅ Consider running in a VM or container for untrusted code
-
-## Brand
-
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Factory Yellow | `#FFE500` | Primary accent |
-| White | `#FAFAFA` | Light backgrounds |
-| Black | `#0A0A0A` | Dark backgrounds |
-
-**Typography:**
-- **Inter Black** - Headlines and logotype
-- **IBM Plex Mono SemiBold** - Code and app icon
-
-## Troubleshooting
-
-### Authentication Issues
-
-**GitHub CLI not authenticated:**
-```bash
-gh auth status          # Check authentication status
-gh auth login           # Login to GitHub
-```
-
-**Claude Code not authenticated:**
-```bash
-claude login            # Authenticate Claude Code CLI
-claude --version        # Verify installation
-```
-
-**Codex authentication/config issues:**
-- Verify your ChatGPT/Codex account can access the selected model.
-- Recreate the session and confirm provider-specific model options appear in the chat bar.
-
-### Database Issues
-
-**Migration failures or corrupt database:**
-```bash
-# Run migrations manually
-ff db:migrate
-
-# Optional reset (⚠️ destroys all local data; creates a backup first)
-mv ~/factory-factory/data.db ~/factory-factory/data.db.bak
-ff db:migrate
-
-# View database in Prisma Studio
-ff db:studio
-```
-
-### Port Conflicts
-
-The server automatically finds available ports if defaults are in use. Use `--verbose` to see which ports are selected:
-
-```bash
-ff serve --verbose
-```
-
-Or specify custom ports:
-```bash
-ff serve --dev --port 8080 --backend-port 8081
-```
-
-### Common Issues
-
-**"Command not found: ff"**
-- Install globally: `npm install -g factory-factory`
-- Or use npx: `npx factory-factory@latest serve`
-
-**Workspace stuck in "Provisioning" state:**
-- Check logs in the Terminal tab
-- Ensure git worktree creation succeeded
-- Verify repository has no uncommitted changes
-
-**Agent not responding:**
-- Verify the selected provider is installed/authenticated (Claude/Codex)
-- Check adapter/runtime errors in backend logs (`acp-runtime-manager`, `session`)
-- Review session logs for error messages
-
-**PR state not updating:**
-- Ensure GitHub CLI is authenticated: `gh auth status`
-- Manually refresh using the Refresh button in Kanban view
-- Check that repository has correct GitHub remote configured
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project structure, conventions, and the full contributor workflow.
 
 ## Acknowledgements
 
-This project was inspired by:
-
-- [Conductor](https://conductor.build) - Mac app for running coding agents in parallel
-- [VibeKanban](https://vibekanban.com) - Visual kanban for AI-assisted development
-- [Gastown](https://github.com/steveyegge/gastown) - Steve Yegge's multi-agent coding environment
-- [Multiclaude](https://github.com/dlorenc/multiclaude) - Dan Lorenc's parallel Claude sessions tool
+Factory Factory was inspired by [Conductor](https://conductor.build), [VibeKanban](https://vibekanban.com), [Gastown](https://github.com/steveyegge/gastown), and [Multiclaude](https://github.com/dlorenc/multiclaude).
 
 ## License
 
-MIT
+[MIT](LICENSE)

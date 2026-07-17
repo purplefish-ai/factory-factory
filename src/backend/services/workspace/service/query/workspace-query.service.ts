@@ -36,7 +36,7 @@ class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
   private reviewCountRefreshPromise: Promise<number> | null = null;
-  private prStatusSyncInFlight = false;
+  private readonly prStatusSyncProjectsInFlight = new Set<string>();
 
   private sessionBridge: WorkspaceQuerySessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
@@ -457,12 +457,12 @@ class WorkspaceQueryService {
   }
 
   async syncAllPRStatuses(projectId: string) {
-    if (this.prStatusSyncInFlight) {
-      logger.info('Batch PR status sync already in flight, skipping', { projectId });
+    if (this.prStatusSyncProjectsInFlight.has(projectId)) {
+      logger.info('Batch PR status sync already in flight for project, skipping', { projectId });
       return { queued: 0 };
     }
 
-    this.prStatusSyncInFlight = true;
+    this.prStatusSyncProjectsInFlight.add(projectId);
 
     try {
       const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
@@ -474,7 +474,7 @@ class WorkspaceQueryService {
       );
 
       if (workspacesWithPRs.length === 0) {
-        this.prStatusSyncInFlight = false;
+        this.prStatusSyncProjectsInFlight.delete(projectId);
         return { queued: 0 };
       }
 
@@ -487,12 +487,12 @@ class WorkspaceQueryService {
         .then(() => logger.info('Batch PR status sync completed', { projectId }))
         .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
         .finally(() => {
-          this.prStatusSyncInFlight = false;
+          this.prStatusSyncProjectsInFlight.delete(projectId);
         });
 
       return { queued: workspacesWithPRs.length };
     } catch (error) {
-      this.prStatusSyncInFlight = false;
+      this.prStatusSyncProjectsInFlight.delete(projectId);
       throw error;
     }
   }
