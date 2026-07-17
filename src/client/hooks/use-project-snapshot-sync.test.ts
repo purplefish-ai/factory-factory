@@ -3,8 +3,8 @@ import {
   resetPendingRatchetTogglesForTests,
   setPendingRatchetToggle,
 } from '@/client/lib/ratchet-toggle-cache';
-import type { WorkspaceSnapshotEntry } from '@/client/lib/snapshot-to-sidebar';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
 // =============================================================================
@@ -76,7 +76,7 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     computedAt: '2026-01-15T10:00:00Z',
     source: 'event:workspace_state_change',
     name: 'test-workspace',
-    status: 'ACTIVE',
+    status: 'READY',
     createdAt: '2026-01-10T08:00:00Z',
     branchName: 'feat/test',
     prUrl: null,
