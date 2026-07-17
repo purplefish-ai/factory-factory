@@ -504,33 +504,6 @@ describe('GitHubCLIService', () => {
       });
     });
 
-    describe('findPRForBranch with malformed data', () => {
-      it('should return null and log error when PR list items have wrong structure', async () => {
-        const malformedData = [
-          {
-            number: 123,
-            url: 'https://github.com/owner/repo/pull/123',
-            // missing state and createdAt fields
-          },
-        ];
-
-        mockExecFile.mockResolvedValue({
-          stdout: JSON.stringify(malformedData),
-          stderr: '',
-        });
-
-        const result = await githubCLIService.findPRForBranch('owner', 'repo', 'test-branch');
-
-        expect(result).toBeNull();
-        expect(mockLoggerError).toHaveBeenCalledWith(
-          'Invalid gh CLI JSON response',
-          expect.objectContaining({
-            context: 'findPRForBranch',
-          })
-        );
-      });
-    });
-
     describe('getReviewComments with malformed data', () => {
       it('should throw error when comment structure is invalid', async () => {
         const malformedData = [
@@ -926,89 +899,6 @@ describe('GitHubCLIService', () => {
 
       const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42');
       expect(result?.reviewDecision).toBeNull();
-    });
-  });
-
-  describe('findPRForBranch', () => {
-    it('should return open PR when created after workspace', async () => {
-      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
-      const prs = [
-        {
-          number: 11,
-          url: 'https://github.com/o/r/pull/11',
-          state: 'OPEN',
-          createdAt: '2024-01-02T00:00:00Z',
-        },
-      ];
-
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch(
-        'o',
-        'r',
-        'feature',
-        workspaceCreatedAt
-      );
-      expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
-    });
-
-    it('should filter out PRs created before workspace', async () => {
-      const workspaceCreatedAt = new Date('2024-01-15T00:00:00Z');
-      const prs = [
-        {
-          number: 10,
-          url: 'https://github.com/o/r/pull/10',
-          state: 'OPEN',
-          createdAt: '2024-01-01T00:00:00Z',
-        },
-      ];
-
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch(
-        'o',
-        'r',
-        'feature',
-        workspaceCreatedAt
-      );
-      expect(result).toBeNull();
-    });
-
-    it('should return null when no open PRs exist (empty result from --state open)', async () => {
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify([]), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
-    });
-
-    it('should return null when no PRs exist for the branch', async () => {
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify([]), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
-    });
-
-    it('should return null when CLI error is not auth-related', async () => {
-      mockExecFile.mockRejectedValue(new Error('some random error'));
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toBeNull();
-    });
-
-    it('should work without workspace createdAt parameter', async () => {
-      const prs = [
-        {
-          number: 11,
-          url: 'https://github.com/o/r/pull/11',
-          state: 'OPEN',
-          createdAt: '2024-01-02T00:00:00Z',
-        },
-      ];
-
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
-
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
     });
   });
 

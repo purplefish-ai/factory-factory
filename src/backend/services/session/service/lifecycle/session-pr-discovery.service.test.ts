@@ -1,21 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '@/backend/services/logger.service';
 
-const { mockAttachAndRefreshPR, mockFindPRForBranch, mockResetPRDiscoveryBackoff } = vi.hoisted(
-  () => ({
-    mockAttachAndRefreshPR: vi.fn(),
-    mockFindPRForBranch: vi.fn(),
-    mockResetPRDiscoveryBackoff: vi.fn(),
-  })
-);
-
-vi.mock('@/backend/services/github', () => ({
-  githubCLIService: {
-    findPRForBranch: (...args: unknown[]) => mockFindPRForBranch(...args),
-  },
-  prSnapshotService: {
-    attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
-  },
+const { mockResetPRDiscoveryBackoff } = vi.hoisted(() => ({
+  mockResetPRDiscoveryBackoff: vi.fn(),
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
@@ -39,7 +26,5 @@ describe('maybeDiscoverPROnSessionEnd', () => {
 
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledOnce();
     expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
-    expect(mockFindPRForBranch).not.toHaveBeenCalled();
-    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
   });
 });

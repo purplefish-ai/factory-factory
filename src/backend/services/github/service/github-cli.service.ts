@@ -19,7 +19,6 @@ import {
   fullPRDetailsSchema,
   issueSchema,
   openPullRequestSchema,
-  prListItemSchema,
   prStatusSchema,
   type ResolvedReviewThreadsPage,
   type ReviewThreadCommentsConnection,
@@ -435,60 +434,6 @@ class GitHubCLIService {
     }
 
     return prs;
-  }
-
-  /**
-   * Find a PR for a given branch in a repository.
-   * Only returns open PRs created after the workspace was created.
-   * Returns the PR URL if found, null otherwise.
-   */
-  async findPRForBranch(
-    owner: string,
-    repo: string,
-    branchName: string,
-    workspaceCreatedAt?: Date
-  ): Promise<{ url: string; number: number } | null> {
-    try {
-      const { stdout } = await this.exec(
-        [
-          'pr',
-          'list',
-          '--head',
-          branchName,
-          '--repo',
-          `${owner}/${repo}`,
-          '--state',
-          'open',
-          '--json',
-          'number,url,createdAt',
-          '--limit',
-          '10',
-        ],
-        { timeout: GH_TIMEOUT_MS.default }
-      );
-
-      const prs = parseGhJson(prListItemSchema.array(), stdout, 'findPRForBranch');
-      if (prs.length === 0) {
-        return null;
-      }
-
-      // Filter out PRs created before the workspace (prevents branch name collisions)
-      const filteredPRs = workspaceCreatedAt
-        ? prs.filter((pr) => new Date(pr.createdAt) >= workspaceCreatedAt)
-        : prs;
-
-      const pr = filteredPRs[0];
-      if (!pr) {
-        return null;
-      }
-      return { url: pr.url, number: pr.number };
-    } catch (error) {
-      const errorType = classifyError(error);
-      if (errorType !== 'cli_not_installed' && errorType !== 'auth_required') {
-        logger.debug('No PR found for branch', { owner, repo, branchName });
-      }
-      return null;
-    }
   }
 
   /** List every open pull request in a repository for local branch matching. */
