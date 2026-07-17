@@ -956,6 +956,71 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  it('dispatches stale actionable review comments when the PR snapshot changes', async () => {
+    const recentCheck = new Date();
+    const workspace = {
+      id: 'ws-stale-actionable-review',
+      prUrl: 'https://github.com/example/repo/pull/43',
+      prNumber: 43,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.FAILURE,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'failed-snapshot',
+      prReviewLastCheckedAt: recentCheck,
+      ratchetDispatchOutcome: 'COMPLETED' as const,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'successful-snapshot',
+      hasChangesRequested: false,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: recentCheck.getTime() - 1000,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 43,
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please handle this edge case.',
+          path: 'src/example.ts',
+          line: 10,
+          url: 'https://github.com/example/repo/pull/43#discussion_r1',
+        },
+      ],
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-review-session',
+      promptSent: true,
+    } as never);
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'TRIGGERED_FIXER', sessionId: 'ratchet-review-session' },
+    });
+    expect(workspaceAccessor.recordRatchetDispatchIfEnabled).toHaveBeenCalledWith(
+      'ws-stale-actionable-review',
+      {
+        sessionId: 'ratchet-review-session',
+        snapshotKey: 'successful-snapshot',
+        retryCount: 0,
+      }
+    );
+  });
+
   it('returns disabled when stale check-state update loses disable race', async () => {
     const recentCheck = new Date();
     const workspace = {

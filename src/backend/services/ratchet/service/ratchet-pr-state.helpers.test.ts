@@ -140,6 +140,23 @@ describe('shouldSkipCleanPR', () => {
     const prState = makePRState({ hasChangesRequested: true });
     expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
   });
+
+  it('does not skip when actionable review comments are still present', () => {
+    const prState = makePRState({
+      latestReviewActivityAtMs: new Date('2025-12-31T00:00:00Z').getTime(),
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please handle this edge case.',
+          path: 'src/example.ts',
+          line: 10,
+          url: 'https://github.com/example/repo/pull/1#discussion_r1',
+        },
+      ],
+    });
+
+    expect(shouldSkipCleanPR(makeWorkspace(), prState)).toBe(false);
+  });
 });
 
 describe('fetchPRState', () => {

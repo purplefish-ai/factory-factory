@@ -240,7 +240,11 @@ export function hasNewReviewActivitySinceLastDispatch(
 }
 
 export function shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
-  if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
+  if (
+    prStateInfo.ciStatus !== CIStatus.SUCCESS ||
+    prStateInfo.hasChangesRequested ||
+    (prStateInfo.reviewComments?.length ?? 0) > 0
+  ) {
     return false;
   }
 
