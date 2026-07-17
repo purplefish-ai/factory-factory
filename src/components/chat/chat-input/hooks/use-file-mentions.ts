@@ -36,7 +36,6 @@ export function useFileMentions({
 }: UseFileMentionsOptions): UseFileMentionsReturn {
   const [fileMentionMenuOpen, setFileMentionMenuOpen] = useState(false);
   const [fileMentionFilter, setFileMentionFilter] = useState('');
-  const [mentionStartPos, setMentionStartPos] = useState(0);
   const paletteRef = useRef<FileMentionPaletteHandle>(null);
 
   // Fetch files from backend with debouncing via tRPC's built-in caching
@@ -97,7 +96,6 @@ export function useFileMentions({
       if (atPos !== -1 && isValidAtPosition(newValue, atPos)) {
         const filter = newValue.slice(atPos + 1, cursorPos);
         setFileMentionFilter(filter);
-        setMentionStartPos(atPos);
         setFileMentionMenuOpen(true);
         return;
       }
@@ -117,9 +115,22 @@ export function useFileMentions({
 
       const currentValue = inputRef.current.value;
       const cursorPos = inputRef.current.selectionStart ?? currentValue.length;
+      const atPos = findAtPosition(currentValue, cursorPos);
+      const charAtCursor = currentValue[cursorPos];
+      const cursorAtMentionEnd =
+        charAtCursor === undefined ||
+        charAtCursor === ' ' ||
+        charAtCursor === '\n' ||
+        charAtCursor === '\t';
+
+      if (atPos === -1 || !isValidAtPosition(currentValue, atPos) || !cursorAtMentionEnd) {
+        setFileMentionMenuOpen(false);
+        setFileMentionFilter('');
+        return;
+      }
 
       // Replace from @ to cursor with the selected file path
-      const before = currentValue.slice(0, mentionStartPos);
+      const before = currentValue.slice(0, atPos);
       const after = currentValue.slice(cursorPos);
       const newValue = `${before}@${filePath} ${after}`;
 
@@ -127,14 +138,14 @@ export function useFileMentions({
       inputRef.current.focus();
 
       // Move cursor after the inserted file path + space
-      const newCursorPos = mentionStartPos + filePath.length + 2; // +2 for @ and space
+      const newCursorPos = atPos + filePath.length + 2; // +2 for @ and space
       inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
 
       onChange?.(newValue);
       setFileMentionMenuOpen(false);
       setFileMentionFilter('');
     },
-    [inputRef, onChange, mentionStartPos]
+    [inputRef, onChange, findAtPosition, isValidAtPosition]
   );
 
   const handleFileMentionMenuClose = useCallback(() => {
