@@ -72,8 +72,9 @@ const CHAT_TAB: MainViewTab = {
 const MainViewTabSchema = z
   .object({
     id: z.string(),
-    type: z.enum(['chat', 'file', 'diff', 'screenshot']),
+    type: z.enum(['chat', 'file', 'diff', 'screenshot', 'closed-session']),
     path: z.string().optional(),
+    closedSessionId: z.string().optional(),
     label: z.string(),
   })
   .superRefine((tab, context) => {
