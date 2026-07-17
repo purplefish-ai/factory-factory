@@ -374,7 +374,7 @@ describe('resource accessors integration', () => {
         prCiStatus: CIStatus.FAILURE,
         prUpdatedAt: new Date('2026-07-17T12:00:00.000Z'),
       });
-      expect(identical).toBe(false);
+      expect(identical).toEqual({ applied: true, dispatchReset: false });
       expect(
         (await workspaceAccessor.findRawByIdOrThrow(workspace.id)).ratchetDispatchOutcome
       ).toBe('DIED');
@@ -386,7 +386,7 @@ describe('resource accessors integration', () => {
         prCiStatus: CIStatus.PENDING,
         prUpdatedAt: new Date('2026-07-17T12:01:00.000Z'),
       });
-      expect(changed).toBe(true);
+      expect(changed).toEqual({ applied: true, dispatchReset: true });
       const reset = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
       expect(reset.ratchetDispatchOutcome).toBeNull();
       expect(reset.ratchetDispatchRetryCount).toBe(0);
@@ -407,7 +407,7 @@ describe('resource accessors integration', () => {
           prCiStatus: CIStatus.FAILURE,
           prUpdatedAt: new Date('2026-07-17T12:02:00.000Z'),
         })
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       await workspaceAccessor.update(workspace.id, {
         prCiStatus: CIStatus.FAILURE,
@@ -422,7 +422,7 @@ describe('resource accessors integration', () => {
           prCiStatus: CIStatus.FAILURE,
           prUpdatedAt: new Date('2026-07-17T12:03:00.000Z'),
         })
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       await workspaceAccessor.update(workspace.id, {
         ratchetDispatchOutcome: 'RUNNING',
@@ -436,7 +436,7 @@ describe('resource accessors integration', () => {
           prCiStatus: CIStatus.SUCCESS,
           prUpdatedAt: new Date('2026-07-17T12:04:00.000Z'),
         })
-      ).resolves.toBe(false);
+      ).resolves.toEqual({ applied: true, dispatchReset: false });
       expect(
         (await workspaceAccessor.findRawByIdOrThrow(workspace.id)).ratchetDispatchOutcome
       ).toBe('RUNNING');

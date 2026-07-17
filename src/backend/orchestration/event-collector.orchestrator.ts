@@ -65,7 +65,7 @@ import {
   workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import type { CIStatus, PRState } from '@/shared/core';
+import { type CIStatus, type PRState, WorkspaceStatus } from '@/shared/core';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 
 // ---------------------------------------------------------------------------
@@ -111,6 +111,7 @@ const logger = createLogger('event-collector');
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
+const MAX_PROJECTION_RETRY_BACKOFF_EXPONENT = 6;
 let lastCoalescerTimestamp = 0;
 
 function nextCoalescerTimestamp(): number {
@@ -135,7 +136,11 @@ async function projectAuthoritativeRatchetState(
 ): Promise<boolean> {
   try {
     const workspace = await workspaceAccessor.findRawById(workspaceId);
-    if (!(workspace && isActive())) {
+    if (
+      !(workspace && isActive()) ||
+      workspace.status === WorkspaceStatus.ARCHIVING ||
+      workspace.status === WorkspaceStatus.ARCHIVED
+    ) {
       return true;
     }
     coalescer.enqueue(
@@ -192,13 +197,10 @@ async function runRatchetProjectionRefresh(params: {
         continue;
       }
       failedAttempts += 1;
-      if (failedAttempts >= 3) {
-        break;
-      }
       if (!isActive()) {
         break;
       }
-      await waitForRetry(failedAttempts - 1);
+      await waitForRetry(Math.min(failedAttempts - 1, MAX_PROJECTION_RETRY_BACKOFF_EXPONENT));
     }
   } finally {
     if (refreshes.get(workspaceId) === refresh) {
@@ -608,6 +610,7 @@ function configureEventCollectorWithState(
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   state.activeCoalescer = coalescer;
   const ratchetProjectionRefreshes = new Map<string, { revision: number }>();
+  const archivedProjectionWorkspaceIds = new Set<string>();
   let projectionActive = true;
   const projectionRetryWaiters = new Set<{
     timer: NodeJS.Timeout;
@@ -621,6 +624,7 @@ function configureEventCollectorWithState(
     }
     projectionRetryWaiters.clear();
     ratchetProjectionRefreshes.clear();
+    archivedProjectionWorkspaceIds.clear();
   };
 
   const waitForProjectionRetry = (attempt: number): Promise<void> =>
@@ -643,6 +647,9 @@ function configureEventCollectorWithState(
     });
 
   const requestAuthoritativeRatchetProjection = (workspaceId: string): void => {
+    if (archivedProjectionWorkspaceIds.has(workspaceId)) {
+      return;
+    }
     const existing = ratchetProjectionRefreshes.get(workspaceId);
     if (existing) {
       existing.revision += 1;
@@ -656,7 +663,10 @@ function configureEventCollectorWithState(
       workspaceId,
       refresh,
       refreshes: ratchetProjectionRefreshes,
-      isActive: () => projectionActive && state.activeCoalescer === coalescer,
+      isActive: () =>
+        projectionActive &&
+        state.activeCoalescer === coalescer &&
+        !archivedProjectionWorkspaceIds.has(workspaceId),
       waitForRetry: waitForProjectionRetry,
     });
   };
@@ -712,6 +722,8 @@ function configureEventCollectorWithState(
     WORKSPACE_STATE_CHANGED,
     (event: WorkspaceStateChangedEvent) => {
       if (event.toStatus === 'ARCHIVED') {
+        archivedProjectionWorkspaceIds.add(event.workspaceId);
+        ratchetProjectionRefreshes.delete(event.workspaceId);
         // Immediate removal for UI feedback -- no coalescing delay
         removeWorkspaceWithState(state, event.workspaceId);
         void Promise.allSettled([
@@ -739,6 +751,7 @@ function configureEventCollectorWithState(
         });
         return;
       }
+      archivedProjectionWorkspaceIds.delete(event.workspaceId);
       coalescer.enqueue(
         event.workspaceId,
         buildWorkspaceStateChangeFields(event),

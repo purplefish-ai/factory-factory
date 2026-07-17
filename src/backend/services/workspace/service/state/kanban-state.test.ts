@@ -414,6 +414,36 @@ describe('kanbanStateService', () => {
     );
   });
 
+  it('backs off and rejects after repeated ownership compare-and-swap misses', async () => {
+    vi.useFakeTimers();
+    mockFindById.mockResolvedValue({
+      id: 'w-cas-conflict',
+      status: WorkspaceStatus.READY,
+      prState: PRState.OPEN,
+      ratchetState: RatchetState.IDLE,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      cachedKanbanColumn: 'WORKING',
+    });
+    mockDeriveFlowStateFromWorkspace.mockReturnValue({ isWorking: false });
+    mockUpdate.mockResolvedValue(false);
+
+    const refresh = kanbanStateService.updateCachedKanbanColumn('w-cas-conflict');
+    const rejection = expect(refresh).rejects.toThrow(
+      'Cached Kanban column refresh conflicted repeatedly for workspace w-cas-conflict'
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(20);
+    await rejection;
+    expect(mockUpdate).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
   it('reruns after a lifecycle race and preserves the archived cached column', async () => {
     mockFindById
       .mockResolvedValueOnce({

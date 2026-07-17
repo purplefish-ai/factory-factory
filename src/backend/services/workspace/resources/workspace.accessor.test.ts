@@ -370,6 +370,7 @@ describe('workspaceAccessor', () => {
   });
 
   it('atomically persists a changed PR aggregate with settled dispatch reset', async () => {
+    const currentUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
     const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
     mockFindUnique.mockResolvedValue({
       prUrl: null,
@@ -377,6 +378,7 @@ describe('workspaceAccessor', () => {
       prState: 'CHANGES_REQUESTED',
       prCiStatus: 'FAILURE',
       prReviewState: 'CHANGES_REQUESTED',
+      prUpdatedAt: currentUpdatedAt,
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: 'failed:41',
       ratchetDispatchOutcome: 'DIED',
@@ -401,11 +403,17 @@ describe('workspaceAccessor', () => {
         prReviewState: 'CHANGES_REQUESTED',
         prUpdatedAt,
       })
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ applied: true, dispatchReset: true });
 
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: {
         id: 'ws-1',
+        prUrl: null,
+        prNumber: 41,
+        prState: 'CHANGES_REQUESTED',
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prUpdatedAt: currentUpdatedAt,
         ratchetActiveSessionId: null,
         ratchetLastCiRunId: 'failed:41',
         ratchetDispatchOutcome: 'DIED',
@@ -425,6 +433,7 @@ describe('workspaceAccessor', () => {
   });
 
   it('preserves a RUNNING dispatch that wins the reset compare-and-swap', async () => {
+    const currentUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
     const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
     mockFindUnique.mockResolvedValue({
       prUrl: null,
@@ -432,13 +441,13 @@ describe('workspaceAccessor', () => {
       prState: 'CHANGES_REQUESTED',
       prCiStatus: 'FAILURE',
       prReviewState: 'CHANGES_REQUESTED',
+      prUpdatedAt: currentUpdatedAt,
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: 'old-snapshot',
       ratchetDispatchOutcome: 'DIED',
       ratchetDispatchRetryCount: 3,
     });
-    mockUpdateMany.mockResolvedValue({ count: 0 });
-    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    mockUpdateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     mockTransaction.mockImplementation(async (callback) =>
       callback({
         workspace: {
@@ -457,11 +466,17 @@ describe('workspaceAccessor', () => {
         prReviewState: 'CHANGES_REQUESTED',
         prUpdatedAt,
       })
-    ).resolves.toBe(false);
+    ).resolves.toEqual({ applied: true, dispatchReset: false });
 
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: {
         id: 'ws-1',
+        prUrl: null,
+        prNumber: 41,
+        prState: 'CHANGES_REQUESTED',
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prUpdatedAt: currentUpdatedAt,
         ratchetActiveSessionId: null,
         ratchetLastCiRunId: 'old-snapshot',
         ratchetDispatchOutcome: 'DIED',
@@ -472,8 +487,16 @@ describe('workspaceAccessor', () => {
         ratchetDispatchRetryCount: 0,
       }),
     });
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 'ws-1' },
+    expect(mockUpdateMany).toHaveBeenLastCalledWith({
+      where: {
+        id: 'ws-1',
+        prUrl: null,
+        prNumber: 41,
+        prState: 'CHANGES_REQUESTED',
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prUpdatedAt: currentUpdatedAt,
+      },
       data: {
         prNumber: 42,
         prState: 'OPEN',
@@ -482,9 +505,69 @@ describe('workspaceAccessor', () => {
         prUpdatedAt,
       },
     });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a newer PR aggregate when the reset and fallback guards lose', async () => {
+    const currentUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
+    const observationUpdatedAt = new Date('2026-07-17T12:01:00.000Z');
+    mockFindUnique.mockResolvedValue({
+      prUrl: 'https://github.com/org/repo/pull/41',
+      prNumber: 41,
+      prState: 'CHANGES_REQUESTED',
+      prCiStatus: 'FAILURE',
+      prReviewState: 'CHANGES_REQUESTED',
+      prUpdatedAt: currentUpdatedAt,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: 3,
+    });
+    mockUpdateMany.mockResolvedValue({ count: 0 });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        workspace: {
+          findUniqueOrThrow: mockFindUnique,
+          update: mockUpdate,
+          updateMany: mockUpdateMany,
+        },
+      })
+    );
+
+    await expect(
+      workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: null,
+        prUpdatedAt: observationUpdatedAt,
+      })
+    ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+    expect(mockUpdateMany).toHaveBeenCalledTimes(2);
+    expect(mockUpdateMany).toHaveBeenLastCalledWith({
+      where: {
+        id: 'ws-1',
+        prUrl: 'https://github.com/org/repo/pull/41',
+        prNumber: 41,
+        prState: 'CHANGES_REQUESTED',
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: 'FAILURE',
+        prUpdatedAt: currentUpdatedAt,
+      },
+      data: {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        prReviewState: null,
+        prUpdatedAt: observationUpdatedAt,
+      },
+    });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('resets settled ownership for a changed direct CI observation', async () => {
+    const currentUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
     const observedAt = new Date('2026-07-17T12:00:00.000Z');
     mockFindUnique.mockResolvedValue({
       prUrl: 'https://github.com/org/repo/pull/42',
@@ -492,6 +575,7 @@ describe('workspaceAccessor', () => {
       prState: 'OPEN',
       prCiStatus: 'FAILURE',
       prReviewState: null,
+      prUpdatedAt: currentUpdatedAt,
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: 'failure:42',
       ratchetDispatchOutcome: 'DIED',
@@ -513,7 +597,7 @@ describe('workspaceAccessor', () => {
         prCiStatus: 'PENDING',
         prUpdatedAt: observedAt,
       })
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ applied: true, dispatchReset: true });
 
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: expect.objectContaining({
@@ -560,7 +644,7 @@ describe('workspaceAccessor', () => {
   });
 
   it('persists an identical PR aggregate without clearing settled dispatch metadata', async () => {
-    mockUpdate.mockResolvedValue({ id: 'ws-1' });
+    const currentUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
     const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
     mockFindUnique.mockResolvedValue({
       prUrl: 'https://github.com/org/repo/pull/42',
@@ -568,11 +652,17 @@ describe('workspaceAccessor', () => {
       prState: 'OPEN',
       prCiStatus: 'FAILURE',
       prReviewState: null,
+      prUpdatedAt: currentUpdatedAt,
       ratchetDispatchOutcome: 'DIED',
     });
+    mockUpdateMany.mockResolvedValue({ count: 1 });
     mockTransaction.mockImplementation(async (callback) =>
       callback({
-        workspace: { findUniqueOrThrow: mockFindUnique, update: mockUpdate },
+        workspace: {
+          findUniqueOrThrow: mockFindUnique,
+          update: mockUpdate,
+          updateMany: mockUpdateMany,
+        },
       })
     );
 
@@ -585,8 +675,16 @@ describe('workspaceAccessor', () => {
       prUpdatedAt,
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 'ws-1' },
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'ws-1',
+        prUrl: 'https://github.com/org/repo/pull/42',
+        prNumber: 42,
+        prState: 'OPEN',
+        prReviewState: null,
+        prCiStatus: 'FAILURE',
+        prUpdatedAt: currentUpdatedAt,
+      },
       data: {
         prUrl: 'https://github.com/org/repo/pull/42',
         prNumber: 42,
@@ -596,6 +694,7 @@ describe('workspaceAccessor', () => {
         prUpdatedAt,
       },
     });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('finishes auto-iteration only when the session pointer still matches', async () => {

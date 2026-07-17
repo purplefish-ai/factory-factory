@@ -4,8 +4,6 @@
 
 Complete on `feature/kanban-next-action-ownership`.
 
-Commit: `Harden Kanban ownership propagation` (the commit containing this report).
-
 ## Changes
 
 - Direct CI observations now share the PR aggregate dispatch-reset transaction and full dispatch

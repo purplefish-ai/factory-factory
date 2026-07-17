@@ -256,21 +256,45 @@ class KanbanStateService {
       if (generation !== this.refreshGeneration) {
         return;
       }
+      let updated: boolean;
       try {
-        const updated = await this.refreshCachedKanbanColumn(workspaceId);
-        if (updated) {
-          return;
-        }
+        updated = await this.refreshCachedKanbanColumn(workspaceId);
       } catch (error) {
-        if (generation !== this.refreshGeneration) {
+        if (!(await this.waitForCachedColumnRetry(generation, attempt, error))) {
           return;
         }
-        if (attempt === 2) {
-          throw error;
-        }
-        await this.waitForRetry(attempt);
+        continue;
+      }
+      if (updated) {
+        return;
+      }
+      if (
+        !(await this.waitForCachedColumnRetry(
+          generation,
+          attempt,
+          new Error(
+            `Cached Kanban column refresh conflicted repeatedly for workspace ${workspaceId}`
+          )
+        ))
+      ) {
+        return;
       }
     }
+  }
+
+  private async waitForCachedColumnRetry(
+    generation: number,
+    attempt: number,
+    finalError: unknown
+  ): Promise<boolean> {
+    if (generation !== this.refreshGeneration) {
+      return false;
+    }
+    if (attempt === 2) {
+      throw finalError;
+    }
+    await this.waitForRetry(attempt);
+    return generation === this.refreshGeneration;
   }
 
   private async refreshCachedKanbanColumn(workspaceId: string): Promise<boolean> {

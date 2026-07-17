@@ -128,6 +128,11 @@ export interface CIObservationPersistenceInput {
   prCiFailedAt?: Date | null;
 }
 
+export interface PrAggregatePersistenceResult {
+  applied: boolean;
+  dispatchReset: boolean;
+}
+
 type PrAggregatePersistenceInput = Partial<
   Pick<
     UpdateWorkspaceInput,
@@ -811,21 +816,21 @@ class WorkspaceAccessor {
   applyPrSnapshotWithDispatchReset(
     workspaceId: string,
     observation: PrSnapshotPersistenceInput
-  ): Promise<boolean> {
+  ): Promise<PrAggregatePersistenceResult> {
     return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
   }
 
   applyCIObservationWithDispatchReset(
     workspaceId: string,
     observation: CIObservationPersistenceInput
-  ): Promise<boolean> {
+  ): Promise<PrAggregatePersistenceResult> {
     return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
   }
 
   private async applyPrAggregateUpdateWithDispatchReset(
     workspaceId: string,
     observation: PrAggregatePersistenceInput
-  ): Promise<boolean> {
+  ): Promise<PrAggregatePersistenceResult> {
     const snapshotData: UpdateWorkspaceInput = {
       ...(observation.prUrl !== undefined ? { prUrl: observation.prUrl } : {}),
       ...(observation.prNumber !== undefined ? { prNumber: observation.prNumber } : {}),
@@ -847,6 +852,7 @@ class WorkspaceAccessor {
           prState: true,
           prReviewState: true,
           prCiStatus: true,
+          prUpdatedAt: true,
           ratchetActiveSessionId: true,
           ratchetLastCiRunId: true,
           ratchetDispatchOutcome: true,
@@ -864,11 +870,20 @@ class WorkspaceAccessor {
         aggregateChanged &&
         (current.ratchetDispatchOutcome === 'COMPLETED' ||
           current.ratchetDispatchOutcome === 'DIED');
+      const aggregateGuard = {
+        prUrl: current.prUrl,
+        prNumber: current.prNumber,
+        prState: current.prState,
+        prReviewState: current.prReviewState,
+        prCiStatus: current.prCiStatus,
+        prUpdatedAt: current.prUpdatedAt,
+      };
 
       if (shouldReset) {
         const reset = await transaction.workspace.updateMany({
           where: {
             id: workspaceId,
+            ...aggregateGuard,
             ratchetActiveSessionId: current.ratchetActiveSessionId,
             ratchetLastCiRunId: current.ratchetLastCiRunId,
             ratchetDispatchOutcome: current.ratchetDispatchOutcome,
@@ -881,15 +896,15 @@ class WorkspaceAccessor {
           },
         });
         if (reset.count > 0) {
-          return true;
+          return { applied: true, dispatchReset: true };
         }
       }
 
-      await transaction.workspace.update({
-        where: { id: workspaceId },
+      const fallback = await transaction.workspace.updateMany({
+        where: { id: workspaceId, ...aggregateGuard },
         data: snapshotData,
       });
-      return false;
+      return { applied: fallback.count > 0, dispatchReset: false };
     });
   }
 

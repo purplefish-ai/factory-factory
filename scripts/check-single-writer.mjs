@@ -308,6 +308,17 @@ const workspaceMutationRules = {
   },
 };
 
+const workspaceMutationAliasRules = {
+  applyPrSnapshotWithDispatchReset: {
+    type: 'static',
+    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
+  },
+  applyCIObservationWithDispatchReset: {
+    type: 'static',
+    fields: workspaceMutationRules.applyPrAggregateUpdateWithDispatchReset.fields,
+  },
+};
+
 function collectSourceFiles(dir) {
   const files = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -491,7 +502,7 @@ function getWorkspaceMutationCall(node) {
   }
 
   const method = node.expression.name.text;
-  const rule = workspaceMutationRules[method];
+  const rule = workspaceMutationRules[method] ?? workspaceMutationAliasRules[method];
   if (!rule) {
     return null;
   }
