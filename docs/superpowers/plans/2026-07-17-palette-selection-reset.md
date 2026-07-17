@@ -29,7 +29,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Add a test in `slash-command-palette regression coverage` that renders five commands with `isOpen: true` and `filter: ''`, sends four `ArrowDown` keys, rerenders closed, rerenders open with the same filter, sends Enter, and expects `onSelect` to receive `commands[0]`.
+Add a parameterized test in `slash-command-palette regression coverage` for `Enter` and `Tab`. For each key, render five commands with `isOpen: true` and `filter: ''`, send four `ArrowDown` keys, rerender closed, rerender open with the same filter, send the parameterized key, and expect `onSelect` to receive `commands[0]`.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -88,10 +88,10 @@ git commit -m "Reset palette selection when reopened (#1913)"
 - [ ] **Step 1: Run the required verification chain**
 
 ```bash
-pnpm typecheck && pnpm check:fix && pnpm test && pnpm build
+pnpm typecheck && pnpm check:fix && pnpm check && pnpm test && pnpm build
 ```
 
-Expected: all four commands exit zero.
+Expected: all five commands exit zero.
 
 - [ ] **Step 2: Review the branch diff and status**
 

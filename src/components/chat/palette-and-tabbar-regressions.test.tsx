@@ -163,7 +163,10 @@ describe('session-tab-bar regression coverage', () => {
 });
 
 describe('slash-command-palette regression coverage', () => {
-  it('resets selected command when reopened with an unchanged filter', () => {
+  it.each([
+    'Enter',
+    'Tab',
+  ] as const)('resets selected command when reopened with an unchanged filter before %s', (selectionKey) => {
     const commands: CommandInfo[] = [
       { name: 'alpha', description: 'First' },
       { name: 'beta', description: 'Second' },
@@ -230,7 +233,7 @@ describe('slash-command-palette regression coverage', () => {
       });
 
       flushSync(() => {
-        expect(paletteRef.current?.handleKeyDown('Enter')).toBe('handled');
+        expect(paletteRef.current?.handleKeyDown(selectionKey)).toBe('handled');
       });
 
       expect(onSelect).toHaveBeenCalledTimes(1);
