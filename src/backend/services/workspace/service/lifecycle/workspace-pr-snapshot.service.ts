@@ -60,6 +60,20 @@ class WorkspacePrSnapshotService {
       prUpdatedAt
     );
   }
+
+  applyPrSnapshotWithDispatchReset(
+    workspaceId: string,
+    observation: Parameters<typeof workspaceAccessor.applyPrSnapshotWithDispatchReset>[1]
+  ) {
+    return workspaceAccessor.applyPrSnapshotWithDispatchReset(workspaceId, observation);
+  }
+
+  applyCIObservationWithDispatchReset(
+    workspaceId: string,
+    observation: Parameters<typeof workspaceAccessor.applyCIObservationWithDispatchReset>[1]
+  ) {
+    return workspaceAccessor.applyCIObservationWithDispatchReset(workspaceId, observation);
+  }
 }
 
 export const workspacePrSnapshotService = new WorkspacePrSnapshotService();

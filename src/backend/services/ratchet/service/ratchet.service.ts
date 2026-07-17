@@ -66,6 +66,11 @@ export type { RatchetAction, RatchetCheckResult, WorkspaceRatchetResult } from '
 
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
 export const RATCHET_TOGGLED = 'ratchet_toggled' as const;
+export const RATCHET_DISPATCH_CHANGED = 'ratchet_dispatch_changed' as const;
+
+export interface RatchetDispatchChangedEvent {
+  workspaceId: string;
+}
 
 export interface RatchetStateChangedEvent {
   workspaceId: string;
@@ -325,7 +330,14 @@ class RatchetService extends EventEmitter {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ): Promise<void> {
-    await this.workspace.recordSessionEnd(workspaceId, sessionId, outcome);
+    const settled = await this.workspace.recordSessionEnd(workspaceId, sessionId, outcome);
+    if (!settled) {
+      return;
+    }
+
+    this.emit(RATCHET_DISPATCH_CHANGED, {
+      workspaceId,
+    } satisfies RatchetDispatchChangedEvent);
   }
 
   /**
@@ -967,6 +979,9 @@ class RatchetService extends EventEmitter {
       sessionBridge: this.session,
       workspaceBridge: this.workspace,
       signal,
+      onDispatchChanged: (event) => {
+        this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);
+      },
     });
   }
 
@@ -1016,14 +1031,18 @@ class RatchetService extends EventEmitter {
       // Direct private-method callers do not have a coordinator timeout to disable.
     }
   ): Promise<RatchetAction> {
-    return await triggerRatchetFixer({
+    const action = await triggerRatchetFixer({
       workspace,
       prStateInfo,
       retryCount,
       sessionBridge: this.session,
       signal,
       commitSideEffects,
+      onDispatchChanged: (event) => {
+        this.emit(RATCHET_DISPATCH_CHANGED, event satisfies RatchetDispatchChangedEvent);
+      },
     });
+    return action;
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {

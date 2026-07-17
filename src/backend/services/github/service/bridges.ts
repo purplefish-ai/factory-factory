@@ -38,12 +38,37 @@ export interface GitHubWorkspaceSnapshotUpdate {
   branchName?: string;
 }
 
+export interface GitHubPrAggregatePersistenceResult {
+  applied: boolean;
+  dispatchReset: boolean;
+}
+
+export interface GitHubPRSnapshotPersistenceInput extends GitHubSnapshotFields {
+  prUrl?: string | null;
+  prUpdatedAt: Date;
+  branchName?: string;
+}
+
+export interface GitHubCIObservationPersistenceInput {
+  prCiStatus: CIStatus;
+  prUpdatedAt: Date;
+  prCiFailedAt?: Date | null;
+}
+
 export interface GitHubWorkspaceBridge {
   findPRContext(workspaceId: string): Promise<{
     branchName: string | null;
     prUrl: string | null;
   } | null>;
   recordSnapshot(workspaceId: string, data: GitHubWorkspaceSnapshotUpdate): Promise<unknown>;
+  applyPrSnapshotWithDispatchReset(
+    workspaceId: string,
+    observation: GitHubPRSnapshotPersistenceInput
+  ): Promise<GitHubPrAggregatePersistenceResult>;
+  applyCIObservationWithDispatchReset(
+    workspaceId: string,
+    observation: GitHubCIObservationPersistenceInput
+  ): Promise<GitHubPrAggregatePersistenceResult>;
   attachDiscoveredPRIfClaimMatches(
     workspaceId: string,
     prUrl: string,

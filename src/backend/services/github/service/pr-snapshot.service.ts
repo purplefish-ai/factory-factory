@@ -23,16 +23,30 @@ type SnapshotData = {
 
 export type PRSnapshotRefreshResult =
   | { success: true; snapshot: SnapshotData }
-  | { success: false; reason: 'workspace_not_found' | 'no_pr_url' | 'fetch_failed' | 'error' };
+  | {
+      success: false;
+      reason: 'workspace_not_found' | 'no_pr_url' | 'fetch_failed' | 'stale_observation' | 'error';
+    };
 
 export type AttachAndRefreshResult =
   | { success: true; snapshot: SnapshotData }
   | {
       success: false;
-      reason: 'workspace_not_found' | 'fetch_failed' | 'claim_stale' | 'error';
+      reason:
+        | 'workspace_not_found'
+        | 'fetch_failed'
+        | 'claim_stale'
+        | 'stale_observation'
+        | 'error';
     };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
+export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
+
+export interface PRDispatchInvalidatedEvent {
+  workspaceId: string;
+  prCiStatus: SnapshotData['prCiStatus'];
+}
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
@@ -41,6 +55,8 @@ export interface PRSnapshotUpdatedEvent {
   prState: string;
   prCiStatus: string;
   prReviewState: string | null;
+  /** The PR write may have reset dispatch ownership; consumers must re-read it. */
+  ratchetDispatchChanged?: true;
 }
 
 interface CIObservationInput {
@@ -63,6 +79,7 @@ interface ApplySnapshotOptions {
 class PRSnapshotService extends EventEmitter {
   private kanbanBridge: GitHubKanbanBridge | null = null;
   private workspaceBridge: GitHubWorkspaceBridge | null = null;
+  private readonly workspaceOperations = new Map<string, Promise<void>>();
 
   configure(bridges: { kanban: GitHubKanbanBridge; workspace: GitHubWorkspaceBridge }): void {
     this.kanbanBridge = bridges.kanban;
@@ -87,17 +104,44 @@ class PRSnapshotService extends EventEmitter {
     return this.kanbanBridge;
   }
 
+  private runWorkspaceOperation<T>(workspaceId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.workspaceOperations.get(workspaceId) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(operation);
+    const completion = result.then(
+      () => undefined,
+      () => undefined
+    );
+    this.workspaceOperations.set(workspaceId, completion);
+    void completion.then(() => {
+      if (this.workspaceOperations.get(workspaceId) === completion) {
+        this.workspaceOperations.delete(workspaceId);
+      }
+    });
+    return result;
+  }
+
   /**
    * Record CI status observation for a workspace.
    * This is the canonical write path for CI tracking fields.
    */
   async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
-    await this.workspace.recordSnapshot(workspaceId, {
-      prCiStatus: input.ciStatus,
-      prUpdatedAt: input.observedAt ?? new Date(),
-      ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
+    await this.runWorkspaceOperation(workspaceId, async () => {
+      const result = await this.workspace.applyCIObservationWithDispatchReset(workspaceId, {
+        prCiStatus: input.ciStatus,
+        prUpdatedAt: input.observedAt ?? new Date(),
+        ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
+      });
+      if (!result.applied) {
+        return;
+      }
+      if (result.dispatchReset) {
+        this.emit(PR_DISPATCH_INVALIDATED, {
+          workspaceId,
+          prCiStatus: input.ciStatus,
+        } satisfies PRDispatchInvalidatedEvent);
+      }
+      await this.kanban.updateCachedKanbanColumn(workspaceId);
     });
-    await this.kanban.updateCachedKanbanColumn(workspaceId);
   }
 
   /**
@@ -131,6 +175,15 @@ class PRSnapshotService extends EventEmitter {
    * @returns Result with snapshot data or failure reason
    */
   async attachAndRefreshPR(workspaceId: string, prUrl: string): Promise<AttachAndRefreshResult> {
+    return await this.runWorkspaceOperation(workspaceId, () =>
+      this.attachAndRefreshPRNow(workspaceId, prUrl)
+    );
+  }
+
+  private async attachAndRefreshPRNow(
+    workspaceId: string,
+    prUrl: string
+  ): Promise<AttachAndRefreshResult> {
     try {
       // Verify workspace exists
       const workspace = await this.workspace.findPRContext(workspaceId);
@@ -158,7 +211,7 @@ class PRSnapshotService extends EventEmitter {
           : {};
 
       // Write full PR snapshot atomically, including prUrl
-      await this.applySnapshot(
+      const applied = await this.applySnapshotNow(
         workspaceId,
         {
           prNumber: snapshot.prNumber,
@@ -171,6 +224,9 @@ class PRSnapshotService extends EventEmitter {
           ...branchNameUpdate,
         }
       );
+      if (!applied) {
+        return { success: false, reason: 'stale_observation' };
+      }
 
       if (branchNameUpdate.branchName) {
         logger.info('Corrected workspace branchName to match PR head branch', {
@@ -211,6 +267,16 @@ class PRSnapshotService extends EventEmitter {
    * correction so a later user rename cannot be overwritten.
    */
   async attachDiscoveredPRAndRefresh(
+    workspaceId: string,
+    prUrl: string,
+    claim: GitHubPRDiscoveryClaim
+  ): Promise<AttachAndRefreshResult> {
+    return await this.runWorkspaceOperation(workspaceId, () =>
+      this.attachDiscoveredPRAndRefreshNow(workspaceId, prUrl, claim)
+    );
+  }
+
+  private async attachDiscoveredPRAndRefreshNow(
     workspaceId: string,
     prUrl: string,
     claim: GitHubPRDiscoveryClaim
@@ -276,6 +342,15 @@ class PRSnapshotService extends EventEmitter {
     workspaceId: string,
     explicitPrUrl?: string | null
   ): Promise<PRSnapshotRefreshResult> {
+    return await this.runWorkspaceOperation(workspaceId, () =>
+      this.refreshWorkspaceNow(workspaceId, explicitPrUrl)
+    );
+  }
+
+  private async refreshWorkspaceNow(
+    workspaceId: string,
+    explicitPrUrl?: string | null
+  ): Promise<PRSnapshotRefreshResult> {
     try {
       let prUrl = explicitPrUrl;
 
@@ -297,7 +372,7 @@ class PRSnapshotService extends EventEmitter {
         return { success: false, reason: 'fetch_failed' };
       }
 
-      await this.applySnapshot(
+      const applied = await this.applySnapshotNow(
         workspaceId,
         {
           prNumber: snapshot.prNumber,
@@ -309,6 +384,9 @@ class PRSnapshotService extends EventEmitter {
           eventPrUrl: prUrl,
         }
       );
+      if (!applied) {
+        return { success: false, reason: 'stale_observation' };
+      }
 
       return {
         success: true,
@@ -330,19 +408,29 @@ class PRSnapshotService extends EventEmitter {
     snapshot: SnapshotData,
     options: ApplySnapshotOptions = {}
   ): Promise<void> {
-    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
+    await this.runWorkspaceOperation(workspaceId, () =>
+      this.applySnapshotNow(workspaceId, snapshot, options)
+    );
+  }
 
-    await this.workspace.recordSnapshot(workspaceId, {
+  private async applySnapshotNow(
+    workspaceId: string,
+    snapshot: SnapshotData,
+    options: ApplySnapshotOptions = {}
+  ): Promise<boolean> {
+    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
+    const result = await this.workspace.applyPrSnapshotWithDispatchReset(workspaceId, {
+      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
       ...(options.branchName !== undefined ? { branchName: options.branchName } : {}),
     });
-
-    await this.kanban.updateCachedKanbanColumn(workspaceId);
+    if (!result.applied) {
+      return false;
+    }
 
     this.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId,
@@ -351,7 +439,11 @@ class PRSnapshotService extends EventEmitter {
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,
       prReviewState: snapshot.prReviewState,
+      ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
     } satisfies PRSnapshotUpdatedEvent);
+
+    await this.kanban.updateCachedKanbanColumn(workspaceId);
+    return true;
   }
 }
 

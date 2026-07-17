@@ -27,6 +27,7 @@ let prisma: PrismaClient;
 let workspaceDataService: typeof import('@/backend/services/workspace').workspaceDataService;
 let workspaceAutoIterationService: typeof import('@/backend/services/workspace').workspaceAutoIterationService;
 let workspaceMaintenanceService: typeof import('@/backend/services/workspace').workspaceMaintenanceService;
+let workspacePrSnapshotService: typeof import('@/backend/services/workspace').workspacePrSnapshotService;
 let workspaceRatchetService: typeof import('@/backend/services/workspace').workspaceRatchetService;
 let workspaceRunScriptService: typeof import('@/backend/services/workspace').workspaceRunScriptService;
 let workspaceStateMachine: typeof import('@/backend/services/workspace').workspaceStateMachine;
@@ -48,6 +49,7 @@ beforeAll(async () => {
     workspaceAutoIterationService,
     workspaceDataService,
     workspaceMaintenanceService,
+    workspacePrSnapshotService,
     workspaceRatchetService,
     workspaceRunScriptService,
     workspaceStateMachine,
@@ -358,6 +360,105 @@ describe('resource accessors integration', () => {
       const cleared = await findWorkspaceOrThrow(workspace.id);
       expect(cleared.ratchetActiveSessionId).toBeNull();
       expect(cleared.ratchetDispatchOutcome).toBe('DIED');
+    });
+
+    it('resets settled Ratchet ownership only for changed PR aggregates', async () => {
+      const project = await createProjectFixture();
+      const workspace = await createWorkspaceFixture(project.id, {
+        prNumber: 42,
+        prState: PRState.CHANGES_REQUESTED,
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: CIStatus.FAILURE,
+        ratchetLastCiRunId: 'rich-dispatch-snapshot',
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+
+      const identical = await workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(
+        workspace.id,
+        {
+          prNumber: 42,
+          prState: PRState.CHANGES_REQUESTED,
+          prReviewState: 'CHANGES_REQUESTED',
+          prCiStatus: CIStatus.FAILURE,
+          prUpdatedAt: new Date('2026-07-17T12:00:00.000Z'),
+        }
+      );
+      expect(identical).toEqual({ applied: true, dispatchReset: false });
+      expect((await findWorkspaceOrThrow(workspace.id)).ratchetDispatchOutcome).toBe('DIED');
+
+      const changed = await workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(
+        workspace.id,
+        {
+          prNumber: 42,
+          prState: PRState.OPEN,
+          prReviewState: null,
+          prCiStatus: CIStatus.PENDING,
+          prUpdatedAt: new Date('2026-07-17T12:01:00.000Z'),
+        }
+      );
+      expect(changed).toEqual({ applied: true, dispatchReset: true });
+      const reset = await findWorkspaceOrThrow(workspace.id);
+      expect(reset.ratchetDispatchOutcome).toBeNull();
+      expect(reset.ratchetDispatchRetryCount).toBe(0);
+      expect(reset.ratchetLastCiRunId).toBe('rich-dispatch-snapshot');
+
+      const ciChangedWorkspace = await createWorkspaceFixture(project.id, {
+        prNumber: 42,
+        prState: PRState.OPEN,
+        prReviewState: null,
+        prCiStatus: CIStatus.PENDING,
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+      await expect(
+        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(ciChangedWorkspace.id, {
+          prNumber: 42,
+          prState: PRState.OPEN,
+          prReviewState: null,
+          prCiStatus: CIStatus.FAILURE,
+          prUpdatedAt: new Date('2026-07-17T12:02:00.000Z'),
+        })
+      ).resolves.toEqual({ applied: true, dispatchReset: true });
+
+      const reviewChangedWorkspace = await createWorkspaceFixture(project.id, {
+        prNumber: 42,
+        prState: PRState.OPEN,
+        prReviewState: null,
+        prCiStatus: CIStatus.FAILURE,
+        ratchetDispatchOutcome: 'DIED',
+        ratchetDispatchRetryCount: 3,
+      });
+      await expect(
+        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(reviewChangedWorkspace.id, {
+          prNumber: 42,
+          prState: PRState.CHANGES_REQUESTED,
+          prReviewState: 'CHANGES_REQUESTED',
+          prCiStatus: CIStatus.FAILURE,
+          prUpdatedAt: new Date('2026-07-17T12:03:00.000Z'),
+        })
+      ).resolves.toEqual({ applied: true, dispatchReset: true });
+
+      const runningWorkspace = await createWorkspaceFixture(project.id, {
+        prNumber: 42,
+        prState: PRState.CHANGES_REQUESTED,
+        prReviewState: 'CHANGES_REQUESTED',
+        prCiStatus: CIStatus.FAILURE,
+        ratchetDispatchOutcome: 'RUNNING',
+        ratchetDispatchRetryCount: 1,
+      });
+      await expect(
+        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(runningWorkspace.id, {
+          prNumber: 43,
+          prState: PRState.OPEN,
+          prReviewState: null,
+          prCiStatus: CIStatus.SUCCESS,
+          prUpdatedAt: new Date('2026-07-17T12:04:00.000Z'),
+        })
+      ).resolves.toEqual({ applied: true, dispatchReset: false });
+      expect((await findWorkspaceOrThrow(runningWorkspace.id)).ratchetDispatchOutcome).toBe(
+        'RUNNING'
+      );
     });
 
     it('clears auto-iteration session only when the expected pointer still matches', async () => {

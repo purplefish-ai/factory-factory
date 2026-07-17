@@ -89,6 +89,60 @@ describe('check-single-writer', () => {
     );
   });
 
+  it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
+        content: `
+          async function writeSnapshots(workspaceAccessor) {
+            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
+              prNumber: 1,
+              prState: 'OPEN',
+              prReviewState: null,
+              prCiStatus: 'SUCCESS',
+              prUpdatedAt: new Date(),
+            });
+            await workspaceAccessor.applyCIObservationWithDispatchReset('ws', {
+              prCiStatus: 'FAILURE',
+              prUpdatedAt: new Date(),
+            });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      'unauthorized write of workspace field "ratchetDispatchOutcome"'
+    );
+  });
+
+  it('allows workspace PR snapshot capability dispatch-reset writes', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath:
+          'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
+        content: `
+          async function writeSnapshots(workspaceAccessor) {
+            await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
+              prNumber: 1,
+              prState: 'OPEN',
+              prReviewState: null,
+              prCiStatus: 'SUCCESS',
+              prUpdatedAt: new Date(),
+            });
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(0);
+  });
+
   it('allows workspace ratchet capability recordRatchetSessionEnd writes', () => {
     const tempRoot = createTempBackend([
       {

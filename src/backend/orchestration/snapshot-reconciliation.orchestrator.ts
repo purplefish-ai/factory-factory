@@ -98,6 +98,8 @@ type DriftComparableField =
   | 'prNumber'
   | 'ratchetEnabled'
   | 'ratchetState'
+  | 'ratchetDispatchOutcome'
+  | 'ratchetDispatchRetryCount'
   | 'runScriptStatus'
   | 'isWorking'
   | 'pendingRequestType'
@@ -106,7 +108,15 @@ type DriftComparableField =
 const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   { group: 'workspace', fields: ['status', 'name', 'branchName'] },
   { group: 'pr', fields: ['prState', 'prCiStatus', 'prNumber'] },
-  { group: 'ratchet', fields: ['ratchetEnabled', 'ratchetState'] },
+  {
+    group: 'ratchet',
+    fields: [
+      'ratchetEnabled',
+      'ratchetState',
+      'ratchetDispatchOutcome',
+      'ratchetDispatchRetryCount',
+    ],
+  },
   { group: 'runScript', fields: ['runScriptStatus'] },
   { group: 'session', fields: ['isWorking', 'pendingRequestType', 'sessionSummaries'] },
 ];
@@ -278,6 +288,8 @@ export class SnapshotReconciliationService {
       prUpdatedAt: ws.prUpdatedAt?.toISOString() ?? null,
       ratchetEnabled: ws.ratchetEnabled,
       ratchetState: ws.ratchetState,
+      ratchetDispatchOutcome: ws.ratchetDispatchOutcome,
+      ratchetDispatchRetryCount: ws.ratchetDispatchRetryCount,
       runScriptStatus: ws.runScriptStatus,
       isWorking,
       pendingRequestType,

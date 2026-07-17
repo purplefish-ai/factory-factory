@@ -264,6 +264,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     session: {
       isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
+      getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
     },
   });
 
@@ -290,6 +291,10 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: {
       findPRContext: (id) => workspaceDataService.findPRContext(id),
       recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
+      applyPrSnapshotWithDispatchReset: (id, observation) =>
+        workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
+      applyCIObservationWithDispatchReset: (id, observation) =>
+        workspacePrSnapshotService.applyCIObservationWithDispatchReset(id, observation),
       attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
         workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
       updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>

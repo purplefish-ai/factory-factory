@@ -31,6 +31,10 @@ class WorkspaceDataService {
     return workspaceAccessor.findPRContext(id);
   }
 
+  findRatchetProjection(id: string) {
+    return workspaceAccessor.findRawById(id);
+  }
+
   findByProjectId(
     projectId: string,
     filters?: { status?: WorkspaceStatus; limit?: number; offset?: number }

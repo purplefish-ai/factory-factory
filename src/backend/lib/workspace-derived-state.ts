@@ -1,3 +1,4 @@
+import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import type {
   CIStatus,
   KanbanColumn,
@@ -32,6 +33,8 @@ export interface WorkspaceDerivedStateInput {
   sessionIsWorking: boolean;
   pendingRequestType: WorkspacePendingRequestType | null;
   hasSessionRuntimeError?: boolean;
+  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+  ratchetDispatchRetryCount: number;
   runScriptStatus: RunScriptStatus | null;
   flowState: WorkspaceDerivedFlowState;
 }
@@ -39,9 +42,14 @@ export interface WorkspaceDerivedStateInput {
 export interface WorkspaceDerivedStateFns {
   computeKanbanColumn: (input: {
     lifecycle: WorkspaceStatus;
-    isWorking: boolean;
+    sessionIsWorking: boolean;
+    flowIsWorking: boolean;
     prState: PRState;
     ratchetState: RatchetState;
+    pendingRequestType: WorkspacePendingRequestType | null;
+    hasSessionRuntimeError: boolean;
+    ratchetDispatchOutcome: RatchetDispatchOutcome | null;
+    ratchetDispatchRetryCount: number;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
@@ -87,9 +95,14 @@ export function assembleWorkspaceDerivedState(
     }),
     kanbanColumn: fns.computeKanbanColumn({
       lifecycle: input.lifecycle,
-      isWorking,
+      sessionIsWorking: input.sessionIsWorking,
+      flowIsWorking: input.flowState.isWorking,
       prState: input.prState,
       ratchetState: input.ratchetState,
+      pendingRequestType: input.pendingRequestType,
+      hasSessionRuntimeError: input.hasSessionRuntimeError ?? false,
+      ratchetDispatchOutcome: input.ratchetDispatchOutcome,
+      ratchetDispatchRetryCount: input.ratchetDispatchRetryCount,
     }),
     flowPhase: input.flowState.phase,
     ciObservation: input.flowState.ciObservation,
