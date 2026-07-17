@@ -21,6 +21,7 @@ import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-i
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script';
 import {
   agentSessionAccessor,
   chatMessageHandlerService,
@@ -474,12 +475,14 @@ export const workspaceRouter = router({
   // Refresh factory-factory.json configuration for all workspaces
   refreshFactoryConfigs: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ input }) => workspaceQueryService.refreshFactoryConfigs(input.projectId)),
+    .mutation(({ input }) =>
+      runScriptConfigPersistenceService.refreshFactoryConfigs(input.projectId)
+    ),
 
   // Get factory-factory.json configuration for a project
   getFactoryConfig: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => workspaceQueryService.getFactoryConfig(input.projectId)),
+    .query(({ input }) => runScriptConfigPersistenceService.getFactoryConfig(input.projectId)),
 
   // Sync PR status for a workspace (immediate refresh from GitHub)
   syncPRStatus: publicProcedure

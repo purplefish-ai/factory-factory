@@ -4,7 +4,7 @@
 
 **Goal:** Replace the filename-derived root-service exemption with an explicit infrastructure registry and relocate domain-owned services into the run-script and workspace capsules.
 
-**Architecture:** Seven truly cross-cutting root services remain as documented infrastructure capabilities. Seven domain services move behind capsule barrels; factory-config endpoints move from workspace query ownership into run-script so the existing `run-script -> workspace` dependency stays acyclic and complete.
+**Architecture:** Seven truly cross-cutting root services and two shared root helper modules remain as documented infrastructure capabilities. Seven domain services move behind capsule barrels; factory-config endpoints move from workspace query ownership into run-script so the existing `run-script -> workspace` dependency stays acyclic and complete.
 
 **Tech Stack:** TypeScript, Vitest, Express/tRPC, service-capsule registry checker, Dependency Cruiser, Biome, pnpm.
 
@@ -68,17 +68,19 @@ Expected: FAIL because the current checker exits 0 for the temporary root servic
 
 - [ ] **Step 3: Add the explicit registry and bidirectional validation**
 
-Add `infrastructureServiceRegistry` entries for exactly:
+Add `infrastructureServiceRegistry` entries for the seven root services plus the two root helper modules imported by capsules. Each entry records its exact filename:
 
 ```ts
 export const infrastructureServiceRegistry = {
-  'config.service': { description: 'Environment and application configuration' },
-  'crypto.service': { description: 'Encryption for secrets stored at rest' },
-  'logger.service': { description: 'Process-wide structured logging' },
-  'notification.service': { description: 'Operating-system notifications' },
-  'port.service': { description: 'Backend server port probing' },
-  'rate-limiter.service': { description: 'Process-wide API request rate limiting' },
-  'server-instance.service': { description: 'Active HTTP server instance state' },
+  'config.service': { fileName: 'config.service.ts', description: 'Environment and application configuration' },
+  constants: { fileName: 'constants.ts', description: 'Shared backend service timing and retry constants' },
+  'crypto.service': { fileName: 'crypto.service.ts', description: 'Encryption for secrets stored at rest' },
+  'logger.service': { fileName: 'logger.service.ts', description: 'Process-wide structured logging' },
+  'notification.service': { fileName: 'notification.service.ts', description: 'Operating-system notifications' },
+  'port.service': { fileName: 'port.service.ts', description: 'Backend server port probing' },
+  'rate-limit-backoff': { fileName: 'rate-limit-backoff.ts', description: 'Shared API rate-limit retry policy' },
+  'rate-limiter.service': { fileName: 'rate-limiter.service.ts', description: 'Process-wide API request rate limiting' },
+  'server-instance.service': { fileName: 'server-instance.service.ts', description: 'Active HTTP server instance state' },
 } as const;
 ```
 

@@ -1,7 +1,6 @@
 import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
@@ -9,6 +8,7 @@ import { workspaceAccessor } from '@/backend/services/workspace/resources/worksp
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
+import { gitOpsService } from '../worktree/git-ops.service';
 
 type Logger = ReturnType<typeof createLogger>;
 

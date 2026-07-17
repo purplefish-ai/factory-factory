@@ -18,6 +18,7 @@
 import { EventEmitter } from 'node:events';
 import { isDeepStrictEqual } from 'node:util';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   CIStatus,
   KanbanColumn,
@@ -31,7 +32,6 @@ import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
-import { createLogger } from './logger.service';
 
 // ---------------------------------------------------------------------------
 // Types

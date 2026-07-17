@@ -13,14 +13,14 @@ import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
 import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceQueryService } from '@/backend/services/workspace';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
+  workspaceQueryService,
   workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
+} from '@/backend/services/workspace';
 import { WorkspaceStatus } from '@/shared/core';
 import { createWebSocketUpgradeHandler } from './upgrade-utils';
 

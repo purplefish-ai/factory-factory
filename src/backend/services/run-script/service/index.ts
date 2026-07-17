@@ -5,8 +5,20 @@
 // Bridge interfaces for orchestration layer wiring
 export type { RunScriptWorkspaceBridge } from './bridges';
 
+// Factory configuration and run-script infrastructure
+export { FactoryConfigService } from './factory-config.service';
+export { PortAllocationService } from './port-allocation.service';
 // Run script execution
 export { createRunScriptService, RunScriptService } from './run-script.service';
+export {
+  type PersistWorkspaceCommands,
+  type RunScriptCommandCache,
+  runScriptConfigPersistenceService,
+} from './run-script-config-persistence.service';
+export {
+  RunScriptProxyService,
+  runScriptProxyService,
+} from './run-script-proxy.service';
 
 // State machine
 export {

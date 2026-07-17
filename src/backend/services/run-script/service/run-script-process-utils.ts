@@ -2,9 +2,9 @@ import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import treeKill from 'tree-kill';
 import { toError } from '@/backend/lib/error-utils';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RunScriptStatus } from '@/shared/core';
+import { FactoryConfigService } from './factory-config.service';
 
 type Logger = ReturnType<typeof createLogger>;
 

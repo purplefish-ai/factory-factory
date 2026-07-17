@@ -31,6 +31,7 @@ vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
   workspaceAccessor: { create: vi.fn(), findRawById: vi.fn(), update: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
+  workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
     markSessionIdle: vi.fn(),

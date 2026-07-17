@@ -2,8 +2,8 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { execCommand, gitCommand } from '@/backend/lib/shell';
-import { configService } from './config.service';
-import { createLogger } from './logger.service';
+import { configService } from '@/backend/services/config.service';
+import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('git-clone');
 const GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;

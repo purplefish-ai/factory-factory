@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockPersistWorkspaceCommands = vi.hoisted(() => vi.fn());
+const mockFindWorkspacesByProjectId = vi.hoisted(() => vi.fn());
+const mockUpdateWorkspace = vi.hoisted(() => vi.fn());
+const mockFindProjectById = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -12,6 +15,14 @@ vi.mock('@/backend/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   }),
+}));
+
+vi.mock('@/backend/services/workspace', () => ({
+  projectAccessor: { findById: mockFindProjectById },
+  workspaceAccessor: {
+    findByProjectId: mockFindWorkspacesByProjectId,
+    update: mockUpdateWorkspace,
+  },
 }));
 
 import { runScriptConfigPersistenceService } from './run-script-config-persistence.service';
@@ -23,6 +34,7 @@ describe('runScriptConfigPersistenceService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPersistWorkspaceCommands.mockResolvedValue(undefined);
+    mockUpdateWorkspace.mockResolvedValue(undefined);
     workspaceDir = mkdtempSync(join(tmpdir(), 'ff-rs-worktree-'));
     repoDir = mkdtempSync(join(tmpdir(), 'ff-rs-repo-'));
   });
@@ -138,5 +150,52 @@ describe('runScriptConfigPersistenceService', () => {
     });
 
     expect(mockPersistWorkspaceCommands).not.toHaveBeenCalled();
+  });
+
+  it('refreshes workspace commands and reports per-workspace config errors', async () => {
+    mockFindWorkspacesByProjectId.mockResolvedValue([
+      { id: 'w1', worktreePath: workspaceDir },
+      { id: 'w2', worktreePath: repoDir },
+      { id: 'w3', worktreePath: null },
+    ]);
+    writeFileSync(
+      join(workspaceDir, 'factory-factory.json'),
+      JSON.stringify({ scripts: { run: 'pnpm dev' } }),
+      'utf8'
+    );
+    writeFileSync(join(repoDir, 'factory-factory.json'), '{invalid', 'utf8');
+
+    const result = await runScriptConfigPersistenceService.refreshFactoryConfigs('p1');
+
+    expect(result).toEqual({
+      updatedCount: 1,
+      totalWorkspaces: 3,
+      errors: [{ workspaceId: 'w2', error: expect.stringContaining('Invalid JSON') }],
+    });
+    expect(mockUpdateWorkspace).toHaveBeenCalledWith('w1', {
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+    });
+  });
+
+  it('reads project factory config and handles read errors', async () => {
+    mockFindProjectById.mockResolvedValueOnce(null);
+    await expect(runScriptConfigPersistenceService.getFactoryConfig('missing')).rejects.toThrow(
+      'Project not found'
+    );
+
+    mockFindProjectById.mockResolvedValueOnce({ id: 'p1', repoPath: repoDir });
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify({ scripts: { run: 'pnpm dev' } }),
+      'utf8'
+    );
+    await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).resolves.toEqual({
+      scripts: { run: 'pnpm dev' },
+    });
+
+    mockFindProjectById.mockResolvedValueOnce({ id: 'p1', repoPath: join(repoDir, 'missing') });
+    await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).resolves.toBeNull();
   });
 });

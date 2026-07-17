@@ -5,10 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type {
-  SnapshotChangedEvent,
-  SnapshotRemovedEvent,
-} from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotChangedEvent, SnapshotRemovedEvent } from '@/backend/services/workspace';
 import {
   createSnapshotsUpgradeHandler,
   resetSnapshotsHandlerStateForTests,
@@ -49,7 +46,7 @@ vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
   },
 }));
 
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
+vi.mock('@/backend/services/workspace', () => {
   const { EventEmitter } = require('node:events');
   const emitter = new EventEmitter();
   const originalOn = emitter.on.bind(emitter);
@@ -69,15 +66,7 @@ vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
         return emitter;
       }),
     },
-  };
-});
-
-vi.mock('@/backend/services/workspace', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
-  return {
-    ...actual,
     workspaceQueryService: {
-      ...actual.workspaceQueryService,
       getCachedReviewCount: mockGetCachedReviewCount,
       refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
     },

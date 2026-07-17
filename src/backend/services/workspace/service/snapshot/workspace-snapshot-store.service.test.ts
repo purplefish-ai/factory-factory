@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { serviceNames } from '@/backend/services/registry';
 
 // Mock logger (standard pattern)
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),

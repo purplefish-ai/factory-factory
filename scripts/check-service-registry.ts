@@ -3,6 +3,7 @@ import path from 'node:path';
 import ts from 'typescript';
 
 import {
+  infrastructureServiceRegistry,
   prismaModelNames,
   type ServiceName,
   serviceRegistry,
@@ -19,13 +20,7 @@ const publicPrismaGeneratedSpecifiers = new Set([
   '@prisma-gen/enums',
   '@prisma-gen/models',
 ]);
-const infraServiceFileNames = new Set(
-  readdirSync(servicesRoot, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
-    )
-    .map((entry) => entry.name.replace(/\.(ts|tsx)$/u, ''))
-);
+const infrastructureServiceNames = new Set(Object.keys(infrastructureServiceRegistry));
 
 function readPrismaModelNames(schemaFilePath: string): Set<string> {
   const schema = readFileSync(schemaFilePath, 'utf8');
@@ -165,6 +160,31 @@ function isRegisteredServiceName(serviceName: string): serviceName is ServiceNam
   return Object.hasOwn(serviceRegistry, serviceName);
 }
 
+function checkInfrastructureServiceClassification(errors: string[]): void {
+  const rootServiceFileNames = new Set(
+    readdirSync(servicesRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.service.ts'))
+      .map((entry) => entry.name)
+  );
+
+  for (const fileName of rootServiceFileNames) {
+    const serviceName = fileName.replace(/\.ts$/u, '');
+    if (!infrastructureServiceNames.has(serviceName)) {
+      errors.push(
+        `${fileName} is a root service that is not registered as infrastructure. Move it into its owning service capsule or add an intentional entry to infrastructureServiceRegistry.`
+      );
+    }
+  }
+
+  for (const [serviceName, definition] of Object.entries(infrastructureServiceRegistry)) {
+    if (!existsSync(path.join(servicesRoot, definition.fileName))) {
+      errors.push(
+        `Infrastructure service "${serviceName}" is registered but ${definition.fileName} does not exist in src/backend/services.`
+      );
+    }
+  }
+}
+
 function getFromService(relativePath: string): ServiceName | null {
   const fromMatch = relativePath.match(/^src\/backend\/services\/([^/]+)\//);
   if (!fromMatch) {
@@ -205,8 +225,7 @@ function validateCrossServiceImport(
   }
 
   if (!isRegisteredServiceName(serviceImport.toServiceName)) {
-    // Registry scope is service capsules only. Root infra service files are out of scope.
-    if (infraServiceFileNames.has(serviceImport.toServiceName)) {
+    if (infrastructureServiceNames.has(serviceImport.toServiceName)) {
       return;
     }
     errors.push(
@@ -361,6 +380,7 @@ function checkRegistryModelList(errors: string[]): void {
 function main(): void {
   const errors: string[] = [];
 
+  checkInfrastructureServiceClassification(errors);
   checkRegistryModelList(errors);
   checkDependencyGraph(errors);
   checkCrossServiceImports(errors);

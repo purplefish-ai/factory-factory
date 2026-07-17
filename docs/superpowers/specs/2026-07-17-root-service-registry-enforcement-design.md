@@ -13,13 +13,13 @@ Seven of the fourteen root services have clear domain ownership:
 - `factory-config.service.ts`, `port-allocation.service.ts`, `run-script-config-persistence.service.ts`, and `run-script-proxy.service.ts` belong to run-script.
 - `git-clone.service.ts`, `workspace-snapshot-store.service.ts`, and `git-ops.service.ts` belong to workspace.
 
-The remaining seven root services are cross-cutting application infrastructure: central environment/application configuration, cryptography, logging, notifications, backend port probing, rate limiting, and server-instance state.
+The remaining seven root services are cross-cutting application infrastructure: central environment/application configuration, cryptography, logging, notifications, backend port probing, rate limiting, and server-instance state. Two root helper modules imported directly by capsules (`constants.ts` and `rate-limit-backoff.ts`) are also explicit infrastructure capabilities; the old blanket had exempted every root TypeScript file, not only services.
 
 ## Considered Approaches
 
 ### 1. Explicit infrastructure registry plus capsule moves (selected)
 
-Declare the seven infrastructure services by module name and description in `src/backend/services/registry.ts`. Move the seven domain services and their tests into their owning capsules, expose them through capsule barrels, and update consumers. The checker compares actual root `*.service.ts` files with the declared infrastructure registry and uses only that registry for import exemptions.
+Declare nine infrastructure capabilities by module name, filename, and description in `src/backend/services/registry.ts`: the seven infrastructure services plus the two shared helper modules. Move the seven domain services and their tests into their owning capsules, expose them through capsule barrels, and update consumers. The checker compares actual root `*.service.ts` files with the declared infrastructure registry and uses only exact registry keys for import exemptions.
 
 This makes additions fail closed, documents every exception next to the capsule dependency graph, and follows existing capsule/barrel conventions.
 
@@ -33,11 +33,11 @@ This makes those capabilities first-class dependency nodes, but each currently s
 
 ## Architecture
 
-`src/backend/services/registry.ts` will export `infrastructureServiceRegistry`, a typed object keyed by the exact root module name (for example, `logger.service`). Each entry contains a short responsibility description. The registry checker will:
+`src/backend/services/registry.ts` will export `infrastructureServiceRegistry`, a typed object keyed by the exact root module name (for example, `logger.service`). Each entry contains its exact filename and a short responsibility description. The registry checker will:
 
 1. enumerate only root production files ending in `.service.ts`;
 2. reject any root service missing from `infrastructureServiceRegistry`;
-3. reject any registry entry whose corresponding file is absent; and
+3. reject any registry entry whose declared file is absent; and
 4. exempt capsule imports only when their first service path segment is an exact infrastructure registry key.
 
 Factory config access, port allocation, config persistence, and proxy logic will move under `src/backend/services/run-script/service/`. Workspace snapshot storage will move under `src/backend/services/workspace/service/snapshot/`, and repository clone and git operations under `src/backend/services/workspace/service/worktree/`. Public consumers will import these APIs from `@/backend/services/run-script` or `@/backend/services/workspace`; same-capsule consumers will use relative imports where appropriate.
