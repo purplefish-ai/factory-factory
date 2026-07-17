@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
   projectSnapshotToKanbanWorkspace,
@@ -8,15 +9,10 @@ import {
 } from './snapshot-to-workspace';
 
 function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSnapshotEntry {
-  return {
-    workspaceId: 'ws-1',
-    projectId: 'proj-1',
+  return makeWorkspaceSnapshotEntry({
     version: 3,
-    computedAt: '2026-01-15T10:00:00Z',
     source: 'event:workspace_state_change',
     name: 'my-workspace',
-    status: 'READY',
-    createdAt: '2026-01-10T08:00:00Z',
     branchName: 'feat/snapshot',
     prUrl: 'https://github.com/org/repo/pull/42',
     prNumber: 42,
@@ -42,7 +38,6 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
       tone: 'attention',
       needsUser: true,
     },
-    ratchetButtonAnimated: false,
     fieldTimestamps: {
       workspace: 1000,
       pr: 2000,
@@ -52,7 +47,7 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
       reconciliation: 6000,
     },
     ...overrides,
-  };
+  });
 }
 
 describe('workspace snapshot cache projections', () => {
@@ -124,6 +119,19 @@ describe('workspace snapshot cache projections', () => {
     expect(sidebar.stateComputedAt).toBe('2026-01-20T00:00:00Z');
     expect(sidebar.snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
     expect(kanban.stateComputedAt).toEqual(new Date('2026-01-20T00:00:00Z'));
+  });
+
+  it('applies transported PR update timing to kanban and detail caches', () => {
+    const entry = makeEntry({ prUpdatedAt: '2026-02-02T12:00:00Z' });
+    const kanban = projectSnapshotToKanbanWorkspace(entry);
+    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, {
+      ...kanban,
+      sessionSummaries: entry.sessionSummaries,
+      sidebarStatus: entry.sidebarStatus,
+    });
+
+    expect(kanban.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
+    expect(detail?.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
   });
 
   it('preserves DB-only issue, creation, and parent fields', () => {

@@ -3,9 +3,10 @@ import {
   SnapshotServerMessageSchema,
   WorkspaceSnapshotEntrySchema,
 } from '@/shared/workspace-snapshot';
+import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 
 function makeCompleteSnapshot() {
-  return {
+  return makeWorkspaceSnapshotEntry({
     workspaceId: 'workspace-1',
     projectId: 'project-1',
     version: 3,
@@ -75,7 +76,7 @@ function makeCompleteSnapshot() {
       runScript: 5,
       reconciliation: 6,
     },
-  };
+  });
 }
 
 describe('workspace snapshot transport contract', () => {

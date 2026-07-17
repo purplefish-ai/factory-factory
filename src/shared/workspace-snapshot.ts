@@ -7,63 +7,21 @@ import {
   RunScriptStatus,
   SessionProvider,
   SessionStatus,
+  WORKSPACE_SIDEBAR_ACTIVITY_STATES,
+  WORKSPACE_SIDEBAR_CI_STATES,
   WorkspaceStatus,
 } from '@/shared/core';
-import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
-import type {
-  WorkspaceStatusReasonCode,
-  WorkspaceStatusReasonTone,
+import {
+  SESSION_RUNTIME_ACTIVITIES,
+  SESSION_RUNTIME_PHASES,
+  SESSION_RUNTIME_PROCESS_STATES,
+} from '@/shared/session-runtime';
+import { WORKSPACE_CI_OBSERVATIONS, WORKSPACE_FLOW_PHASES } from '@/shared/workspace-flow-state';
+import {
+  WORKSPACE_PENDING_REQUEST_TYPES,
+  WORKSPACE_STATUS_REASON_CODES,
+  WORKSPACE_STATUS_REASON_TONES,
 } from '@/shared/workspace-status-reason';
-
-const WORKSPACE_FLOW_PHASES = [
-  'NO_PR',
-  'CI_WAIT',
-  'RATCHET_VERIFY',
-  'RATCHET_FIXING',
-  'READY',
-  'MERGED',
-] as const satisfies readonly WorkspaceFlowPhase[];
-
-const WORKSPACE_CI_OBSERVATIONS = [
-  'NOT_FETCHED',
-  'NO_CHECKS',
-  'CHECKS_PENDING',
-  'CHECKS_FAILED',
-  'CHECKS_PASSED',
-  'CHECKS_UNKNOWN',
-] as const satisfies readonly WorkspaceCiObservation[];
-
-const WORKSPACE_STATUS_REASON_CODES = [
-  'NEEDS_PERMISSION',
-  'NEEDS_PLAN_APPROVAL',
-  'NEEDS_ANSWER',
-  'SESSION_ERROR',
-  'SETTING_UP',
-  'SETUP_FAILED',
-  'ARCHIVING',
-  'ARCHIVED',
-  'AGENT_WORKING',
-  'DEV_SERVER_RUNNING',
-  'WAITING_FOR_CI',
-  'FIXING_CI_FAILURES',
-  'FIXING_REVIEW_COMMENTS',
-  'CHECKING_PR',
-  'MERGED',
-  'PR_CLOSED',
-  'READY_TO_MERGE',
-  'READY_FOR_REVIEW',
-  'NO_SESSION_STARTED',
-  'READY_FOR_NEXT_PROMPT',
-] as const satisfies readonly WorkspaceStatusReasonCode[];
-
-const WORKSPACE_STATUS_REASON_TONES = [
-  'neutral',
-  'working',
-  'waiting',
-  'attention',
-  'success',
-  'danger',
-] as const satisfies readonly WorkspaceStatusReasonTone[];
 
 const SnapshotFieldGroupSchema = z.enum([
   'workspace',
@@ -89,9 +47,9 @@ const WorkspaceSessionSummarySchema = z.object({
   model: z.string().nullable(),
   provider: z.nativeEnum(SessionProvider).optional(),
   persistedStatus: z.nativeEnum(SessionStatus),
-  runtimePhase: z.enum(['loading', 'starting', 'running', 'idle', 'stopping', 'error']),
-  processState: z.enum(['unknown', 'alive', 'stopped']),
-  activity: z.enum(['WORKING', 'IDLE']),
+  runtimePhase: z.enum(SESSION_RUNTIME_PHASES),
+  processState: z.enum(SESSION_RUNTIME_PROCESS_STATES),
+  activity: z.enum(SESSION_RUNTIME_ACTIVITIES),
   updatedAt: z.string(),
   lastExit: SessionRuntimeLastExitSchema.nullable(),
   errorMessage: z.string().nullable().optional(),
@@ -105,17 +63,8 @@ const WorkspaceGitStatsSchema = z.object({
 });
 
 const WorkspaceSidebarStatusSchema = z.object({
-  activityState: z.enum(['WORKING', 'IDLE']),
-  ciState: z.enum([
-    'NONE',
-    'RUNNING',
-    'FAILING',
-    'PASSING',
-    'UNKNOWN',
-    'CLOSED',
-    'MERGED',
-    'CONFLICT',
-  ]),
+  activityState: z.enum(WORKSPACE_SIDEBAR_ACTIVITY_STATES),
+  ciState: z.enum(WORKSPACE_SIDEBAR_CI_STATES),
 });
 
 const WorkspaceStatusReasonSchema = z.object({
@@ -145,7 +94,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
   isWorking: z.boolean(),
-  pendingRequestType: z.enum(['plan_approval', 'user_question', 'permission_request']).nullable(),
+  pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
   sessionSummaries: z.array(WorkspaceSessionSummarySchema),
   gitStats: WorkspaceGitStatsSchema.nullable(),
   lastActivityAt: z.string().nullable(),

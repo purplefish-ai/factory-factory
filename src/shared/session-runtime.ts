@@ -1,16 +1,23 @@
 import type { SessionStatus } from '@/shared/core';
 
-export type SessionRuntimePhase =
-  | 'loading'
-  | 'starting'
-  | 'running'
-  | 'idle'
-  | 'stopping'
-  | 'error';
+export const SESSION_RUNTIME_PHASES = [
+  'loading',
+  'starting',
+  'running',
+  'idle',
+  'stopping',
+  'error',
+] as const;
 
-export type SessionRuntimeProcessState = 'unknown' | 'alive' | 'stopped';
+export type SessionRuntimePhase = (typeof SESSION_RUNTIME_PHASES)[number];
 
-export type SessionRuntimeActivity = 'WORKING' | 'IDLE';
+export const SESSION_RUNTIME_PROCESS_STATES = ['unknown', 'alive', 'stopped'] as const;
+
+export type SessionRuntimeProcessState = (typeof SESSION_RUNTIME_PROCESS_STATES)[number];
+
+export const SESSION_RUNTIME_ACTIVITIES = ['WORKING', 'IDLE'] as const;
+
+export type SessionRuntimeActivity = (typeof SESSION_RUNTIME_ACTIVITIES)[number];
 
 export interface SessionRuntimeLastExit {
   code: number | null;

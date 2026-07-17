@@ -1,17 +1,22 @@
 import { deriveCiVisualStateFromPrCiStatus } from './ci-status.js';
 import type { CIStatus, PRState, RatchetState } from './enums.js';
 
-export type WorkspaceSidebarActivityState = 'WORKING' | 'IDLE';
+export const WORKSPACE_SIDEBAR_ACTIVITY_STATES = ['WORKING', 'IDLE'] as const;
 
-export type WorkspaceSidebarCiState =
-  | 'NONE'
-  | 'RUNNING'
-  | 'FAILING'
-  | 'PASSING'
-  | 'UNKNOWN'
-  | 'CLOSED'
-  | 'MERGED'
-  | 'CONFLICT';
+export type WorkspaceSidebarActivityState = (typeof WORKSPACE_SIDEBAR_ACTIVITY_STATES)[number];
+
+export const WORKSPACE_SIDEBAR_CI_STATES = [
+  'NONE',
+  'RUNNING',
+  'FAILING',
+  'PASSING',
+  'UNKNOWN',
+  'CLOSED',
+  'MERGED',
+  'CONFLICT',
+] as const;
+
+export type WorkspaceSidebarCiState = (typeof WORKSPACE_SIDEBAR_CI_STATES)[number];
 
 export interface WorkspaceSidebarStatus {
   activityState: WorkspaceSidebarActivityState;

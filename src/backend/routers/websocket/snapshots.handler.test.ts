@@ -13,6 +13,7 @@ import {
   SnapshotServerMessageSchema,
   type WorkspaceSnapshotEntry,
 } from '@/shared/workspace-snapshot';
+import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import {
   createSnapshotsUpgradeHandler,
   resetSnapshotsHandlerStateForTests,
@@ -41,7 +42,7 @@ const {
   mockWaitForInProgress,
 } = vi.hoisted(() => ({
   storeListeners: new Map<string, (event: unknown) => unknown>(),
-  mockGetByProjectId: vi.fn(() => []),
+  mockGetByProjectId: vi.fn<() => WorkspaceSnapshotEntry[]>(() => []),
   mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
   mockRefreshReviewCountIfStale: vi.fn(),
   mockWaitForInProgress: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -168,41 +169,11 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
 function makeSnapshotEntry(
   overrides: Partial<WorkspaceSnapshotEntry> = {}
 ): WorkspaceSnapshotEntry {
-  return {
-    workspaceId: 'ws-1',
-    projectId: 'proj-1',
-    version: 1,
+  return makeWorkspaceSnapshotEntry({
     computedAt: '2026-07-17T12:00:00.000Z',
-    source: 'test',
     name: 'Visible',
-    status: 'READY',
     createdAt: '2026-07-17T11:00:00.000Z',
-    branchName: null,
-    prUrl: null,
-    prNumber: null,
-    prState: 'NONE',
-    prCiStatus: 'UNKNOWN',
-    prUpdatedAt: null,
-    ratchetEnabled: false,
-    ratchetState: 'IDLE',
-    runScriptStatus: 'IDLE',
-    hasHadSessions: false,
-    isWorking: false,
-    pendingRequestType: null,
-    sessionSummaries: [],
-    gitStats: null,
-    lastActivityAt: null,
-    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
-    kanbanColumn: 'WORKING',
-    flowPhase: 'NO_PR',
     ciObservation: 'CHECKS_UNKNOWN',
-    ratchetButtonAnimated: false,
-    statusReason: {
-      code: 'NO_SESSION_STARTED',
-      label: 'No session started',
-      tone: 'neutral',
-      needsUser: true,
-    },
     fieldTimestamps: {
       workspace: 1,
       pr: 1,
@@ -212,7 +183,7 @@ function makeSnapshotEntry(
       reconciliation: 1,
     },
     ...overrides,
-  };
+  });
 }
 
 function parseSentMessage(ws: MockWebSocket, callIndex = 0) {
@@ -242,10 +213,10 @@ describe('createSnapshotsUpgradeHandler', () => {
     const visibleEntry = makeSnapshotEntry();
     const testEntries = [
       visibleEntry,
-      { workspaceId: 'ws-2', projectId: 'proj-1', name: 'Archiving', status: 'ARCHIVING' },
-      { workspaceId: 'ws-3', projectId: 'proj-1', name: 'Archived', status: 'ARCHIVED' },
+      makeSnapshotEntry({ workspaceId: 'ws-2', name: 'Archiving', status: 'ARCHIVING' }),
+      makeSnapshotEntry({ workspaceId: 'ws-3', name: 'Archived', status: 'ARCHIVED' }),
     ];
-    mockGetByProjectId.mockReturnValue(testEntries as never);
+    mockGetByProjectId.mockReturnValue(testEntries);
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
@@ -264,14 +235,8 @@ describe('createSnapshotsUpgradeHandler', () => {
 
   it('omits review count from full snapshot when cache is not populated', async () => {
     mockGetCachedReviewCount.mockReturnValue(undefined);
-    mockGetByProjectId.mockReturnValue([
-      {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Visible',
-        status: 'READY',
-      },
-    ] as never);
+    const visibleEntry = makeSnapshotEntry();
+    mockGetByProjectId.mockReturnValue([visibleEntry]);
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
@@ -283,14 +248,7 @@ describe('createSnapshotsUpgradeHandler', () => {
         JSON.stringify({
           type: 'snapshot_full',
           projectId: 'proj-1',
-          entries: [
-            {
-              workspaceId: 'ws-1',
-              projectId: 'proj-1',
-              name: 'Visible',
-              status: 'READY',
-            },
-          ],
+          entries: [visibleEntry],
         })
       );
     });
@@ -383,12 +341,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Updated',
-        status: 'READY',
-      } as never,
+      entry: makeSnapshotEntry({ name: 'Updated' }),
     };
     await changedListener!(event);
 
@@ -416,12 +369,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Archiving',
-        status: 'ARCHIVING',
-      } as never,
+      entry: makeSnapshotEntry({ name: 'Archiving', status: 'ARCHIVING' }),
     };
     await changedListener!(event);
 
@@ -465,7 +413,7 @@ describe('createSnapshotsUpgradeHandler', () => {
         resolveWait = resolve;
       })
     );
-    mockGetByProjectId.mockReturnValue([] as never);
+    mockGetByProjectId.mockReturnValue([]);
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
@@ -477,12 +425,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Early',
-        status: 'READY',
-      } as never,
+      entry: makeSnapshotEntry({ name: 'Early' }),
     };
     await changedListener!(event);
 
@@ -508,14 +451,7 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   it('keeps buffering deltas when the snapshot_full send fails', async () => {
-    mockGetByProjectId.mockReturnValue([
-      {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Visible',
-        status: 'READY',
-      },
-    ] as never);
+    mockGetByProjectId.mockReturnValue([makeSnapshotEntry()]);
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
@@ -534,12 +470,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     await changedListener!({
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Updated',
-        status: 'READY',
-      } as never,
+      entry: makeSnapshotEntry({ name: 'Updated' }),
     });
 
     // The baseline never reached the client, so deltas must stay buffered
@@ -591,12 +522,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Updated',
-        status: 'READY',
-      } as never,
+      entry: makeSnapshotEntry({ name: 'Updated' }),
     };
     expect(() => changedListener!(event)).not.toThrow();
 
@@ -646,14 +572,7 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   it('does not throw out of the upgrade callback when the initial snapshot send throws', () => {
-    mockGetByProjectId.mockReturnValue([
-      {
-        workspaceId: 'ws-1',
-        projectId: 'proj-1',
-        name: 'Visible',
-        status: 'READY',
-      },
-    ] as never);
+    mockGetByProjectId.mockReturnValue([makeSnapshotEntry()]);
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();

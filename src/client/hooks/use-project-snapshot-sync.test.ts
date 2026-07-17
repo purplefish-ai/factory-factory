@@ -4,7 +4,7 @@ import {
   setPendingRatchetToggle,
 } from '@/client/lib/ratchet-toggle-cache';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
-import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
 // =============================================================================
@@ -63,58 +63,6 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
   },
 }));
-
-// =============================================================================
-// Test factory
-// =============================================================================
-
-function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSnapshotEntry {
-  return {
-    workspaceId: 'ws-1',
-    projectId: 'proj-1',
-    version: 1,
-    computedAt: '2026-01-15T10:00:00Z',
-    source: 'event:workspace_state_change',
-    name: 'test-workspace',
-    status: 'READY',
-    createdAt: '2026-01-10T08:00:00Z',
-    branchName: 'feat/test',
-    prUrl: null,
-    prNumber: null,
-    prState: 'NONE',
-    prCiStatus: 'UNKNOWN',
-    prUpdatedAt: null,
-    ratchetEnabled: false,
-    ratchetState: 'IDLE',
-    runScriptStatus: 'IDLE',
-    hasHadSessions: false,
-    isWorking: false,
-    pendingRequestType: null,
-    sessionSummaries: [],
-    gitStats: null,
-    lastActivityAt: null,
-    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
-    kanbanColumn: 'WORKING',
-    flowPhase: 'NO_PR',
-    ciObservation: 'NOT_FETCHED',
-    statusReason: {
-      code: 'NO_SESSION_STARTED',
-      label: 'No session started',
-      tone: 'neutral',
-      needsUser: true,
-    },
-    ratchetButtonAnimated: false,
-    fieldTimestamps: {
-      workspace: 1000,
-      pr: 0,
-      session: 0,
-      ratchet: 0,
-      runScript: 0,
-      reconciliation: 0,
-    },
-    ...overrides,
-  };
-}
 
 // =============================================================================
 // Tests
