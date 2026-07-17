@@ -1,9 +1,30 @@
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
-import { findTypedPayload, unwrapJsonCodeFence } from './tool-result-parse-utils';
+import { findTypedPayload, isObjectRecord, unwrapJsonCodeFence } from './tool-result-parse-utils';
 
 const MAX_PLAN_SEARCH_DEPTH = 6;
 const PLAN_TYPE = 'plan';
+const PLAN_TEXT_KEYS = ['plan', 'markdown', 'text', 'content'] as const;
+
+function hasPlanTextContent(value: unknown, depth = 0): boolean {
+  if (depth > MAX_PLAN_SEARCH_DEPTH) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasPlanTextContent(item, depth + 1));
+  }
+
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+
+  return PLAN_TEXT_KEYS.some((key) => key in value && hasPlanTextContent(value[key], depth + 1));
+}
 
 function extractPlanResultFromRawText(rawText: string): string | null {
   const trimmed = rawText.trim();
@@ -24,6 +45,10 @@ function extractPlanResultFromRawText(rawText: string): string | null {
     maxDepth: MAX_PLAN_SEARCH_DEPTH,
   });
   if (!planPayload) {
+    return null;
+  }
+
+  if (!hasPlanTextContent(planPayload)) {
     return null;
   }
 
