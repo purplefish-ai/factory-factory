@@ -84,6 +84,48 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('raw persistence accessor');
   });
 
+  it('rejects locally imported accessors re-exported from capsule barrels', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "import { workspaceAccessor } from './resources/workspace.accessor';\nexport { workspaceAccessor };\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it('rejects indirect named and star accessor re-exports from capsule barrels', () => {
+    const named = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export { workspaceAccessor } from './service/reexports';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/service/reexports.ts',
+        content: "export { workspaceAccessor } from '../resources/workspace.accessor';\n",
+      },
+    ]);
+    const star = runChecker([
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content: "export * from './service/reexports';\n",
+      },
+      {
+        path: 'src/backend/services/workspace/service/reexports.ts',
+        content: "export { workspaceAccessor } from '../resources/workspace.accessor';\n",
+      },
+    ]);
+
+    expect(named.status).toBe(1);
+    expect(named.output).toContain('workspaceAccessor');
+    expect(star.status).toBe(1);
+    expect(star.output).toContain('workspaceAccessor');
+  });
+
   it('rejects type-only raw accessor imports from capsule barrels', () => {
     const result = runChecker([
       {
@@ -104,6 +146,23 @@ describe('check-service-accessor-boundaries', () => {
         path: 'src/backend/services/session/service/session.service.ts',
         content:
           "import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('cross-owner raw persistence accessor');
+    expect(result.output).toContain('workspaceAccessor');
+  });
+
+  it.each([
+    'js',
+    'mjs',
+    'cjs',
+  ])('normalizes .%s runtime extensions to TypeScript module identity', (extension) => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/session/service/session.service.ts',
+        content: `import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor.${extension}';\n`,
       },
     ]);
 

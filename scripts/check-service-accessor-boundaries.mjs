@@ -69,7 +69,7 @@ function toPosix(filePath) {
 }
 
 function withoutSourceExtension(filePath) {
-  return filePath.replace(/\.(?:tsx?|mts|cts)$/, '');
+  return filePath.replace(/\.(?:[cm]?[jt]sx?)$/, '');
 }
 
 function collectSourceFiles(directory) {
@@ -138,6 +138,166 @@ function exportedNames(exportDeclaration) {
   return exportDeclaration.exportClause.elements.map((element) =>
     (element.propertyName ?? element.name).text
   );
+}
+
+function parseModuleRecords(sourceFiles, rootDir) {
+  const records = new Map();
+
+  for (const absolutePath of sourceFiles) {
+    const filePath = toPosix(path.relative(rootDir, absolutePath));
+    const modulePath = withoutSourceExtension(filePath);
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      readFileSync(absolutePath, 'utf8'),
+      ts.ScriptTarget.Latest,
+      true,
+      filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+    );
+    const record = {
+      filePath,
+      modulePath,
+      imports: [],
+      localExports: [],
+      namedReExports: [],
+      starReExports: [],
+    };
+
+    for (const statement of sourceFile.statements) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+        const importedModule = canonicalModule(filePath, statement.moduleSpecifier.text);
+        const namedBindings = statement.importClause?.namedBindings;
+        if (importedModule && namedBindings && ts.isNamedImports(namedBindings)) {
+          for (const element of namedBindings.elements) {
+            record.imports.push({
+              imported: (element.propertyName ?? element.name).text,
+              local: element.name.text,
+              modulePath: importedModule,
+            });
+          }
+        }
+        continue;
+      }
+
+      if (!ts.isExportDeclaration(statement)) {
+        continue;
+      }
+
+      const exportedModule =
+        statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+          ? canonicalModule(filePath, statement.moduleSpecifier.text)
+          : null;
+
+      if (!statement.exportClause) {
+        if (exportedModule) {
+          record.starReExports.push(exportedModule);
+        }
+        continue;
+      }
+
+      if (!ts.isNamedExports(statement.exportClause)) {
+        continue;
+      }
+
+      for (const element of statement.exportClause.elements) {
+        const importedOrLocal = (element.propertyName ?? element.name).text;
+        const exported = element.name.text;
+        if (exportedModule) {
+          record.namedReExports.push({
+            imported: importedOrLocal,
+            exported,
+            modulePath: exportedModule,
+          });
+        } else {
+          record.localExports.push({ local: importedOrLocal, exported });
+        }
+      }
+    }
+
+    records.set(modulePath, record);
+  }
+
+  return records;
+}
+
+function resolveSourceModule(modulePath, records) {
+  if (records.has(modulePath)) {
+    return modulePath;
+  }
+
+  const indexModule = `${modulePath}/index`;
+  return records.has(indexModule) ? indexModule : modulePath;
+}
+
+function checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations) {
+  const records = parseModuleRecords(sourceFiles, rootDir);
+  const exportsByModule = new Map(
+    [...records.keys()].map((modulePath) => [modulePath, new Map()])
+  );
+
+  for (const [binding, policy] of Object.entries(ACCESSOR_POLICIES)) {
+    const modulePath = resolveSourceModule(policy.module, records);
+    const moduleExports = exportsByModule.get(modulePath) ?? new Map();
+    moduleExports.set(binding, binding);
+    exportsByModule.set(modulePath, moduleExports);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const record of records.values()) {
+      const moduleExports = exportsByModule.get(record.modulePath);
+      const localBindings = new Map();
+
+      for (const importedBinding of record.imports) {
+        const importedModule = resolveSourceModule(importedBinding.modulePath, records);
+        const accessorBinding = exportsByModule.get(importedModule)?.get(importedBinding.imported);
+        if (accessorBinding) {
+          localBindings.set(importedBinding.local, accessorBinding);
+        }
+      }
+
+      for (const localExport of record.localExports) {
+        const accessorBinding = localBindings.get(localExport.local);
+        if (accessorBinding && !moduleExports.has(localExport.exported)) {
+          moduleExports.set(localExport.exported, accessorBinding);
+          changed = true;
+        }
+      }
+
+      for (const reExport of record.namedReExports) {
+        const reExportedModule = resolveSourceModule(reExport.modulePath, records);
+        const accessorBinding = exportsByModule.get(reExportedModule)?.get(reExport.imported);
+        if (accessorBinding && !moduleExports.has(reExport.exported)) {
+          moduleExports.set(reExport.exported, accessorBinding);
+          changed = true;
+        }
+      }
+
+      for (const starModule of record.starReExports) {
+        const reExportedModule = resolveSourceModule(starModule, records);
+        for (const [exported, accessorBinding] of exportsByModule.get(reExportedModule) ?? []) {
+          if (exported !== 'default' && !moduleExports.has(exported)) {
+            moduleExports.set(exported, accessorBinding);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  for (const record of records.values()) {
+    if (!isCapsuleBarrel(record.filePath)) {
+      continue;
+    }
+
+    const exposedAccessors = new Set(exportsByModule.get(record.modulePath)?.values() ?? []);
+    for (const accessorBinding of exposedAccessors) {
+      violations.push(
+        `${record.filePath}: capsule barrel exposes raw persistence accessor ${accessorBinding}`
+      );
+    }
+  }
 }
 
 function isExactException(importerPath, modulePath) {
@@ -217,9 +377,11 @@ function checkSourceFile(absolutePath, rootDir, violations) {
       }
 
       if (isCapsuleBarrel(importerPath) && isAccessorModule(modulePath)) {
-        violations.push(
-          `${importerPath}: capsule barrel exports raw persistence accessor module ${statement.moduleSpecifier.text}`
-        );
+        if (!POLICY_BY_MODULE.has(modulePath)) {
+          violations.push(
+            `${importerPath}: capsule barrel exports raw persistence accessor module ${statement.moduleSpecifier.text}`
+          );
+        }
         continue;
       }
 
@@ -256,6 +418,7 @@ checkAccessorPolicyCoverage(sourceFiles, rootDir, violations);
 for (const sourceFile of sourceFiles) {
   checkSourceFile(sourceFile, rootDir, violations);
 }
+checkCapsuleBarrelExportChains(sourceFiles, rootDir, violations);
 
 if (violations.length > 0) {
   console.error('Service accessor boundary violations:');
