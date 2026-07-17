@@ -293,19 +293,32 @@ describe('fetchPRState', () => {
 });
 
 describe('computeDispatchSnapshotKey', () => {
+  it('includes the pull request number', () => {
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
+
+    expect(key).toBe('pr:123|ci:SUCCESS|no-changes-requested:none|merge:conflict');
+  });
+
+  it('produces different keys for identical state on different pull requests', () => {
+    const first = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
+    const second = computeDispatchSnapshotKey(456, CIStatus.SUCCESS, false, null, null, true);
+
+    expect(first).not.toBe(second);
+  });
+
   it('includes merge:conflict suffix when hasMergeConflict is true', () => {
-    const key = computeDispatchSnapshotKey(CIStatus.SUCCESS, false, null, null, true);
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, true);
     expect(key).toContain('merge:conflict');
   });
 
   it('includes merge:clean suffix when hasMergeConflict is false', () => {
-    const key = computeDispatchSnapshotKey(CIStatus.SUCCESS, false, null, null, false);
+    const key = computeDispatchSnapshotKey(123, CIStatus.SUCCESS, false, null, null, false);
     expect(key).toContain('merge:clean');
   });
 
   it('produces different keys for conflicted vs clean PRs', () => {
-    const clean = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, false);
-    const conflicted = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, true);
+    const clean = computeDispatchSnapshotKey(123, CIStatus.PENDING, false, null, null, false);
+    const conflicted = computeDispatchSnapshotKey(123, CIStatus.PENDING, false, null, null, true);
     expect(clean).not.toBe(conflicted);
   });
 });
@@ -450,6 +463,9 @@ describe('fetchPRState', () => {
         url: 'https://github.com/example/repo/pull/123#discussion_r1',
       },
     ]);
+    expect(result.snapshotKey).toBe(
+      'pr:123|ci:SUCCESS|changes-requested:1767225600000|merge:clean'
+    );
   });
 
   it('filters comments in resolved threads out of the prompt payload', async () => {
