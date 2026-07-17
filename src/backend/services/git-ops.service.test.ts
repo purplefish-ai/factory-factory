@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGitCommand = vi.hoisted(() => vi.fn());
-const mockGetWorkspaceGitStats = vi.hoisted(() => vi.fn());
+const mockGetSnapshot = vi.hoisted(() => vi.fn());
+const mockGetStats = vi.hoisted(() => vi.fn());
 const mockPathExists = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
 const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
@@ -22,10 +23,6 @@ vi.mock('@/backend/lib/shell', () => ({
   gitCommand: (...args: unknown[]) => mockGitCommand(...args),
 }));
 
-vi.mock('@/backend/lib/git-helpers', () => ({
-  getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
-}));
-
 vi.mock('@/backend/lib/file-helpers', () => ({
   pathExists: (...args: unknown[]) => mockPathExists(...args),
 }));
@@ -41,7 +38,9 @@ vi.mock('@/backend/clients/git.client', () => ({
 }));
 
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  getStats: (...args: unknown[]) => mockGetStats(...args),
   workspaceGitStateService: {
+    getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
     invalidate: mockGitStateInvalidate,
     remove: mockGitStateRemove,
   },
@@ -60,14 +59,18 @@ describe('gitOpsService', () => {
     mockGitClient.getWorktreePath.mockImplementation((name: string) => `/repo/worktrees/${name}`);
   });
 
-  it('forwards workspace git stats helper', async () => {
-    mockGetWorkspaceGitStats.mockResolvedValue({ total: 3, additions: 2, deletions: 1 });
+  it('derives workspace git stats from the shared snapshot', async () => {
+    const snapshot = { base: { stats: { total: 3, additions: 2, deletions: 1 } } };
+    const stats = { total: 3, additions: 2, deletions: 1, hasUncommitted: false };
+    mockGetSnapshot.mockResolvedValue(snapshot);
+    mockGetStats.mockReturnValue(stats);
 
-    await expect(gitOpsService.getWorkspaceGitStats('/repo/w1', 'main')).resolves.toEqual({
-      total: 3,
-      additions: 2,
-      deletions: 1,
+    await expect(gitOpsService.getWorkspaceGitStats('/repo/w1', 'main')).resolves.toEqual(stats);
+    expect(mockGetSnapshot).toHaveBeenCalledWith({
+      worktreePath: '/repo/w1',
+      defaultBranch: 'main',
     });
+    expect(mockGetStats).toHaveBeenCalledWith(snapshot);
   });
 
   it('commitIfNeeded skips invalid repo, validates status, and commits when requested', async () => {

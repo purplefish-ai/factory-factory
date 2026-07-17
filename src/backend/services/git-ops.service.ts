@@ -3,11 +3,14 @@ import * as path from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { GitClientFactory } from '@/backend/clients/git.client';
 import { pathExists } from '@/backend/lib/file-helpers';
-import { getWorkspaceGitStats } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
-import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import {
+  getStats,
+  type WorkspaceGitStats,
+  workspaceGitStateService,
+} from '@/backend/services/workspace-git-state.service';
 
-export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>;
+export type { WorkspaceGitStats };
 
 interface ProjectPaths {
   repoPath: string;
@@ -25,8 +28,12 @@ class GitOpsService {
     return branchName;
   }
 
-  getWorkspaceGitStats(worktreePath: string, defaultBranch: string): Promise<WorkspaceGitStats> {
-    return getWorkspaceGitStats(worktreePath, defaultBranch);
+  async getWorkspaceGitStats(
+    worktreePath: string,
+    defaultBranch: string
+  ): Promise<WorkspaceGitStats | null> {
+    const snapshot = await workspaceGitStateService.getSnapshot({ worktreePath, defaultBranch });
+    return getStats(snapshot);
   }
 
   /**

@@ -2,54 +2,61 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
-import { getMergeBase, parseGitStatusOutput } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
 import { workspaceDataService } from '@/backend/services/workspace';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
-import {
-  getWorkspaceWithProjectAndWorktreeOrThrow,
-  getWorkspaceWithWorktree,
-} from './workspace-helpers';
+import { getWorkspaceWithProjectAndWorktreeOrThrow } from './workspace-helpers';
 
 const loggerName = 'workspace-git-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+async function getSnapshotForWorkspace(workspaceId: string) {
+  const workspace = await workspaceDataService.findByIdWithProject(workspaceId);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+  if (!workspace.worktreePath) {
+    return null;
+  }
+  return workspaceGitStateService.getSnapshot({
+    worktreePath: workspace.worktreePath,
+    defaultBranch: workspace.project?.defaultBranch ?? 'main',
+  });
+}
 
 export const workspaceGitRouter = router({
   // Get git status for workspace
   getGitStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
-      if (!result) {
+      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+      if (!snapshot) {
         return { files: [], hasUncommitted: false };
       }
-
-      const gitResult = await gitCommand(['status', '--porcelain'], result.worktreePath);
-      if (gitResult.code !== 0) {
-        throw new Error(`Git status failed: ${gitResult.stderr}`);
+      if (snapshot.status.error) {
+        throw new Error(`Git status failed: ${snapshot.status.error}`);
       }
 
-      const files = parseGitStatusOutput(gitResult.stdout);
-      return { files, hasUncommitted: files.length > 0 };
+      return {
+        files: snapshot.status.files,
+        hasUncommitted: snapshot.status.hasUncommitted,
+      };
     }),
 
   // Get only unstaged changes for workspace
   getUnstagedChanges: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
-      if (!result) {
+      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+      if (!snapshot) {
         return { files: [] };
       }
-
-      const gitResult = await gitCommand(['status', '--porcelain'], result.worktreePath);
-      if (gitResult.code !== 0) {
-        throw new Error(`Git status failed: ${gitResult.stderr}`);
+      if (snapshot.status.error) {
+        throw new Error(`Git status failed: ${snapshot.status.error}`);
       }
 
-      const files = parseGitStatusOutput(gitResult.stdout);
-      // Filter to only unstaged files
-      const unstagedFiles = files.filter((f) => !f.staged);
+      const unstagedFiles = snapshot.status.files.filter((file) => !file.staged);
       return { files: unstagedFiles };
     }),
 
@@ -58,101 +65,43 @@ export const workspaceGitRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      // Use findByIdWithProject directly since we need project info
-      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${input.workspaceId}`);
-      }
-
-      if (!workspace.worktreePath) {
+      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+      if (!snapshot) {
         return { added: [], modified: [], deleted: [], noMergeBase: false };
       }
-
-      // Get merge base with the project's default branch
-      const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-      const mergeBase = await getMergeBase(workspace.worktreePath, defaultBranch);
-
-      // If no merge base, the branch is not based on the default branch
-      if (!mergeBase) {
+      if (snapshot.base.error) {
+        throw new Error(`Git diff failed: ${snapshot.base.error}`);
+      }
+      if (snapshot.base.noMergeBase) {
         logger.warn(
-          `No merge base found for workspace ${input.workspaceId} with branch ${defaultBranch}`
+          `No merge base found for workspace ${input.workspaceId} with branch ${snapshot.defaultBranch}`
         );
-        return { added: [], modified: [], deleted: [], noMergeBase: true };
       }
 
-      // Get list of changed files with status
-      const result = await gitCommand(['diff', '--name-status', mergeBase], workspace.worktreePath);
-
-      if (result.code !== 0) {
-        throw new Error(`Git diff failed: ${result.stderr}`);
-      }
-
-      // Parse output: each line is "STATUS\tFILENAME"
-      const lines = result.stdout.split('\n').filter((line) => line.length > 0);
-      const added: { path: string; status: 'added' }[] = [];
-      const modified: { path: string; status: 'modified' }[] = [];
-      const deleted: { path: string; status: 'deleted' }[] = [];
-
-      for (const line of lines) {
-        const [status, filePath] = line.split('\t');
-        if (!filePath) {
-          // Log unexpected git output format for debugging
-          logger.warn(`Unexpected git diff output format: ${line}`);
-          continue;
-        }
-
-        if (status === 'A') {
-          added.push({ path: filePath, status: 'added' });
-        } else if (status === 'M') {
-          modified.push({ path: filePath, status: 'modified' });
-        } else if (status === 'D') {
-          deleted.push({ path: filePath, status: 'deleted' });
-        }
-        // Silently ignore other status codes (R for rename, C for copy, etc.)
-      }
-
-      return { added, modified, deleted, noMergeBase: false };
+      return {
+        added: snapshot.base.added,
+        modified: snapshot.base.modified,
+        deleted: snapshot.base.deleted,
+        noMergeBase: snapshot.base.noMergeBase,
+      };
     }),
 
   // Get files changed in commits not yet pushed to upstream
   getUnpushedFiles: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
-      if (!result) {
+      const snapshot = await getSnapshotForWorkspace(input.workspaceId);
+      if (!snapshot) {
         return { files: [], hasUpstream: false };
       }
-
-      const upstreamResult = await gitCommand(
-        ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-        result.worktreePath
-      );
-      if (upstreamResult.code !== 0) {
-        // No upstream configured (or detached HEAD); treat as unknown rather than throwing.
-        return { files: [], hasUpstream: false };
+      if (snapshot.upstream.error) {
+        throw new Error(`Git diff failed: ${snapshot.upstream.error}`);
       }
 
-      const upstreamRef = upstreamResult.stdout.trim();
-      if (!upstreamRef) {
-        return { files: [], hasUpstream: false };
-      }
-
-      const diffResult = await gitCommand(
-        // Use three-dot to capture only changes introduced by local commits
-        // since divergence from upstream (exclude remote-only changes).
-        ['diff', '--name-only', `${upstreamRef}...HEAD`],
-        result.worktreePath
-      );
-      if (diffResult.code !== 0) {
-        throw new Error(`Git diff failed: ${diffResult.stderr}`);
-      }
-
-      const files = diffResult.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-
-      return { files, hasUpstream: true };
+      return {
+        files: snapshot.upstream.files,
+        hasUpstream: snapshot.upstream.hasUpstream,
+      };
     }),
 
   // Get file diff for workspace (relative to project's default branch)
@@ -173,9 +122,9 @@ export const workspaceGitRouter = router({
         throw new Error('Invalid file path');
       }
 
-      // Get merge base with the project's default branch
       const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-      const mergeBase = await getMergeBase(worktreePath, defaultBranch);
+      const snapshot = await workspaceGitStateService.getSnapshot({ worktreePath, defaultBranch });
+      const mergeBase = snapshot.base.mergeBase;
 
       // Try to get diff from merge base (shows all changes from main)
       // Falls back to HEAD if no merge base found
