@@ -249,8 +249,12 @@ export function RightPanel({
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
-  const devLogs = useLogStream('/dev-logs', workspaceId);
-  const postRunLogs = useLogStream('/post-run-logs', workspaceId);
+  const devLogs = useLogStream('/dev-logs', workspaceId, activeBottomTab === 'dev-logs');
+  const postRunLogs = useLogStream(
+    '/post-run-logs',
+    workspaceId,
+    activeBottomTab === 'post-run-logs'
+  );
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
