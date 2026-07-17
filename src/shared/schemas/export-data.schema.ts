@@ -14,6 +14,7 @@ import {
   IssueProvider as CoreIssueProvider,
   KanbanColumn as CoreKanbanColumn,
   PRState as CorePRState,
+  RatchetReviewTriggerMode as CoreRatchetReviewTriggerMode,
   RatchetState as CoreRatchetState,
   RunScriptStatus as CoreRunScriptStatus,
   SessionPermissionPreset as CoreSessionPermissionPreset,
@@ -40,6 +41,7 @@ const PRState = z.enum(enumValues(CorePRState));
 const CIStatus = z.enum(enumValues(CoreCIStatus));
 const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
+const RatchetReviewTriggerMode = z.enum(enumValues(CoreRatchetReviewTriggerMode));
 const SessionStatus = z.enum(enumValues(CoreSessionStatus));
 const SessionProvider = z.enum(enumValues(CoreSessionProvider));
 const SessionPermissionPreset = z.enum(enumValues(CoreSessionPermissionPreset));
@@ -150,10 +152,7 @@ const exportedUserSettingsSchema = z.object({
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
   ratchetReplyToPrComments: z.boolean().optional().default(true),
-  ratchetReviewTriggerMode: z
-    .enum(['CHANGES_REQUESTED', 'ALL_REVIEW_FEEDBACK'])
-    .optional()
-    .default('CHANGES_REQUESTED'),
+  ratchetReviewTriggerMode: RatchetReviewTriggerMode.optional().default('CHANGES_REQUESTED'),
   defaultSessionProvider: SessionProvider,
   defaultClaudeModel: z.string().optional().default('sonnet'),
   defaultCodexModel: z.string().optional().default('default'),

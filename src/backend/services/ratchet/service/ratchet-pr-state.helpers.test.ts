@@ -846,6 +846,7 @@ describe('computeLatestReviewActivityAtMs', () => {
         submittedAt: '2026-01-02T00:00:00Z',
         author: { login: 'commenting-reviewer' },
         state: 'COMMENTED',
+        body: 'Please address this feedback.',
       },
       {
         submittedAt: '2026-01-01T00:00:00Z',
@@ -871,6 +872,28 @@ describe('computeLatestReviewActivityAtMs', () => {
     expect(computeLatestReviewActivityAtMs(prDetails, [], null, 'ALL_REVIEW_FEEDBACK')).toBe(
       Date.parse('2026-01-02T00:00:00Z')
     );
+  });
+
+  it('ignores empty commented review submissions in all-feedback mode', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          ...prDetails,
+          reviews: [
+            {
+              submittedAt: '2026-01-05T00:00:00Z',
+              author: { login: 'empty-commenting-reviewer' },
+              state: 'COMMENTED',
+              body: '   ',
+            },
+            ...prDetails.reviews,
+          ],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBe(Date.parse('2026-01-02T00:00:00Z'));
   });
 
   it('always includes inline review comment activity', () => {

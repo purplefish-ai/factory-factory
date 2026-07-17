@@ -283,11 +283,11 @@ Change the started result type to:
 
 Replace the awaited send in `start_empty_and_send` with a synchronous initiation helper that:
 
-- returns `null` when the session is not running;
+- returns `undefined` for `promptCompletion` when the session is not running or initiation throws;
 - otherwise invokes `session.sendSessionMessage` immediately;
 - maps completion to `true` and rejection to `false` with existing warning logging.
 
-Return `promptSent: promptCompletion !== null` and the promise itself. Do not await it in
+Return `promptSent: promptCompletion !== undefined` and the promise itself. Do not await it in
 `acquireAndDispatch`.
 
 - [ ] **Step 5: Persist first, then monitor the committed prompt**

@@ -206,10 +206,8 @@ describe('FixerSessionService', () => {
       sessionId: 's-deferred',
       promptSent: true,
     });
-    if (result.status !== 'started') {
-      throw new Error('Expected a started session');
-    }
-    await expect(result.promptCompletion).resolves.toBe(true);
+    const startedResult = result as Extract<typeof result, { status: 'started' }>;
+    await expect(startedResult.promptCompletion).resolves.toBe(true);
   });
 
   it('restarts an existing running idle session when configured', async () => {

@@ -6,6 +6,7 @@
  * shared schema to prevent backup import failures.
  */
 
+import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@prisma-gen/client';
 import { describe, expect, it } from 'vitest';
 import {
   CIStatus as PrismaCIStatus,
@@ -18,7 +19,11 @@ import {
   WorkspaceMode as PrismaWorkspaceMode,
   WorkspaceStatus as PrismaWorkspaceStatus,
 } from '@/shared/core';
-import { exportedAgentSessionSchema, exportedWorkspaceSchema } from './export-data.schema';
+import {
+  exportedAgentSessionSchema,
+  exportedUserSettingsSchema,
+  exportedWorkspaceSchema,
+} from './export-data.schema';
 
 type DefWithType = {
   def?: {
@@ -227,6 +232,12 @@ describe('Enum sync with Prisma schema', () => {
   it('RatchetState matches Prisma', () => {
     const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.ratchetState);
     const prismaValues = Object.values(PrismaRatchetState);
+    expect(zodValues).toEqual(prismaValues);
+  });
+
+  it('RatchetReviewTriggerMode matches Prisma', () => {
+    const zodValues = getEnumOptions(exportedUserSettingsSchema.shape.ratchetReviewTriggerMode);
+    const prismaValues = Object.values(PrismaRatchetReviewTriggerMode);
     expect(zodValues).toEqual(prismaValues);
   });
 

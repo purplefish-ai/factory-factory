@@ -14,6 +14,7 @@ export {
   PeriodicTaskCadence,
   PeriodicTaskExecutionStatus,
   PRState,
+  RatchetReviewTriggerMode,
   RatchetState,
   RunScriptStatus,
   SessionPermissionPreset,

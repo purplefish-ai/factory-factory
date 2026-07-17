@@ -253,9 +253,11 @@ describe('AdminDashboardPage settings tabs', () => {
       trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const broadOption = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-      (option) => option.textContent?.includes('All review feedback')
-    );
+    // Radix portals SelectContent into document.body, outside the render container.
+    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
+    const broadOption = Array.from(
+      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    ).find((option) => option.textContent?.includes('All review feedback'));
     expect(broadOption).toBeDefined();
 
     flushSync(() => {

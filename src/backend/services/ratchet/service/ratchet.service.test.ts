@@ -2079,6 +2079,35 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(result).toEqual({ checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] });
     });
 
+    it('loads the global review trigger mode once for the whole batch', async () => {
+      const workspaces = ['ws-one', 'ws-two'].map((id) => ({
+        id,
+        prUrl: `https://github.com/example/repo/pull/${id}`,
+        prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+        ratchetDispatchOutcome: null,
+        ratchetDispatchRetryCount: 0,
+      }));
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue(workspaces as never);
+      vi.spyOn(
+        unsafeCoerce<{
+          fetchPRState: () => Promise<{ skipped: true; reason: 'recently_fetched' }>;
+        }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue({ skipped: true, reason: 'recently_fetched' });
+
+      const result = await ratchetService.checkAllWorkspaces();
+
+      expect(result.checked).toBe(2);
+      expect(userSettingsAccessor.get).toHaveBeenCalledTimes(1);
+    });
+
     it('returns an error result when one workspace check times out', async () => {
       unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
 
@@ -2210,7 +2239,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         expect.objectContaining({ id: 'ws-queued-timeout-3' }),
         undefined,
         expect.any(AbortSignal),
-        expect.any(Function)
+        expect.any(Function),
+        'CHANGES_REQUESTED'
       );
       expect(result.results[3]).toMatchObject({
         workspaceId: 'ws-queued-timeout-3',
@@ -3323,7 +3353,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
     });
 
-    it('does not clean up a fixer after its dispatch record is persisted', async () => {
+    it('cleans up a fixer through prompt failure after its dispatch record is persisted', async () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');
       let finishRecord!: (value: boolean) => void;

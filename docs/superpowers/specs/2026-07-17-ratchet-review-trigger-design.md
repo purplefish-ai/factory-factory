@@ -101,8 +101,8 @@ is present in a new dispatch snapshot.
 
 Prompt contents follow the selected mode:
 
-- `CHANGES_REQUESTED` includes unresolved inline comments and current `CHANGES_REQUESTED` review
-  bodies.
+- `CHANGES_REQUESTED` includes unresolved inline comments and bodies from individual reviews whose
+  state is `CHANGES_REQUESTED`.
 - `ALL_REVIEW_FEEDBACK` additionally includes top-level `COMMENTED` review summaries.
 - Neither mode includes ordinary PR conversation comments.
 

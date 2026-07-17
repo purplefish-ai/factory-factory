@@ -128,6 +128,7 @@ export function computeLatestReviewActivityAtMs(
       submittedAt: string | null;
       author: { login: string };
       state?: string;
+      body?: string;
     }>;
     comments: Array<{ updatedAt: string; author: { login: string } }>;
   },
@@ -141,7 +142,9 @@ export function computeLatestReviewActivityAtMs(
         const state = review.state?.toUpperCase();
         return (
           state === 'CHANGES_REQUESTED' ||
-          (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' && state === 'COMMENTED')
+          (reviewTriggerMode === 'ALL_REVIEW_FEEDBACK' &&
+            state === 'COMMENTED' &&
+            (review.body?.trim().length ?? 0) > 0)
         );
       })
       .map((review) => ({

@@ -3,6 +3,7 @@ import {
   IssueProvider as PackageIssueProvider,
   KanbanColumn as PackageKanbanColumn,
   PRState as PackagePRState,
+  RatchetReviewTriggerMode as PackageRatchetReviewTriggerMode,
   RatchetState as PackageRatchetState,
   RunScriptStatus as PackageRunScriptStatus,
   SessionPermissionPreset as PackageSessionPermissionPreset,
@@ -18,6 +19,7 @@ import {
   IssueProvider,
   KanbanColumn,
   PRState,
+  RatchetReviewTriggerMode,
   RatchetState,
   RunScriptStatus,
   SessionPermissionPreset,
@@ -38,6 +40,7 @@ type SharedEnums = {
   CIStatus: Record<string, string>;
   KanbanColumn: Record<string, string>;
   RatchetState: Record<string, string>;
+  RatchetReviewTriggerMode: Record<string, string>;
   WorkspaceCreationSource: Record<string, string>;
   IssueProvider: Record<string, string>;
   RunScriptStatus: Record<string, string>;
@@ -53,6 +56,7 @@ const appEnums: SharedEnums = {
   CIStatus,
   KanbanColumn,
   RatchetState,
+  RatchetReviewTriggerMode,
   WorkspaceCreationSource,
   IssueProvider,
   RunScriptStatus,
@@ -70,11 +74,14 @@ describe('core enum drift guard', () => {
       CIStatus: PackageCIStatus,
       KanbanColumn: PackageKanbanColumn,
       RatchetState: PackageRatchetState,
+      RatchetReviewTriggerMode: PackageRatchetReviewTriggerMode,
       WorkspaceCreationSource: PackageWorkspaceCreationSource,
       IssueProvider: PackageIssueProvider,
       RunScriptStatus: PackageRunScriptStatus,
     };
 
+    expect(RatchetReviewTriggerMode).toBeDefined();
+    expect(PackageRatchetReviewTriggerMode).toBeDefined();
     expect(packageEnums).toEqual(appEnums);
   });
 });

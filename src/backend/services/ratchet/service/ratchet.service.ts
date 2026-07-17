@@ -233,9 +233,16 @@ class RatchetService extends EventEmitter {
       return { checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] };
     }
 
+    const userSettings = await userSettingsAccessor.get();
+
     const results = await Promise.all(
       workspaces.map((workspace) =>
-        this.runWorkspaceCheckSafely(workspace, undefined, scheduleRatchetBatchCheck)
+        this.runWorkspaceCheckSafely(
+          workspace,
+          undefined,
+          scheduleRatchetBatchCheck,
+          userSettings.ratchetReviewTriggerMode
+        )
       )
     );
 
@@ -266,7 +273,15 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const result = await this.runWorkspaceCheckSafely(workspace, opts);
+    const userSettings = await userSettingsAccessor.get();
+    const reviewTriggerMode = userSettings.ratchetReviewTriggerMode;
+
+    const result = await this.runWorkspaceCheckSafely(
+      workspace,
+      opts,
+      undefined,
+      reviewTriggerMode
+    );
 
     // A bypassed check can still come back dedup-skipped: the coordinator may
     // have joined a normal check that was already in flight, or another
@@ -277,7 +292,7 @@ class RatchetService extends EventEmitter {
       if (!freshWorkspace) {
         return result;
       }
-      return this.runWorkspaceCheckSafely(freshWorkspace, opts);
+      return this.runWorkspaceCheckSafely(freshWorkspace, opts, undefined, reviewTriggerMode);
     }
 
     return result;
@@ -347,14 +362,21 @@ class RatchetService extends EventEmitter {
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR,
     opts?: RatchetCheckOptions,
-    schedule?: WorkspaceCheckScheduler
+    schedule?: WorkspaceCheckScheduler,
+    reviewTriggerMode?: RatchetReviewTriggerMode
   ): Promise<WorkspaceRatchetResult> {
     try {
       return await this.checkCoordinator.run(
         workspace,
         (signal, commitSideEffects) => {
           signal.throwIfAborted();
-          return this.processWorkspace(workspace, opts, signal, commitSideEffects);
+          return this.processWorkspace(
+            workspace,
+            opts,
+            signal,
+            commitSideEffects,
+            reviewTriggerMode
+          );
         },
         schedule
       );
@@ -426,7 +448,8 @@ class RatchetService extends EventEmitter {
     signal: AbortSignal = new AbortController().signal,
     commitSideEffects: () => void = () => {
       // Direct private-method callers do not have a coordinator timeout to disable.
-    }
+    },
+    reviewTriggerMode?: RatchetReviewTriggerMode
   ): Promise<WorkspaceRatchetResult> {
     signal.throwIfAborted();
     if (this.isShuttingDown) {
@@ -473,7 +496,8 @@ class RatchetService extends EventEmitter {
 
     try {
       signal.throwIfAborted();
-      const userSettings = await userSettingsAccessor.get();
+      const effectiveReviewTriggerMode =
+        reviewTriggerMode ?? (await userSettingsAccessor.get()).ratchetReviewTriggerMode;
       signal.throwIfAborted();
       const authenticatedUsername = await this.getAuthenticatedUsernameCached(signal);
       signal.throwIfAborted();
@@ -482,7 +506,7 @@ class RatchetService extends EventEmitter {
         authenticatedUsername,
         {
           bypassRecentFetchCooldown: opts?.bypassPrFetchCooldown,
-          reviewTriggerMode: userSettings.ratchetReviewTriggerMode,
+          reviewTriggerMode: effectiveReviewTriggerMode,
         },
         signal
       );
