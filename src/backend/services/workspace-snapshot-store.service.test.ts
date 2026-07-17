@@ -419,6 +419,23 @@ describe('WorkspaceSnapshotStore', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('does not ignore additional session summary fields during stable equality', () => {
+      store.upsert('ws-1', makeUpdate({ sessionSummaries: [makeSessionSummary()] }), 'seed', 100);
+      const expandedSummary = Object.assign(makeSessionSummary(), {
+        futureRuntimeDetail: 'new-value',
+      });
+
+      const result = store.upsert(
+        'ws-1',
+        { sessionSummaries: [expandedSummary] },
+        'event:session_state_change',
+        200
+      );
+
+      expect(result).toEqual({ accepted: true, changed: true, emitted: true });
+      expect(store.getByWorkspaceId('ws-1')!.sessionSummaries).toEqual([expandedSummary]);
+    });
+
     it('newer timestamp overwrites fields', () => {
       store.upsert('ws-1', makeUpdate({ name: 'old' }), 'test', 100);
       store.upsert('ws-1', { name: 'new' }, 'test', 200);

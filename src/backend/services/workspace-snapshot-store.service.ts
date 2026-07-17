@@ -16,6 +16,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { isDeepStrictEqual } from 'node:util';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type {
   CIStatus,
@@ -284,41 +285,7 @@ function sessionSummariesEqual(
   left: WorkspaceSessionSummary[],
   right: WorkspaceSessionSummary[]
 ): boolean {
-  if (left === right) {
-    return true;
-  }
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((summary, index) => {
-    const other = right[index];
-    if (!other) {
-      return false;
-    }
-    const exitsEqual =
-      summary.lastExit === other.lastExit ||
-      (summary.lastExit !== null &&
-        other.lastExit !== null &&
-        summary.lastExit.code === other.lastExit.code &&
-        summary.lastExit.timestamp === other.lastExit.timestamp &&
-        summary.lastExit.unexpected === other.lastExit.unexpected);
-
-    return (
-      summary.sessionId === other.sessionId &&
-      summary.name === other.name &&
-      summary.workflow === other.workflow &&
-      summary.model === other.model &&
-      summary.provider === other.provider &&
-      summary.persistedStatus === other.persistedStatus &&
-      summary.runtimePhase === other.runtimePhase &&
-      summary.processState === other.processState &&
-      summary.activity === other.activity &&
-      summary.updatedAt === other.updatedAt &&
-      exitsEqual &&
-      summary.errorMessage === other.errorMessage
-    );
-  });
+  return isDeepStrictEqual(left, right);
 }
 
 function sidebarStatusesEqual(
