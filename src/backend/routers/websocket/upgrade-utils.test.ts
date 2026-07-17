@@ -211,6 +211,11 @@ describe('validateTrustedLocalWebSocketRequest', () => {
 
     expect(isValid).toBe(false);
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Rejected terminal WebSocket connection from untrusted remote address',
+      { remoteAddress: '203.0.113.10' }
+    );
   });
 
   it('allows trusted local requests without forwarded client address headers', () => {
