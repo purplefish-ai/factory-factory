@@ -15,6 +15,10 @@ const logger = createLogger('pre-push-rename');
 const GIT_PUSH_REGEX = /\bgit\s+push\b/;
 const MAX_PENDING_PUSHES = 1000;
 
+function pendingPushKey(sessionId: string, toolUseId: string): string {
+  return JSON.stringify([sessionId, toolUseId]);
+}
+
 class PrePushRenameInterceptor implements ToolInterceptor {
   readonly name = 'pre-push-rename';
   readonly tools = '*';
@@ -23,20 +27,21 @@ class PrePushRenameInterceptor implements ToolInterceptor {
   private renamedWorkspaces = new Set<string>();
   private pendingPushWorkspaces = new Map<string, string>();
 
-  private trackPendingPush(toolUseId: string, workspaceId: string): void {
-    if (this.pendingPushWorkspaces.has(toolUseId)) {
-      this.pendingPushWorkspaces.delete(toolUseId);
+  private trackPendingPush(sessionId: string, toolUseId: string, workspaceId: string): void {
+    const key = pendingPushKey(sessionId, toolUseId);
+    if (this.pendingPushWorkspaces.has(key)) {
+      this.pendingPushWorkspaces.delete(key);
     }
 
     while (this.pendingPushWorkspaces.size >= MAX_PENDING_PUSHES) {
-      const oldestToolUseId = this.pendingPushWorkspaces.keys().next().value;
-      if (!oldestToolUseId) {
+      const oldestKey = this.pendingPushWorkspaces.keys().next().value;
+      if (!oldestKey) {
         break;
       }
-      this.pendingPushWorkspaces.delete(oldestToolUseId);
+      this.pendingPushWorkspaces.delete(oldestKey);
     }
 
-    this.pendingPushWorkspaces.set(toolUseId, workspaceId);
+    this.pendingPushWorkspaces.set(key, workspaceId);
   }
 
   start(): void {
@@ -60,7 +65,7 @@ class PrePushRenameInterceptor implements ToolInterceptor {
 
       // Completion determines whether the push succeeded. Track it before any
       // branch-specific early returns so every successful push can reset PR discovery.
-      this.trackPendingPush(event.toolUseId, context.workspaceId);
+      this.trackPendingPush(context.sessionId, event.toolUseId, context.workspaceId);
 
       // Skip if already renamed this workspace
       if (this.renamedWorkspaces.has(context.workspaceId)) {
@@ -141,12 +146,13 @@ class PrePushRenameInterceptor implements ToolInterceptor {
     }
   }
 
-  async onToolComplete(event: ToolEvent): Promise<void> {
-    const workspaceId = this.pendingPushWorkspaces.get(event.toolUseId);
+  async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
+    const key = pendingPushKey(context.sessionId, event.toolUseId);
+    const workspaceId = this.pendingPushWorkspaces.get(key);
     if (!workspaceId) {
       return;
     }
-    this.pendingPushWorkspaces.delete(event.toolUseId);
+    this.pendingPushWorkspaces.delete(key);
 
     if (event.output?.isError) {
       return;
@@ -157,6 +163,7 @@ class PrePushRenameInterceptor implements ToolInterceptor {
     } catch (error) {
       logger.error('Failed to reset PR discovery after git push', {
         workspaceId,
+        sessionId: context.sessionId,
         toolUseId: event.toolUseId,
         error,
       });
