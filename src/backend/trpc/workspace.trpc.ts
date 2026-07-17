@@ -14,18 +14,14 @@ import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
-import {
-  buildWorkspaceNotificationMessageText,
-  workspaceNotificationMessageId,
-} from '@/shared/workspace-notifications';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { toTRPCError } from './application-error-mapper';
-import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
+import { type Context, mergeRouters, publicProcedure, router, trustedLocalProcedure } from './trpc';
+import { workspaceChildrenRouter } from './workspace/children.trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
 import { workspaceIdeRouter } from './workspace/ide.trpc';
@@ -115,7 +111,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
 // Router
 // =============================================================================
 
-export const workspaceRouter = router({
+export const workspaceCoreRouter = router({
   // List workspaces for a project
   list: publicProcedure
     .input(
@@ -529,317 +525,14 @@ export const workspaceRouter = router({
     .query(({ ctx, input }) =>
       ctx.appContext.services.workspaceQueryService.hasChanges(input.workspaceId)
     ),
-
-  // -------------------------------------------------------------------------
-  // Child workspace procedures
-  // -------------------------------------------------------------------------
-
-  // Create a child workspace under a parent, optionally in a different project
-  createChild: trustedLocalProcedure
-    .input(
-      z.object({
-        parentWorkspaceId: z.string(),
-        projectId: z.string(),
-        name: z.string().min(1),
-        description: z.string().optional(),
-        initialPrompt: z.string().optional(),
-        reportBackOn: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const workspaceId = await ctx.appContext.services.createChildWorkspace(input);
-      return { workspaceId };
-    }),
-
-  // List non-archived children of a workspace with status summaries
-  listChildren: publicProcedure
-    .input(z.object({ parentWorkspaceId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { workspaceAccessor } = ctx.appContext.services;
-      const children = await workspaceAccessor.findChildrenWithStatus(input.parentWorkspaceId);
-      return children.map((child) => ({
-        id: child.id,
-        name: child.name,
-        description: child.description,
-        status: child.status,
-        prState: child.prState,
-        prUrl: child.prUrl,
-        cachedKanbanColumn: child.cachedKanbanColumn,
-        projectId: child.projectId,
-        projectName: child.project.name,
-        projectSlug: child.project.slug,
-        createdAt: child.createdAt,
-      }));
-    }),
-
-  // Get the parent workspace summary for a child workspace
-  getParent: publicProcedure
-    .input(z.object({ childWorkspaceId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const { workspaceAccessor } = ctx.appContext.services;
-      const parent = await workspaceAccessor.findParentWorkspace(input.childWorkspaceId);
-      if (!parent) {
-        return null;
-      }
-      return {
-        id: parent.id,
-        name: parent.name,
-        projectId: parent.projectId,
-        projectName: parent.project.name,
-        projectSlug: parent.project.slug,
-      };
-    }),
-
-  // Send a message from a child workspace to the parent's active session (or queue it)
-  sendMessageToParent: publicProcedure
-    .input(
-      z.object({
-        childWorkspaceId: z.string(),
-        message: z.string().min(1),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const {
-        chatMessageHandlerService,
-        persistChildNotification,
-        sessionDataService,
-        sessionDomainService,
-        workspaceAccessor,
-      } = ctx.appContext.services;
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
-      if (!child) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: `Workspace not found: ${input.childWorkspaceId}`,
-        });
-      }
-      if (!child.parentWorkspaceId) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'This workspace has no parent',
-        });
-      }
-
-      const parentWorkspaceId = child.parentWorkspaceId;
-
-      // Persist first so the message survives if live delivery races a dying
-      // session; successful dispatch marks the row delivered.
-      const notification = await persistChildNotification({
-        parentWorkspaceId,
-        sourceWorkspaceId: input.childWorkspaceId,
-        message: input.message,
-      });
-      if (!notification) {
-        return { delivered: false };
-      }
-
-      // Try to find an active/idle session on the parent workspace to inject into.
-      // Use the most recently created active session so we target the current one.
-      const parentSessions =
-        await sessionDataService.findAgentSessionsByWorkspaceId(parentWorkspaceId);
-      const activeSession = [...parentSessions]
-        .reverse()
-        .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
-
-      if (!activeSession) {
-        return { delivered: false };
-      }
-
-      // Session startup delivery may have already queued this notification
-      // (persist above races deliverPendingChildNotifications on a starting session).
-      const messageId = workspaceNotificationMessageId(notification.id);
-      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
-        return { delivered: true };
-      }
-
-      // Enqueue as a user message so the parent agent acts on it
-      const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
-        id: messageId,
-        text: buildWorkspaceNotificationMessageText(notification),
-        timestamp: new Date().toISOString(),
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      });
-      if ('error' in enqueueResult) {
-        // Leave the notification pending; it is delivered at next session start.
-        getLogger(ctx).warn('sendMessageToParent: live enqueue failed, left pending', {
-          notificationId: notification.id,
-          sessionId: activeSession.id,
-          error: enqueueResult.error,
-        });
-        return { delivered: false };
-      }
-
-      // Show notification card in parent's UI
-      const claudeMessage = {
-        type: 'child_workspace_update' as const,
-        childWorkspaceId: input.childWorkspaceId,
-        childWorkspaceName: child.name,
-        childProjectName: child.project.name,
-        text: input.message,
-        timestamp: new Date().toISOString(),
-      };
-      const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
-      sessionDomainService.emitDelta(activeSession.id, {
-        type: 'agent_message',
-        data: claudeMessage,
-        order,
-      } as SessionDeltaEvent & { order: number });
-      await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
-
-      return { delivered: true };
-    }),
-
-  // Send a message from a parent workspace to a child's active session (or queue it)
-  sendMessageToChild: publicProcedure
-    .input(
-      z.object({
-        parentWorkspaceId: z.string(),
-        childWorkspaceId: z.string(),
-        message: z.string().min(1),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const {
-        chatMessageHandlerService,
-        persistParentNotification,
-        sessionDataService,
-        sessionDomainService,
-        workspaceAccessor,
-      } = ctx.appContext.services;
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
-      if (!child) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: `Workspace not found: ${input.childWorkspaceId}`,
-        });
-      }
-      if (child.parentWorkspaceId !== input.parentWorkspaceId) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'The specified child workspace does not belong to this parent',
-        });
-      }
-
-      const parent = await workspaceAccessor.findByIdWithProject(input.parentWorkspaceId);
-
-      // Persist first so the message survives if live delivery races a dying
-      // session; successful dispatch marks the row delivered.
-      const notification = await persistParentNotification({
-        parentWorkspaceId: input.parentWorkspaceId,
-        targetChildWorkspaceId: input.childWorkspaceId,
-        message: input.message,
-      });
-      if (!notification) {
-        return { delivered: false };
-      }
-
-      const childSessions = await sessionDataService.findAgentSessionsByWorkspaceId(
-        input.childWorkspaceId
-      );
-      const activeSession = [...childSessions]
-        .reverse()
-        .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
-
-      if (!activeSession) {
-        return { delivered: false };
-      }
-
-      // Session startup delivery may have already queued this notification
-      // (persist above races deliverPendingChildNotifications on a starting session).
-      const messageId = workspaceNotificationMessageId(notification.id);
-      if (sessionDomainService.hasQueuedMessage(activeSession.id, messageId)) {
-        return { delivered: true };
-      }
-
-      // Enqueue as a user message so the child agent acts on it
-      const enqueueResult = sessionDomainService.enqueue(activeSession.id, {
-        id: messageId,
-        text: buildWorkspaceNotificationMessageText(notification),
-        timestamp: new Date().toISOString(),
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      });
-      if ('error' in enqueueResult) {
-        // Leave the notification pending; it is delivered at next session start.
-        getLogger(ctx).warn('sendMessageToChild: live enqueue failed, left pending', {
-          notificationId: notification.id,
-          sessionId: activeSession.id,
-          error: enqueueResult.error,
-        });
-        return { delivered: false };
-      }
-
-      // Show notification card in child's UI
-      const claudeMessage = {
-        type: 'parent_workspace_update' as const,
-        parentWorkspaceId: input.parentWorkspaceId,
-        parentWorkspaceName: parent?.name,
-        parentProjectName: parent?.project.name,
-        text: input.message,
-        timestamp: new Date().toISOString(),
-      };
-      const order = sessionDomainService.appendClaudeEvent(activeSession.id, claudeMessage);
-      sessionDomainService.emitDelta(activeSession.id, {
-        type: 'agent_message',
-        data: claudeMessage,
-        order,
-      } as SessionDeltaEvent & { order: number });
-      await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
-
-      return { delivered: true };
-    }),
-
-  // Archive a child workspace on behalf of the parent
-  archiveChild: publicProcedure
-    .input(
-      z.object({
-        parentWorkspaceId: z.string(),
-        childWorkspaceId: z.string(),
-        commitUncommitted: z.boolean().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const { archiveWorkspace, workspaceAccessor } = ctx.appContext.services;
-      const child = await workspaceAccessor.findByIdWithProject(input.childWorkspaceId);
-      if (!child) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: `Workspace not found: ${input.childWorkspaceId}`,
-        });
-      }
-      if (child.parentWorkspaceId !== input.parentWorkspaceId) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'The specified child workspace does not belong to this parent',
-        });
-      }
-      return archiveWorkspace(
-        child,
-        { commitUncommitted: input.commitUncommitted ?? true },
-        ctx.appContext.services
-      );
-    }),
-
-  // Get count of undelivered notifications for a workspace
-  getPendingNotificationCount: publicProcedure
-    .input(z.object({ workspaceId: z.string() }))
-    .query(({ ctx, input }) =>
-      ctx.appContext.services.workspaceNotificationAccessor.countPending(input.workspaceId)
-    ),
-
-  // Merge sub-routers
-  ...workspaceFilesRouter._def.procedures,
-  ...workspaceGitRouter._def.procedures,
-  ...workspaceIdeRouter._def.procedures,
-  ...workspaceInitRouter._def.procedures,
-  ...workspaceRunScriptRouter._def.procedures,
 });
+
+export const workspaceRouter = mergeRouters(
+  workspaceCoreRouter,
+  workspaceChildrenRouter,
+  workspaceFilesRouter,
+  workspaceGitRouter,
+  workspaceIdeRouter,
+  workspaceInitRouter,
+  workspaceRunScriptRouter
+);
