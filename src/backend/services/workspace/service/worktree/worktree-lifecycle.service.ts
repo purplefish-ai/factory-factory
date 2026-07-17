@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
 export class WorktreePathSafetyError extends Error {
   constructor(message: string) {
@@ -132,11 +133,13 @@ class WorktreeLifecycleService {
 
     const worktreeExists = await pathExists(worktreePath);
     if (!worktreeExists) {
+      workspaceGitStateService.remove(worktreePath);
       return;
     }
 
     await gitOpsService.commitIfNeeded(worktreePath, workspace.name, options.commitUncommitted);
     await gitOpsService.removeWorktree(worktreePath, project);
+    workspaceGitStateService.remove(worktreePath);
   }
 }
 

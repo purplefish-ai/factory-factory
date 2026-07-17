@@ -4,6 +4,7 @@ const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceGitStats = vi.hoisted(() => vi.fn());
 const mockPathExists = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
+const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
 
 const mockGitClient = vi.hoisted(() => ({
   checkWorktreeExists: vi.fn(),
@@ -35,6 +36,12 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('@/backend/clients/git.client', () => ({
   GitClientFactory: {
     forProject: () => mockGitClient,
+  },
+}));
+
+vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  workspaceGitStateService: {
+    invalidate: mockGitStateInvalidate,
   },
 }));
 
@@ -96,6 +103,21 @@ describe('gitOpsService', () => {
       ['commit', '-m', 'Archive workspace W1', '--no-verify'],
       '/repo/w1'
     );
+    expect(mockGitStateInvalidate).toHaveBeenCalledOnce();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
+  });
+
+  it('does not invalidate when the archive commit fails', async () => {
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: ' M file.ts\n', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 1, stdout: '', stderr: 'commit failed' });
+
+    await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1', true)).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+    });
+    expect(mockGitStateInvalidate).not.toHaveBeenCalled();
   });
 
   it('removeWorktree uses git when registered and fs fallback otherwise', async () => {
@@ -186,6 +208,7 @@ describe('gitOpsService', () => {
       worktreePath: '/repo/worktrees/w1',
       branchName: 'feature/w1',
     });
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
 
     mockGitClient.createWorktreeFromExistingBranch.mockResolvedValueOnce({ branchName: 'main' });
     mockGitClient.getWorktreePath.mockReturnValue('/repo/worktrees/w2');
@@ -196,6 +219,7 @@ describe('gitOpsService', () => {
       worktreePath: '/repo/worktrees/w2',
       branchName: 'main',
     });
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w2');
 
     mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([
       { path: '/repo', branchName: 'main' },
@@ -211,5 +235,14 @@ describe('gitOpsService', () => {
       { path: '/repo/worktrees/w2', branchName: 'feature/other' },
     ]);
     await expect(gitOpsService.isBranchCheckedOut(project, 'feature/test')).resolves.toBe(false);
+  });
+
+  it('does not invalidate when worktree creation fails', async () => {
+    mockGitClient.createWorktree.mockRejectedValueOnce(new Error('create failed'));
+
+    await expect(
+      gitOpsService.createWorktree(project, 'w1', 'main', { workspaceName: 'W1' })
+    ).rejects.toThrow('create failed');
+    expect(mockGitStateInvalidate).not.toHaveBeenCalled();
   });
 });

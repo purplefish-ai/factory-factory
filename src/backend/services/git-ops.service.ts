@@ -5,6 +5,7 @@ import { GitClientFactory } from '@/backend/clients/git.client';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { getWorkspaceGitStats } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 
 export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>;
 
@@ -87,6 +88,7 @@ class GitOpsService {
         message: `Git commit failed: ${commitResult.stderr || commitResult.stdout}`,
       });
     }
+    workspaceGitStateService.invalidate(worktreePath);
   }
 
   async removeWorktree(worktreePath: string, project: ProjectPaths): Promise<void> {
@@ -160,6 +162,7 @@ class GitOpsService {
 
     const worktreeInfo = await gitClient.createWorktree(worktreeName, baseBranch, options);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
+    workspaceGitStateService.invalidate(worktreePath);
 
     return { worktreePath, branchName: worktreeInfo.branchName };
   }
@@ -176,6 +179,7 @@ class GitOpsService {
 
     const worktreeInfo = await gitClient.createWorktreeFromExistingBranch(worktreeName, branchRef);
     const worktreePath = gitClient.getWorktreePath(worktreeName);
+    workspaceGitStateService.invalidate(worktreePath);
 
     return { worktreePath, branchName: worktreeInfo.branchName };
   }

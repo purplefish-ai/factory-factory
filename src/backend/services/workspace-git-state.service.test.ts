@@ -8,6 +8,16 @@ import {
 
 type RunGit = (args: string[], cwd: string) => Promise<ExecResult>;
 
+type WatchListener = (eventType: string, filename: string | null) => void;
+
+interface TestWatcher {
+  close(): void;
+  closeMock: ReturnType<typeof vi.fn<() => void>>;
+  listener: WatchListener;
+  errorListener?: (error: Error) => void;
+  on(event: 'error', listener: (error: Error) => void): TestWatcher;
+}
+
 function result(stdout = '', code = 0, stderr = ''): ExecResult {
   return { stdout, stderr, code };
 }
@@ -41,11 +51,44 @@ function defaultGitResult(args: string[]): ExecResult {
 describe('WorkspaceGitStateService', () => {
   const input = { worktreePath: '/repo/w1', defaultBranch: 'main' };
   let runGit: ReturnType<typeof vi.fn<RunGit>>;
+  let now: number;
+  let readFile: ReturnType<typeof vi.fn<(filePath: string) => Promise<string>>>;
+  let watchPath: ReturnType<
+    typeof vi.fn<
+      (filePath: string, options: { recursive: boolean }, listener: WatchListener) => TestWatcher
+    >
+  >;
+  let watchers: Map<string, TestWatcher>;
   let service: WorkspaceGitStateService;
 
   beforeEach(() => {
+    now = 1234;
     runGit = vi.fn<RunGit>((args) => Promise.resolve(defaultGitResult(args)));
-    service = new WorkspaceGitStateService({ runGit, now: () => 1234 });
+    readFile = vi.fn((filePath) => {
+      if (filePath === '/repo/w1/.git') {
+        return Promise.resolve('gitdir: /repo/.git/worktrees/w1\n');
+      }
+      if (filePath === '/repo/.git/worktrees/w1/commondir') {
+        return Promise.resolve('../..\n');
+      }
+      return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    });
+    watchers = new Map();
+    watchPath = vi.fn((filePath, _options, listener) => {
+      const closeMock = vi.fn<() => void>();
+      const watcher: TestWatcher = {
+        close: closeMock,
+        closeMock,
+        listener,
+        on(_event, errorListener) {
+          this.errorListener = errorListener;
+          return this;
+        },
+      };
+      watchers.set(filePath, watcher);
+      return watcher;
+    });
+    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
   });
 
   it('calculates a sectioned snapshot from one aggregate numstat command', async () => {
@@ -132,6 +175,32 @@ describe('WorkspaceGitStateService', () => {
     expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
   });
 
+  it('cleans a removal generation tombstone only after all detached calculations settle', async () => {
+    const statusResolvers: Array<(value: ExecResult) => void> = [];
+    runGit.mockImplementation((args) => {
+      if (args[0] === 'status') {
+        return new Promise((resolve) => statusResolvers.push(resolve));
+      }
+      return Promise.resolve(defaultGitResult(args));
+    });
+
+    const first = service.getSnapshot(input);
+    await vi.waitFor(() => expect(statusResolvers).toHaveLength(1));
+    service.remove(input.worktreePath);
+    const second = service.getSnapshot(input);
+    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
+    service.remove(input.worktreePath);
+
+    statusResolvers[1]?.(defaultGitResult(['status']));
+    await second;
+    expect(service.getGenerationCount()).toBe(1);
+
+    statusResolvers[0]?.(defaultGitResult(['status']));
+    await first;
+    expect(service.getGenerationCount()).toBe(0);
+    expect(service.getCachedSnapshotCount()).toBe(0);
+  });
+
   it('does not restore cached state after stop while a calculation is in flight', async () => {
     const first = service.getSnapshot(input);
     service.stop();
@@ -148,6 +217,108 @@ describe('WorkspaceGitStateService', () => {
 
     expect(develop).not.toBe(main);
     expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+  });
+
+  it('watches the worktree, linked gitdir, and common Git metadata directory', async () => {
+    await service.getSnapshot(input);
+
+    expect([...watchers.keys()]).toEqual(['/repo/w1', '/repo/.git/worktrees/w1', '/repo/.git']);
+    expect(watchPath).toHaveBeenCalledTimes(3);
+    expect(watchPath.mock.calls.every(([, options]) => options.recursive)).toBe(true);
+  });
+
+  it('invalidates all base variants 100 ms after a watched file event', async () => {
+    vi.useFakeTimers();
+    try {
+      const main = await service.getSnapshot(input);
+      await service.getSnapshot({ ...input, defaultBranch: 'develop' });
+
+      watchers.get('/repo/w1')?.listener('change', 'src/a.ts');
+      await vi.advanceTimersByTimeAsync(99);
+      expect(await service.getSnapshot(input)).toBe(main);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await service.getSnapshot(input)).not.toBe(main);
+      expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses five-minute fallback expiry when recursive watcher setup fails', async () => {
+    watchPath.mockImplementation(() => {
+      throw new Error('recursive watching unsupported');
+    });
+
+    const first = await service.getSnapshot(input);
+    now += 299_999;
+    expect(await service.getSnapshot(input)).toBe(first);
+    now += 1;
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+  });
+
+  it('switches to fallback expiry when an installed watcher emits an error', async () => {
+    const first = await service.getSnapshot(input);
+    watchers.get('/repo/.git')?.errorListener?.(new Error('watcher failed'));
+
+    now += 300_000;
+
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(2);
+  });
+
+  it('does not expire warm entries while watchers remain healthy', async () => {
+    const first = await service.getSnapshot(input);
+    now += 3_000_000;
+
+    expect(await service.getSnapshot(input)).toBe(first);
+    expect(runGit.mock.calls.filter(([args]) => args[0] === 'status')).toHaveLength(1);
+  });
+
+  it('closes watchers and clears all base variants on remove', async () => {
+    await service.getSnapshot(input);
+    await service.getSnapshot({ ...input, defaultBranch: 'develop' });
+    const installedWatchers = [...watchers.values()];
+
+    service.remove(input.worktreePath);
+
+    expect(installedWatchers.every((watcher) => watcher.closeMock.mock.calls.length === 1)).toBe(
+      true
+    );
+    expect(service.getCachedSnapshotCount()).toBe(0);
+  });
+
+  it('does not install watchers after remove while metadata resolution is in flight', async () => {
+    let resolveGitFile!: (contents: string) => void;
+    readFile.mockImplementation((filePath) => {
+      if (filePath === '/repo/w1/.git') {
+        return new Promise((resolve) => {
+          resolveGitFile = resolve;
+        });
+      }
+      return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    });
+    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
+
+    const calculation = service.getSnapshot(input);
+    service.remove(input.worktreePath);
+    resolveGitFile('gitdir: /repo/.git/worktrees/w1\n');
+    await calculation;
+
+    expect(watchPath).not.toHaveBeenCalled();
+  });
+
+  it('closes every watcher and clears cached snapshots on stop', async () => {
+    await service.getSnapshot(input);
+    const installedWatchers = [...watchers.values()];
+
+    service.stop();
+
+    expect(installedWatchers.every((watcher) => watcher.closeMock.mock.calls.length === 1)).toBe(
+      true
+    );
+    expect(service.getCachedSnapshotCount()).toBe(0);
   });
 
   it('falls back to the local default branch when the origin merge base is unavailable', async () => {
