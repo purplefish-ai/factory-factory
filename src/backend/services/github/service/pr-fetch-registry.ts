@@ -21,8 +21,17 @@ export class PRFetchRegistry {
   private readonly lastFetchedAt = new Map<string, number>();
   private readonly inFlightStartedAt = new Map<string, number>();
 
-  private pruneExpired(now: number): void {
+  private pruneExpired(
+    now: number,
+    completedEntryToPreserve?: { workspaceId: string; cooldownMs: number }
+  ): void {
     for (const [workspaceId, lastFetchedAt] of this.lastFetchedAt) {
+      if (
+        workspaceId === completedEntryToPreserve?.workspaceId &&
+        now - lastFetchedAt < completedEntryToPreserve.cooldownMs
+      ) {
+        continue;
+      }
       if (now - lastFetchedAt >= DEFAULT_COOLDOWN_MS) {
         this.lastFetchedAt.delete(workspaceId);
       }
@@ -65,8 +74,8 @@ export class PRFetchRegistry {
 
   /**
    * Claim this workspace synchronously before starting an async fetch.
-   * Subsequent `isRecentlyFetched` calls will return true until `register` or
-   * `cancelFetch` is called.
+   * Subsequent `isRecentlyFetched` calls will return true until the claim is
+   * registered, canceled, expired, evicted at capacity, or removed by cleanup.
    */
   startFetch(workspaceId: string): void {
     const now = Date.now();
@@ -103,7 +112,7 @@ export class PRFetchRegistry {
    */
   isRecentlyFetched(workspaceId: string, cooldownMs = DEFAULT_COOLDOWN_MS): boolean {
     const now = Date.now();
-    this.pruneExpired(now);
+    this.pruneExpired(now, { workspaceId, cooldownMs });
     if (this.inFlightStartedAt.has(workspaceId)) {
       return true;
     }

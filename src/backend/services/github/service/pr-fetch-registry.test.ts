@@ -58,6 +58,15 @@ describe('PRFetchRegistry', () => {
     expect(registry.size()).toEqual({ completed: 0, inFlight: 0 });
   });
 
+  it('honors a custom cooldown longer than the default cooldown', () => {
+    registry.startFetch('ws-1');
+    registry.register('ws-1');
+
+    vi.advanceTimersByTime(COOLDOWN_MS);
+
+    expect(registry.isRecentlyFetched('ws-1', 120_000)).toBe(true);
+  });
+
   it('expires abandoned in-flight entries', () => {
     registry.startFetch('ws-1');
 
