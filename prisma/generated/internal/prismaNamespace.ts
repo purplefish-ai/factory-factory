@@ -1602,7 +1602,7 @@ export type EnumSessionProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$
  * Reference to a field of type 'RatchetReviewTriggerMode'
  */
 export type EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetReviewTriggerMode'>
-
+    
 
 
 /**
@@ -1806,3 +1806,4 @@ export type PrismaAction =
  * `PrismaClient` proxy available in interactive transactions.
  */
 export type TransactionClient = Omit<DefaultPrismaClient, runtime.ITXClientDenyList>
+
