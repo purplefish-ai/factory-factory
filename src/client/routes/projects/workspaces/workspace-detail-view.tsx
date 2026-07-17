@@ -26,7 +26,7 @@ interface WorkspaceStateProps {
   handleBackToWorkspaces: () => void;
   isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
-  setupWarningDismissed: boolean;
+  setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
 }
 
@@ -86,10 +86,10 @@ function ScriptBanner({
   workspaceId: string;
   isScriptFailed: boolean;
   workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
-  setupWarningDismissed: boolean;
+  setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
 }) {
-  if (isScriptFailed && !setupWarningDismissed) {
+  if (isScriptFailed && setupWarningDismissed === false) {
     return (
       <ScriptFailedBanner
         workspaceId={workspaceId}

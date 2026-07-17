@@ -165,4 +165,16 @@ describe('WorkspaceDetailView', () => {
 
     root.unmount();
   });
+
+  it('does not render the script warning before dismissal state hydrates', () => {
+    const props = createViewProps(0);
+    props.workspaceState.isScriptFailed = true;
+    props.workspaceState.setupWarningDismissed = null;
+
+    const { container, root } = renderView(props);
+
+    expect(container.textContent).not.toContain('Script failed');
+
+    root.unmount();
+  });
 });

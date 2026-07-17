@@ -66,7 +66,7 @@ export function useWorkspaceInitStatus(
     (status === 'FAILED' && hasWorktreePath) || (status === 'READY' && !!initErrorMessage);
 
   // Persisted per workspace/error so navigating away and back does not resurface dismissed warnings.
-  const [setupWarningDismissed, setSetupWarningDismissed] = useState(false);
+  const [setupWarningDismissed, setSetupWarningDismissed] = useState<boolean | null>(null);
   useEffect(() => {
     if (!workspaceInitStatus) {
       return;

@@ -22,6 +22,7 @@ import {
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
+  getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
@@ -229,10 +230,7 @@ export function WorkspaceDetailContainer() {
   );
 
   const chatTabId = selectedDbSessionId ? `chat-${selectedDbSessionId}` : null;
-  const initBanner =
-    setupWarningDismissed && workspaceInitStatus?.chatBanner?.showDismiss
-      ? null
-      : (workspaceInitStatus?.chatBanner ?? null);
+  const initBanner = getVisibleInitBanner(workspaceInitStatus?.chatBanner, setupWarningDismissed);
 
   const { persistCurrent: persistChatScroll } = usePersistentScroll({
     tabId: chatTabId,

@@ -3,9 +3,32 @@ import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/sess
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,
+  getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
   type SessionForRuntimeOverlay,
 } from './workspace-detail-container.utils';
+
+describe('getVisibleInitBanner', () => {
+  const dismissibleBanner = { message: 'Setup failed', showDismiss: true };
+
+  it('hides a dismissible warning before dismissal state hydrates', () => {
+    expect(getVisibleInitBanner(dismissibleBanner, null)).toBeNull();
+  });
+
+  it('shows a dismissible warning after dismissal state hydrates to false', () => {
+    expect(getVisibleInitBanner(dismissibleBanner, false)).toBe(dismissibleBanner);
+  });
+
+  it('hides a dismissed warning', () => {
+    expect(getVisibleInitBanner(dismissibleBanner, true)).toBeNull();
+  });
+
+  it('keeps non-dismissible init banners visible during dismissal hydration', () => {
+    const banner = { message: 'Workspace is initializing', showDismiss: false };
+
+    expect(getVisibleInitBanner(banner, null)).toBe(banner);
+  });
+});
 
 describe('workspace detail container utils', () => {
   it('returns true when the transcript has a user message and no agent message', () => {

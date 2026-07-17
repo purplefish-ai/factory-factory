@@ -1,5 +1,61 @@
-import { describe, expect, it } from 'vitest';
-import { resolveSelectedSessionId } from './use-workspace-detail-hooks';
+// @vitest-environment jsdom
+
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { trpc } from '@/client/lib/trpc';
+import { resolveSelectedSessionId, useWorkspaceInitStatus } from './use-workspace-detail-hooks';
+
+const getInitStatusUseQueryMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: {
+    useUtils: () => ({
+      workspace: {
+        get: {
+          invalidate: vi.fn(),
+        },
+      },
+    }),
+    workspace: {
+      getInitStatus: {
+        useQuery: getInitStatusUseQueryMock,
+      },
+    },
+  },
+}));
+
+afterEach(() => {
+  document.body.innerHTML = '';
+  vi.clearAllMocks();
+});
+
+describe('useWorkspaceInitStatus', () => {
+  it('starts with an unhydrated setup warning dismissal state', () => {
+    getInitStatusUseQueryMock.mockReturnValue({ data: undefined, isPending: true });
+    const observedStates: Array<boolean | null> = [];
+
+    function Probe() {
+      const utils = trpc.useUtils();
+      const { setupWarningDismissed } = useWorkspaceInitStatus('workspace-1', undefined, utils);
+      observedStates.push(setupWarningDismissed);
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe));
+    });
+
+    expect(observedStates[0]).toBeNull();
+
+    root.unmount();
+  });
+});
 
 describe('resolveSelectedSessionId', () => {
   it('keeps current selection while sessions are still loading', () => {
