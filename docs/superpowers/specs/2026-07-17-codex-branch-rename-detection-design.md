@@ -12,7 +12,7 @@ The branch-rename interceptor subscribes only to the Claude-specific `Bash` tool
 
 ## Design
 
-Set `branchRenameInterceptor.tools` to `'*'`. Inside `onToolComplete`, use `extractMatchingCommand` to find a payload containing the rename text, strip single- and double-quoted arguments from that candidate, then validate the remaining text with a shell-segment matcher. The matcher accepts `git branch -m/-M` at the start of a command or after a shell control operator while ignoring operators inside quoted arguments. This prevents wildcard-delivered search or echo titles containing the literal from being mistaken for an executed rename while preserving real chained shell commands. Keep the existing error-event guard, Git branch lookup, empty-result handling, and atomic workspace metadata update unchanged.
+Set `branchRenameInterceptor.tools` to `'*'`. Inside `onToolComplete`, use `extractMatchingCommand` to find a payload containing the rename text, then scan the candidate while masking quoted arguments and unquoted shell comments. Validate the remaining shell structure with a segment matcher that accepts `git branch -m/-M` at the start of a command, after a shell control operator, or inside a subshell. When an executable `bash -c` or `sh -c` invocation has a quoted program argument, recursively validate that payload instead of treating it as inert text. This prevents wildcard-delivered search, echo, or comment text containing the literal from being mistaken for an executed rename while preserving real chained and nested shell commands. Keep the existing error-event guard, Git branch lookup, empty-result handling, and atomic workspace metadata update unchanged.
 
 No registry, ACP translation, workspace service, database, or UI changes are required.
 
@@ -22,9 +22,11 @@ No registry, ACP translation, workspace service, database, or UI changes are req
 - Claude-style `input.command` events continue to detect `git branch -m` and `git branch -M`.
 - Codex-style raw command tool names detect both lowercase `-m` and uppercase `-M`.
 - Chained shell commands detect a rename after `&&`, `||`, `;`, newline, pipe, or background separators.
-- Unrelated wildcard-delivered tool events, including search and echo titles that contain `git branch -m` inside or outside quotes, return without Git or workspace writes.
+- Leading whitespace and parenthesized subshells do not hide an executed rename.
+- Quoted `bash -c` and `sh -c` payloads are checked when the shell invocation itself is executable.
+- Unrelated wildcard-delivered tool events, including search, echo, quoted argument, and unquoted comment text that contain `git branch -m`, return without Git or workspace writes.
 - Failed or empty `git rev-parse` results continue to skip workspace updates.
 
 ## Testing
 
-Remove the command-extraction mock so the tests exercise real event payloads. Add regression assertions that the interceptor uses the wildcard subscription and that a Codex event whose raw `toolName` is `git branch -m codex-name` updates the workspace after resolving the current branch. Add positive chained-command cases and negative `echo`, `rg`, quoted-literal, and display-only search cases. Retain the existing Claude-style success and negative-path tests with commands supplied in `input.command`. Run the focused test through red and green, then run typecheck, formatting, the full Vitest suite, and the production build.
+Remove the command-extraction mock so the tests exercise real event payloads. Add regression assertions that the interceptor uses the wildcard subscription and that a Codex event whose raw `toolName` is `git branch -m codex-name` updates the workspace after resolving the current branch. Add positive chained-command, leading-whitespace, subshell, and shell-`-c` cases plus negative `echo`, `rg`, quoted-literal, comment, and display-only search cases. Retain the existing Claude-style success and negative-path tests with commands supplied in `input.command`. Run the focused test through red and green, then run typecheck, formatting, the full Vitest suite, and the production build.

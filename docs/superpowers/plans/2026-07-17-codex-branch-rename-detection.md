@@ -155,21 +155,35 @@ Expected: the test fails when matching is limited to the start of the full comma
 
 - [ ] **Step 1: Replace tool-specific input extraction with the shared helper**
 
-Import the helper, define the broad text pattern, and add a quote-aware executable-segment check:
+Import the helper, define the broad text pattern, and add a quote/comment-aware executable-segment check:
 
 ```typescript
 import { extractMatchingCommand } from './branch-rename.utils';
 
 const GIT_BRANCH_RENAME_TEXT_REGEX = /\bgit\s+branch\s+-[mM]\b/;
-const SHELL_QUOTED_ARGUMENT_REGEX = /'[^']*(?:'|$)|"(?:\\.|[^"\\])*(?:"|$)/g;
 const GIT_BRANCH_RENAME_COMMAND_REGEX =
-  /(?:^|(?:&&|\|\||[;&|\n])\s*)git\s+branch\s+-[mM]\b/;
+  /(?:^|&&|\|\||[;&|\n(])\s*git\s+branch\s+-[mM]\b/;
+const SHELL_COMMAND_PAYLOAD_REGEX =
+  /(?:^|&&|\|\||[;&|\n(])\s*(?:\/(?:usr\/)?bin\/)?(?:ba)?sh\s+-[A-Za-z]*c[A-Za-z]*\s+\uE000(\d+)\uE001/g;
 
 function containsGitBranchRenameCommand(command: string): boolean {
-  const commandWithoutQuotedArguments = command.replace(SHELL_QUOTED_ARGUMENT_REGEX, '');
-  return GIT_BRANCH_RENAME_COMMAND_REGEX.test(commandWithoutQuotedArguments);
+  const masked = maskQuotedArgumentsAndComments(command);
+  if (GIT_BRANCH_RENAME_COMMAND_REGEX.test(masked.command)) {
+    return true;
+  }
+
+  for (const match of masked.command.matchAll(SHELL_COMMAND_PAYLOAD_REGEX)) {
+    const payload = masked.quotedArguments[Number(match[1])];
+    if (payload !== undefined && containsGitBranchRenameCommand(payload)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 ```
+
+Implement `maskQuotedArgumentsAndComments` as a single pass over the command. Replace quoted arguments with indexed sentinels, discard comments that begin at an unquoted shell word boundary while preserving their terminating newline, and mask escaped characters so they cannot become command separators. This keeps ordinary quoted arguments inert while allowing an executable `bash -c` or `sh -c` command to recursively validate its quoted program payload.
 
 Remove the direct `extractInputValue` and `isString` import.
 
