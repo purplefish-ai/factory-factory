@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+import { type PRDiscoveryClaim, workspaceAccessor } from '@/backend/services/workspace';
 import type { GitHubKanbanBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 
@@ -28,7 +28,10 @@ export type PRSnapshotRefreshResult =
 
 export type AttachAndRefreshResult =
   | { success: true; snapshot: SnapshotData }
-  | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
+  | {
+      success: false;
+      reason: 'workspace_not_found' | 'fetch_failed' | 'claim_stale' | 'error';
+    };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 
@@ -185,6 +188,73 @@ class PRSnapshotService extends EventEmitter {
       };
     } catch (error) {
       logger.error('Failed to attach PR and refresh snapshot', toError(error), {
+        workspaceId,
+        prUrl,
+      });
+      return { success: false, reason: 'error' };
+    }
+  }
+
+  /**
+   * Attach a PR found by scheduled discovery only if the claim that selected
+   * the workspace still matches. Snapshot refresh deliberately omits branch
+   * correction so a later user rename cannot be overwritten.
+   */
+  async attachDiscoveredPRAndRefresh(
+    workspaceId: string,
+    prUrl: string,
+    claim: PRDiscoveryClaim
+  ): Promise<AttachAndRefreshResult> {
+    try {
+      const attached = await workspaceAccessor.attachDiscoveredPRIfClaimMatches(
+        workspaceId,
+        prUrl,
+        claim,
+        new Date()
+      );
+      if (!attached) {
+        return { success: false, reason: 'claim_stale' };
+      }
+
+      const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
+      if (!snapshot) {
+        await this.kanban.updateCachedKanbanColumn(workspaceId);
+        logger.warn('Attached discovered PR URL but could not fetch snapshot', {
+          workspaceId,
+          prUrl,
+        });
+        return { success: false, reason: 'fetch_failed' };
+      }
+
+      const snapshotData: SnapshotData = {
+        prNumber: snapshot.prNumber,
+        prState: snapshot.prState,
+        prReviewState: snapshot.prReviewState,
+        prCiStatus: snapshot.prCiStatus,
+      };
+      const persisted = await workspaceAccessor.updatePRSnapshotIfUrlMatches(
+        workspaceId,
+        prUrl,
+        snapshotData,
+        new Date()
+      );
+      if (!persisted) {
+        return { success: false, reason: 'claim_stale' };
+      }
+
+      await this.kanban.updateCachedKanbanColumn(workspaceId);
+      this.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId,
+        prUrl,
+        prNumber: snapshotData.prNumber,
+        prState: snapshotData.prState,
+        prCiStatus: snapshotData.prCiStatus,
+        prReviewState: snapshotData.prReviewState,
+      } satisfies PRSnapshotUpdatedEvent);
+
+      return { success: true, snapshot: snapshotData };
+    } catch (error) {
+      logger.error('Failed to attach discovered PR and refresh snapshot', toError(error), {
         workspaceId,
         prUrl,
       });
