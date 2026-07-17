@@ -31,6 +31,9 @@ function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => voi
       <button
         type="button"
         className="flex items-center gap-0.5 hover:text-foreground"
+        onPointerUp={(event) => {
+          event.stopPropagation();
+        }}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -117,6 +120,9 @@ export function WorkspaceItemContent({
             <button
               type="button"
               className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              onPointerUp={(event) => {
+                event.stopPropagation();
+              }}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
