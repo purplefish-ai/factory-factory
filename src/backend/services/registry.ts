@@ -13,6 +13,56 @@ export const prismaModelNames = [
 
 export type PrismaModelName = (typeof prismaModelNames)[number];
 
+/**
+ * Root services are reserved for cross-cutting infrastructure that does not
+ * belong to a service capsule. Keep this list deliberately small: domain
+ * services must live under their owning `src/backend/services/<name>/` capsule.
+ */
+export const infrastructureServiceRegistry = {
+  'config.service': {
+    fileName: 'config.service.ts',
+    description: 'Environment and application configuration',
+  },
+  constants: {
+    fileName: 'constants.ts',
+    description: 'Shared backend service timing and retry constants',
+  },
+  'crypto.service': {
+    fileName: 'crypto.service.ts',
+    description: 'Encryption for secrets stored at rest',
+  },
+  'logger.service': {
+    fileName: 'logger.service.ts',
+    description: 'Process-wide structured logging',
+  },
+  'notification.service': {
+    fileName: 'notification.service.ts',
+    description: 'Operating-system notifications',
+  },
+  'port.service': {
+    fileName: 'port.service.ts',
+    description: 'Backend server port probing',
+  },
+  'rate-limit-backoff': {
+    fileName: 'rate-limit-backoff.ts',
+    description: 'Shared API rate-limit retry policy',
+  },
+  'rate-limiter.service': {
+    fileName: 'rate-limiter.service.ts',
+    description: 'Process-wide API request rate limiting',
+  },
+  'server-instance.service': {
+    fileName: 'server-instance.service.ts',
+    description: 'Active HTTP server instance state',
+  },
+  'workspace-git-state.service': {
+    fileName: 'workspace-git-state.service.ts',
+    description: 'Process-wide workspace Git snapshot cache and invalidation',
+  },
+} as const;
+
+export type InfrastructureServiceName = keyof typeof infrastructureServiceRegistry;
+
 export const serviceNames = [
   'session',
   'workspace',

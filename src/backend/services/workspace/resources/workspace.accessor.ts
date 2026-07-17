@@ -93,6 +93,9 @@ interface UpdateWorkspaceInput {
   prReviewState?: string | null;
   prCiStatus?: CIStatus;
   prUpdatedAt?: Date | null;
+  prDiscoveryLastCheckedAt?: Date | null;
+  prDiscoveryRetryCount?: number;
+  prDiscoveryNextCheckAt?: Date | null;
   // CI failure tracking
   prCiFailedAt?: Date | null;
   prCiLastNotifiedAt?: Date | null;
@@ -171,6 +174,20 @@ type WorkspaceWithAgentSessionsAndProject = Prisma.WorkspaceGetPayload<{
 
 // Type for Workspace with sessions and project included (used by reconciliation)
 export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
+
+export interface PRDiscoveryClaim {
+  branchName: string;
+  checkedAt: Date;
+  retryCount: number;
+  nextCheckAt: Date;
+}
+
+export interface PRSnapshotFields {
+  prNumber: number;
+  prState: PRState;
+  prReviewState: string | null;
+  prCiStatus: CIStatus;
+}
 
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
@@ -613,18 +630,122 @@ class WorkspaceAccessor {
    * Find READY workspaces without PR URLs that have a branch name.
    * Used for detecting newly created PRs.
    */
-  findNeedingPRDiscovery(): Promise<WorkspaceWithProject[]> {
+  findNeedingPRDiscovery(limit: number, dueAt = new Date()): Promise<WorkspaceWithProject[]> {
     return prisma.workspace.findMany({
       where: {
         status: 'READY',
         prUrl: null,
         branchName: { not: null },
+        project: {
+          githubOwner: { not: null },
+          githubRepo: { not: null },
+        },
+        OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: dueAt } }],
       },
       include: {
         project: true,
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ prDiscoveryNextCheckAt: 'asc' }, { updatedAt: 'desc' }],
+      take: limit,
     });
+  }
+
+  /**
+   * Claim a due PR discovery candidate using the values observed by the caller.
+   * Concurrent activity or eligibility changes win by making this update a no-op.
+   */
+  async claimPRDiscoveryAttempt(
+    id: string,
+    attempt: {
+      branchName: string;
+      expectedUpdatedAt: Date;
+      expectedRetryCount: number;
+      expectedNextCheckAt: Date | null;
+      checkedAt: Date;
+      nextCheckAt: Date;
+    }
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: attempt.branchName,
+        updatedAt: attempt.expectedUpdatedAt,
+        prDiscoveryRetryCount: attempt.expectedRetryCount,
+        prDiscoveryNextCheckAt: attempt.expectedNextCheckAt,
+      },
+      data: {
+        prDiscoveryLastCheckedAt: attempt.checkedAt,
+        prDiscoveryRetryCount: { increment: 1 },
+        prDiscoveryNextCheckAt: attempt.nextCheckAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Atomically attach a discovered PR only while the claim that produced it is
+   * still current. A concurrent reset, branch rename, status change, or PR
+   * attachment makes this update a no-op.
+   */
+  async attachDiscoveredPRIfClaimMatches(
+    id: string,
+    prUrl: string,
+    claim: PRDiscoveryClaim,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: claim.branchName,
+        prDiscoveryLastCheckedAt: claim.checkedAt,
+        prDiscoveryRetryCount: claim.retryCount,
+        prDiscoveryNextCheckAt: claim.nextCheckAt,
+      },
+      data: {
+        prUrl,
+        prUpdatedAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /** Atomically update snapshot fields only while the expected PR remains attached. */
+  async updatePRSnapshotIfUrlMatches(
+    id: string,
+    prUrl: string,
+    snapshot: PRSnapshotFields,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: { id, prUrl },
+      data: {
+        ...snapshot,
+        prUpdatedAt,
+      },
+    });
+    return result.count > 0;
+  }
+
+  /** Make an eligible workspace immediately due for PR discovery again. */
+  async resetPRDiscoveryBackoff(id: string): Promise<boolean> {
+    const result = await prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        prUrl: null,
+        branchName: { not: null },
+      },
+      data: {
+        prDiscoveryLastCheckedAt: null,
+        prDiscoveryRetryCount: 0,
+        prDiscoveryNextCheckAt: null,
+      },
+    });
+    return result.count > 0;
   }
 
   /**

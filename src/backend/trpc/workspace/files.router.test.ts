@@ -5,11 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetWorkspaceWithWorktree = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceWithWorktreeOrThrow = vi.hoisted(() => vi.fn());
+const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
 
 vi.mock('./workspace-helpers', () => ({
   getWorkspaceWithWorktree: (...args: unknown[]) => mockGetWorkspaceWithWorktree(...args),
   getWorkspaceWithWorktreeOrThrow: (...args: unknown[]) =>
     mockGetWorkspaceWithWorktreeOrThrow(...args),
+}));
+
+vi.mock('@/backend/services/workspace-git-state.service', () => ({
+  workspaceGitStateService: { invalidate: mockGitStateInvalidate },
 }));
 
 import { workspaceFilesRouter } from './files.trpc';
@@ -146,5 +151,6 @@ describe('workspaceFilesRouter', () => {
       })
     ).resolves.toEqual({ success: true });
     expect(() => unlinkSync(screenshotPath)).toThrow();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith(rootDir);
   });
 });

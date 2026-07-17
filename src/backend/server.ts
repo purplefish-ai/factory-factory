@@ -52,6 +52,7 @@ import {
 import { periodicTaskService } from './services/periodic-task';
 import { runScriptStateMachine } from './services/run-script';
 import { workspaceAutoIterationService } from './services/workspace';
+import { workspaceGitStateService } from './services/workspace-git-state.service';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
@@ -434,6 +435,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       await schedulerService.stop();
       stopEventCollector();
       await snapshotReconciliationService.stop();
+      workspaceGitStateService.stop();
       await ratchetService.stop();
       await periodicTaskService.stop();
       await reconciliationService.stopPeriodicCleanup();

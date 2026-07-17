@@ -13,8 +13,15 @@ class WorkspaceMaintenanceService {
     return workspaceAccessor.findNeedingPRSync(staleThresholdMinutes);
   }
 
-  findNeedingPRDiscovery() {
-    return workspaceAccessor.findNeedingPRDiscovery();
+  findNeedingPRDiscovery(limit: number, dueAt = new Date()) {
+    return workspaceAccessor.findNeedingPRDiscovery(limit, dueAt);
+  }
+
+  claimPRDiscoveryAttempt(
+    id: string,
+    attempt: Parameters<typeof workspaceAccessor.claimPRDiscoveryAttempt>[1]
+  ) {
+    return workspaceAccessor.claimPRDiscoveryAttempt(id, attempt);
   }
 
   findActiveWithSessionsAndProject() {

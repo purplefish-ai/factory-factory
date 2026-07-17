@@ -1,11 +1,11 @@
 import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
-import { TRPCError } from '@trpc/server';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
@@ -192,25 +192,25 @@ export class WorkspaceCreationService {
     source: Extract<WorkspaceCreationSource, { type: 'MANUAL' }>
   ): PreparedWorkspaceCreation {
     if (source.mode === 'AUTO_ITERATION' && !source.autoIterationConfig) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'autoIterationConfig is required for AUTO_ITERATION workspaces',
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        'autoIterationConfig is required for AUTO_ITERATION workspaces'
+      );
     }
     if (source.autoIterationConfig && source.mode !== 'AUTO_ITERATION') {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'autoIterationConfig is only allowed for AUTO_ITERATION workspaces',
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        'autoIterationConfig is only allowed for AUTO_ITERATION workspaces'
+      );
     }
     const configParsed = source.autoIterationConfig
       ? autoIterationConfigSchema.safeParse(source.autoIterationConfig)
       : null;
     if (configParsed && !configParsed.success) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: `Invalid auto-iteration config: ${configParsed.error.message}`,
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        `Invalid auto-iteration config: ${configParsed.error.message}`
+      );
     }
     const autoIterationConfig = configParsed?.success ? configParsed.data : undefined;
 
@@ -248,18 +248,15 @@ export class WorkspaceCreationService {
   ): Promise<PreparedWorkspaceCreation> {
     const project = await projectAccessor.findById(source.projectId);
     if (!project) {
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: `Project not found: ${source.projectId}`,
-      });
+      throw new ApplicationError('NOT_FOUND', `Project not found: ${source.projectId}`);
     }
 
     const isCheckedOut = await gitOpsService.isBranchCheckedOut(project, source.branchName);
     if (isCheckedOut) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: `Branch '${source.branchName}' is already checked out in another worktree.`,
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        `Branch '${source.branchName}' is already checked out in another worktree.`
+      );
     }
 
     return {
@@ -342,22 +339,22 @@ export class WorkspaceCreationService {
   ): Promise<PreparedWorkspaceCreation> {
     const parent = await workspaceAccessor.findRawById(source.parentWorkspaceId);
     if (!parent) {
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: `Parent workspace not found: ${source.parentWorkspaceId}`,
-      });
+      throw new ApplicationError(
+        'NOT_FOUND',
+        `Parent workspace not found: ${source.parentWorkspaceId}`
+      );
     }
     if (parent.status === 'ARCHIVED') {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Cannot create a child workspace under an archived parent',
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        'Cannot create a child workspace under an archived parent'
+      );
     }
     if (parent.parentWorkspaceId) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Child workspaces cannot have children (max depth 1)',
-      });
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        'Child workspaces cannot have children (max depth 1)'
+      );
     }
 
     const metadata: Record<string, unknown> = {

@@ -1,5 +1,5 @@
 import type { WorkspaceNotification } from '@prisma-gen/client';
-import { TRPCError } from '@trpc/server';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
@@ -38,7 +38,7 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
   // Validate that the target project exists
   const project = await projectManagementService.findById(input.projectId);
   if (!project) {
-    throw new TRPCError({ code: 'NOT_FOUND', message: `Project not found: ${input.projectId}` });
+    throw new ApplicationError('NOT_FOUND', `Project not found: ${input.projectId}`);
   }
 
   // WorkspaceCreationService validates parent existence, status, and depth

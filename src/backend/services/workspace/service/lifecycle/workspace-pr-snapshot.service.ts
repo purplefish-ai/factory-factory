@@ -1,4 +1,19 @@
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import type { CIStatus, PRState } from '@/shared/core';
+
+export interface PRDiscoveryClaim {
+  branchName: string;
+  checkedAt: Date;
+  retryCount: number;
+  nextCheckAt: Date;
+}
+
+interface PRSnapshotFields {
+  prNumber: number;
+  prState: PRState;
+  prReviewState: string | null;
+  prCiStatus: CIStatus;
+}
 
 type PRSnapshotUpdate = Pick<
   Parameters<typeof workspaceAccessor.update>[1],
@@ -30,6 +45,34 @@ class WorkspacePrSnapshotService {
       prReviewLastCommentId: data.prReviewLastCommentId,
       branchName: data.branchName,
     });
+  }
+
+  attachDiscoveredPRIfClaimMatches(
+    workspaceId: string,
+    prUrl: string,
+    claim: PRDiscoveryClaim,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    return workspaceAccessor.attachDiscoveredPRIfClaimMatches(
+      workspaceId,
+      prUrl,
+      claim,
+      prUpdatedAt
+    );
+  }
+
+  updatePRSnapshotIfUrlMatches(
+    workspaceId: string,
+    prUrl: string,
+    snapshot: PRSnapshotFields,
+    prUpdatedAt: Date
+  ): Promise<boolean> {
+    return workspaceAccessor.updatePRSnapshotIfUrlMatches(
+      workspaceId,
+      prUrl,
+      snapshot,
+      prUpdatedAt
+    );
   }
 }
 

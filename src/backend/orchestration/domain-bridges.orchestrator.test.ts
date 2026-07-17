@@ -44,6 +44,7 @@ vi.mock('@/backend/services/workspace', () => ({
   },
   workspaceDataService: { findById: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
+  workspaceSnapshotStore: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
     markSessionIdle: vi.fn(),
@@ -133,6 +134,7 @@ import {
   workspaceAutoIterationService,
   workspaceDataService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
@@ -174,6 +176,7 @@ describe('configureDomainBridges', () => {
 
     expect(kanbanStateService.configure).toHaveBeenCalledTimes(1);
     expect(workspaceQueryService.configure).toHaveBeenCalledTimes(1);
+    expect(workspaceSnapshotStore.configure).toHaveBeenCalledTimes(1);
   });
 
   it('configures GitHub domain services', () => {
@@ -305,10 +308,11 @@ describe('configureDomainBridges', () => {
     });
 
     it('github bridge delegates startFetch to prFetchRegistry', () => {
+      vi.mocked(prFetchRegistry.startFetch).mockReturnValue(41);
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.startFetch('ws1');
+      expect(bridge.github.startFetch('ws1')).toBe(41);
       expect(prFetchRegistry.startFetch).toHaveBeenCalledWith('ws1');
     });
 
@@ -334,16 +338,16 @@ describe('configureDomainBridges', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.registerFetch('ws1');
-      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1');
+      bridge.github.registerFetch('ws1', 41);
+      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1', 41);
     });
 
     it('github bridge delegates cancelFetch to prFetchRegistry', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.cancelFetch('ws1');
-      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1');
+      bridge.github.cancelFetch('ws1', 41);
+      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1', 41);
     });
   });
 

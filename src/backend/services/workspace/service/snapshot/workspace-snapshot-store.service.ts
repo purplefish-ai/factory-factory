@@ -18,6 +18,8 @@
 import { EventEmitter } from 'node:events';
 import { isDeepStrictEqual } from 'node:util';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   CIStatus,
   KanbanColumn,
@@ -30,84 +32,16 @@ import type { SessionSummary } from '@/shared/session-runtime';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
-import { createLogger } from './logger.service';
+
+export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * String literal union for timestamp group keys.
- * Represents coherent groups of fields that update together from a single
- * event source (grouped by update source, not per-field).
- */
-export type SnapshotFieldGroup =
-  | 'workspace'
-  | 'pr'
-  | 'session'
-  | 'ratchet'
-  | 'runScript'
-  | 'reconciliation';
 export type WorkspaceSessionSummary = SessionSummary;
-
-/**
- * The full snapshot entry shape for a workspace.
- * Matches the output of getProjectSummaryState() with additional versioning,
- * debug metadata, and field-level timestamps for concurrent update safety.
- */
-export interface WorkspaceSnapshotEntry {
-  // Identity
-  workspaceId: string;
-  projectId: string;
-
-  // Versioning (STORE-02): monotonically increasing per entry
-  version: number;
-
-  // Debug metadata (STORE-03)
-  computedAt: string; // ISO timestamp
-  source: string; // e.g. 'event:workspace_state_change', 'reconciliation'
-
-  // Raw workspace state
-  name: string;
-  status: WorkspaceStatus;
-  createdAt: string;
-  branchName: string | null;
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prCiStatus: CIStatus;
-  prUpdatedAt: string | null;
-  ratchetEnabled: boolean;
-  ratchetState: RatchetState;
-  runScriptStatus: RunScriptStatus;
-  hasHadSessions: boolean;
-
-  // In-memory state (from session domain)
-  isWorking: boolean;
-  pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
-  sessionSummaries: WorkspaceSessionSummary[];
-
-  // Reconciliation-only state
-  gitStats: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-  lastActivityAt: string | null;
-
-  // Derived state (STORE-05): recomputed on every upsert
-  sidebarStatus: WorkspaceSidebarStatus;
-  kanbanColumn: KanbanColumn | null;
-  flowPhase: WorkspaceFlowPhase;
-  ciObservation: WorkspaceCiObservation;
-  ratchetButtonAnimated: boolean;
-  statusReason: WorkspaceStatusReason;
-
-  // Field-level timestamps for concurrent update safety
-  fieldTimestamps: Record<SnapshotFieldGroup, number>;
-}
 
 /**
  * Input type for upsert(). Contains optional versions of all raw + session +
@@ -232,6 +166,8 @@ const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
+type RemovalTombstone = { removedAt: number; expiresAt: number; timer: NodeJS.Timeout };
+
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
   fields: readonly SnapshotField[];
@@ -338,7 +274,15 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * than the removal is ignored, so a reconcile pass that read the DB before
    * an archive committed cannot momentarily resurrect the removed entry.
    */
-  private removalTimestamps = new Map<string, number>();
+  private removalTimestamps = new Map<string, RemovalTombstone>();
+
+  private clearRemovalTombstone(workspaceId: string): void {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      clearTimeout(tombstone.timer);
+    }
+    this.removalTimestamps.delete(workspaceId);
+  }
 
   private assignField<K extends SnapshotField>(
     entry: WorkspaceSnapshotEntry,
@@ -573,16 +517,15 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   ): SnapshotUpsertResult {
     const ts = timestamp ?? Date.now();
 
-    const removedAt = this.removalTimestamps.get(workspaceId);
-    if (removedAt !== undefined) {
-      if (ts <= removedAt) {
+    const tombstone = this.removalTimestamps.get(workspaceId);
+    if (tombstone) {
+      if (ts <= tombstone.removedAt) {
         logger.debug('Snapshot update ignored (workspace removed after update was computed)', {
           workspaceId,
           source,
         });
         return { accepted: false, changed: false, emitted: false };
       }
-      this.removalTimestamps.delete(workspaceId);
     }
 
     let entry = this.entries.get(workspaceId);
@@ -596,6 +539,9 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         );
       }
       entry = this.createDefaultEntry(workspaceId, update.projectId);
+    }
+    if (tombstone) {
+      this.clearRemovalTombstone(workspaceId);
     }
 
     // Field-level timestamp merge
@@ -645,7 +591,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * been upserted here.
    */
   remove(workspaceId: string, timestamp?: number): boolean {
-    this.removalTimestamps.set(workspaceId, timestamp ?? Date.now());
+    const priorTombstone = this.removalTimestamps.get(workspaceId);
+    const removedAt = Math.max(
+      priorTombstone?.removedAt ?? Number.NEGATIVE_INFINITY,
+      timestamp ?? Date.now()
+    );
+    this.clearRemovalTombstone(workspaceId);
+
+    const expiresAt = Date.now() + SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace;
+    const timer = setTimeout(() => {
+      const tombstone = this.removalTimestamps.get(workspaceId);
+      if (tombstone?.expiresAt === expiresAt) {
+        this.removalTimestamps.delete(workspaceId);
+      }
+    }, SERVICE_CACHE_TTL_MS.workspaceSnapshotRemovalGrace);
+    timer.unref();
+    this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -720,12 +681,22 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   }
 
   /**
+   * Get the number of retained removal tombstones (for testing/debugging).
+   */
+  removalTombstoneCount(): number {
+    return this.removalTimestamps.size;
+  }
+
+  /**
    * Clear all entries and indexes. Useful for testing and server shutdown.
    */
   clear(): void {
     this.entries.clear();
     this.projectIndex.clear();
     this.rawSessionIsWorkingByWorkspaceId.clear();
+    for (const tombstone of this.removalTimestamps.values()) {
+      clearTimeout(tombstone.timer);
+    }
     this.removalTimestamps.clear();
     logger.info('Snapshot store cleared');
   }

@@ -1,10 +1,11 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { createLogger } from '@/backend/services/logger.service';
 import * as userSettingsServiceModule from '@/backend/services/settings';
 import * as projectAccessorModule from '@/backend/services/workspace/resources/project.accessor';
 import * as workspaceAccessorModule from '@/backend/services/workspace/resources/workspace.accessor';
+import * as gitOpsServiceModule from '@/backend/services/workspace/service/worktree/git-ops.service';
 import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
@@ -15,7 +16,7 @@ type Logger = ReturnType<typeof createLogger>;
 vi.mock('@/backend/services/workspace/resources/project.accessor');
 vi.mock('@/backend/services/workspace/resources/workspace.accessor');
 vi.mock('@/backend/services/settings');
-vi.mock('@/backend/services/git-ops.service');
+vi.mock('@/backend/services/workspace/service/worktree/git-ops.service');
 vi.mock('@/backend/services/workspace/service/worktree/worktree-lifecycle.service');
 
 describe('WorkspaceCreationService', () => {
@@ -34,6 +35,9 @@ describe('WorkspaceCreationService', () => {
     creationSource: 'MANUAL',
     creationMetadata: null,
     prUrl: null,
+    prDiscoveryLastCheckedAt: null,
+    prDiscoveryRetryCount: 0,
+    prDiscoveryNextCheckAt: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     linearIssueId: null,
@@ -336,7 +340,13 @@ describe('WorkspaceCreationService', () => {
           },
         });
 
-        await expect(service.create(source)).rejects.toThrow('Invalid auto-iteration config');
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({
+          code: 'INVALID_INPUT',
+          message: expect.stringContaining('Invalid auto-iteration config'),
+        });
         expect(workspaceAccessorModule.workspaceAccessor.create).not.toHaveBeenCalled();
       });
     });
@@ -393,7 +403,10 @@ describe('WorkspaceCreationService', () => {
           branchName: 'existing-branch',
         };
 
-        await expect(service.create(source)).rejects.toThrow('Project not found: proj-1');
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({ code: 'NOT_FOUND', message: 'Project not found: proj-1' });
       });
 
       it('should throw error when branch is already checked out', async () => {
@@ -405,9 +418,13 @@ describe('WorkspaceCreationService', () => {
           branchName: 'existing-branch',
         };
 
-        await expect(service.create(source)).rejects.toThrow(
-          "Branch 'existing-branch' is already checked out in another worktree."
-        );
+        const error = await service.create(source).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect(error).toMatchObject({
+          code: 'INVALID_INPUT',
+          message: "Branch 'existing-branch' is already checked out in another worktree.",
+        });
       });
     });
 

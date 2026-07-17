@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getAuthenticatedUsername: vi.fn(),
   getIssue: vi.fn(),
   readConfig: vi.fn(),
+  syncWorkspaceCommandsFromFactoryConfig: vi.fn(),
   runStartupScript: vi.fn(),
   hasStartupScript: vi.fn(),
   startSession: vi.fn(),
@@ -61,6 +62,12 @@ vi.mock('@/backend/services/workspace', () => ({
     registerInitializedWorktree: mocks.updateWorkspace,
     setCommands: mocks.updateWorkspace,
   },
+  gitOpsService: {
+    ensureBaseBranchExists: mocks.ensureBaseBranchExists,
+    createWorktree: mocks.createWorktree,
+    createWorktreeFromExistingBranch: mocks.createWorktreeFromExistingBranch,
+    removeWorktree: mocks.removeWorktree,
+  },
 }));
 
 vi.mock('@/backend/services/session', () => ({
@@ -93,15 +100,6 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
-vi.mock('@/backend/services/git-ops.service', () => ({
-  gitOpsService: {
-    ensureBaseBranchExists: mocks.ensureBaseBranchExists,
-    createWorktree: mocks.createWorktree,
-    createWorktreeFromExistingBranch: mocks.createWorktreeFromExistingBranch,
-    removeWorktree: mocks.removeWorktree,
-  },
-}));
-
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     getAuthenticatedUsername: mocks.getAuthenticatedUsername,
@@ -109,13 +107,13 @@ vi.mock('@/backend/services/github', () => ({
   },
 }));
 
-vi.mock('@/backend/services/factory-config.service', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   FactoryConfigService: {
     readConfig: mocks.readConfig,
   },
-}));
-
-vi.mock('@/backend/services/run-script', () => ({
+  runScriptConfigPersistenceService: {
+    syncWorkspaceCommandsFromFactoryConfig: mocks.syncWorkspaceCommandsFromFactoryConfig,
+  },
   startupScriptService: {
     runStartupScript: mocks.runStartupScript,
     hasStartupScript: mocks.hasStartupScript,

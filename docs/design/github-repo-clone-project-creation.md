@@ -113,9 +113,9 @@ project.createFromGithub: publicProcedure
   })
 ```
 
-#### 2. Clone service (new, in `src/backend/services/`)
+#### 2. Clone service (in the workspace capsule)
 
-`src/backend/services/git-clone.service.ts`:
+`src/backend/services/workspace/service/worktree/git-clone.service.ts`:
 
 ```typescript
 class GitCloneService {

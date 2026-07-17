@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  SnapshotUpdateInput,
-  WorkspaceSnapshotEntry,
-} from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 // ---------------------------------------------------------------------------
@@ -10,25 +7,7 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 // ---------------------------------------------------------------------------
 
 const mockFindAllNonArchived = vi.fn();
-
-vi.mock('@/backend/services/workspace', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
-  return {
-    ...actual,
-    workspaceMaintenanceService: {
-      findActiveWithSessionsAndProject: (...args: unknown[]) => mockFindAllNonArchived(...args),
-    },
-  };
-});
-
 const mockGetWorkspaceGitStats = vi.fn();
-
-vi.mock('@/backend/services/git-ops.service', () => ({
-  gitOpsService: {
-    getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
-  },
-}));
-
 const mockUpsert = vi.fn();
 const mockGetByWorkspaceId = vi.fn();
 const mockGetAllWorkspaceIds = vi.fn().mockReturnValue([]);
@@ -37,14 +16,24 @@ const mockLoggerWarn = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockLoggerError = vi.fn();
 
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {
-    upsert: (...args: unknown[]) => mockUpsert(...args),
-    getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
-    getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
-    remove: (...args: unknown[]) => mockRemove(...args),
-  },
-}));
+vi.mock('@/backend/services/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
+  return {
+    ...actual,
+    workspaceMaintenanceService: {
+      findActiveWithSessionsAndProject: (...args: unknown[]) => mockFindAllNonArchived(...args),
+    },
+    gitOpsService: {
+      getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
+    },
+    workspaceSnapshotStore: {
+      upsert: (...args: unknown[]) => mockUpsert(...args),
+      getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
+      getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
+      remove: (...args: unknown[]) => mockRemove(...args),
+    },
+  };
+});
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

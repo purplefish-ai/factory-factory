@@ -20,7 +20,7 @@ vi.mock('@/backend/lib/shell', () => ({
   gitCommand: (...args: unknown[]) => mockGitCommand(...args),
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),

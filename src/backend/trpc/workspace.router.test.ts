@@ -1,5 +1,7 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
@@ -14,11 +16,14 @@ const mockWorkspaceQueryService = vi.hoisted(() => ({
   getProjectSummaryState: vi.fn(),
   listWithKanbanState: vi.fn(),
   listWithRuntimeState: vi.fn(),
-  refreshFactoryConfigs: vi.fn(),
-  getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
   syncAllPRStatuses: vi.fn(),
   hasChanges: vi.fn(),
+}));
+
+const mockRunScriptConfigPersistenceService = vi.hoisted(() => ({
+  refreshFactoryConfigs: vi.fn(),
+  getFactoryConfig: vi.fn(),
 }));
 
 const mockDeriveFlowState = vi.hoisted(() => vi.fn());
@@ -26,6 +31,7 @@ const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
+const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
@@ -101,6 +107,10 @@ vi.mock('@/backend/services/ratchet', () => ({
   },
 }));
 
+vi.mock('@/backend/services/run-script', () => ({
+  runScriptConfigPersistenceService: mockRunScriptConfigPersistenceService,
+}));
+
 vi.mock('@/backend/lib/session-summaries', () => ({
   buildWorkspaceSessionSummaries: (...args: unknown[]) => mockBuildSessionSummaries(...args),
   hasWorkingSessionSummary: (...args: unknown[]) => mockHasWorkingSessionSummary(...args),
@@ -114,6 +124,10 @@ vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
   archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
   cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
     mockCleanupWorkspaceRuntimeResources(...args),
+}));
+
+vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
+  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
 }));
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
@@ -325,6 +339,44 @@ describe('workspaceRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+  });
+
+  it('includes error codes for individual bulk archive failures', async () => {
+    mockWorkspaceQueryService.listWithKanbanState.mockResolvedValue([
+      { id: 'w-success' },
+      { id: 'w-blocked' },
+      { id: 'w-missing' },
+    ]);
+    mockArchiveWorkspace
+      .mockResolvedValueOnce({ archived: true })
+      .mockRejectedValueOnce(new ApplicationError('PRECONDITION_FAILED', 'Uncommitted changes'))
+      .mockRejectedValueOnce(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
+    const { caller } = createCaller();
+
+    await expect(
+      caller.bulkArchive({
+        projectId: 'p1',
+        kanbanColumn: 'WAITING',
+        commitUncommitted: false,
+      })
+    ).resolves.toEqual({
+      results: [
+        { id: 'w-success', success: true },
+        {
+          id: 'w-blocked',
+          success: false,
+          error: 'Uncommitted changes',
+          code: 'PRECONDITION_FAILED',
+        },
+        {
+          id: 'w-missing',
+          success: false,
+          error: 'Workspace not found',
+          code: 'NOT_FOUND',
+        },
+      ],
+      total: 3,
+    });
   });
 
   it('rejects privileged workspace mutations from untrusted requests', async () => {
@@ -582,8 +634,10 @@ describe('workspaceRouter', () => {
 
   it('cleans up on delete and delegates summary procedures', async () => {
     mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
-    mockWorkspaceQueryService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
-    mockWorkspaceQueryService.getFactoryConfig.mockResolvedValue({ scripts: { run: 'pnpm dev' } });
+    mockRunScriptConfigPersistenceService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
+    mockRunScriptConfigPersistenceService.getFactoryConfig.mockResolvedValue({
+      scripts: { run: 'pnpm dev' },
+    });
     mockWorkspaceQueryService.syncPRStatus.mockResolvedValue({ synced: true });
     mockWorkspaceQueryService.syncAllPRStatuses.mockResolvedValue({ synced: 10 });
     mockWorkspaceQueryService.hasChanges.mockResolvedValue({ hasChanges: true });
@@ -610,7 +664,11 @@ describe('workspaceRouter', () => {
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
-    expect(mockClearWorkspaceActivity).toHaveBeenCalledWith('w1');
+    expect(mockCleanupWorkspaceScopedCaches).toHaveBeenCalledWith('w1');
+    const cacheCleanupCallOrder = mockCleanupWorkspaceScopedCaches.mock.invocationCallOrder[0];
+    expect(deleteCallOrder).toBeDefined();
+    expect(cacheCleanupCallOrder).toBeDefined();
+    expect(cacheCleanupCallOrder!).toBeGreaterThan(deleteCallOrder!);
 
     await expect(caller.refreshFactoryConfigs({ projectId: 'p1' })).resolves.toEqual({
       refreshed: 3,
@@ -635,6 +693,15 @@ describe('workspaceRouter', () => {
     expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not clean workspace caches when database deletion fails', async () => {
+    mockWorkspaceDataService.delete.mockRejectedValue(new Error('database delete failed'));
+    const { caller } = createCaller();
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow('database delete failed');
+
+    expect(mockCleanupWorkspaceScopedCaches).not.toHaveBeenCalled();
   });
 
   it('does not delete when workspace session cleanup throws', async () => {

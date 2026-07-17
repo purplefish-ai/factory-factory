@@ -12,7 +12,7 @@
  *
  * Import rules (EVNT-07 + circular dep avoidance):
  * - Domain singletons and event constants from domain barrels
- * - Store from @/backend/services/workspace-snapshot-store.service
+ * - Store from @/backend/services/workspace
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
@@ -20,9 +20,11 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
+import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
+  prFetchRegistry,
   prSnapshotService,
 } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
@@ -48,15 +50,13 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
+  type SnapshotUpdateInput,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import {
-  type SnapshotUpdateInput,
-  workspaceSnapshotStore,
-} from '@/backend/services/workspace-snapshot-store.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import { getWorkspaceLinearContext } from './linear-config.helper';
 
@@ -243,6 +243,18 @@ export class EventCoalescer {
   }
 
   /**
+   * Cancel pending work and remove the workspace snapshot immediately.
+   */
+  removeWorkspace(workspaceId: string): void {
+    const pending = this.pending.get(workspaceId);
+    if (pending?.timer) {
+      clearTimeout(pending.timer);
+    }
+    this.pending.delete(workspaceId);
+    this.store.remove(workspaceId);
+  }
+
+  /**
    * Number of workspaces with pending updates (for testing).
    */
   get pendingCount(): number {
@@ -256,10 +268,22 @@ export class EventCoalescer {
 
 class EventCollectorState {
   activeCoalescer: EventCoalescer | null = null;
+  lastIdlePrRefreshByWorkspace = new Map<string, number>();
   pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
   runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
   eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
   listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null = null;
+}
+
+function removeWorkspaceWithState(state: EventCollectorState, workspaceId: string): void {
+  if (state.activeCoalescer) {
+    state.activeCoalescer.removeWorkspace(workspaceId);
+  } else {
+    workspaceSnapshotStore.remove(workspaceId);
+  }
+  state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
+  workspaceActivityService.clearWorkspace(workspaceId);
+  prFetchRegistry.removeWorkspace(workspaceId);
 }
 
 async function refreshWorkspaceSessionSummaries(
@@ -443,15 +467,31 @@ function configureEventCollectorWithState(
   };
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   state.activeCoalescer = coalescer;
-  const lastIdlePrRefreshByWorkspace = new Map<string, number>();
+  state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
     const now = Date.now();
-    const lastRefresh = lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
+    for (const [cachedWorkspaceId, refreshedAt] of state.lastIdlePrRefreshByWorkspace) {
+      if (now - refreshedAt >= IDLE_PR_REFRESH_COOLDOWN_MS) {
+        state.lastIdlePrRefreshByWorkspace.delete(cachedWorkspaceId);
+      }
+    }
+
+    const lastRefresh = state.lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
     if (now - lastRefresh < IDLE_PR_REFRESH_COOLDOWN_MS) {
       return;
     }
-    lastIdlePrRefreshByWorkspace.set(workspaceId, now);
+
+    if (
+      !state.lastIdlePrRefreshByWorkspace.has(workspaceId) &&
+      state.lastIdlePrRefreshByWorkspace.size >= SERVICE_LIMITS.workspaceScopedCacheMaxEntries
+    ) {
+      const oldestWorkspaceId = state.lastIdlePrRefreshByWorkspace.keys().next().value;
+      if (oldestWorkspaceId !== undefined) {
+        state.lastIdlePrRefreshByWorkspace.delete(oldestWorkspaceId);
+      }
+    }
+    state.lastIdlePrRefreshByWorkspace.set(workspaceId, now);
 
     void prSnapshotService
       .refreshWorkspace(workspaceId)
@@ -476,8 +516,7 @@ function configureEventCollectorWithState(
   workspaceStateMachine.on(WORKSPACE_STATE_CHANGED, (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
       // Immediate removal for UI feedback -- no coalescing delay
-      workspaceSnapshotStore.remove(event.workspaceId);
-      workspaceActivityService.clearWorkspace(event.workspaceId);
+      removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
         state.eventCollectorSessionServices.sessionService.stopWorkspaceSessions(event.workspaceId),
         Promise.resolve().then(() => {
@@ -693,6 +732,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
+    state.lastIdlePrRefreshByWorkspace.clear();
     logger.info('Event collector stopped');
   }
 }
@@ -706,6 +746,10 @@ export class EventCollectorOrchestrator {
 
   stop(): void {
     stopEventCollectorWithState(this.state);
+  }
+
+  removeWorkspace(workspaceId: string): void {
+    removeWorkspaceWithState(this.state, workspaceId);
   }
 }
 
@@ -723,4 +767,8 @@ export function configureEventCollector(
 
 export function stopEventCollector(): void {
   defaultEventCollectorOrchestrator.stop();
+}
+
+export function cleanupWorkspaceScopedCaches(workspaceId: string): void {
+  defaultEventCollectorOrchestrator.removeWorkspace(workspaceId);
 }

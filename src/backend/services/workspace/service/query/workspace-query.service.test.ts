@@ -5,30 +5,28 @@ import type {
   WorkspaceQuerySessionBridge,
   WorkspaceSessionBridge,
 } from '@/backend/services/workspace/service/bridges';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
-import { WorkspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { CIStatus, PRState, RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceQueryService } from './workspace-query.service';
 
 const mockFindByProjectIdWithSessions = vi.fn();
-const mockFindByProjectId = vi.fn();
 const mockFindById = vi.fn();
 const mockFindByIdWithProject = vi.fn();
 const mockWorkspaceUpdate = vi.fn();
+const mockResetPRDiscoveryBackoff = vi.fn();
 const mockProjectFindById = vi.fn();
 const mockDeriveWorkspaceRuntimeState = vi.fn();
-const mockReadConfig = vi.fn();
 const mockGetWorkspaceGitStats = vi.fn();
-const mockSyncWorkspaceCommandsFromWorktreeConfig = vi.fn();
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findByProjectIdWithSessions: (...args: unknown[]) => mockFindByProjectIdWithSessions(...args),
-    findByProjectId: (...args: unknown[]) => mockFindByProjectId(...args),
     findById: (...args: unknown[]) => mockFindById(...args),
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+    resetPRDiscoveryBackoff: (...args: unknown[]) => mockResetPRDiscoveryBackoff(...args),
     update: (...args: unknown[]) => mockWorkspaceUpdate(...args),
   },
 }));
@@ -43,20 +41,7 @@ vi.mock('@/backend/services/workspace/service/state/workspace-runtime-state', ()
   deriveWorkspaceRuntimeState: (...args: unknown[]) => mockDeriveWorkspaceRuntimeState(...args),
 }));
 
-vi.mock('@/backend/services/factory-config.service', () => ({
-  FactoryConfigService: {
-    readConfig: (...args: unknown[]) => mockReadConfig(...args),
-  },
-}));
-
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
-  runScriptConfigPersistenceService: {
-    syncWorkspaceCommandsFromWorktreeConfig: (...args: unknown[]) =>
-      mockSyncWorkspaceCommandsFromWorktreeConfig(...args),
-  },
-}));
-
-vi.mock('@/backend/services/git-ops.service', () => ({
+vi.mock('@/backend/services/workspace/service/worktree/git-ops.service', () => ({
   gitOpsService: {
     getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
   },
@@ -453,6 +438,7 @@ describe('WorkspaceQueryService', () => {
       isWorking: false,
       gitStats: expect.objectContaining({ total: 3 }),
     });
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
 
     // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
     await new Promise((resolve) => setImmediate(resolve));
@@ -563,58 +549,6 @@ describe('WorkspaceQueryService', () => {
     expect(kanban[0]?.statusReason).toEqual(snapshotEntry?.statusReason);
   });
 
-  it('refreshFactoryConfigs updates script commands and reports per-workspace errors', async () => {
-    mockFindByProjectId.mockResolvedValue([
-      { id: 'w1', worktreePath: '/tmp/w1' },
-      { id: 'w2', worktreePath: '/tmp/w2' },
-      { id: 'w3', worktreePath: null },
-    ]);
-
-    mockSyncWorkspaceCommandsFromWorktreeConfig
-      .mockResolvedValueOnce({
-        runScriptCommand: 'pnpm dev',
-        runScriptPostRunCommand: null,
-        runScriptCleanupCommand: 'pkill node',
-      })
-      .mockRejectedValueOnce(new Error('bad config'));
-
-    const result = await workspaceQueryService.refreshFactoryConfigs('p1');
-
-    expect(result).toEqual({
-      updatedCount: 1,
-      totalWorkspaces: 3,
-      errors: [{ workspaceId: 'w2', error: 'bad config' }],
-    });
-    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledWith({
-      workspaceId: 'w1',
-      worktreePath: '/tmp/w1',
-      persistWorkspaceCommands: expect.any(Function),
-    });
-    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledWith({
-      workspaceId: 'w2',
-      worktreePath: '/tmp/w2',
-      persistWorkspaceCommands: expect.any(Function),
-    });
-    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledTimes(2);
-  });
-
-  it('getFactoryConfig validates project and handles read errors', async () => {
-    mockProjectFindById.mockResolvedValueOnce(null);
-    await expect(workspaceQueryService.getFactoryConfig('missing')).rejects.toThrow(
-      'Project not found'
-    );
-
-    mockProjectFindById.mockResolvedValueOnce({ id: 'p1', repoPath: '/repo' });
-    mockReadConfig.mockResolvedValueOnce({ scripts: { run: 'pnpm dev' } });
-    await expect(workspaceQueryService.getFactoryConfig('p1')).resolves.toEqual({
-      scripts: { run: 'pnpm dev' },
-    });
-
-    mockProjectFindById.mockResolvedValueOnce({ id: 'p1', repoPath: '/repo' });
-    mockReadConfig.mockRejectedValueOnce(new Error('boom'));
-    await expect(workspaceQueryService.getFactoryConfig('p1')).resolves.toBeNull();
-  });
-
   it('syncPRStatus and syncAllPRStatuses handle success and failure paths', async () => {
     mockFindById.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.syncPRStatus('missing')).rejects.toThrow(
@@ -663,6 +597,31 @@ describe('WorkspaceQueryService', () => {
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
       queued: 2,
     });
+  });
+
+  it('syncPRStatus resets discovery backoff before returning no_pr_url', async () => {
+    mockFindById.mockResolvedValue({ id: 'w1', prUrl: null });
+    mockResetPRDiscoveryBackoff.mockResolvedValue(true);
+
+    await expect(workspaceQueryService.syncPRStatus('w1')).resolves.toEqual({
+      success: false,
+      reason: 'no_pr_url',
+    });
+
+    expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledOnce();
+    expect(mockResetPRDiscoveryBackoff).toHaveBeenCalledWith('w1');
+    expect(mockRefreshWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('syncAllPRStatuses does not reset discovery backoff for workspaces without PRs', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      { id: 'w1', prUrl: null },
+      { id: 'w2', prUrl: null },
+    ]);
+
+    await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
+
+    expect(mockResetPRDiscoveryBackoff).not.toHaveBeenCalled();
   });
 
   it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
@@ -728,6 +687,7 @@ describe('WorkspaceQueryService', () => {
   it('hasChanges checks workspace metadata and git stats safely', async () => {
     mockFindByIdWithProject.mockResolvedValueOnce(null);
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -741,6 +701,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',
@@ -754,6 +715,7 @@ describe('WorkspaceQueryService', () => {
       hasUncommitted: false,
     });
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(true);
+    expect(mockGetWorkspaceGitStats).toHaveBeenLastCalledWith('/tmp/w1', 'main');
 
     mockFindByIdWithProject.mockResolvedValueOnce({
       id: 'w1',

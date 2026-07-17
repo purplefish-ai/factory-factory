@@ -8,6 +8,7 @@
 import { gitCommand } from '@/backend/lib/shell';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceDataService } from '@/backend/services/workspace';
+import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { extractMatchingCommand } from './branch-rename.utils';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
@@ -115,16 +116,15 @@ export const branchRenameInterceptor: ToolInterceptor = {
   tools: '*',
 
   async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
-    // Skip if tool execution failed
-    if (event.output?.isError) {
-      return;
-    }
-
     // Check if this was a `git branch -m` or `git branch -M` command (branch rename)
     // -m: rename branch, -M: force rename (overwrite if target exists)
     // Use regex to avoid false positives from strings containing "git branch -m"
     const command = extractMatchingCommand(event, GIT_BRANCH_RENAME_TEXT_REGEX, logger);
     if (!(command && containsGitBranchRenameCommand(command))) {
+      return;
+    }
+    workspaceGitStateService.invalidate(context.workingDir);
+    if (event.output?.isError) {
       return;
     }
 

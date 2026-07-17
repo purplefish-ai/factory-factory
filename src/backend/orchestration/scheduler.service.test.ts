@@ -3,28 +3,40 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 
 const mockFindNeedingPRSync = vi.fn();
 const mockFindNeedingPRDiscovery = vi.fn();
-const mockFindPRForBranch = vi.fn();
+const mockClaimPRDiscoveryAttempt = vi.fn();
+const mockListOpenPRs = vi.fn();
 const mockRefreshWorkspace = vi.fn();
-const mockAttachAndRefreshPR = vi.fn();
+const mockAttachDiscoveredPRAndRefresh = vi.fn();
+const mockGetPRDiscoveryLimits = vi.fn();
+const mockLoggerInfo = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
+  computePRDiscoveryNextCheckAt: (date: Date, retryCount: number) =>
+    new Date(date.getTime() + retryCount * 60_000),
   workspaceMaintenanceService: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
-    findNeedingPRDiscovery: () => mockFindNeedingPRDiscovery(),
+    findNeedingPRDiscovery: (...args: unknown[]) => mockFindNeedingPRDiscovery(...args),
+    claimPRDiscoveryAttempt: (...args: unknown[]) => mockClaimPRDiscoveryAttempt(...args),
+  },
+}));
+
+vi.mock('@/backend/services/config.service', () => ({
+  configService: {
+    getPRDiscoveryLimits: () => mockGetPRDiscoveryLimits(),
   },
 }));
 
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
-    findPRForBranch: (...args: unknown[]) => mockFindPRForBranch(...args),
+    listOpenPRs: (...args: unknown[]) => mockListOpenPRs(...args),
   },
   prSnapshotService: {
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
-    attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
+    attachDiscoveredPRAndRefresh: (...args: unknown[]) => mockAttachDiscoveredPRAndRefresh(...args),
   },
   prFetchRegistry: {
     isRecentlyFetched: () => false,
-    startFetch: vi.fn(),
+    startFetch: vi.fn(() => 41),
     cancelFetch: vi.fn(),
     register: vi.fn(),
   },
@@ -32,13 +44,14 @@ vi.mock('@/backend/services/github', () => ({
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
-    info: vi.fn(),
+    info: (...args: unknown[]) => mockLoggerInfo(...args),
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   }),
 }));
 
+import { prFetchRegistry } from '@/backend/services/github';
 import { schedulerService } from './scheduler.service';
 
 function createDeferred<T>() {
@@ -52,10 +65,49 @@ function createDeferred<T>() {
   };
 }
 
+const checkedAt = new Date('2026-07-17T12:00:00.000Z');
+
+function discoveryWorkspace({
+  id,
+  owner = 'org',
+  repo = 'repo',
+  branch = 'feature',
+  createdAt = new Date('2026-07-17T10:00:00.000Z'),
+  updatedAt = new Date('2026-07-17T11:00:00.000Z'),
+  retryCount = 0,
+  nextCheckAt = null,
+}: {
+  id: string;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  retryCount?: number;
+  nextCheckAt?: Date | null;
+}) {
+  return {
+    id,
+    branchName: branch,
+    createdAt,
+    updatedAt,
+    prDiscoveryRetryCount: retryCount,
+    prDiscoveryNextCheckAt: nextCheckAt,
+    project: { githubOwner: owner, githubRepo: repo },
+  };
+}
+
 describe('SchedulerService', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(checkedAt);
     vi.clearAllMocks();
+    mockGetPRDiscoveryLimits.mockReturnValue({ candidateLimit: 100, repositoryLimit: 10 });
+    mockClaimPRDiscoveryAttempt.mockResolvedValue(true);
+    mockAttachDiscoveredPRAndRefresh.mockResolvedValue({
+      success: true,
+      snapshot: { prNumber: 1 },
+    });
   });
 
   describe('syncPRStatuses', () => {
@@ -87,6 +139,9 @@ describe('SchedulerService', () => {
 
       expect(result).toEqual({ synced: 2, failed: 0 });
       expect(mockRefreshWorkspace).toHaveBeenCalledTimes(2);
+      expect(prFetchRegistry.startFetch).toHaveBeenCalledTimes(2);
+      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(1, 'ws-1', 41);
+      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(2, 'ws-2', 41);
     });
 
     it('counts failed syncs', async () => {
@@ -100,101 +155,305 @@ describe('SchedulerService', () => {
       const result = await schedulerService.syncPRStatuses();
 
       expect(result).toEqual({ synced: 0, failed: 2 });
+      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
     });
   });
 
   describe('discoverNewPRs', () => {
-    it('updates workspace prUrl and refreshes PR snapshot when PR is discovered', async () => {
-      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
+    it('checks dozens of candidates with one repository query per repository', async () => {
+      const repositories = ['alpha', 'beta', 'gamma'];
+      const candidatesPerRepository = 12;
+      const candidates = repositories.flatMap((repo) =>
+        Array.from({ length: candidatesPerRepository }, (_, index) =>
+          discoveryWorkspace({
+            id: `${repo}-${index}`,
+            repo,
+            branch: `feature-${index}`,
+          })
+        )
+      );
+      mockFindNeedingPRDiscovery.mockResolvedValue(candidates);
+      mockListOpenPRs.mockResolvedValue([]);
+
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: candidates.length,
+      });
+
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledTimes(candidates.length);
+      expect(mockListOpenPRs).toHaveBeenCalledTimes(repositories.length);
+      expect(mockListOpenPRs.mock.calls).toEqual(repositories.map((repo) => ['org', repo]));
+      expect(mockAttachDiscoveredPRAndRefresh).not.toHaveBeenCalled();
+    });
+
+    it('claims and checks multiple workspaces through one case-insensitive repository batch', async () => {
+      const nextCheckAt = new Date('2026-07-17T11:55:00.000Z');
       mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({ id: 'ws-1', owner: 'Owner', repo: 'Repo', branch: 'one' }),
+        discoveryWorkspace({
+          id: 'ws-2',
+          owner: 'owner',
+          repo: 'repo',
+          branch: 'two',
+          retryCount: 1,
+          nextCheckAt,
+        }),
+      ]);
+      mockListOpenPRs.mockResolvedValue([
         {
-          id: 'ws-1',
-          branchName: 'feature',
-          createdAt: workspaceCreatedAt,
-          project: { githubOwner: 'org', githubRepo: 'repo' },
+          number: 1,
+          url: 'https://github.com/Owner/Repo/pull/1',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'one',
+        },
+        {
+          number: 2,
+          url: 'https://github.com/Owner/Repo/pull/2',
+          createdAt: '2026-07-17T11:31:00.000Z',
+          headRefName: 'two',
         },
       ]);
-
-      mockFindPRForBranch.mockResolvedValue({
-        number: 101,
-        url: 'https://github.com/org/repo/pull/101',
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 2,
+        checked: 2,
       });
 
-      mockAttachAndRefreshPR.mockResolvedValue({
-        success: true,
-        snapshot: {
-          prNumber: 101,
-          prState: 'OPEN',
-          prReviewState: null,
-          prCiStatus: 'PENDING',
-        },
-      });
-
-      const result = await schedulerService.discoverNewPRs();
-
-      expect(result).toEqual({ discovered: 1, checked: 1 });
-      expect(mockFindPRForBranch).toHaveBeenCalledWith(
-        'org',
-        'repo',
-        'feature',
-        workspaceCreatedAt
+      expect(mockFindNeedingPRDiscovery).toHaveBeenCalledWith(100, checkedAt);
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledTimes(2);
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledWith(
+        'ws-2',
+        expect.objectContaining({
+          branchName: 'two',
+          expectedRetryCount: 1,
+          expectedNextCheckAt: nextCheckAt,
+          checkedAt,
+          nextCheckAt: expect.any(Date),
+        })
       );
-      expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
-        'ws-1',
-        'https://github.com/org/repo/pull/101'
+      expect(mockListOpenPRs).toHaveBeenCalledTimes(1);
+      expect(mockListOpenPRs).toHaveBeenCalledWith('Owner', 'Repo');
+      expect(Math.max(...mockClaimPRDiscoveryAttempt.mock.invocationCallOrder)).toBeLessThan(
+        mockListOpenPRs.mock.invocationCallOrder[0] ?? 0
+      );
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
+        'ws-2',
+        'https://github.com/Owner/Repo/pull/2',
+        {
+          branchName: 'two',
+          checkedAt,
+          retryCount: 2,
+          nextCheckAt: expect.any(Date),
+        }
       );
     });
 
-    it('counts PR as discovered when attachment succeeds but snapshot fetch fails', async () => {
-      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
+    it('caps repository groups and only claims selected candidates', async () => {
+      mockGetPRDiscoveryLimits.mockReturnValue({ candidateLimit: 25, repositoryLimit: 1 });
       mockFindNeedingPRDiscovery.mockResolvedValue([
-        {
-          id: 'ws-1',
-          branchName: 'feature',
-          createdAt: workspaceCreatedAt,
-          project: { githubOwner: 'org', githubRepo: 'repo' },
-        },
+        discoveryWorkspace({ id: 'selected', repo: 'first' }),
+        discoveryWorkspace({ id: 'limited', repo: 'second' }),
       ]);
+      mockListOpenPRs.mockResolvedValue([]);
 
-      mockFindPRForBranch.mockResolvedValue({
-        number: 101,
-        url: 'https://github.com/org/repo/pull/101',
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: 1,
       });
 
-      mockAttachAndRefreshPR.mockResolvedValue({
-        success: false,
-        reason: 'fetch_failed',
-      });
-
-      const result = await schedulerService.discoverNewPRs();
-
-      expect(result).toEqual({ discovered: 1, checked: 1 });
+      expect(mockFindNeedingPRDiscovery).toHaveBeenCalledWith(25, checkedAt);
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledTimes(1);
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledWith('selected', expect.any(Object));
+      expect(mockListOpenPRs).toHaveBeenCalledWith('org', 'first');
     });
 
-    it('does not count PR as discovered when attachment fails entirely', async () => {
-      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
+    it('skips repository I/O when none of its candidates can be claimed', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([discoveryWorkspace({ id: 'stale' })]);
+      mockClaimPRDiscoveryAttempt.mockResolvedValue(false);
+
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: 0,
+      });
+      expect(mockListOpenPRs).not.toHaveBeenCalled();
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'PR discovery completed',
+        expect.objectContaining({
+          selectedRepositories: 1,
+          queriedRepositories: 0,
+        })
+      );
+    });
+
+    it('isolates a repository failure and keeps checking other repositories', async () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({ id: 'failed', repo: 'broken', branch: 'same' }),
+        discoveryWorkspace({ id: 'found', repo: 'working', branch: 'same' }),
+      ]);
+      mockListOpenPRs.mockImplementation((_owner: string, repo: string) => {
+        if (repo === 'broken') {
+          return Promise.reject(new Error('repository unavailable'));
+        }
+        return Promise.resolve([
+          {
+            number: 2,
+            url: 'https://github.com/org/working/pull/2',
+            createdAt: '2026-07-17T11:30:00.000Z',
+            headRefName: 'same',
+          },
+        ]);
+      });
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 1,
+        checked: 2,
+      });
+      expect(mockListOpenPRs).toHaveBeenCalledTimes(2);
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
+        'found',
+        'https://github.com/org/working/pull/2',
+        expect.objectContaining({ branchName: 'same' })
+      );
+    });
+
+    it('keeps identical branch names isolated by repository', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({ id: 'ws-a', repo: 'a', branch: 'shared' }),
+        discoveryWorkspace({ id: 'ws-b', repo: 'b', branch: 'shared' }),
+      ]);
+      mockListOpenPRs.mockImplementation((_owner: string, repo: string) =>
+        Promise.resolve([
+          {
+            number: repo === 'a' ? 1 : 2,
+            url: `https://github.com/org/${repo}/pull/${repo === 'a' ? 1 : 2}`,
+            createdAt: '2026-07-17T11:30:00.000Z',
+            headRefName: 'shared',
+          },
+        ])
+      );
+      await schedulerService.discoverNewPRs();
+
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
+        'ws-a',
+        'https://github.com/org/a/pull/1',
+        expect.objectContaining({ branchName: 'shared' })
+      );
+      expect(mockAttachDiscoveredPRAndRefresh).toHaveBeenCalledWith(
+        'ws-b',
+        'https://github.com/org/b/pull/2',
+        expect.objectContaining({ branchName: 'shared' })
+      );
+    });
+
+    it('matches same-branch PRs one-to-one in chronological workspace order', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({
+          id: 'newer-workspace',
+          branch: 'reused',
+          createdAt: new Date('2026-07-17T10:30:00.000Z'),
+        }),
+        discoveryWorkspace({
+          id: 'older-workspace',
+          branch: 'reused',
+          createdAt: new Date('2026-07-17T10:00:00.000Z'),
+        }),
+      ]);
+      mockListOpenPRs.mockResolvedValue([
         {
+          number: 2,
+          url: 'https://github.com/org/repo/pull/2',
+          createdAt: '2026-07-17T11:00:00.000Z',
+          headRefName: 'reused',
+        },
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T10:15:00.000Z',
+          headRefName: 'reused',
+        },
+      ]);
+      await schedulerService.discoverNewPRs();
+
+      expect(mockAttachDiscoveredPRAndRefresh.mock.calls).toEqual([
+        [
+          'older-workspace',
+          'https://github.com/org/repo/pull/1',
+          expect.objectContaining({ branchName: 'reused' }),
+        ],
+        [
+          'newer-workspace',
+          'https://github.com/org/repo/pull/2',
+          expect.objectContaining({ branchName: 'reused' }),
+        ],
+      ]);
+    });
+
+    it('ignores PRs created before a workspace and branch names with different casing', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([
+        discoveryWorkspace({
           id: 'ws-1',
-          branchName: 'feature',
-          createdAt: workspaceCreatedAt,
-          project: { githubOwner: 'org', githubRepo: 'repo' },
+          branch: 'Feature',
+          createdAt: new Date('2026-07-17T11:00:00.000Z'),
+        }),
+      ]);
+      mockListOpenPRs.mockResolvedValue([
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T10:59:00.000Z',
+          headRefName: 'Feature',
+        },
+        {
+          number: 2,
+          url: 'https://github.com/org/repo/pull/2',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
         },
       ]);
 
-      mockFindPRForBranch.mockResolvedValue({
-        number: 101,
-        url: 'https://github.com/org/repo/pull/101',
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: 1,
       });
+      expect(mockListOpenPRs).toHaveBeenCalledWith('org', 'repo');
+      expect(mockAttachDiscoveredPRAndRefresh).not.toHaveBeenCalled();
+    });
 
-      mockAttachAndRefreshPR.mockResolvedValue({
+    it.each([
+      [{ success: false, reason: 'fetch_failed' }, 1],
+      [{ success: false, reason: 'workspace_not_found' }, 0],
+    ])('counts attachment result %o as %i discoveries', async (attachment, discovered) => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([discoveryWorkspace({ id: 'ws-1' })]);
+      mockListOpenPRs.mockResolvedValue([
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
+        },
+      ]);
+      mockAttachDiscoveredPRAndRefresh.mockResolvedValue(attachment);
+
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({ discovered, checked: 1 });
+    });
+
+    it('does not count a PR when activity invalidated its discovery claim', async () => {
+      mockFindNeedingPRDiscovery.mockResolvedValue([discoveryWorkspace({ id: 'ws-1' })]);
+      mockListOpenPRs.mockResolvedValue([
+        {
+          number: 1,
+          url: 'https://github.com/org/repo/pull/1',
+          createdAt: '2026-07-17T11:30:00.000Z',
+          headRefName: 'feature',
+        },
+      ]);
+      mockAttachDiscoveredPRAndRefresh.mockResolvedValue({
         success: false,
-        reason: 'workspace_not_found',
+        reason: 'claim_stale',
       });
 
-      const result = await schedulerService.discoverNewPRs();
-
-      expect(result).toEqual({ discovered: 0, checked: 1 });
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: 1,
+      });
     });
   });
 

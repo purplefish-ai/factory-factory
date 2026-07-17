@@ -46,9 +46,9 @@ import {
   workspaceAutoIterationService,
   workspaceDataService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { reconciliationService } from './reconciliation.service';
@@ -216,8 +216,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
     isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
     startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
-    registerFetch: (workspaceId) => prFetchRegistry.register(workspaceId),
-    cancelFetch: (workspaceId) => prFetchRegistry.cancelFetch(workspaceId),
+    registerFetch: (workspaceId, claimToken) => prFetchRegistry.register(workspaceId, claimToken),
+    cancelFetch: (workspaceId, claimToken) => prFetchRegistry.cancelFetch(workspaceId, claimToken),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {

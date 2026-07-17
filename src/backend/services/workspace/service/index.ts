@@ -25,18 +25,37 @@ export {
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
 export { workspaceAutoIterationService } from './lifecycle/workspace-auto-iteration.service';
-export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
+export {
+  type PRDiscoveryClaim,
+  workspacePrSnapshotService,
+} from './lifecycle/workspace-pr-snapshot.service';
 export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
 export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';
 export {
   type RunScriptExecutionState,
   workspaceRunScriptService,
 } from './lifecycle/workspace-run-script.service';
+export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';
 // --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
 export { workspaceMaintenanceService } from './query/workspace-maintenance.service';
 export { workspaceNotificationService } from './query/workspace-notification.service';
 export { workspaceQueryService } from './query/workspace-query.service';
+// --- Workspace snapshots ---
+export {
+  SNAPSHOT_CHANGED,
+  SNAPSHOT_REMOVED,
+  type SnapshotChangedEvent,
+  type SnapshotDerivationFns,
+  type SnapshotFieldGroup,
+  type SnapshotRemovedEvent,
+  type SnapshotUpdateInput,
+  type SnapshotUpsertResult,
+  type WorkspaceSessionSummary,
+  type WorkspaceSnapshotEntry,
+  WorkspaceSnapshotStore,
+  workspaceSnapshotStore,
+} from './snapshot/workspace-snapshot-store.service';
 // --- State derivation (pure functions) ---
 export {
   deriveWorkspaceFlowState,
@@ -63,6 +82,13 @@ export {
   type WorkspacePendingRequestType,
 } from './state/pending-request-type';
 // --- Worktree management ---
+export {
+  type ExistingCloneStatus,
+  type GithubRepo,
+  gitCloneService,
+  parseGithubUrl,
+} from './worktree/git-clone.service';
+export { gitOpsService, type WorkspaceGitStats } from './worktree/git-ops.service';
 export {
   assertWorktreePathSafe,
   WorktreePathSafetyError,

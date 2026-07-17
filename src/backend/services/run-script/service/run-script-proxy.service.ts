@@ -2,6 +2,8 @@ import type { ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 import type { Socket } from 'node:net';
+import { configService } from '@/backend/services/config.service';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   authenticateRequest,
   createAuthCookie,
@@ -11,8 +13,6 @@ import {
   proxyAuthenticatedWebSocketUpgrade,
   startCloudflaredTunnel,
 } from '@/shared/proxy-utils';
-import { configService } from './config.service';
-import { createLogger } from './logger.service';
 
 const logger = createLogger('run-script-proxy-service');
 

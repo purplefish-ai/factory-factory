@@ -1,12 +1,14 @@
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { cleanupWorkspaceScopedCaches } from '@/backend/orchestration/event-collector.orchestrator';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
@@ -21,6 +23,7 @@ import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-i
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script';
 import {
   chatMessageHandlerService,
   sessionDataService,
@@ -33,7 +36,6 @@ import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
-  workspaceActivityService,
   workspaceDataService,
   workspaceNotificationService,
   workspaceQueryService,
@@ -49,6 +51,7 @@ import {
   workspaceNotificationMessageId,
 } from '@/shared/workspace-notifications';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { toTRPCError } from './application-error-mapper';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -59,6 +62,13 @@ import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+function normalizeBulkArchiveError(error: unknown): TRPCError | undefined {
+  if (error instanceof ApplicationError) {
+    return toTRPCError(error);
+  }
+  return error instanceof TRPCError ? error : undefined;
+}
 
 // Zod schema for workspace creation source discriminated union
 const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
@@ -446,6 +456,7 @@ export const workspaceRouter = router({
           await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
+          const mappedError = normalizeBulkArchiveError(error);
           logger.error('Failed to archive workspace during bulk operation', {
             workspaceId: workspaceWithState.id,
             error: error instanceof Error ? error.message : String(error),
@@ -454,6 +465,7 @@ export const workspaceRouter = router({
             id: workspaceWithState.id,
             success: false,
             error: error instanceof Error ? error.message : String(error),
+            code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
           });
         }
       }
@@ -466,19 +478,22 @@ export const workspaceRouter = router({
     // Clean up running sessions, terminals, and dev processes before deleting
     await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
-    workspaceActivityService.clearWorkspace(input.id);
-    return workspaceDataService.delete(input.id);
+    const result = await workspaceDataService.delete(input.id);
+    cleanupWorkspaceScopedCaches(input.id);
+    return result;
   }),
 
   // Refresh factory-factory.json configuration for all workspaces
   refreshFactoryConfigs: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ input }) => workspaceQueryService.refreshFactoryConfigs(input.projectId)),
+    .mutation(({ input }) =>
+      runScriptConfigPersistenceService.refreshFactoryConfigs(input.projectId)
+    ),
 
   // Get factory-factory.json configuration for a project
   getFactoryConfig: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(({ input }) => workspaceQueryService.getFactoryConfig(input.projectId)),
+    .query(({ input }) => runScriptConfigPersistenceService.getFactoryConfig(input.projectId)),
 
   // Sync PR status for a workspace (immediate refresh from GitHub)
   syncPRStatus: publicProcedure

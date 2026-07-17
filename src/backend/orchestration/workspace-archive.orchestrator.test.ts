@@ -1,7 +1,13 @@
-import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
+
+const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
+
+vi.mock('./event-collector.orchestrator', () => ({
+  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
+}));
 
 vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
@@ -112,14 +118,19 @@ describe('archiveWorkspace', () => {
   });
 
   describe('state transition validation', () => {
-    it('throws TRPCError when transition is invalid', async () => {
+    it('throws an invalid-input application error when transition is invalid', async () => {
       vi.mocked(workspaceStateMachine.isValidTransition).mockReturnValue(false);
       const workspace = makeWorkspace({ status: 'NEW' as never });
 
-      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(TRPCError);
-      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
-        /Cannot archive workspace from status: NEW/
+      const error = await archiveWorkspace(workspace, defaultOptions).catch(
+        (caught: unknown) => caught
       );
+
+      expect(error).toBeInstanceOf(ApplicationError);
+      expect(error).toMatchObject({
+        code: 'INVALID_INPUT',
+        message: 'Cannot archive workspace from status: NEW',
+      });
     });
 
     it('checks transition from current status to ARCHIVING', async () => {
@@ -170,6 +181,18 @@ describe('archiveWorkspace', () => {
       expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
     });
 
+    it('cleans workspace caches after the archived state is persisted', async () => {
+      await archiveWorkspace(makeWorkspace(), defaultOptions);
+
+      expect(mockCleanupWorkspaceScopedCaches).toHaveBeenCalledWith('ws-1');
+      const archivedCallOrder = vi.mocked(workspaceStateMachine.markArchived).mock
+        .invocationCallOrder[0];
+      const cleanupCallOrder = mockCleanupWorkspaceScopedCaches.mock.invocationCallOrder[0];
+      expect(archivedCallOrder).toBeDefined();
+      expect(cleanupCallOrder).toBeDefined();
+      expect(cleanupCallOrder!).toBeGreaterThan(archivedCallOrder!);
+    });
+
     it('returns the archived workspace', async () => {
       const archivedWs = unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' });
       vi.mocked(workspaceStateMachine.markArchived).mockResolvedValue(archivedWs as never);
@@ -211,6 +234,26 @@ describe('archiveWorkspace', () => {
       );
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
+    });
+
+    it('retains multiple runtime cleanup failures as an aggregate cause', async () => {
+      const sessionError = new Error('session stop failed');
+      const terminalError = new Error('terminal destroy failed');
+      vi.mocked(services.sessionService.stopWorkspaceSessions).mockRejectedValue(sessionError);
+      vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
+        throw terminalError;
+      });
+
+      const error = await cleanupWorkspaceRuntimeResources('ws-1', services, 'archive').catch(
+        (caught: unknown) => caught
+      );
+
+      expect(error).toBeInstanceOf(ApplicationError);
+      expect(error).toMatchObject({ code: 'INTERNAL_ERROR' });
+      expect((error as ApplicationError).cause).toBeInstanceOf(AggregateError);
+      expect((error as ApplicationError).cause).toMatchObject({
+        errors: [sessionError, terminalError],
+      });
     });
 
     it('fails archive when run script stop rejects', async () => {
