@@ -683,16 +683,19 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'A requests changes first',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-b' },
             state: 'CHANGES_REQUESTED',
             body: 'B requests changes',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
@@ -720,11 +723,13 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'COMMENTED',
             body: 'Please fix the first-round issue',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
@@ -776,16 +781,19 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'Please fix the null check',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'COMMENTED',
             body: 'Thanks for the fix!',
@@ -813,16 +821,19 @@ describe('buildReviewSummariesForPrompt', () => {
         url: 'https://github.com/example/repo/pull/1',
         reviews: [
           {
+            submittedAt: '2026-01-01T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'First round of feedback',
           },
           {
+            submittedAt: '2026-01-02T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'APPROVED',
             body: '',
           },
           {
+            submittedAt: '2026-01-03T00:00:00Z',
             author: { login: 'reviewer-a' },
             state: 'CHANGES_REQUESTED',
             body: 'Found a new issue after approving',
@@ -837,6 +848,42 @@ describe('buildReviewSummariesForPrompt', () => {
       {
         author: 'reviewer-a',
         body: 'Found a new issue after approving',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1',
+      },
+    ]);
+  });
+
+  it('uses submission time to filter reviews when GitHub returns them out of order', () => {
+    const prDetails = {
+      url: 'https://github.com/example/repo/pull/1',
+      reviews: [
+        {
+          submittedAt: '2026-01-04T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'COMMENTED',
+          body: 'New feedback after approval',
+        },
+        {
+          submittedAt: '2026-01-03T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'APPROVED',
+          body: '',
+        },
+        {
+          submittedAt: '2026-01-02T00:00:00Z',
+          author: { login: 'reviewer-a' },
+          state: 'COMMENTED',
+          body: 'Old feedback before approval',
+        },
+      ],
+    };
+
+    expect(buildReviewSummariesForPrompt(prDetails, null, 'ALL_REVIEW_FEEDBACK')).toEqual([
+      {
+        author: 'reviewer-a',
+        body: 'New feedback after approval',
         path: 'PR review',
         line: null,
         url: 'https://github.com/example/repo/pull/1',
@@ -962,6 +1009,39 @@ describe('computeLatestReviewActivityAtMs', () => {
         'ALL_REVIEW_FEEDBACK'
       )
     ).toBeNull();
+  });
+
+  it('uses submission time for activity when GitHub returns reviews out of order', () => {
+    expect(
+      computeLatestReviewActivityAtMs(
+        {
+          reviews: [
+            {
+              submittedAt: '2026-01-04T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'New feedback after approval',
+            },
+            {
+              submittedAt: '2026-01-03T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'APPROVED',
+              body: '',
+            },
+            {
+              submittedAt: '2026-01-02T00:00:00Z',
+              author: { login: 'reviewer-a' },
+              state: 'COMMENTED',
+              body: 'Old feedback before approval',
+            },
+          ],
+          comments: [],
+        },
+        [],
+        null,
+        'ALL_REVIEW_FEEDBACK'
+      )
+    ).toBe(Date.parse('2026-01-04T00:00:00Z'));
   });
 
   it('always includes inline review comment activity', () => {

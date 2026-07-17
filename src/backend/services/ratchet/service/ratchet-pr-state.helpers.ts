@@ -122,18 +122,53 @@ export function isIgnoredReviewAuthor(
   return authorLogin === authenticatedUsername;
 }
 
-function getLastApprovedReviewIndexByAuthor(
-  reviews: Array<{ author: { login: string }; state?: string }>
+function parseSubmittedAtMs(submittedAt: string | null | undefined): number | null {
+  if (!submittedAt) {
+    return null;
+  }
+
+  const timestamp = Date.parse(submittedAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getLatestApprovedReviewAtMsByAuthor(
+  reviews: Array<{
+    submittedAt?: string | null;
+    author: { login: string };
+    state?: string;
+  }>
 ): Map<string, number> {
-  const lastApprovedIndexByAuthor = new Map<string, number>();
+  const latestApprovedReviewAtMsByAuthor = new Map<string, number>();
 
-  reviews.forEach((review, index) => {
-    if (review.state?.toUpperCase() === 'APPROVED') {
-      lastApprovedIndexByAuthor.set(review.author.login, index);
+  for (const review of reviews) {
+    if (review.state?.toUpperCase() !== 'APPROVED') {
+      continue;
     }
-  });
 
-  return lastApprovedIndexByAuthor;
+    const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
+    if (submittedAtMs === null) {
+      continue;
+    }
+
+    const latestApprovedAtMs = latestApprovedReviewAtMsByAuthor.get(review.author.login);
+    if (latestApprovedAtMs === undefined || submittedAtMs > latestApprovedAtMs) {
+      latestApprovedReviewAtMsByAuthor.set(review.author.login, submittedAtMs);
+    }
+  }
+
+  return latestApprovedReviewAtMsByAuthor;
+}
+
+function wasReviewSupersededByApproval(
+  review: { submittedAt?: string | null; author: { login: string } },
+  latestApprovedReviewAtMsByAuthor: Map<string, number>
+): boolean {
+  const submittedAtMs = parseSubmittedAtMs(review.submittedAt);
+  const latestApprovedAtMs = latestApprovedReviewAtMsByAuthor.get(review.author.login);
+
+  return (
+    submittedAtMs !== null && latestApprovedAtMs !== undefined && latestApprovedAtMs > submittedAtMs
+  );
 }
 
 export function computeLatestReviewActivityAtMs(
@@ -150,11 +185,11 @@ export function computeLatestReviewActivityAtMs(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): number | null {
-  const lastApprovedIndexByAuthor = getLastApprovedReviewIndexByAuthor(prDetails.reviews);
+  const latestApprovedReviewAtMsByAuthor = getLatestApprovedReviewAtMsByAuthor(prDetails.reviews);
   const entries = [
     ...prDetails.reviews
-      .filter((review, index) => {
-        if ((lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index) {
+      .filter((review) => {
+        if (wasReviewSupersededByApproval(review, latestApprovedReviewAtMsByAuthor)) {
           return false;
         }
 
@@ -191,6 +226,7 @@ export function buildReviewSummariesForPrompt(
   prDetails: {
     url: string;
     reviews: Array<{
+      submittedAt?: string | null;
       author: { login: string };
       state?: string;
       body?: string;
@@ -200,17 +236,17 @@ export function buildReviewSummariesForPrompt(
   authenticatedUsername: string | null,
   reviewTriggerMode: RatchetReviewTriggerMode
 ): PRStateInfo['reviewComments'] {
-  const lastApprovedIndexByAuthor = getLastApprovedReviewIndexByAuthor(prDetails.reviews);
+  const latestApprovedReviewAtMsByAuthor = getLatestApprovedReviewAtMsByAuthor(prDetails.reviews);
 
   return prDetails.reviews
-    .filter((review, index) => {
+    .filter((review) => {
       if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
         return false;
       }
 
       const state = review.state?.toUpperCase() ?? '';
 
-      if ((lastApprovedIndexByAuthor.get(review.author.login) ?? -1) > index) {
+      if (wasReviewSupersededByApproval(review, latestApprovedReviewAtMsByAuthor)) {
         return false;
       }
 
