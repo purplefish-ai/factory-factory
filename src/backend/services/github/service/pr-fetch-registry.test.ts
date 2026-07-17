@@ -48,22 +48,33 @@ describe('PRFetchRegistry', () => {
     expect(registry.size()).toEqual({ completed: 0, inFlight: 0 });
   });
 
-  it('expires completed entries after the cooldown', () => {
+  it('returns false after the default cooldown without deleting the timestamp', () => {
     registry.startFetch('ws-1');
     registry.register('ws-1');
 
     vi.advanceTimersByTime(COOLDOWN_MS);
 
     expect(registry.isRecentlyFetched('ws-1')).toBe(false);
-    expect(registry.size()).toEqual({ completed: 0, inFlight: 0 });
+    expect(registry.size()).toEqual({ completed: 1, inFlight: 0 });
   });
 
-  it('honors a custom cooldown longer than the default cooldown', () => {
+  it('honors a longer custom cooldown after an unrelated registry operation', () => {
+    registry.startFetch('ws-1');
+    registry.register('ws-1');
+
+    vi.advanceTimersByTime(COOLDOWN_MS);
+    registry.startFetch('ws-2');
+
+    expect(registry.isRecentlyFetched('ws-1', 120_000)).toBe(true);
+  });
+
+  it('keeps a default-expired timestamp available to a longer custom cooldown', () => {
     registry.startFetch('ws-1');
     registry.register('ws-1');
 
     vi.advanceTimersByTime(COOLDOWN_MS);
 
+    expect(registry.isRecentlyFetched('ws-1')).toBe(false);
     expect(registry.isRecentlyFetched('ws-1', 120_000)).toBe(true);
   });
 
