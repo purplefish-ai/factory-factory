@@ -5,6 +5,7 @@ export const SERVICE_LIMITS = Object.freeze({
   sessionStoreMaxQueueSize: 100,
   startupScriptOutputMaxBytes: 1024 * 1024,
   startupScriptOutputTailBytes: 512 * 1024,
+  workspaceScopedCacheMaxEntries: 1024,
 } as const);
 
 export const SERVICE_TIMEOUT_MS = Object.freeze({
@@ -30,6 +31,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
 export const SERVICE_CACHE_TTL_MS = Object.freeze({
   ratchetAuthenticatedUsername: 5 * 60_000,
   cliHealth: 30_000,
+  workspacePrFetchInFlight: 10 * 60_000,
   workspaceSnapshotRemovalGrace: 10 * 60_000,
 } as const);
 

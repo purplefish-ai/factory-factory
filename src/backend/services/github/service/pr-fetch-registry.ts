@@ -13,11 +13,55 @@
  * from racing past the check and issuing duplicate GitHub API calls.
  */
 
+import { SERVICE_CACHE_TTL_MS, SERVICE_LIMITS } from '@/backend/services/constants';
+
 const DEFAULT_COOLDOWN_MS = 90_000; // 90 seconds
 
-class PRFetchRegistry {
+export class PRFetchRegistry {
   private readonly lastFetchedAt = new Map<string, number>();
-  private readonly inFlight = new Set<string>();
+  private readonly inFlightStartedAt = new Map<string, number>();
+
+  private pruneExpired(now: number): void {
+    for (const [workspaceId, lastFetchedAt] of this.lastFetchedAt) {
+      if (now - lastFetchedAt >= DEFAULT_COOLDOWN_MS) {
+        this.lastFetchedAt.delete(workspaceId);
+      }
+    }
+
+    for (const [workspaceId, startedAt] of this.inFlightStartedAt) {
+      if (now - startedAt >= SERVICE_CACHE_TTL_MS.workspacePrFetchInFlight) {
+        this.inFlightStartedAt.delete(workspaceId);
+      }
+    }
+  }
+
+  private ensureCapacityFor(workspaceId: string): void {
+    if (this.lastFetchedAt.has(workspaceId) || this.inFlightStartedAt.has(workspaceId)) {
+      return;
+    }
+
+    const workspaceIds = new Set([...this.lastFetchedAt.keys(), ...this.inFlightStartedAt.keys()]);
+    if (workspaceIds.size < SERVICE_LIMITS.workspaceScopedCacheMaxEntries) {
+      return;
+    }
+
+    let oldestWorkspaceId: string | undefined;
+    let oldestTimestamp = Number.POSITIVE_INFINITY;
+    for (const [candidateWorkspaceId, timestamp] of [
+      ...this.lastFetchedAt,
+      ...this.inFlightStartedAt,
+    ]) {
+      if (timestamp < oldestTimestamp) {
+        oldestWorkspaceId = candidateWorkspaceId;
+        oldestTimestamp = timestamp;
+      }
+    }
+
+    if (oldestWorkspaceId !== undefined) {
+      this.lastFetchedAt.delete(oldestWorkspaceId);
+      this.inFlightStartedAt.delete(oldestWorkspaceId);
+    }
+  }
 
   /**
    * Claim this workspace synchronously before starting an async fetch.
@@ -25,7 +69,10 @@ class PRFetchRegistry {
    * `cancelFetch` is called.
    */
   startFetch(workspaceId: string): void {
-    this.inFlight.add(workspaceId);
+    const now = Date.now();
+    this.pruneExpired(now);
+    this.ensureCapacityFor(workspaceId);
+    this.inFlightStartedAt.set(workspaceId, now);
   }
 
   /**
@@ -34,8 +81,11 @@ class PRFetchRegistry {
    * Call this after a successful fetch.
    */
   register(workspaceId: string): void {
-    this.inFlight.delete(workspaceId);
-    this.lastFetchedAt.set(workspaceId, Date.now());
+    const now = Date.now();
+    this.pruneExpired(now);
+    if (this.inFlightStartedAt.delete(workspaceId)) {
+      this.lastFetchedAt.set(workspaceId, now);
+    }
   }
 
   /**
@@ -43,7 +93,8 @@ class PRFetchRegistry {
    * Call this when a fetch fails so the workspace becomes eligible again.
    */
   cancelFetch(workspaceId: string): void {
-    this.inFlight.delete(workspaceId);
+    this.pruneExpired(Date.now());
+    this.inFlightStartedAt.delete(workspaceId);
   }
 
   /**
@@ -51,14 +102,16 @@ class PRFetchRegistry {
    * the cooldown window. Use this to skip redundant fetches.
    */
   isRecentlyFetched(workspaceId: string, cooldownMs = DEFAULT_COOLDOWN_MS): boolean {
-    if (this.inFlight.has(workspaceId)) {
+    const now = Date.now();
+    this.pruneExpired(now);
+    if (this.inFlightStartedAt.has(workspaceId)) {
       return true;
     }
     const lastFetch = this.lastFetchedAt.get(workspaceId);
     if (lastFetch === undefined) {
       return false;
     }
-    return Date.now() - lastFetch < cooldownMs;
+    return now - lastFetch < cooldownMs;
   }
 
   /**
@@ -67,7 +120,28 @@ class PRFetchRegistry {
    * avoid issuing a duplicate concurrent GitHub call.
    */
   isFetchInFlight(workspaceId: string): boolean {
-    return this.inFlight.has(workspaceId);
+    this.pruneExpired(Date.now());
+    return this.inFlightStartedAt.has(workspaceId);
+  }
+
+  /**
+   * Remove all state retained for one workspace.
+   */
+  removeWorkspace(workspaceId: string): void {
+    this.pruneExpired(Date.now());
+    this.lastFetchedAt.delete(workspaceId);
+    this.inFlightStartedAt.delete(workspaceId);
+  }
+
+  /**
+   * Return retained entry counts after discarding expired state.
+   */
+  size(): { completed: number; inFlight: number } {
+    this.pruneExpired(Date.now());
+    return {
+      completed: this.lastFetchedAt.size,
+      inFlight: this.inFlightStartedAt.size,
+    };
   }
 
   /**
@@ -75,7 +149,7 @@ class PRFetchRegistry {
    */
   clear(): void {
     this.lastFetchedAt.clear();
-    this.inFlight.clear();
+    this.inFlightStartedAt.clear();
   }
 }
 
