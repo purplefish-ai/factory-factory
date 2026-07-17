@@ -1,4 +1,3 @@
-export { periodicTaskAccessor } from './resources/periodic-task.accessor';
 export {
   PeriodicTaskService,
   type PeriodicTaskWorkspaceBridge,

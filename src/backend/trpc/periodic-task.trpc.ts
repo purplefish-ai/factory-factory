@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { periodicTaskAccessor } from '@/backend/services/periodic-task';
+import { periodicTaskService } from '@/backend/services/periodic-task';
 import { publicProcedure, router } from './trpc';
 
 const scheduledTimeSchema = z
@@ -27,11 +27,11 @@ const timezoneSchema = z
 
 export const periodicTaskRouter = router({
   list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ input }) => {
-    return periodicTaskAccessor.listByProject(input.projectId);
+    return periodicTaskService.list(input.projectId);
   }),
 
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const task = await periodicTaskAccessor.findById(input.id);
+    const task = await periodicTaskService.get(input.id);
     if (!task) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Periodic task not found' });
     }
@@ -50,7 +50,7 @@ export const periodicTaskRouter = router({
       })
     )
     .mutation(({ input }) => {
-      return periodicTaskAccessor.create(input);
+      return periodicTaskService.create(input);
     }),
 
   update: publicProcedure
@@ -68,18 +68,18 @@ export const periodicTaskRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...data } = input;
-      return periodicTaskAccessor.update(id, data);
+      return periodicTaskService.update(id, data);
     }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    await periodicTaskAccessor.delete(input.id);
+    await periodicTaskService.delete(input.id);
     return { success: true };
   }),
 
   toggleEnabled: publicProcedure
     .input(z.object({ id: z.string(), enabled: z.boolean() }))
     .mutation(({ input }) => {
-      return periodicTaskAccessor.toggleEnabled(input.id, input.enabled);
+      return periodicTaskService.toggleEnabled(input.id, input.enabled);
     }),
 
   listExecutions: publicProcedure
@@ -87,12 +87,12 @@ export const periodicTaskRouter = router({
       z.object({ periodicTaskId: z.string(), limit: z.number().int().min(1).max(100).optional() })
     )
     .query(({ input }) => {
-      return periodicTaskAccessor.listExecutions(input.periodicTaskId, input.limit ?? 20);
+      return periodicTaskService.listExecutions(input.periodicTaskId, input.limit);
     }),
 
   listExecutionsByPeriodicTaskId: publicProcedure
     .input(z.object({ periodicTaskId: z.string() }))
     .query(({ input }) => {
-      return periodicTaskAccessor.listExecutionsByWorkspacePeriodicTask(input.periodicTaskId);
+      return periodicTaskService.listExecutionsByPeriodicTaskId(input.periodicTaskId);
     }),
 });

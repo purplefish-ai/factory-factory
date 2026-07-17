@@ -59,6 +59,38 @@ export class PeriodicTaskService {
     this.statusBridge = bridges.status;
   }
 
+  list(projectId: string) {
+    return periodicTaskAccessor.listByProject(projectId);
+  }
+
+  get(id: string) {
+    return periodicTaskAccessor.findById(id);
+  }
+
+  create(input: Parameters<typeof periodicTaskAccessor.create>[0]) {
+    return periodicTaskAccessor.create(input);
+  }
+
+  update(id: string, input: Parameters<typeof periodicTaskAccessor.update>[1]) {
+    return periodicTaskAccessor.update(id, input);
+  }
+
+  delete(id: string) {
+    return periodicTaskAccessor.delete(id);
+  }
+
+  toggleEnabled(id: string, enabled: boolean) {
+    return periodicTaskAccessor.toggleEnabled(id, enabled);
+  }
+
+  listExecutions(periodicTaskId: string, limit = 20) {
+    return periodicTaskAccessor.listExecutions(periodicTaskId, limit);
+  }
+
+  listExecutionsByPeriodicTaskId(periodicTaskId: string) {
+    return periodicTaskAccessor.listExecutionsByWorkspacePeriodicTask(periodicTaskId);
+  }
+
   start(): void {
     if (this.pollLoop !== null) {
       return;
