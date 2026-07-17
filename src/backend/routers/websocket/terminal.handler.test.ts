@@ -6,7 +6,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
-import { sessionDataService } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 
@@ -19,14 +19,14 @@ type MockTerminalDescriptor = {
   outputBuffer: string;
 };
 
-vi.mock('@/backend/services/session', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/session')>();
+vi.mock('@/backend/services/terminal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/terminal')>();
   return {
     ...actual,
-    sessionDataService: {
-      ...actual.sessionDataService,
-      clearTerminalPid: (...args: unknown[]) => mockClearTerminalPid(...args),
-      createTerminalSession: vi.fn(),
+    terminalSessionService: {
+      ...actual.terminalSessionService,
+      clearPid: (...args: unknown[]) => mockClearTerminalPid(...args),
+      create: vi.fn(),
     },
   };
 });
@@ -528,7 +528,7 @@ describe('createTerminalUpgradeHandler', () => {
       cols: 120,
       rows: 40,
     });
-    expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+    expect(terminalSessionService.create).toHaveBeenCalledWith({
       workspaceId,
       name: 'terminal-1',
       pid: 4321,
@@ -789,9 +789,7 @@ describe('createTerminalUpgradeHandler', () => {
       id: workspaceId,
       worktreePath: '/tmp/worktree',
     } as never);
-    vi.mocked(sessionDataService.createTerminalSession).mockRejectedValueOnce(
-      new Error('database locked')
-    );
+    vi.mocked(terminalSessionService.create).mockRejectedValueOnce(new Error('database locked'));
 
     const terminalInstances = new Map<string, { id: string; pid: number }>();
     const { terminalService } = createTerminalService();
@@ -838,7 +836,7 @@ describe('createTerminalUpgradeHandler', () => {
     ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
 
     await vi.waitFor(() => {
-      expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+      expect(terminalSessionService.create).toHaveBeenCalledWith({
         workspaceId,
         name: 'terminal-1',
         pid: 4321,

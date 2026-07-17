@@ -14,7 +14,7 @@ import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { sendStreamOutput } from '@/backend/lib/websocket-send';
 import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionDataService } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { parseWebSocketMessage, sendJsonError } from './message-utils';
 import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
@@ -135,7 +135,7 @@ async function handleCreateMessage(
   });
 
   try {
-    await sessionDataService.createTerminalSession({
+    await terminalSessionService.create({
       workspaceId,
       name: terminalId,
       pid,
@@ -204,7 +204,7 @@ async function clearTerminalPidWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await sessionDataService.clearTerminalPid(workspaceId, terminalId);
+      await terminalSessionService.clearPid(workspaceId, terminalId);
       return;
     } catch (error) {
       const retryDelayMs = TERMINAL_PID_CLEAR_RETRY_DELAYS_MS[attempt - 1];

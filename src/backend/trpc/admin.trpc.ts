@@ -12,6 +12,7 @@ import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogService } from '@/backend/services/decision-log';
 import { getLogFilePath } from '@/backend/services/logger.service';
 import { sessionDataService } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
@@ -189,7 +190,7 @@ export const adminRouter = router({
     const mergedAgentSessions = mergeAgentSessions(activeDbSessions, agentSessionsWithPid);
 
     // Get terminal sessions with PIDs from database
-    const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
+    const terminalSessionsWithPid = await terminalSessionService.findWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([

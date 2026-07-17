@@ -22,7 +22,6 @@ import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
-  agentSessionAccessor,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
@@ -607,7 +606,8 @@ export const workspaceRouter = router({
 
       // Try to find an active/idle session on the parent workspace to inject into.
       // Use the most recently created active session so we target the current one.
-      const parentSessions = await agentSessionAccessor.findByWorkspaceId(parentWorkspaceId);
+      const parentSessions =
+        await sessionDataService.findAgentSessionsByWorkspaceId(parentWorkspaceId);
       const activeSession = [...parentSessions]
         .reverse()
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');
@@ -702,7 +702,9 @@ export const workspaceRouter = router({
         return { delivered: false };
       }
 
-      const childSessions = await agentSessionAccessor.findByWorkspaceId(input.childWorkspaceId);
+      const childSessions = await sessionDataService.findAgentSessionsByWorkspaceId(
+        input.childWorkspaceId
+      );
       const activeSession = [...childSessions]
         .reverse()
         .find((s) => s.status === 'RUNNING' || s.status === 'IDLE');

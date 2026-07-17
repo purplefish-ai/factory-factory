@@ -1,7 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { agentSessionAccessor } from '@/backend/services/session';
+import { sessionDataService } from '@/backend/services/session';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
@@ -80,7 +80,7 @@ class FixerSessionService {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId,
     });
-    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
     const matching = sessions
       .filter(
         (s) =>
@@ -129,7 +129,7 @@ class FixerSessionService {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
     });
-    const acquisition = await agentSessionAccessor.acquireFixerSession({
+    const acquisition = await sessionDataService.acquireFixerSession({
       workspaceId: input.workspaceId,
       workflow: input.workflow,
       sessionName: input.sessionName,

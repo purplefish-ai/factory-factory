@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { SessionStatus } from '@/shared/core';
 
 const mockCreate = vi.fn();
@@ -10,7 +9,6 @@ const mockCount = vi.fn();
 const mockUpdate = vi.fn();
 const mockUpdateMany = vi.fn();
 const mockDelete = vi.fn();
-const mockUserSettingsGet = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -27,29 +25,21 @@ vi.mock('@/backend/db', () => ({
   },
 }));
 
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsAccessor: {
-    get: (...args: unknown[]) => mockUserSettingsGet(...args),
-  },
-}));
-
 import { agentSessionAccessor } from './agent-session.accessor';
 
 describe('agentSessionAccessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUserSettingsGet.mockResolvedValue({
-      defaultClaudeModel: 'opus',
-      defaultCodexModel: 'gpt-5-codex',
-    });
   });
 
-  it('create applies default provider and model resolution', async () => {
+  it('create persists the resolved provider and model', async () => {
     mockCreate.mockResolvedValue({ id: 'session-1' });
 
     await agentSessionAccessor.create({
       workspaceId: 'workspace-1',
       workflow: 'user',
+      provider: 'CLAUDE',
+      model: 'opus',
     });
 
     expect(mockCreate).toHaveBeenCalledWith({
@@ -57,7 +47,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         name: undefined,
         workflow: 'user',
-        model: resolveSessionModelForProvider(undefined, 'CLAUDE', 'opus'),
+        model: 'opus',
         provider: 'CLAUDE',
         providerProjectPath: null,
       },
@@ -81,7 +71,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         name: 'Chat 1',
         workflow: 'ratchet-fixer',
-        model: resolveSessionModelForProvider('gpt-5-codex', 'CODEX', 'gpt-5-codex'),
+        model: 'gpt-5-codex',
         provider: 'CODEX',
         providerProjectPath: '/tmp/workspace',
       },
@@ -97,6 +87,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         workflow: 'user',
         provider: 'CODEX',
+        model: 'gpt-5-codex',
         maxSessions: 2,
       })
     ).resolves.toEqual({ outcome: 'created', session: { id: 'session-3' } });
@@ -112,7 +103,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         name: undefined,
         workflow: 'user',
-        model: resolveSessionModelForProvider(undefined, 'CODEX', 'gpt-5-codex'),
+        model: 'gpt-5-codex',
         provider: 'CODEX',
         providerProjectPath: null,
       },
@@ -126,6 +117,8 @@ describe('agentSessionAccessor', () => {
       agentSessionAccessor.createWithinWorkspaceLimit({
         workspaceId: 'workspace-1',
         workflow: 'user',
+        provider: 'CLAUDE',
+        model: 'opus',
         maxSessions: 2,
       })
     ).resolves.toEqual({ outcome: 'limit_reached' });
@@ -141,6 +134,8 @@ describe('agentSessionAccessor', () => {
       agentSessionAccessor.createWithinWorkspaceLimit({
         workspaceId: 'workspace-1',
         workflow: 'user',
+        provider: 'CLAUDE',
+        model: 'opus',
         maxSessions: 2,
       })
     ).resolves.toEqual({

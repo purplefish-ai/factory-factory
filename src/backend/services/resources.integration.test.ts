@@ -26,8 +26,8 @@ let prisma: PrismaClient;
 
 let workspaceAccessor: typeof import('@/backend/services/workspace').workspaceAccessor;
 let projectAccessor: typeof import('@/backend/services/workspace').projectAccessor;
-let agentSessionAccessor: typeof import('@/backend/services/session').agentSessionAccessor;
-let terminalSessionAccessor: typeof import('@/backend/services/terminal').terminalSessionAccessor;
+let agentSessionAccessor: typeof import('@/backend/services/session/resources/agent-session.accessor').agentSessionAccessor;
+let terminalSessionAccessor: typeof import('@/backend/services/terminal/resources/terminal-session.accessor').terminalSessionAccessor;
 let userSettingsAccessor: typeof import('@/backend/services/settings').userSettingsAccessor;
 let decisionLogAccessor: typeof import('@/backend/services/decision-log').decisionLogAccessor;
 let GitClientFactory: typeof import('@/backend/clients/git.client').GitClientFactory;
@@ -45,12 +45,12 @@ beforeAll(async () => {
   ({ projectAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
     '@/backend/services/workspace'
   ));
-  ({ agentSessionAccessor } = await vi.importActual<typeof import('@/backend/services/session')>(
-    '@/backend/services/session'
-  ));
+  ({ agentSessionAccessor } = await vi.importActual<
+    typeof import('@/backend/services/session/resources/agent-session.accessor')
+  >('@/backend/services/session/resources/agent-session.accessor'));
   ({ terminalSessionAccessor } = await vi.importActual<
-    typeof import('@/backend/services/terminal')
-  >('@/backend/services/terminal'));
+    typeof import('@/backend/services/terminal/resources/terminal-session.accessor')
+  >('@/backend/services/terminal/resources/terminal-session.accessor'));
   ({ userSettingsAccessor } = await vi.importActual<typeof import('@/backend/services/settings')>(
     '@/backend/services/settings'
   ));
@@ -507,6 +507,8 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 3,
+        provider: 'CLAUDE',
+        model: 'sonnet',
         providerProjectPath: '/tmp/worktree',
       });
 
@@ -545,6 +547,8 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 2,
+        provider: 'CLAUDE',
+        model: 'sonnet',
         providerProjectPath: null,
       });
 
@@ -579,6 +583,8 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 2,
+        provider: 'CLAUDE',
+        model: 'sonnet',
         providerProjectPath: null,
       });
 
@@ -604,6 +610,8 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 5,
+        provider: 'CLAUDE',
+        model: 'sonnet',
         providerProjectPath: '/tmp/worktree',
       });
 

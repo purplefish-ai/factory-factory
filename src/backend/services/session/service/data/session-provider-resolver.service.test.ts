@@ -118,4 +118,20 @@ describe('sessionProviderResolverService', () => {
     expect(provider).toBe('CLAUDE');
     expect(userSettingsService.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
   });
+
+  it('resolves the configured model for the selected provider', async () => {
+    vi.mocked(userSettingsService.getDefaultSessionProvider).mockResolvedValue('CODEX');
+    vi.mocked(userSettingsService.get).mockResolvedValue({
+      defaultCodexModel: 'gpt-5.3-codex',
+    } as never);
+
+    await expect(
+      sessionProviderResolverService.resolveSessionDefaults({
+        workspaceId: 'ws-1',
+      })
+    ).resolves.toEqual({
+      provider: 'CODEX',
+      model: 'gpt-5.3-codex',
+    });
+  });
 });

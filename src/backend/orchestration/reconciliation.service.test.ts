@@ -24,6 +24,12 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionService: {
+    recoverOrphanedSessions: vi.fn(async () => 0),
+  },
+}));
+
 const mockInitializeWorktree = vi.fn();
 
 // Import after mocks are set up

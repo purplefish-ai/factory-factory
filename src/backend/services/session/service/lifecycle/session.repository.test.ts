@@ -29,7 +29,6 @@ describe('SessionRepository', () => {
     update: vi.fn<() => Promise<AgentSessionRecord>>(),
     updateIfStatus: vi.fn<() => Promise<number>>(),
     delete: vi.fn<() => Promise<AgentSessionRecord>>(),
-    recoverStaleRunning: vi.fn<() => Promise<number>>(),
   };
 
   const workspaces = {
@@ -41,10 +40,15 @@ describe('SessionRepository', () => {
     findById: vi.fn<() => Promise<Project | null>>(),
   };
 
+  const recovery = {
+    recoverStaleRunningAgentSessions: vi.fn<() => Promise<number>>(),
+  };
+
   const repository = new SessionRepository(
     unsafeCoerce<ConstructorParameters<typeof SessionRepository>[0]>(sessions),
     workspaces,
-    projects
+    projects,
+    recovery
   );
 
   beforeEach(() => {
@@ -89,11 +93,11 @@ describe('SessionRepository', () => {
   });
 
   it('delegates stale running session recovery to the session accessor', async () => {
-    sessions.recoverStaleRunning.mockResolvedValue(3);
+    recovery.recoverStaleRunningAgentSessions.mockResolvedValue(3);
 
     await expect(repository.recoverStaleRunningSessions()).resolves.toBe(3);
 
-    expect(sessions.recoverStaleRunning).toHaveBeenCalledOnce();
+    expect(recovery.recoverStaleRunningAgentSessions).toHaveBeenCalledOnce();
   });
 
   it('delegates conditional session updates to the session accessor', async () => {

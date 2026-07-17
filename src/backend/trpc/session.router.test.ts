@@ -11,11 +11,14 @@ const mockSessionDataService = vi.hoisted(() => ({
   createAgentSessionWithinWorkspaceLimit: vi.fn(),
   updateAgentSession: vi.fn(),
   deleteAgentSession: vi.fn(),
-  findTerminalSessionsByWorkspaceId: vi.fn(),
-  findTerminalSessionById: vi.fn(),
-  createTerminalSession: vi.fn(),
-  updateTerminalSession: vi.fn(),
-  deleteTerminalSession: vi.fn(),
+}));
+
+const mockTerminalSessionService = vi.hoisted(() => ({
+  findByWorkspaceId: vi.fn(),
+  findById: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn(),
 }));
 
 const mockSessionDomainService = vi.hoisted(() => ({
@@ -33,6 +36,10 @@ vi.mock('@/backend/services/session', () => ({
   sessionDataService: mockSessionDataService,
   sessionDomainService: mockSessionDomainService,
   sessionProviderResolverService: mockSessionProviderResolverService,
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionService: mockTerminalSessionService,
 }));
 
 vi.mock('@/backend/prompts/quick-actions', () => ({
@@ -323,11 +330,11 @@ describe('sessionRouter', () => {
     const { caller, sessionService, sessionDomainService } = createCaller();
     mockSessionDataService.findAgentSessionById.mockResolvedValue({ id: 's1' });
     mockSessionDataService.deleteAgentSession.mockResolvedValue({ deleted: true });
-    mockSessionDataService.findTerminalSessionsByWorkspaceId.mockResolvedValue([{ id: 't1' }]);
-    mockSessionDataService.findTerminalSessionById.mockResolvedValue({ id: 't1' });
-    mockSessionDataService.createTerminalSession.mockResolvedValue({ id: 't2' });
-    mockSessionDataService.updateTerminalSession.mockResolvedValue({ id: 't2', name: 'renamed' });
-    mockSessionDataService.deleteTerminalSession.mockResolvedValue({ deleted: true });
+    mockTerminalSessionService.findByWorkspaceId.mockResolvedValue([{ id: 't1' }]);
+    mockTerminalSessionService.findById.mockResolvedValue({ id: 't1' });
+    mockTerminalSessionService.create.mockResolvedValue({ id: 't2' });
+    mockTerminalSessionService.update.mockResolvedValue({ id: 't2', name: 'renamed' });
+    mockTerminalSessionService.delete.mockResolvedValue({ deleted: true });
 
     await caller.startSession({ id: 's1', initialPrompt: 'hello' });
     await caller.stopSession({ id: 's1' });

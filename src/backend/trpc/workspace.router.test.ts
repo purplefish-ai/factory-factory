@@ -78,13 +78,11 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionDataService: {
     createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
+    findAgentSessionsByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
   },
   sessionProviderResolverService: {
     resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
       mockResolveProviderForWorkspaceCreation(explicitProvider),
-  },
-  agentSessionAccessor: {
-    findByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
   },
   chatMessageHandlerService: {
     tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),

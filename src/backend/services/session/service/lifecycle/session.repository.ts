@@ -4,6 +4,7 @@ import {
   agentSessionAccessor,
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { projectAccessor, workspaceAccessor } from '@/backend/services/workspace';
+import { sessionDataService } from '../data/session-data.service';
 
 type SessionUpdateData = Partial<
   Pick<
@@ -29,7 +30,10 @@ type SessionAccessor = {
     allowedStatuses: AgentSessionRecord['status'][]
   ): Promise<number>;
   delete(id: string): Promise<AgentSessionRecord>;
-  recoverStaleRunning(): Promise<number>;
+};
+
+type SessionRecovery = {
+  recoverStaleRunningAgentSessions(): Promise<number>;
 };
 
 type WorkspaceAccessor = {
@@ -45,7 +49,8 @@ export class SessionRepository {
   constructor(
     private readonly sessions: SessionAccessor = agentSessionAccessor,
     private readonly workspaces: WorkspaceAccessor = workspaceAccessor,
-    private readonly projects: ProjectAccessor = projectAccessor
+    private readonly projects: ProjectAccessor = projectAccessor,
+    private readonly recovery: SessionRecovery = sessionDataService
   ) {}
 
   getSessionById(sessionId: string): Promise<AgentSessionRecord | null> {
@@ -106,7 +111,7 @@ export class SessionRepository {
   }
 
   recoverStaleRunningSessions(): Promise<number> {
-    return this.sessions.recoverStaleRunning();
+    return this.recovery.recoverStaleRunningAgentSessions();
   }
 }
 

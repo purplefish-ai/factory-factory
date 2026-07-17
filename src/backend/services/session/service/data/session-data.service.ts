@@ -1,4 +1,4 @@
-import type { Prisma, SessionProvider, TerminalSession } from '@prisma-gen/client';
+import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
@@ -8,8 +8,10 @@ import {
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
 } from '@/backend/services/session/resources/closed-session.accessor';
-import { terminalSessionAccessor } from '@/backend/services/terminal';
 import type { SessionStatus } from '@/shared/core';
+import { sessionProviderResolverService } from './session-provider-resolver.service';
+
+export type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 
 class SessionDataService {
   // Agent sessions
@@ -33,7 +35,7 @@ class SessionDataService {
     return agentSessionAccessor.countActiveByWorkspaceId(workspaceId);
   }
 
-  createAgentSession(data: {
+  async createAgentSession(data: {
     workspaceId: string;
     name?: string;
     workflow: string;
@@ -41,10 +43,15 @@ class SessionDataService {
     provider?: SessionProvider;
     providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
-    return agentSessionAccessor.create(data);
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+      explicitModel: data.model,
+    });
+    return agentSessionAccessor.create({ ...data, ...defaults });
   }
 
-  createAgentSessionWithinWorkspaceLimit(data: {
+  async createAgentSessionWithinWorkspaceLimit(data: {
     workspaceId: string;
     name?: string;
     workflow: string;
@@ -53,7 +60,27 @@ class SessionDataService {
     providerProjectPath?: string | null;
     maxSessions: number;
   }) {
-    return agentSessionAccessor.createWithinWorkspaceLimit(data);
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+      explicitModel: data.model,
+    });
+    return agentSessionAccessor.createWithinWorkspaceLimit({ ...data, ...defaults });
+  }
+
+  async acquireFixerSession(data: {
+    workspaceId: string;
+    workflow: string;
+    sessionName: string;
+    maxSessions: number;
+    provider?: SessionProvider;
+    providerProjectPath: string | null;
+  }) {
+    const defaults = await sessionProviderResolverService.resolveSessionDefaults({
+      workspaceId: data.workspaceId,
+      explicitProvider: data.provider,
+    });
+    return agentSessionAccessor.acquireFixerSession({ ...data, ...defaults });
   }
 
   updateAgentSession(
@@ -81,6 +108,10 @@ class SessionDataService {
     return agentSessionAccessor.findWithPid();
   }
 
+  recoverStaleRunningAgentSessions(): Promise<number> {
+    return agentSessionAccessor.recoverStaleRunning();
+  }
+
   // Closed sessions
 
   findClosedSessionsByWorkspaceId(
@@ -96,43 +127,6 @@ class SessionDataService {
 
   deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
     return closedSessionAccessor.delete(id);
-  }
-
-  // Terminal sessions
-
-  findTerminalSessionById(id: string) {
-    return terminalSessionAccessor.findById(id);
-  }
-
-  findTerminalSessionsByWorkspaceId(
-    workspaceId: string,
-    filters?: { status?: SessionStatus; limit?: number }
-  ): Promise<TerminalSession[]> {
-    return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
-  }
-
-  createTerminalSession(data: {
-    workspaceId: string;
-    name?: string;
-    pid?: number;
-  }): Promise<TerminalSession> {
-    return terminalSessionAccessor.create(data);
-  }
-
-  updateTerminalSession(id: string, data: { name?: string }): Promise<TerminalSession> {
-    return terminalSessionAccessor.update(id, data);
-  }
-
-  deleteTerminalSession(id: string): Promise<TerminalSession> {
-    return terminalSessionAccessor.delete(id);
-  }
-
-  findTerminalSessionsWithPid(): Promise<TerminalSession[]> {
-    return terminalSessionAccessor.findWithPid();
-  }
-
-  clearTerminalPid(workspaceId: string, name: string): Promise<void> {
-    return terminalSessionAccessor.clearPid(workspaceId, name);
   }
 }
 

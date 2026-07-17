@@ -1,6 +1,6 @@
 import type { RatchetDispatchOutcome, SessionProvider } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
-import { agentSessionAccessor } from '@/backend/services/session';
+import { sessionDataService } from '@/backend/services/session';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
@@ -124,7 +124,7 @@ export async function checkActiveFixerSession(params: {
     workspace,
   });
   signal?.throwIfAborted();
-  const session = await agentSessionAccessor.findById(sessionId);
+  const session = await sessionDataService.findAgentSessionById(sessionId);
   signal?.throwIfAborted();
   if (!session) {
     // Transient ratchet session rows are deleted on normal exit, so a missing
@@ -182,7 +182,7 @@ export async function hasActiveSession(
   signal?: AbortSignal
 ): Promise<boolean> {
   signal?.throwIfAborted();
-  const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
+  const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
   signal?.throwIfAborted();
   return sessions.some((session) => sessionBridge.isSessionWorking(session.id));
 }

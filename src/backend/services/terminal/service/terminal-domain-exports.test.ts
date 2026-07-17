@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { terminalService } from './index';
+import { terminalService, terminalSessionService } from './index';
 
 /**
  * Domain barrel export smoke test.
@@ -11,5 +11,9 @@ import { terminalService } from './index';
 describe('Terminal domain exports', () => {
   it('exports terminalService as an object', () => {
     expect(terminalService).toBeDefined();
+  });
+
+  it('exports terminalSessionService as an object', () => {
+    expect(terminalSessionService).toBeDefined();
   });
 });

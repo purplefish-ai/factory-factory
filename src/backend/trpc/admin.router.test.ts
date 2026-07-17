@@ -55,7 +55,12 @@ vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
     findAgentSessionsByIds: mockFindAgentSessionsByIds,
     findAgentSessionsWithPid: mockFindAgentSessionsWithPid,
-    findTerminalSessionsWithPid: mockFindTerminalSessionsWithPid,
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionService: {
+    findWithPid: mockFindTerminalSessionsWithPid,
   },
 }));
 

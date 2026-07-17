@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { SessionStatus } from '@/shared/core';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -249,14 +250,14 @@ export const sessionRouter = router({
     )
     .query(({ input }) => {
       const { workspaceId, ...filters } = input;
-      return sessionDataService.findTerminalSessionsByWorkspaceId(workspaceId, filters);
+      return terminalSessionService.findByWorkspaceId(workspaceId, filters);
     }),
 
   // Get terminal session by ID
   getTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const session = await sessionDataService.findTerminalSessionById(input.id);
+      const session = await terminalSessionService.findById(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
       }
@@ -272,7 +273,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(({ input }) => {
-      return sessionDataService.createTerminalSession(input);
+      return terminalSessionService.create(input);
     }),
 
   // Update a terminal session
@@ -285,13 +286,13 @@ export const sessionRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return sessionDataService.updateTerminalSession(id, updates);
+      return terminalSessionService.update(id, updates);
     }),
 
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => {
-      return sessionDataService.deleteTerminalSession(input.id);
+      return terminalSessionService.delete(input.id);
     }),
 });

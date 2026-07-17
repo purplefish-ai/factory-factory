@@ -1,9 +1,8 @@
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { terminalSessionAccessor } from '@/backend/services/terminal';
+import { terminalSessionService } from '@/backend/services/terminal';
 import { workspaceAccessor } from '@/backend/services/workspace';
-import { SessionStatus } from '@/shared/core';
 
 const logger = createLogger('reconciliation');
 
@@ -194,21 +193,11 @@ class ReconciliationService {
     }
 
     // Terminal sessions are still PID-tracked and may become orphaned.
-    const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
-
-    for (const session of terminalSessionsWithPid) {
-      if (session.pid) {
-        const isRunning = this.isProcessRunning(session.pid);
-        if (!isRunning) {
-          await terminalSessionAccessor.update(session.id, {
-            status: SessionStatus.IDLE,
-            pid: null,
-          });
-          logger.info('Marked orphaned terminal session as idle', {
-            sessionId: session.id,
-          });
-        }
-      }
+    const recoveredCount = await terminalSessionService.recoverOrphanedSessions();
+    if (recoveredCount > 0) {
+      logger.info('Marked orphaned terminal sessions as idle', {
+        recoveredCount,
+      });
     }
   }
 

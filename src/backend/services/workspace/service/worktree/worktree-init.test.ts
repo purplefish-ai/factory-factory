@@ -58,9 +58,6 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  agentSessionAccessor: {
-    findByWorkspaceId: mocks.findByWorkspaceId,
-  },
   sessionService: {
     startSession: mocks.startSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
@@ -73,8 +70,7 @@ vi.mock('@/backend/services/session', () => ({
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
   sessionDataService: {
-    createTerminalSession: mocks.createTerminalSession,
-    clearTerminalPid: mocks.clearTerminalPid,
+    findAgentSessionsByWorkspaceId: mocks.findByWorkspaceId,
   },
 }));
 
@@ -84,6 +80,10 @@ vi.mock('@/backend/services/terminal', () => ({
     destroyTerminal: mocks.destroyTerminal,
     getTerminalsForWorkspace: mocks.getTerminalsForWorkspace,
     onExit: mocks.onExit,
+  },
+  terminalSessionService: {
+    create: mocks.createTerminalSession,
+    clearPid: mocks.clearTerminalPid,
   },
 }));
 

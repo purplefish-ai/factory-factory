@@ -7,14 +7,13 @@ import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import {
-  agentSessionAccessor,
   buildChildWorkspaceContext,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
-import { terminalService } from '@/backend/services/terminal';
+import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
   assertWorktreePathSafe,
   workspaceAccessor,
@@ -127,7 +126,7 @@ async function handleWorkspaceInitFailure(
       });
     }
     try {
-      await sessionDataService.clearTerminalPid(workspaceId, autoCreatedTerminalId);
+      await terminalSessionService.clearPid(workspaceId, autoCreatedTerminalId);
     } catch (clearPidError) {
       logger.warn('Failed to clear default terminal PID after init failure', {
         workspaceId,
@@ -350,7 +349,7 @@ async function resolveInitialAutoMessageContent(
 
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
-    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });
@@ -432,7 +431,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const runningSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const runningSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.RUNNING,
       limit: 1,
     });
@@ -442,7 +441,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const idleSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
+    const idleSessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });
@@ -484,7 +483,7 @@ async function startDefaultTerminal(
     let terminalSessionPersisted = false;
     const clearPersistedTerminalPid = async () => {
       try {
-        await sessionDataService.clearTerminalPid(workspaceId, terminalId);
+        await terminalSessionService.clearPid(workspaceId, terminalId);
       } catch (error) {
         logger.warn('Failed to clear terminal PID after default terminal exit', {
           workspaceId,
@@ -506,7 +505,7 @@ async function startDefaultTerminal(
     });
 
     try {
-      await sessionDataService.createTerminalSession({
+      await terminalSessionService.create({
         workspaceId,
         name: terminalId,
         pid,

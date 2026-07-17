@@ -19,9 +19,9 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  agentSessionAccessor: {
-    findById: vi.fn(),
-    findByWorkspaceId: vi.fn(),
+  sessionDataService: {
+    findAgentSessionById: vi.fn(),
+    findAgentSessionsByWorkspaceId: vi.fn(),
   },
 }));
 
@@ -47,7 +47,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { agentSessionAccessor } from '@/backend/services/session';
+import { sessionDataService } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { fixerSessionService } from './fixer-session.service';
@@ -114,7 +114,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.adoptRatchetActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(true);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([]);
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockGitHubBridge.getResolvedReviewCommentIds).mockResolvedValue(new Set());
@@ -348,7 +348,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       {
         id: 'chat-1',
         workflow: 'default-followup',
@@ -400,7 +400,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'ratchet-session',
@@ -460,7 +460,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 40,
     });
 
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'raced-session',
@@ -520,7 +520,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       {
         id: 'chat-idle-1',
         workflow: 'default-followup',
@@ -577,7 +577,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 5,
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
@@ -589,7 +589,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR state unchanged since last ratchet dispatch',
       },
     });
-    expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
     expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
   });
 
@@ -633,7 +633,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ],
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
       unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
@@ -650,7 +650,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         reason: 'PR state unchanged since last ratchet dispatch',
       },
     });
-    expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
   it('does not dispatch for CHANGES_REQUESTED when there are no PR review comments', async () => {
@@ -685,7 +685,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       reviewComments: [],
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
       unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
@@ -745,7 +745,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ],
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'ratchet-session',
@@ -815,7 +815,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'ratchet-session',
@@ -921,7 +921,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 8,
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     const triggerSpy = vi.spyOn(
       unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'triggerFixer'
@@ -976,7 +976,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ws-disable-race-state',
       ratchetEnabled: false,
     } as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
 
     const events: RatchetStateChangedEvent[] = [];
     ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
@@ -1034,7 +1034,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
     } as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
 
     const events: RatchetStateChangedEvent[] = [];
     ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
@@ -1092,7 +1092,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 13,
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'retry-session',
@@ -1146,7 +1146,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       reviewComments: [],
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'retry-session',
@@ -1239,7 +1239,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 16,
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
       sessionId: 'fresh-session',
@@ -1387,7 +1387,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
       id: 'ratchet-session',
       provider: 'CLAUDE',
       status: SessionStatus.RUNNING,
@@ -1422,7 +1422,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.mocked(agentSessionAccessor.findById).mockResolvedValue(null);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue(null);
 
     const result = await unsafeCoerce<{
       checkActiveFixerSession: (workspaceArg: typeof workspace) => Promise<unknown>;
@@ -1455,7 +1455,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.mocked(agentSessionAccessor.findById).mockResolvedValue(null);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue(null);
     vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(false);
 
     const result = await unsafeCoerce<{
@@ -1493,7 +1493,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prState: 'OPEN',
       prNumber: 12,
     });
-    vi.mocked(agentSessionAccessor.findById).mockResolvedValue(null);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue(null);
     vi.mocked(workspaceAccessor.recordRatchetSessionEnd).mockResolvedValue(false);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
@@ -1526,7 +1526,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetDispatchRetryCount: 0,
     };
 
-    vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
       id: 'ratchet-session',
       provider: 'CLAUDE',
       status: SessionStatus.RUNNING,
@@ -2873,7 +2873,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ).decideRatchetAction(context);
 
     const arrangeOtherWorkingSession = () => {
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'other-session' },
       ] as never);
       vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
@@ -3024,7 +3024,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('settles a non-RUNNING session as COMPLETED when its status is not FAILED', async () => {
-      vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+      vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
         id: 'completed-session',
         provider: 'CLAUDE',
         status: SessionStatus.IDLE,
@@ -3044,7 +3044,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('settles a FAILED session as DIED', async () => {
-      vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+      vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
         id: 'failed-session',
         provider: 'CLAUDE',
         status: SessionStatus.FAILED,
@@ -3064,7 +3064,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('settles a provider-mismatched session as DIED and stops it', async () => {
-      vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+      vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
         id: 'codex-session',
         provider: 'CODEX',
         status: SessionStatus.RUNNING,
@@ -3088,7 +3088,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('returns the active fixer when the session is working', async () => {
-      vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+      vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
         id: 'working-session',
         provider: 'CLAUDE',
         status: SessionStatus.RUNNING,
@@ -3112,7 +3112,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');
       let finishLookup!: (value: null) => void;
-      vi.mocked(agentSessionAccessor.findById).mockImplementation(
+      vi.mocked(sessionDataService.findAgentSessionById).mockImplementation(
         () =>
           new Promise((resolve) => {
             finishLookup = resolve;
@@ -3128,7 +3128,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         },
         controller.signal
       );
-      await vi.waitFor(() => expect(agentSessionAccessor.findById).toHaveBeenCalled());
+      await vi.waitFor(() => expect(sessionDataService.findAgentSessionById).toHaveBeenCalled());
       controller.abort(timeoutError);
       finishLookup(null);
 
@@ -3603,7 +3603,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
 
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
       vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
         status: 'started',
         sessionId: 'ratchet-session-32',
@@ -3656,7 +3656,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
 
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
-      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([] as never);
       vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
         status: 'started',
         sessionId: 'ratchet-session-33',
