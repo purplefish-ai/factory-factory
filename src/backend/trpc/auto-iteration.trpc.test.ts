@@ -14,16 +14,6 @@ const mockWorkspaceDataService = vi.hoisted(() => ({
   findById: vi.fn(),
 }));
 
-vi.mock('@/backend/services/auto-iteration', () => ({
-  autoIterationService: mockAutoIterationService,
-  insightsService: { read: vi.fn() },
-  logbookService: { read: vi.fn() },
-}));
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-}));
-
 import { autoIterationRouter } from './auto-iteration.trpc';
 
 const validProgress = {
@@ -42,7 +32,16 @@ const validProgress = {
 };
 
 function createCaller() {
-  return autoIterationRouter.createCaller({ appContext: {} } as never);
+  return autoIterationRouter.createCaller({
+    appContext: {
+      services: {
+        autoIterationService: mockAutoIterationService,
+        insightsService: { read: vi.fn(), write: vi.fn() },
+        logbookService: { read: vi.fn() },
+        workspaceDataService: mockWorkspaceDataService,
+      },
+    },
+  } as never);
 }
 
 describe('autoIterationRouter', () => {

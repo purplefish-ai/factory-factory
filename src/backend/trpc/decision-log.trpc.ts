@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({
@@ -11,8 +10,11 @@ export const decisionLogRouter = router({
         limit: z.number().min(1).max(100).optional(),
       })
     )
-    .query(({ input }) => {
-      return decisionLogQueryService.findByAgentId(input.agentId, input.limit ?? 50);
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.decisionLogQueryService.findByAgentId(
+        input.agentId,
+        input.limit ?? 50
+      );
     }),
 
   // List recent decision logs across all agents
@@ -24,13 +26,13 @@ export const decisionLogRouter = router({
         })
         .optional()
     )
-    .query(({ input }) => {
-      return decisionLogQueryService.findRecent(input?.limit ?? 100);
+    .query(({ ctx, input }) => {
+      return ctx.appContext.services.decisionLogQueryService.findRecent(input?.limit ?? 100);
     }),
 
   // Get decision log by ID
-  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const log = await decisionLogQueryService.findById(input.id);
+  getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const log = await ctx.appContext.services.decisionLogQueryService.findById(input.id);
     if (!log) {
       throw new Error(`Decision log not found: ${input.id}`);
     }

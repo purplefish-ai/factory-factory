@@ -12,14 +12,11 @@ const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockGetMergeBase = vi.hoisted(() => vi.fn());
 const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-}));
-
 vi.mock('./workspace-helpers', () => ({
-  getWorkspaceWithWorktree: (...args: unknown[]) => mockGetWorkspaceWithWorktree(...args),
-  getWorkspaceWithProjectAndWorktreeOrThrow: (...args: unknown[]) =>
-    mockGetWorkspaceWithProjectAndWorktreeOrThrow(...args),
+  getWorkspaceWithWorktree: (_service: unknown, workspaceId: string) =>
+    mockGetWorkspaceWithWorktree(workspaceId),
+  getWorkspaceWithProjectAndWorktreeOrThrow: (_service: unknown, workspaceId: string) =>
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow(workspaceId),
 }));
 
 vi.mock('@/backend/lib/shell', () => ({
@@ -52,6 +49,7 @@ function createCaller() {
     appContext: {
       services: {
         createLogger: () => logger,
+        workspaceDataService: mockWorkspaceDataService,
       },
     },
   } as never);

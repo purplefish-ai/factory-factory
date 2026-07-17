@@ -19,6 +19,7 @@ const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerN
 const SCREENSHOT_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 async function validateScreenshotPath(
+  workspaceDataService: Context['appContext']['services']['workspaceDataService'],
   workspaceId: string,
   screenshotPath: string
 ): Promise<string> {
@@ -26,7 +27,7 @@ async function validateScreenshotPath(
     throw new Error('Invalid screenshot path');
   }
 
-  const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(workspaceId);
+  const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(workspaceDataService, workspaceId);
 
   if (!(await isPathSafe(worktreePath, screenshotPath))) {
     throw new Error('Invalid file path');
@@ -52,7 +53,10 @@ export const workspaceFilesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
 
       if (!result) {
         logger.warn('No worktreePath for workspace', { workspaceId: input.workspaceId });
@@ -92,7 +96,10 @@ export const workspaceFilesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
 
       logger.info('listFiles called', {
         workspaceId: input.workspaceId,
@@ -172,8 +179,11 @@ export const workspaceFilesRouter = router({
         path: z.string(),
       })
     )
-    .query(async ({ input }) => {
-      const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
 
       // Validate path is safe
       if (!(await isPathSafe(worktreePath, input.path))) {
@@ -227,8 +237,11 @@ export const workspaceFilesRouter = router({
   // List screenshots in .factory-factory/screenshots/
   listScreenshots: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
       if (!result) {
         return { screenshots: [], hasWorktree: false };
       }
@@ -275,8 +288,12 @@ export const workspaceFilesRouter = router({
         path: z.string(),
       })
     )
-    .query(async ({ input }) => {
-      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+    .query(async ({ ctx, input }) => {
+      const fullPath = await validateScreenshotPath(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId,
+        input.path
+      );
       const buffer = await readFile(fullPath);
       const ext = path.extname(input.path).toLowerCase();
 
@@ -302,8 +319,12 @@ export const workspaceFilesRouter = router({
         path: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
-      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+    .mutation(async ({ ctx, input }) => {
+      const fullPath = await validateScreenshotPath(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId,
+        input.path
+      );
       await unlink(fullPath);
       return { success: true };
     }),

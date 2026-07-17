@@ -38,33 +38,6 @@ vi.mock('node:fs/promises', () => ({
   open: (...args: unknown[]) => mockOpen(...args),
 }));
 
-vi.mock('@/backend/orchestration/data-backup.service', () => ({
-  dataBackupService: {
-    exportData: (...args: unknown[]) => mockExportData(...args),
-    importData: (...args: unknown[]) => mockImportData(...args),
-  },
-}));
-
-vi.mock('@/backend/orchestration/decision-log-query.service', () => ({
-  decisionLogQueryService: {
-    list: (...args: unknown[]) => mockDecisionLogList(...args),
-  },
-}));
-
-vi.mock('@/backend/services/session', () => ({
-  sessionDataService: {
-    findAgentSessionsByIds: mockFindAgentSessionsByIds,
-    findAgentSessionsWithPid: mockFindAgentSessionsWithPid,
-    findTerminalSessionsWithPid: mockFindTerminalSessionsWithPid,
-  },
-}));
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findByIdsWithProject: mockFindWorkspacesByIdsWithProject,
-  },
-}));
-
 vi.mock('./admin-active-processes', () => ({
   mergeAgentSessions: (...args: unknown[]) => mockMergeAgentSessions(...args),
   buildAgentProcesses: (...args: unknown[]) => mockBuildAgentProcesses(...args),
@@ -172,6 +145,21 @@ function createCaller() {
         terminalService,
         ratchetService,
         sessionService,
+        dataBackupService: {
+          exportData: (...args: unknown[]) => mockExportData(...args),
+          importData: (...args: unknown[]) => mockImportData(...args),
+        },
+        decisionLogQueryService: {
+          list: (...args: unknown[]) => mockDecisionLogList(...args),
+        },
+        sessionDataService: {
+          findAgentSessionsByIds: mockFindAgentSessionsByIds,
+          findAgentSessionsWithPid: mockFindAgentSessionsWithPid,
+          findTerminalSessionsWithPid: mockFindTerminalSessionsWithPid,
+        },
+        workspaceDataService: {
+          findByIdsWithProject: mockFindWorkspacesByIdsWithProject,
+        },
         createLogger: () => logger,
       },
     },

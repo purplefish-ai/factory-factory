@@ -18,19 +18,21 @@ const mockProjectManagementService = vi.hoisted(() => ({
 }));
 
 vi.mock('@/backend/services/github', () => ({
-  githubCLIService: mockGithubCLIService,
   classifyGitHubCLIError: mockClassifyGitHubCLIError,
-}));
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-  projectManagementService: mockProjectManagementService,
 }));
 
 import { githubRouter } from './github.trpc';
 
 function createCaller() {
-  return githubRouter.createCaller({ appContext: { services: {} } } as never);
+  return githubRouter.createCaller({
+    appContext: {
+      services: {
+        githubCLIService: mockGithubCLIService,
+        projectManagementService: mockProjectManagementService,
+        workspaceDataService: mockWorkspaceDataService,
+      },
+    },
+  } as never);
 }
 
 describe('githubRouter', () => {

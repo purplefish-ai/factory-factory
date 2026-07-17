@@ -6,19 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockWriteFactoryConfigAndSyncWorkspace = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-  },
-}));
-
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
-  runScriptConfigPersistenceService: {
-    writeFactoryConfigAndSyncWorkspace: (...args: unknown[]) =>
-      mockWriteFactoryConfigAndSyncWorkspace(...args),
-  },
-}));
-
 import { workspaceRunScriptRouter } from './run-script.trpc';
 
 function createCaller(
@@ -50,6 +37,13 @@ function createCaller(
           getRunScriptStatus:
             runScriptService?.getRunScriptStatus ??
             (async () => ({ status: 'IDLE', workspaceId: 'default' })),
+        },
+        workspaceDataService: {
+          findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+        },
+        runScriptConfigPersistenceService: {
+          writeFactoryConfigAndSyncWorkspace: (...args: unknown[]) =>
+            mockWriteFactoryConfigAndSyncWorkspace(...args),
         },
       },
     },

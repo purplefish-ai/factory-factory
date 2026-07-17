@@ -5,12 +5,7 @@
  */
 
 import { z } from 'zod';
-import {
-  classifyGitHubCLIError,
-  type GitHubCLIHealthStatus,
-  githubCLIService,
-} from '@/backend/services/github';
-import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
+import { classifyGitHubCLIError, type GitHubCLIHealthStatus } from '@/backend/services/github';
 import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
 
@@ -31,8 +26,8 @@ export const githubRouter = router({
   /**
    * Check if GitHub CLI is installed and authenticated.
    */
-  checkHealth: publicProcedure.query(() => {
-    return githubCLIService.checkHealth();
+  checkHealth: publicProcedure.query(({ ctx }) => {
+    return ctx.appContext.services.githubCLIService.checkHealth();
   }),
 
   /**
@@ -41,7 +36,8 @@ export const githubRouter = router({
    */
   hasGitHubRepo: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { workspaceDataService } = ctx.appContext.services;
       const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
       if (!workspace?.project) {
         return false;
@@ -57,7 +53,8 @@ export const githubRouter = router({
    */
   listIssuesForWorkspace: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { githubCLIService, workspaceDataService } = ctx.appContext.services;
       // Check GitHub health first
       const health = await githubCLIService.checkHealth();
       if (!(health.isInstalled && health.isAuthenticated)) {
@@ -111,7 +108,9 @@ export const githubRouter = router({
    */
   listIssuesForProject: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { githubCLIService, projectManagementService, workspaceDataService } =
+        ctx.appContext.services;
       // Check GitHub health first
       const health = await githubCLIService.checkHealth();
       if (!(health.isInstalled && health.isAuthenticated)) {
@@ -179,7 +178,8 @@ export const githubRouter = router({
         issueNumber: z.number(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { githubCLIService, projectManagementService } = ctx.appContext.services;
       // Get project to access githubOwner/githubRepo
       const project = await projectManagementService.findById(input.projectId);
       if (!project) {

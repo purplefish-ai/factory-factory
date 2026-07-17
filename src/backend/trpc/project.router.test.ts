@@ -26,24 +26,8 @@ const mockGetClonePath = vi.hoisted(() => vi.fn());
 const mockCheckExistingClone = vi.hoisted(() => vi.fn());
 const mockCloneRepo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  projectManagementService: mockProjectManagementService,
-}));
-
 vi.mock('@/backend/lib/shell', () => ({
   gitCommandC: (...args: unknown[]) => mockGitCommandC(...args),
-}));
-
-vi.mock('@/backend/services/crypto.service', () => ({
-  cryptoService: {
-    encrypt: (value: string) => mockEncrypt(value),
-  },
-}));
-
-vi.mock('@/backend/services/factory-config.service', () => ({
-  FactoryConfigService: {
-    readConfig: (...args: unknown[]) => mockReadConfig(...args),
-  },
 }));
 
 vi.mock('@/backend/lib/file-helpers', () => ({
@@ -51,12 +35,6 @@ vi.mock('@/backend/lib/file-helpers', () => ({
 }));
 
 vi.mock('@/backend/services/git-clone.service', () => ({
-  gitCloneService: {
-    checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
-    getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
-    checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
-    clone: (...args: unknown[]) => mockCloneRepo(...args),
-  },
   parseGithubUrl: (...args: unknown[]) => mockParseGithubUrl(...args),
 }));
 
@@ -88,6 +66,19 @@ function createCaller(
           getReposDir: () => '/repos',
           getCorsConfig: () => corsConfig,
         },
+        cryptoService: {
+          encrypt: (value: string) => mockEncrypt(value),
+        },
+        factoryConfigService: {
+          readConfig: (...args: unknown[]) => mockReadConfig(...args),
+        },
+        gitCloneService: {
+          checkGithubAuth: (...args: unknown[]) => mockCheckGithubAuth(...args),
+          getClonePath: (...args: unknown[]) => mockGetClonePath(...args),
+          checkExistingClone: (...args: unknown[]) => mockCheckExistingClone(...args),
+          clone: (...args: unknown[]) => mockCloneRepo(...args),
+        },
+        projectManagementService: mockProjectManagementService,
       },
     },
   } as never);

@@ -1,6 +1,8 @@
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { cliHealthService } from './orchestration/cli-health.service';
+import { dataBackupService } from './orchestration/data-backup.service';
+import { decisionLogQueryService } from './orchestration/decision-log-query.service';
 import {
   type BridgeServices,
   configureDomainBridges,
@@ -13,12 +15,31 @@ import { healthService } from './orchestration/health.service';
 import { reconciliationService } from './orchestration/reconciliation.service';
 import { schedulerService } from './orchestration/scheduler.service';
 import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
-import { recoverStaleArchivingWorkspaces } from './orchestration/workspace-archive.orchestrator';
-import { autoIterationService, logbookService } from './services/auto-iteration';
+import {
+  archiveWorkspace,
+  cleanupWorkspaceRuntimeResources,
+  recoverStaleArchivingWorkspaces,
+} from './orchestration/workspace-archive.orchestrator';
+import {
+  createChildWorkspace,
+  fireLifecycleNotification,
+  persistChildNotification,
+  persistParentNotification,
+} from './orchestration/workspace-children.orchestrator';
+import {
+  initializeWorkspaceWorktree,
+  retryQueuedDispatchAfterWorkspaceReady,
+} from './orchestration/workspace-init.orchestrator';
+import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
+import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
+import { cryptoService } from './services/crypto.service';
+import { FactoryConfigService } from './services/factory-config.service';
+import { gitCloneService } from './services/git-clone.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
+import { linearClientService } from './services/linear';
 import { createLogger } from './services/logger.service';
-import { periodicTaskService } from './services/periodic-task';
+import { periodicTaskAccessor, periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
 import { fixerSessionService, ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
@@ -28,6 +49,7 @@ import {
   runScriptStateMachine,
   startupScriptService,
 } from './services/run-script';
+import { runScriptConfigPersistenceService } from './services/run-script-config-persistence.service';
 import {
   createServerInstanceService,
   type ServerInstanceService,
@@ -38,22 +60,29 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   chatMessageHandlerService,
+  fetchCodexModelCatalogFromAppServer,
   type SessionFileLogger,
   sessionDataService,
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
+  sessionProviderResolverService,
   sessionService,
 } from './services/session';
 import { terminalService } from './services/terminal';
 import {
   getWorkspaceInitPolicy,
   kanbanStateService,
+  projectManagementService,
+  userSettingsQueryService,
+  WorkspaceCreationService,
   workspaceAccessor,
   workspaceActivityService,
   workspaceDataService,
+  workspaceNotificationAccessor,
   workspaceQueryService,
   workspaceStateMachine,
+  worktreeLifecycleService,
 } from './services/workspace';
 import { workspaceSnapshotStore } from './services/workspace-snapshot-store.service';
 
@@ -62,18 +91,45 @@ export type ApplicationServices = BridgeServices & {
   acpTraceLogger: AcpTraceLogger;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
+  cryptoService: typeof cryptoService;
   createLogger: typeof createLogger;
+  dataBackupService: typeof dataBackupService;
+  decisionLogQueryService: typeof decisionLogQueryService;
+  executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
+  fetchCodexModelCatalogFromAppServer: typeof fetchCodexModelCatalogFromAppServer;
+  factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
+  gitCloneService: typeof gitCloneService;
   healthService: typeof healthService;
+  initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
+  insightsService: typeof insightsService;
+  linearClientService: typeof linearClientService;
+  periodicTaskAccessor: typeof periodicTaskAccessor;
+  projectManagementService: typeof projectManagementService;
   rateLimiter: typeof rateLimiter;
+  runScriptConfigPersistenceService: typeof runScriptConfigPersistenceService;
   runScriptService: RunScriptService;
   runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: ServerInstanceService;
   sessionEventBus: typeof sessionEventBus;
   sessionFileLogger: SessionFileLogger;
+  sessionProviderResolverService: typeof sessionProviderResolverService;
   terminalService: typeof terminalService;
+  userSettingsQueryService: typeof userSettingsQueryService;
   workspaceDataService: typeof workspaceDataService;
+  workspaceNotificationAccessor: typeof workspaceNotificationAccessor;
+  worktreeLifecycleService: typeof worktreeLifecycleService;
+  archiveWorkspace: typeof archiveWorkspace;
+  cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
+  createChildWorkspace: typeof createChildWorkspace;
+  createWorkspaceCreationService: (
+    dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
+  ) => WorkspaceCreationService;
+  fireLifecycleNotification: typeof fireLifecycleNotification;
+  persistChildNotification: typeof persistChildNotification;
+  persistParentNotification: typeof persistParentNotification;
+  retryQueuedDispatchAfterWorkspaceReady: typeof retryQueuedDispatchAfterWorkspaceReady;
 };
 
 export type AppServices = ApplicationServices;
@@ -117,19 +173,32 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       chatMessageHandlerService,
       cliHealthService,
       configService,
+      cryptoService,
       createLogger,
+      dataBackupService,
+      decisionLogQueryService,
+      executeStartupScriptPipeline,
+      fetchCodexModelCatalogFromAppServer,
+      factoryConfigService: FactoryConfigService,
       findAvailablePort,
+      gitCloneService,
       healthService,
+      initializeWorkspaceWorktree,
+      insightsService,
       fixerSessionService,
       getWorkspaceInitPolicy,
       githubCLIService,
       kanbanStateService,
       logbookService,
+      linearClientService,
+      periodicTaskAccessor,
       periodicTaskService,
+      projectManagementService,
       prFetchRegistry,
       prSnapshotService,
       ratchetService,
       rateLimiter,
+      runScriptConfigPersistenceService,
       reconciliationService,
       runScriptService: defaultRunScriptService,
       runScriptStateMachine,
@@ -139,15 +208,28 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       sessionDomainService,
       sessionEventBus,
       sessionFileLogger,
+      sessionProviderResolverService,
       sessionService,
       startupScriptService,
       terminalService,
+      userSettingsQueryService,
       workspaceAccessor,
       workspaceActivityService,
       workspaceDataService,
+      workspaceNotificationAccessor,
       workspaceQueryService,
       workspaceSnapshotStore,
       workspaceStateMachine,
+      worktreeLifecycleService,
+      archiveWorkspace,
+      cleanupWorkspaceRuntimeResources,
+      createChildWorkspace,
+      createWorkspaceCreationService: (creationDependencies) =>
+        new WorkspaceCreationService(creationDependencies),
+      fireLifecycleNotification,
+      persistChildNotification,
+      persistParentNotification,
+      retryQueuedDispatchAfterWorkspaceReady,
     },
     lifecycle: {
       database: prisma,

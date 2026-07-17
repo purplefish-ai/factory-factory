@@ -2,22 +2,10 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
-import {
-  initializeWorkspaceWorktree,
-  retryQueuedDispatchAfterWorkspaceReady,
-} from '@/backend/orchestration/workspace-init.orchestrator';
-import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { createLogger } from '@/backend/services/logger.service';
-import {
-  getWorkspaceInitPolicy,
-  workspaceDataService,
-  workspaceStateMachine,
-  worktreeLifecycleService,
-} from '@/backend/services/workspace';
-import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import { getWorkspaceInitPolicy } from '@/backend/services/workspace';
+import { type Context, publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
 
-const logger = createLogger('workspace-init-trpc');
+const getLogger = (ctx: Context) => ctx.appContext.services.createLogger('workspace-init-trpc');
 
 function maxRetriesExceededError(maxRetries: number) {
   return new TRPCError({
@@ -27,9 +15,12 @@ function maxRetriesExceededError(maxRetries: number) {
 }
 
 async function retryFailedWorkspaceWithExistingWorktree(
+  ctx: Context,
   workspace: WorkspaceWithProject,
   maxRetries: number
 ) {
+  const { initializeWorkspaceWorktree, workspaceStateMachine } = ctx.appContext.services;
+  const logger = getLogger(ctx);
   const updatedWorkspace = await workspaceStateMachine.startProvisioning(workspace.id, {
     maxRetries,
   });
@@ -60,36 +51,49 @@ async function retryFailedWorkspaceWithExistingWorktree(
 
 export const workspaceInitRouter = router({
   // Get workspace initialization status
-  getInitStatus: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const workspace = await workspaceDataService.findByIdWithProject(input.id);
-    if (!workspace) {
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: `Workspace not found: ${input.id}`,
-      });
-    }
+  getInitStatus: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { workspaceDataService } = ctx.appContext.services;
+      const workspace = await workspaceDataService.findByIdWithProject(input.id);
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.id}`,
+        });
+      }
 
-    const initPolicy = getWorkspaceInitPolicy(workspace);
+      const initPolicy = getWorkspaceInitPolicy(workspace);
 
-    return {
-      status: workspace.status,
-      initErrorMessage: workspace.initErrorMessage,
-      initOutput: workspace.initOutput,
-      initStartedAt: workspace.initStartedAt,
-      initCompletedAt: workspace.initCompletedAt,
-      phase: initPolicy.phase,
-      chatBanner: initPolicy.banner,
-      hasStartupScript: !!(
-        workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
-      ),
-      hasWorktreePath: !!workspace.worktreePath,
-    };
-  }),
+      return {
+        status: workspace.status,
+        initErrorMessage: workspace.initErrorMessage,
+        initOutput: workspace.initOutput,
+        initStartedAt: workspace.initStartedAt,
+        initCompletedAt: workspace.initCompletedAt,
+        phase: initPolicy.phase,
+        chatBanner: initPolicy.banner,
+        hasStartupScript: !!(
+          workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
+        ),
+        hasWorktreePath: !!workspace.worktreePath,
+      };
+    }),
 
   // Retry failed initialization
   retryInit: trustedLocalProcedure
     .input(z.object({ id: z.string(), useExistingBranch: z.boolean().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const {
+        executeStartupScriptPipeline,
+        factoryConfigService,
+        initializeWorkspaceWorktree,
+        retryQueuedDispatchAfterWorkspaceReady,
+        workspaceDataService,
+        workspaceStateMachine,
+        worktreeLifecycleService,
+      } = ctx.appContext.services;
+      const logger = getLogger(ctx);
       const workspace = await workspaceDataService.findByIdWithProject(input.id);
       if (!workspace?.project) {
         throw new TRPCError({
@@ -145,7 +149,7 @@ export const workspaceInitRouter = router({
         // Read config before state transition so a readConfig failure
         // doesn't leave the workspace stuck in PROVISIONING.
         const worktreePath = workspace.worktreePath;
-        const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
+        const factoryConfig = await factoryConfigService.readConfig(worktreePath);
 
         const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
           workspace.id,
@@ -167,7 +171,7 @@ export const workspaceInitRouter = router({
         return workspaceDataService.findById(input.id);
       }
 
-      await retryFailedWorkspaceWithExistingWorktree(workspace, maxRetries);
+      await retryFailedWorkspaceWithExistingWorktree(ctx, workspace, maxRetries);
 
       return workspaceDataService.findById(input.id);
     }),

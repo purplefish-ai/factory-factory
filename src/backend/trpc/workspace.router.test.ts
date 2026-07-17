@@ -49,53 +49,9 @@ const mockPersistChildNotification = vi.hoisted(() => vi.fn());
 const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: mockWorkspaceDataService,
-  workspaceQueryService: mockWorkspaceQueryService,
-  workspaceAccessor: {
-    findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-  },
-  workspaceActivityService: {
-    clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
-  },
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
   computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
   computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
-  WorkspaceCreationService: class {
-    create = (...args: unknown[]) => mockWorkspaceCreationCreate(...args);
-  },
-}));
-
-vi.mock('@/backend/services/session', () => ({
-  sessionService: {
-    getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
-  },
-  sessionDomainService: {
-    getAllPendingRequests: () => new Map(),
-    appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
-    emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
-    enqueue: (...args: unknown[]) => mockEnqueue(...args),
-    hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
-  },
-  sessionDataService: {
-    createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
-  },
-  sessionProviderResolverService: {
-    resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
-      mockResolveProviderForWorkspaceCreation(explicitProvider),
-  },
-  agentSessionAccessor: {
-    findByWorkspaceId: (...args: unknown[]) => mockFindSessionsByWorkspaceId(...args),
-  },
-  chatMessageHandlerService: {
-    tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
-  },
-}));
-
-vi.mock('@/backend/services/ratchet', () => ({
-  ratchetService: {
-    setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
-    checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
-  },
 }));
 
 vi.mock('@/backend/lib/session-summaries', () => ({
@@ -107,25 +63,8 @@ vi.mock('@/shared/workspace-sidebar-status', () => ({
   deriveWorkspaceSidebarStatus: (...args: unknown[]) => mockDeriveWorkspaceSidebarStatus(...args),
 }));
 
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
-  archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
-  cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
-    mockCleanupWorkspaceRuntimeResources(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
-}));
-
-vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
-  createChildWorkspace: vi.fn(),
-  fireLifecycleNotification: vi.fn(),
-  persistChildNotification: (...args: unknown[]) => mockPersistChildNotification(...args),
-  persistParentNotification: (...args: unknown[]) => mockPersistParentNotification(...args),
-}));
-
 vi.mock('./workspace/workspace-helpers', () => ({
-  getWorkspaceWithProjectOrThrow: vi.fn(async (id: string) => ({
+  getWorkspaceWithProjectOrThrow: vi.fn(async (_service: unknown, id: string) => ({
     id,
     project: { slug: 'demo' },
   })),
@@ -156,6 +95,7 @@ function createCaller(requestTrust?: {
 }) {
   const sessionService = {
     stopWorkspaceSessions: vi.fn(async () => undefined),
+    getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
   };
   const runScriptService = {
     stopRunScript: vi.fn(
@@ -196,6 +136,53 @@ function createCaller(requestTrust?: {
           error: vi.fn(),
         }),
         sessionService,
+        sessionDataService: {
+          createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
+          findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
+            mockFindSessionsByWorkspaceId(...args),
+        },
+        sessionDomainService: {
+          getAllPendingRequests: () => new Map(),
+          appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
+          emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
+          enqueue: (...args: unknown[]) => mockEnqueue(...args),
+          hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
+        },
+        sessionProviderResolverService: {
+          resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
+            mockResolveProviderForWorkspaceCreation(explicitProvider),
+        },
+        chatMessageHandlerService: {
+          tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
+        },
+        workspaceDataService: mockWorkspaceDataService,
+        workspaceQueryService: mockWorkspaceQueryService,
+        workspaceAccessor: {
+          findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+          findChildrenWithStatus: vi.fn(async () => []),
+          findParentWorkspace: vi.fn(async () => null),
+        },
+        workspaceActivityService: {
+          clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
+        },
+        workspaceNotificationAccessor: { countPending: vi.fn(async () => 0) },
+        ratchetService: {
+          setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
+          checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
+        },
+        prSnapshotService: { attachAndRefreshPR: vi.fn() },
+        archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
+        cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
+          mockCleanupWorkspaceRuntimeResources(...args),
+        initializeWorkspaceWorktree: (...args: unknown[]) =>
+          mockInitializeWorkspaceWorktree(...args),
+        createWorkspaceCreationService: () => ({
+          create: (...args: unknown[]) => mockWorkspaceCreationCreate(...args),
+        }),
+        createChildWorkspace: vi.fn(),
+        fireLifecycleNotification: vi.fn(),
+        persistChildNotification: (...args: unknown[]) => mockPersistChildNotification(...args),
+        persistParentNotification: (...args: unknown[]) => mockPersistParentNotification(...args),
         runScriptService,
         terminalService,
       },

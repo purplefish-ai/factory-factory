@@ -8,11 +8,7 @@ import { open } from 'node:fs/promises';
 import type { DecisionLog } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { getLogFilePath } from '@/backend/services/logger.service';
-import { sessionDataService } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
 import { readFilteredLogEntriesPage } from './log-file-reader';
@@ -63,7 +59,8 @@ export const adminRouter = router({
         limit: z.number().default(1000),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      const { decisionLogQueryService } = ctx.appContext.services;
       const logs = await decisionLogQueryService.list({
         agentId: input.agentId,
         limit: input.limit,
@@ -172,7 +169,8 @@ export const adminRouter = router({
    * Get all active processes (Agent sessions via ACP and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
-    const { acpRuntimeManager, terminalService } = ctx.appContext.services;
+    const { acpRuntimeManager, sessionDataService, terminalService, workspaceDataService } =
+      ctx.appContext.services;
     const logger = getLogger(ctx);
     // Get active ACP sessions from in-memory map
     const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
@@ -272,7 +270,7 @@ export const adminRouter = router({
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
    */
   exportData: publicProcedure.query(({ ctx }) => {
-    const { configService } = ctx.appContext.services;
+    const { configService, dataBackupService } = ctx.appContext.services;
     return dataBackupService.exportData(configService.getAppVersion());
   }),
 
@@ -281,8 +279,8 @@ export const adminRouter = router({
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    */
-  importData: publicProcedure.input(exportDataSchema).mutation(async ({ input }) => {
-    const results = await dataBackupService.importData(input);
+  importData: publicProcedure.input(exportDataSchema).mutation(async ({ ctx, input }) => {
+    const results = await ctx.appContext.services.dataBackupService.importData(input);
     return {
       success: true,
       results,

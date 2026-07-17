@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
 import { getMergeBase, parseGitStatusOutput } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,
@@ -18,8 +17,11 @@ export const workspaceGitRouter = router({
   // Get git status for workspace
   getGitStatus: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
       if (!result) {
         return { files: [], hasUncommitted: false };
       }
@@ -36,8 +38,11 @@ export const workspaceGitRouter = router({
   // Get only unstaged changes for workspace
   getUnstagedChanges: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
       if (!result) {
         return { files: [] };
       }
@@ -58,6 +63,7 @@ export const workspaceGitRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
+      const { workspaceDataService } = ctx.appContext.services;
       // Use findByIdWithProject directly since we need project info
       const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
       if (!workspace) {
@@ -117,8 +123,11 @@ export const workspaceGitRouter = router({
   // Get files changed in commits not yet pushed to upstream
   getUnpushedFiles: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await getWorkspaceWithWorktree(input.workspaceId);
+    .query(async ({ ctx, input }) => {
+      const result = await getWorkspaceWithWorktree(
+        ctx.appContext.services.workspaceDataService,
+        input.workspaceId
+      );
       if (!result) {
         return { files: [], hasUpstream: false };
       }
@@ -163,8 +172,9 @@ export const workspaceGitRouter = router({
         filePath: z.string(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const { workspace, worktreePath } = await getWorkspaceWithProjectAndWorktreeOrThrow(
+        ctx.appContext.services.workspaceDataService,
         input.workspaceId
       );
 
