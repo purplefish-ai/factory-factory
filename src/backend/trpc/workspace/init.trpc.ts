@@ -7,8 +7,8 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { FactoryConfigService } from '@/backend/services/run-script';
 import {
   getWorkspaceInitPolicy,
   workspaceDataService,

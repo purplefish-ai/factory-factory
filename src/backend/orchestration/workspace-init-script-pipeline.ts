@@ -1,5 +1,5 @@
-import type { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { FactoryConfigService } from '@/backend/services/run-script';
 import { startupScriptService } from '@/backend/services/run-script';
 import { workspaceStateMachine } from '@/backend/services/workspace';
 import type { WorkspaceWithProject } from './types';

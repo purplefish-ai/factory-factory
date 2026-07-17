@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
+import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 
 // ---------------------------------------------------------------------------
 // Mock store helper type
@@ -30,6 +30,12 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: { on: vi.fn() },
   workspaceActivityService: { on: vi.fn(), clearWorkspace: vi.fn() },
   computePendingRequestType: vi.fn().mockReturnValue(null),
+  workspaceSnapshotStore: {
+    upsert: vi.fn(),
+    getByWorkspaceId: vi.fn(),
+    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
+    remove: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/services/github', () => ({
@@ -87,15 +93,6 @@ vi.mock('@/backend/services/terminal', () => ({
   },
 }));
 
-vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
-  workspaceSnapshotStore: {
-    upsert: vi.fn(),
-    getByWorkspaceId: vi.fn(),
-    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
-    remove: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -118,9 +115,9 @@ import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   workspaceActivityService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {
   configureEventCollector,

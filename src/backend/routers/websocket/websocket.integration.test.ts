@@ -42,7 +42,7 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let snapshotConnections: typeof import('./snapshots.handler').snapshotConnections;
 let chatConnectionRegistry: typeof import('./chat-connection-registry').chatConnectionRegistry;
-let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
+let workspaceSnapshotStore: typeof import('@/backend/services/workspace').workspaceSnapshotStore;
 
 let counter = 0;
 const allowedOrigin = 'http://localhost:3000';
@@ -68,8 +68,8 @@ beforeAll(async () => {
     './chat-connection-registry'
   ));
   ({ workspaceSnapshotStore } = await vi.importActual<
-    typeof import('@/backend/services/workspace-snapshot-store.service')
-  >('@/backend/services/workspace-snapshot-store.service'));
+    typeof import('@/backend/services/workspace')
+  >('@/backend/services/workspace'));
 }, 30_000);
 
 afterEach(async () => {

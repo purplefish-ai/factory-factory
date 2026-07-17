@@ -16,9 +16,13 @@ function createLogger() {
   return { warn: vi.fn() };
 }
 
-function createConfigService(allowedOrigins: string[], trustedLocalCidrs: string[] = []) {
+function createConfigService(
+  allowedOrigins: string[],
+  trustedLocalCidrs: string[] = [],
+  trustProxyHeaders = false
+) {
   return {
-    getCorsConfig: vi.fn(() => ({ allowedOrigins, trustedLocalCidrs })),
+    getCorsConfig: vi.fn(() => ({ allowedOrigins, trustedLocalCidrs, trustProxyHeaders })),
   };
 }
 
@@ -166,6 +170,52 @@ describe('validateTrustedLocalWebSocketRequest', () => {
         forwardedClientAddressHeaders: ['x-forwarded-for'],
         remoteAddress: '127.0.0.1',
       }
+    );
+  });
+
+  it('allows forwarded client address headers when trustProxyHeaders is enabled', () => {
+    const socket = createSocket();
+    const logger = createLogger();
+
+    const isValid = validateTrustedLocalWebSocketRequest({
+      request: {
+        headers: { 'x-forwarded-for': '203.0.113.10' },
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000'], [], true),
+      logger,
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(true);
+    expect(socket.write).not.toHaveBeenCalled();
+    expect(socket.destroy).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('still rejects untrusted remote addresses when trustProxyHeaders is enabled', () => {
+    const socket = createSocket();
+    const logger = createLogger();
+
+    const isValid = validateTrustedLocalWebSocketRequest({
+      request: {
+        headers: {},
+        socket: { remoteAddress: '203.0.113.10' },
+      } as IncomingMessage,
+      socket,
+      configService: createConfigService(['http://localhost:3000'], [], true),
+      logger,
+      connectionName: 'terminal WebSocket',
+    });
+
+    expect(isValid).toBe(false);
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Untrusted remote address'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Rejected terminal WebSocket connection from untrusted remote address',
+      { remoteAddress: '203.0.113.10' }
     );
   });
 

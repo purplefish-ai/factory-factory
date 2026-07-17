@@ -16,6 +16,12 @@ vi.mock('@/backend/services/run-script', () => ({
     hasStartupScript: vi.fn(),
     runStartupScript: vi.fn(),
   },
+  FactoryConfigService: {
+    readConfig: vi.fn(),
+  },
+  runScriptConfigPersistenceService: {
+    syncWorkspaceCommandsFromFactoryConfig: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/services/session', () => ({
@@ -70,26 +76,11 @@ vi.mock('@/backend/services/workspace', () => ({
     findParentWorkspace: vi.fn(),
     update: vi.fn(),
   },
-}));
-
-vi.mock('@/backend/services/factory-config.service', () => ({
-  FactoryConfigService: {
-    readConfig: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/git-ops.service', () => ({
   gitOpsService: {
     ensureBaseBranchExists: vi.fn(),
     createWorktree: vi.fn(),
     createWorktreeFromExistingBranch: vi.fn(),
     removeWorktree: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
-  runScriptConfigPersistenceService: {
-    syncWorkspaceCommandsFromFactoryConfig: vi.fn(),
   },
 }));
 
@@ -109,11 +100,12 @@ vi.mock('@/shared/acp-protocol', () => ({
 
 // --- Imports (after mocks) ---
 
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService } from '@/backend/services/github';
-import { startupScriptService } from '@/backend/services/run-script';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import {
+  FactoryConfigService,
+  runScriptConfigPersistenceService,
+  startupScriptService,
+} from '@/backend/services/run-script';
 import {
   agentSessionAccessor,
   buildChildWorkspaceContext,
@@ -124,6 +116,7 @@ import {
 } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import {
+  gitOpsService,
   workspaceAccessor,
   workspaceStateMachine,
   worktreeLifecycleService,
