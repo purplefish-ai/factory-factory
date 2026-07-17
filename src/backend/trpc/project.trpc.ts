@@ -6,9 +6,12 @@ import { z } from 'zod';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitCloneService, parseGithubUrl } from '@/backend/services/git-clone.service';
-import { projectManagementService } from '@/backend/services/workspace';
+import { FactoryConfigService } from '@/backend/services/run-script';
+import {
+  gitCloneService,
+  parseGithubUrl,
+  projectManagementService,
+} from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {

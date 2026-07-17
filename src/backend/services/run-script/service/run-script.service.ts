@@ -1,14 +1,13 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { toError } from '@/backend/lib/error-utils';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { PortAllocationService } from '@/backend/services/port-allocation.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
+import { FactoryConfigService } from './factory-config.service';
+import { PortAllocationService } from './port-allocation.service';
 import {
   type RunScriptCommandCache,
   runScriptConfigPersistenceService,
-} from '@/backend/services/run-script-config-persistence.service';
-import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
-import { workspaceAccessor } from '@/backend/services/workspace';
+} from './run-script-config-persistence.service';
 import { RunScriptOutputBuffer } from './run-script-output-buffer';
 import {
   runCleanupScriptProcess,
@@ -16,6 +15,7 @@ import {
   treeKillProcess,
   waitForChildProcessExit,
 } from './run-script-process-utils';
+import { runScriptProxyService } from './run-script-proxy.service';
 import {
   RunScriptStateMachineError,
   runScriptStateMachine,

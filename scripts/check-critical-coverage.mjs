@@ -42,7 +42,7 @@ const groups = [
     files: [
       'src/backend/services/run-script/service/startup-script.service.ts',
       'src/backend/services/run-script/service/run-script.service.ts',
-      'src/backend/services/run-script-proxy.service.ts',
+      'src/backend/services/run-script/service/run-script-proxy.service.ts',
     ],
   },
   {
@@ -76,7 +76,7 @@ const perFileThresholds = [
   { file: 'src/backend/services/session/resources/agent-session.accessor.ts', threshold: 70 },
   { file: 'src/backend/services/run-script/service/startup-script.service.ts', threshold: 75 },
   { file: 'src/backend/services/run-script/service/run-script.service.ts', threshold: 50 },
-  { file: 'src/backend/services/run-script-proxy.service.ts', threshold: 70 },
+  { file: 'src/backend/services/run-script/service/run-script-proxy.service.ts', threshold: 70 },
   { file: 'src/backend/services/workspace/service/query/workspace-query.service.ts', threshold: 85 },
   { file: 'src/backend/services/workspace/service/state/kanban-state.ts', threshold: 80 },
   { file: 'src/backend/services/session/service/session-domain.service.ts', threshold: 90 },
@@ -88,7 +88,7 @@ const perFileThresholds = [
   { file: 'src/backend/trpc/linear.trpc.ts', threshold: 90 },
   { file: 'src/backend/trpc/pr-review.trpc.ts', threshold: 95 },
   { file: 'src/backend/trpc/decision-log.trpc.ts', threshold: 95 },
-  { file: 'src/backend/services/git-ops.service.ts', threshold: 90 },
+  { file: 'src/backend/services/workspace/service/worktree/git-ops.service.ts', threshold: 90 },
   { file: 'src/backend/services/rate-limiter.service.ts', threshold: 90 },
   { file: 'src/backend/interceptors/branch-rename.interceptor.ts', threshold: 95 },
 ];

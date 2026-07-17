@@ -2,10 +2,10 @@ import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { gitOpsService } from '@/backend/services/git-ops.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { gitOpsService } from './git-ops.service';
 import {
   assertWorktreePathSafe,
   WorktreePathSafetyError,
