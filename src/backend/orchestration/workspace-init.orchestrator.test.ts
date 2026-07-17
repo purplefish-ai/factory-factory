@@ -977,6 +977,50 @@ describe('initializeWorkspaceWorktree', () => {
       );
     });
 
+    it('queues child workspace context with attachments when no initial prompt is provided', async () => {
+      setupHappyPath({
+        parentWorkspaceId: 'parent-1',
+        creationMetadata: {
+          initialAttachments: [
+            {
+              id: 'att-child-only-1',
+              name: 'child-only-evidence.png',
+              type: 'image/png',
+              size: 120,
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+              contentType: 'image',
+            },
+          ],
+        },
+      });
+      vi.mocked(workspaceAccessor.findParentWorkspace).mockResolvedValue(
+        unsafeCoerce({
+          id: 'parent-1',
+          name: 'parent-workspace',
+          project: { id: 'parent-project-1', name: 'parent-project' },
+        })
+      );
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: '## Child Workspace Context\nUse send_message_to_parent.',
+          attachments: [
+            expect.objectContaining({
+              id: 'att-child-only-1',
+              name: 'child-only-evidence.png',
+            }),
+          ],
+        })
+      );
+    });
+
     it('queues child workspace context for a whitespace-only initial prompt', async () => {
       setupHappyPath({
         parentWorkspaceId: 'parent-1',

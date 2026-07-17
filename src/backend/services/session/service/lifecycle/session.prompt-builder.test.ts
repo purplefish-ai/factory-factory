@@ -51,6 +51,19 @@ describe('buildChildWorkspaceContext', () => {
         `use the \`send_message_to_parent\` tool to report back. Include a brief summary of what was done and any next steps the parent workspace should be aware of.\n`
     );
   });
+
+  it('omits whitespace-only report-back criteria', () => {
+    const context = buildChildWorkspaceContext({ reportBackOn: '  \n\t' });
+
+    expect(context).not.toContain('Report back when:');
+  });
+
+  it('trims surrounding whitespace from report-back criteria', () => {
+    const context = buildChildWorkspaceContext({ reportBackOn: '  a PR is opened  ' });
+
+    expect(context).toContain('\nReport back when: a PR is opened\n');
+    expect(context).not.toContain('  a PR is opened  ');
+  });
 });
 
 describe('SessionPromptBuilder', () => {
