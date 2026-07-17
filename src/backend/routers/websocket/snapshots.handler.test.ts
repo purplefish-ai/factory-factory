@@ -10,6 +10,10 @@ import type {
   SnapshotRemovedEvent,
 } from '@/backend/services/workspace-snapshot-store.service';
 import {
+  SnapshotServerMessageSchema,
+  type WorkspaceSnapshotEntry,
+} from '@/shared/workspace-snapshot';
+import {
   createSnapshotsUpgradeHandler,
   resetSnapshotsHandlerStateForTests,
   snapshotConnections,
@@ -161,6 +165,62 @@ async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
   });
 }
 
+function makeSnapshotEntry(
+  overrides: Partial<WorkspaceSnapshotEntry> = {}
+): WorkspaceSnapshotEntry {
+  return {
+    workspaceId: 'ws-1',
+    projectId: 'proj-1',
+    version: 1,
+    computedAt: '2026-07-17T12:00:00.000Z',
+    source: 'test',
+    name: 'Visible',
+    status: 'READY',
+    createdAt: '2026-07-17T11:00:00.000Z',
+    branchName: null,
+    prUrl: null,
+    prNumber: null,
+    prState: 'NONE',
+    prCiStatus: 'UNKNOWN',
+    prUpdatedAt: null,
+    ratchetEnabled: false,
+    ratchetState: 'IDLE',
+    runScriptStatus: 'IDLE',
+    hasHadSessions: false,
+    isWorking: false,
+    pendingRequestType: null,
+    sessionSummaries: [],
+    gitStats: null,
+    lastActivityAt: null,
+    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
+    kanbanColumn: 'WORKING',
+    flowPhase: 'NO_PR',
+    ciObservation: 'CHECKS_UNKNOWN',
+    ratchetButtonAnimated: false,
+    statusReason: {
+      code: 'NO_SESSION_STARTED',
+      label: 'No session started',
+      tone: 'neutral',
+      needsUser: true,
+    },
+    fieldTimestamps: {
+      workspace: 1,
+      pr: 1,
+      session: 1,
+      ratchet: 1,
+      runScript: 1,
+      reconciliation: 1,
+    },
+    ...overrides,
+  };
+}
+
+function parseSentMessage(ws: MockWebSocket, callIndex = 0) {
+  const serialized = ws.send.mock.calls[callIndex]?.[0];
+  expect(serialized).toBeTypeOf('string');
+  return SnapshotServerMessageSchema.parse(JSON.parse(serialized));
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -179,12 +239,7 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   it('sends full snapshot with review count on connect', async () => {
-    const visibleEntry = {
-      workspaceId: 'ws-1',
-      projectId: 'proj-1',
-      name: 'Visible',
-      status: 'READY',
-    };
+    const visibleEntry = makeSnapshotEntry();
     const testEntries = [
       visibleEntry,
       { workspaceId: 'ws-2', projectId: 'proj-1', name: 'Archiving', status: 'ARCHIVING' },
@@ -197,15 +252,12 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, ws, 'proj-1');
 
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'snapshot_full',
-          projectId: 'proj-1',
-          entries: [visibleEntry],
-          reviewCount: 5,
-        })
-      );
+    await waitForInitialSnapshot(ws);
+    expect(parseSentMessage(ws)).toEqual({
+      type: 'snapshot_full',
+      projectId: 'proj-1',
+      entries: [visibleEntry],
+      reviewCount: 5,
     });
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
@@ -302,23 +354,16 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-A',
-      entry: {
-        workspaceId: 'ws-1',
-        projectId: 'proj-A',
-        name: 'Updated',
-        status: 'READY',
-      } as never,
+      entry: makeSnapshotEntry({ projectId: 'proj-A', name: 'Updated' }),
     };
     await changedListener!(event);
 
-    expect(wsA.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'snapshot_changed',
-        workspaceId: 'ws-1',
-        entry: event.entry,
-        reviewCount: 5,
-      })
-    );
+    expect(parseSentMessage(wsA)).toEqual({
+      type: 'snapshot_changed',
+      workspaceId: 'ws-1',
+      entry: event.entry,
+      reviewCount: 5,
+    });
     expect(wsB.send).not.toHaveBeenCalled();
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
@@ -380,13 +425,11 @@ describe('createSnapshotsUpgradeHandler', () => {
     };
     await changedListener!(event);
 
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'snapshot_removed',
-        workspaceId: 'ws-1',
-        reviewCount: 5,
-      })
-    );
+    expect(parseSentMessage(ws)).toEqual({
+      type: 'snapshot_removed',
+      workspaceId: 'ws-1',
+      reviewCount: 5,
+    });
   });
 
   it('sends snapshot_removed with review count to project clients', async () => {
