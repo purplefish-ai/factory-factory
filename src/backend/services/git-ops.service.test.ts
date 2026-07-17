@@ -5,6 +5,7 @@ const mockGetWorkspaceGitStats = vi.hoisted(() => vi.fn());
 const mockPathExists = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
 const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
+const mockGitStateRemove = vi.hoisted(() => vi.fn());
 
 const mockGitClient = vi.hoisted(() => ({
   checkWorktreeExists: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/backend/clients/git.client', () => ({
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
   workspaceGitStateService: {
     invalidate: mockGitStateInvalidate,
+    remove: mockGitStateRemove,
   },
 }));
 
@@ -137,6 +139,37 @@ describe('gitOpsService', () => {
 
     await gitOpsService.removeWorktree('/repo/worktrees/w3', project);
     expect(mockRm).toHaveBeenCalledTimes(1);
+  });
+
+  it('evicts Git state after successful registered worktree removal', async () => {
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/repo/worktrees/w1' }]);
+
+    await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
+
+    expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('w1');
+    expect(mockGitStateRemove).toHaveBeenCalledOnce();
+    expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+  });
+
+  it('evicts Git state after successful filesystem-fallback removal', async () => {
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([]);
+    mockPathExists.mockResolvedValueOnce(true);
+
+    await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
+
+    expect(mockRm).toHaveBeenCalledWith('/repo/worktrees/w1', { recursive: true, force: true });
+    expect(mockGitStateRemove).toHaveBeenCalledOnce();
+    expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+  });
+
+  it('does not evict Git state when registered worktree removal fails', async () => {
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/repo/worktrees/w1' }]);
+    mockGitClient.deleteWorktree.mockRejectedValueOnce(new Error('remove failed'));
+
+    await expect(gitOpsService.removeWorktree('/repo/worktrees/w1', project)).rejects.toThrow(
+      'remove failed'
+    );
+    expect(mockGitStateRemove).not.toHaveBeenCalled();
   });
 
   it('removeWorktree refuses requested paths that do not match the configured worktree path', async () => {

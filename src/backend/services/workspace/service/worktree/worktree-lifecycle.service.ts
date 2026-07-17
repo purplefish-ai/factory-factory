@@ -139,7 +139,6 @@ class WorktreeLifecycleService {
 
     await gitOpsService.commitIfNeeded(worktreePath, workspace.name, options.commitUncommitted);
     await gitOpsService.removeWorktree(worktreePath, project);
-    workspaceGitStateService.remove(worktreePath);
   }
 }
 

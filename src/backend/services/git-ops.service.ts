@@ -109,12 +109,14 @@ class GitOpsService {
     );
     if (registeredWorktree) {
       await gitClient.deleteWorktree(worktreeName);
+      workspaceGitStateService.remove(worktreePath);
       return;
     }
 
     if (await pathExists(worktreePath)) {
       await fs.rm(worktreePath, { recursive: true, force: true });
     }
+    workspaceGitStateService.remove(worktreePath);
   }
 
   async ensureBaseBranchExists(
