@@ -191,6 +191,7 @@ class SchedulerService {
     logger.info('PR discovery completed', {
       candidates: workspaces.length,
       selectedRepositories: selectedGroups.length,
+      queriedRepositories: results.length,
       checked,
       discovered,
       failures,

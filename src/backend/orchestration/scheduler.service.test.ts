@@ -8,6 +8,7 @@ const mockListOpenPRs = vi.fn();
 const mockRefreshWorkspace = vi.fn();
 const mockAttachAndRefreshPR = vi.fn();
 const mockGetPRDiscoveryLimits = vi.fn();
+const mockLoggerInfo = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
   computePRDiscoveryNextCheckAt: (date: Date, retryCount: number) =>
@@ -43,7 +44,7 @@ vi.mock('@/backend/services/github', () => ({
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
-    info: vi.fn(),
+    info: (...args: unknown[]) => mockLoggerInfo(...args),
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
@@ -155,6 +156,32 @@ describe('SchedulerService', () => {
   });
 
   describe('discoverNewPRs', () => {
+    it('checks dozens of candidates with one repository query per repository', async () => {
+      const repositories = ['alpha', 'beta', 'gamma'];
+      const candidatesPerRepository = 12;
+      const candidates = repositories.flatMap((repo) =>
+        Array.from({ length: candidatesPerRepository }, (_, index) =>
+          discoveryWorkspace({
+            id: `${repo}-${index}`,
+            repo,
+            branch: `feature-${index}`,
+          })
+        )
+      );
+      mockFindNeedingPRDiscovery.mockResolvedValue(candidates);
+      mockListOpenPRs.mockResolvedValue([]);
+
+      await expect(schedulerService.discoverNewPRs()).resolves.toEqual({
+        discovered: 0,
+        checked: candidates.length,
+      });
+
+      expect(mockClaimPRDiscoveryAttempt).toHaveBeenCalledTimes(candidates.length);
+      expect(mockListOpenPRs).toHaveBeenCalledTimes(repositories.length);
+      expect(mockListOpenPRs.mock.calls).toEqual(repositories.map((repo) => ['org', repo]));
+      expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+    });
+
     it('claims and checks multiple workspaces through one case-insensitive repository batch', async () => {
       const nextCheckAt = new Date('2026-07-17T11:55:00.000Z');
       mockFindNeedingPRDiscovery.mockResolvedValue([
@@ -236,6 +263,13 @@ describe('SchedulerService', () => {
         checked: 0,
       });
       expect(mockListOpenPRs).not.toHaveBeenCalled();
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'PR discovery completed',
+        expect.objectContaining({
+          selectedRepositories: 1,
+          queriedRepositories: 0,
+        })
+      );
     });
 
     it('isolates a repository failure and keeps checking other repositories', async () => {

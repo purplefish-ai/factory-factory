@@ -208,7 +208,60 @@ git add src/backend/services/workspace/service/lifecycle src/backend/services/se
 git commit -m "Reset PR discovery after workspace activity (#1945)"
 ```
 
-### Task 5: Verify, Review, and Publish
+### Task 5: Resolve Integration Fixtures and Record Batch Validation
+
+**Files:**
+- Modify: `src/backend/orchestration/data-backup.service.test.ts`
+- Modify: `src/backend/services/workspace/service/lifecycle/creation.service.test.ts`
+- Modify: `src/client/components/kanban/inline-workspace-form.tsx`
+- Modify: `src/client/components/kanban/kanban-board.stories.tsx`
+- Modify: `src/client/components/kanban/kanban-card.stories.tsx`
+- Modify: `src/client/components/kanban/kanban-column.stories.tsx`
+- Modify: `src/backend/orchestration/scheduler.service.ts`
+- Modify: `src/backend/orchestration/scheduler.service.test.ts`
+- Modify: `docs/superpowers/specs/2026-07-17-batched-pr-discovery-design.md`
+- Modify: `docs/superpowers/plans/2026-07-17-batched-pr-discovery.md`
+
+**Interfaces:**
+- Consumes: the generated non-null `prDiscoveryRetryCount` and nullable discovery timestamps on complete workspace fixtures
+- Produces: final discovery logs that distinguish selected repositories from repositories actually queried
+- Produces: a many-workspace/few-repository test fixture that records bounded GitHub CLI invocation scaling
+
+- [ ] **Step 1: Verify the integration RED state**
+
+```bash
+pnpm typecheck
+```
+
+Expected: exactly six complete-workspace fixtures fail because they lack the three generated discovery fields.
+
+- [ ] **Step 2: Add neutral discovery metadata to complete workspace fixtures**
+
+Add `prDiscoveryLastCheckedAt: null`, `prDiscoveryRetryCount: 0`, and `prDiscoveryNextCheckAt: null` to each complete workspace literal. These are type/schema integration values only and must not change visible UI behavior.
+
+- [ ] **Step 3: Add a failing many-workspace batching/logging test**
+
+Create dozens of no-PR candidates across three repositories. Assert all candidates are claimed, only three repository-list calls occur, no per-workspace attachment calls occur, and the completion log distinguishes selected repositories from actual queried repositories when a separate zero-claim group is exercised.
+
+- [ ] **Step 4: Implement queried-repository logging and verify GREEN**
+
+Add `queriedRepositories: results.length` to the completion log, then run:
+
+```bash
+pnpm exec vitest run src/backend/orchestration/scheduler.service.test.ts
+pnpm typecheck
+```
+
+Expected: scheduler tests pass and typecheck exits zero.
+
+- [ ] **Step 5: Commit the integration unit**
+
+```bash
+git add docs/superpowers src/backend/orchestration/data-backup.service.test.ts src/backend/services/workspace/service/lifecycle/creation.service.test.ts src/client/components/kanban/inline-workspace-form.tsx src/client/components/kanban/kanban-board.stories.tsx src/client/components/kanban/kanban-card.stories.tsx src/client/components/kanban/kanban-column.stories.tsx src/backend/orchestration/scheduler.service.ts src/backend/orchestration/scheduler.service.test.ts
+git commit -m "Complete PR discovery integration (#1945)"
+```
+
+### Task 6: Verify, Review, and Publish
 
 **Files:**
 - Review: all changes relative to `origin/main`

@@ -43,13 +43,13 @@ For each selected repository, run exactly one:
 gh pr list --repo owner/repo --state open --json number,url,createdAt,headRefName --limit 1000
 ```
 
-Match the returned PRs locally by exact `headRefName`. Retain the existing collision guard: a PR created before a workspace is ignored for that workspace. Repository names form the batch key, so identical branch names in different repositories never collide. If one repository fails, log it, retain the already-claimed retry metadata for only that repository's candidates, and continue processing other repositories.
+Match the returned PRs locally by exact `headRefName`. Retain the existing collision guard: a PR created before a workspace is ignored for that workspace. Repository names form the batch key, so identical branch names in different repositories never collide. Within one repository and branch, sort PRs oldest-first and assign each one to the newest eligible unmatched workspace; this prevents two stale workspaces from attaching the same new PR while correctly handling branch reuse over time. If one repository fails, log it, retain the already-claimed retry metadata for only that repository's candidates, and continue processing other repositories.
 
 The scheduler continues to use its existing whole-tick in-flight promise, so PR status synchronization and PR discovery from one tick finish before another tick starts. Candidate and repository limits bound each tick independently.
 
 ## Error Handling and Observability
 
-The repository listing API throws on CLI, authentication, network, rate-limit, or JSON-validation failure so the scheduler can distinguish failure from a successful empty result. Discovery logs record candidate count, selected repository count, checked workspaces, discoveries, and repository failures. PR snapshot attachment remains the canonical write path; `fetch_failed` still counts as discovered because the URL was attached.
+The repository listing API throws on CLI, authentication, network, rate-limit, or JSON-validation failure so the scheduler can distinguish failure from a successful empty result. Discovery logs record candidate count, selected and actually queried repository counts, checked workspaces, discoveries, effective limits, and repository failures. PR snapshot attachment remains the canonical write path; `fetch_failed` still counts as discovered because the URL was attached.
 
 ## Testing
 
