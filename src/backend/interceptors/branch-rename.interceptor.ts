@@ -12,7 +12,14 @@ import { extractMatchingCommand } from './branch-rename.utils';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('branch-rename');
-const GIT_BRANCH_RENAME_REGEX = /\bgit\s+branch\s+-[mM]\b/;
+const GIT_BRANCH_RENAME_TEXT_REGEX = /\bgit\s+branch\s+-[mM]\b/;
+const SHELL_QUOTED_ARGUMENT_REGEX = /'[^']*(?:'|$)|"(?:\\.|[^"\\])*(?:"|$)/g;
+const GIT_BRANCH_RENAME_COMMAND_REGEX = /(?:^|(?:&&|\|\||[;&|\n])\s*)git\s+branch\s+-[mM]\b/;
+
+function containsGitBranchRenameCommand(command: string): boolean {
+  const commandWithoutQuotedArguments = command.replace(SHELL_QUOTED_ARGUMENT_REGEX, '');
+  return GIT_BRANCH_RENAME_COMMAND_REGEX.test(commandWithoutQuotedArguments);
+}
 
 export const branchRenameInterceptor: ToolInterceptor = {
   name: 'branch-rename',
@@ -27,8 +34,8 @@ export const branchRenameInterceptor: ToolInterceptor = {
     // Check if this was a `git branch -m` or `git branch -M` command (branch rename)
     // -m: rename branch, -M: force rename (overwrite if target exists)
     // Use regex to avoid false positives from strings containing "git branch -m"
-    const command = extractMatchingCommand(event, GIT_BRANCH_RENAME_REGEX, logger);
-    if (!command) {
+    const command = extractMatchingCommand(event, GIT_BRANCH_RENAME_TEXT_REGEX, logger);
+    if (!(command && containsGitBranchRenameCommand(command))) {
       return;
     }
 
