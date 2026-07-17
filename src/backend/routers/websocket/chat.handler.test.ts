@@ -8,11 +8,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { sessionEventBus } from '@/backend/services/session';
+import { SessionEventBus, sessionEventBus } from '@/backend/services/session';
 import { createChatUpgradeHandler } from './chat.handler';
-import { chatConnectionRegistry, detachChatTransportForTests } from './chat-connection-registry';
+import {
+  type ChatConnectionRegistry,
+  detachChatTransportForTests,
+  getChatConnectionRegistryForApplication,
+} from './chat-connection-registry';
 
 const allowedOrigin = 'http://localhost:3000';
+const testRegistries = new Set<ChatConnectionRegistry>();
+let chatConnectionRegistry: ChatConnectionRegistry;
 
 class MockWebSocket extends EventEmitter {
   readyState = WS_READY_STATE.OPEN;
@@ -29,7 +35,7 @@ function createLogger() {
   };
 }
 
-function createTestContext(worktreeBaseDir: string) {
+function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = sessionEventBus) {
   const logger = createLogger();
 
   const appContext = {
@@ -54,7 +60,7 @@ function createTestContext(worktreeBaseDir: string) {
         log: vi.fn(),
         closeSession: vi.fn(),
       },
-      sessionEventBus,
+      sessionEventBus: eventBus,
       sessionService: {
         getOrCreateClient: vi.fn(),
         getOrCreateSessionClient: vi.fn(async () => ({})),
@@ -66,6 +72,8 @@ function createTestContext(worktreeBaseDir: string) {
       },
     },
   } as unknown as AppContext;
+  chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
+  testRegistries.add(chatConnectionRegistry);
 
   return {
     appContext,
@@ -83,11 +91,13 @@ describe('createChatUpgradeHandler', () => {
 
   beforeEach(() => {
     tempRootDir = mkdtempSync(join(tmpdir(), 'chat-handler-test-'));
-    chatConnectionRegistry.clear();
   });
 
   afterEach(() => {
-    detachChatTransportForTests();
+    for (const registry of testRegistries) {
+      detachChatTransportForTests(registry);
+    }
+    testRegistries.clear();
     vi.restoreAllMocks();
   });
 
@@ -231,6 +241,75 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('keeps chat transport dependencies scoped to each application', () => {
+    const eventBusA = new SessionEventBus();
+    const eventBusB = new SessionEventBus();
+    const contextA = createTestContext(tempRootDir, eventBusA);
+    const contextB = createTestContext(tempRootDir, eventBusB);
+    const handlerA = createChatUpgradeHandler(contextA.appContext);
+    const handlerB = createChatUpgradeHandler(contextB.appContext);
+    const wsA = new MockWebSocket();
+    const wsB = new MockWebSocket();
+
+    const open = (
+      handler: ReturnType<typeof createChatUpgradeHandler>,
+      ws: MockWebSocket,
+      connectionId: string,
+      sessionId: string
+    ) => {
+      const wss = {
+        handleUpgrade: vi.fn(
+          (
+            _request: IncomingMessage,
+            _socket: Duplex,
+            _head: Buffer,
+            callback: (socket: WebSocket) => void
+          ) => callback(ws as unknown as WebSocket)
+        ),
+      } as unknown as WebSocketServer;
+      handler(
+        {
+          headers: { origin: allowedOrigin },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as unknown as IncomingMessage,
+        { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+        Buffer.alloc(0),
+        new URL(`http://localhost/chat?connectionId=${connectionId}&sessionId=${sessionId}`),
+        wss,
+        new WeakMap<WebSocket, boolean>()
+      );
+    };
+
+    open(handlerA, wsA, 'conn-a', 'session-a');
+    open(handlerB, wsB, 'conn-b', 'session-b');
+    wsA.send.mockClear();
+    wsB.send.mockClear();
+
+    eventBusB.publishToSession('session-b', {
+      type: 'session_delta',
+      data: {
+        type: 'assistant_text_delta',
+        messageId: 'message-b',
+        order: 1,
+        offset: 0,
+        text: 'from-b',
+      },
+    });
+
+    expect(wsB.send).toHaveBeenCalledTimes(1);
+    expect(wsA.send).not.toHaveBeenCalled();
+    expect(contextB.sessionFileLogger.log).toHaveBeenCalledWith(
+      'session-b',
+      'OUT_TO_CLIENT',
+      expect.objectContaining({ type: 'session_delta' })
+    );
+    expect(contextA.sessionFileLogger.log).not.toHaveBeenCalledWith(
+      'session-b',
+      'OUT_TO_CLIENT',
+      expect.anything()
+    );
   });
 
   it('clears in-memory state when the last viewer disconnects from a stopped session', () => {

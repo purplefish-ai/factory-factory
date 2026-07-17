@@ -11,11 +11,12 @@ import type {
 } from '@/backend/services/workspace-snapshot-store.service';
 import {
   createSnapshotsUpgradeHandler,
+  getSnapshotConnectionsForApplication,
   resetSnapshotsHandlerStateForTests,
-  snapshotConnections,
 } from './snapshots.handler';
 
 const allowedOrigin = 'http://localhost:3000';
+const testApplications = new Set<AppContext>();
 
 // ============================================================================
 // Mocks
@@ -61,8 +62,10 @@ const workspaceSnapshotStore = {
 // Helpers
 // ============================================================================
 
-function createAppContextMock(): AppContext {
-  return {
+function createAppContextMock(
+  overrides: { workspaceQueryService?: unknown; workspaceSnapshotStore?: unknown } = {}
+): AppContext {
+  const application = {
     services: {
       createLogger: vi.fn(() => ({
         debug: vi.fn(),
@@ -73,11 +76,11 @@ function createAppContextMock(): AppContext {
       configService: {
         getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
       },
-      workspaceQueryService: {
+      workspaceQueryService: overrides.workspaceQueryService ?? {
         getCachedReviewCount: mockGetCachedReviewCount,
         refreshReviewCountIfStale: mockRefreshReviewCountIfStale,
       },
-      workspaceSnapshotStore,
+      workspaceSnapshotStore: overrides.workspaceSnapshotStore ?? workspaceSnapshotStore,
     },
     lifecycle: {
       snapshotReconciliation: {
@@ -85,6 +88,8 @@ function createAppContextMock(): AppContext {
       },
     },
   } as unknown as AppContext;
+  testApplications.add(application);
+  return application;
 }
 
 function createWssMock(ws: MockWebSocket): WebSocketServer {
@@ -138,8 +143,10 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   afterEach(() => {
-    // Clean up connection map between tests
-    snapshotConnections.clear();
+    for (const application of testApplications) {
+      resetSnapshotsHandlerStateForTests(application);
+    }
+    testApplications.clear();
     resetSnapshotsHandlerStateForTests();
     storeListeners.clear();
     mockWaitForInProgress.mockImplementation(() => Promise.resolve());
@@ -288,6 +295,85 @@ describe('createSnapshotsUpgradeHandler', () => {
     );
     expect(wsB.send).not.toHaveBeenCalled();
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
+  });
+
+  it('keeps snapshot delta dependencies scoped to each application', async () => {
+    const listenersA = new Map<string, (event: unknown) => unknown>();
+    const listenersB = new Map<string, (event: unknown) => unknown>();
+    const createStore = (listeners: Map<string, (event: unknown) => unknown>) => ({
+      getByProjectId: vi.fn(() => [
+        {
+          workspaceId: 'baseline',
+          projectId: 'project',
+          name: 'Baseline',
+          status: 'READY',
+        },
+      ]),
+      on: vi.fn((event: string, listener: (event: unknown) => unknown) => {
+        listeners.set(event, listener);
+      }),
+      off: vi.fn(),
+    });
+    const queryA = {
+      getCachedReviewCount: vi.fn(() => 11),
+      refreshReviewCountIfStale: vi.fn(),
+    };
+    const queryB = {
+      getCachedReviewCount: vi.fn(() => 22),
+      refreshReviewCountIfStale: vi.fn(),
+    };
+    const handlerA = createSnapshotsUpgradeHandler(
+      createAppContextMock({
+        workspaceQueryService: queryA,
+        workspaceSnapshotStore: createStore(listenersA),
+      })
+    );
+    const handlerB = createSnapshotsUpgradeHandler(
+      createAppContextMock({
+        workspaceQueryService: queryB,
+        workspaceSnapshotStore: createStore(listenersB),
+      })
+    );
+    const wsA = new MockWebSocket();
+    const wsB = new MockWebSocket();
+
+    callHandler(handlerA, wsA, 'project-a');
+    callHandler(handlerB, wsB, 'project-b');
+    await waitForInitialSnapshot(wsA);
+    await waitForInitialSnapshot(wsB);
+    wsA.send.mockClear();
+    wsB.send.mockClear();
+    queryA.getCachedReviewCount.mockClear();
+    queryB.getCachedReviewCount.mockClear();
+
+    const changedListenerB = listenersB.get('snapshot_changed');
+    expect(changedListenerB).toBeDefined();
+    await changedListenerB!({
+      workspaceId: 'workspace-b',
+      projectId: 'project-b',
+      entry: {
+        workspaceId: 'workspace-b',
+        projectId: 'project-b',
+        name: 'B',
+        status: 'READY',
+      },
+    });
+
+    expect(wsB.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_changed',
+        workspaceId: 'workspace-b',
+        entry: {
+          workspaceId: 'workspace-b',
+          projectId: 'project-b',
+          name: 'B',
+          status: 'READY',
+        },
+        reviewCount: 22,
+      })
+    );
+    expect(wsA.send).not.toHaveBeenCalled();
+    expect(queryA.getCachedReviewCount).not.toHaveBeenCalled();
   });
 
   it('omits review count from snapshot_changed when cache is not populated', async () => {
@@ -590,35 +676,39 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   it('cleans up connection set on close', () => {
-    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const application = createAppContextMock();
+    const handler = createSnapshotsUpgradeHandler(application);
+    const connections = getSnapshotConnectionsForApplication(application);
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
 
-    expect(snapshotConnections.subscribers('proj-1').has(ws as unknown as WebSocket)).toBe(true);
+    expect(connections?.subscribers('proj-1').has(ws as unknown as WebSocket)).toBe(true);
 
     // Emit close event
     ws.emit('close');
 
     // Connection should be removed
-    expect(snapshotConnections.hasSubscribers('proj-1')).toBe(false);
+    expect(connections?.hasSubscribers('proj-1')).toBe(false);
   });
 
   it('retains project entry when other connections remain after close', () => {
-    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const application = createAppContextMock();
+    const handler = createSnapshotsUpgradeHandler(application);
+    const connections = getSnapshotConnectionsForApplication(application);
     const ws1 = new MockWebSocket();
     const ws2 = new MockWebSocket();
 
     callHandler(handler, ws1, 'proj-1');
     callHandler(handler, ws2, 'proj-1');
 
-    expect(snapshotConnections.subscriberCount('proj-1')).toBe(2);
+    expect(connections?.subscriberCount('proj-1')).toBe(2);
 
     // Close first connection
     ws1.emit('close');
 
     // Project entry should remain with one connection
-    expect(snapshotConnections.subscriberCount('proj-1')).toBe(1);
-    expect(snapshotConnections.subscribers('proj-1').has(ws2 as unknown as WebSocket)).toBe(true);
+    expect(connections?.subscriberCount('proj-1')).toBe(1);
+    expect(connections?.subscribers('proj-1').has(ws2 as unknown as WebSocket)).toBe(true);
   });
 });

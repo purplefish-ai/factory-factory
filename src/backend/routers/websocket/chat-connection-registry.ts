@@ -12,14 +12,13 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { ApplicationServices } from '@/backend/app-context';
+import type { Application, ApplicationServices } from '@/backend/app-context';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
 import {
   CHAT_BROADCAST_EVENT,
   type ChatBroadcastEvent,
   SESSION_OUTBOUND_EVENT,
-  type SessionEventBus,
   type SessionOutboundEvent,
 } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
@@ -167,68 +166,104 @@ export class ChatConnectionRegistry {
 }
 
 export const chatConnectionRegistry = new ChatConnectionRegistry();
+const applicationChatConnectionRegistries = new WeakMap<Application, ChatConnectionRegistry>();
+
+export function getChatConnectionRegistryForApplication(
+  application: Application
+): ChatConnectionRegistry {
+  const existing = applicationChatConnectionRegistries.get(application);
+  if (existing) {
+    return existing;
+  }
+  const registry = new ChatConnectionRegistry();
+  applicationChatConnectionRegistries.set(application, registry);
+  return registry;
+}
 
 // ============================================================================
 // Event Bus Wiring
 // ============================================================================
 
-let sessionOutboundListener: ((event: SessionOutboundEvent) => void) | null = null;
-let chatBroadcastListener: ((event: ChatBroadcastEvent) => void) | null = null;
-let attachedSessionEventBus: SessionEventBus | null = null;
+type ChatTransportDeps = Pick<
+  ApplicationServices,
+  'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+>;
+
+interface ChatTransportAttachment {
+  readonly deps: ChatTransportDeps;
+  readonly sessionOutboundListener: (event: SessionOutboundEvent) => void;
+  readonly chatBroadcastListener: (event: ChatBroadcastEvent) => void;
+}
+
+const chatTransportAttachments = new WeakMap<ChatConnectionRegistry, ChatTransportAttachment>();
+
+function detachChatTransport(registry: ChatConnectionRegistry): void {
+  const attachment = chatTransportAttachments.get(registry);
+  if (!attachment) {
+    registry.clear();
+    return;
+  }
+  const { sessionEventBus } = attachment.deps;
+  sessionEventBus.off(SESSION_OUTBOUND_EVENT, attachment.sessionOutboundListener);
+  sessionEventBus.off(CHAT_BROADCAST_EVENT, attachment.chatBroadcastListener);
+  sessionEventBus.registerViewerCountProvider(null);
+  chatTransportAttachments.delete(registry);
+  registry.clear();
+}
 
 /**
- * Subscribe the singleton registry to the session domain's outbound event bus
- * and register the viewer-count provider. Idempotent (first caller's
- * dependencies win); called during chat upgrade handler creation at server
- * startup.
+ * Subscribe a transport-owned registry to an application's session event bus
+ * and register the viewer-count provider. Repeated attachment with the same
+ * dependency identities is idempotent; a different graph is rebound safely.
  *
  * OUT_TO_CLIENT session file logging lives here rather than in the registry
  * so it uses the app context's `sessionFileLogger`; it records only payloads
  * that actually reached at least one client.
  */
 export function attachChatTransport(
-  deps: Pick<
-    ApplicationServices,
-    'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
-  >
+  deps: ChatTransportDeps,
+  registry: ChatConnectionRegistry = chatConnectionRegistry
 ): void {
-  if (sessionOutboundListener) {
+  const existing = chatTransportAttachments.get(registry);
+  if (
+    existing?.deps.configService === deps.configService &&
+    existing.deps.createLogger === deps.createLogger &&
+    existing.deps.sessionEventBus === deps.sessionEventBus &&
+    existing.deps.sessionFileLogger === deps.sessionFileLogger
+  ) {
     return;
   }
+  if (existing) {
+    detachChatTransport(registry);
+  }
   const { configService, createLogger, sessionEventBus, sessionFileLogger } = deps;
-  attachedSessionEventBus = sessionEventBus;
-  chatConnectionRegistry.configure({
+  registry.configure({
     logger: createLogger('chat-connection'),
     debugChatWebSocket: configService.getDebugConfig().chatWebSocket,
   });
 
-  sessionOutboundListener = (event: SessionOutboundEvent) => {
-    const sent = chatConnectionRegistry.broadcastToSession(event.sessionId, event.payload);
+  const sessionOutboundListener = (event: SessionOutboundEvent) => {
+    const sent = registry.broadcastToSession(event.sessionId, event.payload);
     if (sent > 0) {
       sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
     }
   };
-  chatBroadcastListener = (event: ChatBroadcastEvent) => {
-    chatConnectionRegistry.broadcastToAll(event.payload);
+  const chatBroadcastListener = (event: ChatBroadcastEvent) => {
+    registry.broadcastToAll(event.payload);
   };
 
   sessionEventBus.on(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
   sessionEventBus.on(CHAT_BROADCAST_EVENT, chatBroadcastListener);
-  sessionEventBus.registerViewerCountProvider((sessionId) =>
-    chatConnectionRegistry.countViewers(sessionId)
-  );
+  sessionEventBus.registerViewerCountProvider((sessionId) => registry.countViewers(sessionId));
+  chatTransportAttachments.set(registry, {
+    deps,
+    sessionOutboundListener,
+    chatBroadcastListener,
+  });
 }
 
-export function detachChatTransportForTests(): void {
-  if (sessionOutboundListener && attachedSessionEventBus) {
-    attachedSessionEventBus.off(SESSION_OUTBOUND_EVENT, sessionOutboundListener);
-    sessionOutboundListener = null;
-  }
-  if (chatBroadcastListener && attachedSessionEventBus) {
-    attachedSessionEventBus.off(CHAT_BROADCAST_EVENT, chatBroadcastListener);
-    chatBroadcastListener = null;
-  }
-  attachedSessionEventBus?.registerViewerCountProvider(null);
-  attachedSessionEventBus = null;
-  chatConnectionRegistry.clear();
+export function detachChatTransportForTests(
+  registry: ChatConnectionRegistry = chatConnectionRegistry
+): void {
+  detachChatTransport(registry);
 }

@@ -7,7 +7,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { AppContext, ApplicationServices } from '@/backend/app-context';
+import type { AppContext, Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import { safeSend } from '@/backend/lib/websocket-send';
@@ -156,7 +156,34 @@ class SnapshotStoreSubscriptionState {
   }
 }
 
-const defaultSnapshotStoreSubscriptionState = new SnapshotStoreSubscriptionState();
+interface SnapshotHandlerState {
+  readonly connections: TopicBroadcaster<string>;
+  readonly subscriptionState: SnapshotStoreSubscriptionState;
+}
+
+const applicationSnapshotHandlerStates = new WeakMap<Application, SnapshotHandlerState>();
+
+function getSnapshotHandlerState(
+  application: Application,
+  logger: ReturnType<ApplicationServices['createLogger']>
+): SnapshotHandlerState {
+  const existing = applicationSnapshotHandlerStates.get(application);
+  if (existing) {
+    return existing;
+  }
+  const state = {
+    connections: new TopicBroadcaster<string>(logger, 'snapshot message'),
+    subscriptionState: new SnapshotStoreSubscriptionState(),
+  };
+  applicationSnapshotHandlerStates.set(application, state);
+  return state;
+}
+
+export function getSnapshotConnectionsForApplication(
+  application: Application
+): TopicBroadcaster<string> | undefined {
+  return applicationSnapshotHandlerStates.get(application)?.connections;
+}
 
 function isHiddenWorkspaceStatus(status: WorkspaceStatus): boolean {
   return status === WorkspaceStatus.ARCHIVING || status === WorkspaceStatus.ARCHIVED;
@@ -178,9 +205,15 @@ function getSnapshotReviewCount(
   }
 }
 
-export function resetSnapshotsHandlerStateForTests(): void {
+export function resetSnapshotsHandlerStateForTests(application?: Application): void {
+  if (application) {
+    const state = applicationSnapshotHandlerStates.get(application);
+    state?.connections.clear();
+    state?.subscriptionState.reset();
+    applicationSnapshotHandlerStates.delete(application);
+    return;
+  }
   snapshotConnections.clear();
-  defaultSnapshotStoreSubscriptionState.reset();
 }
 
 // ============================================================================
@@ -199,8 +232,13 @@ export function createSnapshotsUpgradeHandler(
   const snapshotReconciliation = appContext.lifecycle.snapshotReconciliation;
   const services: SnapshotHandlerServices = { workspaceQueryService, workspaceSnapshotStore };
   broadcasterLogger = logger;
-  const connections = options.connections ?? snapshotConnections;
-  const subscriptionState = options.subscriptionState ?? defaultSnapshotStoreSubscriptionState;
+  const applicationState = getSnapshotHandlerState(appContext, logger);
+  const connections = options.connections ?? applicationState.connections;
+  const subscriptionState =
+    options.subscriptionState ??
+    (options.connections
+      ? new SnapshotStoreSubscriptionState()
+      : applicationState.subscriptionState);
 
   return createWebSocketUpgradeHandler({
     connectionName: 'snapshots WebSocket',
