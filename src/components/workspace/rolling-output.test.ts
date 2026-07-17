@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendToRollingOutput, trimRollingOutput } from './rolling-output';
+import { appendToRollingOutput, RollingOutputBuffer, trimRollingOutput } from './rolling-output';
 
 const options = {
   maxChars: 12,
@@ -41,5 +41,57 @@ describe('rolling output', () => {
         truncationMarker: '[cut]\n',
       })
     ).toBe('');
+  });
+});
+
+describe('RollingOutputBuffer', () => {
+  it('retains chunks without materializing a truncation marker below the cap', () => {
+    const buffer = new RollingOutputBuffer(options);
+
+    buffer.append('abc');
+    buffer.append('def');
+
+    expect(buffer.toString()).toBe('abcdef');
+  });
+
+  it('retains the newest body with exactly one marker across later appends', () => {
+    const buffer = new RollingOutputBuffer(options);
+
+    buffer.append('abcdef');
+    buffer.append('ghijklmnop');
+    expect(buffer.toString()).toBe('[cut]\nklmnop');
+
+    buffer.append('qrst');
+    expect(buffer.toString()).toBe('[cut]\nopqrst');
+  });
+
+  it('bounds a single oversized chunk without retaining its discarded prefix', () => {
+    const buffer = new RollingOutputBuffer(options);
+
+    buffer.append('abcdefghijklmnop');
+
+    expect(buffer.toString()).toBe('[cut]\nklmnop');
+  });
+
+  it('bounds the marker itself when it consumes the entire capacity', () => {
+    const buffer = new RollingOutputBuffer({
+      maxChars: 4,
+      truncationMarker: '[cut]\n',
+    });
+
+    buffer.append('abcdef');
+
+    expect(buffer.toString()).toBe('[cut');
+  });
+
+  it('retains no chunks when capacity is non-positive', () => {
+    const buffer = new RollingOutputBuffer({
+      maxChars: 0,
+      truncationMarker: '[cut]\n',
+    });
+
+    buffer.append('abcdef');
+
+    expect(buffer.toString()).toBe('');
   });
 });
