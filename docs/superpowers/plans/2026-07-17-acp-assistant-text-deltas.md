@@ -142,7 +142,7 @@ type AcpTextStreamState = {
 };
 ```
 
-Persist full `accText` on every chunk. Buffer only the incoming chunk for live emission. Schedule one timer per pending buffer, and synchronously flush before clearing a block. Ignore empty text chunks.
+Persist full `accText` on every chunk. Buffer only the incoming chunk for live emission. When the first chunk starts a pending buffer (`pendingText` is empty), set `pendingOffset` to the current `accText.length` before appending the chunk; leave `pendingOffset` unchanged for subsequent buffered chunks. Schedule one timer per pending buffer, and synchronously flush before clearing a block. Ignore empty text chunks.
 
 - [ ] **Step 5: Close text blocks at every lifecycle boundary**
 
