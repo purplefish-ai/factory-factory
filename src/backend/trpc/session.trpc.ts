@@ -2,7 +2,6 @@ import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
-import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { SessionStatus } from '@/shared/core';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -98,12 +97,12 @@ export const sessionRouter = router({
   // Quick Actions
 
   // List all available quick actions
-  listQuickActions: publicProcedure.query(() => listQuickActions()),
+  listQuickActions: publicProcedure.query(({ ctx }) => ctx.appContext.services.listQuickActions()),
 
   // Get a specific quick action by ID
   getQuickAction: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ input }) => getQuickAction(input.id)),
+    .query(({ ctx, input }) => ctx.appContext.services.getQuickAction(input.id)),
 
   // Sessions
 

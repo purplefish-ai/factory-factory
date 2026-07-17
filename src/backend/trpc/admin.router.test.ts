@@ -47,10 +47,6 @@ vi.mock('./log-file-reader', () => ({
   readFilteredLogEntriesPage: (...args: unknown[]) => mockReadFilteredLogEntriesPage(...args),
 }));
 
-vi.mock('@/backend/services/logger.service', () => ({
-  getLogFilePath: (...args: unknown[]) => mockGetLogFilePath(...args),
-}));
-
 import { adminRouter } from './admin.trpc';
 
 function createCaller() {
@@ -161,6 +157,7 @@ function createCaller() {
           findByIdsWithProject: mockFindWorkspacesByIdsWithProject,
         },
         createLogger: () => logger,
+        getLogFilePath: (...args: unknown[]) => mockGetLogFilePath(...args),
       },
     },
   } as never);

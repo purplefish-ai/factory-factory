@@ -31,6 +31,7 @@ import {
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
+import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { autoIterationService, insightsService, logbookService } from './services/auto-iteration';
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
@@ -38,7 +39,7 @@ import { FactoryConfigService } from './services/factory-config.service';
 import { gitCloneService } from './services/git-clone.service';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
 import { linearClientService } from './services/linear';
-import { createLogger } from './services/logger.service';
+import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskAccessor, periodicTaskService } from './services/periodic-task';
 import { findAvailablePort } from './services/port.service';
 import { fixerSessionService, ratchetService } from './services/ratchet';
@@ -100,10 +101,13 @@ export type ApplicationServices = BridgeServices & {
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;
   gitCloneService: typeof gitCloneService;
+  getLogFilePath: typeof getLogFilePath;
+  getQuickAction: typeof getQuickAction;
   healthService: typeof healthService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   insightsService: typeof insightsService;
   linearClientService: typeof linearClientService;
+  listQuickActions: typeof listQuickActions;
   periodicTaskAccessor: typeof periodicTaskAccessor;
   projectManagementService: typeof projectManagementService;
   rateLimiter: typeof rateLimiter;
@@ -125,7 +129,7 @@ export type ApplicationServices = BridgeServices & {
   createChildWorkspace: typeof createChildWorkspace;
   createWorkspaceCreationService: (
     dependencies: ConstructorParameters<typeof WorkspaceCreationService>[0]
-  ) => WorkspaceCreationService;
+  ) => Pick<WorkspaceCreationService, 'create'>;
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -182,6 +186,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       factoryConfigService: FactoryConfigService,
       findAvailablePort,
       gitCloneService,
+      getLogFilePath,
+      getQuickAction,
       healthService,
       initializeWorkspaceWorktree,
       insightsService,
@@ -191,6 +197,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       kanbanStateService,
       logbookService,
       linearClientService,
+      listQuickActions,
       periodicTaskAccessor,
       periodicTaskService,
       projectManagementService,

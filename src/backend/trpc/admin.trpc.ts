@@ -8,7 +8,6 @@ import { open } from 'node:fs/promises';
 import type { DecisionLog } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { getLogFilePath } from '@/backend/services/logger.service';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
 import { readFilteredLogEntriesPage } from './log-file-reader';
@@ -301,8 +300,8 @@ export const adminRouter = router({
         offset: z.number().min(0).default(0),
       })
     )
-    .query(async ({ input }) => {
-      const filePath = getLogFilePath();
+    .query(async ({ ctx, input }) => {
+      const filePath = ctx.appContext.services.getLogFilePath();
 
       const filter = {
         level: input.level,
@@ -331,8 +330,8 @@ export const adminRouter = router({
   /**
    * Download the raw log file content.
    */
-  downloadLogFile: publicProcedure.query(async () => {
-    const filePath = getLogFilePath();
+  downloadLogFile: publicProcedure.query(async ({ ctx }) => {
+    const filePath = ctx.appContext.services.getLogFilePath();
     const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
     try {
       const fh = await open(filePath, 'r');

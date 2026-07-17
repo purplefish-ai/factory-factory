@@ -1,5 +1,10 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  type AppContext,
+  type ApplicationServices,
+  createDefaultApplicationDependencies,
+} from '@/backend/app-context';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
@@ -48,11 +53,15 @@ const mockTryDispatchNextMessage = vi.hoisted(() => vi.fn());
 const mockPersistChildNotification = vi.hoisted(() => vi.fn());
 const mockPersistParentNotification = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', () => ({
-  deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
-  computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
-  computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
-}));
+vi.mock('@/backend/services/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
+  return {
+    ...actual,
+    deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
+    computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
+    computePendingRequestType: (...args: unknown[]) => mockComputePendingRequestType(...args),
+  };
+});
 
 vi.mock('@/backend/lib/session-summaries', () => ({
   buildWorkspaceSessionSummaries: (...args: unknown[]) => mockBuildSessionSummaries(...args),
@@ -93,6 +102,7 @@ function createCaller(requestTrust?: {
   origin?: string;
   isLocal: boolean;
 }) {
+  const defaults = createDefaultApplicationDependencies();
   const sessionService = {
     stopWorkspaceSessions: vi.fn(async () => undefined),
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
@@ -116,80 +126,121 @@ function createCaller(requestTrust?: {
       })
     ),
   };
+  const logger = Object.assign(defaults.services.createLogger('workspace-router-test'), {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  });
+  const composedSessionService = Object.assign(
+    {},
+    defaults.services.sessionService,
+    sessionService
+  );
+  const composedRunScriptService = Object.assign(
+    {},
+    defaults.services.runScriptService,
+    runScriptService
+  );
+  const composedTerminalService = Object.assign(
+    {},
+    defaults.services.terminalService,
+    terminalService
+  );
 
-  const caller = workspaceRouter.createCaller({
-    requestTrust,
-    appContext: {
-      services: {
-        configService: {
-          getWorktreeBaseDir: () => '/tmp/worktrees',
-          getMaxSessionsPerWorkspace: () => 2,
-          getCorsConfig: () => ({
-            allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
-          }),
-        },
-        cliHealthService,
-        createLogger: () => ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }),
-        sessionService,
-        sessionDataService: {
-          createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
-          findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
-            mockFindSessionsByWorkspaceId(...args),
-        },
-        sessionDomainService: {
-          getAllPendingRequests: () => new Map(),
-          appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
-          emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
-          enqueue: (...args: unknown[]) => mockEnqueue(...args),
-          hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
-        },
-        sessionProviderResolverService: {
-          resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
-            mockResolveProviderForWorkspaceCreation(explicitProvider),
-        },
-        chatMessageHandlerService: {
-          tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
-        },
-        workspaceDataService: mockWorkspaceDataService,
-        workspaceQueryService: mockWorkspaceQueryService,
-        workspaceAccessor: {
-          findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-          findChildrenWithStatus: vi.fn(async () => []),
-          findParentWorkspace: vi.fn(async () => null),
-        },
-        workspaceActivityService: {
-          clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
-        },
-        workspaceNotificationAccessor: { countPending: vi.fn(async () => 0) },
-        ratchetService: {
-          setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
-          checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
-        },
-        prSnapshotService: { attachAndRefreshPR: vi.fn() },
-        archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
-        cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
-          mockCleanupWorkspaceRuntimeResources(...args),
-        initializeWorkspaceWorktree: (...args: unknown[]) =>
-          mockInitializeWorkspaceWorktree(...args),
-        createWorkspaceCreationService: () => ({
-          create: (...args: unknown[]) => mockWorkspaceCreationCreate(...args),
-        }),
-        createChildWorkspace: vi.fn(),
-        fireLifecycleNotification: vi.fn(),
-        persistChildNotification: (...args: unknown[]) => mockPersistChildNotification(...args),
-        persistParentNotification: (...args: unknown[]) => mockPersistParentNotification(...args),
-        runScriptService,
-        terminalService,
-      },
-    },
-  } as never);
+  const services = {
+    ...defaults.services,
+    configService: Object.assign({}, defaults.services.configService, {
+      getWorktreeBaseDir: () => '/tmp/worktrees',
+      getMaxSessionsPerWorkspace: () => 2,
+      getCorsConfig: () => ({
+        allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
+      }),
+    }),
+    cliHealthService: Object.assign({}, defaults.services.cliHealthService, cliHealthService),
+    createLogger: () => logger,
+    sessionService: composedSessionService,
+    sessionDataService: Object.assign({}, defaults.services.sessionDataService, {
+      createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
+      findAgentSessionsByWorkspaceId: (...args: unknown[]) =>
+        mockFindSessionsByWorkspaceId(...args),
+    }),
+    sessionDomainService: Object.assign({}, defaults.services.sessionDomainService, {
+      getAllPendingRequests: () => new Map(),
+      appendClaudeEvent: (...args: unknown[]) => mockAppendClaudeEvent(...args),
+      emitDelta: (...args: unknown[]) => mockEmitDelta(...args),
+      enqueue: (...args: unknown[]) => mockEnqueue(...args),
+      hasQueuedMessage: (...args: unknown[]) => mockHasQueuedMessage(...args),
+    }),
+    sessionProviderResolverService: Object.assign(
+      {},
+      defaults.services.sessionProviderResolverService,
+      {
+        resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
+          mockResolveProviderForWorkspaceCreation(explicitProvider),
+      }
+    ),
+    chatMessageHandlerService: Object.assign({}, defaults.services.chatMessageHandlerService, {
+      tryDispatchNextMessage: (...args: unknown[]) => mockTryDispatchNextMessage(...args),
+    }),
+    workspaceDataService: Object.assign(
+      {},
+      defaults.services.workspaceDataService,
+      mockWorkspaceDataService
+    ),
+    workspaceQueryService: Object.assign(
+      {},
+      defaults.services.workspaceQueryService,
+      mockWorkspaceQueryService
+    ),
+    workspaceAccessor: Object.assign({}, defaults.services.workspaceAccessor, {
+      findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
+      findChildrenWithStatus: vi.fn(async () => []),
+      findParentWorkspace: vi.fn(async () => null),
+    }),
+    workspaceActivityService: Object.assign({}, defaults.services.workspaceActivityService, {
+      clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
+    }),
+    workspaceNotificationAccessor: Object.assign(
+      {},
+      defaults.services.workspaceNotificationAccessor,
+      { countPending: vi.fn(async () => 0) }
+    ),
+    ratchetService: Object.assign({}, defaults.services.ratchetService, {
+      setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
+      checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
+    }),
+    prSnapshotService: Object.assign({}, defaults.services.prSnapshotService, {
+      attachAndRefreshPR: vi.fn(),
+    }),
+    archiveWorkspace: (...args) => mockArchiveWorkspace(...args),
+    cleanupWorkspaceRuntimeResources: (...args) => mockCleanupWorkspaceRuntimeResources(...args),
+    initializeWorkspaceWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
+    createWorkspaceCreationService: () => ({
+      create: (...args) => mockWorkspaceCreationCreate(...args),
+    }),
+    createChildWorkspace: vi.fn(),
+    fireLifecycleNotification: vi.fn(),
+    persistChildNotification: (...args) => mockPersistChildNotification(...args),
+    persistParentNotification: (...args) => mockPersistParentNotification(...args),
+    runScriptService: composedRunScriptService,
+    terminalService: composedTerminalService,
+  } satisfies ApplicationServices;
+  const appContext = {
+    services,
+    lifecycle: defaults.lifecycle,
+    config: defaults.services.configService.getSystemConfig(),
+  } satisfies AppContext;
 
-  return { caller, sessionService, runScriptService, terminalService, cliHealthService };
+  const caller = workspaceRouter.createCaller({ requestTrust, appContext });
+
+  return {
+    caller,
+    sessionService: composedSessionService,
+    runScriptService: composedRunScriptService,
+    terminalService: composedTerminalService,
+    cliHealthService,
+  };
 }
 
 describe('workspaceRouter', () => {
