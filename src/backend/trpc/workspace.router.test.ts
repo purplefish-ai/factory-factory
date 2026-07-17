@@ -26,6 +26,7 @@ const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
+const mockCleanupWorkspaceScopedCaches = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
@@ -112,6 +113,10 @@ vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
   archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
   cleanupWorkspaceRuntimeResources: (...args: unknown[]) =>
     mockCleanupWorkspaceRuntimeResources(...args),
+}));
+
+vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
+  cleanupWorkspaceScopedCaches: (...args: unknown[]) => mockCleanupWorkspaceScopedCaches(...args),
 }));
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
@@ -640,7 +645,11 @@ describe('workspaceRouter', () => {
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
-    expect(mockClearWorkspaceActivity).toHaveBeenCalledWith('w1');
+    expect(mockCleanupWorkspaceScopedCaches).toHaveBeenCalledWith('w1');
+    const cacheCleanupCallOrder = mockCleanupWorkspaceScopedCaches.mock.invocationCallOrder[0];
+    expect(deleteCallOrder).toBeDefined();
+    expect(cacheCleanupCallOrder).toBeDefined();
+    expect(cacheCleanupCallOrder!).toBeGreaterThan(deleteCallOrder!);
 
     await expect(caller.refreshFactoryConfigs({ projectId: 'p1' })).resolves.toEqual({
       refreshed: 3,
@@ -665,6 +674,15 @@ describe('workspaceRouter', () => {
     expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not clean workspace caches when database deletion fails', async () => {
+    mockWorkspaceDataService.delete.mockRejectedValue(new Error('database delete failed'));
+    const { caller } = createCaller();
+
+    await expect(caller.delete({ id: 'w1' })).rejects.toThrow('database delete failed');
+
+    expect(mockCleanupWorkspaceScopedCaches).not.toHaveBeenCalled();
   });
 
   it('does not delete when workspace session cleanup throws', async () => {

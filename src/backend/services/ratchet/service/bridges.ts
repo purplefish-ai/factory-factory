@@ -130,9 +130,9 @@ export interface RatchetGitHubBridge {
   /** True only while another service's PR fetch is actively in flight for this workspace. */
   isFetchInFlight(workspaceId: string): boolean;
   /** Claim this workspace as in-flight before starting an async fetch (dedup optimization). */
-  startFetch(workspaceId: string): void;
+  startFetch(workspaceId: string): number;
   /** Record that a PR fetch completed successfully for this workspace (dedup optimization). */
-  registerFetch(workspaceId: string): void;
+  registerFetch(workspaceId: string, claimToken: number): void;
   /** Release an in-flight claim without recording a successful fetch (call on failure). */
-  cancelFetch(workspaceId: string): void;
+  cancelFetch(workspaceId: string, claimToken: number): void;
 }

@@ -34,6 +34,9 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/services/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
+  prFetchRegistry: {
+    removeWorkspace: vi.fn(),
+  },
   prSnapshotService: {
     on: vi.fn(),
     refreshWorkspace: vi.fn().mockResolvedValue({ success: false, reason: 'no_pr_url' }),
@@ -102,7 +105,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { prSnapshotService } from '@/backend/services/github';
+import { prFetchRegistry, prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import { runScriptStateMachine } from '@/backend/services/run-script';
 import {
@@ -309,6 +312,18 @@ describe('EventCoalescer', () => {
     );
     expect(coalescer.pendingCount).toBe(0);
   });
+
+  it('cancels a pending update for an archived workspace', () => {
+    const coalescer = new EventCoalescer(mockStore, 150);
+
+    coalescer.enqueue('ws-1', { isWorking: true }, 'test');
+    coalescer.removeWorkspace('ws-1');
+    vi.advanceTimersByTime(150);
+
+    expect(mockStore.remove).toHaveBeenCalledWith('ws-1');
+    expect(mockStore.upsert).not.toHaveBeenCalled();
+    expect(coalescer.pendingCount).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -499,8 +514,15 @@ describe('configureEventCollector', () => {
     expect(sessionDomainService.off).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
-  it('ARCHIVED workspace event removes snapshot and cleans up workspace resources immediately', async () => {
+  it('ARCHIVED workspace event evicts all scoped caches and cleans up resources immediately', async () => {
     configureEventCollector();
+
+    const idleCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const idleHandler = idleCall![1] as (event: { workspaceId: string }) => void;
+    idleHandler({ workspaceId: 'ws-archived' });
+    vi.mocked(workspaceSnapshotStore.upsert).mockClear();
 
     // Get the workspace state changed handler
     const onCall = vi
@@ -518,9 +540,13 @@ describe('configureEventCollector', () => {
     // store.remove() called immediately, not through coalescer
     expect(workspaceSnapshotStore.remove).toHaveBeenCalledWith('ws-archived');
     expect(workspaceActivityService.clearWorkspace).toHaveBeenCalledWith('ws-archived');
+    expect(prFetchRegistry.removeWorkspace).toHaveBeenCalledWith('ws-archived');
     expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-archived');
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
+
+    idleHandler({ workspaceId: 'ws-archived' });
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(2);
   });
 
   it('non-ARCHIVED workspace event is applied immediately', () => {
@@ -1062,6 +1088,40 @@ describe('configureEventCollector', () => {
     );
     expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('suppresses idle PR refresh before 30 seconds and allows it at the boundary', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+    vi.advanceTimersByTime(29_999);
+    handler({ workspaceId: 'ws-1' });
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    handler({ workspaceId: 'ws-1' });
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds idle refresh timestamps and evicts the oldest workspace at capacity', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    for (let index = 0; index <= 1024; index += 1) {
+      handler({ workspaceId: `ws-${index}` });
+    }
+    handler({ workspaceId: 'ws-0' });
+
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledTimes(1026);
   });
 
   it('workspace active transition performs one session summary query', () => {

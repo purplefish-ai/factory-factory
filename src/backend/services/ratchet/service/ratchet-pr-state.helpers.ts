@@ -371,11 +371,12 @@ export async function fetchPRState(params: {
     return { skipped: true, reason: 'recently_fetched' };
   }
 
+  let claimToken: number | undefined;
   try {
     // Claim this workspace as in-flight before the async fetch so concurrent
     // scheduler/ratchet calls see it and skip redundant fetches.
     signal?.throwIfAborted();
-    github.startFetch(workspace.id);
+    claimToken = github.startFetch(workspace.id);
 
     const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
       github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
@@ -461,7 +462,7 @@ export async function fetchPRState(params: {
 
     // Record successful fetch completion so the dedup registry tracks this workspace.
     signal?.throwIfAborted();
-    github.registerFetch(workspace.id);
+    github.registerFetch(workspace.id, claimToken);
 
     return {
       ciStatus,
@@ -476,7 +477,9 @@ export async function fetchPRState(params: {
     };
   } catch (error) {
     // Release the in-flight claim so the workspace is eligible for a future retry.
-    github.cancelFetch(workspace.id);
+    if (claimToken !== undefined) {
+      github.cancelFetch(workspace.id, claimToken);
+    }
     signal?.throwIfAborted();
     backoff.handleError(
       error,

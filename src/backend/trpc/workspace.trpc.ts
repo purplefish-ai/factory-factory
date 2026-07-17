@@ -7,6 +7,7 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import { cleanupWorkspaceScopedCaches } from '@/backend/orchestration/event-collector.orchestrator';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
@@ -35,7 +36,6 @@ import {
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceAccessor,
-  workspaceActivityService,
   workspaceDataService,
   workspaceNotificationAccessor,
   workspaceQueryService,
@@ -468,8 +468,9 @@ export const workspaceRouter = router({
     // Clean up running sessions, terminals, and dev processes before deleting
     await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
-    workspaceActivityService.clearWorkspace(input.id);
-    return workspaceDataService.delete(input.id);
+    const result = await workspaceDataService.delete(input.id);
+    cleanupWorkspaceScopedCaches(input.id);
+    return result;
   }),
 
   // Refresh factory-factory.json configuration for all workspaces
