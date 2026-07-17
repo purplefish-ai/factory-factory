@@ -7,6 +7,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
 
+const mocks = vi.hoisted(() => ({
+  updateSettingsMutate: vi.fn(),
+  testCustomCommandMutate: vi.fn(),
+  userSettings: {
+    playSoundOnComplete: true,
+    preferredIde: 'cursor' as 'cursor' | 'vscode' | 'custom',
+    customIdeCommand: null as string | null,
+    defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'sonnet',
+    defaultCodexModel: 'default',
+    defaultClaudeReasoningEffort: null,
+    defaultCodexReasoningEffort: null,
+    defaultWorkspacePermissions: 'STRICT',
+    ratchetEnabled: false,
+    ratchetReplyToPrComments: true,
+    ratchetPermissions: 'YOLO',
+  },
+}));
+
 vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) =>
     createElement('a', { href: to }, children),
@@ -78,20 +97,6 @@ vi.mock('./admin/index', () => ({
 
 vi.mock('@/client/lib/trpc', () => {
   const mutation = { mutate: vi.fn(), isPending: false, error: null };
-  const userSettings = {
-    playSoundOnComplete: true,
-    preferredIde: 'cursor',
-    customIdeCommand: null,
-    defaultSessionProvider: 'CLAUDE',
-    defaultClaudeModel: 'sonnet',
-    defaultCodexModel: 'default',
-    defaultClaudeReasoningEffort: null,
-    defaultCodexReasoningEffort: null,
-    defaultWorkspacePermissions: 'STRICT',
-    ratchetEnabled: false,
-    ratchetReplyToPrComments: true,
-    ratchetPermissions: 'YOLO',
-  };
   const projects = [
     {
       id: 'project-1',
@@ -122,7 +127,7 @@ vi.mock('@/client/lib/trpc', () => {
         },
       }),
       userSettings: {
-        get: { useQuery: () => ({ data: userSettings, isLoading: false }) },
+        get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
         getProviderOptions: {
           useQuery: () => ({
             data: {
@@ -139,8 +144,20 @@ vi.mock('@/client/lib/trpc', () => {
             },
           }),
         },
-        update: { useMutation: () => mutation },
-        testCustomCommand: { useMutation: () => mutation },
+        update: {
+          useMutation: () => ({
+            mutate: mocks.updateSettingsMutate,
+            isPending: false,
+            error: null,
+          }),
+        },
+        testCustomCommand: {
+          useMutation: () => ({
+            mutate: mocks.testCustomCommandMutate,
+            isPending: false,
+            error: null,
+          }),
+        },
       },
       admin: {
         getServerInfo: { useQuery: () => ({ data: { backendPort: 3001 }, isLoading: false }) },
@@ -198,6 +215,10 @@ function createStorageStub(): Storage {
 }
 
 beforeEach(() => {
+  mocks.updateSettingsMutate.mockReset();
+  mocks.testCustomCommandMutate.mockReset();
+  mocks.userSettings.preferredIde = 'cursor';
+  mocks.userSettings.customIdeCommand = null;
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
     writable: true,
@@ -212,6 +233,46 @@ afterEach(() => {
 });
 
 describe('AdminDashboardPage settings tabs', () => {
+  it('tests the current custom command before it has been saved', () => {
+    mocks.userSettings.preferredIde = 'custom';
+    mocks.userSettings.customIdeCommand = null;
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    const input = container.querySelector<HTMLInputElement>('#custom-command');
+    const testButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Test'
+    );
+    const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+
+    expect(input).not.toBeNull();
+    expect(testButton).toBeDefined();
+    expect(testButton?.disabled).toBe(true);
+
+    flushSync(() => {
+      setInputValue?.call(input, 'code-insiders {workspace}');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(testButton?.disabled).toBe(false);
+
+    flushSync(() => {
+      testButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.testCustomCommandMutate).toHaveBeenCalledWith({
+      customCommand: 'code-insiders {workspace}',
+    });
+
+    root.unmount();
+  });
+
   it('separates general and project settings into top tabs', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

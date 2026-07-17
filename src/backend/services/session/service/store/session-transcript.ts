@@ -176,20 +176,51 @@ export function setNextOrderFromTranscript(store: SessionStore): void {
   store.nextOrder = maxOrder + 1;
 }
 
+function hasMatchingToolResult(message: AgentMessage, toolUseId: string): boolean {
+  const content = message.message?.content;
+  if (
+    Array.isArray(content) &&
+    content.some((item) => item.type === 'tool_result' && item.tool_use_id === toolUseId)
+  ) {
+    return true;
+  }
+
+  return (
+    message.type === 'stream_event' &&
+    message.event?.type === 'content_block_start' &&
+    message.event.content_block.type === 'tool_result' &&
+    message.event.content_block.tool_use_id === toolUseId
+  );
+}
+
 function findPersistedToolUseStart(
   store: SessionStore,
   toolUseId: string
 ): ChatMessage | undefined {
-  return store.transcript.find((entry) => {
-    if (entry.source !== 'agent' || !entry.message || entry.message.type !== 'stream_event') {
-      return false;
+  for (let index = store.transcript.length - 1; index >= 0; index -= 1) {
+    const entry = store.transcript[index];
+    if (!entry || entry.source !== 'agent' || !entry.message) {
+      continue;
     }
+
+    if (hasMatchingToolResult(entry.message, toolUseId)) {
+      return undefined;
+    }
+
+    if (entry.message.type !== 'stream_event') {
+      continue;
+    }
+
     const event = entry.message.event;
     if (!event || event.type !== 'content_block_start') {
-      return false;
+      continue;
     }
-    return event.content_block.type === 'tool_use' && event.content_block.id === toolUseId;
-  });
+    if (event.content_block.type === 'tool_use' && event.content_block.id === toolUseId) {
+      return entry;
+    }
+  }
+
+  return undefined;
 }
 
 export function appendClaudeEvent(

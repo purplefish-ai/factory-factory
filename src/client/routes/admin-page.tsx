@@ -389,12 +389,11 @@ function IdeSettingsSection() {
   };
 
   const handleTestCommand = () => {
-    const command = settings?.customIdeCommand;
-    if (!command) {
+    if (!localCustomCommand) {
       toast.error('Please enter a custom command first');
       return;
     }
-    testCommand.mutate({ customCommand: command });
+    testCommand.mutate({ customCommand: localCustomCommand });
   };
 
   if (isLoading) {
@@ -452,7 +451,7 @@ function IdeSettingsSection() {
               <Button
                 variant="outline"
                 onClick={handleTestCommand}
-                disabled={testCommand.isPending || !settings?.customIdeCommand}
+                disabled={testCommand.isPending || !localCustomCommand}
               >
                 {testCommand.isPending ? 'Testing...' : 'Test'}
               </Button>
