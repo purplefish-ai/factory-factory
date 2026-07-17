@@ -117,7 +117,6 @@ describe('tRPC context dependencies', () => {
         'src/backend/trpc/index.ts',
         'src/backend/trpc/issue-filter.ts',
         'src/backend/trpc/log-file-reader.ts',
-        'src/backend/trpc/procedures/project-scoped.ts',
         'src/backend/trpc/trpc.ts',
       ])
     );
