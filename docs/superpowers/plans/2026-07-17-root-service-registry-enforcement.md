@@ -22,6 +22,7 @@
 
 **Files:**
 - Create: `src/backend/services/service-registry-check.test.ts`
+- Create: `src/backend/services/service-registry-check.helpers.ts`
 - Modify: `src/backend/services/registry.ts`
 - Modify: `scripts/check-service-registry.ts`
 
@@ -32,29 +33,34 @@
 - [ ] **Step 1: Write the failing unclassified-root test**
 
 ```ts
-import { spawnSync } from 'node:child_process';
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { getInfrastructureServiceClassificationErrors } from './service-registry-check.helpers';
+import { infrastructureServiceRegistry } from './registry';
 
 describe('check-service-registry root infrastructure classification', () => {
-  const unclassifiedPath = path.join(
-    process.cwd(),
-    'src/backend/services/unclassified-registry-test.service.ts'
-  );
+  let servicesRoot: string;
 
-  afterEach(() => rmSync(unclassifiedPath, { force: true }));
+  beforeEach(() => {
+    servicesRoot = mkdtempSync(path.join(tmpdir(), 'ff-service-registry-'));
+    for (const { fileName } of Object.values(infrastructureServiceRegistry)) {
+      writeFileSync(path.join(servicesRoot, fileName), 'export {};\n');
+    }
+  });
+
+  afterEach(() => rmSync(servicesRoot, { recursive: true, force: true }));
 
   it('rejects a root service that is not explicitly registered as infrastructure', () => {
-    writeFileSync(unclassifiedPath, 'export const marker = true;\n');
-    const result = spawnSync('pnpm', ['check:service-registry'], {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    });
+    writeFileSync(path.join(servicesRoot, 'unclassified.service.ts'), 'export {};\n');
+    const errors = getInfrastructureServiceClassificationErrors(
+      servicesRoot,
+      infrastructureServiceRegistry
+    );
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain(
-      'unclassified-registry-test.service.ts is a root service that is not registered as infrastructure'
+    expect(errors).toContain(
+      'unclassified.service.ts is a root service that is not registered as infrastructure. Move it into its owning service capsule or add an intentional entry to infrastructureServiceRegistry.'
     );
   });
 });
@@ -64,7 +70,7 @@ describe('check-service-registry root infrastructure classification', () => {
 
 Run: `pnpm vitest run src/backend/services/service-registry-check.test.ts`
 
-Expected: FAIL because the current checker exits 0 for the temporary root service.
+Expected: FAIL because the current classification logic returns no error for the temporary root service.
 
 - [ ] **Step 3: Add the explicit registry and bidirectional validation**
 

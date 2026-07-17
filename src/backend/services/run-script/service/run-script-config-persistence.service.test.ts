@@ -19,9 +19,9 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 vi.mock('@/backend/services/workspace', () => ({
   projectAccessor: { findById: mockFindProjectById },
-  workspaceAccessor: {
+  workspaceDataService: {
     findByProjectId: mockFindWorkspacesByProjectId,
-    update: mockUpdateWorkspace,
+    setRunScriptCommands: mockUpdateWorkspace,
   },
 }));
 
@@ -172,14 +172,10 @@ describe('runScriptConfigPersistenceService', () => {
       totalWorkspaces: 3,
       errors: [{ workspaceId: 'w2', error: expect.stringContaining('Invalid JSON') }],
     });
-    expect(mockUpdateWorkspace).toHaveBeenCalledWith('w1', {
-      runScriptCommand: 'pnpm dev',
-      runScriptPostRunCommand: null,
-      runScriptCleanupCommand: null,
-    });
+    expect(mockUpdateWorkspace).toHaveBeenCalledWith('w1', 'pnpm dev', null, null);
   });
 
-  it('reads project factory config and handles read errors', async () => {
+  it('reads project factory config and returns null when the file is missing', async () => {
     mockFindProjectById.mockResolvedValueOnce(null);
     await expect(runScriptConfigPersistenceService.getFactoryConfig('missing')).rejects.toThrow(
       'Project not found'
@@ -197,5 +193,14 @@ describe('runScriptConfigPersistenceService', () => {
 
     mockFindProjectById.mockResolvedValueOnce({ id: 'p1', repoPath: join(repoDir, 'missing') });
     await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).resolves.toBeNull();
+  });
+
+  it('surfaces malformed project factory config errors', async () => {
+    mockFindProjectById.mockResolvedValue({ id: 'p1', repoPath: repoDir });
+    writeFileSync(join(repoDir, 'factory-factory.json'), '{invalid', 'utf8');
+
+    await expect(runScriptConfigPersistenceService.getFactoryConfig('p1')).rejects.toThrow(
+      'Invalid JSON'
+    );
   });
 });

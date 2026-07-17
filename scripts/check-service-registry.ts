@@ -8,6 +8,7 @@ import {
   type ServiceName,
   serviceRegistry,
 } from '../src/backend/services/registry';
+import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
 
 const rootDir = process.cwd();
 const servicesRoot = path.join(rootDir, 'src/backend/services');
@@ -161,28 +162,9 @@ function isRegisteredServiceName(serviceName: string): serviceName is ServiceNam
 }
 
 function checkInfrastructureServiceClassification(errors: string[]): void {
-  const rootServiceFileNames = new Set(
-    readdirSync(servicesRoot, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.service.ts'))
-      .map((entry) => entry.name)
+  errors.push(
+    ...getInfrastructureServiceClassificationErrors(servicesRoot, infrastructureServiceRegistry)
   );
-
-  for (const fileName of rootServiceFileNames) {
-    const serviceName = fileName.replace(/\.ts$/u, '');
-    if (!infrastructureServiceNames.has(serviceName)) {
-      errors.push(
-        `${fileName} is a root service that is not registered as infrastructure. Move it into its owning service capsule or add an intentional entry to infrastructureServiceRegistry.`
-      );
-    }
-  }
-
-  for (const [serviceName, definition] of Object.entries(infrastructureServiceRegistry)) {
-    if (!existsSync(path.join(servicesRoot, definition.fileName))) {
-      errors.push(
-        `Infrastructure service "${serviceName}" is registered but ${definition.fileName} does not exist in src/backend/services.`
-      );
-    }
-  }
 }
 
 function getFromService(relativePath: string): ServiceName | null {

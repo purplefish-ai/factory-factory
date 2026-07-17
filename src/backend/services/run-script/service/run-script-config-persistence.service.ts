@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
-import { projectAccessor, workspaceAccessor } from '@/backend/services/workspace';
+import { projectAccessor, workspaceDataService } from '@/backend/services/workspace';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { FactoryConfigService } from './factory-config.service';
 
@@ -54,7 +54,7 @@ class RunScriptConfigPersistenceService {
     totalWorkspaces: number;
     errors: Array<{ workspaceId: string; error: string }>;
   }> {
-    const workspaces = await workspaceAccessor.findByProjectId(projectId);
+    const workspaces = await workspaceDataService.findByProjectId(projectId);
     let updatedCount = 0;
     const errors: Array<{ workspaceId: string; error: string }> = [];
 
@@ -68,11 +68,12 @@ class RunScriptConfigPersistenceService {
           workspaceId: workspace.id,
           worktreePath: workspace.worktreePath,
           persistWorkspaceCommands: (id, commands) =>
-            workspaceAccessor.update(id, {
-              runScriptCommand: commands.runScriptCommand,
-              runScriptPostRunCommand: commands.runScriptPostRunCommand,
-              runScriptCleanupCommand: commands.runScriptCleanupCommand,
-            }),
+            workspaceDataService.setRunScriptCommands(
+              id,
+              commands.runScriptCommand,
+              commands.runScriptPostRunCommand,
+              commands.runScriptCleanupCommand
+            ),
         });
         updatedCount++;
       } catch (error) {
@@ -94,15 +95,7 @@ class RunScriptConfigPersistenceService {
       throw new Error('Project not found');
     }
 
-    try {
-      return await FactoryConfigService.readConfig(project.repoPath);
-    } catch (error) {
-      logger.error('Failed to read factory config', {
-        projectId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
+    return FactoryConfigService.readConfig(project.repoPath);
   }
 
   async syncWorkspaceCommandsFromFactoryConfig(input: {

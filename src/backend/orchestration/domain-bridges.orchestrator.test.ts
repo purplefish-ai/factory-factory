@@ -120,6 +120,7 @@ import {
   workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
+  workspaceSnapshotStore,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
@@ -161,6 +162,7 @@ describe('configureDomainBridges', () => {
 
     expect(kanbanStateService.configure).toHaveBeenCalledTimes(1);
     expect(workspaceQueryService.configure).toHaveBeenCalledTimes(1);
+    expect(workspaceSnapshotStore.configure).toHaveBeenCalledTimes(1);
   });
 
   it('configures GitHub domain services', () => {
