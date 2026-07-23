@@ -501,8 +501,24 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         value,
       };
       send(msg);
+
+      // When the model is chosen through the ACP config selector, mirror it into chatSettings.
+      // Otherwise chatSettings.selectedModel keeps its stale default and the model re-applied at
+      // message dispatch (setSessionModel) clobbers the user's pick right before the turn runs.
+      const changedOption = stateRef.current.acpConfigOptions?.find(
+        (option) => option.id === configId
+      );
+      const isModelOption = configId === 'model' || changedOption?.category === 'model';
+      if (isModelOption) {
+        dispatch({ type: 'UPDATE_SETTINGS', payload: { selectedModel: value } });
+        const syncedSettings = clampChatSettingsForCapabilities(
+          { ...stateRef.current.chatSettings, selectedModel: value },
+          stateRef.current.chatCapabilities
+        );
+        persistSettings(dbSessionIdRef.current, syncedSettings);
+      }
     },
-    [send]
+    [send, dispatch, stateRef, dbSessionIdRef]
   );
 
   // Rewind files actions
