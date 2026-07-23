@@ -227,6 +227,48 @@ describe.each(deliveryCases)('deliverWorkspaceNotification: $name', (testCase) =
     );
   });
 
+  it('resolves without awaiting the dispatched turn (fire-and-forget)', async () => {
+    // tryDispatchNextMessage awaits the target's entire agent turn. If
+    // deliverWorkspaceNotification awaited it, the sendMessageTo{Child,Parent}
+    // mutation — and thus the caller's blocked MCP tool call — would hang for the
+    // whole turn, tripping the external client's timeout and causing a retry that
+    // persists a duplicate notification (H1). Simulate a turn that never settles
+    // and assert delivery still resolves promptly.
+    let resolveDispatch: (() => void) | undefined;
+    mockTryDispatchNextMessage.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDispatch = resolve;
+      })
+    );
+
+    await expect(deliverWorkspaceNotification(testCase.input)).resolves.toEqual({
+      delivered: true,
+    });
+
+    // The dispatch was kicked off but not awaited.
+    expect(mockTryDispatchNextMessage).toHaveBeenCalledWith('session-current');
+    resolveDispatch?.();
+  });
+
+  it('does not reject when the detached dispatch fails; logs a warning instead', async () => {
+    mockTryDispatchNextMessage.mockRejectedValue(new Error('dispatch boom'));
+
+    await expect(deliverWorkspaceNotification(testCase.input)).resolves.toEqual({
+      delivered: true,
+    });
+
+    // Allow the detached rejection handler to run.
+    await Promise.resolve();
+    expect(mockWarn).toHaveBeenCalledWith(
+      'deliverWorkspaceNotification: detached dispatch failed',
+      expect.objectContaining({
+        sessionId: 'session-current',
+        notificationId: testCase.notification.id,
+        error: 'dispatch boom',
+      })
+    );
+  });
+
   it('keeps the persisted notification pending when no session is active', async () => {
     mockFindSessionsByWorkspaceId.mockResolvedValue([{ id: 'session-stopped', status: 'STOPPED' }]);
 
