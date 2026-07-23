@@ -2,6 +2,8 @@ import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SetConfigOptionMessage } from '@/shared/websocket';
 import { sendWebSocketError } from './utils';
 
@@ -56,6 +58,19 @@ export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOpti
         error: errorMessage,
       });
       sendWebSocketError(ws, `Failed to set config option: ${errorMessage}`);
+
+      // Re-emit the actual (unchanged) config options so the client's optimistic
+      // chatSettings update (see use-chat-actions.ts setConfigOption) gets rolled back
+      // to the real server-confirmed value instead of sticking to the rejected one.
+      // Skip if there's no live ACP handle to read the real options from, since an
+      // empty list would wipe the client's config selector instead of correcting it.
+      const configOptions = sessionService.getSessionConfigOptions(sessionId);
+      if (configOptions.length > 0) {
+        sessionDomainService.emitDelta(sessionId, {
+          type: 'config_options_update',
+          configOptions,
+        } as SessionDeltaEvent);
+      }
     }
   };
 }

@@ -2,11 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   setSessionConfigOption: vi.fn(),
+  getSessionConfigOptions: vi.fn(),
+  emitDelta: vi.fn(),
 }));
 
 vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
   sessionService: {
     setSessionConfigOption: mocks.setSessionConfigOption,
+    getSessionConfigOptions: mocks.getSessionConfigOptions,
+  },
+}));
+
+vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+  sessionDomainService: {
+    emitDelta: mocks.emitDelta,
   },
 }));
 
@@ -24,6 +33,7 @@ import { createSetConfigOptionHandler } from './set-config-option.handler';
 describe('createSetConfigOptionHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSessionConfigOptions.mockReturnValue([]);
   });
 
   it('updates session config option', async () => {
@@ -65,6 +75,42 @@ describe('createSetConfigOptionHandler', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Failed to set config option: boom' })
     );
+  });
+
+  it('re-emits the current config options on failure so the client can roll back', async () => {
+    mocks.setSessionConfigOption.mockRejectedValue(new Error('boom'));
+    const currentConfigOptions = [{ id: 'model', category: 'model', currentValue: 'gpt-5' }];
+    mocks.getSessionConfigOptions.mockReturnValue(currentConfigOptions);
+    const ws = { send: vi.fn() };
+    const handler = createSetConfigOptionHandler();
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/work',
+      message: { type: 'set_config_option', configId: 'model', value: 'gpt-5-mini' } as never,
+    });
+
+    expect(mocks.getSessionConfigOptions).toHaveBeenCalledWith('session-1');
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'config_options_update',
+      configOptions: currentConfigOptions,
+    });
+  });
+
+  it('does not emit config options update on failure when there is no live ACP handle', async () => {
+    mocks.setSessionConfigOption.mockRejectedValue(new Error('boom'));
+    const ws = { send: vi.fn() };
+    const handler = createSetConfigOptionHandler();
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/work',
+      message: { type: 'set_config_option', configId: 'model', value: 'gpt-5-mini' } as never,
+    });
+
+    expect(mocks.emitDelta).not.toHaveBeenCalled();
   });
 
   it('uses structured data payload when error object has no message', async () => {

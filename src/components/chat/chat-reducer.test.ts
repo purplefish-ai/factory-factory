@@ -23,6 +23,7 @@ import {
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
+  type AcpConfigOption,
   type ChatAction,
   type ChatState,
   chatReducer,
@@ -239,6 +240,65 @@ describe('createInitialChatState', () => {
     expect(state.chatSettings).toEqual(customSettings);
     // Other values should still be defaults
     expect(state.messages).toEqual([]);
+  });
+});
+
+// =============================================================================
+// CONFIG_OPTIONS_UPDATE model sync
+// =============================================================================
+
+describe('chatReducer CONFIG_OPTIONS_UPDATE', () => {
+  function modelConfigOption(currentValue: string): AcpConfigOption {
+    return {
+      id: 'model',
+      name: 'Model',
+      type: 'string',
+      category: 'model',
+      currentValue,
+      options: [
+        { value: 'opus', name: 'Opus' },
+        { value: 'sonnet', name: 'Sonnet' },
+      ],
+    };
+  }
+
+  it('mirrors the ACP model option currentValue into chatSettings.selectedModel', () => {
+    // Regression: model chosen via the ACP config selector must reach chatSettings, otherwise
+    // the stale default is re-applied at message dispatch and clobbers the user's pick.
+    const state = createInitialChatState({
+      chatSettings: { ...DEFAULT_CHAT_SETTINGS, selectedModel: 'opus' },
+    });
+
+    const next = chatReducer(state, {
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: { configOptions: [modelConfigOption('sonnet')] },
+    });
+
+    expect(next.chatSettings.selectedModel).toBe('sonnet');
+    expect(next.acpConfigOptions).toEqual([modelConfigOption('sonnet')]);
+  });
+
+  it('leaves chatSettings unchanged when there is no model config option', () => {
+    const state = createInitialChatState({
+      chatSettings: { ...DEFAULT_CHAT_SETTINGS, selectedModel: 'opus' },
+    });
+
+    const modeOption: AcpConfigOption = {
+      id: 'mode',
+      name: 'Mode',
+      type: 'string',
+      category: 'mode',
+      currentValue: 'default',
+      options: [{ value: 'default', name: 'Default' }],
+    };
+
+    const next = chatReducer(state, {
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: { configOptions: [modeOption] },
+    });
+
+    expect(next.chatSettings.selectedModel).toBe('opus');
+    expect(next.acpConfigOptions).toEqual([modeOption]);
   });
 });
 
