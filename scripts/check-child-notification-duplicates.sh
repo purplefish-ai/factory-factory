@@ -121,10 +121,13 @@ echo "Duplicate pairs found: $DUPES"
 echo
 
 if [[ "$DUPES" -eq 0 ]]; then
-  echo "==> NO duplicate notification rows detected."
-  echo "    This argues AGAINST H1/H3 (undeduplicable double-persist)."
-  echo "    Any duplication you saw would have to be re-delivery of a single"
-  echo "    row (H2), which the id-keyed guards already mostly handle."
+  echo "==> NO duplicate notification rows detected within the ${WINDOW_SECONDS}s window."
+  echo "    This argues against H1/H3 for pairs that close-in-time — it does NOT"
+  echo "    rule out H1/H3 duplication with a gap larger than WINDOW_SECONDS."
+  echo "    Re-run with a larger WINDOW_SECONDS if you suspect a slower retry path."
+  echo "    Any duplication you saw within this window would have to be"
+  echo "    re-delivery of a single row (H2), which the id-keyed guards already"
+  echo "    mostly handle."
   exit 0
 fi
 
