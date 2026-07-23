@@ -102,7 +102,25 @@ export async function deliverWorkspaceNotification(
     data: uiEvent,
     order,
   });
-  await chatMessageHandlerService.tryDispatchNextMessage(activeSession.id);
+  // Dispatch fire-and-forget: tryDispatchNextMessage awaits the target session's
+  // ENTIRE agent turn (up to the 1h prompt timeout). This function runs behind the
+  // sendMessageToChild/sendMessageToParent tRPC mutation, which in turn is the
+  // synchronous HTTP request the caller's child-workspace MCP client is blocked on.
+  // Awaiting the turn here holds that request open long enough for the external MCP
+  // client's own (~5min) tool-call timeout to fire, at which point the agent retries
+  // the tool call and a second, non-deduplicable WorkspaceNotification row is
+  // persisted — a real duplicate turn (see
+  // docs/design/multi-child-workspace-duplicate-messages-analysis.md, H1). Returning
+  // as soon as the message is durably queued keeps the mutation fast; the detached
+  // dispatch delivers the already-persisted, already-enqueued notification.
+  void chatMessageHandlerService.tryDispatchNextMessage(activeSession.id).catch((error) => {
+    logger.warn('deliverWorkspaceNotification: detached dispatch failed', {
+      direction: input.direction,
+      notificationId: notification.id,
+      sessionId: activeSession.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   return { delivered: true };
 }
