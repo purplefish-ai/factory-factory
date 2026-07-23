@@ -65,12 +65,15 @@ if [[ ! -f "$DB" ]]; then
   exit 1
 fi
 
-# Read-only connection string (safe against a running app; picks up WAL data).
-URI="file:${DB}?mode=ro"
+# Read-only invocation (safe against a running app; picks up WAL data).
+# Uses -readonly with the filename as a plain argument, rather than building a
+# `file:` URI, so paths containing URI-reserved characters (?, #, %, spaces)
+# resolve correctly instead of being misparsed as URI syntax.
+SQLITE=(sqlite3 -readonly "$DB")
 
 # Guard against copies that lack the notifications table, or predate the
 # `direction` column (very old schema).
-if ! sqlite3 "$URI" "SELECT 1 WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_notifications') AND EXISTS (SELECT 1 FROM pragma_table_info('workspace_notifications') WHERE name='direction');" | grep -q 1; then
+if ! "${SQLITE[@]}" "SELECT 1 WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_notifications') AND EXISTS (SELECT 1 FROM pragma_table_info('workspace_notifications') WHERE name='direction');" | grep -q 1; then
   echo "ERROR: table 'workspace_notifications' or column 'direction' not found in $DB" >&2
   echo "This DB predates the child-workspace notification schema, or is the wrong file." >&2
   exit 1
@@ -86,7 +89,7 @@ echo
 # ---------------------------------------------------------------------------
 # 0. Baseline: is there any data to analyze at all?
 # ---------------------------------------------------------------------------
-TOTAL="$(sqlite3 "$URI" "SELECT COUNT(*) FROM workspace_notifications;")"
+TOTAL="$("${SQLITE[@]}" "SELECT COUNT(*) FROM workspace_notifications;")"
 echo "Total workspace_notifications rows: $TOTAL"
 if [[ "$TOTAL" -eq 0 ]]; then
   echo
@@ -98,7 +101,7 @@ fi
 
 echo
 echo "--- Notifications by direction ---"
-sqlite3 -header -column "$URI" "
+"${SQLITE[@]}" -header -column "
   SELECT direction, COUNT(*) AS n
   FROM workspace_notifications
   GROUP BY direction;"
@@ -111,7 +114,7 @@ echo "=================================================================="
 echo " Duplicate notification pairs (same source->target, same text,"
 echo " distinct rows, within ${WINDOW_SECONDS}s of each other)"
 echo "=================================================================="
-DUPES="$(sqlite3 "$URI" "
+DUPES="$("${SQLITE[@]}" "
   SELECT COUNT(*) FROM workspace_notifications a
   JOIN workspace_notifications b
     ON a.workspace_id = b.workspace_id
@@ -141,7 +144,7 @@ echo "    and/or H3 (racing lifecycle notifications). Details below."
 echo
 
 echo "--- Duplicate pairs (id_1/id_2 distinct, gap in seconds, message truncated) ---"
-sqlite3 -header -column "$URI" "
+"${SQLITE[@]}" -header -column "
   SELECT a.direction,
          substr(a.source_workspace_id,1,10) AS src,
          substr(a.workspace_id,1,10)        AS target,
@@ -167,7 +170,7 @@ echo
 echo "--- Gap distribution (bucketed) ---"
 echo "    A tight cluster (e.g. most gaps ~30-60s) implies a fixed external MCP"
 echo "    timeout firing => strong H1 signal. A wide spread points more to H3."
-sqlite3 -header -column "$URI" "
+"${SQLITE[@]}" -header -column "
   WITH pairs AS (
     SELECT (julianday(b.created_at) - julianday(a.created_at)) * 86400 AS gap_s
     FROM workspace_notifications a
@@ -199,7 +202,7 @@ echo
 echo "--- Delivery status of duplicated rows (Link 5: real token cost?) ---"
 echo "    Both rows delivered => two real agent turns => real extra tokens."
 echo "    One or both rows still pending (delivered_at NULL) => delivery is incomplete."
-sqlite3 -header -column "$URI" "
+"${SQLITE[@]}" -header -column "
   SELECT
     SUM(CASE WHEN a.delivered_at IS NOT NULL AND b.delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS both_delivered,
     SUM(CASE WHEN a.delivered_at IS NULL OR  b.delivered_at IS NULL THEN 1 ELSE 0 END)         AS one_or_none_delivered
