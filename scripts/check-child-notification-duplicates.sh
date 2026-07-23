@@ -31,6 +31,11 @@ set -euo pipefail
 
 WINDOW_SECONDS="${WINDOW_SECONDS:-600}"
 
+if ! [[ "$WINDOW_SECONDS" =~ ^[0-9]+$ ]] || [[ "$WINDOW_SECONDS" -eq 0 ]]; then
+  echo "ERROR: WINDOW_SECONDS must be a positive integer, got: $WINDOW_SECONDS" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Resolve the database path
 # ---------------------------------------------------------------------------
