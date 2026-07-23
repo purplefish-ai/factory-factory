@@ -63,10 +63,11 @@ fi
 # Read-only connection string (safe against a running app; picks up WAL data).
 URI="file:${DB}?mode=ro"
 
-# Guard against copies that lack the notifications table (very old schema).
-if ! sqlite3 "$URI" "SELECT name FROM sqlite_master WHERE type='table' AND name='workspace_notifications';" | grep -q workspace_notifications; then
-  echo "ERROR: table 'workspace_notifications' not found in $DB" >&2
-  echo "This DB predates the child-workspace feature, or is the wrong file." >&2
+# Guard against copies that lack the notifications table, or predate the
+# `direction` column (very old schema).
+if ! sqlite3 "$URI" "SELECT 1 WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_notifications') AND EXISTS (SELECT 1 FROM pragma_table_info('workspace_notifications') WHERE name='direction');" | grep -q 1; then
+  echo "ERROR: table 'workspace_notifications' or column 'direction' not found in $DB" >&2
+  echo "This DB predates the child-workspace notification schema, or is the wrong file." >&2
   exit 1
 fi
 
@@ -112,7 +113,8 @@ DUPES="$(sqlite3 "$URI" "
    AND a.source_workspace_id = b.source_workspace_id
    AND a.direction = b.direction
    AND a.message = b.message
-   AND a.id < b.id
+   AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))
+   AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 >= 0
    AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 < ${WINDOW_SECONDS};")"
 
 echo "Duplicate pairs found: $DUPES"
@@ -145,7 +147,8 @@ sqlite3 -header -column "$URI" "
    AND a.source_workspace_id = b.source_workspace_id
    AND a.direction = b.direction
    AND a.message = b.message
-   AND a.id < b.id
+   AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))
+   AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 >= 0
    AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 < ${WINDOW_SECONDS}
   ORDER BY t1;"
 
@@ -165,7 +168,8 @@ sqlite3 -header -column "$URI" "
      AND a.source_workspace_id = b.source_workspace_id
      AND a.direction = b.direction
      AND a.message = b.message
-     AND a.id < b.id
+     AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))
+     AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 >= 0
      AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 < ${WINDOW_SECONDS}
   )
   SELECT CASE
@@ -186,7 +190,7 @@ sqlite3 -header -column "$URI" "
 echo
 echo "--- Delivery status of duplicated rows (Link 5: real token cost?) ---"
 echo "    Both rows delivered => two real agent turns => real extra tokens."
-echo "    Second row still pending (delivered_at NULL) => dedup caught it."
+echo "    One or both rows still pending (delivered_at NULL) => delivery is incomplete."
 sqlite3 -header -column "$URI" "
   SELECT
     SUM(CASE WHEN a.delivered_at IS NOT NULL AND b.delivered_at IS NOT NULL THEN 1 ELSE 0 END) AS both_delivered,
@@ -197,7 +201,8 @@ sqlite3 -header -column "$URI" "
    AND a.source_workspace_id = b.source_workspace_id
    AND a.direction = b.direction
    AND a.message = b.message
-   AND a.id < b.id
+   AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))
+   AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 >= 0
    AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 < ${WINDOW_SECONDS};"
 
 echo

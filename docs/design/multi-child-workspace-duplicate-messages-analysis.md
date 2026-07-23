@@ -133,12 +133,13 @@ JOIN workspace_notifications b
  AND a.source_workspace_id = b.source_workspace_id
  AND a.direction = b.direction
  AND a.message = b.message
- AND a.id < b.id
+ AND (a.created_at < b.created_at OR (a.created_at = b.created_at AND a.id < b.id))
+ AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 >= 0
  AND (julianday(b.created_at) - julianday(a.created_at)) * 86400 < 600
 ORDER BY t1;
 ```
 
-- **Zero rows** → H1 and H3 are effectively falsified: any duplication would have to be re-delivery of a *single* row, which is H2's territory and is already guarded.
+- **Zero rows** → This rules out only byte-identical pairs found within the selected time window; H1/H3 require additional evidence to be falsified, and remaining duplication is not necessarily limited to H2.
 - **Rows returned** → the `gap_seconds` distribution is itself diagnostic. Retries clustered at a consistent gap (e.g. all ~30–60s apart) strongly implies a fixed external timeout firing, which is the heart of H1. Byte-identical `message` text is the key signal — a coordinating agent almost never re-emits byte-identical prose by chance, so identical text ≈ mechanical retry, not the LLM independently choosing to send again.
 
 Run this before touching any code; it can falsify H1 outright or justify the instrumentation below.
