@@ -370,7 +370,9 @@ function IdeSettingsSection() {
   const handleIdeChange = (value: string) => {
     updateSettings.mutate({
       preferredIde: value as 'cursor' | 'vscode' | 'custom',
-      customIdeCommand: value === 'custom' ? settings?.customIdeCommand || null : null,
+      ...(value === 'custom' && {
+        customIdeCommand: settings?.customIdeCommand || null,
+      }),
     });
   };
 
