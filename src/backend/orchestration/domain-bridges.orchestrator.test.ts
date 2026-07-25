@@ -4,6 +4,7 @@ import {
   autoIterationService,
   logbookService,
 } from '@/backend/services/auto-iteration';
+import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 
 // --- Module mocks (inline vi.fn() - no top-level variable references) ---
 
@@ -81,6 +82,8 @@ vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
     findAgentSessionById: vi.fn(),
     createAgentSession: vi.fn(),
+    deleteAgentSession: vi.fn(),
+    updateAgentSession: vi.fn(),
     findAgentSessionsByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
   },
@@ -97,6 +100,7 @@ vi.mock('@/backend/services/session', () => ({
     sendAcpMessage: vi.fn(),
   },
   sessionDomainService: {
+    clearSession: vi.fn(),
     injectCommittedUserMessage: vi.fn(),
     getTranscriptSnapshot: vi.fn(),
     getQueueLength: vi.fn(),
@@ -647,13 +651,221 @@ describe('configureDomainBridges', () => {
   });
 
   describe('auto-iteration session bridge', () => {
+    it('rolls back a created session when initial runtime startup fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const startupError = new Error('runtime failed to start');
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionService.startSession).mockRejectedValueOnce(startupError);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(
+        sessionBridge.startSession('ws-1', {
+          initialPrompt: 'start prompt',
+          startupModePreset: 'non_interactive',
+        })
+      ).rejects.toThrow(startupError);
+
+      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
+    });
+
+    it('retires the stopped predecessor after a successful recycle', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).resolves.toBe(
+        'new-session'
+      );
+
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
+        status: SessionStatus.COMPLETED,
+        providerProcessPid: null,
+      });
+      expect(vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(sessionDataService.updateAgentSession).mock.invocationCallOrder[0]!
+      );
+      expect(workspaceAutoIterationService.finishSessionIfMatching).not.toHaveBeenCalled();
+    });
+
+    it('keeps the replacement active when predecessor retirement fails after handoff', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionDataService.updateAgentSession).mockRejectedValueOnce(
+        new Error('predecessor retirement failed')
+      );
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).resolves.toBe(
+        'new-session'
+      );
+
+      expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
+        { type: 'text', text: 'handoff prompt' },
+      ]);
+      expect(sessionService.stopSession).not.toHaveBeenCalledWith('new-session');
+      expect(sessionDomainService.clearSession).not.toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).not.toHaveBeenCalledWith('new-session');
+      expect(workspaceAutoIterationService.finishSessionIfMatching).not.toHaveBeenCalled();
+    });
+
+    it('rolls back a recycled session when replacement startup fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const startupError = new Error('runtime failed to start');
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(workspaceAutoIterationService.finishSessionIfMatching)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionService.startSession).mockRejectedValueOnce(startupError);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        startupError
+      );
+
+      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
+        status: SessionStatus.COMPLETED,
+        providerProcessPid: null,
+      });
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'new-session',
+        AutoIterationStatus.FAILED
+      );
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'old-session',
+        AutoIterationStatus.FAILED
+      );
+      expect(workspaceAutoIterationService.setSession).not.toHaveBeenCalled();
+      expect(sessionService.sendAcpMessage).not.toHaveBeenCalled();
+    });
+
+    it('retires the stopped predecessor when replacement creation fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const creationError = new Error('session row creation failed');
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mockResolvedValueOnce(true);
+      vi.mocked(sessionDataService.createAgentSession).mockRejectedValueOnce(creationError);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        creationError
+      );
+
+      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
+        status: SessionStatus.COMPLETED,
+        providerProcessPid: null,
+      });
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'old-session',
+        AutoIterationStatus.FAILED
+      );
+      expect(sessionService.startSession).not.toHaveBeenCalled();
+      expect(sessionDataService.deleteAgentSession).not.toHaveBeenCalled();
+    });
+
+    it('clears the stopped predecessor when replacement pointer persistence fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const persistenceError = new Error('pointer update failed');
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(workspaceAutoIterationService.finishSessionIfMatching)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      vi.mocked(workspaceAutoIterationService.setSession).mockRejectedValueOnce(persistenceError);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        persistenceError
+      );
+
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
+        status: SessionStatus.COMPLETED,
+        providerProcessPid: null,
+      });
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'new-session',
+        AutoIterationStatus.FAILED
+      );
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'old-session',
+        AutoIterationStatus.FAILED
+      );
+      expect(sessionService.sendAcpMessage).not.toHaveBeenCalled();
+    });
+
     it('cleans up a recycled session when handoff send fails', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
       const sendError = new Error('prompt failed');
       vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
         autoIterationSessionId: 'old-session',
       } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
-      vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(true);
+      vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mockResolvedValueOnce(true);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
@@ -678,10 +890,21 @@ describe('configureDomainBridges', () => {
         { type: 'text', text: 'handoff prompt' },
       ]);
       expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
-      expect(workspaceAutoIterationService.clearSessionIfMatching).toHaveBeenCalledWith(
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
+        status: SessionStatus.COMPLETED,
+        providerProcessPid: null,
+      });
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
         'ws-1',
-        'new-session'
+        'new-session',
+        AutoIterationStatus.FAILED
       );
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledTimes(1);
+      expect(
+        vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mock.invocationCallOrder[0]
+      ).toBeLessThan(vi.mocked(sessionDataService.deleteAgentSession).mock.invocationCallOrder[0]!);
       expect(
         vi.mocked(workspaceAutoIterationService.setSession).mock.invocationCallOrder[0]
       ).toBeLessThan(vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]!);
@@ -692,7 +915,7 @@ describe('configureDomainBridges', () => {
       vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
         autoIterationSessionId: 'old-session',
       } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
-      vi.mocked(workspaceAutoIterationService.clearSessionIfMatching).mockResolvedValue(false);
+      vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mockResolvedValue(false);
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
@@ -709,11 +932,88 @@ describe('configureDomainBridges', () => {
       );
 
       expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(workspaceAutoIterationService.setSession).toHaveBeenCalledTimes(1);
-      expect(workspaceAutoIterationService.clearSessionIfMatching).toHaveBeenCalledWith(
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
         'ws-1',
-        'new-session'
+        'new-session',
+        AutoIterationStatus.FAILED
       );
+      expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledWith(
+        'ws-1',
+        'old-session',
+        AutoIterationStatus.FAILED
+      );
+    });
+
+    it('marks a created session failed when recycle rollback deletion fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const sendError = new Error('prompt failed');
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionDataService.deleteAgentSession).mockRejectedValueOnce(
+        new Error('delete failed')
+      );
+      vi.mocked(sessionService.sendAcpMessage).mockRejectedValueOnce(sendError);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        sendError
+      );
+
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('new-session', {
+        status: SessionStatus.FAILED,
+        providerProcessPid: null,
+        providerMetadata: {
+          rollbackReason: 'auto_iteration_recycle_failed_after_create',
+        },
+      });
+    });
+
+    it('preserves the handoff error when recycle rollback repair fails', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      const sendError = new Error('prompt failed');
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionDataService.deleteAgentSession).mockRejectedValueOnce(
+        new Error('delete failed')
+      );
+      vi.mocked(sessionDataService.updateAgentSession).mockRejectedValueOnce(
+        new Error('repair failed')
+      );
+      vi.mocked(sessionService.sendAcpMessage).mockRejectedValueOnce(sendError);
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).rejects.toThrow(
+        sendError
+      );
+
+      expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('new-session', {
+        status: SessionStatus.FAILED,
+        providerProcessPid: null,
+        providerMetadata: {
+          rollbackReason: 'auto_iteration_recycle_failed_after_create',
+        },
+      });
     });
   });
 

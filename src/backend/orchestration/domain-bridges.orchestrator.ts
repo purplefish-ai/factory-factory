@@ -57,12 +57,18 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
+import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
 import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
+type SessionDataService = typeof sessionDataService;
+type SessionDomainService = typeof sessionDomainService;
 type SessionService = typeof sessionService;
 type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
+type AutoIterationRollbackReason =
+  | 'auto_iteration_startup_failed_after_create'
+  | 'auto_iteration_recycle_failed_after_create';
 
 export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
@@ -123,26 +129,128 @@ async function stopPreviousAutoIterationSession(
   }
 }
 
-async function clearAutoIterationSessionIfMatching(
+async function finishFailedAutoIterationSessionIfMatching(
   workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await workspaceAutoIterationService.clearSessionIfMatching(workspaceId, sessionId);
+    return await workspaceAutoIterationService.finishSessionIfMatching(
+      workspaceId,
+      sessionId,
+      AutoIterationStatus.FAILED
+    );
   } catch {
     // Preserve the original handoff or persistence error
+    return false;
   }
 }
 
-async function cleanupRecycledAutoIterationSession(
+async function rollbackCreatedAutoIterationSession(
   sessionService: SessionService,
-  workspaceAutoIterationService: WorkspaceAutoIterationService,
-  workspaceId: string,
-  sessionId: string
+  sessionDataService: SessionDataService,
+  sessionDomainService: SessionDomainService,
+  sessionId: string,
+  rollbackReason: AutoIterationRollbackReason
 ): Promise<void> {
   await stopSessionBestEffort(sessionService, sessionId);
-  await clearAutoIterationSessionIfMatching(workspaceAutoIterationService, workspaceId, sessionId);
+
+  try {
+    sessionDomainService.clearSession(sessionId);
+  } catch {
+    // Preserve the original startup or handoff error
+  }
+
+  try {
+    await sessionDataService.deleteAgentSession(sessionId);
+  } catch {
+    try {
+      await sessionDataService.updateAgentSession(sessionId, {
+        status: SessionStatus.FAILED,
+        providerProcessPid: null,
+        providerMetadata: {
+          rollbackReason,
+        },
+      });
+    } catch {
+      // Preserve the original startup or handoff error
+    }
+  }
+}
+
+async function retireStoppedAutoIterationSession(
+  sessionDataService: SessionDataService,
+  sessionId: string
+): Promise<void> {
+  await sessionDataService.updateAgentSession(sessionId, {
+    status: SessionStatus.COMPLETED,
+    providerProcessPid: null,
+  });
+}
+
+async function retireStoppedAutoIterationSessionBestEffort(
+  sessionDataService: SessionDataService,
+  sessionId: string
+): Promise<void> {
+  try {
+    await retireStoppedAutoIterationSession(sessionDataService, sessionId);
+  } catch {
+    // Retirement bookkeeping must not invalidate a failed cleanup or successful handoff
+  }
+}
+
+async function finishFailedRecycleIfSessionMatches(
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
+  workspaceId: string,
+  previousSessionId: string | undefined,
+  replacementSessionId: string | undefined
+): Promise<void> {
+  if (
+    replacementSessionId &&
+    (await finishFailedAutoIterationSessionIfMatching(
+      workspaceAutoIterationService,
+      workspaceId,
+      replacementSessionId
+    ))
+  ) {
+    return;
+  }
+  if (previousSessionId && previousSessionId !== replacementSessionId) {
+    await finishFailedAutoIterationSessionIfMatching(
+      workspaceAutoIterationService,
+      workspaceId,
+      previousSessionId
+    );
+  }
+}
+
+async function cleanupFailedAutoIterationRecycle(
+  sessionService: SessionService,
+  sessionDataService: SessionDataService,
+  sessionDomainService: SessionDomainService,
+  workspaceAutoIterationService: WorkspaceAutoIterationService,
+  workspaceId: string,
+  previousSessionId: string | undefined,
+  replacementSessionId?: string
+): Promise<void> {
+  await finishFailedRecycleIfSessionMatches(
+    workspaceAutoIterationService,
+    workspaceId,
+    previousSessionId,
+    replacementSessionId
+  );
+  if (replacementSessionId) {
+    await rollbackCreatedAutoIterationSession(
+      sessionService,
+      sessionDataService,
+      sessionDomainService,
+      replacementSessionId,
+      'auto_iteration_recycle_failed_after_create'
+    );
+  }
+  if (previousSessionId) {
+    await retireStoppedAutoIterationSessionBestEffort(sessionDataService, previousSessionId);
+  }
 }
 
 export function configureDomainBridges(services: BridgeServices): void {
@@ -392,12 +500,13 @@ export function configureDomainBridges(services: BridgeServices): void {
           startupModePreset: opts.startupModePreset,
         });
       } catch (err) {
-        // Clean up the session record if startup failed to prevent orphaned entries
-        try {
-          await sessionService.stopSession(session.id);
-        } catch {
-          // Best-effort cleanup
-        }
+        await rollbackCreatedAutoIterationSession(
+          sessionService,
+          sessionDataService,
+          sessionDomainService,
+          session.id,
+          'auto_iteration_startup_failed_after_create'
+        );
         throw err;
       }
       return session.id;
@@ -439,28 +548,56 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
     async recycleSession(workspaceId, handoffPrompt) {
       const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
-      if (ws?.autoIterationSessionId) {
-        await stopPreviousAutoIterationSession(sessionService, ws.autoIterationSessionId);
+      const previousSessionId = ws?.autoIterationSessionId ?? undefined;
+      if (previousSessionId) {
+        await stopPreviousAutoIterationSession(sessionService, previousSessionId);
       }
-      const newSession = await sessionDataService.createAgentSession({
-        workspaceId,
-        name: 'Auto-iteration (recycled)',
-        workflow: 'auto-iteration',
-      });
+      let newSession: Awaited<ReturnType<SessionDataService['createAgentSession']>>;
+      try {
+        newSession = await sessionDataService.createAgentSession({
+          workspaceId,
+          name: 'Auto-iteration (recycled)',
+          workflow: 'auto-iteration',
+        });
+      } catch (err) {
+        await cleanupFailedAutoIterationRecycle(
+          sessionService,
+          sessionDataService,
+          sessionDomainService,
+          workspaceAutoIterationService,
+          workspaceId,
+          previousSessionId
+        );
+        throw err;
+      }
       try {
         await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
       } catch (err) {
-        await stopSessionBestEffort(sessionService, newSession.id);
+        await cleanupFailedAutoIterationRecycle(
+          sessionService,
+          sessionDataService,
+          sessionDomainService,
+          workspaceAutoIterationService,
+          workspaceId,
+          previousSessionId,
+          newSession.id
+        );
         throw err;
       }
       try {
         await workspaceAutoIterationService.setSession(workspaceId, newSession.id);
         await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
+        if (previousSessionId) {
+          await retireStoppedAutoIterationSessionBestEffort(sessionDataService, previousSessionId);
+        }
       } catch (err) {
-        await cleanupRecycledAutoIterationSession(
+        await cleanupFailedAutoIterationRecycle(
           sessionService,
+          sessionDataService,
+          sessionDomainService,
           workspaceAutoIterationService,
           workspaceId,
+          previousSessionId,
           newSession.id
         );
         throw err;

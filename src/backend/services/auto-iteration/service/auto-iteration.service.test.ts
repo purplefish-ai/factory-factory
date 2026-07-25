@@ -292,6 +292,33 @@ describe('AutoIterationService resume', () => {
     expect(workspaceBridge.updateAutoIterationStatus).not.toHaveBeenCalled();
   });
 
+  it('settles a recycle failure already persisted by the session bridge', async () => {
+    const loop = createPausedLoop('ws-1');
+    loop.progress.currentIteration = config.sessionRecycleInterval;
+    serviceInternals.loops.set('ws-1', loop);
+    vi.spyOn(insightsService, 'getOpenContent').mockResolvedValue('');
+    vi.mocked(sessionBridge.recycleSession).mockRejectedValueOnce(
+      new Error('replacement startup failed')
+    );
+    vi.mocked(workspaceBridge.finishAutoIterationIfSessionMatches).mockResolvedValueOnce(false);
+
+    await service.resume('ws-1');
+    await loop.loopPromise;
+
+    expect(sessionBridge.recycleSession).toHaveBeenCalledWith('ws-1', expect.any(String));
+    expect(workspaceBridge.finishAutoIterationIfSessionMatches).toHaveBeenCalledWith(
+      'ws-1',
+      'session-1',
+      AutoIterationStatus.FAILED
+    );
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledTimes(1);
+    expect(workspaceBridge.updateAutoIterationStatus).toHaveBeenCalledWith(
+      'ws-1',
+      AutoIterationStatus.RUNNING
+    );
+    expect(service.isRunning('ws-1')).toBe(false);
+  });
+
   it('finishes a dead session with a session-keyed mutation', () => {
     const loop = createPausedLoop('ws-1');
     serviceInternals.loops.set('ws-1', loop);
