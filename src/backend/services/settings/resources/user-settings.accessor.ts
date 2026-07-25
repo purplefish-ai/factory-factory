@@ -157,6 +157,7 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+        ratchetEnabled: data.ratchetEnabled ?? false,
         defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
