@@ -357,6 +357,7 @@ export class SessionService {
     prompt: ContentBlock[],
     timeoutMs?: number
   ): Promise<string> {
+    const stopGeneration = this.getStopGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
@@ -379,24 +380,22 @@ export class SessionService {
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       promptCompleted = true;
-      this.acpEventProcessor.finishPromptTurn(sessionId);
-      this.acpEventProcessor.finalizeOrphanedToolCalls(
+      this.completePromptTurnIfCurrent(
         sessionId,
-        `stop_reason:${result.stopReason}`
+        stopGeneration,
+        `stop_reason:${result.stopReason}`,
+        {
+          phase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: new Date().toISOString(),
+        }
       );
-      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'idle',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
       return result.stopReason;
     } catch (error) {
       promptError = error;
       promptErrorSet = true;
-      this.acpEventProcessor.finishPromptTurn(sessionId);
-      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
-      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', {
         phase: 'error',
         processState: 'alive',
         activity: 'IDLE',
@@ -414,11 +413,26 @@ export class SessionService {
       }
       if (
         (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
-        !this.isSessionStopping(sessionId)
+        !this.isSessionStopping(sessionId) &&
+        this.getStopGeneration(sessionId) === stopGeneration
       ) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
+  }
+
+  private completePromptTurnIfCurrent(
+    sessionId: string,
+    stopGeneration: number,
+    orphanedToolCallReason: string,
+    runtime: SessionRuntimeState
+  ): void {
+    if (this.getStopGeneration(sessionId) !== stopGeneration) {
+      return;
+    }
+    this.acpEventProcessor.finishPromptTurn(sessionId);
+    this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, orphanedToolCallReason);
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, runtime);
   }
 
   private isTurnAlreadyInProgressError(error: unknown): boolean {
