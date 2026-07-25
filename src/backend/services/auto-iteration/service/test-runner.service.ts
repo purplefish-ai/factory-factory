@@ -20,7 +20,7 @@ export function runTestCommand(
 
     let stdout = '';
     let stderr = '';
-    let timedOut = false;
+    let timeoutTriggered = false;
     let exited = false;
 
     child.stdout.on('data', (data: Buffer) => {
@@ -37,7 +37,7 @@ export function runTestCommand(
     });
 
     const timer = setTimeout(() => {
-      timedOut = true;
+      timeoutTriggered = true;
       child.kill('SIGTERM');
       setTimeout(() => {
         if (!exited) {
@@ -46,14 +46,14 @@ export function runTestCommand(
       }, 5000);
     }, timeoutSeconds * 1000);
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       exited = true;
       clearTimeout(timer);
       resolve({
         stdout,
         stderr,
         exitCode: code ?? 1,
-        timedOut,
+        timedOut: timeoutTriggered && signal !== null,
       });
     });
 
@@ -63,7 +63,7 @@ export function runTestCommand(
         stdout,
         stderr: `${stderr}\n${err.message}`,
         exitCode: 1,
-        timedOut,
+        timedOut: timeoutTriggered,
       });
     });
   });

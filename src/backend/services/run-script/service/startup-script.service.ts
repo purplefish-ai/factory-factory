@@ -241,7 +241,7 @@ class StartupScriptService {
         });
       }
 
-      let timedOut = false;
+      let timeoutTriggered = false;
       let stdout = '';
       let stderr = '';
       let killTimeoutHandle: NodeJS.Timeout | undefined;
@@ -266,7 +266,7 @@ class StartupScriptService {
       };
 
       const timeoutHandle = setTimeout(() => {
-        timedOut = true;
+        timeoutTriggered = true;
         proc.kill('SIGTERM');
         killTimeoutHandle = setTimeout(() => proc.kill('SIGKILL'), gracePeriodMs);
       }, timeoutMs);
@@ -297,8 +297,9 @@ class StartupScriptService {
       proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
       proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
 
-      proc.on('close', async (code) => {
+      proc.on('close', async (code, signal) => {
         await cleanupTimeouts();
+        const timedOut = timeoutTriggered && signal !== null;
         resolve({ success: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
       });
 
