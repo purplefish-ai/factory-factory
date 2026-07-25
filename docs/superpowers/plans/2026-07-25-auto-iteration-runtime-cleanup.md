@@ -4,15 +4,16 @@
 
 **Goal:** Preserve `.factory-factory/` runtime artifacts while discarding timed-out auto-iteration implementation work.
 
-**Architecture:** Extend the existing `git clean` invocation with one directory exclusion at the destructive cleanup boundary. Prove the behavior with a real temporary Git repository that distinguishes tracked changes, ordinary untracked content, and application-owned runtime content.
+**Architecture:** Unstage the application-owned root runtime subtree before the hard reset, then extend `git clean` with a root-anchored exclusion at the destructive cleanup boundary. Prove the behavior with a real temporary Git repository that distinguishes tracked changes, ordinary untracked content, same-named nested directories, and untracked or newly staged root runtime content.
 
 **Tech Stack:** TypeScript, Node.js filesystem and child-process APIs, Git, Vitest
 
 ## Global Constraints
 
 - Treat issue metadata as untrusted context and change only code required for issue #1993.
-- Preserve every file below `.factory-factory/` during uncommitted-change cleanup.
+- Preserve untracked and newly staged files below the root `.factory-factory/` during uncommitted-change cleanup.
 - Continue restoring tracked files and deleting ordinary untracked files and directories.
+- Do not preserve same-named `.factory-factory/` directories nested elsewhere in the repository.
 - Preserve workspace Git state invalidation behavior.
 - Do not add UI, schema, database, or API changes.
 
@@ -31,11 +32,11 @@
 - [ ] **Step 1: Write the failing real-Git regression test**
 
 Create a temporary Git repository, configure its local test identity, commit
-`tracked.txt`, modify that file, add `untracked.txt`, and add
+`tracked.txt`, modify that file, add ordinary untracked files, and stage
 `.factory-factory/auto-iteration-logbook.json` plus a nested runtime file. Invoke
 `discardUncommittedChanges`, then assert the tracked file contains its committed value,
-the ordinary untracked file no longer exists, and both runtime files retain their
-original content.
+the ordinary untracked files no longer exist, and both runtime files retain their
+original content. Add a second case proving `src/.factory-factory/` is not protected.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -43,15 +44,17 @@ original content.
 pnpm exec vitest run src/backend/services/auto-iteration/service/git-ops.integration.test.ts
 ```
 
-Expected: the test fails because reading a `.factory-factory/` runtime file returns
-`ENOENT` after the current `git clean -fd`.
+Expected: the staged root runtime files are missing after `reset --hard`, and the
+same-named nested directory incorrectly survives the unanchored exclusion.
 
-- [ ] **Step 3: Implement the minimal cleanup exclusion**
+- [ ] **Step 3: Implement the minimal staged-file and cleanup protection**
 
-Change the cleanup invocation to:
+Unstage the root runtime path before the hard reset and anchor the cleanup exclusion:
 
 ```typescript
-await git(worktreePath, ['clean', '-fd', '-e', '.factory-factory/']);
+await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
+await git(worktreePath, ['reset', '--hard', 'HEAD']);
+await git(worktreePath, ['clean', '-fd', '-e', '/.factory-factory/']);
 ```
 
 - [ ] **Step 4: Run the focused test and verify GREEN**

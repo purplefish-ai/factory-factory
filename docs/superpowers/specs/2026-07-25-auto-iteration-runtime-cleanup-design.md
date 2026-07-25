@@ -17,9 +17,12 @@ persisted.
 
 ## Design
 
-Keep the existing hard reset and untracked-file cleanup, but pass
-`-e .factory-factory/` to `git clean`. This protects the complete Factory Factory runtime
-directory while continuing to remove ordinary untracked implementation work.
+Before the hard reset, reset the index entry for `/.factory-factory/` to `HEAD`. This
+converts newly staged runtime files back to untracked files without changing their
+working-tree contents. Then keep the existing hard reset and untracked-file cleanup, but
+pass the root-anchored exclusion `-e /.factory-factory/` to `git clean`. This protects
+the complete root runtime directory while continuing to remove ordinary untracked
+implementation work, including nested directories that happen to share its name.
 
 The exclusion belongs in `discardUncommittedChanges`, where the destructive cleanup is
 defined, rather than in the timeout caller. This keeps every caller of the helper on the
@@ -29,8 +32,10 @@ are separate concerns.
 
 ## Alternatives Considered
 
-1. Exclude `.factory-factory/` from `git clean`. Selected because all files under this
-   application-owned runtime directory must survive cleanup.
+1. Unstage `/.factory-factory/`, then exclude the anchored root directory from `git clean`.
+   Selected because all untracked and newly staged files under this application-owned
+   runtime directory must survive cleanup without protecting same-named directories
+   elsewhere.
 2. Exclude only `.factory-factory/auto-iteration-logbook.json`. Rejected because insights,
    strategy, screenshots, and future runtime artifacts would remain vulnerable.
 3. Add `.factory-factory/` to the repository `.gitignore`. Rejected because the worktree
@@ -41,7 +46,11 @@ are separate concerns.
 
 - Modified tracked files are still restored to `HEAD`.
 - Ordinary untracked files and directories are still deleted.
-- Every file below `.factory-factory/` survives, including nested files.
+- Every untracked or newly staged file below the root `.factory-factory/` survives,
+  including nested files.
+- Same-named directories below other repository paths remain ordinary untracked work and
+  are deleted.
+- Runtime paths already tracked by `HEAD` retain normal hard-reset behavior.
 - Workspace Git state is invalidated after both successful and failed cleanup, preserving
   current cache behavior.
 - Progress-persistence hardening when logbook writes fail is outside this issue's focused
@@ -50,10 +59,11 @@ are separate concerns.
 ## Testing
 
 Add a real-Git regression test that creates a temporary repository with committed tracked
-content, modifies that content, creates an ordinary untracked file, and creates nested
-runtime files under `.factory-factory/`. After `discardUncommittedChanges`, assert that
-tracked content is restored, ordinary untracked content is removed, and runtime content
-is unchanged.
+content, modifies that content, creates ordinary untracked files, stages nested runtime
+files under the root `.factory-factory/`, and creates an untracked
+`src/.factory-factory/` file. After `discardUncommittedChanges`, assert that tracked
+content is restored, ordinary and same-named nested untracked content is removed, and
+root runtime content is unchanged.
 
 Run the focused regression file before and after the implementation, followed by the
 required typecheck, formatter, full test suite, and production build.

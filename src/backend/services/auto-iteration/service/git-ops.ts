@@ -54,8 +54,9 @@ export async function getHeadDiff(worktreePath: string): Promise<string> {
 /** Discard all uncommitted changes (staged and unstaged). */
 export async function discardUncommittedChanges(worktreePath: string): Promise<void> {
   try {
+    await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
     await git(worktreePath, ['reset', '--hard', 'HEAD']);
-    await git(worktreePath, ['clean', '-fd', '-e', '.factory-factory/']);
+    await git(worktreePath, ['clean', '-fd', '-e', '/.factory-factory/']);
   } finally {
     workspaceGitStateService.invalidate(worktreePath);
   }

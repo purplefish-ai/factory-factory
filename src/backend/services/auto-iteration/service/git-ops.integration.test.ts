@@ -43,6 +43,12 @@ describe('auto-iteration Git cleanup integration', () => {
     await mkdir(nestedRuntimeDirectory, { recursive: true });
     await writeFile(logbookPath, '{"iterations":[]}\n', 'utf-8');
     await writeFile(screenshotPath, 'runtime artifact\n', 'utf-8');
+    git(worktreePath, [
+      'add',
+      '--',
+      '.factory-factory/auto-iteration-logbook.json',
+      '.factory-factory/screenshots/iteration.png',
+    ]);
 
     await discardUncommittedChanges(worktreePath);
 
@@ -55,5 +61,18 @@ describe('auto-iteration Git cleanup integration', () => {
     });
     await expect(readFile(logbookPath, 'utf-8')).resolves.toBe('{"iterations":[]}\n');
     await expect(readFile(screenshotPath, 'utf-8')).resolves.toBe('runtime artifact\n');
+  });
+
+  it('does not preserve nested directories that share the runtime directory name', async () => {
+    const nestedRuntimeDirectoryPath = join(worktreePath, 'src', '.factory-factory');
+    const nestedRuntimeFilePath = join(nestedRuntimeDirectoryPath, 'draft.txt');
+    await mkdir(nestedRuntimeDirectoryPath, { recursive: true });
+    await writeFile(nestedRuntimeFilePath, 'discard nested implementation artifact\n', 'utf-8');
+
+    await discardUncommittedChanges(worktreePath);
+
+    await expect(readFile(nestedRuntimeFilePath, 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 });
