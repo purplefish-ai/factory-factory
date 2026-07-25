@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type AgentContentItem,
   type ChatMessage,
+  compareTranscriptMessageOrder,
   hasRenderableAssistantContent,
   isImageContent,
   isRenderableAssistantContentItem,
@@ -34,6 +35,13 @@ describe('renderer transcript window', () => {
 
     expect(sorted.map((message) => message.id)).toEqual(['m-1', 'm-2']);
     expect(messages.map((message) => message.id)).toEqual(['m-2', 'm-1']);
+  });
+
+  it('treats negative local orders as an equal renderer tail namespace', () => {
+    const firstError = rendererMessage('error-1', -1);
+    const secondError = rendererMessage('error-2', -1);
+
+    expect(compareTranscriptMessageOrder(firstError, secondError)).toBe(0);
   });
 });
 

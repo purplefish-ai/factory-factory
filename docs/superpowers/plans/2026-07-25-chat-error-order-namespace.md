@@ -70,6 +70,7 @@ Keep the failing test unstaged until Task 2 is green so no intentionally failing
 - Modify: `src/components/chat/reducer/helpers.ts`
 - Modify: `src/shared/acp-protocol/protocol/renderer-window.ts`
 - Test: `src/components/chat/chat-reducer.test.ts`
+- Test: `src/shared/acp-protocol/protocol.test.ts`
 
 **Interfaces:**
 - Produces: module-local `ERROR_MESSAGE_ORDER` with value `-1`
@@ -108,12 +109,18 @@ function rendererSortOrder(message: ChatMessage): number {
 }
 
 export function compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number {
-  return rendererSortOrder(left) - rendererSortOrder(right);
+  const leftOrder = rendererSortOrder(left);
+  const rightOrder = rendererSortOrder(right);
+  if (leftOrder === rightOrder) {
+    return 0;
+  }
+  return leftOrder < rightOrder ? -1 : 1;
 }
 ```
 
 This maintains a shared sorted-array invariant: backend orders remain ascending and negative local
-messages remain after them in stable arrival order.
+messages remain after them in stable arrival order. Add a protocol unit test requiring two negative
+local orders to compare as equal rather than producing `NaN`.
 
 - [ ] **Step 4: Add and run the renderer-limit regression**
 
@@ -154,6 +161,7 @@ Expected: all reducer and renderer protocol tests pass.
 git add src/components/chat/chat-reducer.test.ts \
   src/components/chat/reducer/helpers.ts \
   src/components/chat/reducer/slices/messages/transport.ts \
+  src/shared/acp-protocol/protocol.test.ts \
   src/shared/acp-protocol/protocol/renderer-window.ts
 git commit -m "Fix chat error order collisions (#1984)"
 ```

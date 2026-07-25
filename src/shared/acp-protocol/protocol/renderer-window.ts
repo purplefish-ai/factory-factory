@@ -41,7 +41,12 @@ function rendererSortOrder(message: ChatMessage): number {
 }
 
 export function compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number {
-  return rendererSortOrder(left) - rendererSortOrder(right);
+  const leftOrder = rendererSortOrder(left);
+  const rightOrder = rendererSortOrder(right);
+  if (leftOrder === rightOrder) {
+    return 0;
+  }
+  return leftOrder < rightOrder ? -1 : 1;
 }
 
 export function trimTranscriptForRenderer(

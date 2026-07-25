@@ -36,7 +36,8 @@ to them.
 Renderer sorting and client binary insertion compare negative local orders as the live transcript
 tail. This preserves the array ordering invariant for later backend inserts, keeps a newly received
 error inside a full renderer window, and ensures a following backend message is inserted immediately
-before the local error. Multiple negative local messages retain arrival order through stable sorting.
+before the local error. Multiple negative local messages compare as equal and retain arrival order
+through stable sorting.
 
 No backend, wire-protocol, message-schema, or React component changes are required; the shared
 renderer-window ordering utility owns the local-tail comparison.
