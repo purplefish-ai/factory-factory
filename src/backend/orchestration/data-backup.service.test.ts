@@ -491,7 +491,7 @@ describe('DataBackupService', () => {
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
 
-      const exported = await dataBackupService.exportData('1.0.0');
+      const exported = exportDataSchema.parse(await dataBackupService.exportData('1.0.0'));
 
       expect(exported.data.workspaces[0]?.parentWorkspaceId).toBeNull();
       expect(exported.data.workspaces[1]?.parentWorkspaceId).toBe(parentWorkspace.id);
@@ -509,6 +509,12 @@ describe('DataBackupService', () => {
       const result = await dataBackupService.importData(exported);
 
       expect(result.workspaces.imported).toBe(2);
+      expect(mockTx.workspace.create).toHaveBeenNthCalledWith(1, {
+        data: expect.objectContaining({
+          id: parentWorkspace.id,
+          parentWorkspaceId: null,
+        }),
+      });
       expect(mockTx.workspace.create).toHaveBeenNthCalledWith(2, {
         data: expect.objectContaining({
           id: childWorkspace.id,
