@@ -272,6 +272,43 @@ describe('AdminDashboardPage settings tabs', () => {
     root.unmount();
   });
 
+  it('preserves the saved custom command when switching to a built-in IDE', () => {
+    mocks.userSettings.preferredIde = 'custom';
+    mocks.userSettings.customIdeCommand = 'code-insiders {workspace}';
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    const trigger = container.querySelector<HTMLElement>('#ide-select');
+
+    flushSync(() => {
+      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
+    const cursorOption = Array.from(
+      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    ).find((option) => option.textContent === 'Cursor');
+    expect(cursorOption).toBeDefined();
+
+    flushSync(() => {
+      cursorOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      cursorOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      preferredIde: 'cursor',
+    });
+
+    root.unmount();
+  });
+
   it('tests the current custom command before it has been saved', () => {
     mocks.userSettings.preferredIde = 'custom';
     mocks.userSettings.customIdeCommand = null;
