@@ -147,11 +147,18 @@ describe('PRSnapshotService', () => {
       prSnapshotService.off(PR_URL_ATTACHED, listener);
 
       expect(result).toEqual({ success: false, reason: 'error' });
+      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+        prUrl: 'https://github.com/org/repo/pull/1',
+        prUpdatedAt: expect.any(Date),
+      });
       expect(listener).toHaveBeenCalledOnce();
       expect(listener).toHaveBeenCalledWith({
         workspaceId: 'w1',
         prUrl: 'https://github.com/org/repo/pull/1',
       });
+      expect(mockUpdate.mock.invocationCallOrder[0]!).toBeLessThan(
+        listener.mock.invocationCallOrder[0]!
+      );
     });
 
     it('attaches PR URL and persists full snapshot with kanban cache update', async () => {
