@@ -23,8 +23,10 @@ export {
   type AttachAndRefreshResult,
   PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  PR_URL_ATTACHED,
   type PRDispatchInvalidatedEvent,
   type PRSnapshotRefreshResult,
   type PRSnapshotUpdatedEvent,
+  type PRUrlAttachedEvent,
   prSnapshotService,
 } from './pr-snapshot.service';

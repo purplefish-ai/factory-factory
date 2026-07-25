@@ -36,7 +36,10 @@ import {
 
 describe('WorkspaceStateMachineService', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockFindUnique.mockReset();
+    mockFindUniqueOrThrow.mockReset();
+    mockUpdate.mockReset();
+    mockUpdateMany.mockReset();
   });
 
   describe('isValidTransition', () => {
@@ -424,12 +427,64 @@ describe('WorkspaceStateMachineService', () => {
     it('should return null when max retries exceeded', async () => {
       const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 3 };
 
-      mockFindUnique.mockResolvedValue(workspace);
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(workspace);
       mockUpdateMany.mockResolvedValue({ count: 0 }); // No update happened
 
       const result = await workspaceStateMachine.startProvisioning('ws-1');
 
       expect(result).toBeNull();
+    });
+
+    it('should throw when the status changes during a retry CAS', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
+      const concurrentlyUpdatedWorkspace = {
+        ...workspace,
+        status: 'PROVISIONING',
+        initRetryCount: 2,
+      };
+
+      mockFindUnique
+        .mockResolvedValueOnce(workspace)
+        .mockResolvedValueOnce(concurrentlyUpdatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.startProvisioning('ws-1')).rejects.toMatchObject({
+        name: 'WorkspaceStateMachineError',
+        workspaceId: 'ws-1',
+        fromStatus: 'FAILED',
+        toStatus: 'PROVISIONING',
+        message: 'Transition failed: status changed by another process',
+      });
+    });
+
+    it('should throw when the workspace is deleted during a retry CAS', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
+
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(null);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.startProvisioning('ws-1')).rejects.toMatchObject({
+        name: 'WorkspaceStateMachineError',
+        workspaceId: 'ws-1',
+        fromStatus: 'FAILED',
+        toStatus: 'PROVISIONING',
+        message: 'Transition failed: status changed by another process',
+      });
+    });
+
+    it('should throw when a failed retry CAS re-read is still below the retry limit', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
+
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.startProvisioning('ws-1')).rejects.toMatchObject({
+        name: 'WorkspaceStateMachineError',
+        workspaceId: 'ws-1',
+        fromStatus: 'FAILED',
+        toStatus: 'PROVISIONING',
+        message: 'Transition failed: status changed by another process',
+      });
     });
 
     it('should respect custom maxRetries option', async () => {
@@ -547,6 +602,41 @@ describe('WorkspaceStateMachineService', () => {
         data: expect.objectContaining({
           initErrorMessage: 'Timeout exceeded',
         }),
+      });
+    });
+  });
+
+  describe('startProvisioningFromReady', () => {
+    it('should return null when max retries exceeded', async () => {
+      const workspace = { id: 'ws-1', status: 'READY', initRetryCount: 3 };
+
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      const result = await workspaceStateMachine.startProvisioningFromReady('ws-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw when the status changes during a retry CAS', async () => {
+      const workspace = { id: 'ws-1', status: 'READY', initRetryCount: 1 };
+      const concurrentlyUpdatedWorkspace = {
+        ...workspace,
+        status: 'PROVISIONING',
+        initRetryCount: 2,
+      };
+
+      mockFindUnique
+        .mockResolvedValueOnce(workspace)
+        .mockResolvedValueOnce(concurrentlyUpdatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.startProvisioningFromReady('ws-1')).rejects.toMatchObject({
+        name: 'WorkspaceStateMachineError',
+        workspaceId: 'ws-1',
+        fromStatus: 'READY',
+        toStatus: 'PROVISIONING',
+        message: 'Transition failed: status changed by another process',
       });
     });
   });
@@ -692,12 +782,34 @@ describe('WorkspaceStateMachineService', () => {
     it('should return null when max retries exceeded', async () => {
       const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 3 };
 
-      mockFindUnique.mockResolvedValue(workspace);
+      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(workspace);
       mockUpdateMany.mockResolvedValue({ count: 0 }); // No update happened
 
       const result = await workspaceStateMachine.resetToNew('ws-1');
 
       expect(result).toBeNull();
+    });
+
+    it('should throw when the status changes during a reset CAS', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED', initRetryCount: 1 };
+      const concurrentlyUpdatedWorkspace = {
+        ...workspace,
+        status: 'NEW',
+        initRetryCount: 2,
+      };
+
+      mockFindUnique
+        .mockResolvedValueOnce(workspace)
+        .mockResolvedValueOnce(concurrentlyUpdatedWorkspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.resetToNew('ws-1')).rejects.toMatchObject({
+        name: 'WorkspaceStateMachineError',
+        workspaceId: 'ws-1',
+        fromStatus: 'FAILED',
+        toStatus: 'NEW',
+        message: 'Transition failed: status changed by another process',
+      });
     });
 
     it('should respect custom maxRetries option', async () => {

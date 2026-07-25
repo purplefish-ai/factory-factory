@@ -3,6 +3,7 @@ import { createDefaultApplicationDependencies } from '@/backend/app-context';
 import {
   PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  PR_URL_ATTACHED,
   prSnapshotService,
 } from '@/backend/services/github';
 import {
@@ -24,6 +25,7 @@ describe('event collector listener lifecycle', () => {
     const sources = [
       [workspaceStateMachine, WORKSPACE_STATE_CHANGED],
       [prSnapshotService, PR_SNAPSHOT_UPDATED],
+      [prSnapshotService, PR_URL_ATTACHED],
       [prSnapshotService, PR_DISPATCH_INVALIDATED],
       [ratchetService, RATCHET_STATE_CHANGED],
       [ratchetService, RATCHET_TOGGLED],

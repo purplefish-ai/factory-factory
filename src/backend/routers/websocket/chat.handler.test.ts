@@ -243,6 +243,59 @@ describe('createChatUpgradeHandler', () => {
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
   });
 
+  it('keeps the session log open until the last viewer disconnects', () => {
+    const { appContext, sessionFileLogger } = createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+    const ws1 = new MockWebSocket();
+    const ws2 = new MockWebSocket();
+    const sockets = [ws1, ws2];
+    const wss = {
+      handleUpgrade: vi.fn(
+        (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (socket: WebSocket) => void
+        ) => callback(sockets.shift() as unknown as WebSocket)
+      ),
+    } as unknown as WebSocketServer;
+    const request = {
+      headers: { origin: allowedOrigin },
+      socket: { remoteAddress: '127.0.0.1' },
+    } as unknown as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1'),
+      wss,
+      wsAliveMap
+    );
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/chat?connectionId=conn-2&sessionId=session-1'),
+      wss,
+      wsAliveMap
+    );
+    expect(chatConnectionRegistry.countViewers('session-1')).toBe(2);
+
+    ws1.emit('close');
+
+    expect(chatConnectionRegistry.countViewers('session-1')).toBe(1);
+    expect(sessionFileLogger.closeSession).not.toHaveBeenCalled();
+
+    ws2.emit('close');
+
+    expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
+    expect(sessionFileLogger.closeSession).toHaveBeenCalledTimes(1);
+    expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+  });
+
   it('keeps chat transport dependencies scoped to each application', () => {
     const eventBusA = new SessionEventBus();
     const eventBusB = new SessionEventBus();
