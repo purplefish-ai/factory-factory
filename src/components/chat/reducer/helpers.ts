@@ -146,7 +146,7 @@ function buildToolUseIdToIndex(messages: ChatMessage[]): Map<string, number> {
 function buildAgentMessageOrderToIndex(messages: ChatMessage[]): Map<number, number> {
   const orderToIndex = new Map<number, number>();
   messages.forEach((message, index) => {
-    if (message.source === 'agent') {
+    if (message.source === 'agent' && message.order >= 0) {
       orderToIndex.set(message.order, index);
     }
   });

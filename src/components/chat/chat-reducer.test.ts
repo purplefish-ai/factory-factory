@@ -987,6 +987,51 @@ describe('chatReducer', () => {
       expect(next.agentMessageOrderToIndex.get(7)).toBe(0);
     });
 
+    it('keeps assistant text visible when an error arrives at the next backend order', () => {
+      const replayEvents: WebSocketMessage[] = Array.from({ length: 8 }, (_, order) => ({
+        type: 'agent_message',
+        messageId: `session-1-${order}`,
+        order,
+        data: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: `Replayed response ${order}` }],
+          },
+        },
+      }));
+      let state = chatReducer(initialState, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: { replayEvents },
+      });
+
+      state = chatReducer(state, {
+        type: 'WS_ERROR',
+        payload: { message: 'Streaming connection warning' },
+      });
+      state = chatReducer(
+        state,
+        textDelta(0, 'Visible response', { messageId: 'session-1-8', order: 8 })
+      );
+
+      const errorMessage = state.messages.find((message) => message.message?.type === 'error');
+      const assistantIndex = state.messages.findIndex((message) => message.id === 'session-1-8');
+      expect(errorMessage?.order).toBe(-1);
+      expect(state.agentMessageOrderToIndex.has(-1)).toBe(false);
+      expect(state.messages[assistantIndex]).toMatchObject({
+        id: 'session-1-8',
+        order: 8,
+        message: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Visible response' }],
+          },
+        },
+      });
+      expect(state.agentMessageOrderToIndex.get(8)).toBe(assistantIndex);
+    });
+
     it('applies many sequential deltas to one indexed assistant message', () => {
       let state = initialState;
       for (let offset = 0; offset < 200; offset += 1) {
