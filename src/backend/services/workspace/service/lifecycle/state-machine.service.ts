@@ -57,6 +57,26 @@ export class WorkspaceStateMachineError extends Error {
   }
 }
 
+async function findRetryLimitWorkspaceOrThrowCasError(
+  workspaceId: string,
+  fromStatus: WorkspaceStatus,
+  toStatus: WorkspaceStatus,
+  maxRetries: number
+): Promise<Workspace> {
+  const workspace = await workspaceAccessor.findRawById(workspaceId);
+
+  if (!workspace || workspace.status !== fromStatus || workspace.initRetryCount < maxRetries) {
+    throw new WorkspaceStateMachineError(
+      workspaceId,
+      fromStatus,
+      toStatus,
+      'Transition failed: status changed by another process'
+    );
+  }
+
+  return workspace;
+}
+
 export interface TransitionOptions {
   /** Worktree path to set (for READY transition) */
   worktreePath?: string;
@@ -312,10 +332,17 @@ class WorkspaceStateMachineService extends EventEmitter {
       );
 
       if (result.count === 0) {
+        const retryLimitWorkspace = await findRetryLimitWorkspaceOrThrowCasError(
+          workspaceId,
+          'FAILED',
+          'PROVISIONING',
+          maxRetries
+        );
+
         logger.warn('Max retries exceeded for workspace', {
           workspaceId,
           maxRetries,
-          currentRetryCount: workspace.initRetryCount,
+          currentRetryCount: retryLimitWorkspace.initRetryCount,
         });
         return null; // Max retries exceeded
       }
@@ -464,10 +491,17 @@ class WorkspaceStateMachineService extends EventEmitter {
     );
 
     if (result.count === 0) {
+      const retryLimitWorkspace = await findRetryLimitWorkspaceOrThrowCasError(
+        workspaceId,
+        'READY',
+        'PROVISIONING',
+        maxRetries
+      );
+
       logger.warn('Max retries exceeded for workspace setup script retry', {
         workspaceId,
         maxRetries,
-        currentRetryCount: workspace.initRetryCount,
+        currentRetryCount: retryLimitWorkspace.initRetryCount,
       });
       return null;
     }
@@ -509,10 +543,17 @@ class WorkspaceStateMachineService extends EventEmitter {
     const result = await workspaceAccessor.resetToNewIfAllowed(workspaceId, maxRetries);
 
     if (result.count === 0) {
+      const retryLimitWorkspace = await findRetryLimitWorkspaceOrThrowCasError(
+        workspaceId,
+        'FAILED',
+        'NEW',
+        maxRetries
+      );
+
       logger.warn('Max retries exceeded for workspace reset', {
         workspaceId,
         maxRetries,
-        currentRetryCount: workspace.initRetryCount,
+        currentRetryCount: retryLimitWorkspace.initRetryCount,
       });
       return null; // Max retries exceeded
     }
