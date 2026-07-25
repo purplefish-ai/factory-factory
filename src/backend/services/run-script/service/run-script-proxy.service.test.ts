@@ -1,5 +1,4 @@
-import type { ChildProcess } from 'node:child_process';
-import { EventEmitter } from 'node:events';
+import { ChildProcess } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
@@ -49,12 +48,14 @@ type ProxyServiceInternals = {
   cloudflaredUnavailable: boolean;
 };
 
-function createChildProcess(pid = 1234): ChildProcess & EventEmitter {
-  return Object.assign(new EventEmitter(), {
-    pid,
-    exitCode: null,
-    kill: vi.fn(),
-  }) as ChildProcess & EventEmitter;
+function createChildProcess(pid = 1234): ChildProcess {
+  const childProcess = new ChildProcess();
+  Object.defineProperties(childProcess, {
+    pid: { value: pid },
+    exitCode: { value: null },
+    kill: { value: vi.fn() },
+  });
+  return childProcess;
 }
 
 function sendRawHttpRequest(params: { port: number; rawRequest: string }): Promise<string> {
