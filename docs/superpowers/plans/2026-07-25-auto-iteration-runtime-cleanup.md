@@ -4,7 +4,7 @@
 
 **Goal:** Preserve `.factory-factory/` runtime artifacts while discarding timed-out auto-iteration implementation work.
 
-**Architecture:** Unstage the application-owned root runtime subtree before the hard reset, then extend `git clean` with a root-anchored exclusion at the destructive cleanup boundary. Prove the behavior with a real temporary Git repository that distinguishes tracked changes, ordinary untracked content, same-named nested directories, and untracked or newly staged root runtime content.
+**Architecture:** Unstage the application-owned root runtime subtree before the hard reset, with a recursive `git rm --cached` fallback for repositories whose `HEAD` does not exist yet, then extend `git clean` with a root-anchored exclusion at the destructive cleanup boundary. On an unborn branch, clear the remaining index instead of attempting the unavailable hard reset. Prove the behavior with a real temporary Git repository that distinguishes tracked changes, ordinary untracked content, same-named nested directories, untracked or newly staged root runtime content, and cleanup before the initial commit.
 
 **Tech Stack:** TypeScript, Node.js filesystem and child-process APIs, Git, Vitest
 
@@ -36,7 +36,8 @@ Create a temporary Git repository, configure its local test identity, commit
 `.factory-factory/auto-iteration-logbook.json` plus a nested runtime file. Invoke
 `discardUncommittedChanges`, then assert the tracked file contains its committed value,
 the ordinary untracked files no longer exist, and both runtime files retain their
-original content. Add a second case proving `src/.factory-factory/` is not protected.
+original content. Add a second case proving `src/.factory-factory/` is not protected,
+and a third case proving the same cleanup contract before the initial commit.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -44,18 +45,56 @@ original content. Add a second case proving `src/.factory-factory/` is not prote
 pnpm exec vitest run src/backend/services/auto-iteration/service/git-ops.integration.test.ts
 ```
 
-Expected: the staged root runtime files are missing after `reset --hard`, and the
-same-named nested directory incorrectly survives the unanchored exclusion.
+Expected: the staged root runtime files are missing after `reset --hard`, the
+same-named nested directory incorrectly survives the unanchored exclusion, and an
+unborn branch fails because `git reset --hard HEAD` has no commit to restore.
 
 - [ ] **Step 3: Implement the minimal staged-file and cleanup protection**
 
-Unstage the root runtime path before the hard reset and anchor the cleanup exclusion:
+Unstage the root runtime path before the hard reset and anchor the cleanup exclusion.
+`HEAD` may not exist before the initial commit, so match the existing defensive unstage
+pattern with a recursive directory fallback:
 
 ```typescript
-await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
-await git(worktreePath, ['reset', '--hard', 'HEAD']);
+try {
+  await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
+} catch {
+  await git(worktreePath, [
+    'rm',
+    '-r',
+    '--force',
+    '--cached',
+    '--ignore-unmatch',
+    '--',
+    '.factory-factory/',
+  ]);
+}
+```
+
+When `HEAD` exists, restore tracked files with `git reset --hard HEAD`. When it does
+not, clear the rest of the index recursively so `git clean` can remove every
+non-runtime file:
+
+```typescript
+if (headExists) {
+  await git(worktreePath, ['reset', '--hard', 'HEAD']);
+} else {
+  await git(worktreePath, [
+    'rm',
+    '-r',
+    '--force',
+    '--cached',
+    '--ignore-unmatch',
+    '--',
+    '.',
+  ]);
+}
 await git(worktreePath, ['clean', '-fd', '-e', '/.factory-factory/']);
 ```
+
+Both cached-only removals use `--force` so partially staged files can be removed from
+the index. Because `--cached` remains present, their working-tree contents are untouched
+until the subsequent anchored clean applies the cleanup policy.
 
 - [ ] **Step 4: Run the focused test and verify GREEN**
 

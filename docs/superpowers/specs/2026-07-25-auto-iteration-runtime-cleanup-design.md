@@ -17,12 +17,15 @@ persisted.
 
 ## Design
 
-Before the hard reset, reset the index entry for `/.factory-factory/` to `HEAD`. This
-converts newly staged runtime files back to untracked files without changing their
-working-tree contents. Then keep the existing hard reset and untracked-file cleanup, but
-pass the root-anchored exclusion `-e /.factory-factory/` to `git clean`. This protects
-the complete root runtime directory while continuing to remove ordinary untracked
-implementation work, including nested directories that happen to share its name.
+Before the hard reset, reset the index entry for `/.factory-factory/` to `HEAD`. If
+`HEAD` does not exist yet, recursively remove the runtime directory from the index with
+forced cached-only removal, which also handles partially staged runtime files without
+changing their working-tree contents. A repository with a commit keeps the existing
+hard reset. On an unborn branch, clear the rest of the index with the same cached-only
+operation because there is no commit to restore. Then pass the root-anchored exclusion
+`-e /.factory-factory/` to `git clean`. This protects the complete root runtime directory
+while continuing to remove ordinary untracked implementation work, including nested
+directories that happen to share its name.
 
 The exclusion belongs in `discardUncommittedChanges`, where the destructive cleanup is
 defined, rather than in the timeout caller. This keeps every caller of the helper on the
@@ -51,6 +54,8 @@ are separate concerns.
 - Same-named directories below other repository paths remain ordinary untracked work and
   are deleted.
 - Runtime paths already tracked by `HEAD` retain normal hard-reset behavior.
+- Before the initial commit, staged and partially staged non-runtime files are cleared
+  from the index and deleted while the latest root runtime contents survive.
 - Workspace Git state is invalidated after both successful and failed cleanup, preserving
   current cache behavior.
 - Progress-persistence hardening when logbook writes fail is outside this issue's focused
@@ -58,12 +63,13 @@ are separate concerns.
 
 ## Testing
 
-Add a real-Git regression test that creates a temporary repository with committed tracked
-content, modifies that content, creates ordinary untracked files, stages nested runtime
-files under the root `.factory-factory/`, and creates an untracked
-`src/.factory-factory/` file. After `discardUncommittedChanges`, assert that tracked
-content is restored, ordinary and same-named nested untracked content is removed, and
-root runtime content is unchanged.
+Add real-Git regression tests that create a temporary repository with committed tracked
+content, modify that content, create ordinary untracked files, stage nested runtime files
+under the root `.factory-factory/`, and create an untracked `src/.factory-factory/` file.
+Also exercise an unborn branch containing staged-then-edited runtime and non-runtime
+files. After `discardUncommittedChanges`, assert that committed tracked content is
+restored when available, ordinary and same-named nested untracked content is removed,
+and the latest root runtime content is unchanged.
 
 Run the focused regression file before and after the implementation, followed by the
 required typecheck, formatter, full test suite, and production build.

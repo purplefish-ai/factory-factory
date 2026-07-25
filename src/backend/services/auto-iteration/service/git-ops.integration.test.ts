@@ -75,4 +75,29 @@ describe('auto-iteration Git cleanup integration', () => {
       code: 'ENOENT',
     });
   });
+
+  it('preserves runtime files when discarding changes before the initial commit', async () => {
+    const runtimeDirectory = join(worktreePath, '.factory-factory');
+    const runtimeFilePath = join(runtimeDirectory, 'auto-iteration-logbook.json');
+    const stagedFilePath = join(worktreePath, 'staged.txt');
+    const untrackedFilePath = join(worktreePath, 'untracked.txt');
+
+    git(worktreePath, ['update-ref', '-d', 'HEAD']);
+    await mkdir(runtimeDirectory);
+    await writeFile(runtimeFilePath, '{"iterations":[]}\n', 'utf-8');
+    await writeFile(stagedFilePath, 'discard staged content\n', 'utf-8');
+    await writeFile(untrackedFilePath, 'discard untracked content\n', 'utf-8');
+    git(worktreePath, ['add', '--', '.factory-factory/auto-iteration-logbook.json', 'staged.txt']);
+    await writeFile(runtimeFilePath, '{"iterations":[1]}\n', 'utf-8');
+    await writeFile(stagedFilePath, 'discard partially staged content\n', 'utf-8');
+
+    await discardUncommittedChanges(worktreePath);
+
+    await expect(readFile(runtimeFilePath, 'utf-8')).resolves.toBe('{"iterations":[1]}\n');
+    await expect(readFile(join(worktreePath, 'tracked.txt'), 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(readFile(stagedFilePath, 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(untrackedFilePath, 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 });

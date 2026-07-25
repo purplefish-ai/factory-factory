@@ -54,8 +54,13 @@ export async function getHeadDiff(worktreePath: string): Promise<string> {
 /** Discard all uncommitted changes (staged and unstaged). */
 export async function discardUncommittedChanges(worktreePath: string): Promise<void> {
   try {
-    await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
-    await git(worktreePath, ['reset', '--hard', 'HEAD']);
+    const headExists = await hasHead(worktreePath);
+    await unstageRuntimeDirectory(worktreePath);
+    if (headExists) {
+      await git(worktreePath, ['reset', '--hard', 'HEAD']);
+    } else {
+      await git(worktreePath, ['rm', '-r', '--force', '--cached', '--ignore-unmatch', '--', '.']);
+    }
     await git(worktreePath, ['clean', '-fd', '-e', '/.factory-factory/']);
   } finally {
     workspaceGitStateService.invalidate(worktreePath);
@@ -70,6 +75,34 @@ export async function hasUncommittedChanges(worktreePath: string): Promise<boole
 
 const LOGBOOK_PATH = '.factory-factory/auto-iteration-logbook.json';
 const INSIGHTS_PATH = '.factory-factory/auto-iteration-insights.md';
+
+async function hasHead(worktreePath: string): Promise<boolean> {
+  try {
+    await git(worktreePath, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+    return true;
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 1) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function unstageRuntimeDirectory(worktreePath: string): Promise<void> {
+  try {
+    await git(worktreePath, ['reset', 'HEAD', '--', '.factory-factory/']);
+  } catch {
+    await git(worktreePath, [
+      'rm',
+      '-r',
+      '--force',
+      '--cached',
+      '--ignore-unmatch',
+      '--',
+      '.factory-factory/',
+    ]);
+  }
+}
 
 /** Unstage the auto-iteration logbook if it is currently staged. */
 async function unstageLogbook(worktreePath: string): Promise<void> {
