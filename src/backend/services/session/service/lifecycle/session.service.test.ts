@@ -2344,6 +2344,59 @@ describe('SessionService', () => {
     }
   });
 
+  it('preserves stopped runtime when an in-flight prompt times out after stop completes', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'session-prompt-timeout-after-stop';
+    sessionEventBus.registerViewerCountProvider((viewedSessionId) =>
+      viewedSessionId === sessionId ? 1 : 0
+    );
+    try {
+      const prompt = createDeferred<{ stopReason: string }>();
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      const publishToSessionSpy = vi.spyOn(sessionEventBus, 'publishToSession');
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
+      vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+
+      const sendPromise = sessionService.sendAcpMessage(sessionId, [
+        { type: 'text', text: 'hello' },
+      ]);
+      const sendRejection = expect(sendPromise).rejects.toThrow('Prompt timed out');
+      await vi.waitFor(() => {
+        expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledWith(
+          sessionId,
+          [{ type: 'text', text: 'hello' }],
+          undefined
+        );
+      });
+
+      await sessionService.stopSession(sessionId);
+      expect(sessionService.isSessionStopping(sessionId)).toBe(false);
+      publishToSessionSpy.mockClear();
+
+      prompt.reject(new Error('Prompt timed out'));
+      await sendRejection;
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(sessionService.getRuntimeSnapshot(sessionId)).toMatchObject({
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+      });
+      expect(publishToSessionSpy).not.toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({
+          type: 'session_runtime_updated',
+          sessionRuntime: expect.objectContaining({ processState: 'alive' }),
+        })
+      );
+      expect(onPromptTurnComplete).not.toHaveBeenCalled();
+    } finally {
+      sessionEventBus.registerViewerCountProvider(null);
+      vi.useRealTimers();
+    }
+  });
+
   it('swallows prompt-turn completion callback failures', async () => {
     vi.useFakeTimers();
     try {

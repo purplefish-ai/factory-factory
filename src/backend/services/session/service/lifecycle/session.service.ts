@@ -357,6 +357,7 @@ export class SessionService {
     prompt: ContentBlock[],
     timeoutMs?: number
   ): Promise<string> {
+    const stopGeneration = this.getStopGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
@@ -384,7 +385,7 @@ export class SessionService {
         sessionId,
         `stop_reason:${result.stopReason}`
       );
-      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.setRuntimeSnapshotForPrompt(sessionId, stopGeneration, {
         phase: 'idle',
         processState: 'alive',
         activity: 'IDLE',
@@ -396,7 +397,7 @@ export class SessionService {
       promptErrorSet = true;
       this.acpEventProcessor.finishPromptTurn(sessionId);
       this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
-      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.setRuntimeSnapshotForPrompt(sessionId, stopGeneration, {
         phase: 'error',
         processState: 'alive',
         activity: 'IDLE',
@@ -414,11 +415,23 @@ export class SessionService {
       }
       if (
         (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
-        !this.isSessionStopping(sessionId)
+        !this.isSessionStopping(sessionId) &&
+        this.getStopGeneration(sessionId) === stopGeneration
       ) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
+  }
+
+  private setRuntimeSnapshotForPrompt(
+    sessionId: string,
+    stopGeneration: number,
+    runtime: SessionRuntimeState
+  ): void {
+    if (this.getStopGeneration(sessionId) !== stopGeneration) {
+      return;
+    }
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, runtime);
   }
 
   private isTurnAlreadyInProgressError(error: unknown): boolean {
