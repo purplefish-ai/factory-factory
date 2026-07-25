@@ -903,6 +903,9 @@ describe('configureDomainBridges', () => {
       );
       expect(workspaceAutoIterationService.finishSessionIfMatching).toHaveBeenCalledTimes(1);
       expect(
+        vi.mocked(workspaceAutoIterationService.finishSessionIfMatching).mock.invocationCallOrder[0]
+      ).toBeLessThan(vi.mocked(sessionDataService.deleteAgentSession).mock.invocationCallOrder[0]!);
+      expect(
         vi.mocked(workspaceAutoIterationService.setSession).mock.invocationCallOrder[0]
       ).toBeLessThan(vi.mocked(sessionService.sendAcpMessage).mock.invocationCallOrder[0]!);
     });

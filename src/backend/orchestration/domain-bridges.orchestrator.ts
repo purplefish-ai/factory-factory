@@ -233,6 +233,12 @@ async function cleanupFailedAutoIterationRecycle(
   previousSessionId: string | undefined,
   replacementSessionId?: string
 ): Promise<void> {
+  await finishFailedRecycleIfSessionMatches(
+    workspaceAutoIterationService,
+    workspaceId,
+    previousSessionId,
+    replacementSessionId
+  );
   if (replacementSessionId) {
     await rollbackCreatedAutoIterationSession(
       sessionService,
@@ -245,12 +251,6 @@ async function cleanupFailedAutoIterationRecycle(
   if (previousSessionId) {
     await retireStoppedAutoIterationSessionBestEffort(sessionDataService, previousSessionId);
   }
-  await finishFailedRecycleIfSessionMatches(
-    workspaceAutoIterationService,
-    workspaceId,
-    previousSessionId,
-    replacementSessionId
-  );
 }
 
 export function configureDomainBridges(services: BridgeServices): void {
