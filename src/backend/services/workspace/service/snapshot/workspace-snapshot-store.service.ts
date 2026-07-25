@@ -230,7 +230,7 @@ function gitStatsEqual(left: GitStats | null, right: GitStats | null): boolean {
   );
 }
 
-function sessionSummariesEqual(
+export function sessionSummariesEqual(
   left: WorkspaceSessionSummary[],
   right: WorkspaceSessionSummary[]
 ): boolean {

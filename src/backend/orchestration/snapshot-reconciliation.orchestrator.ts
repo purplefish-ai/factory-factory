@@ -29,6 +29,7 @@ import {
   computePendingRequestType,
   type gitOpsService,
   type SnapshotUpdateInput,
+  sessionSummariesEqual,
   type WorkspaceSnapshotEntry,
   type workspaceMaintenanceService,
   type workspaceSnapshotStore,
@@ -138,7 +139,12 @@ export function detectDrift(
         continue;
       }
       const snapValue = existing[field];
-      if (!isDeepStrictEqual(authValue, snapValue)) {
+      const valuesEqual =
+        field === 'sessionSummaries'
+          ? authoritative.sessionSummaries !== undefined &&
+            sessionSummariesEqual(authoritative.sessionSummaries, existing.sessionSummaries)
+          : isDeepStrictEqual(authValue, snapValue);
+      if (!valuesEqual) {
         drifts.push({
           field,
           group,
