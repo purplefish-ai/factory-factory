@@ -501,8 +501,13 @@ describe('DataBackupService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValue(mockProject);
       vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
-      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
       const importedWorkspaceIds = new Set<string>();
+      vi.mocked(mockTx.workspace.findUnique).mockImplementation(({ where }) => {
+        if (!(where.id && importedWorkspaceIds.has(where.id))) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(where.id === parentWorkspace.id ? parentWorkspace : childWorkspace);
+      });
       vi.mocked(mockTx.workspace.create).mockImplementation(({ data }) => {
         if (data.parentWorkspaceId && !importedWorkspaceIds.has(data.parentWorkspaceId as string)) {
           return Promise.reject(new Error('Foreign key constraint failed'));
@@ -615,6 +620,72 @@ describe('DataBackupService', () => {
       vi.mocked(mockTx.project.findUnique).mockResolvedValue(null);
       vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
       vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.workspaces.imported).toBe(0);
+      expect(result.workspaces.skipped).toBe(1);
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
+    });
+
+    it('skips child workspaces when their parent was not imported', async () => {
+      const baseWorkspace = createImportData().data.workspaces[0]!;
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [
+          {
+            ...baseWorkspace,
+            id: 'child-ws',
+            parentWorkspaceId: 'parent-ws',
+          },
+          {
+            ...baseWorkspace,
+            id: 'parent-ws',
+            projectId: 'missing-project',
+            parentWorkspaceId: null,
+          },
+        ],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.project.findUnique).mockImplementation(({ where }) =>
+        Promise.resolve(where.id === mockProject.id ? mockProject : null)
+      );
+      vi.mocked(mockTx.workspace.create).mockRejectedValue(
+        new Error('Foreign key constraint failed')
+      );
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.workspaces.imported).toBe(0);
+      expect(result.workspaces.skipped).toBe(2);
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
+    });
+
+    it('skips child workspaces with an empty parent ID', async () => {
+      const baseWorkspace = createImportData().data.workspaces[0]!;
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [
+          {
+            ...baseWorkspace,
+            id: 'child-ws',
+            parentWorkspaceId: '',
+          },
+        ],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.create).mockRejectedValue(
+        new Error('Foreign key constraint failed')
+      );
 
       const result = await dataBackupService.importData(exportedData);
 

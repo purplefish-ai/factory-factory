@@ -148,6 +148,20 @@ async function importWorkspaces(
       continue;
     }
 
+    if (workspace.parentWorkspaceId !== null) {
+      const parentWorkspace = await tx.workspace.findUnique({
+        where: { id: workspace.parentWorkspaceId },
+      });
+      if (!parentWorkspace) {
+        logger.warn('Skipping workspace due to missing parent workspace', {
+          workspaceId: workspace.id,
+          parentWorkspaceId: workspace.parentWorkspaceId,
+        });
+        counter.skipped++;
+        continue;
+      }
+    }
+
     await tx.workspace.create({
       data: {
         id: workspace.id,
