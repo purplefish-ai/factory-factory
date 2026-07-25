@@ -3294,6 +3294,41 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session');
     });
 
+    it('stops a provider-mismatched session after settlement observes cancellation', async () => {
+      const controller = new AbortController();
+      const timeoutError = new Error('Workspace check timed out');
+      vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
+        id: 'codex-session',
+        provider: 'CODEX',
+        status: SessionStatus.RUNNING,
+      } as never);
+      vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
+      vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockImplementation(() => {
+        controller.abort(timeoutError);
+        return Promise.resolve(true);
+      });
+
+      const check = unsafeCoerce<{
+        checkActiveFixerSession: (w: unknown, signal: AbortSignal) => Promise<unknown>;
+      }>(ratchetService).checkActiveFixerSession(
+        {
+          id: 'ws-provider-mismatch-cancelled-after-settlement',
+          ratchetActiveSessionId: 'codex-session',
+          defaultSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        },
+        controller.signal
+      );
+
+      await expect(check).rejects.toBe(timeoutError);
+      expect(mockWorkspaceBridge.recordSessionEnd).toHaveBeenCalledWith(
+        'ws-provider-mismatch-cancelled-after-settlement',
+        'codex-session',
+        'DIED'
+      );
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session');
+    });
+
     it('returns the active fixer when the session is working', async () => {
       vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
         id: 'working-session',

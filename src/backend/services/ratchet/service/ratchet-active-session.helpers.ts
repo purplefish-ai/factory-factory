@@ -12,15 +12,11 @@ async function safeStopSession(params: {
   sessionId: string;
   warningMessage: string;
   warningContext: Record<string, unknown>;
-  signal?: AbortSignal;
 }): Promise<void> {
-  const { sessionBridge, sessionId, warningMessage, warningContext, signal } = params;
+  const { sessionBridge, sessionId, warningMessage, warningContext } = params;
   try {
-    signal?.throwIfAborted();
     await sessionBridge.stopSession(sessionId);
-    signal?.throwIfAborted();
   } catch (error) {
-    signal?.throwIfAborted();
     logger.warn(warningMessage, {
       ...warningContext,
       error: error instanceof Error ? error.message : String(error),
@@ -32,7 +28,6 @@ async function stopCompletedRatchetSession(params: {
   workspaceId: string;
   sessionId: string;
   sessionBridge: RatchetSessionBridge;
-  signal?: AbortSignal;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -42,7 +37,6 @@ async function stopCompletedRatchetSession(params: {
       workspaceId: params.workspaceId,
       sessionId: params.sessionId,
     },
-    signal: params.signal,
   });
 }
 
@@ -52,7 +46,6 @@ async function stopSessionForProviderMismatch(params: {
   expectedProvider: SessionProvider;
   actualProvider: SessionProvider;
   sessionBridge: RatchetSessionBridge;
-  signal?: AbortSignal;
 }): Promise<void> {
   await safeStopSession({
     sessionBridge: params.sessionBridge,
@@ -64,7 +57,6 @@ async function stopSessionForProviderMismatch(params: {
       expectedProvider: params.expectedProvider,
       actualProvider: params.actualProvider,
     },
-    signal: params.signal,
   });
 }
 
@@ -135,19 +127,20 @@ export async function checkActiveFixerSession(params: {
   }
 
   if (session.provider !== resolvedRatchetProvider) {
-    const result = await settle(
-      'DIED',
-      `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
-    );
-    await stopSessionForProviderMismatch({
-      workspaceId: workspace.id,
-      sessionId: session.id,
-      expectedProvider: resolvedRatchetProvider,
-      actualProvider: session.provider,
-      sessionBridge,
-      signal,
-    });
-    return result;
+    try {
+      return await settle(
+        'DIED',
+        `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
+      );
+    } finally {
+      await stopSessionForProviderMismatch({
+        workspaceId: workspace.id,
+        sessionId: session.id,
+        expectedProvider: resolvedRatchetProvider,
+        actualProvider: session.provider,
+        sessionBridge,
+      });
+    }
   }
 
   if (session.status !== SessionStatus.RUNNING) {
@@ -169,7 +162,6 @@ export async function checkActiveFixerSession(params: {
       workspaceId: workspace.id,
       sessionId: session.id,
       sessionBridge,
-      signal,
     });
     return result;
   }
