@@ -6,10 +6,21 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let capturedDefaultLayout: unknown;
+let capturedOnLayoutChanged:
+  | ((layout: Record<string, number>, meta: { isUserInteraction: boolean }) => void)
+  | undefined;
 
 vi.mock('react-resizable-panels', () => ({
-  Group: (props: { defaultLayout?: unknown; children?: ReactNode }) => {
+  Group: (props: {
+    defaultLayout?: unknown;
+    onLayoutChanged?: (
+      layout: Record<string, number>,
+      meta: { isUserInteraction: boolean }
+    ) => void;
+    children?: ReactNode;
+  }) => {
     capturedDefaultLayout = props.defaultLayout;
+    capturedOnLayoutChanged = props.onLayoutChanged;
     return createElement('div', null, props.children);
   },
   Panel: (props: { children?: ReactNode }) => createElement('div', null, props.children),
@@ -65,6 +76,7 @@ function renderInDom(render: (root: Root) => void): () => void {
 
 beforeEach(() => {
   capturedDefaultLayout = undefined;
+  capturedOnLayoutChanged = undefined;
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
     writable: true,
@@ -114,6 +126,28 @@ describe('ResizablePanelGroup persistence', () => {
     });
 
     expect(capturedDefaultLayout).toEqual({ left: 40, right: 60 });
+    cleanup();
+  });
+
+  it('persists completed layouts and forwards their interaction metadata', () => {
+    const onLayoutChanged = vi.fn();
+    const cleanup = renderInDom((root) => {
+      flushSync(() => {
+        root.render(
+          createElement(ResizablePanelGroup, {
+            autoSaveId: 'workspace-3',
+            onLayoutChanged,
+          })
+        );
+      });
+    });
+    const layout = { left: 35, right: 65 };
+    const meta = { isUserInteraction: true };
+
+    capturedOnLayoutChanged?.(layout, meta);
+
+    expect(onLayoutChanged).toHaveBeenCalledWith(layout, meta);
+    expect(localStorage.getItem('resizable-panels:workspace-3')).toBe(JSON.stringify(layout));
     cleanup();
   });
 });
