@@ -143,6 +143,7 @@ describe('Enum sync with Prisma schema', () => {
 
     expect(parsed.mode).toBe('STANDARD');
     expect(parsed.autoIterationConfig).toBeNull();
+    expect(parsed.parentWorkspaceId).toBeNull();
   });
 
   it('validates and defaults exported auto-iteration config', () => {

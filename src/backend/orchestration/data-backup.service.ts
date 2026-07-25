@@ -149,6 +149,7 @@ async function importWorkspaces(
       data: {
         id: workspace.id,
         projectId: workspace.projectId,
+        parentWorkspaceId: workspace.parentWorkspaceId,
         name: workspace.name,
         description: workspace.description,
         status: workspace.status,
@@ -385,6 +386,7 @@ class DataBackupService {
         workspaces: workspaces.map((w) => ({
           id: w.id,
           projectId: w.projectId,
+          parentWorkspaceId: w.parentWorkspaceId,
           name: w.name,
           description: w.description,
           status: w.status,

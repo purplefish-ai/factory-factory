@@ -469,6 +469,53 @@ describe('DataBackupService', () => {
         }),
       });
     });
+
+    it('preserves parent-child relationships through export and import', async () => {
+      const parentWorkspace: Workspace = {
+        ...mockWorkspace,
+        id: 'parent-ws',
+        name: 'Parent Workspace',
+      };
+      const childWorkspace: Workspace = {
+        ...mockWorkspace,
+        id: 'child-ws',
+        name: 'Child Workspace',
+        parentWorkspaceId: parentWorkspace.id,
+        createdAt: new Date('2025-01-01T00:01:00.000Z'),
+        updatedAt: new Date('2025-01-01T00:36:00.000Z'),
+      };
+
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([parentWorkspace, childWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+
+      const exported = await dataBackupService.exportData('1.0.0');
+
+      expect(exported.data.workspaces[0]?.parentWorkspaceId).toBeNull();
+      expect(exported.data.workspaces[1]?.parentWorkspaceId).toBe(parentWorkspace.id);
+
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create)
+        .mockResolvedValueOnce(parentWorkspace)
+        .mockResolvedValueOnce(childWorkspace);
+
+      const result = await dataBackupService.importData(exported);
+
+      expect(result.workspaces.imported).toBe(2);
+      expect(mockTx.workspace.create).toHaveBeenNthCalledWith(2, {
+        data: expect.objectContaining({
+          id: childWorkspace.id,
+          parentWorkspaceId: parentWorkspace.id,
+        }),
+      });
+    });
   });
 
   describe('importData', () => {
