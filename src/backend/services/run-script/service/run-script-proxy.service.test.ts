@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { createConnection } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
@@ -48,12 +49,12 @@ type ProxyServiceInternals = {
   cloudflaredUnavailable: boolean;
 };
 
-function createChildProcess(pid = 1234): ChildProcess {
-  return {
+function createChildProcess(pid = 1234): ChildProcess & EventEmitter {
+  return Object.assign(new EventEmitter(), {
     pid,
     exitCode: null,
     kill: vi.fn(),
-  } as unknown as ChildProcess;
+  }) as ChildProcess & EventEmitter;
 }
 
 function sendRawHttpRequest(params: { port: number; rawRequest: string }): Promise<string> {
@@ -148,6 +149,41 @@ describe('RunScriptProxyService', () => {
     expect(second).toMatch(/^https:\/\/abc\.trycloudflare\.com\?token=/);
     expect(mockKillProcessWithTimeout).toHaveBeenCalledTimes(1);
     expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears a tunnel URL when its cloudflared process exits', async () => {
+    const service = new RunScriptProxyService();
+    const process = createChildProcess(1235);
+    mockStartCloudflaredTunnel.mockResolvedValueOnce({
+      publicUrl: 'https://abc.trycloudflare.com',
+      proc: process,
+    });
+
+    await service.ensureTunnel('w1', 3000);
+    process.emit('exit', 1, null);
+
+    expect(service.getTunnelUrl('w1')).toBeNull();
+  });
+
+  it('keeps a replacement tunnel URL when the previous process exits', async () => {
+    const service = new RunScriptProxyService();
+    const firstProcess = createChildProcess(1235);
+    const secondProcess = createChildProcess(1236);
+    mockStartCloudflaredTunnel
+      .mockResolvedValueOnce({
+        publicUrl: 'https://first.trycloudflare.com',
+        proc: firstProcess,
+      })
+      .mockResolvedValueOnce({
+        publicUrl: 'https://second.trycloudflare.com',
+        proc: secondProcess,
+      });
+
+    await service.ensureTunnel('w1', 3000);
+    const replacementUrl = await service.ensureTunnel('w1', 4173);
+    firstProcess.emit('exit', 1, null);
+
+    expect(service.getTunnelUrl('w1')).toBe(replacementUrl);
   });
 
   it('marks cloudflared unavailable on command-not-found errors', async () => {

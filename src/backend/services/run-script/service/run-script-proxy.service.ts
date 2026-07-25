@@ -212,12 +212,22 @@ export class RunScriptProxyService {
       cloudflaredProcess = tunnel.proc;
 
       const authenticatedUrl = `${tunnel.publicUrl}?${TOKEN_QUERY_PARAM}=${authToken}`;
-      this.tunnels.set(workspaceId, {
+      const activeTunnel: ActiveTunnel = {
         upstreamPort,
         publicUrl: tunnel.publicUrl,
         authenticatedUrl,
         cloudflaredProcess,
         closeAuthProxy,
+      };
+      this.tunnels.set(workspaceId, activeTunnel);
+      cloudflaredProcess.once('exit', () => {
+        const current = this.tunnels.get(workspaceId);
+        if (current?.cloudflaredProcess !== cloudflaredProcess) {
+          return;
+        }
+
+        this.tunnels.delete(workspaceId);
+        void current.closeAuthProxy().catch(() => undefined);
       });
 
       logger.info('Started run-script proxy tunnel', {
