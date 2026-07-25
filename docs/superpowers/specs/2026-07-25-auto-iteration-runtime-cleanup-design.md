@@ -1,0 +1,64 @@
+# Auto-Iteration Runtime Cleanup Design
+
+## Goal
+
+Preserve Factory Factory's untracked runtime artifacts when auto-iteration discards an
+implementing-phase timeout's uncommitted work.
+
+## Root Cause
+
+`AutoIterationService` handles an implementing-phase prompt timeout by calling
+`discardUncommittedChanges`. That helper hard-resets tracked content and then runs
+`git clean -fd`, which deletes every untracked file and directory. The auto-iteration
+logbook lives under the intentionally untracked `.factory-factory/` directory, so the
+cleanup deletes it before the timeout recovery path appends its crash entry. The append
+then throws, preventing the updated crash count and iteration timestamp from being
+persisted.
+
+## Design
+
+Keep the existing hard reset and untracked-file cleanup, but pass
+`-e .factory-factory/` to `git clean`. This protects the complete Factory Factory runtime
+directory while continuing to remove ordinary untracked implementation work.
+
+The exclusion belongs in `discardUncommittedChanges`, where the destructive cleanup is
+defined, rather than in the timeout caller. This keeps every caller of the helper on the
+same safety boundary and avoids coupling generic Git cleanup to individual logbook
+files. No `.gitignore` change is needed because commit exclusion and cleanup protection
+are separate concerns.
+
+## Alternatives Considered
+
+1. Exclude `.factory-factory/` from `git clean`. Selected because all files under this
+   application-owned runtime directory must survive cleanup.
+2. Exclude only `.factory-factory/auto-iteration-logbook.json`. Rejected because insights,
+   strategy, screenshots, and future runtime artifacts would remain vulnerable.
+3. Add `.factory-factory/` to the repository `.gitignore`. Rejected because the worktree
+   belongs to the user's project and the current unstage behavior intentionally keeps
+   runtime artifacts out of commits without modifying project ignore policy.
+
+## Edge Cases
+
+- Modified tracked files are still restored to `HEAD`.
+- Ordinary untracked files and directories are still deleted.
+- Every file below `.factory-factory/` survives, including nested files.
+- Workspace Git state is invalidated after both successful and failed cleanup, preserving
+  current cache behavior.
+- Progress-persistence hardening when logbook writes fail is outside this issue's focused
+  scope.
+
+## Testing
+
+Add a real-Git regression test that creates a temporary repository with committed tracked
+content, modifies that content, creates an ordinary untracked file, and creates nested
+runtime files under `.factory-factory/`. After `discardUncommittedChanges`, assert that
+tracked content is restored, ordinary untracked content is removed, and runtime content
+is unchanged.
+
+Run the focused regression file before and after the implementation, followed by the
+required typecheck, formatter, full test suite, and production build.
+
+## Scope
+
+This is a backend-only Git cleanup change. It requires no UI changes, screenshots,
+database migration, schema update, or API change.
