@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["20", "22"]
+        node-version: ["22.22", "24"]
     permissions:
       contents: write
       id-token: write
@@ -67,26 +67,26 @@ jobs:
           npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$TMPDIR/test.db"
 
       - name: Publish to npm (dry run)
-        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        if: ${{ matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
         run: npm publish --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
-        if: ${{ matrix.node-version == '20' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')) }}
+        if: ${{ matrix.node-version == '22.22' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')) }}
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Compute release version
-        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        if: ${{ matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         id: release_version
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
-        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        if: ${{ matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         run: |
           VERSION="${{ steps.release_version.outputs.version }}"
           git config user.name "github-actions[bot]"
@@ -99,7 +99,7 @@ jobs:
           fi
 
       - name: Create GitHub release
-        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        if: ${{ matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: v${{ steps.release_version.outputs.version }}
