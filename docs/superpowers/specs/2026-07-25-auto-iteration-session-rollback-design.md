@@ -44,18 +44,24 @@ will:
 This mirrors the existing `createAndStartSession` rollback contract in `session.trpc.ts`.
 
 For `recycleSession()`, retain the predecessor session ID from the initial workspace snapshot.
-Every failure after the predecessor has been stopped will conditionally clear the workspace pointer
-for both IDs that can legitimately belong to the failed operation:
+Every failure after the predecessor has been stopped will conditionally finish auto-iteration as
+`FAILED` for both IDs that can legitimately belong to the failed operation:
 
 - the replacement ID, if it was created; and
 - the predecessor ID, if the pointer was never advanced.
 
-Conditional `clearSessionIfMatching()` calls preserve a concurrently installed newer session ID.
-The replacement row is rolled back after either runtime startup or handoff persistence/send fails.
-The stopped predecessor is best-effort retired to `COMPLETED` with its process PID cleared, which
-preserves its history without leaving it active against the workspace session limit. If replacement
-row creation itself fails, there is no row to delete, but the predecessor is still retired and its
-pointer is cleared conditionally.
+Conditional `finishSessionIfMatching()` calls atomically set the terminal status and clear the
+pointer while preserving a concurrently installed newer session ID. This prevents the outer loop's
+failure finalizer from finding an already-cleared pointer and leaving the workspace status
+`RUNNING`. The replacement row is rolled back after either runtime startup or handoff
+persistence/send fails. The stopped predecessor is best-effort retired to `COMPLETED` with its
+process PID cleared, which preserves its history without leaving it active against the workspace
+session limit. If replacement row creation itself fails, there is no row to delete, but the
+predecessor is still retired and auto-iteration is conditionally finished against its pointer.
+
+After a successful replacement handoff, retire the stopped predecessor to `COMPLETED` before
+returning the new session ID. This keeps each successful recycle from accumulating an `IDLE`
+predecessor against the workspace session limit.
 
 The bridge's initial `startSession()` flow uses the same created-session rollback helper on startup
 failure. It does not manipulate the workspace pointer because it has not yet returned a session ID
@@ -63,17 +69,20 @@ to the auto-iteration service.
 
 ## Error Handling and Edge Cases
 
-- Runtime stop, pointer clear, row delete, and failed-row repair are all best-effort cleanup; none
-  may replace the original operational error.
+- Runtime stop, conditional failed-state persistence, row delete, and failed-row repair are all
+  best-effort cleanup; none may replace the original operational error.
 - A failed row deletion falls back to `FAILED`, which no longer counts as an active `IDLE` or
   `RUNNING` workspace session.
 - A failed fallback update is swallowed after the attempt, matching the existing tRPC rollback.
 - A failed recycle retires its stopped predecessor to `COMPLETED`; it does not delete prior session
   history.
-- A handoff failure after `setSession()` clears the replacement pointer.
-- A `setSession()` rejection that leaves the predecessor pointer unchanged clears the predecessor.
-- A concurrent newer pointer is not cleared because every pointer mutation is compare-and-clear.
-- Successful recycle behavior and retention of previously completed session rows are unchanged.
+- A handoff failure after `setSession()` atomically marks auto-iteration `FAILED` and clears the
+  replacement pointer.
+- A `setSession()` rejection that leaves the predecessor pointer unchanged applies the same
+  terminal transition against the predecessor.
+- A concurrent newer pointer and its workspace status are not changed because every terminal
+  mutation is compare-and-finish.
+- A successful recycle retires its predecessor only after the replacement handoff succeeds.
 - No UI, schema, migration, dependency, or public bridge interface changes are required.
 
 ## Testing
@@ -82,13 +91,15 @@ Add focused orchestration bridge tests that prove:
 
 1. initial auto-iteration startup failure stops the runtime, clears domain state, and deletes the
    created row;
-2. recycle startup failure rolls back the replacement row and clears the stopped predecessor
-   pointer;
-3. handoff send failure rolls back the replacement row and clears its pointer;
-4. cleanup cannot clear a concurrently installed newer pointer;
-5. the stopped predecessor is retired to `COMPLETED` on recycle failure;
-6. delete failure marks the created row `FAILED` with cleared process state and rollback metadata;
-7. cleanup failures preserve the original operational error.
+2. successful recycle retires the stopped predecessor to `COMPLETED`;
+3. recycle startup failure rolls back the replacement row and atomically finishes auto-iteration
+   against the stopped predecessor pointer;
+4. handoff send failure rolls back the replacement row and atomically finishes auto-iteration
+   against its pointer;
+5. cleanup cannot mutate a concurrently installed newer pointer;
+6. the stopped predecessor is retired to `COMPLETED` on recycle failure;
+7. delete failure marks the created row `FAILED` with cleared process state and rollback metadata;
+8. cleanup failures preserve the original operational error.
 
 Run the focused orchestration test through a verified red/green cycle, then run the repository's
 required `typecheck`, formatter/linter, full test suite, and production build.

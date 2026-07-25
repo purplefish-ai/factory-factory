@@ -57,7 +57,7 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { SessionStatus } from '@/shared/core';
+import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
 import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
@@ -126,15 +126,20 @@ async function stopPreviousAutoIterationSession(
   }
 }
 
-async function clearAutoIterationSessionIfMatching(
+async function finishFailedAutoIterationSessionIfMatching(
   workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   sessionId: string
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await workspaceAutoIterationService.clearSessionIfMatching(workspaceId, sessionId);
+    return await workspaceAutoIterationService.finishSessionIfMatching(
+      workspaceId,
+      sessionId,
+      AutoIterationStatus.FAILED
+    );
   } catch {
     // Preserve the original handoff or persistence error
+    return false;
   }
 }
 
@@ -173,31 +178,41 @@ async function retireStoppedAutoIterationSession(
   sessionDataService: SessionDataService,
   sessionId: string
 ): Promise<void> {
+  await sessionDataService.updateAgentSession(sessionId, {
+    status: SessionStatus.COMPLETED,
+    providerProcessPid: null,
+  });
+}
+
+async function retireStoppedAutoIterationSessionBestEffort(
+  sessionDataService: SessionDataService,
+  sessionId: string
+): Promise<void> {
   try {
-    await sessionDataService.updateAgentSession(sessionId, {
-      status: SessionStatus.COMPLETED,
-      providerProcessPid: null,
-    });
+    await retireStoppedAutoIterationSession(sessionDataService, sessionId);
   } catch {
     // Preserve the original recycle error
   }
 }
 
-async function clearFailedRecycleSessionPointers(
+async function finishFailedRecycleIfSessionMatches(
   workspaceAutoIterationService: WorkspaceAutoIterationService,
   workspaceId: string,
   previousSessionId: string | undefined,
   replacementSessionId: string | undefined
 ): Promise<void> {
-  if (replacementSessionId) {
-    await clearAutoIterationSessionIfMatching(
+  if (
+    replacementSessionId &&
+    (await finishFailedAutoIterationSessionIfMatching(
       workspaceAutoIterationService,
       workspaceId,
       replacementSessionId
-    );
+    ))
+  ) {
+    return;
   }
   if (previousSessionId && previousSessionId !== replacementSessionId) {
-    await clearAutoIterationSessionIfMatching(
+    await finishFailedAutoIterationSessionIfMatching(
       workspaceAutoIterationService,
       workspaceId,
       previousSessionId
@@ -223,9 +238,9 @@ async function cleanupFailedAutoIterationRecycle(
     );
   }
   if (previousSessionId) {
-    await retireStoppedAutoIterationSession(sessionDataService, previousSessionId);
+    await retireStoppedAutoIterationSessionBestEffort(sessionDataService, previousSessionId);
   }
-  await clearFailedRecycleSessionPointers(
+  await finishFailedRecycleIfSessionMatches(
     workspaceAutoIterationService,
     workspaceId,
     previousSessionId,
@@ -566,6 +581,9 @@ export function configureDomainBridges(services: BridgeServices): void {
       try {
         await workspaceAutoIterationService.setSession(workspaceId, newSession.id);
         await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
+        if (previousSessionId) {
+          await retireStoppedAutoIterationSession(sessionDataService, previousSessionId);
+        }
       } catch (err) {
         await cleanupFailedAutoIterationRecycle(
           sessionService,
