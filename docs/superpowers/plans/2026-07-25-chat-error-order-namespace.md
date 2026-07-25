@@ -4,7 +4,7 @@
 
 **Goal:** Prevent locally rendered WebSocket errors from claiming backend transcript orders and blocking live assistant text.
 
-**Architecture:** Assign local transport errors a negative sentinel order, while retaining them in the renderer transcript. Rebuild the agent order lookup from non-negative backend-owned orders only so the first assistant delta at the next backend order creates and indexes its own message.
+**Architecture:** Assign local transport errors a negative sentinel order and compare negative local orders as the live renderer tail. Rebuild the agent order lookup from non-negative backend-owned orders only so the first assistant delta at the next backend order creates and indexes its own message without trimming away the local error.
 
 **Tech Stack:** TypeScript, React reducer state, Vitest, Biome
 
@@ -13,6 +13,7 @@
 - Change only the client reducer behavior required for issue #1984.
 - Preserve the stable message-ID guard for existing backend messages.
 - Preserve visible error rendering, loading-status recovery, transcript trimming, and normal backend ordering.
+- Retain newly arrived local errors and assistant deltas at the renderer transcript limit.
 - Use a failing regression test before changing production code.
 - Run `pnpm typecheck && pnpm check:fix && pnpm test && pnpm build` before publishing.
 
@@ -67,10 +68,12 @@ Keep the failing test unstaged until Task 2 is green so no intentionally failing
 **Files:**
 - Modify: `src/components/chat/reducer/slices/messages/transport.ts`
 - Modify: `src/components/chat/reducer/helpers.ts`
+- Modify: `src/shared/acp-protocol/protocol/renderer-window.ts`
 - Test: `src/components/chat/chat-reducer.test.ts`
 
 **Interfaces:**
 - Produces: module-local `ERROR_MESSAGE_ORDER` with value `-1`
+- Produces: `compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number`
 - Preserves: `agentMessageOrderToIndex: Map<number, number>` for backend-owned non-negative orders
 
 - [ ] **Step 1: Assign local errors the negative sentinel**
@@ -94,7 +97,40 @@ if (message.source === 'agent' && message.order >= 0) {
 }
 ```
 
-- [ ] **Step 3: Run the focused test and verify GREEN**
+- [ ] **Step 3: Keep negative local messages at the live renderer tail**
+
+Export one comparator from `renderer-window.ts` and use it both for renderer normalization and the
+client's binary insertion:
+
+```typescript
+function rendererSortOrder(message: ChatMessage): number {
+  return message.order < 0 ? Number.POSITIVE_INFINITY : message.order;
+}
+
+export function compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number {
+  return rendererSortOrder(left) - rendererSortOrder(right);
+}
+```
+
+This maintains a shared sorted-array invariant: backend orders remain ascending and negative local
+messages remain after them in stable arrival order.
+
+- [ ] **Step 4: Add and run the renderer-limit regression**
+
+Replay `DEFAULT_RENDERER_TRANSCRIPT_LIMIT` backend messages, then dispatch `WS_ERROR` and the first
+assistant delta at the next backend order. Require the messages array to remain capped, the error to
+remain at the tail, the assistant to remain visible, and only the assistant's non-negative order to
+be indexed.
+
+```bash
+pnpm exec vitest run src/components/chat/chat-reducer.test.ts \
+  -t "retains the error and assistant delta at the renderer transcript limit"
+```
+
+Expected before the comparator change: FAIL because the error is trimmed. Expected after the
+comparator change: PASS.
+
+- [ ] **Step 5: Run the original focused test and verify GREEN**
 
 ```bash
 pnpm exec vitest run src/components/chat/chat-reducer.test.ts \
@@ -103,20 +139,22 @@ pnpm exec vitest run src/components/chat/chat-reducer.test.ts \
 
 Expected: one test passes and the assistant message is present at backend order 8.
 
-- [ ] **Step 4: Run the complete reducer test file**
+- [ ] **Step 6: Run the complete reducer and protocol test files**
 
 ```bash
-pnpm exec vitest run src/components/chat/chat-reducer.test.ts
+pnpm exec vitest run src/components/chat/chat-reducer.test.ts \
+  src/shared/acp-protocol/protocol.test.ts
 ```
 
-Expected: all reducer tests pass.
+Expected: all reducer and renderer protocol tests pass.
 
-- [ ] **Step 5: Commit the focused fix**
+- [ ] **Step 7: Commit the focused fix**
 
 ```bash
 git add src/components/chat/chat-reducer.test.ts \
   src/components/chat/reducer/helpers.ts \
-  src/components/chat/reducer/slices/messages/transport.ts
+  src/components/chat/reducer/slices/messages/transport.ts \
+  src/shared/acp-protocol/protocol/renderer-window.ts
 git commit -m "Fix chat error order collisions (#1984)"
 ```
 

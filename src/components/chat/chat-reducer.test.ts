@@ -1032,6 +1032,58 @@ describe('chatReducer', () => {
       expect(state.agentMessageOrderToIndex.get(8)).toBe(assistantIndex);
     });
 
+    it('retains the error and assistant delta at the renderer transcript limit', () => {
+      const replayEvents: WebSocketMessage[] = Array.from(
+        { length: DEFAULT_RENDERER_TRANSCRIPT_LIMIT },
+        (_, order) => ({
+          type: 'agent_message',
+          messageId: `session-1-${order}`,
+          order,
+          data: {
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [{ type: 'text', text: `Replayed response ${order}` }],
+            },
+          },
+        })
+      );
+      let state = chatReducer(initialState, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: { replayEvents },
+      });
+
+      state = chatReducer(state, {
+        type: 'WS_ERROR',
+        payload: { message: 'Streaming connection warning' },
+      });
+      state = chatReducer(
+        state,
+        textDelta(0, 'Visible response', {
+          messageId: `session-1-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT}`,
+          order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+        })
+      );
+
+      const errorIndex = state.messages.findIndex((message) => message.message?.type === 'error');
+      const assistantIndex = state.messages.findIndex(
+        (message) => message.id === `session-1-${DEFAULT_RENDERER_TRANSCRIPT_LIMIT}`
+      );
+      expect(state.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
+      expect(errorIndex).toBe(DEFAULT_RENDERER_TRANSCRIPT_LIMIT - 1);
+      expect(state.agentMessageOrderToIndex.has(-1)).toBe(false);
+      expect(state.messages[assistantIndex]).toMatchObject({
+        order: DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
+        message: {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'Visible response' }] },
+        },
+      });
+      expect(state.agentMessageOrderToIndex.get(DEFAULT_RENDERER_TRANSCRIPT_LIMIT)).toBe(
+        assistantIndex
+      );
+    });
+
     it('applies many sequential deltas to one indexed assistant message', () => {
       let state = initialState;
       for (let offset = 0; offset < 200; offset += 1) {

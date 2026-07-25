@@ -36,15 +36,23 @@ function isSafeRendererWindowStart(message: ChatMessage): boolean {
   return !(isToolResultMessage(message.message) || isStreamFragment(message.message));
 }
 
+function rendererSortOrder(message: ChatMessage): number {
+  return message.order < 0 ? Number.POSITIVE_INFINITY : message.order;
+}
+
+export function compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number {
+  return rendererSortOrder(left) - rendererSortOrder(right);
+}
+
 export function trimTranscriptForRenderer(
   messages: ChatMessage[],
   limit = DEFAULT_RENDERER_TRANSCRIPT_LIMIT
 ): ChatMessage[] {
   const isOrdered = messages.every(
     (message, index) =>
-      index === 0 || (messages[index - 1]?.order ?? message.order) <= message.order
+      index === 0 || compareTranscriptMessageOrder(messages[index - 1] ?? message, message) <= 0
   );
-  const sortedMessages = isOrdered ? messages : [...messages].sort((a, b) => a.order - b.order);
+  const sortedMessages = isOrdered ? messages : [...messages].sort(compareTranscriptMessageOrder);
   if (sortedMessages.length <= limit) {
     return sortedMessages;
   }
