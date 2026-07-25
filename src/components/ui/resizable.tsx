@@ -1,7 +1,7 @@
 import { DotsSixVerticalIcon } from '@phosphor-icons/react';
 import type { ComponentProps } from 'react';
 import { useCallback, useMemo } from 'react';
-import type { Layout } from 'react-resizable-panels';
+import type { Layout, LayoutChangedMeta } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { z } from 'zod';
 
@@ -61,9 +61,9 @@ const ResizablePanelGroup = ({
 
   // Save layout to localStorage when it changes
   const handleLayoutChange = useCallback(
-    (layout: Layout) => {
+    (layout: Layout, meta: LayoutChangedMeta) => {
       // Call the consumer's callback first
-      onLayoutChangedProp?.(layout);
+      onLayoutChangedProp?.(layout, meta);
 
       if (!autoSaveId) {
         return;
