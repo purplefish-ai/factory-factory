@@ -51,7 +51,9 @@ vi.mock('@/backend/services/logger.service', () => ({
 import {
   PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  PR_URL_ATTACHED,
   type PRSnapshotUpdatedEvent,
+  type PRUrlAttachedEvent,
   prSnapshotService,
 } from './pr-snapshot.service';
 
@@ -67,6 +69,7 @@ describe('PRSnapshotService', () => {
       dispatchReset: false,
     });
     mockUpdatePRSnapshotIfUrlMatches.mockResolvedValue(true);
+    mockUpdateCachedKanbanColumn.mockResolvedValue(undefined);
     // Configure bridge with mock kanban dependency
     prSnapshotService.configure({
       kanban: {
@@ -90,25 +93,32 @@ describe('PRSnapshotService', () => {
   describe('attachAndRefreshPR', () => {
     it('returns workspace_not_found when workspace does not exist', async () => {
       mockFindById.mockResolvedValue(null);
+      const listener = vi.fn<(event: PRUrlAttachedEvent) => void>();
+      prSnapshotService.on(PR_URL_ATTACHED, listener);
 
       const result = await prSnapshotService.attachAndRefreshPR(
         'w1',
         'https://github.com/org/repo/pull/1'
       );
+      prSnapshotService.off(PR_URL_ATTACHED, listener);
 
       expect(result).toEqual({ success: false, reason: 'workspace_not_found' });
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockUpdateCachedKanbanColumn).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
-    it('attaches PR URL even when snapshot fetch fails', async () => {
+    it('publishes the attached PR URL even when snapshot fetch fails', async () => {
       mockFindById.mockResolvedValue({ id: 'w1', prUrl: null });
       mockFetchAndComputePRState.mockResolvedValue(null);
+      const listener = vi.fn<(event: PRUrlAttachedEvent) => void>();
+      prSnapshotService.on(PR_URL_ATTACHED, listener);
 
       const result = await prSnapshotService.attachAndRefreshPR(
         'w1',
         'https://github.com/org/repo/pull/1'
       );
+      prSnapshotService.off(PR_URL_ATTACHED, listener);
 
       expect(result).toEqual({ success: false, reason: 'fetch_failed' });
       expect(mockUpdate).toHaveBeenCalledWith('w1', {
@@ -116,6 +126,39 @@ describe('PRSnapshotService', () => {
         prUpdatedAt: expect.any(Date),
       });
       expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w1');
+      expect(listener).toHaveBeenCalledOnce();
+      expect(listener).toHaveBeenCalledWith({
+        workspaceId: 'w1',
+        prUrl: 'https://github.com/org/repo/pull/1',
+      });
+    });
+
+    it('publishes the persisted PR URL before a kanban cache update fails', async () => {
+      mockFindById.mockResolvedValue({ id: 'w1', prUrl: null });
+      mockFetchAndComputePRState.mockResolvedValue(null);
+      mockUpdateCachedKanbanColumn.mockRejectedValue(new Error('cache unavailable'));
+      const listener = vi.fn<(event: PRUrlAttachedEvent) => void>();
+      prSnapshotService.on(PR_URL_ATTACHED, listener);
+
+      const result = await prSnapshotService.attachAndRefreshPR(
+        'w1',
+        'https://github.com/org/repo/pull/1'
+      );
+      prSnapshotService.off(PR_URL_ATTACHED, listener);
+
+      expect(result).toEqual({ success: false, reason: 'error' });
+      expect(mockUpdate).toHaveBeenCalledWith('w1', {
+        prUrl: 'https://github.com/org/repo/pull/1',
+        prUpdatedAt: expect.any(Date),
+      });
+      expect(listener).toHaveBeenCalledOnce();
+      expect(listener).toHaveBeenCalledWith({
+        workspaceId: 'w1',
+        prUrl: 'https://github.com/org/repo/pull/1',
+      });
+      expect(mockUpdate.mock.invocationCallOrder[0]!).toBeLessThan(
+        listener.mock.invocationCallOrder[0]!
+      );
     });
 
     it('attaches PR URL and persists full snapshot with kanban cache update', async () => {
@@ -178,6 +221,8 @@ describe('PRSnapshotService', () => {
 
     it('does not attach or fetch when activity invalidated the discovery claim', async () => {
       mockAttachDiscoveredPRIfClaimMatches.mockResolvedValue(false);
+      const listener = vi.fn<(event: PRUrlAttachedEvent) => void>();
+      prSnapshotService.on(PR_URL_ATTACHED, listener);
 
       await expect(
         prSnapshotService.attachDiscoveredPRAndRefresh(
@@ -186,6 +231,7 @@ describe('PRSnapshotService', () => {
           claim
         )
       ).resolves.toEqual({ success: false, reason: 'claim_stale' });
+      prSnapshotService.off(PR_URL_ATTACHED, listener);
 
       expect(mockAttachDiscoveredPRIfClaimMatches).toHaveBeenCalledWith(
         'w1',
@@ -196,6 +242,7 @@ describe('PRSnapshotService', () => {
       expect(mockFetchAndComputePRState).not.toHaveBeenCalled();
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockUpdateCachedKanbanColumn).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('refreshes the snapshot without correcting a newer branch after guarded attachment', async () => {
@@ -281,6 +328,8 @@ describe('PRSnapshotService', () => {
     it('keeps the guarded PR attachment when snapshot fetch fails', async () => {
       mockAttachDiscoveredPRIfClaimMatches.mockResolvedValue(true);
       mockFetchAndComputePRState.mockResolvedValue(null);
+      const listener = vi.fn<(event: PRUrlAttachedEvent) => void>();
+      prSnapshotService.on(PR_URL_ATTACHED, listener);
 
       await expect(
         prSnapshotService.attachDiscoveredPRAndRefresh(
@@ -289,8 +338,14 @@ describe('PRSnapshotService', () => {
           claim
         )
       ).resolves.toEqual({ success: false, reason: 'fetch_failed' });
+      prSnapshotService.off(PR_URL_ATTACHED, listener);
 
       expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w1');
+      expect(listener).toHaveBeenCalledOnce();
+      expect(listener).toHaveBeenCalledWith({
+        workspaceId: 'w1',
+        prUrl: 'https://github.com/org/repo/pull/1',
+      });
     });
   });
 

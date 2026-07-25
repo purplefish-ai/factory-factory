@@ -41,6 +41,7 @@ export type AttachAndRefreshResult =
     };
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
+export const PR_URL_ATTACHED = 'pr_url_attached' as const;
 export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
 
 export interface PRDispatchInvalidatedEvent {
@@ -57,6 +58,11 @@ export interface PRSnapshotUpdatedEvent {
   prReviewState: string | null;
   /** The PR write may have reset dispatch ownership; consumers must re-read it. */
   ratchetDispatchChanged?: true;
+}
+
+export interface PRUrlAttachedEvent {
+  workspaceId: string;
+  prUrl: string;
 }
 
 interface CIObservationInput {
@@ -199,6 +205,10 @@ class PRSnapshotService extends EventEmitter {
           prUrl,
           prUpdatedAt: new Date(),
         });
+        this.emit(PR_URL_ATTACHED, {
+          workspaceId,
+          prUrl,
+        } satisfies PRUrlAttachedEvent);
         await this.kanban.updateCachedKanbanColumn(workspaceId);
         logger.warn('Attached PR URL but could not fetch snapshot', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
@@ -294,6 +304,10 @@ class PRSnapshotService extends EventEmitter {
 
       const snapshot = await githubCLIService.fetchAndComputePRState(prUrl);
       if (!snapshot) {
+        this.emit(PR_URL_ATTACHED, {
+          workspaceId,
+          prUrl,
+        } satisfies PRUrlAttachedEvent);
         await this.kanban.updateCachedKanbanColumn(workspaceId);
         logger.warn('Attached discovered PR URL but could not fetch snapshot', {
           workspaceId,
