@@ -59,6 +59,7 @@ vi.mock('@/backend/services/workspace', () => ({
 vi.mock('@/backend/services/github', () => ({
   PR_DISPATCH_INVALIDATED: 'pr_dispatch_invalidated',
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
+  PR_URL_ATTACHED: 'pr_url_attached',
   prSnapshotService: {
     on: vi.fn(),
     off: vi.fn(),
@@ -530,7 +531,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 12 event listeners on domain singletons', () => {
+  it('registers 13 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -541,6 +542,7 @@ describe('configureEventCollector', () => {
 
     // prSnapshotService: PR updates and dispatch invalidation
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_snapshot_updated', expect.any(Function));
+    expect(prSnapshotService.on).toHaveBeenCalledWith('pr_url_attached', expect.any(Function));
     expect(prSnapshotService.on).toHaveBeenCalledWith(
       'pr_dispatch_invalidated',
       expect.any(Function)
@@ -1090,6 +1092,32 @@ describe('configureEventCollector', () => {
         prCiStatus: 'SUCCESS',
       },
       'event:pr_snapshot_updated',
+      expect.any(Number)
+    );
+  });
+
+  it('pr_url_attached immediately updates only prUrl in the store', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prUrl: null,
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_url_attached');
+    const handler = onCall![1] as (event: { workspaceId: string; prUrl: string }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prUrl: 'https://github.com/org/repo/pull/1',
+    });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { prUrl: 'https://github.com/org/repo/pull/1' },
+      'event:pr_url_attached',
       expect.any(Number)
     );
   });

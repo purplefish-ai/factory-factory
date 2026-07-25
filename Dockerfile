@@ -1,7 +1,7 @@
 # FactoryFactory Dockerfile
 # Multi-stage build for cloud deployment
 
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22.22
 ARG PNPM_VERSION=10.28.1
 
 # ============================================================================

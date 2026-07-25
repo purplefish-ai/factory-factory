@@ -24,8 +24,10 @@ import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
   PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
+  PR_URL_ATTACHED,
   type PRDispatchInvalidatedEvent,
   type PRSnapshotUpdatedEvent,
+  type PRUrlAttachedEvent,
   type prFetchRegistry,
   type prSnapshotService,
 } from '@/backend/services/github';
@@ -790,6 +792,16 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.prSnapshotService.off(PR_SNAPSHOT_UPDATED, prSnapshotUpdatedHandler)
   );
 
+  const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
+    coalescer.enqueue(event.workspaceId, { prUrl: event.prUrl }, 'event:pr_url_attached', {
+      immediate: true,
+    });
+  };
+  dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
+  state.teardownListeners.push(() =>
+    dependencies.prSnapshotService.off(PR_URL_ATTACHED, prUrlAttachedHandler)
+  );
+
   const prDispatchInvalidatedHandler = (event: PRDispatchInvalidatedEvent) => {
     coalescer.enqueue(
       event.workspaceId,
@@ -958,7 +970,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     dependencies.sessionDomainService.off('runtime_changed', runtimeChangedHandler)
   );
 
-  state.logger.info('Event collector started with 12 event subscriptions');
+  state.logger.info('Event collector started with 13 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------

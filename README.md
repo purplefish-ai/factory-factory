@@ -27,7 +27,7 @@ Factory Factory is a local workspace manager for AI coding agents. Every workspa
 
 You will need:
 
-- Node.js 20.19+, 22.12+, or 24+
+- Node.js 22.22+ or 24+
 - A local git repository
 - At least one agent provider:
   - Claude Code, authenticated with `claude login`
