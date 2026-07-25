@@ -265,14 +265,16 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         // when the old connection's close event fires
         const current = chatConnectionRegistry.get(connectionId);
         if (current?.ws === ws) {
+          chatConnectionRegistry.unregister(connectionId);
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'INFO', {
               event: 'connection_closed',
               connectionId,
             });
-            sessionFileLogger.closeSession(dbSessionId);
+            if (chatConnectionRegistry.countViewers(dbSessionId) === 0) {
+              sessionFileLogger.closeSession(dbSessionId);
+            }
           }
-          chatConnectionRegistry.unregister(connectionId);
           disconnected = true;
           clearSessionIfDisconnectedAndInactive();
         }
