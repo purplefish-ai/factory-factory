@@ -2350,10 +2350,10 @@ describe('SessionService', () => {
     sessionEventBus.registerViewerCountProvider((viewedSessionId) =>
       viewedSessionId === sessionId ? 1 : 0
     );
+    const publishToSessionSpy = vi.spyOn(sessionEventBus, 'publishToSession');
     try {
       const prompt = createDeferred<{ stopReason: string }>();
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
-      const publishToSessionSpy = vi.spyOn(sessionEventBus, 'publishToSession');
       sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
       vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
       vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
@@ -2386,15 +2386,77 @@ describe('SessionService', () => {
       expect(publishToSessionSpy).not.toHaveBeenCalledWith(
         sessionId,
         expect.objectContaining({
-          type: 'session_runtime_updated',
-          sessionRuntime: expect.objectContaining({ processState: 'alive' }),
+          type: 'session_delta',
+          data: expect.objectContaining({
+            type: 'session_runtime_updated',
+            sessionRuntime: expect.objectContaining({ processState: 'alive' }),
+          }),
         })
       );
       expect(onPromptTurnComplete).not.toHaveBeenCalled();
     } finally {
+      publishToSessionSpy.mockRestore();
       sessionEventBus.registerViewerCountProvider(null);
       vi.useRealTimers();
     }
+  });
+
+  it('does not finalize a restarted prompt when a stopped prompt later times out', async () => {
+    const sessionId = 'session-restarted-before-old-prompt-timeout';
+    const stoppedPrompt = createDeferred<{ stopReason: string }>();
+    const restartedPrompt = createDeferred<{ stopReason: string }>();
+    vi.mocked(acpRuntimeManager.sendPrompt)
+      .mockReturnValueOnce(stoppedPrompt.promise as never)
+      .mockReturnValueOnce(restartedPrompt.promise as never);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+
+    const stoppedSend = sessionService.sendAcpMessage(sessionId, [
+      { type: 'text', text: 'before stop' },
+    ]);
+    const stoppedSendRejection = expect(stoppedSend).rejects.toThrow('Prompt timed out');
+    await vi.waitFor(() => {
+      expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    });
+    await sessionService.stopSession(sessionId);
+
+    const restartedSend = sessionService.sendAcpMessage(sessionId, [
+      { type: 'text', text: 'after restart' },
+    ]);
+    await vi.waitFor(() => {
+      expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
+      string,
+      Map<string, { toolUseId: string; toolName: string }>
+    >;
+    pendingToolCalls.set(
+      sessionId,
+      new Map([
+        [
+          'restarted-call',
+          {
+            toolUseId: 'restarted-call',
+            toolName: 'Run tests',
+          },
+        ],
+      ])
+    );
+    const appendClaudeEventSpy = vi
+      .spyOn(sessionDomainService, 'appendClaudeEvent')
+      .mockReturnValue(88);
+
+    stoppedPrompt.reject(new Error('Prompt timed out'));
+    await stoppedSendRejection;
+    const restartedToolCallSurvived = pendingToolCalls.get(sessionId)?.has('restarted-call');
+    const stalePromptFinalizedToolCall = appendClaudeEventSpy.mock.calls.length > 0;
+
+    pendingToolCalls.delete(sessionId);
+    restartedPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(restartedSend).resolves.toBe('end_turn');
+
+    expect(restartedToolCallSurvived).toBe(true);
+    expect(stalePromptFinalizedToolCall).toBe(false);
   });
 
   it('swallows prompt-turn completion callback failures', async () => {
