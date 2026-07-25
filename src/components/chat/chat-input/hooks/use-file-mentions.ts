@@ -133,13 +133,14 @@ export function useFileMentions({
       // Replace from @ to cursor with the selected file path
       const before = currentValue.slice(0, atPos);
       const after = currentValue.slice(cursorPos);
-      const newValue = `${before}@${filePath} ${after}`;
+      const trailingSpace = charAtCursor === undefined ? ' ' : '';
+      const newValue = `${before}@${filePath}${trailingSpace}${after}`;
 
       inputRef.current.value = newValue;
       inputRef.current.focus();
 
-      // Move cursor after the inserted file path + space
-      const newCursorPos = atPos + filePath.length + 2; // +2 for @ and space
+      // Move the cursor after the inserted file path and any added space
+      const newCursorPos = atPos + filePath.length + 1 + trailingSpace.length;
       inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
 
       onChange?.(newValue);

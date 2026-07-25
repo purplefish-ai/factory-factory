@@ -118,12 +118,13 @@ export function useProjectFileMentions({
 
       const before = currentValue.slice(0, atPos);
       const after = currentValue.slice(cursorPos);
-      const newValue = `${before}@${filePath} ${after}`;
+      const trailingSpace = charAtCursor === undefined ? ' ' : '';
+      const newValue = `${before}@${filePath}${trailingSpace}${after}`;
 
       inputRef.current.value = newValue;
       inputRef.current.focus();
 
-      const newCursorPos = atPos + filePath.length + 2;
+      const newCursorPos = atPos + filePath.length + 1 + trailingSpace.length;
       inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
 
       onChange?.(newValue);
