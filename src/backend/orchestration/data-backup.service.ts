@@ -127,8 +127,11 @@ async function importWorkspaces(
   tx: TransactionClient
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
+  const orderedWorkspaces = [...workspaces].sort(
+    (a, b) => Number(a.parentWorkspaceId !== null) - Number(b.parentWorkspaceId !== null)
+  );
 
-  for (const workspace of workspaces) {
+  for (const workspace of orderedWorkspaces) {
     const existing = await tx.workspace.findUnique({ where: { id: workspace.id } });
     if (existing) {
       counter.skipped++;

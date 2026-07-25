@@ -486,15 +486,15 @@ describe('DataBackupService', () => {
       };
 
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
-      vi.mocked(prisma.workspace.findMany).mockResolvedValue([parentWorkspace, childWorkspace]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([childWorkspace, parentWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
 
       const exported = exportDataSchema.parse(await dataBackupService.exportData('1.0.0'));
 
-      expect(exported.data.workspaces[0]?.parentWorkspaceId).toBeNull();
-      expect(exported.data.workspaces[1]?.parentWorkspaceId).toBe(parentWorkspace.id);
+      expect(exported.data.workspaces[0]?.parentWorkspaceId).toBe(parentWorkspace.id);
+      expect(exported.data.workspaces[1]?.parentWorkspaceId).toBeNull();
 
       vi.mocked(mockTx.project.findUnique)
         .mockResolvedValueOnce(null)
@@ -502,9 +502,15 @@ describe('DataBackupService', () => {
         .mockResolvedValue(mockProject);
       vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
       vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
-      vi.mocked(mockTx.workspace.create)
-        .mockResolvedValueOnce(parentWorkspace)
-        .mockResolvedValueOnce(childWorkspace);
+      const importedWorkspaceIds = new Set<string>();
+      vi.mocked(mockTx.workspace.create).mockImplementation(({ data }) => {
+        if (data.parentWorkspaceId && !importedWorkspaceIds.has(data.parentWorkspaceId as string)) {
+          return Promise.reject(new Error('Foreign key constraint failed'));
+        }
+
+        importedWorkspaceIds.add(data.id as string);
+        return Promise.resolve(data.id === parentWorkspace.id ? parentWorkspace : childWorkspace);
+      });
 
       const result = await dataBackupService.importData(exported);
 
