@@ -66,6 +66,9 @@ type SessionDataService = typeof sessionDataService;
 type SessionDomainService = typeof sessionDomainService;
 type SessionService = typeof sessionService;
 type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
+type AutoIterationRollbackReason =
+  | 'auto_iteration_startup_failed_after_create'
+  | 'auto_iteration_recycle_failed_after_create';
 
 export type BridgeServices = {
   autoIterationService: typeof autoIterationService;
@@ -147,7 +150,8 @@ async function rollbackCreatedAutoIterationSession(
   sessionService: SessionService,
   sessionDataService: SessionDataService,
   sessionDomainService: SessionDomainService,
-  sessionId: string
+  sessionId: string,
+  rollbackReason: AutoIterationRollbackReason
 ): Promise<void> {
   await stopSessionBestEffort(sessionService, sessionId);
 
@@ -165,7 +169,7 @@ async function rollbackCreatedAutoIterationSession(
         status: SessionStatus.FAILED,
         providerProcessPid: null,
         providerMetadata: {
-          rollbackReason: 'auto_iteration_startup_failed_after_create',
+          rollbackReason,
         },
       });
     } catch {
@@ -191,7 +195,7 @@ async function retireStoppedAutoIterationSessionBestEffort(
   try {
     await retireStoppedAutoIterationSession(sessionDataService, sessionId);
   } catch {
-    // Preserve the original recycle error
+    // Retirement bookkeeping must not invalidate a failed cleanup or successful handoff
   }
 }
 
@@ -234,7 +238,8 @@ async function cleanupFailedAutoIterationRecycle(
       sessionService,
       sessionDataService,
       sessionDomainService,
-      replacementSessionId
+      replacementSessionId,
+      'auto_iteration_recycle_failed_after_create'
     );
   }
   if (previousSessionId) {
@@ -499,7 +504,8 @@ export function configureDomainBridges(services: BridgeServices): void {
           sessionService,
           sessionDataService,
           sessionDomainService,
-          session.id
+          session.id,
+          'auto_iteration_startup_failed_after_create'
         );
         throw err;
       }
@@ -582,7 +588,7 @@ export function configureDomainBridges(services: BridgeServices): void {
         await workspaceAutoIterationService.setSession(workspaceId, newSession.id);
         await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
         if (previousSessionId) {
-          await retireStoppedAutoIterationSession(sessionDataService, previousSessionId);
+          await retireStoppedAutoIterationSessionBestEffort(sessionDataService, previousSessionId);
         }
       } catch (err) {
         await cleanupFailedAutoIterationRecycle(

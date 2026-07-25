@@ -706,6 +706,37 @@ describe('configureDomainBridges', () => {
       expect(workspaceAutoIterationService.finishSessionIfMatching).not.toHaveBeenCalled();
     });
 
+    it('keeps the replacement active when predecessor retirement fails after handoff', async () => {
+      const autoIterationServiceMock = createAutoIterationServiceMock();
+      vi.mocked(workspaceAutoIterationService.getExecutionContext).mockResolvedValue({
+        autoIterationSessionId: 'old-session',
+      } as Awaited<ReturnType<typeof workspaceAutoIterationService.getExecutionContext>>);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'new-session',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(sessionDataService.updateAgentSession).mockRejectedValueOnce(
+        new Error('predecessor retirement failed')
+      );
+
+      configureDomainBridges(
+        createBridgeServices({ autoIterationService: autoIterationServiceMock })
+      );
+      const sessionBridge = vi.mocked(autoIterationServiceMock.configure).mock
+        .calls[0]![0] as AutoIterationSessionBridge;
+
+      await expect(sessionBridge.recycleSession('ws-1', 'handoff prompt')).resolves.toBe(
+        'new-session'
+      );
+
+      expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
+        { type: 'text', text: 'handoff prompt' },
+      ]);
+      expect(sessionService.stopSession).not.toHaveBeenCalledWith('new-session');
+      expect(sessionDomainService.clearSession).not.toHaveBeenCalledWith('new-session');
+      expect(sessionDataService.deleteAgentSession).not.toHaveBeenCalledWith('new-session');
+      expect(workspaceAutoIterationService.finishSessionIfMatching).not.toHaveBeenCalled();
+    });
+
     it('rolls back a recycled session when replacement startup fails', async () => {
       const autoIterationServiceMock = createAutoIterationServiceMock();
       const startupError = new Error('runtime failed to start');
@@ -941,7 +972,7 @@ describe('configureDomainBridges', () => {
         status: SessionStatus.FAILED,
         providerProcessPid: null,
         providerMetadata: {
-          rollbackReason: 'auto_iteration_startup_failed_after_create',
+          rollbackReason: 'auto_iteration_recycle_failed_after_create',
         },
       });
     });
@@ -977,7 +1008,7 @@ describe('configureDomainBridges', () => {
         status: SessionStatus.FAILED,
         providerProcessPid: null,
         providerMetadata: {
-          rollbackReason: 'auto_iteration_startup_failed_after_create',
+          rollbackReason: 'auto_iteration_recycle_failed_after_create',
         },
       });
     });
