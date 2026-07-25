@@ -127,20 +127,27 @@ export async function checkActiveFixerSession(params: {
   }
 
   if (session.provider !== resolvedRatchetProvider) {
-    try {
-      return await settle(
-        'DIED',
-        `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
-      );
-    } finally {
-      void stopSessionForProviderMismatch({
+    const stopMismatchedSession = () =>
+      stopSessionForProviderMismatch({
         workspaceId: workspace.id,
         sessionId: session.id,
         expectedProvider: resolvedRatchetProvider,
         actualProvider: session.provider,
         sessionBridge,
       });
+    let result: ActiveFixerCheckResult;
+    try {
+      result = await settle(
+        'DIED',
+        `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
+      );
+    } catch (error) {
+      // Preserve prompt cancellation while still starting best-effort cleanup.
+      void stopMismatchedSession();
+      throw error;
     }
+    await stopMismatchedSession();
+    return result;
   }
 
   if (session.status !== SessionStatus.RUNNING) {

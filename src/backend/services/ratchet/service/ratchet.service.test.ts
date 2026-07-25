@@ -3270,28 +3270,38 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       );
     });
 
-    it('settles a provider-mismatched session as DIED and stops it', async () => {
+    it('waits for provider-mismatch cleanup before returning a successful settlement', async () => {
+      let finishStop!: () => void;
+      const pendingStop = new Promise<void>((resolve) => {
+        finishStop = resolve;
+      });
       vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
         id: 'codex-session',
         provider: 'CODEX',
         status: SessionStatus.RUNNING,
       } as never);
-      vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
+      vi.mocked(mockSessionBridge.stopSession).mockReturnValue(pendingStop);
 
-      const result = await callCheckActiveFixerSession({
+      const check = callCheckActiveFixerSession({
         id: 'ws-5',
         ratchetActiveSessionId: 'codex-session',
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
       });
 
-      expect(result).toEqual({ kind: 'settled', outcome: 'DIED' });
+      await vi.waitFor(() =>
+        expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session')
+      );
+      await expect(
+        Promise.race([check, Promise.resolve({ kind: 'cleanup_pending' })])
+      ).resolves.toEqual({ kind: 'cleanup_pending' });
       expect(mockWorkspaceBridge.recordSessionEnd).toHaveBeenCalledWith(
         'ws-5',
         'codex-session',
         'DIED'
       );
-      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session');
+      finishStop();
+      await expect(check).resolves.toEqual({ kind: 'settled', outcome: 'DIED' });
     });
 
     it('returns cancellation without waiting for provider-mismatch cleanup', async () => {
