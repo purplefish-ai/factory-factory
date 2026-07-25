@@ -287,10 +287,11 @@ function handleDestroyMessage(
   ws: WebSocket,
   workspaceId: string,
   message: Extract<TerminalMessageInput, { type: 'destroy' }>,
-  terminalService: AppContext['services']['terminalService'],
+  services: TerminalHandlerServices,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): void {
   if (message.terminalId) {
+    const { terminalService } = services;
     logger.info('Destroying terminal', { terminalId: message.terminalId });
     const cleanupMap = terminalListenerCleanup.get(ws);
     const unsubs = cleanupMap?.get(message.terminalId);
@@ -301,6 +302,7 @@ function handleDestroyMessage(
       cleanupMap?.delete(message.terminalId);
     }
     terminalService.destroyTerminal(workspaceId, message.terminalId);
+    void clearTerminalPidWithRetry(workspaceId, message.terminalId, services, logger);
   }
 }
 
@@ -381,7 +383,7 @@ async function handleTerminalMessage(
       handleResizeMessage(workspaceId, message, terminalService, logger);
       break;
     case 'destroy':
-      handleDestroyMessage(ws, workspaceId, message, terminalService, logger);
+      handleDestroyMessage(ws, workspaceId, message, services, logger);
       break;
     case 'set_active':
       handleSetActiveMessage(workspaceId, message, terminalService, logger);
