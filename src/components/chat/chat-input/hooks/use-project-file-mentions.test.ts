@@ -162,16 +162,37 @@ describe('useProjectFileMentions selection', () => {
     expect(rendered.onChange).toHaveBeenCalledWith(expectedValue);
   });
 
-  it('uses the mention at the live cursor position instead of the stored position', () => {
+  it.each([
+    {
+      separator: 'space',
+      value: '@one and @two',
+      expectedValue: '@src/foo.ts and @two',
+    },
+    {
+      separator: 'newline',
+      value: '@one\nand @two',
+      expectedValue: '@src/foo.ts\nand @two',
+    },
+    {
+      separator: 'tab',
+      value: '@one\tand @two',
+      expectedValue: '@src/foo.ts\tand @two',
+    },
+  ])('reuses the $separator at the live cursor after inserting a file mention', ({
+    value,
+    expectedValue,
+  }) => {
     const rendered = renderHook();
-    openMentionMenu(rendered, '@one and @two');
+    openMentionMenu(rendered, value);
 
     rendered.textarea.setSelectionRange(4, 4);
     flushSync(() => {
       rendered.getResult().handleFileMentionSelect('src/foo.ts');
     });
 
-    expect(rendered.textarea.value).toBe('@src/foo.ts  and @two');
-    expect(rendered.onChange).toHaveBeenCalledWith('@src/foo.ts  and @two');
+    expect(rendered.textarea.value).toBe(expectedValue);
+    expect(rendered.textarea.selectionStart).toBe(11);
+    expect(rendered.textarea.selectionEnd).toBe(11);
+    expect(rendered.onChange).toHaveBeenCalledWith(expectedValue);
   });
 });
