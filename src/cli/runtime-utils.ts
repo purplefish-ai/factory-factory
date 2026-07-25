@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import treeKill from 'tree-kill';
 
 const execPromise = promisify(exec);
+const MAX_PORT = 65_535;
 
 export function ensureDataDir(databasePath: string): void {
   const dir = dirname(databasePath);
@@ -93,6 +94,9 @@ export async function findAvailablePort(
   const { maxAttempts = 10, excludePorts = [] } = options;
   for (let i = 0; i < maxAttempts; i += 1) {
     const port = startPort + i;
+    if (port > MAX_PORT) {
+      break;
+    }
     if (excludePorts.includes(port)) {
       continue;
     }
