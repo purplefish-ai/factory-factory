@@ -127,8 +127,11 @@ async function importWorkspaces(
   tx: TransactionClient
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
+  const orderedWorkspaces = [...workspaces].sort(
+    (a, b) => Number(a.parentWorkspaceId !== null) - Number(b.parentWorkspaceId !== null)
+  );
 
-  for (const workspace of workspaces) {
+  for (const workspace of orderedWorkspaces) {
     const existing = await tx.workspace.findUnique({ where: { id: workspace.id } });
     if (existing) {
       counter.skipped++;
@@ -145,10 +148,25 @@ async function importWorkspaces(
       continue;
     }
 
+    if (workspace.parentWorkspaceId !== null) {
+      const parentWorkspace = await tx.workspace.findUnique({
+        where: { id: workspace.parentWorkspaceId },
+      });
+      if (!parentWorkspace) {
+        logger.warn('Skipping workspace due to missing parent workspace', {
+          workspaceId: workspace.id,
+          parentWorkspaceId: workspace.parentWorkspaceId,
+        });
+        counter.skipped++;
+        continue;
+      }
+    }
+
     await tx.workspace.create({
       data: {
         id: workspace.id,
         projectId: workspace.projectId,
+        parentWorkspaceId: workspace.parentWorkspaceId,
         name: workspace.name,
         description: workspace.description,
         status: workspace.status,
@@ -385,6 +403,7 @@ class DataBackupService {
         workspaces: workspaces.map((w) => ({
           id: w.id,
           projectId: w.projectId,
+          parentWorkspaceId: w.parentWorkspaceId,
           name: w.name,
           description: w.description,
           status: w.status,

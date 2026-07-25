@@ -69,6 +69,7 @@ const exportedProjectSchema = z.object({
 const exportedWorkspaceSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  parentWorkspaceId: z.string().nullable().optional().default(null),
   name: z.string(),
   description: z.string().nullable(),
   status: WorkspaceStatus,
