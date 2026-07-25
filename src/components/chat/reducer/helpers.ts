@@ -6,6 +6,7 @@ import type {
   UserQuestionRequest,
 } from '@/lib/chat-protocol';
 import {
+  compareTranscriptMessageOrder,
   DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
   getToolUseIdFromEvent,
   isReasoningToolCall,
@@ -97,8 +98,6 @@ export function insertMessageByOrder(
   messages: ChatMessage[],
   newMessage: ChatMessage
 ): ChatMessage[] {
-  const newOrder = newMessage.order;
-
   // Binary search to find insertion point based on order
   let low = 0;
   let high = messages.length;
@@ -109,7 +108,7 @@ export function insertMessageByOrder(
     if (!midMessage) {
       throw new Error(`Missing message at index ${mid}`);
     }
-    if (midMessage.order <= newOrder) {
+    if (compareTranscriptMessageOrder(midMessage, newMessage) <= 0) {
       low = mid + 1;
     } else {
       high = mid;
@@ -146,7 +145,7 @@ function buildToolUseIdToIndex(messages: ChatMessage[]): Map<string, number> {
 function buildAgentMessageOrderToIndex(messages: ChatMessage[]): Map<number, number> {
   const orderToIndex = new Map<number, number>();
   messages.forEach((message, index) => {
-    if (message.source === 'agent') {
+    if (message.source === 'agent' && message.order >= 0) {
       orderToIndex.set(message.order, index);
     }
   });

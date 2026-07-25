@@ -7,6 +7,8 @@ import {
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 
+const ERROR_MESSAGE_ORDER = -1;
+
 export function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'WS_AGENT_MESSAGE':
@@ -19,7 +21,6 @@ export function reduceMessageTransportSlice(state: ChatState, action: ChatAction
     case 'WS_ASSISTANT_TEXT_DELTA':
       return handleAssistantTextDelta(state, action.payload);
     case 'WS_ERROR': {
-      const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const errorMsg: AgentMessage = {
         type: 'error',
         error: action.payload.message,
@@ -30,7 +31,7 @@ export function reduceMessageTransportSlice(state: ChatState, action: ChatAction
         source: 'agent',
         message: errorMsg,
         timestamp: new Date().toISOString(),
-        order: maxOrder + 1,
+        order: ERROR_MESSAGE_ORDER,
       };
       // Clear loading state if error occurs while loading (e.g., load_session fails)
       const sessionStatus =
