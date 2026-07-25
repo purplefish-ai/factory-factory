@@ -244,6 +244,34 @@ describe('detectDrift', () => {
     ]);
   });
 
+  it('ignores reordered session summaries', () => {
+    const first = {
+      sessionId: 'session-1',
+      name: 'First',
+      workflow: 'followup',
+      model: 'claude-sonnet',
+      persistedStatus: 'IDLE',
+      runtimePhase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-03T10:00:00.000Z',
+      lastExit: null,
+      errorMessage: null,
+    } satisfies WorkspaceSnapshotEntry['sessionSummaries'][number];
+    const second = {
+      ...first,
+      sessionId: 'session-2',
+      name: 'Second',
+      updatedAt: '2026-01-03T11:00:00.000Z',
+    } satisfies WorkspaceSnapshotEntry['sessionSummaries'][number];
+    const existing = createSnapshotEntry({ sessionSummaries: [first, second] });
+    const authoritative: SnapshotUpdateInput = {
+      sessionSummaries: [{ ...second }, { ...first }],
+    };
+
+    expect(detectDrift(existing, authoritative)).toEqual([]);
+  });
+
   it.each([
     {
       field: 'ratchetDispatchOutcome' as const,

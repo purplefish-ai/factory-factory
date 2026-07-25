@@ -56,6 +56,7 @@ export {
   type SnapshotRemovedEvent,
   type SnapshotUpdateInput,
   type SnapshotUpsertResult,
+  sessionSummariesEqual,
   type WorkspaceSessionSummary,
   type WorkspaceSnapshotEntry,
   WorkspaceSnapshotStore,
