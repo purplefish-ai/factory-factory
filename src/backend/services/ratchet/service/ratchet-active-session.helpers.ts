@@ -133,7 +133,7 @@ export async function checkActiveFixerSession(params: {
         `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
       );
     } finally {
-      await stopSessionForProviderMismatch({
+      void stopSessionForProviderMismatch({
         workspaceId: workspace.id,
         sessionId: session.id,
         expectedProvider: resolvedRatchetProvider,

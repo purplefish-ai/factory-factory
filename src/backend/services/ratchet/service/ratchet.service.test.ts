@@ -3294,15 +3294,19 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session');
     });
 
-    it('stops a provider-mismatched session after settlement observes cancellation', async () => {
+    it('returns cancellation without waiting for provider-mismatch cleanup', async () => {
       const controller = new AbortController();
       const timeoutError = new Error('Workspace check timed out');
+      let finishStop!: () => void;
+      const pendingStop = new Promise<void>((resolve) => {
+        finishStop = resolve;
+      });
       vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
         id: 'codex-session',
         provider: 'CODEX',
         status: SessionStatus.RUNNING,
       } as never);
-      vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
+      vi.mocked(mockSessionBridge.stopSession).mockReturnValue(pendingStop);
       vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockImplementation(() => {
         controller.abort(timeoutError);
         return Promise.resolve(true);
@@ -3319,14 +3323,24 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         },
         controller.signal
       );
+      const outcome = check.then(
+        (value) => ({ status: 'resolved' as const, value }),
+        (error: unknown) => ({ status: 'rejected' as const, error })
+      );
 
-      await expect(check).rejects.toBe(timeoutError);
+      await vi.waitFor(() =>
+        expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session')
+      );
+      await expect(
+        Promise.race([outcome, Promise.resolve({ status: 'pending' as const })])
+      ).resolves.toEqual({ status: 'rejected', error: timeoutError });
       expect(mockWorkspaceBridge.recordSessionEnd).toHaveBeenCalledWith(
         'ws-provider-mismatch-cancelled-after-settlement',
         'codex-session',
         'DIED'
       );
-      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('codex-session');
+      finishStop();
+      await pendingStop;
     });
 
     it('returns the active fixer when the session is working', async () => {
