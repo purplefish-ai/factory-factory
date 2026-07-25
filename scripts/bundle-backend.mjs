@@ -41,7 +41,7 @@ const __dirname = __dirname_fn(__filename);
 const commonOptions = {
   bundle: true,
   platform: 'node',
-  target: 'node20',
+  target: 'node22',
   format: 'esm',
   sourcemap: true,
   // Mark native modules as external
