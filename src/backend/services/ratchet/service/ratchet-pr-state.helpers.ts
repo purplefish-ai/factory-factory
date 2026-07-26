@@ -2,7 +2,13 @@ import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import { SERVICE_CACHE_TTL_MS, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
+import {
+  CIStatus,
+  deriveRatchetState,
+  PRState,
+  type RatchetState,
+  reduceCheckRollupToLatestRunAttempts,
+} from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
 import type {
   PRStateFetchResult,
@@ -33,35 +39,36 @@ export function isPRStateFetchSkipped(result: PRStateFetchResult): result is PRS
   return result !== null && 'skipped' in result && result.skipped === true;
 }
 
+/**
+ * The ratchet state implied by a live PR fetch, before any of it is persisted.
+ *
+ * A thin adapter over the shared `deriveRatchetState` so a check and a later read
+ * of the same workspace cannot disagree. The two differ only in vocabulary: this
+ * has GitHub's raw `state` (`OPEN`/`CLOSED`/`MERGED`) and a `hasChangesRequested`
+ * boolean, where the cache has the enriched `PRState` and the raw
+ * `reviewDecision`. Callers are already inside a check with a fetch in hand, so
+ * `ratchetEnabled` is true by construction — the poll query filters on it and
+ * `processWorkspace` returns early otherwise.
+ */
 export function determineRatchetState(pr: PRStateInfo): RatchetState {
-  if (pr.prState === 'MERGED') {
-    return RatchetState.MERGED;
-  }
+  return deriveRatchetState({
+    ratchetEnabled: true,
+    prState: toCachedPRState(pr.prState),
+    prCiStatus: pr.ciStatus,
+    prHasMergeConflict: pr.hasMergeConflict,
+    prReviewState: pr.hasChangesRequested ? 'CHANGES_REQUESTED' : null,
+  });
+}
 
-  if (pr.prState !== 'OPEN') {
-    return RatchetState.IDLE;
+/** GitHub's raw PR state, in the vocabulary `WorkspacePR.state` uses. */
+function toCachedPRState(rawState: string): PRState {
+  if (rawState === 'MERGED') {
+    return PRState.MERGED;
   }
-
-  if (pr.ciStatus === CIStatus.FAILURE) {
-    return RatchetState.CI_FAILED;
+  if (rawState === 'OPEN') {
+    return PRState.OPEN;
   }
-
-  // Check merge conflicts before CI pending/unknown — a PR can have conflicts
-  // even when there are no CI checks configured, and conflicts are independently
-  // actionable regardless of CI status.
-  if (pr.hasMergeConflict) {
-    return RatchetState.MERGE_CONFLICT;
-  }
-
-  if (pr.ciStatus === CIStatus.PENDING || pr.ciStatus === CIStatus.UNKNOWN) {
-    return RatchetState.CI_RUNNING;
-  }
-
-  if (pr.hasChangesRequested) {
-    return RatchetState.REVIEW_PENDING;
-  }
-
-  return RatchetState.READY;
+  return PRState.CLOSED;
 }
 
 export function computeCiSnapshotKey(

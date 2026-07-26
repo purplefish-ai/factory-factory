@@ -53,19 +53,19 @@ clearing the discovery schedule when a branch is renamed
 
 ## WorkspaceRatchet field ownership
 
-The ratchet's seven fields used to sit on `Workspace` and appear in the table
-above. They now live in their own 1:1 `WorkspaceRatchet` row, written only by
+The ratchet's fields used to sit on `Workspace` and appear in the table above.
+They now live in their own 1:1 `WorkspaceRatchet` row, written only by
 `src/backend/services/workspace/resources/workspace-ratchet.accessor.ts`.
 
-There is no lint rule for them because there no longer needs to be: the columns
-are absent from `Workspace`, so nothing else can name them. `check-single-writer`
-polices `Workspace` writes only, and that is why its ratchet entries are gone
-rather than merely relaxed.
+There is no lint rule for the individual fields because there no longer needs to
+be: the columns are absent from `Workspace`, so nothing else can name them. The
+table as a whole is policed by the `OWNED_SIDE_TABLES` rule in
+`check-single-writer`, which is what keeps the write in one file rather than
+merely in one accessor method.
 
 | Field | Was |
 | --- | --- |
 | `enabled` | `Workspace.ratchetEnabled` |
-| `state` | `Workspace.ratchetState` |
 | `lastCheckedAt` | `Workspace.ratchetLastCheckedAt` |
 | `activeSessionId` | `Workspace.ratchetActiveSessionId` |
 | `dispatchSnapshotKey` | `Workspace.ratchetLastCiRunId` (renamed; the old name was a documented misnomer) |
@@ -75,6 +75,35 @@ rather than merely relaxed.
 Reads flatten back to the old `ratchet*` names at the accessor boundary
 (`flattenWorkspaceRatchet`), so derived state, the snapshot stream and the client
 are unchanged by the split.
+
+## RatchetState has no owner
+
+`ratchetState` is absent from the table above because it is not stored. It is a
+projection of the PR observation, computed by `deriveRatchetState`
+(`src/shared/core/ratchet-state.ts`) at the accessor boundary that flattens the
+side tables, so every read gets it and no write can put it out of step with the
+PR cache.
+
+| Input | Source |
+| --- | --- |
+| `ratchetEnabled` | `WorkspaceRatchet.enabled` |
+| `prState` | `WorkspacePR.state` |
+| `prCiStatus` | `WorkspacePR.ciStatus` |
+| `prReviewState` | `WorkspacePR.reviewState` (GitHub's raw `reviewDecision`) |
+| `prHasMergeConflict` | `WorkspacePR.hasMergeConflict` |
+
+The last of those is new. A merge conflict was observed on every ratchet fetch but
+never persisted as a fact: the ratchet folded it straight into
+`RatchetState.MERGE_CONFLICT` and stored that, so a restart could not tell "no
+conflict" from "a conflict we had already folded in". The projection replaced one
+derived enum column with one observed boolean.
+
+`RatchetState` stays declared in `prisma/schema.prisma` even though no model uses
+it, so `src/shared/core/enums.ts` keeps a schema-side pair for the drift test, and
+because it is still the vocabulary the snapshot stream and the v4 export format
+speak. The v4 format requires `ratchetState`, so the export computes it on the way
+out; on the way in it is read only to recover `hasMergeConflict` from a backup file
+that predates the column.
 
 ## Session field ownership
 

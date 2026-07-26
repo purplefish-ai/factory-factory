@@ -57,14 +57,16 @@ export type Workspace = Prisma.WorkspaceModel
 export type WorkspacePR = Prisma.WorkspacePRModel
 /**
  * Model WorkspaceRatchet
- * The ratchet's own state for one workspace: whether it is watching the PR,
- * how far the PR progression has got, and the last fixer dispatch.
+ * What the ratchet decides for one workspace: whether it is watching the PR,
+ * and the last fixer dispatch it made.
  * 
- * Split out of `Workspace` so that the compare-and-swap writes the ratchet
- * relies on guard a row no other concern writes. Every conditional ratchet
- * write tests `enabled` and/or `state` alongside the field it sets, so those
- * two have to live next to the dispatch record for the guards to stay
- * single-statement.
+ * Deliberately not the ratchet's *state*. `RatchetState` is a projection of the
+ * PR observation on `WorkspacePR` (see `deriveRatchetState`), so it is computed
+ * at read time and there is nothing here to keep in step with the PR cache.
+ * What remains is genuinely mutable: a user-owned toggle and a dispatch record
+ * with real concurrency, whose conditional writes guard `enabled` alongside the
+ * field they set — which is why the toggle lives next to the dispatch record
+ * rather than back on `Workspace`.
  * 
  * Exactly one row per workspace, created with the workspace. Reads go through
  * `workspaceRatchetAccessor`, which substitutes these defaults if a row is

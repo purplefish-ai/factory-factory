@@ -130,6 +130,12 @@ export interface RatchetPRSnapshotBridge {
   recordCIObservation(input: {
     workspaceId: string;
     ciStatus: CIStatus;
+    /**
+     * GitHub's `mergeStateStatus == DIRTY`. Travels with CI because the ratchet's
+     * PR fetch is the only place either is observed, and `deriveRatchetState`
+     * needs both.
+     */
+    hasMergeConflict?: boolean;
     failedAt?: Date | null;
     observedAt?: Date;
   }): Promise<void>;

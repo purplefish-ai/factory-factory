@@ -142,6 +142,7 @@ const mockWorkspace: WorkspaceForExport = {
     state: PRState.OPEN,
     reviewState: 'APPROVED',
     ciStatus: CIStatus.SUCCESS,
+    hasMergeConflict: false,
     syncedAt: new Date('2025-01-01T00:15:00.000Z'),
     discoveryLastCheckedAt: null,
     discoveryRetryCount: 0,
@@ -154,7 +155,6 @@ const mockWorkspace: WorkspaceForExport = {
   ratchet: {
     workspaceId: 'ws-1',
     enabled: true,
-    state: RatchetState.READY,
     lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
     activeSessionId: 'session-123',
     dispatchSnapshotKey: 'run-123',
@@ -587,7 +587,6 @@ describe('DataBackupService', () => {
           ratchet: {
             create: {
               enabled: true,
-              state: RatchetState.READY,
               lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
               activeSessionId: 'session-123',
               dispatchSnapshotKey: 'run-123',

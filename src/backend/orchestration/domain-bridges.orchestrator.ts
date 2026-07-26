@@ -329,9 +329,10 @@ export function configureDomainBridges(services: BridgeServices): void {
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
-    recordCIObservation: ({ workspaceId, ciStatus, failedAt, observedAt }) =>
+    recordCIObservation: ({ workspaceId, ciStatus, hasMergeConflict, failedAt, observedAt }) =>
       prSnapshotService.recordCIObservation(workspaceId, {
         ciStatus,
+        hasMergeConflict,
         failedAt,
         observedAt,
       }),

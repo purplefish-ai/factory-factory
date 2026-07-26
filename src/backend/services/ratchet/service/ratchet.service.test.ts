@@ -19,8 +19,7 @@ vi.mock('@/backend/services/workspace', () => ({
     clearActiveSession: vi.fn(),
     enable: vi.fn(),
     disable: vi.fn(),
-    transitionStateIfEnabled: vi.fn(),
-    settleIdleWhileDisabled: vi.fn(),
+    recordCheckIfEnabled: vi.fn(),
     recordDispatchIfEnabled: vi.fn(),
     adoptActiveSessionIfEnabled: vi.fn(),
     recordSessionEnd: vi.fn(),
@@ -127,8 +126,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshot: mockSnapshotBridge,
       workspace: mockWorkspaceBridge,
     });
-    vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(true);
-    vi.mocked(workspaceRatchetService.settleIdleWhileDisabled).mockResolvedValue(true);
+    vi.mocked(workspaceRatchetService.recordCheckIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.recordDispatchIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.adoptActiveSessionIfEnabled).mockResolvedValue(true);
     vi.mocked(workspaceRatchetService.recordSessionEnd).mockResolvedValue(true);
@@ -187,6 +185,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -221,6 +221,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/2',
       prNumber: 2,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: false,
       ratchetState: RatchetState.IDLE,
@@ -251,29 +253,30 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
       newState: RatchetState.IDLE,
     });
-    expect(workspaceRatchetService.settleIdleWhileDisabled).toHaveBeenCalledWith(
-      'ws-disabled',
-      RatchetState.IDLE
-    );
+    // A disabled workspace derives to IDLE, so there is no settling write to make.
+    expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
   });
 
-  it('settles a disabled workspace to IDLE via CAS and emits an accurate fromState', async () => {
+  it('reports a disabled workspace as IDLE without writing anything', async () => {
+    // `ratchetState` is projected from `ratchetEnabled`, so a disabled workspace
+    // arrives already IDLE. There is nothing left to settle, which is why the
+    // fromState this used to CAS on cannot exist and no event is emitted.
     const workspace = {
       id: 'ws-disabled-settle',
       prUrl: 'https://github.com/example/repo/pull/2',
       prNumber: 2,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: false,
-      ratchetState: RatchetState.CI_FAILED,
+      ratchetState: RatchetState.IDLE,
       ratchetActiveSessionId: null,
       ratchetDispatchSnapshotKey: null,
       prReviewLastCheckedAt: null,
       ratchetDispatchOutcome: null,
       ratchetDispatchRetryCount: 0,
     };
-
-    vi.mocked(workspaceRatchetService.settleIdleWhileDisabled).mockResolvedValue(true);
 
     const events: RatchetStateChangedEvent[] = [];
     ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
@@ -284,59 +287,13 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
-    expect(workspaceRatchetService.settleIdleWhileDisabled).toHaveBeenCalledWith(
-      'ws-disabled-settle',
-      RatchetState.CI_FAILED
-    );
     expect(result).toMatchObject({
-      previousState: RatchetState.CI_FAILED,
+      previousState: RatchetState.IDLE,
       newState: RatchetState.IDLE,
       action: { type: 'DISABLED' },
     });
-    expect(events).toEqual([
-      {
-        workspaceId: 'ws-disabled-settle',
-        fromState: RatchetState.CI_FAILED,
-        toState: RatchetState.IDLE,
-      },
-    ]);
-  });
-
-  it('does not emit for a disabled workspace when the settle CAS loses', async () => {
-    const workspace = {
-      id: 'ws-disabled-settle-race',
-      prUrl: 'https://github.com/example/repo/pull/2',
-      prNumber: 2,
-      prState: 'OPEN',
-      prCiStatus: CIStatus.UNKNOWN,
-      ratchetEnabled: false,
-      ratchetState: RatchetState.CI_FAILED,
-      ratchetActiveSessionId: null,
-      ratchetDispatchSnapshotKey: null,
-      prReviewLastCheckedAt: null,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
-    };
-
-    vi.mocked(workspaceRatchetService.settleIdleWhileDisabled).mockResolvedValue(false);
-
-    const events: RatchetStateChangedEvent[] = [];
-    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-      events.push(event);
-    });
-
-    const result = await unsafeCoerce<{
-      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
-    }>(ratchetService).processWorkspace(workspace);
-
-    // The settle did not persist, so the result must not report a state
-    // change this check never committed.
-    expect(result).toMatchObject({
-      previousState: RatchetState.CI_FAILED,
-      newState: RatchetState.CI_FAILED,
-      action: { type: 'DISABLED' },
-    });
     expect(events).toEqual([]);
+    expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
   });
 
   it('does not dispatch when workspace is not idle', async () => {
@@ -345,6 +302,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/3',
       prNumber: 3,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
@@ -405,6 +364,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/4',
       prNumber: 4,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
@@ -448,11 +409,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: '2026-01-02T00:00:00Z',
       retryCount: 0,
     });
-    const finalUpdatePayload = vi
-      .mocked(workspaceRatchetService.transitionStateIfEnabled)
-      .mock.calls.at(-1)?.[2] as Record<string, unknown>;
-    expect(finalUpdatePayload).not.toHaveProperty('ratchetDispatchSnapshotKey');
-    expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
+    // The check-stamp write carries only the timestamp: the dispatch record is
+    // written atomically inside triggerFixer, and the review cursor by the bridge.
+    expect(workspaceRatchetService.recordCheckIfEnabled).toHaveBeenLastCalledWith(
+      'ws-change',
+      expect.any(Date)
+    );
     expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
       'ws-change',
       expect.any(Date)
@@ -465,6 +427,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/40',
       prNumber: 40,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
@@ -495,7 +459,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       promptSent: true,
     } as never);
     vi.mocked(workspaceRatchetService.recordDispatchIfEnabled).mockResolvedValue(false);
-    vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceRatchetService.recordCheckIfEnabled).mockResolvedValue(false);
     vi.mocked(workspaceDataService.findById).mockResolvedValue({
       id: 'ws-disable-race-dispatch',
       ratchetEnabled: false,
@@ -529,6 +493,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/44',
       prNumber: 44,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
@@ -584,6 +550,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/5',
       prNumber: 5,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -630,6 +598,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/55',
       prNumber: 55,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.REVIEW_PENDING,
@@ -689,6 +659,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/56',
       prNumber: 56,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.REVIEW_PENDING,
@@ -741,6 +713,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/57',
       prNumber: 57,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -825,6 +799,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/7',
       prNumber: 7,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
@@ -963,6 +939,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/8',
       prNumber: 8,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -1013,6 +991,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/43',
       prNumber: 43,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.FAILURE,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1077,6 +1057,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/41',
       prNumber: 41,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -1101,7 +1083,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prState: 'OPEN',
       prNumber: 41,
     });
-    vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(false);
+    vi.mocked(workspaceRatchetService.recordCheckIfEnabled).mockResolvedValue(false);
     vi.mocked(workspaceDataService.findById).mockResolvedValue({
       id: 'ws-disable-race-state',
       ratchetEnabled: false,
@@ -1125,19 +1107,24 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     ratchetService.removeAllListeners();
   });
 
-  it('reports a concurrent state change without emitting when the check loses the CAS while still enabled', async () => {
-    const recentCheck = new Date();
+  it('persists a newly observed merge conflict even when CI status is unchanged', async () => {
+    // The conflict flag is the one input to `deriveRatchetState` that no poller
+    // persisted before: the ratchet folded it into `MERGE_CONFLICT` and stored
+    // that. It rides along with CI, so the write has to fire on a conflict change
+    // alone — otherwise a conflict appearing on a green PR would never be stored.
     const workspace = {
-      id: 'ws-superseded',
-      prUrl: 'https://github.com/example/repo/pull/42',
-      prNumber: 42,
+      id: 'ws-conflict',
+      prUrl: 'https://github.com/example/repo/pull/43',
+      prNumber: 43,
       prState: 'OPEN',
-      prCiStatus: CIStatus.UNKNOWN,
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.SUCCESS,
       ratchetEnabled: true,
-      ratchetState: RatchetState.CI_RUNNING,
+      ratchetState: RatchetState.READY,
       ratchetActiveSessionId: null,
-      ratchetDispatchSnapshotKey: 'old-snapshot',
-      prReviewLastCheckedAt: recentCheck,
+      ratchetDispatchSnapshotKey: 'conflict-snapshot',
+      prReviewLastCheckedAt: null,
       ratchetDispatchOutcome: null,
       ratchetDispatchRetryCount: 0,
     };
@@ -1149,48 +1136,27 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       'fetchPRState'
     ).mockResolvedValue({
       ciStatus: CIStatus.SUCCESS,
-      snapshotKey: 'new-snapshot',
+      snapshotKey: 'conflict-snapshot',
       hasChangesRequested: false,
-      latestReviewActivityAtMs: recentCheck.getTime() - 1000,
+      hasMergeConflict: true,
+      latestReviewActivityAtMs: null,
       statusCheckRollup: null,
       prState: 'OPEN',
-      prNumber: 42,
+      prNumber: 43,
     });
-    // The CAS on fromState loses (e.g. markPrClosed settled the workspace to
-    // IDLE mid-check) while ratcheting remains enabled.
-    vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(false);
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
-      id: 'ws-superseded',
-      ratchetEnabled: true,
-      ratchetState: RatchetState.IDLE,
-    } as never);
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
 
-    const events: RatchetStateChangedEvent[] = [];
-    ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-      events.push(event);
-    });
-
-    const result = await unsafeCoerce<{
+    await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
-    expect(workspaceRatchetService.transitionStateIfEnabled).toHaveBeenCalledWith(
-      'ws-superseded',
-      RatchetState.CI_RUNNING,
-      expect.objectContaining({ ratchetState: RatchetState.READY })
+    expect(mockSnapshotBridge.recordCIObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'ws-conflict',
+        ciStatus: CIStatus.SUCCESS,
+        hasMergeConflict: true,
+      })
     );
-    expect(result).toMatchObject({
-      previousState: RatchetState.CI_RUNNING,
-      newState: RatchetState.CI_RUNNING,
-      action: {
-        type: 'WAITING',
-        reason: 'Ratchet state changed concurrently during this check; re-evaluating next cycle',
-      },
-    });
-    expect(events).toHaveLength(0);
-    expect(mockSnapshotBridge.recordCIObservation).not.toHaveBeenCalled();
-    expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
   });
 
   it('redispatches with an incremented retry count when the previous fixer died', async () => {
@@ -1199,6 +1165,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/13',
       prNumber: 13,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.FAILURE,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1251,6 +1219,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/14',
       prNumber: 14,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.SUCCESS,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -1306,6 +1276,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/15',
       prNumber: 15,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.FAILURE,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1348,6 +1320,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/16',
       prNumber: 16,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.FAILURE,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1396,6 +1370,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/17',
       prNumber: 17,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.FAILURE,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1457,6 +1433,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/456',
       prNumber: 456,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.SUCCESS,
       ratchetEnabled: true,
       ratchetState: RatchetState.MERGE_CONFLICT,
@@ -1507,6 +1485,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/9',
       prNumber: 9,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1542,6 +1522,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/12',
       prNumber: 12,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1580,6 +1562,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/12',
       prNumber: 12,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1611,6 +1595,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/12',
       prNumber: 12,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1655,6 +1641,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/11',
       prNumber: 11,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.CI_FAILED,
@@ -1755,6 +1743,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prUrl: 'https://github.com/example/repo/pull/10',
       prNumber: 10,
       prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
       prCiStatus: CIStatus.UNKNOWN,
       ratchetEnabled: true,
       ratchetState: RatchetState.READY,
@@ -2207,6 +2197,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: `https://github.com/example/repo/pull/${id}`,
         prNumber: 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetEnabled: true,
         ratchetState: RatchetState.IDLE,
@@ -2319,6 +2311,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: `https://github.com/example/repo/pull/${index + 1}`,
         prNumber: index + 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -2423,6 +2417,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: `https://github.com/example/repo/pull/${index + 1}`,
         prNumber: index + 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -2492,129 +2488,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
-  describe('markPrClosed', () => {
+  describe('check abort safety', () => {
     afterEach(() => {
       ratchetService.removeAllListeners();
-    });
-
-    it('resets ratchet state to IDLE via CAS on fromState and emits a state change', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue({
-        id: 'ws-closed',
-        ratchetEnabled: true,
-        ratchetState: RatchetState.CI_FAILED,
-      } as never);
-      vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(true);
-
-      const stateEvents: RatchetStateChangedEvent[] = [];
-      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-        stateEvents.push(event);
-      });
-
-      await ratchetService.markPrClosed('ws-closed');
-
-      expect(workspaceRatchetService.transitionStateIfEnabled).toHaveBeenCalledWith(
-        'ws-closed',
-        RatchetState.CI_FAILED,
-        {
-          ratchetState: RatchetState.IDLE,
-          ratchetLastCheckedAt: expect.any(Date),
-        }
-      );
-      expect(stateEvents).toEqual([
-        {
-          workspaceId: 'ws-closed',
-          fromState: RatchetState.CI_FAILED,
-          toState: RatchetState.IDLE,
-        },
-      ]);
-    });
-
-    it('emits the fromState that actually won the compare-and-swap after losing a race', async () => {
-      vi.mocked(workspaceDataService.findById)
-        .mockResolvedValueOnce({
-          id: 'ws-closed',
-          ratchetEnabled: true,
-          ratchetState: RatchetState.CI_FAILED,
-        } as never)
-        .mockResolvedValueOnce({
-          id: 'ws-closed',
-          ratchetEnabled: true,
-          ratchetState: RatchetState.CI_RUNNING,
-        } as never);
-      vi.mocked(workspaceRatchetService.transitionStateIfEnabled)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(true);
-
-      const stateEvents: RatchetStateChangedEvent[] = [];
-      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-        stateEvents.push(event);
-      });
-
-      await ratchetService.markPrClosed('ws-closed');
-
-      expect(workspaceRatchetService.transitionStateIfEnabled).toHaveBeenNthCalledWith(
-        1,
-        'ws-closed',
-        RatchetState.CI_FAILED,
-        expect.objectContaining({ ratchetState: RatchetState.IDLE })
-      );
-      expect(workspaceRatchetService.transitionStateIfEnabled).toHaveBeenNthCalledWith(
-        2,
-        'ws-closed',
-        RatchetState.CI_RUNNING,
-        expect.objectContaining({ ratchetState: RatchetState.IDLE })
-      );
-      expect(stateEvents).toEqual([
-        {
-          workspaceId: 'ws-closed',
-          fromState: RatchetState.CI_RUNNING,
-          toState: RatchetState.IDLE,
-        },
-      ]);
-    });
-
-    it('is a no-op when ratchet state is already IDLE', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue({
-        id: 'ws-closed',
-        ratchetEnabled: true,
-        ratchetState: RatchetState.IDLE,
-      } as never);
-
-      await ratchetService.markPrClosed('ws-closed');
-
-      expect(workspaceRatchetService.transitionStateIfEnabled).not.toHaveBeenCalled();
-    });
-
-    it('does not emit when ratcheting was disabled concurrently', async () => {
-      vi.mocked(workspaceDataService.findById)
-        .mockResolvedValueOnce({
-          id: 'ws-closed',
-          ratchetEnabled: true,
-          ratchetState: RatchetState.CI_FAILED,
-        } as never)
-        .mockResolvedValueOnce({
-          id: 'ws-closed',
-          ratchetEnabled: false,
-          ratchetState: RatchetState.IDLE,
-        } as never);
-      vi.mocked(workspaceRatchetService.transitionStateIfEnabled).mockResolvedValue(false);
-
-      const stateEvents: RatchetStateChangedEvent[] = [];
-      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-        stateEvents.push(event);
-      });
-
-      await ratchetService.markPrClosed('ws-closed');
-
-      expect(stateEvents).toEqual([]);
-    });
-
-    it('is a no-op when workspace is not found', async () => {
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(null);
-
-      await ratchetService.markPrClosed('ws-missing');
-
-      expect(workspaceRatchetService.transitionStateIfEnabled).not.toHaveBeenCalled();
     });
 
     it('does not continue to side effects after a timed-out await completes', async () => {
@@ -2624,6 +2500,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.FAILURE,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -2670,7 +2548,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(finishSpy).not.toHaveBeenCalled();
-      expect(workspaceRatchetService.transitionStateIfEnabled).not.toHaveBeenCalled();
+      expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
     });
   });
 
@@ -2696,6 +2574,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/9',
         prNumber: 9,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetEnabled: true,
         ratchetState: RatchetState.CI_RUNNING,
@@ -2725,6 +2605,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/9',
         prNumber: 9,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -2775,6 +2657,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/9',
         prNumber: 9,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -2823,6 +2707,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/9',
         prNumber: 9,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetEnabled: true,
         ratchetState: RatchetState.CI_RUNNING,
@@ -2857,6 +2743,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prUrl: 'https://github.com/example/repo/pull/1',
         prNumber: 1,
         prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiStatus: CIStatus.UNKNOWN,
         defaultSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetSessionProvider: 'WORKSPACE_DEFAULT',
@@ -4116,38 +4004,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetService.removeAllListeners();
     });
 
-    it('emits ratchet_state_changed when disabled workspace state changes', async () => {
-      const workspace = {
-        id: 'ws-disabled-change',
-        prUrl: 'https://github.com/example/repo/pull/30',
-        prNumber: 30,
-        ratchetEnabled: false,
-        ratchetState: RatchetState.CI_FAILED,
-        ratchetActiveSessionId: null,
-        ratchetDispatchSnapshotKey: null,
-        prReviewLastCheckedAt: null,
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
-      };
-
-      const events: RatchetStateChangedEvent[] = [];
-      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
-        events.push(event);
-      });
-
-      await unsafeCoerce<{
-        processWorkspace: (w: typeof workspace) => Promise<unknown>;
-      }>(ratchetService).processWorkspace(workspace);
-
-      expect(events).toHaveLength(1);
-      expect(events[0]).toEqual({
-        workspaceId: 'ws-disabled-change',
-        fromState: RatchetState.CI_FAILED,
-        toState: RatchetState.IDLE,
-      });
-    });
-
-    it('does NOT emit when disabled workspace state is already IDLE', async () => {
+    it('never emits from a check on a disabled workspace', async () => {
+      // The pair of tests this replaces covered a disabled workspace whose state
+      // was and was not already IDLE. Only the second case exists now: a disabled
+      // workspace projects to IDLE, so a check has no transition to report. The
+      // disable itself still emits one — see `setWorkspaceRatcheting`.
       const workspace = {
         id: 'ws-disabled-idle',
         prUrl: 'https://github.com/example/repo/pull/31',

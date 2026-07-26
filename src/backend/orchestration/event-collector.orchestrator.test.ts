@@ -75,7 +75,6 @@ vi.mock('@/backend/services/ratchet', () => ({
     on: vi.fn(),
     off: vi.fn(),
     checkWorkspaceById: vi.fn().mockResolvedValue(null),
-    markPrClosed: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -1225,10 +1224,12 @@ describe('configureEventCollector', () => {
     });
 
     expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
-    expect(ratchetService.markPrClosed).toHaveBeenCalledWith('ws-1');
+    // No settle call: a closed PR derives to IDLE. The projection refresh is what
+    // republishes it.
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledWith('ws-1');
   });
 
-  it('re-settles ratchet state when PR stays closed across syncs', () => {
+  it('re-projects ratchet state when PR stays closed across syncs', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
       prNumber: 42,
@@ -1260,7 +1261,9 @@ describe('configureEventCollector', () => {
     });
 
     expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
-    expect(ratchetService.markPrClosed).toHaveBeenCalledWith('ws-1');
+    // No settle call: a closed PR derives to IDLE. The projection refresh is what
+    // republishes it.
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledWith('ws-1');
   });
 
   it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
@@ -1643,7 +1646,6 @@ describe('per-graph event collector lifecycle', () => {
       }),
       ratchetService: Object.assign(createSource(), {
         checkWorkspaceById: vi.fn().mockResolvedValue(null),
-        markPrClosed: vi.fn().mockResolvedValue(undefined),
       }),
       runScriptStateMachine: createSource(),
       sessionDataService,

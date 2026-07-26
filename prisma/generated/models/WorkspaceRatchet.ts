@@ -14,14 +14,16 @@ import type * as Prisma from "../internal/prismaNamespace"
 
 /**
  * Model WorkspaceRatchet
- * The ratchet's own state for one workspace: whether it is watching the PR,
- * how far the PR progression has got, and the last fixer dispatch.
+ * What the ratchet decides for one workspace: whether it is watching the PR,
+ * and the last fixer dispatch it made.
  * 
- * Split out of `Workspace` so that the compare-and-swap writes the ratchet
- * relies on guard a row no other concern writes. Every conditional ratchet
- * write tests `enabled` and/or `state` alongside the field it sets, so those
- * two have to live next to the dispatch record for the guards to stay
- * single-statement.
+ * Deliberately not the ratchet's *state*. `RatchetState` is a projection of the
+ * PR observation on `WorkspacePR` (see `deriveRatchetState`), so it is computed
+ * at read time and there is nothing here to keep in step with the PR cache.
+ * What remains is genuinely mutable: a user-owned toggle and a dispatch record
+ * with real concurrency, whose conditional writes guard `enabled` alongside the
+ * field they set — which is why the toggle lives next to the dispatch record
+ * rather than back on `Workspace`.
  * 
  * Exactly one row per workspace, created with the workspace. Reads go through
  * `workspaceRatchetAccessor`, which substitutes these defaults if a row is
@@ -49,7 +51,6 @@ export type WorkspaceRatchetSumAggregateOutputType = {
 export type WorkspaceRatchetMinAggregateOutputType = {
   workspaceId: string | null
   enabled: boolean | null
-  state: $Enums.RatchetState | null
   lastCheckedAt: Date | null
   activeSessionId: string | null
   dispatchSnapshotKey: string | null
@@ -60,7 +61,6 @@ export type WorkspaceRatchetMinAggregateOutputType = {
 export type WorkspaceRatchetMaxAggregateOutputType = {
   workspaceId: string | null
   enabled: boolean | null
-  state: $Enums.RatchetState | null
   lastCheckedAt: Date | null
   activeSessionId: string | null
   dispatchSnapshotKey: string | null
@@ -71,7 +71,6 @@ export type WorkspaceRatchetMaxAggregateOutputType = {
 export type WorkspaceRatchetCountAggregateOutputType = {
   workspaceId: number
   enabled: number
-  state: number
   lastCheckedAt: number
   activeSessionId: number
   dispatchSnapshotKey: number
@@ -92,7 +91,6 @@ export type WorkspaceRatchetSumAggregateInputType = {
 export type WorkspaceRatchetMinAggregateInputType = {
   workspaceId?: true
   enabled?: true
-  state?: true
   lastCheckedAt?: true
   activeSessionId?: true
   dispatchSnapshotKey?: true
@@ -103,7 +101,6 @@ export type WorkspaceRatchetMinAggregateInputType = {
 export type WorkspaceRatchetMaxAggregateInputType = {
   workspaceId?: true
   enabled?: true
-  state?: true
   lastCheckedAt?: true
   activeSessionId?: true
   dispatchSnapshotKey?: true
@@ -114,7 +111,6 @@ export type WorkspaceRatchetMaxAggregateInputType = {
 export type WorkspaceRatchetCountAggregateInputType = {
   workspaceId?: true
   enabled?: true
-  state?: true
   lastCheckedAt?: true
   activeSessionId?: true
   dispatchSnapshotKey?: true
@@ -212,7 +208,6 @@ export type WorkspaceRatchetGroupByArgs<ExtArgs extends runtime.Types.Extensions
 export type WorkspaceRatchetGroupByOutputType = {
   workspaceId: string
   enabled: boolean
-  state: $Enums.RatchetState
   lastCheckedAt: Date | null
   activeSessionId: string | null
   dispatchSnapshotKey: string | null
@@ -246,7 +241,6 @@ export type WorkspaceRatchetWhereInput = {
   NOT?: Prisma.WorkspaceRatchetWhereInput | Prisma.WorkspaceRatchetWhereInput[]
   workspaceId?: Prisma.StringFilter<"WorkspaceRatchet"> | string
   enabled?: Prisma.BoolFilter<"WorkspaceRatchet"> | boolean
-  state?: Prisma.EnumRatchetStateFilter<"WorkspaceRatchet"> | $Enums.RatchetState
   lastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspaceRatchet"> | Date | string | null
   activeSessionId?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
   dispatchSnapshotKey?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
@@ -258,7 +252,6 @@ export type WorkspaceRatchetWhereInput = {
 export type WorkspaceRatchetOrderByWithRelationInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
-  state?: Prisma.SortOrder
   lastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   activeSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchSnapshotKey?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -273,7 +266,6 @@ export type WorkspaceRatchetWhereUniqueInput = Prisma.AtLeast<{
   OR?: Prisma.WorkspaceRatchetWhereInput[]
   NOT?: Prisma.WorkspaceRatchetWhereInput | Prisma.WorkspaceRatchetWhereInput[]
   enabled?: Prisma.BoolFilter<"WorkspaceRatchet"> | boolean
-  state?: Prisma.EnumRatchetStateFilter<"WorkspaceRatchet"> | $Enums.RatchetState
   lastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspaceRatchet"> | Date | string | null
   activeSessionId?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
   dispatchSnapshotKey?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
@@ -285,7 +277,6 @@ export type WorkspaceRatchetWhereUniqueInput = Prisma.AtLeast<{
 export type WorkspaceRatchetOrderByWithAggregationInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
-  state?: Prisma.SortOrder
   lastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   activeSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchSnapshotKey?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -304,7 +295,6 @@ export type WorkspaceRatchetScalarWhereWithAggregatesInput = {
   NOT?: Prisma.WorkspaceRatchetScalarWhereWithAggregatesInput | Prisma.WorkspaceRatchetScalarWhereWithAggregatesInput[]
   workspaceId?: Prisma.StringWithAggregatesFilter<"WorkspaceRatchet"> | string
   enabled?: Prisma.BoolWithAggregatesFilter<"WorkspaceRatchet"> | boolean
-  state?: Prisma.EnumRatchetStateWithAggregatesFilter<"WorkspaceRatchet"> | $Enums.RatchetState
   lastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspaceRatchet"> | Date | string | null
   activeSessionId?: Prisma.StringNullableWithAggregatesFilter<"WorkspaceRatchet"> | string | null
   dispatchSnapshotKey?: Prisma.StringNullableWithAggregatesFilter<"WorkspaceRatchet"> | string | null
@@ -314,7 +304,6 @@ export type WorkspaceRatchetScalarWhereWithAggregatesInput = {
 
 export type WorkspaceRatchetCreateInput = {
   enabled?: boolean
-  state?: $Enums.RatchetState
   lastCheckedAt?: Date | string | null
   activeSessionId?: string | null
   dispatchSnapshotKey?: string | null
@@ -326,7 +315,6 @@ export type WorkspaceRatchetCreateInput = {
 export type WorkspaceRatchetUncheckedCreateInput = {
   workspaceId: string
   enabled?: boolean
-  state?: $Enums.RatchetState
   lastCheckedAt?: Date | string | null
   activeSessionId?: string | null
   dispatchSnapshotKey?: string | null
@@ -336,7 +324,6 @@ export type WorkspaceRatchetUncheckedCreateInput = {
 
 export type WorkspaceRatchetUpdateInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -348,7 +335,6 @@ export type WorkspaceRatchetUpdateInput = {
 export type WorkspaceRatchetUncheckedUpdateInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -359,7 +345,6 @@ export type WorkspaceRatchetUncheckedUpdateInput = {
 export type WorkspaceRatchetCreateManyInput = {
   workspaceId: string
   enabled?: boolean
-  state?: $Enums.RatchetState
   lastCheckedAt?: Date | string | null
   activeSessionId?: string | null
   dispatchSnapshotKey?: string | null
@@ -369,7 +354,6 @@ export type WorkspaceRatchetCreateManyInput = {
 
 export type WorkspaceRatchetUpdateManyMutationInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -380,7 +364,6 @@ export type WorkspaceRatchetUpdateManyMutationInput = {
 export type WorkspaceRatchetUncheckedUpdateManyInput = {
   workspaceId?: Prisma.StringFieldUpdateOperationsInput | string
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -396,7 +379,6 @@ export type WorkspaceRatchetNullableScalarRelationFilter = {
 export type WorkspaceRatchetCountOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
-  state?: Prisma.SortOrder
   lastCheckedAt?: Prisma.SortOrder
   activeSessionId?: Prisma.SortOrder
   dispatchSnapshotKey?: Prisma.SortOrder
@@ -411,7 +393,6 @@ export type WorkspaceRatchetAvgOrderByAggregateInput = {
 export type WorkspaceRatchetMaxOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
-  state?: Prisma.SortOrder
   lastCheckedAt?: Prisma.SortOrder
   activeSessionId?: Prisma.SortOrder
   dispatchSnapshotKey?: Prisma.SortOrder
@@ -422,7 +403,6 @@ export type WorkspaceRatchetMaxOrderByAggregateInput = {
 export type WorkspaceRatchetMinOrderByAggregateInput = {
   workspaceId?: Prisma.SortOrder
   enabled?: Prisma.SortOrder
-  state?: Prisma.SortOrder
   lastCheckedAt?: Prisma.SortOrder
   activeSessionId?: Prisma.SortOrder
   dispatchSnapshotKey?: Prisma.SortOrder
@@ -466,17 +446,12 @@ export type WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceRatchetUpdateToOneWithWhereWithoutWorkspaceInput, Prisma.WorkspaceRatchetUpdateWithoutWorkspaceInput>, Prisma.WorkspaceRatchetUncheckedUpdateWithoutWorkspaceInput>
 }
 
-export type EnumRatchetStateFieldUpdateOperationsInput = {
-  set?: $Enums.RatchetState
-}
-
 export type NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput = {
   set?: $Enums.RatchetDispatchOutcome | null
 }
 
 export type WorkspaceRatchetCreateWithoutWorkspaceInput = {
   enabled?: boolean
-  state?: $Enums.RatchetState
   lastCheckedAt?: Date | string | null
   activeSessionId?: string | null
   dispatchSnapshotKey?: string | null
@@ -486,7 +461,6 @@ export type WorkspaceRatchetCreateWithoutWorkspaceInput = {
 
 export type WorkspaceRatchetUncheckedCreateWithoutWorkspaceInput = {
   enabled?: boolean
-  state?: $Enums.RatchetState
   lastCheckedAt?: Date | string | null
   activeSessionId?: string | null
   dispatchSnapshotKey?: string | null
@@ -512,7 +486,6 @@ export type WorkspaceRatchetUpdateToOneWithWhereWithoutWorkspaceInput = {
 
 export type WorkspaceRatchetUpdateWithoutWorkspaceInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -522,7 +495,6 @@ export type WorkspaceRatchetUpdateWithoutWorkspaceInput = {
 
 export type WorkspaceRatchetUncheckedUpdateWithoutWorkspaceInput = {
   enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  state?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
   lastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   activeSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -535,7 +507,6 @@ export type WorkspaceRatchetUncheckedUpdateWithoutWorkspaceInput = {
 export type WorkspaceRatchetSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
-  state?: boolean
   lastCheckedAt?: boolean
   activeSessionId?: boolean
   dispatchSnapshotKey?: boolean
@@ -547,7 +518,6 @@ export type WorkspaceRatchetSelect<ExtArgs extends runtime.Types.Extensions.Inte
 export type WorkspaceRatchetSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
-  state?: boolean
   lastCheckedAt?: boolean
   activeSessionId?: boolean
   dispatchSnapshotKey?: boolean
@@ -559,7 +529,6 @@ export type WorkspaceRatchetSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
 export type WorkspaceRatchetSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   workspaceId?: boolean
   enabled?: boolean
-  state?: boolean
   lastCheckedAt?: boolean
   activeSessionId?: boolean
   dispatchSnapshotKey?: boolean
@@ -571,7 +540,6 @@ export type WorkspaceRatchetSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
 export type WorkspaceRatchetSelectScalar = {
   workspaceId?: boolean
   enabled?: boolean
-  state?: boolean
   lastCheckedAt?: boolean
   activeSessionId?: boolean
   dispatchSnapshotKey?: boolean
@@ -579,7 +547,7 @@ export type WorkspaceRatchetSelectScalar = {
   dispatchRetryCount?: boolean
 }
 
-export type WorkspaceRatchetOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "state" | "lastCheckedAt" | "activeSessionId" | "dispatchSnapshotKey" | "dispatchOutcome" | "dispatchRetryCount", ExtArgs["result"]["workspaceRatchet"]>
+export type WorkspaceRatchetOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "lastCheckedAt" | "activeSessionId" | "dispatchSnapshotKey" | "dispatchOutcome" | "dispatchRetryCount", ExtArgs["result"]["workspaceRatchet"]>
 export type WorkspaceRatchetInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -598,7 +566,6 @@ export type $WorkspaceRatchetPayload<ExtArgs extends runtime.Types.Extensions.In
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     workspaceId: string
     enabled: boolean
-    state: $Enums.RatchetState
     lastCheckedAt: Date | null
     activeSessionId: string | null
     dispatchSnapshotKey: string | null
@@ -1030,7 +997,6 @@ export interface Prisma__WorkspaceRatchetClient<T, Null = never, ExtArgs extends
 export interface WorkspaceRatchetFieldRefs {
   readonly workspaceId: Prisma.FieldRef<"WorkspaceRatchet", 'String'>
   readonly enabled: Prisma.FieldRef<"WorkspaceRatchet", 'Boolean'>
-  readonly state: Prisma.FieldRef<"WorkspaceRatchet", 'RatchetState'>
   readonly lastCheckedAt: Prisma.FieldRef<"WorkspaceRatchet", 'DateTime'>
   readonly activeSessionId: Prisma.FieldRef<"WorkspaceRatchet", 'String'>
   readonly dispatchSnapshotKey: Prisma.FieldRef<"WorkspaceRatchet", 'String'>

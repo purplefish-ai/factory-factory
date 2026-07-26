@@ -67,6 +67,11 @@ export interface PRUrlAttachedEvent {
 
 interface CIObservationInput {
   ciStatus: SnapshotData['prCiStatus'];
+  /**
+   * GitHub's `mergeStateStatus == DIRTY`, observed by the same fetch that
+   * computed `ciStatus`. Absent when the caller did not look.
+   */
+  hasMergeConflict?: boolean;
   failedAt?: Date | null;
   observedAt?: Date;
 }
@@ -124,6 +129,9 @@ class PRSnapshotService extends EventEmitter {
       const result = await this.workspace.applyCIObservationWithDispatchReset(workspaceId, {
         prCiStatus: input.ciStatus,
         prUpdatedAt: input.observedAt ?? new Date(),
+        ...(input.hasMergeConflict !== undefined
+          ? { prHasMergeConflict: input.hasMergeConflict }
+          : {}),
         ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
       });
       if (!result.applied) {

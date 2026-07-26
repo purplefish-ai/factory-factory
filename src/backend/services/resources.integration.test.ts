@@ -7,7 +7,6 @@ import {
   PRState,
   type Prisma,
   type PrismaClient,
-  RatchetState,
   RunScriptStatus,
   SessionStatus,
   WorkspaceStatus,
@@ -259,7 +258,7 @@ describe('resource accessors integration', () => {
       ).toBe(true);
     });
 
-    it('filters ratchet workspaces by READY + PR + ratchet state', async () => {
+    it('filters ratchet workspaces by READY + open PR + ratchet enabled', async () => {
       const project = await createProjectFixture();
 
       const included = await createWorkspaceFixture(project.id, {
@@ -270,7 +269,7 @@ describe('resource accessors integration', () => {
           state: PRState.OPEN,
           ciStatus: CIStatus.PENDING,
         },
-        ratchet: { enabled: true, state: RatchetState.CI_RUNNING },
+        ratchet: { enabled: true },
       });
 
       await createWorkspaceFixture(project.id, {
@@ -279,15 +278,55 @@ describe('resource accessors integration', () => {
         ratchet: { enabled: false },
       });
 
+      // Merged is read off the PR now, not off a second copy on the ratchet row.
       await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
-        pr: { url: 'https://github.com/acme/repo/pull/3' },
-        ratchet: { enabled: true, state: RatchetState.MERGED },
+        pr: { url: 'https://github.com/acme/repo/pull/3', state: PRState.MERGED },
+        ratchet: { enabled: true },
       });
 
       const ratchetCandidates = await workspaceRatchetService.findCandidates();
 
       expect(ratchetCandidates.map((workspace) => workspace.id)).toEqual([included.id]);
+    });
+
+    it('projects ratchetState from the PR row on every read, with no state column', async () => {
+      const project = await createProjectFixture();
+
+      const conflicted = await createWorkspaceFixture(project.id, {
+        status: WorkspaceStatus.READY,
+        pr: {
+          url: 'https://github.com/acme/repo/pull/10',
+          number: 10,
+          state: PRState.OPEN,
+          ciStatus: CIStatus.SUCCESS,
+          hasMergeConflict: true,
+        },
+        ratchet: { enabled: true },
+      });
+
+      // A conflict on a green PR: only `hasMergeConflict` records it, and before
+      // the projection nothing recorded it at all — the derived `MERGE_CONFLICT`
+      // enum was the sole trace and it did not survive a restart.
+      await expect(workspaceDataService.findById(conflicted.id)).resolves.toMatchObject({
+        prHasMergeConflict: true,
+        ratchetState: 'MERGE_CONFLICT',
+      });
+
+      // Disabling is the whole transition: no settling write follows it, and the
+      // very next read already says IDLE.
+      await workspaceRatchetService.disable(conflicted.id);
+      await expect(workspaceDataService.findById(conflicted.id)).resolves.toMatchObject({
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
+      });
+
+      // Re-enabling restores the projection rather than resuming a stored value.
+      await workspaceRatchetService.enable(conflicted.id);
+      await expect(workspaceDataService.findById(conflicted.id)).resolves.toMatchObject({
+        ratchetEnabled: true,
+        ratchetState: 'MERGE_CONFLICT',
+      });
     });
 
     it('truncates init output when max size is exceeded', async () => {

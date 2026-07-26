@@ -50,6 +50,7 @@ describe('WorkspaceCreationService', () => {
     prState: 'NONE',
     prReviewState: null,
     prCiStatus: 'UNKNOWN',
+    prHasMergeConflict: false,
     prUpdatedAt: null,
     prCiFailedAt: null,
     prCiLastNotifiedAt: null,

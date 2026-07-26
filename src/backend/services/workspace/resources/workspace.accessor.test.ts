@@ -136,6 +136,86 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  describe('ratchetState projection at the flatten boundary', () => {
+    function row(
+      pr: Record<string, unknown>,
+      ratchet: Record<string, unknown> = { enabled: true }
+    ) {
+      return { id: 'ws-1', ratchet, pr };
+    }
+
+    it('derives the state from the joined PR row instead of reading a column', async () => {
+      mockFindUnique.mockResolvedValue(
+        row({ state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: false, reviewState: null })
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        ratchetState: 'CI_FAILED',
+      });
+    });
+
+    it('joins both side tables on the read that projects the state', async () => {
+      mockFindUnique.mockResolvedValue(row({ state: 'OPEN', ciStatus: 'SUCCESS' }));
+
+      await workspaceAccessor.findById('ws-1');
+
+      expect(mockFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({ ratchet: true, pr: true }),
+        })
+      );
+    });
+
+    it('projects IDLE for a disabled workspace whatever the PR says', async () => {
+      // The old settling write left a window where a disabled workspace still
+      // read as its last progression state. The projection closes it: the two
+      // cannot disagree because one is computed from the other.
+      mockFindUnique.mockResolvedValue(
+        row(
+          { state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true, reviewState: null },
+          { enabled: false }
+        )
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
+      });
+    });
+
+    it('surfaces a merge conflict that only the conflict column records', async () => {
+      mockFindUnique.mockResolvedValue(
+        row({ state: 'OPEN', ciStatus: 'SUCCESS', hasMergeConflict: true, reviewState: null })
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        prHasMergeConflict: true,
+        ratchetState: 'MERGE_CONFLICT',
+      });
+    });
+
+    it('falls back to the side-table defaults when a row is missing', async () => {
+      mockFindUnique.mockResolvedValue({ id: 'ws-1', ratchet: null, pr: null });
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        // Defaults are enabled + no PR, which derives to IDLE.
+        ratchetEnabled: true,
+        prState: 'NONE',
+        ratchetState: 'IDLE',
+      });
+    });
+
+    it('drops the relation objects so callers see only the flat shape', async () => {
+      mockFindUnique.mockResolvedValue(row({ state: 'OPEN', ciStatus: 'PENDING' }));
+
+      const workspace = await workspaceAccessor.findById('ws-1');
+
+      expect(workspace).not.toHaveProperty('ratchet');
+      expect(workspace).not.toHaveProperty('pr');
+      expect(workspace).toMatchObject({ ratchetState: 'CI_RUNNING' });
+    });
+  });
+
   describe('PR aggregate writes with dispatch reset', () => {
     /**
      * The aggregate lives on WorkspacePR and the dispatch on WorkspaceRatchet, so

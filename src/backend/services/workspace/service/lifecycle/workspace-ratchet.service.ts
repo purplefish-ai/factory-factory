@@ -1,10 +1,12 @@
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
-import type { RatchetState } from '@/shared/core';
 
 /**
- * The workspace capsule's public surface for ratchet state, used by the ratchet
+ * The workspace capsule's public surface for the ratchet row, used by the ratchet
  * capsule through the barrel.
+ *
+ * There is no state accessor here: `RatchetState` is derived from the PR cache
+ * (`deriveRatchetState`) and arrives already projected on every workspace read.
  *
  * Every method delegates to `workspaceRatchetAccessor`, the sole writer of the
  * `WorkspaceRatchet` table.
@@ -37,16 +39,8 @@ class WorkspaceRatchetService {
     return workspaceRatchetAccessor.adoptActiveSessionIfEnabled(workspaceId, sessionId);
   }
 
-  transitionStateIfEnabled(
-    workspaceId: string,
-    from: RatchetState,
-    data: { ratchetState: RatchetState; ratchetLastCheckedAt: Date }
-  ) {
-    return workspaceRatchetAccessor.transitionStateIfEnabled(workspaceId, from, data);
-  }
-
-  settleIdleWhileDisabled(workspaceId: string, from: RatchetState) {
-    return workspaceRatchetAccessor.settleIdleWhileDisabled(workspaceId, from);
+  recordCheckIfEnabled(workspaceId: string, checkedAt: Date) {
+    return workspaceRatchetAccessor.recordCheckIfEnabled(workspaceId, checkedAt);
   }
 
   clearActiveSession(workspaceId: string, sessionId: string) {

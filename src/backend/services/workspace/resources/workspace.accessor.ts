@@ -20,12 +20,14 @@ import type {
   WorkspaceProviderSelectionSnapshot,
   WorkspaceStatusSnapshot,
 } from '@/backend/services/workspace/types';
-import type {
-  AutoIterationStatus,
-  CIStatus,
-  PRState,
-  RunScriptStatus,
-  WorkspaceStatus,
+import {
+  type AutoIterationStatus,
+  type CIStatus,
+  deriveRatchetState,
+  type PRState,
+  type RatchetState,
+  type RunScriptStatus,
+  type WorkspaceStatus,
 } from '@/shared/core';
 
 const autoIterationExecutionContextSelect = {
@@ -132,6 +134,7 @@ export interface PrSnapshotPersistenceInput {
 
 export interface CIObservationPersistenceInput {
   prCiStatus: CIStatus;
+  prHasMergeConflict?: boolean;
   prUpdatedAt: Date;
   prCiFailedAt?: Date | null;
 }
@@ -147,6 +150,7 @@ type PrAggregatePersistenceInput = Partial<{
   prState: PRState;
   prReviewState: string | null;
   prCiStatus: CIStatus;
+  prHasMergeConflict: boolean;
   prCiFailedAt: Date | null;
   branchName: string | null;
 }> & { prUpdatedAt: Date };
@@ -181,19 +185,40 @@ function prAggregateChanged(
 }
 
 /**
- * The ratchet's state and the PR cache live in their own tables now, but the
- * reads that feed derived state and the snapshot stream consumed them as flat
- * `ratchet*` and `pr*` fields on the workspace. `flatten` keeps that shape, so
- * both splits stop at this accessor instead of rippling out through derived
- * state, the snapshot wire and the client.
+ * The ratchet and the PR cache live in their own tables now, but the reads that
+ * feed derived state and the snapshot stream consumed them as flat `ratchet*` and
+ * `pr*` fields on the workspace. `flatten` keeps that shape, so both splits stop
+ * at this accessor instead of rippling out through derived state, the snapshot
+ * wire and the client.
+ *
+ * `ratchetState` is in that shape too, but it is no longer read from a column: it
+ * is projected here from the PR fields joined in alongside it. Computing it at the
+ * same boundary that flattens is what keeps a stored copy from existing to
+ * disagree with them — and what let the projection land without touching any of
+ * the forty files that read `workspace.ratchetState`.
  */
-type Flattened<T> = Omit<T, 'ratchet' | 'pr'> & WorkspaceRatchetFields & WorkspacePRFields;
+type Flattened<T> = Omit<T, 'ratchet' | 'pr'> &
+  WorkspaceRatchetFields &
+  WorkspacePRFields & { ratchetState: RatchetState };
 
 function flatten<T extends { ratchet?: WorkspaceRatchetRow | null; pr?: WorkspacePRRow | null }>(
   row: T
 ): Flattened<T> {
   const { ratchet, pr, ...rest } = row;
-  return { ...rest, ...flattenWorkspaceRatchet(ratchet), ...flattenWorkspacePR(pr) };
+  const ratchetFields = flattenWorkspaceRatchet(ratchet);
+  const prFields = flattenWorkspacePR(pr);
+  return {
+    ...rest,
+    ...ratchetFields,
+    ...prFields,
+    ratchetState: deriveRatchetState({
+      ratchetEnabled: ratchetFields.ratchetEnabled,
+      prState: prFields.prState,
+      prCiStatus: prFields.prCiStatus,
+      prHasMergeConflict: prFields.prHasMergeConflict,
+      prReviewState: prFields.prReviewState,
+    }),
+  };
 }
 
 /** Included on every read that has to reproduce the old flat workspace shape. */
