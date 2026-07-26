@@ -20,7 +20,7 @@ const groups = [
       'src/backend/server.ts',
       'src/backend/routers/websocket/chat.handler.ts',
       'src/backend/routers/websocket/terminal.handler.ts',
-      'src/backend/routers/websocket/dev-logs.handler.ts',
+      'src/backend/routers/websocket/log-stream.handler.ts',
       'src/backend/routers/websocket/snapshots.handler.ts',
     ],
   },

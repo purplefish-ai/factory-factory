@@ -34,8 +34,8 @@ let prisma: PrismaClient;
 let tempRootDir: string;
 
 let createTerminalUpgradeHandler: typeof import('./terminal.handler').createTerminalUpgradeHandler;
-let createDevLogsUpgradeHandler: typeof import('./dev-logs.handler').createDevLogsUpgradeHandler;
-let createPostRunLogsUpgradeHandler: typeof import('./post-run-logs.handler').createPostRunLogsUpgradeHandler;
+let createDevLogsUpgradeHandler: typeof import('./log-stream.handler').createDevLogsUpgradeHandler;
+let createPostRunLogsUpgradeHandler: typeof import('./log-stream.handler').createPostRunLogsUpgradeHandler;
 let createSnapshotsUpgradeHandler: typeof import('./snapshots.handler').createSnapshotsUpgradeHandler;
 let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeHandler;
 
@@ -63,10 +63,8 @@ beforeAll(async () => {
 
   ({ createTerminalUpgradeHandler, terminalConnections } =
     await vi.importActual<typeof import('./terminal.handler')>('./terminal.handler'));
-  ({ createDevLogsUpgradeHandler } =
-    await vi.importActual<typeof import('./dev-logs.handler')>('./dev-logs.handler'));
-  ({ createPostRunLogsUpgradeHandler } =
-    await vi.importActual<typeof import('./post-run-logs.handler')>('./post-run-logs.handler'));
+  ({ createDevLogsUpgradeHandler, createPostRunLogsUpgradeHandler } =
+    await vi.importActual<typeof import('./log-stream.handler')>('./log-stream.handler'));
   ({ createSnapshotsUpgradeHandler, disposeSnapshotsHandlerState } =
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =

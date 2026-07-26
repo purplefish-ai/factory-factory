@@ -35,23 +35,11 @@
     "noImplicitOverride": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
       "@/*": ["./src/*"],
       "@prisma-gen/*": ["./prisma/generated/*"]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "prisma/generated/**/*.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": ["node_modules", "dist", ".next"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "prisma/generated/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
