@@ -94,50 +94,6 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('listWithRuntimeState maps working state and pending request types', async () => {
-    mockFindByProjectIdWithSessions.mockResolvedValue([
-      { id: 'ws-1', name: 'Workspace 1' },
-      { id: 'ws-2', name: 'Workspace 2' },
-      { id: 'ws-3', name: 'Workspace 3' },
-    ]);
-
-    mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => {
-      if (workspace.id === 'ws-1') {
-        return { sessionIds: ['s-1'], isSessionWorking: false, isWorking: false };
-      }
-      if (workspace.id === 'ws-2') {
-        return { sessionIds: ['s-2'], isSessionWorking: true, isWorking: true };
-      }
-      return { sessionIds: ['s-3'], isSessionWorking: false, isWorking: false };
-    });
-
-    mockGetAllPendingRequests.mockReturnValue(
-      new Map([
-        ['s-1', { toolName: 'ExitPlanMode' }],
-        ['s-2', { toolName: 'SomeOtherPermissionTool' }],
-      ])
-    );
-
-    const result = await workspaceQueryService.listWithRuntimeState({ projectId: 'proj-1' });
-
-    expect(result).toHaveLength(3);
-    expect(result[0]).toMatchObject({
-      id: 'ws-1',
-      isWorking: false,
-      pendingRequestType: 'plan_approval',
-    });
-    expect(result[1]).toMatchObject({
-      id: 'ws-2',
-      isWorking: true,
-      pendingRequestType: 'permission_request',
-    });
-    expect(result[2]).toMatchObject({
-      id: 'ws-3',
-      isWorking: false,
-      pendingRequestType: null,
-    });
-  });
-
   it('listWithKanbanState shows empty workspaces and applies runtime-derived reasons', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {

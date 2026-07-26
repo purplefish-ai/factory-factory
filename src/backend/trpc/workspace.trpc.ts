@@ -149,20 +149,6 @@ export const workspaceCoreRouter = router({
       ctx.appContext.services.workspaceQueryService.listWithKanbanState(input)
     ),
 
-  // List workspaces with runtime state (for table view)
-  listWithRuntimeState: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
-        limit: z.number().min(1).max(100).optional(),
-        offset: z.number().min(0).optional(),
-      })
-    )
-    .query(({ ctx, input }) =>
-      ctx.appContext.services.workspaceQueryService.listWithRuntimeState(input)
-    ),
-
   // Get workspace by ID
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const { sessionDomainService, sessionService, workspaceDataService } = ctx.appContext.services;

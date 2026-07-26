@@ -316,7 +316,7 @@ function checkPrismaGeneratedImport(
 }
 
 function checkPrismaGeneratedImports(errors: string[]): void {
-  const codeRoots = ['src', 'scripts', 'electron', 'packages'];
+  const codeRoots = ['src', 'scripts', 'electron'];
 
   for (const codeRoot of codeRoots) {
     const absoluteCodeRoot = path.join(rootDir, codeRoot);

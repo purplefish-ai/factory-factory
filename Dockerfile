@@ -17,9 +17,8 @@ RUN apk add --no-cache python3 make g++ git libc6-compat
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-# Copy package manifests (workspace + root + sub-packages)
+# Copy package manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/core/package.json packages/core/
 
 # Copy files needed by postinstall script (runs prisma generate + node-pty fixup)
 COPY scripts/postinstall.mjs scripts/
@@ -40,13 +39,12 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 # Copy dependencies from stage 1
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=deps /app/prisma/generated ./prisma/generated
 
 # Copy source
 COPY . .
 
-# Build everything: core workspace, backend TS, frontend Vite SPA, prompts
+# Build everything: backend TS, frontend Vite SPA, prompts
 ENV NODE_ENV=production
 # Use relative asset paths so the app works behind a reverse proxy with a path prefix.
 # Relative paths (./assets/...) resolve correctly regardless of the proxy mount point,
@@ -108,8 +106,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/packages/core/dist ./packages/core/dist
-COPY --from=builder /app/packages/core/package.json ./packages/core/
 
 # Copy Prisma artifacts (migrations for runtime runner + generated client)
 COPY --from=builder /app/prisma/migrations ./prisma/migrations
