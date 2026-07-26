@@ -247,20 +247,6 @@ export type EnumWorkspaceProviderSelectionFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel> | $Enums.WorkspaceProviderSelection
 }
 
-export type EnumWorkspaceModeFilter<$PrismaModel = never> = {
-  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
-  in?: $Enums.WorkspaceMode[]
-  notIn?: $Enums.WorkspaceMode[]
-  not?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel> | $Enums.WorkspaceMode
-}
-
-export type EnumAutoIterationStatusNullableFilter<$PrismaModel = never> = {
-  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
-  in?: $Enums.AutoIterationStatus[] | null
-  notIn?: $Enums.AutoIterationStatus[] | null
-  not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
-}
-
 export type EnumWorkspaceStatusWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceStatus | Prisma.EnumWorkspaceStatusFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceStatus[]
@@ -319,26 +305,6 @@ export type EnumWorkspaceProviderSelectionWithAggregatesFilter<$PrismaModel = ne
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel>
   _max?: Prisma.NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel>
-}
-
-export type EnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
-  in?: $Enums.WorkspaceMode[]
-  notIn?: $Enums.WorkspaceMode[]
-  not?: Prisma.NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel> | $Enums.WorkspaceMode
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
-}
-
-export type EnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
-  in?: $Enums.AutoIterationStatus[] | null
-  notIn?: $Enums.AutoIterationStatus[] | null
-  not?: Prisma.NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
-  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
 }
 
 export type EnumPRStateFilter<$PrismaModel = never> = {
@@ -407,6 +373,40 @@ export type EnumRunScriptStatusWithAggregatesFilter<$PrismaModel = never> = {
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
   _max?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
+}
+
+export type EnumWorkspaceModeFilter<$PrismaModel = never> = {
+  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
+  in?: $Enums.WorkspaceMode[]
+  notIn?: $Enums.WorkspaceMode[]
+  not?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel> | $Enums.WorkspaceMode
+}
+
+export type EnumAutoIterationStatusNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
+  in?: $Enums.AutoIterationStatus[] | null
+  notIn?: $Enums.AutoIterationStatus[] | null
+  not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
+}
+
+export type EnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
+  in?: $Enums.WorkspaceMode[]
+  notIn?: $Enums.WorkspaceMode[]
+  not?: Prisma.NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel> | $Enums.WorkspaceMode
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
+}
+
+export type EnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
+  in?: $Enums.AutoIterationStatus[] | null
+  notIn?: $Enums.AutoIterationStatus[] | null
+  not?: Prisma.NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
 }
 
 export type EnumSessionStatusFilter<$PrismaModel = never> = {
@@ -745,20 +745,6 @@ export type NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel> | $Enums.WorkspaceProviderSelection
 }
 
-export type NestedEnumWorkspaceModeFilter<$PrismaModel = never> = {
-  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
-  in?: $Enums.WorkspaceMode[]
-  notIn?: $Enums.WorkspaceMode[]
-  not?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel> | $Enums.WorkspaceMode
-}
-
-export type NestedEnumAutoIterationStatusNullableFilter<$PrismaModel = never> = {
-  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
-  in?: $Enums.AutoIterationStatus[] | null
-  notIn?: $Enums.AutoIterationStatus[] | null
-  not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
-}
-
 export type NestedEnumWorkspaceStatusWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceStatus | Prisma.EnumWorkspaceStatusFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceStatus[]
@@ -830,26 +816,6 @@ export type NestedEnumWorkspaceProviderSelectionWithAggregatesFilter<$PrismaMode
   _max?: Prisma.NestedEnumWorkspaceProviderSelectionFilter<$PrismaModel>
 }
 
-export type NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
-  in?: $Enums.WorkspaceMode[]
-  notIn?: $Enums.WorkspaceMode[]
-  not?: Prisma.NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel> | $Enums.WorkspaceMode
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
-}
-
-export type NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
-  in?: $Enums.AutoIterationStatus[] | null
-  notIn?: $Enums.AutoIterationStatus[] | null
-  not?: Prisma.NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
-  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
-}
-
 export type NestedEnumPRStateFilter<$PrismaModel = never> = {
   equals?: $Enums.PRState | Prisma.EnumPRStateFieldRefInput<$PrismaModel>
   in?: $Enums.PRState[]
@@ -916,6 +882,40 @@ export type NestedEnumRunScriptStatusWithAggregatesFilter<$PrismaModel = never> 
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
   _max?: Prisma.NestedEnumRunScriptStatusFilter<$PrismaModel>
+}
+
+export type NestedEnumWorkspaceModeFilter<$PrismaModel = never> = {
+  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
+  in?: $Enums.WorkspaceMode[]
+  notIn?: $Enums.WorkspaceMode[]
+  not?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel> | $Enums.WorkspaceMode
+}
+
+export type NestedEnumAutoIterationStatusNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
+  in?: $Enums.AutoIterationStatus[] | null
+  notIn?: $Enums.AutoIterationStatus[] | null
+  not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
+}
+
+export type NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
+  in?: $Enums.WorkspaceMode[]
+  notIn?: $Enums.WorkspaceMode[]
+  not?: Prisma.NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel> | $Enums.WorkspaceMode
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumWorkspaceModeFilter<$PrismaModel>
+}
+
+export type NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AutoIterationStatus | Prisma.EnumAutoIterationStatusFieldRefInput<$PrismaModel> | null
+  in?: $Enums.AutoIterationStatus[] | null
+  notIn?: $Enums.AutoIterationStatus[] | null
+  not?: Prisma.NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
 }
 
 export type NestedEnumSessionStatusFilter<$PrismaModel = never> = {

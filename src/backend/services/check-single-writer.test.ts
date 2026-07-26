@@ -468,13 +468,23 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
-  it('allows creation service to own auto-iteration configuration writes', () => {
+  // Auto-iteration's five fields left `Workspace` for `WorkspaceAutoIteration`,
+  // so the field-ownership rules that used to police `autoIterationConfig` are
+  // gone and OWNED_SIDE_TABLES polices the table instead. These two cover the
+  // same invariant at its new home.
+  it('allows the auto-iteration row to be created alongside its workspace', () => {
     const tempRoot = createTempBackend([
       {
         relPath: 'src/backend/services/workspace/service/lifecycle/creation.service.ts',
         content: `
-          async function createAutoIteration(workspaceAccessor) {
-            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          async function createAutoIteration(prisma, projectId) {
+            await prisma.workspace.create({
+              data: {
+                projectId,
+                name: 'x',
+                autoIteration: { create: { mode: 'AUTO_ITERATION', config: { maxIterations: 3 } } },
+              },
+            });
           }
         `,
       },
@@ -485,13 +495,17 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
-  it('rejects orchestration writes to auto-iteration configuration', () => {
+  it('rejects orchestration writes to the auto-iteration table', () => {
     const tempRoot = createTempBackend([
       {
         relPath: 'src/backend/orchestration/domain-bridges.orchestrator.ts',
         content: `
-          async function configure(workspaceAccessor) {
-            await workspaceAccessor.update('ws', { autoIterationConfig: { maxIterations: 3 } });
+          import { prisma } from '@/backend/db';
+          async function configure(workspaceId) {
+            await prisma.workspaceAutoIteration.updateMany({
+              where: { workspaceId },
+              data: { config: { maxIterations: 3 } },
+            });
           }
         `,
       },
@@ -500,7 +514,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "autoIterationConfig"');
+    expect(result.output).toContain('unauthorized write to workspaceAutoIteration');
   });
 
   it('checks ownership for updateMany payload mutators', () => {

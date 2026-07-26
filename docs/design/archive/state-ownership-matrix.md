@@ -163,9 +163,50 @@ that predates the column.
 | `ClaudeSession.status`, `ClaudeSession.claudeProcessPid` | session lifecycle service (`src/backend/services/session/service/lifecycle/session.lifecycle.service.ts`) |
 | `TerminalSession.status`, `TerminalSession.pid` | terminal/session lifecycle services (not public tRPC metadata update routes) |
 
+## WorkspaceAutoIteration field ownership
+
+The auto-iteration group's five fields used to sit on `Workspace` and appear in
+the table above. They now live in their own 1:1 `WorkspaceAutoIteration` row,
+written only by
+`src/backend/services/workspace/resources/workspace-auto-iteration.accessor.ts`,
+and policed by `OWNED_SIDE_TABLES` rather than by per-field lint entries.
+
+| Field | Was |
+| --- | --- |
+| `mode` | `Workspace.mode` |
+| `status` | `Workspace.autoIterationStatus` |
+| `config` | `Workspace.autoIterationConfig` |
+| `progress` | `Workspace.autoIterationProgress` |
+| `sessionId` | `Workspace.autoIterationSessionId` |
+
+Reads flatten back to the old flat names at the accessor boundary
+(`flattenWorkspaceAutoIteration`), so the workspace list, the v4 export format and
+the client are unchanged by the split.
+
+`mode` travelled with the group rather than staying on `Workspace`. It reads like
+a general workspace attribute, and the pre-split ownership table listed it
+separately from the four `autoIteration*` fields, but every consumer of it is an
+auto-iteration consumer: the kanban card gates its badge on it, the right panel
+and the progress banner derive `isAutoIteration` from it, creation only validates
+it against `autoIterationConfig`, and `auto-iteration.trpc.ts` uses it as an entry
+guard. It is the group's discriminant — the same call the ratchet split made for
+`ratchetEnabled`.
+
+Unlike the three splits before it, none of these fields are on the snapshot wire:
+the client's snapshot adapter lists all five under `mutationOnlyFieldDefaults`,
+because they change through explicit mutations rather than live activity. Only
+`mode` and `config` are in the v4 export format, both already optional with
+defaults — `status`, `progress` and `sessionId` describe a loop that does not
+survive an export, so a workspace whose loop was running when the backup was taken
+restores idle rather than half-resumed.
+
+Same `updatedAt` consequence as the three splits before it: these writes no longer
+touch `Workspace.updatedAt`, so loop progress does not float its workspace up the
+sidebar and board.
+
 ## Enforcement
 
 - `scripts/check-single-writer.mjs` enforces these ownership boundaries for write calls.
 - Ownership checks apply to `workspaceAccessor` mutation APIs that write via `update`/`updateMany`, including wrapper mutators (for example `transitionWithCas` and `registerInitializedWorktree`).
-- `WorkspacePR`, `WorkspaceRatchet` and `WorkspaceRunScript` need no per-field entries there: their single writers are schema facts, not lint rules. The `OWNED_SIDE_TABLES` rule keeps each table's writes in one file.
+- `WorkspacePR`, `WorkspaceRatchet`, `WorkspaceRunScript` and `WorkspaceAutoIteration` need no per-field entries there: their single writers are schema facts, not lint rules. The `OWNED_SIDE_TABLES` rule keeps each table's writes in one file.
 - `pnpm check:ownership` should run in CI.
