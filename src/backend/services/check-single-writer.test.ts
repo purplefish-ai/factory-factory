@@ -333,6 +333,64 @@ describe('check-single-writer', () => {
       expect(result.output).not.toContain('workspaceRunScript');
     });
 
+    // The exemption is one call's own `data:` payload, not everything textually
+    // inside it. An argument expression can contain an entire `workspace.update()`,
+    // and that update is not creating anything.
+    it('rejects a nested create in an update evaluated inside a create argument', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function restore(tx, projectId, id) {
+              await tx.workspace.create({
+                data: {
+                  projectId,
+                  name: 'x',
+                  runScript: { create: { command: 'pnpm dev' } },
+                  description: label(
+                    await tx.workspace.update({
+                      where: { id },
+                      data: { pr: { create: { url: 'https://example.test/pr/1' } } },
+                    })
+                  ),
+                },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized nested create of the workspacePR relation');
+      expect(result.output).not.toContain('workspaceRunScript');
+    });
+
+    // What has to be the creation's own is the `data:` key, not the whole
+    // argument: spreading other options in alongside it is still that call's
+    // payload. The guard reads `data:` off the first argument, so this stays
+    // exempt while a `data:` belonging to some other call does not.
+    it('allows a nested create when the create argument spreads other options in', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function restore(tx) {
+              await tx.workspace.create({
+                ...selectOptions(),
+                data: { name: 'x', runScript: { create: { command: 'pnpm dev' } } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
     // `pr: { url: null }` under `where:` is a relation filter, not a write. The
     // PR accessor's own compare-and-swaps depend on those.
     it('allows relation filters that name a side table in a where clause', () => {

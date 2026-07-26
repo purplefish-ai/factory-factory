@@ -612,9 +612,14 @@ const NESTED_CREATION_KEYS = new Set(['create']);
  * side table to reproduce the flat workspace shape.
  */
 function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
-  const visit = (node, creatingWorkspace) => {
-    let insideWorkspaceCreate = creatingWorkspace;
+  // The `data:` assignments that are a `workspace.create()` call's own payload.
+  // Exempting those specific nodes rather than carrying a flag down the subtree
+  // is the difference between "this creation may bring its paired rows" and
+  // "anything textually inside a creation is exempt" -- an argument expression
+  // can contain a whole `workspace.update()`, which must stay policed.
+  const creationPayloads = new Set();
 
+  const visit = (node) => {
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -628,25 +633,43 @@ function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
           `${relPath}: unauthorized write to ${table} via ${method}(); ${table} is written only by ${owner}`
         );
       }
-      // Everything under this call's payload is creating a workspace, so the
-      // paired rows may be created with it. The flag covers the subtree rather
-      // than the file: a `workspace.update()` elsewhere in the same file is
-      // still policed.
       if (table === 'workspace' && method === 'create') {
-        insideWorkspaceCreate = true;
+        const payload = ownDataPayload(node);
+        if (payload) {
+          creationPayloads.add(payload);
+        }
       }
     }
 
     // A nested relation write reaches the same rows without naming the table:
     // `prisma.workspace.update({ data: { pr: { update: ... } } })`. Only `data:`
     // payloads count -- `pr: { url: null }` under `where:` is a relation filter.
+    // Calls are visited before their arguments, so a creation's payload is
+    // already registered by the time this reaches it.
     if (ts.isPropertyAssignment(node) && propertyName(node) === 'data') {
-      checkNestedSideTableMutation(relPath, node.initializer, violations, insideWorkspaceCreate);
+      checkNestedSideTableMutation(relPath, node.initializer, violations, creationPayloads.has(node));
     }
 
-    ts.forEachChild(node, (child) => visit(child, insideWorkspaceCreate));
+    ts.forEachChild(node, visit);
   };
-  visit(sourceFile, false);
+  visit(sourceFile);
+}
+
+/**
+ * The `data:` assignment in a Prisma call's own first argument, when that
+ * argument is written as an object literal. A payload assembled elsewhere and
+ * spread in has no node to exempt, so it stays policed.
+ */
+function ownDataPayload(call) {
+  const [argument] = call.arguments;
+  if (!argument || !ts.isObjectLiteralExpression(argument)) {
+    return null;
+  }
+  return (
+    argument.properties.find(
+      (property) => ts.isPropertyAssignment(property) && propertyName(property) === 'data'
+    ) ?? null
+  );
 }
 
 function propertyName(assignment) {
