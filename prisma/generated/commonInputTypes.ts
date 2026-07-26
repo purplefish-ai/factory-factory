@@ -268,20 +268,6 @@ export type EnumCIStatusFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumCIStatusFilter<$PrismaModel> | $Enums.CIStatus
 }
 
-export type EnumRatchetStateFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
-  in?: $Enums.RatchetState[]
-  notIn?: $Enums.RatchetState[]
-  not?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel> | $Enums.RatchetState
-}
-
-export type EnumRatchetDispatchOutcomeNullableFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
-  in?: $Enums.RatchetDispatchOutcome[] | null
-  notIn?: $Enums.RatchetDispatchOutcome[] | null
-  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
-}
-
 export type EnumWorkspaceModeFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceMode[]
@@ -386,26 +372,6 @@ export type EnumCIStatusWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumCIStatusFilter<$PrismaModel>
 }
 
-export type EnumRatchetStateWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
-  in?: $Enums.RatchetState[]
-  notIn?: $Enums.RatchetState[]
-  not?: Prisma.NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel> | $Enums.RatchetState
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
-}
-
-export type EnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
-  in?: $Enums.RatchetDispatchOutcome[] | null
-  notIn?: $Enums.RatchetDispatchOutcome[] | null
-  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
-  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
-}
-
 export type EnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceMode[]
@@ -424,6 +390,40 @@ export type EnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = n
   _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
+}
+
+export type EnumRatchetStateFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetState[]
+  notIn?: $Enums.RatchetState[]
+  not?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel> | $Enums.RatchetState
+}
+
+export type EnumRatchetDispatchOutcomeNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
+  in?: $Enums.RatchetDispatchOutcome[] | null
+  notIn?: $Enums.RatchetDispatchOutcome[] | null
+  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
+}
+
+export type EnumRatchetStateWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetState[]
+  notIn?: $Enums.RatchetState[]
+  not?: Prisma.NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel> | $Enums.RatchetState
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
+}
+
+export type EnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
+  in?: $Enums.RatchetDispatchOutcome[] | null
+  notIn?: $Enums.RatchetDispatchOutcome[] | null
+  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
 }
 
 export type EnumSessionStatusFilter<$PrismaModel = never> = {
@@ -783,20 +783,6 @@ export type NestedEnumCIStatusFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumCIStatusFilter<$PrismaModel> | $Enums.CIStatus
 }
 
-export type NestedEnumRatchetStateFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
-  in?: $Enums.RatchetState[]
-  notIn?: $Enums.RatchetState[]
-  not?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel> | $Enums.RatchetState
-}
-
-export type NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
-  in?: $Enums.RatchetDispatchOutcome[] | null
-  notIn?: $Enums.RatchetDispatchOutcome[] | null
-  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
-}
-
 export type NestedEnumWorkspaceModeFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceMode[]
@@ -912,26 +898,6 @@ export type NestedEnumCIStatusWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumCIStatusFilter<$PrismaModel>
 }
 
-export type NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
-  in?: $Enums.RatchetState[]
-  notIn?: $Enums.RatchetState[]
-  not?: Prisma.NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel> | $Enums.RatchetState
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
-}
-
-export type NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
-  in?: $Enums.RatchetDispatchOutcome[] | null
-  notIn?: $Enums.RatchetDispatchOutcome[] | null
-  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
-  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
-}
-
 export type NestedEnumWorkspaceModeWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceMode | Prisma.EnumWorkspaceModeFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceMode[]
@@ -950,6 +916,40 @@ export type NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaMod
   _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
+}
+
+export type NestedEnumRatchetStateFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetState[]
+  notIn?: $Enums.RatchetState[]
+  not?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel> | $Enums.RatchetState
+}
+
+export type NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
+  in?: $Enums.RatchetDispatchOutcome[] | null
+  notIn?: $Enums.RatchetDispatchOutcome[] | null
+  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
+}
+
+export type NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetState | Prisma.EnumRatchetStateFieldRefInput<$PrismaModel>
+  in?: $Enums.RatchetState[]
+  notIn?: $Enums.RatchetState[]
+  not?: Prisma.NestedEnumRatchetStateWithAggregatesFilter<$PrismaModel> | $Enums.RatchetState
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetStateFilter<$PrismaModel>
+}
+
+export type NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.RatchetDispatchOutcome | Prisma.EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> | null
+  in?: $Enums.RatchetDispatchOutcome[] | null
+  notIn?: $Enums.RatchetDispatchOutcome[] | null
+  not?: Prisma.NestedEnumRatchetDispatchOutcomeNullableWithAggregatesFilter<$PrismaModel> | $Enums.RatchetDispatchOutcome | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumRatchetDispatchOutcomeNullableFilter<$PrismaModel>
 }
 
 export type NestedEnumSessionStatusFilter<$PrismaModel = never> = {

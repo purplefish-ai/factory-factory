@@ -1,14 +1,21 @@
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import type { RatchetState } from '@/shared/core';
 
+/**
+ * The workspace capsule's public surface for ratchet state, used by the ratchet
+ * capsule through the barrel.
+ *
+ * Every method delegates to `workspaceRatchetAccessor`, the sole writer of the
+ * `WorkspaceRatchet` table.
+ */
 class WorkspaceRatchetService {
   findCandidates() {
-    return workspaceAccessor.findWithPRsForRatchet();
+    return workspaceRatchetAccessor.findWithPRsForRatchet();
   }
 
   findCandidateById(workspaceId: string) {
-    return workspaceAccessor.findForRatchetById(workspaceId);
+    return workspaceRatchetAccessor.findForRatchetById(workspaceId);
   }
 
   recordSessionEnd(
@@ -16,18 +23,18 @@ class WorkspaceRatchetService {
     sessionId: string,
     outcome: Exclude<RatchetDispatchOutcome, 'RUNNING'>
   ) {
-    return workspaceAccessor.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
+    return workspaceRatchetAccessor.recordSessionEnd(workspaceId, sessionId, outcome);
   }
 
   recordDispatchIfEnabled(
     workspaceId: string,
     input: { sessionId: string; snapshotKey: string; retryCount: number }
   ) {
-    return workspaceAccessor.recordRatchetDispatchIfEnabled(workspaceId, input);
+    return workspaceRatchetAccessor.recordDispatchIfEnabled(workspaceId, input);
   }
 
   adoptActiveSessionIfEnabled(workspaceId: string, sessionId: string) {
-    return workspaceAccessor.adoptRatchetActiveSessionIfEnabled(workspaceId, sessionId);
+    return workspaceRatchetAccessor.adoptActiveSessionIfEnabled(workspaceId, sessionId);
   }
 
   transitionStateIfEnabled(
@@ -35,30 +42,23 @@ class WorkspaceRatchetService {
     from: RatchetState,
     data: { ratchetState: RatchetState; ratchetLastCheckedAt: Date }
   ) {
-    return workspaceAccessor.transitionRatchetStateIfEnabled(workspaceId, from, data);
+    return workspaceRatchetAccessor.transitionStateIfEnabled(workspaceId, from, data);
   }
 
   settleIdleWhileDisabled(workspaceId: string, from: RatchetState) {
-    return workspaceAccessor.settleRatchetIdleWhileDisabled(workspaceId, from);
+    return workspaceRatchetAccessor.settleIdleWhileDisabled(workspaceId, from);
   }
 
-  clearActiveSession(workspaceId: string) {
-    return workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
+  clearActiveSession(workspaceId: string, sessionId: string) {
+    return workspaceRatchetAccessor.clearActiveSession(workspaceId, sessionId);
   }
 
   enable(workspaceId: string) {
-    return workspaceAccessor.update(workspaceId, { ratchetEnabled: true });
+    return workspaceRatchetAccessor.enable(workspaceId);
   }
 
   disable(workspaceId: string) {
-    return workspaceAccessor.update(workspaceId, {
-      ratchetEnabled: false,
-      ratchetState: 'IDLE',
-      ratchetActiveSessionId: null,
-      ratchetLastCiRunId: null,
-      ratchetDispatchOutcome: null,
-      ratchetDispatchRetryCount: 0,
-    });
+    return workspaceRatchetAccessor.disable(workspaceId);
   }
 }
 

@@ -48,7 +48,7 @@ const createWorkspace = (overrides?: Partial<Workspace>): Workspace =>
     ratchetState: 'IDLE',
     ratchetLastCheckedAt: null,
     ratchetActiveSessionId: null,
-    ratchetLastCiRunId: null,
+    ratchetDispatchSnapshotKey: null,
     hasHadSessions: false,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),

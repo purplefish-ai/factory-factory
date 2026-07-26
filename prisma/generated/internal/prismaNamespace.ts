@@ -400,6 +400,7 @@ export const ModelName = {
   Project: 'Project',
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
+  WorkspaceRatchet: 'WorkspaceRatchet',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -422,7 +423,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceRatchet" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -645,6 +646,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspaceRatchet: {
+      payload: Prisma.$WorkspaceRatchetPayload<ExtArgs>
+      fields: Prisma.WorkspaceRatchetFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceRatchetFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceRatchetFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceRatchetFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceRatchetFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceRatchetFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceRatchetCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceRatchetCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceRatchetCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceRatchetDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceRatchetUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceRatchetDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceRatchetUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceRatchetUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceRatchetUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRatchetPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceRatchetAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceRatchet>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceRatchetGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceRatchetGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceRatchetCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceRatchetCountAggregateOutputType> | number
         }
       }
     }
@@ -1282,13 +1357,6 @@ export const WorkspaceScalarFieldEnum = {
   prCiLastNotifiedAt: 'prCiLastNotifiedAt',
   prReviewLastCheckedAt: 'prReviewLastCheckedAt',
   prReviewLastCommentId: 'prReviewLastCommentId',
-  ratchetEnabled: 'ratchetEnabled',
-  ratchetState: 'ratchetState',
-  ratchetLastCheckedAt: 'ratchetLastCheckedAt',
-  ratchetActiveSessionId: 'ratchetActiveSessionId',
-  ratchetLastCiRunId: 'ratchetLastCiRunId',
-  ratchetDispatchOutcome: 'ratchetDispatchOutcome',
-  ratchetDispatchRetryCount: 'ratchetDispatchRetryCount',
   mode: 'mode',
   autoIterationStatus: 'autoIterationStatus',
   autoIterationConfig: 'autoIterationConfig',
@@ -1300,6 +1368,20 @@ export const WorkspaceScalarFieldEnum = {
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspaceRatchetScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  enabled: 'enabled',
+  state: 'state',
+  lastCheckedAt: 'lastCheckedAt',
+  activeSessionId: 'activeSessionId',
+  dispatchSnapshotKey: 'dispatchSnapshotKey',
+  dispatchOutcome: 'dispatchOutcome',
+  dispatchRetryCount: 'dispatchRetryCount'
+} as const
+
+export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {
@@ -1564,20 +1646,6 @@ export type EnumCIStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
 
 
 /**
- * Reference to a field of type 'RatchetState'
- */
-export type EnumRatchetStateFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetState'>
-    
-
-
-/**
- * Reference to a field of type 'RatchetDispatchOutcome'
- */
-export type EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetDispatchOutcome'>
-    
-
-
-/**
  * Reference to a field of type 'WorkspaceMode'
  */
 export type EnumWorkspaceModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WorkspaceMode'>
@@ -1588,6 +1656,20 @@ export type EnumWorkspaceModeFieldRefInput<$PrismaModel> = FieldRefInputType<$Pr
  * Reference to a field of type 'AutoIterationStatus'
  */
 export type EnumAutoIterationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AutoIterationStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'RatchetState'
+ */
+export type EnumRatchetStateFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetState'>
+    
+
+
+/**
+ * Reference to a field of type 'RatchetDispatchOutcome'
+ */
+export type EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetDispatchOutcome'>
     
 
 
@@ -1800,6 +1882,7 @@ export type GlobalOmitConfig = {
   project?: Prisma.ProjectOmit
   decisionLog?: Prisma.DecisionLogOmit
   workspace?: Prisma.WorkspaceOmit
+  workspaceRatchet?: Prisma.WorkspaceRatchetOmit
   agentSession?: Prisma.AgentSessionOmit
   terminalSession?: Prisma.TerminalSessionOmit
   closedSession?: Prisma.ClosedSessionOmit

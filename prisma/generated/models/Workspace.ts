@@ -34,7 +34,6 @@ export type WorkspaceAvgAggregateOutputType = {
   githubIssueNumber: number | null
   prNumber: number | null
   prDiscoveryRetryCount: number | null
-  ratchetDispatchRetryCount: number | null
 }
 
 export type WorkspaceSumAggregateOutputType = {
@@ -45,7 +44,6 @@ export type WorkspaceSumAggregateOutputType = {
   githubIssueNumber: number | null
   prNumber: number | null
   prDiscoveryRetryCount: number | null
-  ratchetDispatchRetryCount: number | null
 }
 
 export type WorkspaceMinAggregateOutputType = {
@@ -93,13 +91,6 @@ export type WorkspaceMinAggregateOutputType = {
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
   prReviewLastCommentId: string | null
-  ratchetEnabled: boolean | null
-  ratchetState: $Enums.RatchetState | null
-  ratchetLastCheckedAt: Date | null
-  ratchetActiveSessionId: string | null
-  ratchetLastCiRunId: string | null
-  ratchetDispatchOutcome: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount: number | null
   mode: $Enums.WorkspaceMode | null
   autoIterationStatus: $Enums.AutoIterationStatus | null
   autoIterationSessionId: string | null
@@ -153,13 +144,6 @@ export type WorkspaceMaxAggregateOutputType = {
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
   prReviewLastCommentId: string | null
-  ratchetEnabled: boolean | null
-  ratchetState: $Enums.RatchetState | null
-  ratchetLastCheckedAt: Date | null
-  ratchetActiveSessionId: string | null
-  ratchetLastCiRunId: string | null
-  ratchetDispatchOutcome: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount: number | null
   mode: $Enums.WorkspaceMode | null
   autoIterationStatus: $Enums.AutoIterationStatus | null
   autoIterationSessionId: string | null
@@ -214,13 +198,6 @@ export type WorkspaceCountAggregateOutputType = {
   prCiLastNotifiedAt: number
   prReviewLastCheckedAt: number
   prReviewLastCommentId: number
-  ratchetEnabled: number
-  ratchetState: number
-  ratchetLastCheckedAt: number
-  ratchetActiveSessionId: number
-  ratchetLastCiRunId: number
-  ratchetDispatchOutcome: number
-  ratchetDispatchRetryCount: number
   mode: number
   autoIterationStatus: number
   autoIterationConfig: number
@@ -241,7 +218,6 @@ export type WorkspaceAvgAggregateInputType = {
   githubIssueNumber?: true
   prNumber?: true
   prDiscoveryRetryCount?: true
-  ratchetDispatchRetryCount?: true
 }
 
 export type WorkspaceSumAggregateInputType = {
@@ -252,7 +228,6 @@ export type WorkspaceSumAggregateInputType = {
   githubIssueNumber?: true
   prNumber?: true
   prDiscoveryRetryCount?: true
-  ratchetDispatchRetryCount?: true
 }
 
 export type WorkspaceMinAggregateInputType = {
@@ -300,13 +275,6 @@ export type WorkspaceMinAggregateInputType = {
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
   prReviewLastCommentId?: true
-  ratchetEnabled?: true
-  ratchetState?: true
-  ratchetLastCheckedAt?: true
-  ratchetActiveSessionId?: true
-  ratchetLastCiRunId?: true
-  ratchetDispatchOutcome?: true
-  ratchetDispatchRetryCount?: true
   mode?: true
   autoIterationStatus?: true
   autoIterationSessionId?: true
@@ -360,13 +328,6 @@ export type WorkspaceMaxAggregateInputType = {
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
   prReviewLastCommentId?: true
-  ratchetEnabled?: true
-  ratchetState?: true
-  ratchetLastCheckedAt?: true
-  ratchetActiveSessionId?: true
-  ratchetLastCiRunId?: true
-  ratchetDispatchOutcome?: true
-  ratchetDispatchRetryCount?: true
   mode?: true
   autoIterationStatus?: true
   autoIterationSessionId?: true
@@ -421,13 +382,6 @@ export type WorkspaceCountAggregateInputType = {
   prCiLastNotifiedAt?: true
   prReviewLastCheckedAt?: true
   prReviewLastCommentId?: true
-  ratchetEnabled?: true
-  ratchetState?: true
-  ratchetLastCheckedAt?: true
-  ratchetActiveSessionId?: true
-  ratchetLastCiRunId?: true
-  ratchetDispatchOutcome?: true
-  ratchetDispatchRetryCount?: true
   mode?: true
   autoIterationStatus?: true
   autoIterationConfig?: true
@@ -571,13 +525,6 @@ export type WorkspaceGroupByOutputType = {
   prCiLastNotifiedAt: Date | null
   prReviewLastCheckedAt: Date | null
   prReviewLastCommentId: string | null
-  ratchetEnabled: boolean
-  ratchetState: $Enums.RatchetState
-  ratchetLastCheckedAt: Date | null
-  ratchetActiveSessionId: string | null
-  ratchetLastCiRunId: string | null
-  ratchetDispatchOutcome: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount: number
   mode: $Enums.WorkspaceMode
   autoIterationStatus: $Enums.AutoIterationStatus | null
   autoIterationConfig: runtime.JsonValue | null
@@ -657,13 +604,6 @@ export type WorkspaceWhereInput = {
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCommentId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetEnabled?: Prisma.BoolFilter<"Workspace"> | boolean
-  ratchetState?: Prisma.EnumRatchetStateFilter<"Workspace"> | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
-  ratchetActiveSessionId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetLastCiRunId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetDispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableFilter<"Workspace"> | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFilter<"Workspace"> | number
   mode?: Prisma.EnumWorkspaceModeFilter<"Workspace"> | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.EnumAutoIterationStatusNullableFilter<"Workspace"> | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.JsonNullableFilter<"Workspace">
@@ -676,6 +616,7 @@ export type WorkspaceWhereInput = {
   agentSessions?: Prisma.AgentSessionListRelationFilter
   terminalSessions?: Prisma.TerminalSessionListRelationFilter
   closedSessions?: Prisma.ClosedSessionListRelationFilter
+  ratchet?: Prisma.XOR<Prisma.WorkspaceRatchetNullableScalarRelationFilter, Prisma.WorkspaceRatchetWhereInput> | null
   periodicTask?: Prisma.XOR<Prisma.PeriodicTaskNullableScalarRelationFilter, Prisma.PeriodicTaskWhereInput> | null
   periodicTaskExecution?: Prisma.XOR<Prisma.PeriodicTaskExecutionNullableScalarRelationFilter, Prisma.PeriodicTaskExecutionWhereInput> | null
   parentWorkspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
@@ -729,13 +670,6 @@ export type WorkspaceOrderByWithRelationInput = {
   prCiLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetEnabled?: Prisma.SortOrder
-  ratchetState?: Prisma.SortOrder
-  ratchetLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetActiveSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetLastCiRunId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetDispatchOutcome?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
   mode?: Prisma.SortOrder
   autoIterationStatus?: Prisma.SortOrderInput | Prisma.SortOrder
   autoIterationConfig?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -748,6 +682,7 @@ export type WorkspaceOrderByWithRelationInput = {
   agentSessions?: Prisma.AgentSessionOrderByRelationAggregateInput
   terminalSessions?: Prisma.TerminalSessionOrderByRelationAggregateInput
   closedSessions?: Prisma.ClosedSessionOrderByRelationAggregateInput
+  ratchet?: Prisma.WorkspaceRatchetOrderByWithRelationInput
   periodicTask?: Prisma.PeriodicTaskOrderByWithRelationInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionOrderByWithRelationInput
   parentWorkspace?: Prisma.WorkspaceOrderByWithRelationInput
@@ -804,13 +739,6 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCommentId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetEnabled?: Prisma.BoolFilter<"Workspace"> | boolean
-  ratchetState?: Prisma.EnumRatchetStateFilter<"Workspace"> | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
-  ratchetActiveSessionId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetLastCiRunId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetDispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableFilter<"Workspace"> | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFilter<"Workspace"> | number
   mode?: Prisma.EnumWorkspaceModeFilter<"Workspace"> | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.EnumAutoIterationStatusNullableFilter<"Workspace"> | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.JsonNullableFilter<"Workspace">
@@ -823,6 +751,7 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   agentSessions?: Prisma.AgentSessionListRelationFilter
   terminalSessions?: Prisma.TerminalSessionListRelationFilter
   closedSessions?: Prisma.ClosedSessionListRelationFilter
+  ratchet?: Prisma.XOR<Prisma.WorkspaceRatchetNullableScalarRelationFilter, Prisma.WorkspaceRatchetWhereInput> | null
   periodicTask?: Prisma.XOR<Prisma.PeriodicTaskNullableScalarRelationFilter, Prisma.PeriodicTaskWhereInput> | null
   periodicTaskExecution?: Prisma.XOR<Prisma.PeriodicTaskExecutionNullableScalarRelationFilter, Prisma.PeriodicTaskExecutionWhereInput> | null
   parentWorkspace?: Prisma.XOR<Prisma.WorkspaceNullableScalarRelationFilter, Prisma.WorkspaceWhereInput> | null
@@ -876,13 +805,6 @@ export type WorkspaceOrderByWithAggregationInput = {
   prCiLastNotifiedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   prReviewLastCommentId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetEnabled?: Prisma.SortOrder
-  ratchetState?: Prisma.SortOrder
-  ratchetLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetActiveSessionId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetLastCiRunId?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetDispatchOutcome?: Prisma.SortOrderInput | Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
   mode?: Prisma.SortOrder
   autoIterationStatus?: Prisma.SortOrderInput | Prisma.SortOrder
   autoIterationConfig?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -947,13 +869,6 @@ export type WorkspaceScalarWhereWithAggregatesInput = {
   prCiLastNotifiedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   prReviewLastCommentId?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
-  ratchetEnabled?: Prisma.BoolWithAggregatesFilter<"Workspace"> | boolean
-  ratchetState?: Prisma.EnumRatchetStateWithAggregatesFilter<"Workspace"> | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
-  ratchetActiveSessionId?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
-  ratchetLastCiRunId?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
-  ratchetDispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableWithAggregatesFilter<"Workspace"> | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntWithAggregatesFilter<"Workspace"> | number
   mode?: Prisma.EnumWorkspaceModeWithAggregatesFilter<"Workspace"> | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.EnumAutoIterationStatusNullableWithAggregatesFilter<"Workspace"> | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.JsonNullableWithAggregatesFilter<"Workspace">
@@ -1009,13 +924,6 @@ export type WorkspaceCreateInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1026,6 +934,7 @@ export type WorkspaceCreateInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -1079,13 +988,6 @@ export type WorkspaceUncheckedCreateInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1097,6 +999,7 @@ export type WorkspaceUncheckedCreateInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -1147,13 +1050,6 @@ export type WorkspaceUpdateInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1164,6 +1060,7 @@ export type WorkspaceUpdateInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -1217,13 +1114,6 @@ export type WorkspaceUncheckedUpdateInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1235,6 +1125,7 @@ export type WorkspaceUncheckedUpdateInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -1286,13 +1177,6 @@ export type WorkspaceCreateManyInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1348,13 +1232,6 @@ export type WorkspaceUpdateManyMutationInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1409,13 +1286,6 @@ export type WorkspaceUncheckedUpdateManyInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1487,13 +1357,6 @@ export type WorkspaceCountOrderByAggregateInput = {
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
   prReviewLastCommentId?: Prisma.SortOrder
-  ratchetEnabled?: Prisma.SortOrder
-  ratchetState?: Prisma.SortOrder
-  ratchetLastCheckedAt?: Prisma.SortOrder
-  ratchetActiveSessionId?: Prisma.SortOrder
-  ratchetLastCiRunId?: Prisma.SortOrder
-  ratchetDispatchOutcome?: Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
   mode?: Prisma.SortOrder
   autoIterationStatus?: Prisma.SortOrder
   autoIterationConfig?: Prisma.SortOrder
@@ -1512,7 +1375,6 @@ export type WorkspaceAvgOrderByAggregateInput = {
   githubIssueNumber?: Prisma.SortOrder
   prNumber?: Prisma.SortOrder
   prDiscoveryRetryCount?: Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
 }
 
 export type WorkspaceMaxOrderByAggregateInput = {
@@ -1560,13 +1422,6 @@ export type WorkspaceMaxOrderByAggregateInput = {
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
   prReviewLastCommentId?: Prisma.SortOrder
-  ratchetEnabled?: Prisma.SortOrder
-  ratchetState?: Prisma.SortOrder
-  ratchetLastCheckedAt?: Prisma.SortOrder
-  ratchetActiveSessionId?: Prisma.SortOrder
-  ratchetLastCiRunId?: Prisma.SortOrder
-  ratchetDispatchOutcome?: Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
   mode?: Prisma.SortOrder
   autoIterationStatus?: Prisma.SortOrder
   autoIterationSessionId?: Prisma.SortOrder
@@ -1620,13 +1475,6 @@ export type WorkspaceMinOrderByAggregateInput = {
   prCiLastNotifiedAt?: Prisma.SortOrder
   prReviewLastCheckedAt?: Prisma.SortOrder
   prReviewLastCommentId?: Prisma.SortOrder
-  ratchetEnabled?: Prisma.SortOrder
-  ratchetState?: Prisma.SortOrder
-  ratchetLastCheckedAt?: Prisma.SortOrder
-  ratchetActiveSessionId?: Prisma.SortOrder
-  ratchetLastCiRunId?: Prisma.SortOrder
-  ratchetDispatchOutcome?: Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
   mode?: Prisma.SortOrder
   autoIterationStatus?: Prisma.SortOrder
   autoIterationSessionId?: Prisma.SortOrder
@@ -1643,7 +1491,6 @@ export type WorkspaceSumOrderByAggregateInput = {
   githubIssueNumber?: Prisma.SortOrder
   prNumber?: Prisma.SortOrder
   prDiscoveryRetryCount?: Prisma.SortOrder
-  ratchetDispatchRetryCount?: Prisma.SortOrder
 }
 
 export type WorkspaceScalarRelationFilter = {
@@ -1749,14 +1596,6 @@ export type EnumCIStatusFieldUpdateOperationsInput = {
   set?: $Enums.CIStatus
 }
 
-export type EnumRatchetStateFieldUpdateOperationsInput = {
-  set?: $Enums.RatchetState
-}
-
-export type NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput = {
-  set?: $Enums.RatchetDispatchOutcome | null
-}
-
 export type EnumWorkspaceModeFieldUpdateOperationsInput = {
   set?: $Enums.WorkspaceMode
 }
@@ -1801,6 +1640,20 @@ export type WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput = {
   update?: Prisma.WorkspaceUpdateWithWhereUniqueWithoutParentWorkspaceInput | Prisma.WorkspaceUpdateWithWhereUniqueWithoutParentWorkspaceInput[]
   updateMany?: Prisma.WorkspaceUpdateManyWithWhereWithoutParentWorkspaceInput | Prisma.WorkspaceUpdateManyWithWhereWithoutParentWorkspaceInput[]
   deleteMany?: Prisma.WorkspaceScalarWhereInput | Prisma.WorkspaceScalarWhereInput[]
+}
+
+export type WorkspaceCreateNestedOneWithoutRatchetInput = {
+  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutRatchetInput, Prisma.WorkspaceUncheckedCreateWithoutRatchetInput>
+  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutRatchetInput
+  connect?: Prisma.WorkspaceWhereUniqueInput
+}
+
+export type WorkspaceUpdateOneRequiredWithoutRatchetNestedInput = {
+  create?: Prisma.XOR<Prisma.WorkspaceCreateWithoutRatchetInput, Prisma.WorkspaceUncheckedCreateWithoutRatchetInput>
+  connectOrCreate?: Prisma.WorkspaceCreateOrConnectWithoutRatchetInput
+  upsert?: Prisma.WorkspaceUpsertWithoutRatchetInput
+  connect?: Prisma.WorkspaceWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.WorkspaceUpdateToOneWithWhereWithoutRatchetInput, Prisma.WorkspaceUpdateWithoutRatchetInput>, Prisma.WorkspaceUncheckedUpdateWithoutRatchetInput>
 }
 
 export type WorkspaceCreateNestedOneWithoutAgentSessionsInput = {
@@ -1962,13 +1815,6 @@ export type WorkspaceCreateWithoutProjectInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -1978,6 +1824,7 @@ export type WorkspaceCreateWithoutProjectInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2030,13 +1877,6 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2048,6 +1888,7 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2127,13 +1968,6 @@ export type WorkspaceScalarWhereInput = {
   prCiLastNotifiedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   prReviewLastCommentId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetEnabled?: Prisma.BoolFilter<"Workspace"> | boolean
-  ratchetState?: Prisma.EnumRatchetStateFilter<"Workspace"> | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
-  ratchetActiveSessionId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetLastCiRunId?: Prisma.StringNullableFilter<"Workspace"> | string | null
-  ratchetDispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableFilter<"Workspace"> | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFilter<"Workspace"> | number
   mode?: Prisma.EnumWorkspaceModeFilter<"Workspace"> | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.EnumAutoIterationStatusNullableFilter<"Workspace"> | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.JsonNullableFilter<"Workspace">
@@ -2189,13 +2023,6 @@ export type WorkspaceCreateWithoutChildWorkspacesInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2206,6 +2033,7 @@ export type WorkspaceCreateWithoutChildWorkspacesInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2258,13 +2086,6 @@ export type WorkspaceUncheckedCreateWithoutChildWorkspacesInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2276,6 +2097,7 @@ export type WorkspaceUncheckedCreateWithoutChildWorkspacesInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
 }
@@ -2330,13 +2152,6 @@ export type WorkspaceCreateWithoutParentWorkspaceInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2347,6 +2162,7 @@ export type WorkspaceCreateWithoutParentWorkspaceInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -2399,13 +2215,6 @@ export type WorkspaceUncheckedCreateWithoutParentWorkspaceInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2416,6 +2225,7 @@ export type WorkspaceUncheckedCreateWithoutParentWorkspaceInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2486,13 +2296,6 @@ export type WorkspaceUpdateWithoutChildWorkspacesInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2503,6 +2306,7 @@ export type WorkspaceUpdateWithoutChildWorkspacesInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2555,13 +2359,6 @@ export type WorkspaceUncheckedUpdateWithoutChildWorkspacesInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2573,6 +2370,7 @@ export type WorkspaceUncheckedUpdateWithoutChildWorkspacesInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
@@ -2591,6 +2389,270 @@ export type WorkspaceUpdateWithWhereUniqueWithoutParentWorkspaceInput = {
 export type WorkspaceUpdateManyWithWhereWithoutParentWorkspaceInput = {
   where: Prisma.WorkspaceScalarWhereInput
   data: Prisma.XOR<Prisma.WorkspaceUpdateManyMutationInput, Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceInput>
+}
+
+export type WorkspaceCreateWithoutRatchetInput = {
+  id?: string
+  name: string
+  description?: string | null
+  status?: $Enums.WorkspaceStatus
+  worktreePath?: string | null
+  branchName?: string | null
+  isAutoGeneratedBranch?: boolean
+  creationSource?: $Enums.WorkspaceCreationSource
+  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  initErrorMessage?: string | null
+  initOutput?: string | null
+  initStartedAt?: Date | string | null
+  initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
+  initRetryCount?: number
+  runScriptCommand?: string | null
+  runScriptPostRunCommand?: string | null
+  runScriptCleanupCommand?: string | null
+  runScriptPid?: number | null
+  runScriptPort?: number | null
+  runScriptStartedAt?: Date | string | null
+  runScriptStatus?: $Enums.RunScriptStatus
+  prUrl?: string | null
+  githubIssueNumber?: number | null
+  githubIssueUrl?: string | null
+  linearIssueId?: string | null
+  linearIssueIdentifier?: string | null
+  linearIssueUrl?: string | null
+  defaultSessionProvider?: $Enums.WorkspaceProviderSelection
+  ratchetSessionProvider?: $Enums.WorkspaceProviderSelection
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  prNumber?: number | null
+  prState?: $Enums.PRState
+  prReviewState?: string | null
+  prCiStatus?: $Enums.CIStatus
+  prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
+  prCiFailedAt?: Date | string | null
+  prCiLastNotifiedAt?: Date | string | null
+  prReviewLastCheckedAt?: Date | string | null
+  prReviewLastCommentId?: string | null
+  mode?: $Enums.WorkspaceMode
+  autoIterationStatus?: $Enums.AutoIterationStatus | null
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationSessionId?: string | null
+  hasHadSessions?: boolean
+  project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
+  agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
+  terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
+  closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
+  periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
+  parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
+  childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
+  notifications?: Prisma.WorkspaceNotificationCreateNestedManyWithoutWorkspaceInput
+}
+
+export type WorkspaceUncheckedCreateWithoutRatchetInput = {
+  id?: string
+  projectId: string
+  name: string
+  description?: string | null
+  status?: $Enums.WorkspaceStatus
+  worktreePath?: string | null
+  branchName?: string | null
+  isAutoGeneratedBranch?: boolean
+  creationSource?: $Enums.WorkspaceCreationSource
+  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  initErrorMessage?: string | null
+  initOutput?: string | null
+  initStartedAt?: Date | string | null
+  initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
+  initRetryCount?: number
+  runScriptCommand?: string | null
+  runScriptPostRunCommand?: string | null
+  runScriptCleanupCommand?: string | null
+  runScriptPid?: number | null
+  runScriptPort?: number | null
+  runScriptStartedAt?: Date | string | null
+  runScriptStatus?: $Enums.RunScriptStatus
+  prUrl?: string | null
+  githubIssueNumber?: number | null
+  githubIssueUrl?: string | null
+  linearIssueId?: string | null
+  linearIssueIdentifier?: string | null
+  linearIssueUrl?: string | null
+  defaultSessionProvider?: $Enums.WorkspaceProviderSelection
+  ratchetSessionProvider?: $Enums.WorkspaceProviderSelection
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  prNumber?: number | null
+  prState?: $Enums.PRState
+  prReviewState?: string | null
+  prCiStatus?: $Enums.CIStatus
+  prUpdatedAt?: Date | string | null
+  prDiscoveryLastCheckedAt?: Date | string | null
+  prDiscoveryRetryCount?: number
+  prDiscoveryNextCheckAt?: Date | string | null
+  prCiFailedAt?: Date | string | null
+  prCiLastNotifiedAt?: Date | string | null
+  prReviewLastCheckedAt?: Date | string | null
+  prReviewLastCommentId?: string | null
+  mode?: $Enums.WorkspaceMode
+  autoIterationStatus?: $Enums.AutoIterationStatus | null
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationSessionId?: string | null
+  periodicTaskId?: string | null
+  parentWorkspaceId?: string | null
+  hasHadSessions?: boolean
+  agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
+  childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
+  notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
+}
+
+export type WorkspaceCreateOrConnectWithoutRatchetInput = {
+  where: Prisma.WorkspaceWhereUniqueInput
+  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutRatchetInput, Prisma.WorkspaceUncheckedCreateWithoutRatchetInput>
+}
+
+export type WorkspaceUpsertWithoutRatchetInput = {
+  update: Prisma.XOR<Prisma.WorkspaceUpdateWithoutRatchetInput, Prisma.WorkspaceUncheckedUpdateWithoutRatchetInput>
+  create: Prisma.XOR<Prisma.WorkspaceCreateWithoutRatchetInput, Prisma.WorkspaceUncheckedCreateWithoutRatchetInput>
+  where?: Prisma.WorkspaceWhereInput
+}
+
+export type WorkspaceUpdateToOneWithWhereWithoutRatchetInput = {
+  where?: Prisma.WorkspaceWhereInput
+  data: Prisma.XOR<Prisma.WorkspaceUpdateWithoutRatchetInput, Prisma.WorkspaceUncheckedUpdateWithoutRatchetInput>
+}
+
+export type WorkspaceUpdateWithoutRatchetInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumWorkspaceStatusFieldUpdateOperationsInput | $Enums.WorkspaceStatus
+  worktreePath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoGeneratedBranch?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  creationSource?: Prisma.EnumWorkspaceCreationSourceFieldUpdateOperationsInput | $Enums.WorkspaceCreationSource
+  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  initErrorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptCleanupCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  runScriptPort?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  runScriptStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  runScriptStatus?: Prisma.EnumRunScriptStatusFieldUpdateOperationsInput | $Enums.RunScriptStatus
+  prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  githubIssueNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  githubIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueIdentifier?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  defaultSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
+  ratchetSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  prNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  prState?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
+  autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
+  agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
+  terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
+  closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
+  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
+  parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
+  childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
+  notifications?: Prisma.WorkspaceNotificationUpdateManyWithoutWorkspaceNestedInput
+}
+
+export type WorkspaceUncheckedUpdateWithoutRatchetInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  projectId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumWorkspaceStatusFieldUpdateOperationsInput | $Enums.WorkspaceStatus
+  worktreePath?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isAutoGeneratedBranch?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  creationSource?: Prisma.EnumWorkspaceCreationSourceFieldUpdateOperationsInput | $Enums.WorkspaceCreationSource
+  creationMetadata?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  initErrorMessage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptCleanupCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  runScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  runScriptPort?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  runScriptStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  runScriptStatus?: Prisma.EnumRunScriptStatusFieldUpdateOperationsInput | $Enums.RunScriptStatus
+  prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  githubIssueNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  githubIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueIdentifier?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  linearIssueUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  defaultSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
+  ratchetSessionProvider?: Prisma.EnumWorkspaceProviderSelectionFieldUpdateOperationsInput | $Enums.WorkspaceProviderSelection
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  prNumber?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  prState?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
+  prReviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  prCiStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  prUpdatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prDiscoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  prDiscoveryNextCheckAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prCiFailedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
+  autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
+  childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
+  notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
 
 export type WorkspaceCreateWithoutAgentSessionsInput = {
@@ -2638,13 +2700,6 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2654,6 +2709,7 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2707,13 +2763,6 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2724,6 +2773,7 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   hasHadSessions?: boolean
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2790,13 +2840,6 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2806,6 +2849,7 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -2859,13 +2903,6 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2876,6 +2913,7 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2926,13 +2964,6 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -2942,6 +2973,7 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -2995,13 +3027,6 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3012,6 +3037,7 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   hasHadSessions?: boolean
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3078,13 +3104,6 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3094,6 +3113,7 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3147,13 +3167,6 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3164,6 +3177,7 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3214,13 +3228,6 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3230,6 +3237,7 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -3283,13 +3291,6 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3300,6 +3301,7 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   hasHadSessions?: boolean
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3366,13 +3368,6 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3382,6 +3377,7 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -3435,13 +3431,6 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3452,6 +3441,7 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -3502,13 +3492,6 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3519,6 +3502,7 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -3571,13 +3555,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3588,6 +3565,7 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3663,13 +3641,6 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3680,6 +3651,7 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
   childWorkspaces?: Prisma.WorkspaceCreateNestedManyWithoutParentWorkspaceInput
@@ -3732,13 +3704,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3750,6 +3715,7 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
   notifications?: Prisma.WorkspaceNotificationUncheckedCreateNestedManyWithoutWorkspaceInput
 }
@@ -3815,13 +3781,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3832,6 +3791,7 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -3884,13 +3844,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3902,6 +3855,7 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
 }
@@ -3951,13 +3905,6 @@ export type WorkspaceCreateWithoutNotificationsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -3968,6 +3915,7 @@ export type WorkspaceCreateWithoutNotificationsInput = {
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetCreateNestedOneWithoutWorkspaceInput
   periodicTask?: Prisma.PeriodicTaskCreateNestedOneWithoutWorkspacesInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionCreateNestedOneWithoutWorkspaceInput
   parentWorkspace?: Prisma.WorkspaceCreateNestedOneWithoutChildWorkspacesInput
@@ -4020,13 +3968,6 @@ export type WorkspaceUncheckedCreateWithoutNotificationsInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4038,6 +3979,7 @@ export type WorkspaceUncheckedCreateWithoutNotificationsInput = {
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedCreateNestedOneWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
   childWorkspaces?: Prisma.WorkspaceUncheckedCreateNestedManyWithoutParentWorkspaceInput
 }
@@ -4103,13 +4045,6 @@ export type WorkspaceUpdateWithoutNotificationsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4120,6 +4055,7 @@ export type WorkspaceUpdateWithoutNotificationsInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -4172,13 +4108,6 @@ export type WorkspaceUncheckedUpdateWithoutNotificationsInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4190,6 +4119,7 @@ export type WorkspaceUncheckedUpdateWithoutNotificationsInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
 }
@@ -4239,13 +4169,6 @@ export type WorkspaceCreateManyProjectInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4301,13 +4224,6 @@ export type WorkspaceUpdateWithoutProjectInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4317,6 +4233,7 @@ export type WorkspaceUpdateWithoutProjectInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
@@ -4369,13 +4286,6 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4387,6 +4297,7 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4437,13 +4348,6 @@ export type WorkspaceUncheckedUpdateManyWithoutProjectInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4500,13 +4404,6 @@ export type WorkspaceCreateManyParentWorkspaceInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4561,13 +4458,6 @@ export type WorkspaceUpdateWithoutParentWorkspaceInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4578,6 +4468,7 @@ export type WorkspaceUpdateWithoutParentWorkspaceInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTask?: Prisma.PeriodicTaskUpdateOneWithoutWorkspacesNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -4630,13 +4521,6 @@ export type WorkspaceUncheckedUpdateWithoutParentWorkspaceInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4647,6 +4531,7 @@ export type WorkspaceUncheckedUpdateWithoutParentWorkspaceInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4698,13 +4583,6 @@ export type WorkspaceUncheckedUpdateManyWithoutParentWorkspaceInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4760,13 +4638,6 @@ export type WorkspaceCreateManyPeriodicTaskInput = {
   prCiLastNotifiedAt?: Date | string | null
   prReviewLastCheckedAt?: Date | string | null
   prReviewLastCommentId?: string | null
-  ratchetEnabled?: boolean
-  ratchetState?: $Enums.RatchetState
-  ratchetLastCheckedAt?: Date | string | null
-  ratchetActiveSessionId?: string | null
-  ratchetLastCiRunId?: string | null
-  ratchetDispatchOutcome?: $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: number
   mode?: $Enums.WorkspaceMode
   autoIterationStatus?: $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4821,13 +4692,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4838,6 +4702,7 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUpdateOneWithoutWorkspaceNestedInput
   parentWorkspace?: Prisma.WorkspaceUpdateOneWithoutChildWorkspacesNestedInput
   childWorkspaces?: Prisma.WorkspaceUpdateManyWithoutParentWorkspaceNestedInput
@@ -4890,13 +4755,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -4907,6 +4765,7 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
+  ratchet?: Prisma.WorkspaceRatchetUncheckedUpdateOneWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
   childWorkspaces?: Prisma.WorkspaceUncheckedUpdateManyWithoutParentWorkspaceNestedInput
   notifications?: Prisma.WorkspaceNotificationUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4958,13 +4817,6 @@ export type WorkspaceUncheckedUpdateManyWithoutPeriodicTaskInput = {
   prCiLastNotifiedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   prReviewLastCommentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  ratchetState?: Prisma.EnumRatchetStateFieldUpdateOperationsInput | $Enums.RatchetState
-  ratchetLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-  ratchetActiveSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetLastCiRunId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
-  ratchetDispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
-  ratchetDispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   mode?: Prisma.EnumWorkspaceModeFieldUpdateOperationsInput | $Enums.WorkspaceMode
   autoIterationStatus?: Prisma.NullableEnumAutoIterationStatusFieldUpdateOperationsInput | $Enums.AutoIterationStatus | null
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -5087,13 +4939,6 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
   prReviewLastCommentId?: boolean
-  ratchetEnabled?: boolean
-  ratchetState?: boolean
-  ratchetLastCheckedAt?: boolean
-  ratchetActiveSessionId?: boolean
-  ratchetLastCiRunId?: boolean
-  ratchetDispatchOutcome?: boolean
-  ratchetDispatchRetryCount?: boolean
   mode?: boolean
   autoIterationStatus?: boolean
   autoIterationConfig?: boolean
@@ -5106,6 +4951,7 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
   terminalSessions?: boolean | Prisma.Workspace$terminalSessionsArgs<ExtArgs>
   closedSessions?: boolean | Prisma.Workspace$closedSessionsArgs<ExtArgs>
+  ratchet?: boolean | Prisma.Workspace$ratchetArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   periodicTaskExecution?: boolean | Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -5160,13 +5006,6 @@ export type WorkspaceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
   prReviewLastCommentId?: boolean
-  ratchetEnabled?: boolean
-  ratchetState?: boolean
-  ratchetLastCheckedAt?: boolean
-  ratchetActiveSessionId?: boolean
-  ratchetLastCiRunId?: boolean
-  ratchetDispatchOutcome?: boolean
-  ratchetDispatchRetryCount?: boolean
   mode?: boolean
   autoIterationStatus?: boolean
   autoIterationConfig?: boolean
@@ -5226,13 +5065,6 @@ export type WorkspaceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
   prReviewLastCommentId?: boolean
-  ratchetEnabled?: boolean
-  ratchetState?: boolean
-  ratchetLastCheckedAt?: boolean
-  ratchetActiveSessionId?: boolean
-  ratchetLastCiRunId?: boolean
-  ratchetDispatchOutcome?: boolean
-  ratchetDispatchRetryCount?: boolean
   mode?: boolean
   autoIterationStatus?: boolean
   autoIterationConfig?: boolean
@@ -5292,13 +5124,6 @@ export type WorkspaceSelectScalar = {
   prCiLastNotifiedAt?: boolean
   prReviewLastCheckedAt?: boolean
   prReviewLastCommentId?: boolean
-  ratchetEnabled?: boolean
-  ratchetState?: boolean
-  ratchetLastCheckedAt?: boolean
-  ratchetActiveSessionId?: boolean
-  ratchetLastCiRunId?: boolean
-  ratchetDispatchOutcome?: boolean
-  ratchetDispatchRetryCount?: boolean
   mode?: boolean
   autoIterationStatus?: boolean
   autoIterationConfig?: boolean
@@ -5309,12 +5134,13 @@ export type WorkspaceSelectScalar = {
   hasHadSessions?: boolean
 }
 
-export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prDiscoveryLastCheckedAt" | "prDiscoveryRetryCount" | "prDiscoveryNextCheckAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "ratchetDispatchOutcome" | "ratchetDispatchRetryCount" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions", ExtArgs["result"]["workspace"]>
+export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prDiscoveryLastCheckedAt" | "prDiscoveryRetryCount" | "prDiscoveryNextCheckAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions", ExtArgs["result"]["workspace"]>
 export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
   terminalSessions?: boolean | Prisma.Workspace$terminalSessionsArgs<ExtArgs>
   closedSessions?: boolean | Prisma.Workspace$closedSessionsArgs<ExtArgs>
+  ratchet?: boolean | Prisma.Workspace$ratchetArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   periodicTaskExecution?: boolean | Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -5340,6 +5166,7 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     agentSessions: Prisma.$AgentSessionPayload<ExtArgs>[]
     terminalSessions: Prisma.$TerminalSessionPayload<ExtArgs>[]
     closedSessions: Prisma.$ClosedSessionPayload<ExtArgs>[]
+    ratchet: Prisma.$WorkspaceRatchetPayload<ExtArgs> | null
     periodicTask: Prisma.$PeriodicTaskPayload<ExtArgs> | null
     periodicTaskExecution: Prisma.$PeriodicTaskExecutionPayload<ExtArgs> | null
     parentWorkspace: Prisma.$WorkspacePayload<ExtArgs> | null
@@ -5392,13 +5219,6 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     prCiLastNotifiedAt: Date | null
     prReviewLastCheckedAt: Date | null
     prReviewLastCommentId: string | null
-    ratchetEnabled: boolean
-    ratchetState: $Enums.RatchetState
-    ratchetLastCheckedAt: Date | null
-    ratchetActiveSessionId: string | null
-    ratchetLastCiRunId: string | null
-    ratchetDispatchOutcome: $Enums.RatchetDispatchOutcome | null
-    ratchetDispatchRetryCount: number
     mode: $Enums.WorkspaceMode
     autoIterationStatus: $Enums.AutoIterationStatus | null
     autoIterationConfig: runtime.JsonValue | null
@@ -5805,6 +5625,7 @@ export interface Prisma__WorkspaceClient<T, Null = never, ExtArgs extends runtim
   agentSessions<T extends Prisma.Workspace$agentSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$agentSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AgentSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   terminalSessions<T extends Prisma.Workspace$terminalSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$terminalSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TerminalSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   closedSessions<T extends Prisma.Workspace$closedSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$closedSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ClosedSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  ratchet<T extends Prisma.Workspace$ratchetArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$ratchetArgs<ExtArgs>>): Prisma.Prisma__WorkspaceRatchetClient<runtime.Types.Result.GetResult<Prisma.$WorkspaceRatchetPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   periodicTask<T extends Prisma.Workspace$periodicTaskArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$periodicTaskArgs<ExtArgs>>): Prisma.Prisma__PeriodicTaskClient<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   periodicTaskExecution<T extends Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$periodicTaskExecutionArgs<ExtArgs>>): Prisma.Prisma__PeriodicTaskExecutionClient<runtime.Types.Result.GetResult<Prisma.$PeriodicTaskExecutionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   parentWorkspace<T extends Prisma.Workspace$parentWorkspaceArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Workspace$parentWorkspaceArgs<ExtArgs>>): Prisma.Prisma__WorkspaceClient<runtime.Types.Result.GetResult<Prisma.$WorkspacePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
@@ -5884,13 +5705,6 @@ export interface WorkspaceFieldRefs {
   readonly prCiLastNotifiedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly prReviewLastCheckedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly prReviewLastCommentId: Prisma.FieldRef<"Workspace", 'String'>
-  readonly ratchetEnabled: Prisma.FieldRef<"Workspace", 'Boolean'>
-  readonly ratchetState: Prisma.FieldRef<"Workspace", 'RatchetState'>
-  readonly ratchetLastCheckedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
-  readonly ratchetActiveSessionId: Prisma.FieldRef<"Workspace", 'String'>
-  readonly ratchetLastCiRunId: Prisma.FieldRef<"Workspace", 'String'>
-  readonly ratchetDispatchOutcome: Prisma.FieldRef<"Workspace", 'RatchetDispatchOutcome'>
-  readonly ratchetDispatchRetryCount: Prisma.FieldRef<"Workspace", 'Int'>
   readonly mode: Prisma.FieldRef<"Workspace", 'WorkspaceMode'>
   readonly autoIterationStatus: Prisma.FieldRef<"Workspace", 'AutoIterationStatus'>
   readonly autoIterationConfig: Prisma.FieldRef<"Workspace", 'Json'>
@@ -6367,6 +6181,25 @@ export type Workspace$closedSessionsArgs<ExtArgs extends runtime.Types.Extension
   take?: number
   skip?: number
   distinct?: Prisma.ClosedSessionScalarFieldEnum | Prisma.ClosedSessionScalarFieldEnum[]
+}
+
+/**
+ * Workspace.ratchet
+ */
+export type Workspace$ratchetArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the WorkspaceRatchet
+   */
+  select?: Prisma.WorkspaceRatchetSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the WorkspaceRatchet
+   */
+  omit?: Prisma.WorkspaceRatchetOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.WorkspaceRatchetInclude<ExtArgs> | null
+  where?: Prisma.WorkspaceRatchetWhereInput
 }
 
 /**

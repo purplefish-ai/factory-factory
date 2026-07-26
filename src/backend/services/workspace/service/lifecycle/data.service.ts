@@ -1,5 +1,6 @@
 import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 
 class WorkspaceDataService {
   findById(id: string) {
@@ -31,7 +32,7 @@ class WorkspaceDataService {
   }
 
   findRatchetProjection(id: string) {
-    return workspaceAccessor.findRawById(id);
+    return workspaceRatchetAccessor.findSnapshotProjection(id);
   }
 
   findByProjectId(projectId: string) {

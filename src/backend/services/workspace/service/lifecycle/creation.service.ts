@@ -1,10 +1,13 @@
-import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
+import type { Prisma, SessionProvider } from '@prisma-gen/client';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
-import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import {
+  type WorkspaceWithRatchet,
+  workspaceAccessor,
+} from '@/backend/services/workspace/resources/workspace.accessor';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
@@ -140,7 +143,7 @@ export class WorkspaceCreationService {
   /**
    * Create a workspace from a source-discriminated input.
    */
-  async create(source: WorkspaceCreationSource): Promise<Workspace> {
+  async create(source: WorkspaceCreationSource): Promise<WorkspaceWithRatchet> {
     this.deps.logger.debug('Creating workspace from source', { sourceType: source.type });
 
     // Validate and prepare creation based on source type

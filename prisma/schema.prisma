@@ -254,14 +254,8 @@ model Workspace {
   prReviewLastCheckedAt   DateTime?     // When PR review comments were last checked
   prReviewLastCommentId   String?       // ID of the last processed review comment
 
-  // Ratchet tracking (centralized PR progression)
-  ratchetEnabled          Boolean       @default(true)    // Workspace-level ratchet toggle
-  ratchetState            RatchetState  @default(IDLE)    // Current state in the ratchet progression
-  ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
-  ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
-  ratchetLastCiRunId      String?                         // Misnomer (kept to avoid a migration): stores the full PR dispatch snapshot key (PR number + CI signature + review activity + merge conflict), not just a CI run id. Dedupes fixer dispatches.
-  ratchetDispatchOutcome  RatchetDispatchOutcome?         // Outcome of the last fixer dispatch for the snapshot key above (null = never dispatched)
-  ratchetDispatchRetryCount Int         @default(0)       // DIED re-dispatches consumed for the current snapshot key
+  // Ratchet tracking (centralized PR progression) — see WorkspaceRatchet
+  ratchet             WorkspaceRatchet?
 
   // Auto-iteration tracking
   mode                      WorkspaceMode         @default(STANDARD)
@@ -294,7 +288,37 @@ model Workspace {
   @@index([status, prUrl])
   @@index([status, prUrl, prDiscoveryNextCheckAt])
   @@index([status, prUpdatedAt])
-  @@index([status, ratchetEnabled, ratchetLastCheckedAt])
+}
+
+/// The ratchet's own state for one workspace: whether it is watching the PR,
+/// how far the PR progression has got, and the last fixer dispatch.
+///
+/// Split out of `Workspace` so that the compare-and-swap writes the ratchet
+/// relies on guard a row no other concern writes. Every conditional ratchet
+/// write tests `enabled` and/or `state` alongside the field it sets, so those
+/// two have to live next to the dispatch record for the guards to stay
+/// single-statement.
+///
+/// Exactly one row per workspace, created with the workspace. Reads go through
+/// `workspaceRatchetAccessor`, which substitutes these defaults if a row is
+/// ever missing (a pre-split backup restored, say) rather than making every
+/// caller handle the null.
+model WorkspaceRatchet {
+  workspaceId String    @id
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  enabled       Boolean      @default(true)   // Workspace-level ratchet toggle
+  state         RatchetState @default(IDLE)   // Current state in the ratchet progression
+  lastCheckedAt DateTime?                     // When the ratchet last checked this workspace
+
+  // The last fixer dispatch, keyed by the PR state it was dispatched for.
+  activeSessionId     String?                 // Active fixer session (if any)
+  dispatchSnapshotKey String?                 // PR number + CI signature + review activity + merge conflict. Dedupes fixer dispatches.
+  dispatchOutcome     RatchetDispatchOutcome? // Outcome for the key above (null = never dispatched, or reset by a PR change)
+  dispatchRetryCount  Int          @default(0) // DIED re-dispatches consumed for the current key
+
+  @@index([enabled, state])
+  @@index([lastCheckedAt])
 }
 
 model AgentSession {

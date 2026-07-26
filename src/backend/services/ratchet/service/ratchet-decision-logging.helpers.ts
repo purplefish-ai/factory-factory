@@ -67,7 +67,7 @@ export function buildRatchetingLogContext(params: {
     newState,
     ratchetEnabled: workspace.ratchetEnabled,
     ratchetActiveSessionId: workspace.ratchetActiveSessionId,
-    ratchetLastCiRunId: workspace.ratchetLastCiRunId,
+    ratchetDispatchSnapshotKey: workspace.ratchetDispatchSnapshotKey,
     dispatchOutcome: decisionContext?.dispatchOutcome ?? workspace.ratchetDispatchOutcome,
     dispatchRetryCount: decisionContext?.dispatchRetryCount ?? workspace.ratchetDispatchRetryCount,
     ciStatusCheckRollup: prStateInfo?.statusCheckRollup ?? null,

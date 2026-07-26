@@ -1,5 +1,4 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react';
-import type { Workspace } from '@prisma-gen/browser';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Loading } from '@/client/components/loading';
@@ -31,7 +30,7 @@ export default function NewWorkspacePage() {
 
   const utils = trpc.useUtils();
   const createWorkspace = trpc.workspace.create.useMutation({
-    onSuccess: (workspace: Workspace) => {
+    onSuccess: (workspace) => {
       // Optimistically populate the workspace detail query cache so the status
       // is immediately visible when navigating to the detail page
       utils.workspace.get.setData({ id: workspace.id }, (old) => {

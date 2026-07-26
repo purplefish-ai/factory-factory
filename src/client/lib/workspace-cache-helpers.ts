@@ -1,4 +1,12 @@
-import type { Workspace } from '@prisma-gen/browser';
+import type { inferRouterOutputs } from '@trpc/server';
+import type { AppRouter } from '@/client/lib/trpc';
+
+/**
+ * A newly created workspace, as the create endpoint returns it. Typed from the
+ * router rather than the Prisma model, so fields the endpoint composes — the
+ * ratchet's, which live in their own table — are part of the shape.
+ */
+export type CreatedWorkspace = inferRouterOutputs<AppRouter>['workspace']['create'];
 
 /**
  * Creates an enriched workspace object with computed fields for optimistic cache updates.
@@ -9,7 +17,7 @@ import type { Workspace } from '@prisma-gen/browser';
  *
  * This must match the shape returned by the backend workspace.get endpoint.
  */
-export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
+export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) {
   return {
     ...workspace,
     sessionSummaries: [],

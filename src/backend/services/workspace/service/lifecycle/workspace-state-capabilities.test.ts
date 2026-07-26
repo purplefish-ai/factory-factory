@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import { workspaceAutoIterationService } from './workspace-auto-iteration.service';
 import { workspaceRatchetService } from './workspace-ratchet.service';
 import { workspaceRunScriptService } from './workspace-run-script.service';
@@ -11,8 +12,13 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
     findRunScriptExecutionStateOrThrow: vi.fn(),
     finishAutoIterationIfSessionMatches: vi.fn(),
     casRunScriptStatusUpdate: vi.fn(),
-    recordRatchetDispatchIfEnabled: vi.fn(),
     update: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/services/workspace/resources/workspace-ratchet.accessor', () => ({
+  workspaceRatchetAccessor: {
+    recordDispatchIfEnabled: vi.fn(),
   },
 }));
 
@@ -88,7 +94,7 @@ describe('workspace state capabilities', () => {
   });
 
   it('records ratchet dispatch only while ratcheting remains enabled', async () => {
-    vi.mocked(workspaceAccessor.recordRatchetDispatchIfEnabled).mockResolvedValue(true);
+    vi.mocked(workspaceRatchetAccessor.recordDispatchIfEnabled).mockResolvedValue(true);
 
     await expect(
       workspaceRatchetService.recordDispatchIfEnabled('ws-1', {
