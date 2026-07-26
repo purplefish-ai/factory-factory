@@ -97,11 +97,12 @@ const mockProject: Project = {
 };
 
 /**
- * A workspace row as the export reads it: the row plus its ratchet and PR cache,
- * which the v4 format carries as flat `ratchet*` and `pr*` workspace fields.
+ * A workspace row as the export reads it: the row plus its ratchet, PR cache and
+ * run-script group, which the v4 format carries as flat `ratchet*`, `pr*` and
+ * `runScript*` workspace fields.
  */
 type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true };
+  include: { ratchet: true; pr: true; runScript: true };
 }>;
 
 const mockWorkspace: WorkspaceForExport = {
@@ -121,13 +122,6 @@ const mockWorkspace: WorkspaceForExport = {
   initCompletedAt: new Date('2025-01-01T00:05:00.000Z'),
   initScriptPid: null,
   initRetryCount: 0,
-  runScriptCommand: 'npm run dev',
-  runScriptPostRunCommand: null,
-  runScriptCleanupCommand: 'npm run cleanup',
-  runScriptPid: 12_345,
-  runScriptPort: 3000,
-  runScriptStartedAt: new Date('2025-01-01T00:10:00.000Z'),
-  runScriptStatus: RunScriptStatus.RUNNING,
   githubIssueNumber: 123,
   githubIssueUrl: 'https://github.com/test/repo/issues/123',
   linearIssueId: null,
@@ -151,6 +145,16 @@ const mockWorkspace: WorkspaceForExport = {
     ciLastNotifiedAt: null,
     reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
     reviewLastCommentId: 'comment-123',
+  },
+  runScript: {
+    workspaceId: 'ws-1',
+    command: 'npm run dev',
+    postRunCommand: null,
+    cleanupCommand: 'npm run cleanup',
+    pid: 12_345,
+    port: 3000,
+    startedAt: new Date('2025-01-01T00:10:00.000Z'),
+    status: RunScriptStatus.RUNNING,
   },
   ratchet: {
     workspaceId: 'ws-1',
@@ -580,8 +584,20 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          runScriptStatus: RunScriptStatus.RUNNING,
           mode: WorkspaceMode.STANDARD,
+          // The v4 format's flat run-script fields land in the nested row too.
+          // `postRunCommand` is absent because the format never carried it, so it
+          // restores as null and the next reconcile reads it back off disk.
+          runScript: {
+            create: {
+              command: 'npm run dev',
+              cleanupCommand: 'npm run cleanup',
+              pid: 12_345,
+              port: 3000,
+              startedAt: new Date('2025-01-01T00:10:00.000Z'),
+              status: RunScriptStatus.RUNNING,
+            },
+          },
           // The v4 format's flat ratchet fields land in the nested row, and
           // `ratchetLastCiRunId` restores as `dispatchSnapshotKey`.
           ratchet: {

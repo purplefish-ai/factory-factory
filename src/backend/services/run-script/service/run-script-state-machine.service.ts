@@ -19,10 +19,10 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { Prisma } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   type RunScriptExecutionState,
+  type RunScriptExecutionUpdate,
   workspaceRunScriptService,
 } from '@/backend/services/workspace';
 import type { RunScriptStatus } from '@/shared/core';
@@ -107,7 +107,7 @@ class RunScriptStateMachineService extends EventEmitter {
       throw new RunScriptStateMachineError(workspaceId, currentStatus, targetStatus);
     }
 
-    const updateData: Prisma.WorkspaceUpdateManyMutationInput = {
+    const updateData: RunScriptExecutionUpdate = {
       runScriptStatus: targetStatus,
     };
 

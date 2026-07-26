@@ -13,6 +13,7 @@ const mockRatchetFindUnique = vi.fn();
 const mockRatchetUpdateMany = vi.fn();
 const mockPrFindUnique = vi.fn();
 const mockPrUpdateMany = vi.fn();
+const mockRunScriptUpdateMany = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -33,6 +34,9 @@ vi.mock('@/backend/db', () => ({
       findUnique: (...args: unknown[]) => mockPrFindUnique(...args),
       updateMany: (...args: unknown[]) => mockPrUpdateMany(...args),
     },
+    workspaceRunScript: {
+      updateMany: (...args: unknown[]) => mockRunScriptUpdateMany(...args),
+    },
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
     $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
@@ -48,6 +52,7 @@ describe('workspaceAccessor', () => {
     mockUpdateMany.mockReset();
     mockRatchetUpdateMany.mockReset();
     mockPrUpdateMany.mockReset();
+    mockRunScriptUpdateMany.mockReset();
   });
 
   describe('create', () => {
@@ -67,8 +72,10 @@ describe('workspaceAccessor', () => {
           name: 'Issue workspace',
           githubIssueNumber: 12,
           ratchet: { create: { enabled: false } },
+          pr: { create: {} },
+          runScript: { create: {} },
         }),
-        include: { ratchet: true, pr: true },
+        include: { ratchet: true, pr: true, runScript: true },
       });
     });
 
@@ -85,8 +92,10 @@ describe('workspaceAccessor', () => {
           projectId: 'project-1',
           name: 'Manual workspace',
           ratchet: { create: { enabled: undefined } },
+          pr: { create: {} },
+          runScript: { create: {} },
         }),
-        include: { ratchet: true, pr: true },
+        include: { ratchet: true, pr: true, runScript: true },
       });
     });
 
@@ -110,7 +119,13 @@ describe('workspaceAccessor', () => {
     expect(mockFindMany).toHaveBeenCalledWith({
       where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
       orderBy: { updatedAt: 'desc' },
-      include: { agentSessions: true, terminalSessions: true, ratchet: true, pr: true },
+      include: {
+        agentSessions: true,
+        terminalSessions: true,
+        ratchet: true,
+        pr: true,
+        runScript: true,
+      },
     });
   });
 
@@ -161,7 +176,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
-          include: expect.objectContaining({ ratchet: true, pr: true }),
+          include: expect.objectContaining({ ratchet: true, pr: true, runScript: true }),
         })
       );
     });
@@ -554,52 +569,6 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('selects only run-script execution state', async () => {
-    const state = {
-      runScriptStatus: 'RUNNING',
-      runScriptPid: 123,
-      runScriptPort: 3000,
-      runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
-    };
-    mockFindUnique.mockResolvedValue(state);
-
-    await expect(workspaceAccessor.findRunScriptExecutionState('ws-1')).resolves.toEqual(state);
-
-    expect(mockFindUnique).toHaveBeenCalledWith({
-      where: { id: 'ws-1' },
-      select: {
-        runScriptStatus: true,
-        runScriptPid: true,
-        runScriptPort: true,
-        runScriptStartedAt: true,
-      },
-    });
-  });
-
-  it('selects only run-script execution state when requiring a result', async () => {
-    const state = {
-      runScriptStatus: 'RUNNING',
-      runScriptPid: 123,
-      runScriptPort: 3000,
-      runScriptStartedAt: new Date('2026-01-01T00:00:00.000Z'),
-    };
-    mockFindUniqueOrThrow.mockResolvedValue(state);
-
-    await expect(workspaceAccessor.findRunScriptExecutionStateOrThrow('ws-1')).resolves.toEqual(
-      state
-    );
-
-    expect(mockFindUniqueOrThrow).toHaveBeenCalledWith({
-      where: { id: 'ws-1' },
-      select: {
-        runScriptStatus: true,
-        runScriptPid: true,
-        runScriptPort: true,
-        runScriptStartedAt: true,
-      },
-    });
-  });
-
   it('appends init output and skips existence check when update succeeds', async () => {
     mockExecuteRaw.mockResolvedValue(1);
 
@@ -627,46 +596,6 @@ describe('workspaceAccessor', () => {
     mockFindUnique.mockResolvedValue({ id: 'ws-1' });
 
     await expect(workspaceAccessor.appendInitOutput('ws-1', 'line')).resolves.toBeUndefined();
-  });
-
-  describe('resetStaleRunScriptStatuses', () => {
-    it('returns empty array and skips update when no stale workspaces exist', async () => {
-      mockFindMany.mockResolvedValue([]);
-
-      const result = await workspaceAccessor.resetStaleRunScriptStatuses();
-
-      expect(result).toEqual([]);
-      expect(mockUpdateMany).not.toHaveBeenCalled();
-    });
-
-    it('resets STARTING and STOPPING workspaces to IDLE and returns affected records', async () => {
-      const stale = [
-        { id: 'ws-1', runScriptStatus: 'STARTING' },
-        { id: 'ws-2', runScriptStatus: 'STOPPING' },
-      ];
-      mockFindMany.mockResolvedValue(stale);
-      mockUpdateMany.mockResolvedValue({ count: 2 });
-
-      const result = await workspaceAccessor.resetStaleRunScriptStatuses();
-
-      expect(result).toEqual(stale);
-      expect(mockFindMany).toHaveBeenCalledWith({
-        where: { runScriptStatus: { in: ['STARTING', 'STOPPING'] } },
-        select: { id: true, runScriptStatus: true },
-      });
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: { in: ['ws-1', 'ws-2'] },
-          runScriptStatus: { in: ['STARTING', 'STOPPING'] },
-        },
-        data: {
-          runScriptStatus: 'IDLE',
-          runScriptPid: null,
-          runScriptPort: null,
-          runScriptStartedAt: null,
-        },
-      });
-    });
   });
 
   describe('findStaleArchivingWithProject', () => {

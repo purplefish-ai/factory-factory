@@ -56,6 +56,7 @@ export const ModelName = {
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
   WorkspaceRatchet: 'WorkspaceRatchet',
+  WorkspaceRunScript: 'WorkspaceRunScript',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -129,13 +130,6 @@ export const WorkspaceScalarFieldEnum = {
   initCompletedAt: 'initCompletedAt',
   initScriptPid: 'initScriptPid',
   initRetryCount: 'initRetryCount',
-  runScriptCommand: 'runScriptCommand',
-  runScriptPostRunCommand: 'runScriptPostRunCommand',
-  runScriptCleanupCommand: 'runScriptCleanupCommand',
-  runScriptPid: 'runScriptPid',
-  runScriptPort: 'runScriptPort',
-  runScriptStartedAt: 'runScriptStartedAt',
-  runScriptStatus: 'runScriptStatus',
   githubIssueNumber: 'githubIssueNumber',
   githubIssueUrl: 'githubIssueUrl',
   linearIssueId: 'linearIssueId',
@@ -190,6 +184,20 @@ export const WorkspaceRatchetScalarFieldEnum = {
 } as const
 
 export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+
+
+export const WorkspaceRunScriptScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  command: 'command',
+  postRunCommand: 'postRunCommand',
+  cleanupCommand: 'cleanupCommand',
+  pid: 'pid',
+  port: 'port',
+  startedAt: 'startedAt',
+  status: 'status'
+} as const
+
+export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {

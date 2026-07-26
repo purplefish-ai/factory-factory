@@ -402,6 +402,7 @@ export const ModelName = {
   Workspace: 'Workspace',
   WorkspacePR: 'WorkspacePR',
   WorkspaceRatchet: 'WorkspaceRatchet',
+  WorkspaceRunScript: 'WorkspaceRunScript',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -424,7 +425,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -795,6 +796,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.WorkspaceRatchetCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.WorkspaceRatchetCountAggregateOutputType> | number
+        }
+      }
+    }
+    WorkspaceRunScript: {
+      payload: Prisma.$WorkspaceRunScriptPayload<ExtArgs>
+      fields: Prisma.WorkspaceRunScriptFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.WorkspaceRunScriptFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.WorkspaceRunScriptFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        findFirst: {
+          args: Prisma.WorkspaceRunScriptFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.WorkspaceRunScriptFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        findMany: {
+          args: Prisma.WorkspaceRunScriptFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>[]
+        }
+        create: {
+          args: Prisma.WorkspaceRunScriptCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        createMany: {
+          args: Prisma.WorkspaceRunScriptCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.WorkspaceRunScriptCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>[]
+        }
+        delete: {
+          args: Prisma.WorkspaceRunScriptDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        update: {
+          args: Prisma.WorkspaceRunScriptUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        deleteMany: {
+          args: Prisma.WorkspaceRunScriptDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.WorkspaceRunScriptUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.WorkspaceRunScriptUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>[]
+        }
+        upsert: {
+          args: Prisma.WorkspaceRunScriptUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$WorkspaceRunScriptPayload>
+        }
+        aggregate: {
+          args: Prisma.WorkspaceRunScriptAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateWorkspaceRunScript>
+        }
+        groupBy: {
+          args: Prisma.WorkspaceRunScriptGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceRunScriptGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.WorkspaceRunScriptCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.WorkspaceRunScriptCountAggregateOutputType> | number
         }
       }
     }
@@ -1403,13 +1478,6 @@ export const WorkspaceScalarFieldEnum = {
   initCompletedAt: 'initCompletedAt',
   initScriptPid: 'initScriptPid',
   initRetryCount: 'initRetryCount',
-  runScriptCommand: 'runScriptCommand',
-  runScriptPostRunCommand: 'runScriptPostRunCommand',
-  runScriptCleanupCommand: 'runScriptCleanupCommand',
-  runScriptPid: 'runScriptPid',
-  runScriptPort: 'runScriptPort',
-  runScriptStartedAt: 'runScriptStartedAt',
-  runScriptStatus: 'runScriptStatus',
   githubIssueNumber: 'githubIssueNumber',
   githubIssueUrl: 'githubIssueUrl',
   linearIssueId: 'linearIssueId',
@@ -1464,6 +1532,20 @@ export const WorkspaceRatchetScalarFieldEnum = {
 } as const
 
 export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
+
+
+export const WorkspaceRunScriptScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  command: 'command',
+  postRunCommand: 'postRunCommand',
+  cleanupCommand: 'cleanupCommand',
+  pid: 'pid',
+  port: 'port',
+  startedAt: 'startedAt',
+  status: 'status'
+} as const
+
+export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {
@@ -1700,13 +1782,6 @@ export type EnumWorkspaceCreationSourceFieldRefInput<$PrismaModel> = FieldRefInp
 
 
 /**
- * Reference to a field of type 'RunScriptStatus'
- */
-export type EnumRunScriptStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RunScriptStatus'>
-    
-
-
-/**
  * Reference to a field of type 'WorkspaceProviderSelection'
  */
 export type EnumWorkspaceProviderSelectionFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'WorkspaceProviderSelection'>
@@ -1745,6 +1820,13 @@ export type EnumCIStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
  * Reference to a field of type 'RatchetDispatchOutcome'
  */
 export type EnumRatchetDispatchOutcomeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetDispatchOutcome'>
+    
+
+
+/**
+ * Reference to a field of type 'RunScriptStatus'
+ */
+export type EnumRunScriptStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RunScriptStatus'>
     
 
 
@@ -1959,6 +2041,7 @@ export type GlobalOmitConfig = {
   workspace?: Prisma.WorkspaceOmit
   workspacePR?: Prisma.WorkspacePROmit
   workspaceRatchet?: Prisma.WorkspaceRatchetOmit
+  workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
   agentSession?: Prisma.AgentSessionOmit
   terminalSession?: Prisma.TerminalSessionOmit
   closedSession?: Prisma.ClosedSessionOmit

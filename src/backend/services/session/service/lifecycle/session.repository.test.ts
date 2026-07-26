@@ -33,7 +33,9 @@ describe('SessionRepository', () => {
   };
 
   const workspaces = {
-    findById: vi.fn<() => Promise<Workspace | null>>(),
+    // `runScriptPort` is flattened on by the workspace accessor rather than being
+    // a Workspace column, which is why the port declares it separately.
+    findById: vi.fn<() => Promise<(Workspace & { runScriptPort: number | null }) | null>>(),
     recordSessionPresence: vi.fn<() => Promise<void>>(),
   };
 

@@ -32,8 +32,19 @@ type SessionAccessor = {
   recoverStaleRunning(): Promise<number>;
 };
 
+/**
+ * A workspace row as this capsule needs it: the `Workspace` columns plus the one
+ * run-script field the session prompt builder reads.
+ *
+ * `runScriptPort` is not a `Workspace` column any more — it lives on
+ * `WorkspaceRunScript` and the workspace accessor flattens it back on. Naming it
+ * here is what keeps that split from reaching into this capsule as an untyped
+ * assumption: the port declares what it consumes, and the flat shape satisfies it.
+ */
+type WorkspaceRecord = Workspace & { runScriptPort: number | null };
+
 type WorkspaceAccessor = {
-  findById(id: string): Promise<Workspace | null>;
+  findById(id: string): Promise<WorkspaceRecord | null>;
   recordSessionPresence(id: string): Promise<void>;
 };
 
@@ -56,7 +67,7 @@ export class SessionRepository {
     return this.sessions.findByWorkspaceId(workspaceId);
   }
 
-  getWorkspaceById(workspaceId: string): Promise<Workspace | null> {
+  getWorkspaceById(workspaceId: string): Promise<WorkspaceRecord | null> {
     return this.workspaces.findById(workspaceId);
   }
 

@@ -38,6 +38,7 @@ export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
 export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';
 export {
   type RunScriptExecutionState,
+  type RunScriptExecutionUpdate,
   workspaceRunScriptService,
 } from './lifecycle/workspace-run-script.service';
 export { computePRDiscoveryNextCheckAt } from './pr-discovery-schedule';

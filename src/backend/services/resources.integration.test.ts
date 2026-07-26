@@ -107,19 +107,21 @@ async function createWorkspaceFixture(
   overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
     ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput;
     pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
+    runScript?: Prisma.WorkspaceRunScriptCreateWithoutWorkspaceInput;
   } = {}
 ) {
-  const { ratchet, pr, ...workspaceOverrides } = overrides;
+  const { ratchet, pr, runScript, ...workspaceOverrides } = overrides;
   return await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
       status: WorkspaceStatus.NEW,
       ...workspaceOverrides,
-      // Mirrors workspaceAccessor.create: every workspace gets both side-table
-      // rows, so the row-guarded writes under test have one to guard.
+      // Mirrors workspaceAccessor.create: every workspace gets all three
+      // side-table rows, so the row-guarded writes under test have one to guard.
       ratchet: { create: ratchet ?? {} },
       pr: { create: pr ?? {} },
+      runScript: { create: runScript ?? {} },
     },
   });
 }
@@ -179,7 +181,7 @@ describe('resource accessors integration', () => {
     it('enforces compare-and-swap run script transitions', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
-        runScriptStatus: RunScriptStatus.IDLE,
+        runScript: { status: RunScriptStatus.IDLE },
       });
 
       const started = await workspaceRunScriptService.transitionStatusIfCurrent(

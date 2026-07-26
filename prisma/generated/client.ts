@@ -99,6 +99,52 @@ export type WorkspacePR = Prisma.WorkspacePRModel
  */
 export type WorkspaceRatchet = Prisma.WorkspaceRatchetModel
 /**
+ * Model WorkspaceRunScript
+ * The workspace's dev server: the commands `factory-factory.json` declares for
+ * it, and the process currently running one of them.
+ * 
+ * Two groups in one row, on purpose. `command` / `postRunCommand` /
+ * `cleanupCommand` are a cache of the config file in the worktree; `pid` /
+ * `port` / `startedAt` / `status` describe a live process. They share a row
+ * because they share a writer — `workspaceRunScriptService` is the only thing
+ * that writes either — so splitting them would produce two accessors guarding
+ * the same boundary, and because every read that wants one wants the workspace
+ * anyway. Nothing here is written together across the groups, so no write
+ * spans them.
+ * 
+ * The config group stays a cache rather than becoming a projection the way
+ * `cachedKanbanColumn` and `RatchetState` did, and the reason is where the
+ * source of truth lives. Those two were derived from other columns, so
+ * computing them at read time cost nothing; these come from a file in the
+ * worktree, and deriving them on read would mean a filesystem call per
+ * workspace per list query. Drift is repaired at the point of use instead:
+ * `reconcileWorkspaceCommandCache` re-reads the file before starting or
+ * stopping a script and writes back what it finds.
+ * 
+ * The runtime group is persisted even though a restart invalidates the process,
+ * because `pid` is the only handle on an orphan. Run scripts spawn with
+ * `detached: false`, so they normally die with the server -- but a SIGKILL or a
+ * crash leaves them running, and `verifyRunning` finds them again with
+ * `process.kill(pid, 0)` against this column. `resetStaleTransientStatuses`
+ * clears `STARTING` / `STOPPING` at startup for the same reason: those two
+ * cannot survive the process that was mid-transition.
+ * 
+ * Exactly one row per workspace, created with the workspace, so the
+ * compare-and-swap on `status` always has a row to guard. Reads substitute
+ * defaults if a row is ever missing rather than making every caller handle the
+ * null.
+ * 
+ * One consequence of the split, the same one the PR cache had: these writes no
+ * longer touch `Workspace.updatedAt`, because Prisma's `@updatedAt` only fires
+ * for the table being written. So starting or stopping a run script no longer
+ * floats its workspace up the sidebar and board, which order by `updatedAt`.
+ * That is deliberate -- a process exiting was never workspace activity, and the
+ * activity the UI actually displays (`lastActivityAt`) is computed from session
+ * timestamps, not this column. It also stops a busy run script from holding
+ * `updatedAt` fresh enough to defer the stale-ARCHIVING recovery sweep.
+ */
+export type WorkspaceRunScript = Prisma.WorkspaceRunScriptModel
+/**
  * Model AgentSession
  * 
  */
