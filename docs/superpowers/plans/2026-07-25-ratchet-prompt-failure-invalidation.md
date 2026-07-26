@@ -80,7 +80,7 @@ pnpm test src/backend/services/ratchet/service/ratchet.service.test.ts
 
 Expected: all Ratchet service tests pass.
 
-- [ ] **Step 4: Commit the focused fix**
+- [x] **Step 4: Commit the focused fix**
 
 ```bash
 git add src/backend/services/ratchet/service/ratchet-fixer-dispatch.helpers.ts \
@@ -112,6 +112,6 @@ git diff --check
 git status --short
 ```
 
-- [ ] **Step 3: Push and create the pull request**
+- [x] **Step 3: Push and create the pull request**
 
 Push the current issue branch, create the PR with the required Factory Factory signature and `Closes #1985`, then verify the PR URL with `gh pr view`.
