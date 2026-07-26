@@ -49,8 +49,8 @@ class WorkspaceRatchetService {
     return workspaceRatchetAccessor.settleIdleWhileDisabled(workspaceId, from);
   }
 
-  clearActiveSession(workspaceId: string) {
-    return workspaceRatchetAccessor.clearActiveSession(workspaceId);
+  clearActiveSession(workspaceId: string, sessionId: string) {
+    return workspaceRatchetAccessor.clearActiveSession(workspaceId, sessionId);
   }
 
   enable(workspaceId: string) {

@@ -873,7 +873,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(result).toMatchObject({
       action: { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' },
     });
-    expect(workspaceRatchetService.clearActiveSession).toHaveBeenCalledWith(workspace.id);
+    // Scoped to the session that failed, so the clear cannot evict a pointer
+    // belonging to a dispatch this path never recorded.
+    expect(workspaceRatchetService.clearActiveSession).toHaveBeenCalledWith(
+      workspace.id,
+      'ratchet-session'
+    );
     expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
   });
 

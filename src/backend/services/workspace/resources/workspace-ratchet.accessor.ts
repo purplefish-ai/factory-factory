@@ -277,11 +277,20 @@ class WorkspaceRatchetAccessor {
     return result.count > 0;
   }
 
-  async clearActiveSession(workspaceId: string): Promise<void> {
-    await prisma.workspaceRatchet.updateMany({
-      where: { workspaceId },
+  /**
+   * Release the active-session pointer, if it still names this session.
+   *
+   * Session-scoped for the same reason `recordSessionEnd` is. Its only caller is
+   * the prompt-delivery failure path, which returns before recording its own
+   * dispatch — so the pointer it would otherwise clear belongs to a different
+   * dispatch, and an unscoped clear would evict that claim.
+   */
+  async clearActiveSession(workspaceId: string, sessionId: string): Promise<boolean> {
+    const result = await prisma.workspaceRatchet.updateMany({
+      where: { workspaceId, activeSessionId: sessionId },
       data: { activeSessionId: null },
     });
+    return result.count > 0;
   }
 
   async enable(workspaceId: string): Promise<void> {

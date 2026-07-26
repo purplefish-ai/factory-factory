@@ -275,6 +275,30 @@ describe('workspaceRatchetAccessor', () => {
       ).resolves.toBe(false);
     });
 
+    it('clears the active-session pointer only when it names that session', async () => {
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(workspaceRatchetAccessor.clearActiveSession('ws-1', 'session-1')).resolves.toBe(
+        true
+      );
+
+      // Scoped to the session: the prompt-failure path that calls this never
+      // recorded its own dispatch, so an unscoped clear would evict whichever
+      // dispatch does hold the pointer.
+      expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
+        where: { workspaceId: 'ws-1', activeSessionId: 'session-1' },
+        data: { activeSessionId: null },
+      });
+    });
+
+    it('leaves a newer dispatch pointer alone when the failed session does not own it', async () => {
+      mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        workspaceRatchetAccessor.clearActiveSession('ws-1', 'session-that-never-ran')
+      ).resolves.toBe(false);
+    });
+
     it('clears everything the ratchet was tracking on disable', async () => {
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 

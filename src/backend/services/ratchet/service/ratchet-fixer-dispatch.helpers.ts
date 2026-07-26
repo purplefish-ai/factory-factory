@@ -65,7 +65,7 @@ async function handleStartedFixerResult(params: {
       sessionId: result.sessionId,
     });
     signal?.throwIfAborted();
-    await workspaceRatchetService.clearActiveSession(workspace.id);
+    await workspaceRatchetService.clearActiveSession(workspace.id, result.sessionId);
     signal?.throwIfAborted();
     if (sessionBridge.isSessionRunning(result.sessionId)) {
       signal?.throwIfAborted();
