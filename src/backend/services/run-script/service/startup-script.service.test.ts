@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSpawn = vi.hoisted(() => vi.fn());
 const mockClearInitOutput = vi.hoisted(() => vi.fn());
@@ -63,6 +63,10 @@ describe('StartupScriptService', () => {
     mockAppendInitOutput.mockResolvedValue(undefined);
     mockSetInitScriptPid.mockResolvedValue(undefined);
     mockClearInitScriptPid.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('marks workspace ready immediately when no startup script is configured', async () => {
@@ -145,6 +149,134 @@ describe('StartupScriptService', () => {
     expect(mockAppendInitOutput).toHaveBeenCalledWith('w1', expect.stringContaining('hello'));
     expect(mockSetInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
     expect(mockClearInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
+  });
+
+  it('reports a natural exit at the timeout boundary as successful', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+    proc.emit('close', 0, null);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: true,
+      exitCode: 0,
+      timedOut: false,
+    });
+    expect(markReady).toHaveBeenCalledWith('w1');
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it('reports a process terminated by the timeout signal as timed out', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit('close', null, 'SIGTERM');
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: false,
+      exitCode: null,
+      timedOut: true,
+    });
+    expect(markFailed).toHaveBeenCalledWith('w1', 'Script timed out after 1 seconds');
+  });
+
+  it('does not escalate after the process exits during the SIGTERM grace period', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit('exit', null, 'SIGTERM');
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(proc.kill).toHaveBeenCalledTimes(1);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    proc.emit('close', null, 'SIGTERM');
+    await resultPromise;
+  });
+
+  it('does not schedule SIGKILL escalation when SIGTERM was not sent', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(false);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(proc.kill).toHaveBeenCalledTimes(1);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    proc.emit('close', 0, null);
+    await resultPromise;
+  });
+
+  it('does not report a different termination signal as the startup-script timeout', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit('close', null, 'SIGINT');
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: false,
+      exitCode: null,
+      timedOut: false,
+    });
   });
 
   it('marks workspace failed when spawn emits error', async () => {

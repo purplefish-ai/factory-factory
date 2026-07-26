@@ -20,7 +20,7 @@ export function runTestCommand(
 
     let stdout = '';
     let stderr = '';
-    let timedOut = false;
+    const timeoutSignalsSent = new Set<NodeJS.Signals>();
     let exited = false;
 
     child.stdout.on('data', (data: Buffer) => {
@@ -37,23 +37,24 @@ export function runTestCommand(
     });
 
     const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
+      if (child.kill('SIGTERM')) {
+        timeoutSignalsSent.add('SIGTERM');
+      }
       setTimeout(() => {
-        if (!exited) {
-          child.kill('SIGKILL');
+        if (!exited && child.kill('SIGKILL')) {
+          timeoutSignalsSent.add('SIGKILL');
         }
       }, 5000);
     }, timeoutSeconds * 1000);
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       exited = true;
       clearTimeout(timer);
       resolve({
         stdout,
         stderr,
         exitCode: code ?? 1,
-        timedOut,
+        timedOut: signal !== null && timeoutSignalsSent.has(signal),
       });
     });
 
@@ -63,7 +64,7 @@ export function runTestCommand(
         stdout,
         stderr: `${stderr}\n${err.message}`,
         exitCode: 1,
-        timedOut,
+        timedOut: false,
       });
     });
   });
