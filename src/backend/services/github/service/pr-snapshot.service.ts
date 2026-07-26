@@ -42,12 +42,6 @@ export type AttachAndRefreshResult =
 
 export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 export const PR_URL_ATTACHED = 'pr_url_attached' as const;
-export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
-
-export interface PRDispatchInvalidatedEvent {
-  workspaceId: string;
-  prCiStatus: SnapshotData['prCiStatus'];
-}
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
@@ -65,8 +59,14 @@ export interface PRUrlAttachedEvent {
   prUrl: string;
 }
 
-interface CIObservationInput {
+/** One ratchet check's observation of a PR: every input `deriveRatchetState` reads. */
+interface PrObservationInput {
+  prNumber: number;
   ciStatus: SnapshotData['prCiStatus'];
+  prState: SnapshotData['prState'];
+  reviewState: string | null;
+  /** GitHub's `mergeStateStatus == DIRTY`. */
+  hasMergeConflict: boolean;
   failedAt?: Date | null;
   observedAt?: Date;
 }
@@ -116,25 +116,39 @@ class PRSnapshotService extends EventEmitter {
   }
 
   /**
-   * Record CI status observation for a workspace.
-   * This is the canonical write path for CI tracking fields.
+   * Record what a ratchet check observed about a PR. The canonical write path for
+   * the ratchet's half of the PR cache.
+   *
+   * Publishes `PR_SNAPSHOT_UPDATED` for every applied write, exactly as the
+   * PR-sync poller does. It used to publish only a dispatch-invalidation, and only
+   * when a settled dispatch was reset — so a merge the ratchet saw first reached
+   * the database and stopped there, leaving the client on `OPEN` and the linked
+   * Linear issue uncompleted until the poller came round.
    */
-  async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
+  async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
     await this.runWorkspaceOperation(workspaceId, async () => {
-      const result = await this.workspace.applyCIObservationWithDispatchReset(workspaceId, {
+      const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
+        expectedPrNumber: input.prNumber,
         prCiStatus: input.ciStatus,
+        prState: input.prState,
+        prReviewState: input.reviewState,
+        prHasMergeConflict: input.hasMergeConflict,
         prUpdatedAt: input.observedAt ?? new Date(),
         ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
       });
       if (!result.applied) {
         return;
       }
-      if (result.dispatchReset) {
-        this.emit(PR_DISPATCH_INVALIDATED, {
-          workspaceId,
-          prCiStatus: input.ciStatus,
-        } satisfies PRDispatchInvalidatedEvent);
-      }
+      // `prUrl` is deliberately absent: this observation is for the PR already
+      // attached, and the PR-switch check keys off a changed url or number.
+      this.emit(PR_SNAPSHOT_UPDATED, {
+        workspaceId,
+        prNumber: input.prNumber,
+        prState: input.prState,
+        prCiStatus: input.ciStatus,
+        prReviewState: input.reviewState,
+        ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
+      } satisfies PRSnapshotUpdatedEvent);
     });
   }
 

@@ -44,8 +44,18 @@ export interface GitHubPRSnapshotPersistenceInput extends GitHubSnapshotFields {
   branchName?: string;
 }
 
-export interface GitHubCIObservationPersistenceInput {
+/**
+ * One ratchet check's observation of a PR. Carries the PR and review state as
+ * well as CI because `deriveRatchetState` projects from all of them, so an
+ * observation the check does not write is one no later read can derive from.
+ */
+export interface GitHubPrObservationPersistenceInput {
+  /** The PR the observation was fetched for. Guarded, not written. */
+  expectedPrNumber: number;
   prCiStatus: CIStatus;
+  prState: PRState;
+  prReviewState: string | null;
+  prHasMergeConflict: boolean;
   prUpdatedAt: Date;
   prCiFailedAt?: Date | null;
 }
@@ -60,9 +70,9 @@ export interface GitHubWorkspaceBridge {
     workspaceId: string,
     observation: GitHubPRSnapshotPersistenceInput
   ): Promise<GitHubPrAggregatePersistenceResult>;
-  applyCIObservationWithDispatchReset(
+  applyPrObservationWithDispatchReset(
     workspaceId: string,
-    observation: GitHubCIObservationPersistenceInput
+    observation: GitHubPrObservationPersistenceInput
   ): Promise<GitHubPrAggregatePersistenceResult>;
   attachDiscoveredPRIfClaimMatches(
     workspaceId: string,

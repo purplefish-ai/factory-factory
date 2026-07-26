@@ -18,7 +18,7 @@ const {
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
-    applyCIObservationWithDispatchReset: (...args: unknown[]) =>
+    applyPrObservationWithDispatchReset: (...args: unknown[]) =>
       mockApplyCIObservationWithDispatchReset(...args),
     applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
       mockApplyPrSnapshotWithDispatchReset(...args),
@@ -113,11 +113,15 @@ describe('workspacePrSnapshotService', () => {
 
   it('owns atomic CI observation dispatch reset persistence', async () => {
     const observation = {
+      expectedPrNumber: 7,
       prCiStatus: 'FAILURE' as const,
+      prState: 'OPEN' as const,
+      prReviewState: null,
+      prHasMergeConflict: false,
       prUpdatedAt: new Date('2026-07-17T12:04:00.000Z'),
     };
 
-    await workspacePrSnapshotService.applyCIObservationWithDispatchReset(
+    await workspacePrSnapshotService.applyPrObservationWithDispatchReset(
       'workspace-1',
       observation
     );

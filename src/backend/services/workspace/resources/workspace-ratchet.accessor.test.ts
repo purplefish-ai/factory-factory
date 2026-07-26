@@ -32,7 +32,6 @@ function ratchetRow(overrides: Partial<WorkspaceRatchetRow> = {}): WorkspaceRatc
   return {
     workspaceId: 'ws-1',
     enabled: true,
-    state: 'CI_RUNNING' as const,
     lastCheckedAt: new Date('2026-01-01T00:00:00.000Z'),
     activeSessionId: 'session-1',
     dispatchSnapshotKey: 'snapshot-1',
@@ -46,7 +45,6 @@ describe('flattenWorkspaceRatchet', () => {
   it('maps the table field names onto the caller-facing ratchet* names', () => {
     expect(flattenWorkspaceRatchet(ratchetRow())).toEqual({
       ratchetEnabled: true,
-      ratchetState: 'CI_RUNNING',
       ratchetLastCheckedAt: new Date('2026-01-01T00:00:00.000Z'),
       ratchetActiveSessionId: 'session-1',
       ratchetDispatchSnapshotKey: 'snapshot-1',
@@ -77,7 +75,10 @@ describe('workspaceRatchetAccessor', () => {
   });
 
   describe('candidate reads', () => {
-    it('filters candidates on the ratchet relation and orders by its last check', async () => {
+    it('reads both closed and merged off the PR, and only `enabled` off the ratchet', async () => {
+      // These used to be two conditions on two tables — `pr.state != CLOSED` and
+      // `ratchet.state != MERGED` — asking the same question of a cache and of a
+      // copy of that cache.
       mockWorkspaceFindMany.mockResolvedValue([]);
 
       await workspaceRatchetAccessor.findWithPRsForRatchet();
@@ -86,8 +87,8 @@ describe('workspaceRatchetAccessor', () => {
         expect.objectContaining({
           where: {
             status: 'READY',
-            pr: { url: { not: null }, state: { not: 'CLOSED' } },
-            ratchet: { enabled: true, state: { not: 'MERGED' } },
+            pr: { url: { not: null }, state: { notIn: ['CLOSED', 'MERGED'] } },
+            ratchet: { enabled: true },
           },
           orderBy: { ratchet: { lastCheckedAt: 'asc' } },
         })
@@ -105,7 +106,9 @@ describe('workspaceRatchetAccessor', () => {
             url: 'https://github.com/org/repo/pull/1',
             number: 1,
             state: 'OPEN',
+            reviewState: null,
             ciStatus: 'FAILURE',
+            hasMergeConflict: false,
             reviewLastCheckedAt: null,
           },
         },
@@ -119,7 +122,9 @@ describe('workspaceRatchetAccessor', () => {
         prNumber: 1,
         prState: 'OPEN',
         prCiStatus: 'FAILURE',
-        ratchetState: 'CI_RUNNING',
+        prHasMergeConflict: false,
+        // Projected from the PR row above, not read from the ratchet row.
+        ratchetState: 'CI_FAILED',
         ratchetDispatchSnapshotKey: 'snapshot-1',
         ratchetDispatchRetryCount: 2,
       });
@@ -153,8 +158,12 @@ describe('workspaceRatchetAccessor', () => {
       );
     });
 
-    it('reads only status and the ratchet row for the snapshot projection', async () => {
-      mockWorkspaceFindUnique.mockResolvedValue({ status: 'READY', ratchet: ratchetRow() });
+    it('projects the state from the PR row it joins in for the snapshot', async () => {
+      mockWorkspaceFindUnique.mockResolvedValue({
+        status: 'READY',
+        ratchet: ratchetRow(),
+        pr: { state: 'OPEN', ciStatus: 'PENDING', hasMergeConflict: false, reviewState: null },
+      });
 
       await expect(workspaceRatchetAccessor.findSnapshotProjection('ws-1')).resolves.toEqual({
         status: 'READY',
@@ -166,7 +175,20 @@ describe('workspaceRatchetAccessor', () => {
 
       expect(mockWorkspaceFindUnique).toHaveBeenCalledWith({
         where: { id: 'ws-1' },
-        select: { status: true, ratchet: true },
+        select: { status: true, ratchet: true, pr: true },
+      });
+    });
+
+    it('projects IDLE for a disabled workspace regardless of the PR', async () => {
+      mockWorkspaceFindUnique.mockResolvedValue({
+        status: 'READY',
+        ratchet: ratchetRow({ enabled: false }),
+        pr: { state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true, reviewState: null },
+      });
+
+      await expect(workspaceRatchetAccessor.findSnapshotProjection('ws-1')).resolves.toMatchObject({
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
       });
     });
 
@@ -246,53 +268,39 @@ describe('workspaceRatchetAccessor', () => {
       ).resolves.toBe(false);
     });
 
-    it('transitions state only when enabled and the fromState still matches', async () => {
+    it('stamps the check timestamp only while ratcheting is enabled', async () => {
       const checkedAt = new Date('2026-01-01T00:00:00.000Z');
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
-      await expect(
-        workspaceRatchetAccessor.transitionStateIfEnabled('ws-1', 'CI_RUNNING', {
-          ratchetState: 'CI_FAILED',
-          ratchetLastCheckedAt: checkedAt,
-        })
-      ).resolves.toBe(true);
+      await expect(workspaceRatchetAccessor.recordCheckIfEnabled('ws-1', checkedAt)).resolves.toBe(
+        true
+      );
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', enabled: true, state: 'CI_RUNNING' },
-        data: { state: 'CI_FAILED', lastCheckedAt: checkedAt },
+        where: { workspaceId: 'ws-1', enabled: true },
+        data: { lastCheckedAt: checkedAt },
       });
     });
 
-    it('returns false when the state transition loses the compare-and-swap', async () => {
+    it('returns false when ratcheting was disabled while the check ran', async () => {
       mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        workspaceRatchetAccessor.transitionStateIfEnabled('ws-1', 'CI_RUNNING', {
-          ratchetState: 'READY',
-          ratchetLastCheckedAt: new Date('2026-01-01T00:00:00.000Z'),
-        })
-      ).resolves.toBe(false);
+      await expect(workspaceRatchetAccessor.recordCheckIfEnabled('ws-1', new Date())).resolves.toBe(
+        false
+      );
     });
 
-    it('settles state to IDLE only while disabled and the fromState still matches', async () => {
+    it('never writes a state column: nothing here can name one', async () => {
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
-      await expect(
-        workspaceRatchetAccessor.settleIdleWhileDisabled('ws-1', 'CI_FAILED')
-      ).resolves.toBe(true);
+      await workspaceRatchetAccessor.recordCheckIfEnabled('ws-1', new Date());
+      await workspaceRatchetAccessor.disable('ws-1');
+      await workspaceRatchetAccessor.enable('ws-1');
 
-      expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', enabled: false, state: 'CI_FAILED' },
-        data: { state: 'IDLE', lastCheckedAt: expect.any(Date) },
-      });
-    });
-
-    it('returns false when the disabled-settle compare-and-swap affects no rows', async () => {
-      mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
-
-      await expect(
-        workspaceRatchetAccessor.settleIdleWhileDisabled('ws-1', 'CI_FAILED')
-      ).resolves.toBe(false);
+      for (const call of mockRatchetUpdateMany.mock.calls) {
+        expect(call[0].data).not.toHaveProperty('state');
+        expect(call[0].where).not.toHaveProperty('state');
+      }
     });
 
     it('clears the active-session pointer only when it names that session', async () => {
@@ -328,7 +336,6 @@ describe('workspaceRatchetAccessor', () => {
         where: { workspaceId: 'ws-1' },
         data: {
           enabled: false,
-          state: 'IDLE',
           activeSessionId: null,
           dispatchSnapshotKey: null,
           dispatchOutcome: null,

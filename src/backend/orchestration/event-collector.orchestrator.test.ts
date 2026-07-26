@@ -56,7 +56,6 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/github', () => ({
-  PR_DISPATCH_INVALIDATED: 'pr_dispatch_invalidated',
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   PR_URL_ATTACHED: 'pr_url_attached',
   prSnapshotService: {
@@ -75,7 +74,6 @@ vi.mock('@/backend/services/ratchet', () => ({
     on: vi.fn(),
     off: vi.fn(),
     checkWorkspaceById: vi.fn().mockResolvedValue(null),
-    markPrClosed: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -528,7 +526,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 13 event listeners on domain singletons', () => {
+  it('registers 12 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -537,13 +535,11 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // prSnapshotService: PR updates and dispatch invalidation
+    // prSnapshotService: PR updates. The ratchet's observation publishes the same
+    // `pr_snapshot_updated` the PR poller does, so there is no separate
+    // dispatch-invalidation listener any more.
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_snapshot_updated', expect.any(Function));
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_url_attached', expect.any(Function));
-    expect(prSnapshotService.on).toHaveBeenCalledWith(
-      'pr_dispatch_invalidated',
-      expect.any(Function)
-    );
 
     // ratchetService: state, toggle, and dispatch ownership
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_state_changed', expect.any(Function));
@@ -822,7 +818,11 @@ describe('configureEventCollector', () => {
     );
   });
 
-  it('projects the direct CI status carried by a dispatch invalidation', () => {
+  it('projects a ratchet observation through the snapshot-update path', () => {
+    // This replaces a test for `pr_dispatch_invalidated`, which had one emitter and
+    // one handler and was only published when a settled dispatch was reset. A
+    // ratchet observation now publishes `pr_snapshot_updated` for every applied
+    // write, so a merge the ratchet saw first no longer stops at the database.
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
@@ -837,16 +837,25 @@ describe('configureEventCollector', () => {
 
     const handler = vi
       .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_dispatch_invalidated')![1] as (event: {
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated')![1] as (event: {
       workspaceId: string;
+      prNumber: number;
+      prState: string;
       prCiStatus: string;
+      prReviewState: string | null;
     }) => void;
-    handler({ workspaceId: 'ws-direct-ci', prCiStatus: 'PENDING' });
+    handler({
+      workspaceId: 'ws-direct-ci',
+      prNumber: 7,
+      prState: 'MERGED',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+    });
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-direct-ci',
-      { prCiStatus: 'PENDING' },
-      'event:pr_dispatch_invalidated',
+      { prNumber: 7, prState: 'MERGED', prCiStatus: 'PENDING' },
+      'event:pr_snapshot_updated',
       expect.any(Number)
     );
   });
@@ -1225,10 +1234,12 @@ describe('configureEventCollector', () => {
     });
 
     expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
-    expect(ratchetService.markPrClosed).toHaveBeenCalledWith('ws-1');
+    // No settle call: a closed PR derives to IDLE. The projection refresh is what
+    // republishes it.
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledWith('ws-1');
   });
 
-  it('re-settles ratchet state when PR stays closed across syncs', () => {
+  it('re-projects ratchet state when PR stays closed across syncs', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
       prNumber: 42,
@@ -1260,7 +1271,9 @@ describe('configureEventCollector', () => {
     });
 
     expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
-    expect(ratchetService.markPrClosed).toHaveBeenCalledWith('ws-1');
+    // No settle call: a closed PR derives to IDLE. The projection refresh is what
+    // republishes it.
+    expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledWith('ws-1');
   });
 
   it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
@@ -1643,7 +1656,6 @@ describe('per-graph event collector lifecycle', () => {
       }),
       ratchetService: Object.assign(createSource(), {
         checkWorkspaceById: vi.fn().mockResolvedValue(null),
-        markPrClosed: vi.fn().mockResolvedValue(undefined),
       }),
       runScriptStateMachine: createSource(),
       sessionDataService,

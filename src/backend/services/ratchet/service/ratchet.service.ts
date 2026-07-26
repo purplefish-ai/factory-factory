@@ -45,7 +45,6 @@ import {
   isPRStateFetchSkipped,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
-import { assertValidRatchetTransition } from './ratchet-state-machine';
 import {
   RatchetWorkspaceCheckCoordinator,
   type WorkspaceCheckScheduler,
@@ -340,54 +339,6 @@ class RatchetService extends EventEmitter {
     } satisfies RatchetDispatchChangedEvent);
   }
 
-  /**
-   * Settle ratchet state for a workspace whose PR is closed (not merged).
-   * Closed PRs are excluded from the poll set, so the poll loop can no longer
-   * transition them to IDLE itself. Idempotent; no GitHub fetch.
-   *
-   * The transition is CAS'd on the fromState just read, so the emitted event
-   * carries the state that was actually replaced. Losing the CAS means an
-   * in-flight check wrote a fresh state concurrently; retry so that racing
-   * check does not leave the closed PR parked in a non-IDLE state (it will
-   * never be polled again). Closed PRs leave the poll set, so at most one
-   * such check can be in flight and the bounded retries are expected to
-   * always suffice; if they are ever exhausted anyway, this logs a warning
-   * and leaves the stale state for a manual ratchet toggle to clear.
-   */
-  async markPrClosed(workspaceId: string): Promise<void> {
-    const maxCasAttempts = 3;
-    for (let attempt = 0; attempt < maxCasAttempts; attempt++) {
-      const workspace = await workspaceDataService.findById(workspaceId);
-      if (!workspace?.ratchetEnabled || workspace.ratchetState === RatchetState.IDLE) {
-        return;
-      }
-
-      const fromState = workspace.ratchetState;
-      assertValidRatchetTransition(workspaceId, fromState, RatchetState.IDLE);
-      const updated = await workspaceRatchetService.transitionStateIfEnabled(
-        workspaceId,
-        fromState,
-        {
-          ratchetState: RatchetState.IDLE,
-          ratchetLastCheckedAt: new Date(),
-        }
-      );
-      if (updated) {
-        this.emit(RATCHET_STATE_CHANGED, {
-          workspaceId,
-          fromState,
-          toState: RatchetState.IDLE,
-        } satisfies RatchetStateChangedEvent);
-        return;
-      }
-    }
-
-    logger.warn('markPrClosed gave up after losing repeated state CAS races', {
-      workspaceId,
-      attempts: maxCasAttempts,
-    });
-  }
-
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR,
     opts?: RatchetCheckOptions,
@@ -447,6 +398,9 @@ class RatchetService extends EventEmitter {
     // (now cleared) active-session pointer named.
     await this.stopActiveRatchetSessionsAfterDisable(workspaceId);
 
+    // `disable` is the whole transition: `deriveRatchetState` reads IDLE for a
+    // workspace that is not ratcheting, so there is no second write to settle and
+    // no window in which the state disagrees with the toggle.
     if (workspace.ratchetState !== RatchetState.IDLE) {
       this.emit(RATCHET_STATE_CHANGED, {
         workspaceId,
@@ -483,33 +437,15 @@ class RatchetService extends EventEmitter {
 
     if (!workspace.ratchetEnabled) {
       const action: RatchetAction = { type: 'DISABLED', reason: 'Workspace ratcheting disabled' };
+      // Nothing to settle: a disabled workspace already derives to IDLE, so the
+      // row this check read is the row every later read will project from. Which
+      // also means `fromState` here is IDLE, and there is no transition to emit.
       const fromState = workspace.ratchetState;
-      const newState = RatchetState.IDLE;
-      signal.throwIfAborted();
-      assertValidRatchetTransition(workspace.id, fromState, newState);
-      // CAS on the pre-read fromState: a lost swap means another path already
-      // settled (or re-enabled) the workspace, and that path emitted its own
-      // event, so emitting here with this fromState would be stale.
-      const settled = await workspaceRatchetService.settleIdleWhileDisabled(
-        workspace.id,
-        fromState
-      );
-      signal.throwIfAborted();
-      if (settled && fromState !== newState) {
-        this.emit(RATCHET_STATE_CHANGED, {
-          workspaceId: workspace.id,
-          fromState,
-          toState: newState,
-        } satisfies RatchetStateChangedEvent);
-      }
-      // A lost settle persisted nothing, so report the state unchanged rather
-      // than a transition this check never committed.
-      const reportedState = settled ? newState : fromState;
-      this.logWorkspaceRatchetingDecision(workspace, fromState, reportedState, action, null);
+      this.logWorkspaceRatchetingDecision(workspace, fromState, fromState, action, null);
       return {
         workspaceId: workspace.id,
         previousState: fromState,
-        newState: reportedState,
+        newState: fromState,
         action,
       };
     }
@@ -831,14 +767,13 @@ class RatchetService extends EventEmitter {
       workspace,
       prStateInfo,
       action,
-      decisionContext.newState,
       signal
     );
     signal.throwIfAborted();
 
     // The conditional update refused to persist: ratcheting was disabled while
-    // this check was in flight. Report DISABLED and emit nothing — the disable
-    // path already settled the workspace to IDLE.
+    // this check was in flight. Report DISABLED and emit nothing — a disabled
+    // workspace derives to IDLE, and the disable path emitted that transition.
     if (updateResult === 'disabled') {
       const disabledAction: RatchetAction = {
         type: 'DISABLED',
@@ -857,31 +792,6 @@ class RatchetService extends EventEmitter {
         previousState: decisionContext.previousState,
         newState: RatchetState.IDLE,
         action: disabledAction,
-      };
-    }
-
-    // The CAS on fromState lost while ratcheting stayed enabled: another path
-    // (e.g. markPrClosed) transitioned the state mid-check and emitted its own
-    // event. This check's result is stale, so persist and emit nothing; the
-    // next cycle re-evaluates from the fresh state.
-    if (updateResult === 'superseded') {
-      const supersededAction: RatchetAction = {
-        type: 'WAITING',
-        reason: 'Ratchet state changed concurrently during this check; re-evaluating next cycle',
-      };
-      this.logWorkspaceRatchetingDecision(
-        workspace,
-        decisionContext.previousState,
-        decisionContext.previousState,
-        supersededAction,
-        prStateInfo,
-        decisionContext
-      );
-      return {
-        workspaceId: workspace.id,
-        previousState: decisionContext.previousState,
-        newState: decisionContext.previousState,
-        action: supersededAction,
       };
     }
 
@@ -918,37 +828,32 @@ class RatchetService extends EventEmitter {
     return workspace.ratchetDispatchSnapshotKey !== prStateInfo.snapshotKey;
   }
 
+  /**
+   * Persist what this check learned: the check timestamp, and the PR observation
+   * the ratchet state is projected from.
+   *
+   * The state itself is not written — it is derived from the observation below, so
+   * writing the observation *is* the transition. That also collapses the old
+   * three-way result: with no stored state, no concurrent write can supersede this
+   * one, leaving only "ratcheting was disabled while we ran".
+   */
   private async updateWorkspaceAfterCheck(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
     action: RatchetAction,
-    nextState: RatchetState,
     signal: AbortSignal = new AbortController().signal
-  ): Promise<'applied' | 'disabled' | 'superseded'> {
+  ): Promise<'applied' | 'disabled'> {
     const now = new Date();
     // The dispatch record itself (session pointer, snapshot key, outcome,
     // retry count) is written atomically inside triggerFixer.
     const dispatched = action.type === 'TRIGGERED_FIXER' && action.promptSent;
 
     signal.throwIfAborted();
-    assertValidRatchetTransition(workspace.id, workspace.ratchetState, nextState);
-    const updated = await workspaceRatchetService.transitionStateIfEnabled(
-      workspace.id,
-      workspace.ratchetState,
-      {
-        ratchetState: nextState,
-        ratchetLastCheckedAt: now,
-      }
-    );
+    const updated = await workspaceRatchetService.recordCheckIfEnabled(workspace.id, now);
     signal.throwIfAborted();
 
     if (!updated) {
-      // The CAS refused the write: either ratcheting was disabled mid-check,
-      // or another path (markPrClosed, disable+re-enable) transitioned the
-      // state away from the one this check ran against.
-      const fresh = await workspaceDataService.findById(workspace.id);
-      signal.throwIfAborted();
-      return fresh?.ratchetEnabled ? 'superseded' : 'disabled';
+      return 'disabled';
     }
 
     if (dispatched) {
@@ -957,11 +862,28 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
     }
 
-    if (prStateInfo.ciStatus !== workspace.prCiStatus) {
+    // Persist the whole observation, not just CI.
+    //
+    // `ratchetState` is projected from this cache, so anything the check saw and
+    // kept to itself is something no later read can derive from. That used not to
+    // matter: the check wrote its conclusion straight into a `state` column, so a
+    // merge or a new changes-requested review reached the rest of the app even
+    // though the cache had not caught up. Now the cache *is* the answer, and this
+    // fetch is the only observer of the conflict flag at all.
+    if (
+      prStateInfo.ciStatus !== workspace.prCiStatus ||
+      prStateInfo.cachedPrState !== workspace.prState ||
+      prStateInfo.reviewDecision !== workspace.prReviewState ||
+      prStateInfo.hasMergeConflict !== workspace.prHasMergeConflict
+    ) {
       signal.throwIfAborted();
-      await this.snapshot.recordCIObservation({
+      await this.snapshot.recordPrObservation({
         workspaceId: workspace.id,
+        prNumber: prStateInfo.prNumber,
         ciStatus: prStateInfo.ciStatus,
+        prState: prStateInfo.cachedPrState,
+        reviewState: prStateInfo.reviewDecision,
+        hasMergeConflict: prStateInfo.hasMergeConflict,
         observedAt: now,
       });
       signal.throwIfAborted();

@@ -1,6 +1,6 @@
 import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import type { workspaceRatchetService } from '@/backend/services/workspace';
-import type { CIStatus, RatchetState } from '@/shared/core';
+import type { CIStatus, PRState, RatchetState } from '@/shared/core';
 
 export interface RatchetStatusCheckRollupItem {
   name?: string;
@@ -19,7 +19,18 @@ export interface PRStateInfo {
   hasMergeConflict: boolean;
   latestReviewActivityAtMs: number | null;
   statusCheckRollup: RatchetStatusCheckRollupItem[] | null;
+  /** GitHub's raw state: `OPEN`, `CLOSED` or `MERGED`. What decisions branch on. */
   prState: string;
+  /**
+   * The same observation in the vocabulary `WorkspacePR.state` uses, which folds
+   * draft and review decision into one enum. Carried separately because the check
+   * has to *persist* the observation now, not just decide from it: `ratchetState`
+   * is projected from the cache, so anything this fetch saw and did not write
+   * would leave the projection reading a staler value than the check used.
+   */
+  cachedPrState: PRState;
+  /** GitHub's `reviewDecision`, verbatim, as `WorkspacePR.reviewState` stores it. */
+  reviewDecision: string | null;
   prNumber: number;
   reviewComments: Array<{
     author: string;

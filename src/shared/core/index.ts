@@ -26,6 +26,8 @@ export {
   WorkspaceStatus,
 } from './enums.js';
 
+export { deriveRatchetState, type RatchetStateInput } from './ratchet-state.js';
+
 export {
   deriveWorkspaceSidebarStatus,
   getWorkspaceActivityTooltip,

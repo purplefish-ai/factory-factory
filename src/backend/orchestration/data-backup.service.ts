@@ -11,7 +11,9 @@ import { createLogger } from '@/backend/services/logger.service';
 import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
+  type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
+import { deriveRatchetState, type RatchetState } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
@@ -60,6 +62,23 @@ const parseAutoIterationConfigForExport = (value: unknown) =>
   value == null ? null : autoIterationConfigSchema.parse(value);
 
 /** Strip the encrypted API key from issueTrackerConfig for safe export. */
+/**
+ * The `ratchetState` a v4 export file has to carry.
+ *
+ * Required at `schemaVersion: 4`, so it is still written — but computed now, not
+ * read: nothing stores it. It is also the only field that carries the conflict
+ * flag to a reader of this file predating `WorkspacePR.hasMergeConflict`.
+ */
+function exportedRatchetState(workspace: WorkspaceForExport): RatchetState {
+  return deriveRatchetState({
+    ratchetEnabled: workspace.ratchet?.enabled ?? true,
+    prState: workspace.pr?.state ?? 'NONE',
+    prCiStatus: workspace.pr?.ciStatus ?? 'UNKNOWN',
+    prHasMergeConflict: workspace.pr?.hasMergeConflict ?? false,
+    prReviewState: workspace.pr?.reviewState ?? null,
+  });
+}
+
 function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
   if (!config || typeof config !== 'object') {
     return null;
@@ -212,6 +231,10 @@ async function importWorkspaces(
             state: workspace.prState,
             reviewState: workspace.prReviewState,
             ciStatus: workspace.prCiStatus,
+            // A v4 file predating the projection never carried a conflict flag —
+            // `ratchetState: 'MERGE_CONFLICT'` was the only place a conflict was
+            // recorded, so that is what it restores from.
+            hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
             syncedAt: parseDate(workspace.prUpdatedAt),
             ciFailedAt: parseDate(workspace.prCiFailedAt),
             ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
@@ -222,10 +245,14 @@ async function importWorkspaces(
         // Phase 3+ ratchet fields, restored into the WorkspaceRatchet row this
         // create brings with it. A workspace without one would be invisible to
         // the ratchet's row-guarded writes.
+        //
+        // `ratchetState` is not among them: it is derived from the PR row above,
+        // so restoring it would create a second copy to disagree with. It is still
+        // read on the way in — for the conflict flag — and recomputed on the way
+        // out, because the v4 format requires the field.
         ratchet: {
           create: {
             enabled: workspace.ratchetEnabled,
-            state: workspace.ratchetState,
             lastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
             activeSessionId: workspace.ratchetActiveSessionId,
             dispatchSnapshotKey: workspace.ratchetLastCiRunId,
@@ -460,7 +487,7 @@ class DataBackupService {
           // the v4 export format carries them as workspace fields, and
           // `ratchetLastCiRunId` keeps the name it has in files already on disk.
           ratchetEnabled: w.ratchet?.enabled ?? true,
-          ratchetState: w.ratchet?.state ?? 'IDLE',
+          ratchetState: exportedRatchetState(w),
           ratchetLastCheckedAt: toISOString(w.ratchet?.lastCheckedAt ?? null),
           ratchetActiveSessionId: w.ratchet?.activeSessionId ?? null,
           ratchetLastCiRunId: w.ratchet?.dispatchSnapshotKey ?? null,

@@ -61,6 +61,7 @@ export type WorkspacePRMinAggregateOutputType = {
   state: $Enums.PRState | null
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
+  hasMergeConflict: boolean | null
   syncedAt: Date | null
   discoveryLastCheckedAt: Date | null
   discoveryRetryCount: number | null
@@ -78,6 +79,7 @@ export type WorkspacePRMaxAggregateOutputType = {
   state: $Enums.PRState | null
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
+  hasMergeConflict: boolean | null
   syncedAt: Date | null
   discoveryLastCheckedAt: Date | null
   discoveryRetryCount: number | null
@@ -95,6 +97,7 @@ export type WorkspacePRCountAggregateOutputType = {
   state: number
   reviewState: number
   ciStatus: number
+  hasMergeConflict: number
   syncedAt: number
   discoveryLastCheckedAt: number
   discoveryRetryCount: number
@@ -124,6 +127,7 @@ export type WorkspacePRMinAggregateInputType = {
   state?: true
   reviewState?: true
   ciStatus?: true
+  hasMergeConflict?: true
   syncedAt?: true
   discoveryLastCheckedAt?: true
   discoveryRetryCount?: true
@@ -141,6 +145,7 @@ export type WorkspacePRMaxAggregateInputType = {
   state?: true
   reviewState?: true
   ciStatus?: true
+  hasMergeConflict?: true
   syncedAt?: true
   discoveryLastCheckedAt?: true
   discoveryRetryCount?: true
@@ -158,6 +163,7 @@ export type WorkspacePRCountAggregateInputType = {
   state?: true
   reviewState?: true
   ciStatus?: true
+  hasMergeConflict?: true
   syncedAt?: true
   discoveryLastCheckedAt?: true
   discoveryRetryCount?: true
@@ -262,6 +268,7 @@ export type WorkspacePRGroupByOutputType = {
   state: $Enums.PRState
   reviewState: string | null
   ciStatus: $Enums.CIStatus
+  hasMergeConflict: boolean
   syncedAt: Date | null
   discoveryLastCheckedAt: Date | null
   discoveryRetryCount: number
@@ -302,6 +309,7 @@ export type WorkspacePRWhereInput = {
   state?: Prisma.EnumPRStateFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   discoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   discoveryRetryCount?: Prisma.IntFilter<"WorkspacePR"> | number
@@ -320,6 +328,7 @@ export type WorkspacePROrderByWithRelationInput = {
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   discoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   discoveryRetryCount?: Prisma.SortOrder
@@ -341,6 +350,7 @@ export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
   state?: Prisma.EnumPRStateFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   discoveryLastCheckedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   discoveryRetryCount?: Prisma.IntFilter<"WorkspacePR"> | number
@@ -359,6 +369,7 @@ export type WorkspacePROrderByWithAggregationInput = {
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   discoveryLastCheckedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   discoveryRetryCount?: Prisma.SortOrder
@@ -384,6 +395,7 @@ export type WorkspacePRScalarWhereWithAggregatesInput = {
   state?: Prisma.EnumPRStateWithAggregatesFilter<"WorkspacePR"> | $Enums.PRState
   reviewState?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusWithAggregatesFilter<"WorkspacePR"> | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolWithAggregatesFilter<"WorkspacePR"> | boolean
   syncedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   discoveryLastCheckedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   discoveryRetryCount?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
@@ -400,6 +412,7 @@ export type WorkspacePRCreateInput = {
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
   syncedAt?: Date | string | null
   discoveryLastCheckedAt?: Date | string | null
   discoveryRetryCount?: number
@@ -418,6 +431,7 @@ export type WorkspacePRUncheckedCreateInput = {
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
   syncedAt?: Date | string | null
   discoveryLastCheckedAt?: Date | string | null
   discoveryRetryCount?: number
@@ -434,6 +448,7 @@ export type WorkspacePRUpdateInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -452,6 +467,7 @@ export type WorkspacePRUncheckedUpdateInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -469,6 +485,7 @@ export type WorkspacePRCreateManyInput = {
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
   syncedAt?: Date | string | null
   discoveryLastCheckedAt?: Date | string | null
   discoveryRetryCount?: number
@@ -485,6 +502,7 @@ export type WorkspacePRUpdateManyMutationInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -502,6 +520,7 @@ export type WorkspacePRUncheckedUpdateManyInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -524,6 +543,7 @@ export type WorkspacePRCountOrderByAggregateInput = {
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   discoveryLastCheckedAt?: Prisma.SortOrder
   discoveryRetryCount?: Prisma.SortOrder
@@ -546,6 +566,7 @@ export type WorkspacePRMaxOrderByAggregateInput = {
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   discoveryLastCheckedAt?: Prisma.SortOrder
   discoveryRetryCount?: Prisma.SortOrder
@@ -563,6 +584,7 @@ export type WorkspacePRMinOrderByAggregateInput = {
   state?: Prisma.SortOrder
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
+  hasMergeConflict?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   discoveryLastCheckedAt?: Prisma.SortOrder
   discoveryRetryCount?: Prisma.SortOrder
@@ -624,6 +646,7 @@ export type WorkspacePRCreateWithoutWorkspaceInput = {
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
   syncedAt?: Date | string | null
   discoveryLastCheckedAt?: Date | string | null
   discoveryRetryCount?: number
@@ -640,6 +663,7 @@ export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
   state?: $Enums.PRState
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
+  hasMergeConflict?: boolean
   syncedAt?: Date | string | null
   discoveryLastCheckedAt?: Date | string | null
   discoveryRetryCount?: number
@@ -672,6 +696,7 @@ export type WorkspacePRUpdateWithoutWorkspaceInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -688,6 +713,7 @@ export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
   state?: Prisma.EnumPRStateFieldUpdateOperationsInput | $Enums.PRState
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
+  hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryLastCheckedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   discoveryRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -707,6 +733,7 @@ export type WorkspacePRSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
+  hasMergeConflict?: boolean
   syncedAt?: boolean
   discoveryLastCheckedAt?: boolean
   discoveryRetryCount?: boolean
@@ -725,6 +752,7 @@ export type WorkspacePRSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
+  hasMergeConflict?: boolean
   syncedAt?: boolean
   discoveryLastCheckedAt?: boolean
   discoveryRetryCount?: boolean
@@ -743,6 +771,7 @@ export type WorkspacePRSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
+  hasMergeConflict?: boolean
   syncedAt?: boolean
   discoveryLastCheckedAt?: boolean
   discoveryRetryCount?: boolean
@@ -761,6 +790,7 @@ export type WorkspacePRSelectScalar = {
   state?: boolean
   reviewState?: boolean
   ciStatus?: boolean
+  hasMergeConflict?: boolean
   syncedAt?: boolean
   discoveryLastCheckedAt?: boolean
   discoveryRetryCount?: boolean
@@ -771,7 +801,7 @@ export type WorkspacePRSelectScalar = {
   reviewLastCommentId?: boolean
 }
 
-export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "url" | "number" | "state" | "reviewState" | "ciStatus" | "syncedAt" | "discoveryLastCheckedAt" | "discoveryRetryCount" | "discoveryNextCheckAt" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId", ExtArgs["result"]["workspacePR"]>
+export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "url" | "number" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "discoveryLastCheckedAt" | "discoveryRetryCount" | "discoveryNextCheckAt" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId", ExtArgs["result"]["workspacePR"]>
 export type WorkspacePRInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -794,6 +824,7 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
     state: $Enums.PRState
     reviewState: string | null
     ciStatus: $Enums.CIStatus
+    hasMergeConflict: boolean
     syncedAt: Date | null
     discoveryLastCheckedAt: Date | null
     discoveryRetryCount: number
@@ -1232,6 +1263,7 @@ export interface WorkspacePRFieldRefs {
   readonly state: Prisma.FieldRef<"WorkspacePR", 'PRState'>
   readonly reviewState: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly ciStatus: Prisma.FieldRef<"WorkspacePR", 'CIStatus'>
+  readonly hasMergeConflict: Prisma.FieldRef<"WorkspacePR", 'Boolean'>
   readonly syncedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly discoveryLastCheckedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly discoveryRetryCount: Prisma.FieldRef<"WorkspacePR", 'Int'>

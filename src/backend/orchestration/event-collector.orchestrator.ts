@@ -22,10 +22,8 @@ import {
 } from '@/backend/lib/session-summaries';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
-  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
   PR_URL_ATTACHED,
-  type PRDispatchInvalidatedEvent,
   type PRSnapshotUpdatedEvent,
   type PRUrlAttachedEvent,
   type prFetchRegistry,
@@ -740,9 +738,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       immediate: true,
     });
 
-    if (event.ratchetDispatchChanged) {
-      requestAuthoritativeRatchetProjection(event.workspaceId);
-    }
+    // Every field this event carries is an input to `deriveRatchetState`, so a PR
+    // change is a ratchet-state change; re-project rather than patching a copy.
+    // Before the projection this refresh was conditional on the dispatch record
+    // moving, which is why a snapshot could show `prState: MERGED` next to a
+    // `ratchetState` from the previous ratchet poll.
+    requestAuthoritativeRatchetProjection(event.workspaceId);
 
     if (shouldRefreshRatchet) {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
@@ -756,17 +757,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
             error: error instanceof Error ? error.message : String(error),
           });
         });
-    }
-
-    // Closed PRs are excluded from the ratchet poll set, so the poll loop can no
-    // longer settle their ratchet state; reset it directly (no GitHub fetch needed).
-    if (event.prState === 'CLOSED') {
-      void dependencies.ratchetService.markPrClosed(event.workspaceId).catch((error) => {
-        state.logger.warn('Failed to reset ratchet state for closed PR', {
-          workspaceId: event.workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
     }
 
     // Transition linked Linear issue to completed when PR is merged
@@ -787,20 +777,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
     dependencies.prSnapshotService.off(PR_URL_ATTACHED, prUrlAttachedHandler)
-  );
-
-  const prDispatchInvalidatedHandler = (event: PRDispatchInvalidatedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      { prCiStatus: event.prCiStatus },
-      'event:pr_dispatch_invalidated',
-      { immediate: true }
-    );
-    requestAuthoritativeRatchetProjection(event.workspaceId);
-  };
-  dependencies.prSnapshotService.on(PR_DISPATCH_INVALIDATED, prDispatchInvalidatedHandler);
-  state.teardownListeners.push(() =>
-    dependencies.prSnapshotService.off(PR_DISPATCH_INVALIDATED, prDispatchInvalidatedHandler)
   );
 
   // 3. Ratchet state changes

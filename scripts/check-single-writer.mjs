@@ -60,8 +60,10 @@ const workspaceFieldOwners = {
   // ratchet's below: they live on their own table, and OWNED_SIDE_TABLES keeps
   // the write in one file rather than one accessor method.
 
-  // The ratchet's seven fields are absent here on purpose, same as the PR
-  // cache's above.
+  // The ratchet's fields are absent here on purpose, same as the PR cache's
+  // above. `ratchetState` is absent for a further reason: it is not stored at
+  // all. It is projected from `WorkspacePR` by `deriveRatchetState`, so there is
+  // no write for a single-writer rule to police.
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),

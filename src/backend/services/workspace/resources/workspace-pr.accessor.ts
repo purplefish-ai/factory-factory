@@ -38,6 +38,12 @@ export interface WorkspacePRFields {
   prState: PRState;
   prReviewState: string | null;
   prCiStatus: CIStatus;
+  /**
+   * GitHub's `mergeStateStatus == DIRTY`. Cached because `deriveRatchetState`
+   * needs it and nothing else persisted it: the ratchet used to fold a conflict
+   * straight into `RatchetState.MERGE_CONFLICT` and store only that.
+   */
+  prHasMergeConflict: boolean;
   prUpdatedAt: Date | null;
   prDiscoveryLastCheckedAt: Date | null;
   prDiscoveryRetryCount: number;
@@ -63,6 +69,7 @@ export const WORKSPACE_PR_DEFAULTS: WorkspacePRFields = {
   prState: 'NONE',
   prReviewState: null,
   prCiStatus: 'UNKNOWN',
+  prHasMergeConflict: false,
   prUpdatedAt: null,
   prDiscoveryLastCheckedAt: null,
   prDiscoveryRetryCount: 0,
@@ -87,6 +94,7 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
     prState: pr.state,
     prReviewState: pr.reviewState,
     prCiStatus: pr.ciStatus,
+    prHasMergeConflict: pr.hasMergeConflict,
     prUpdatedAt: pr.syncedAt,
     prDiscoveryLastCheckedAt: pr.discoveryLastCheckedAt,
     prDiscoveryRetryCount: pr.discoveryRetryCount,
@@ -123,6 +131,9 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   if (fields.prCiStatus !== undefined) {
     columns.ciStatus = fields.prCiStatus;
   }
+  if (fields.prHasMergeConflict !== undefined) {
+    columns.hasMergeConflict = fields.prHasMergeConflict;
+  }
   if (fields.prUpdatedAt !== undefined) {
     columns.syncedAt = fields.prUpdatedAt;
   }
@@ -150,13 +161,14 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   return columns;
 }
 
-/** The five aggregate fields a refresh compares against before writing. */
+/** The aggregate fields a refresh compares against before writing. */
 export interface PRAggregateGuard {
   prUrl: string | null;
   prNumber: number | null;
   prState: PRState;
   prReviewState: string | null;
   prCiStatus: CIStatus;
+  prHasMergeConflict: boolean;
   prUpdatedAt: Date | null;
 }
 
@@ -412,6 +424,7 @@ class WorkspacePRAccessor {
         state: true,
         reviewState: true,
         ciStatus: true,
+        hasMergeConflict: true,
         syncedAt: true,
       },
     });
@@ -424,6 +437,7 @@ class WorkspacePRAccessor {
       prState: row.state,
       prReviewState: row.reviewState,
       prCiStatus: row.ciStatus,
+      prHasMergeConflict: row.hasMergeConflict,
       prUpdatedAt: row.syncedAt,
     };
   }
@@ -446,6 +460,7 @@ class WorkspacePRAccessor {
         number: guard.prNumber,
         state: guard.prState,
         reviewState: guard.prReviewState,
+        hasMergeConflict: guard.prHasMergeConflict,
         ciStatus: guard.prCiStatus,
         syncedAt: guard.prUpdatedAt,
       },

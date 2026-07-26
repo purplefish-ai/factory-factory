@@ -1439,6 +1439,7 @@ export const WorkspacePRScalarFieldEnum = {
   state: 'state',
   reviewState: 'reviewState',
   ciStatus: 'ciStatus',
+  hasMergeConflict: 'hasMergeConflict',
   syncedAt: 'syncedAt',
   discoveryLastCheckedAt: 'discoveryLastCheckedAt',
   discoveryRetryCount: 'discoveryRetryCount',
@@ -1455,7 +1456,6 @@ export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[key
 export const WorkspaceRatchetScalarFieldEnum = {
   workspaceId: 'workspaceId',
   enabled: 'enabled',
-  state: 'state',
   lastCheckedAt: 'lastCheckedAt',
   activeSessionId: 'activeSessionId',
   dispatchSnapshotKey: 'dispatchSnapshotKey',
@@ -1738,13 +1738,6 @@ export type EnumPRStateFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMo
  * Reference to a field of type 'CIStatus'
  */
 export type EnumCIStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CIStatus'>
-    
-
-
-/**
- * Reference to a field of type 'RatchetState'
- */
-export type EnumRatchetStateFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetState'>
     
 
 

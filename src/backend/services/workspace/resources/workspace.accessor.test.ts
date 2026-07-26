@@ -136,6 +136,86 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  describe('ratchetState projection at the flatten boundary', () => {
+    function row(
+      pr: Record<string, unknown>,
+      ratchet: Record<string, unknown> = { enabled: true }
+    ) {
+      return { id: 'ws-1', ratchet, pr };
+    }
+
+    it('derives the state from the joined PR row instead of reading a column', async () => {
+      mockFindUnique.mockResolvedValue(
+        row({ state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: false, reviewState: null })
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        ratchetState: 'CI_FAILED',
+      });
+    });
+
+    it('joins both side tables on the read that projects the state', async () => {
+      mockFindUnique.mockResolvedValue(row({ state: 'OPEN', ciStatus: 'SUCCESS' }));
+
+      await workspaceAccessor.findById('ws-1');
+
+      expect(mockFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({ ratchet: true, pr: true }),
+        })
+      );
+    });
+
+    it('projects IDLE for a disabled workspace whatever the PR says', async () => {
+      // The old settling write left a window where a disabled workspace still
+      // read as its last progression state. The projection closes it: the two
+      // cannot disagree because one is computed from the other.
+      mockFindUnique.mockResolvedValue(
+        row(
+          { state: 'OPEN', ciStatus: 'FAILURE', hasMergeConflict: true, reviewState: null },
+          { enabled: false }
+        )
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
+      });
+    });
+
+    it('surfaces a merge conflict that only the conflict column records', async () => {
+      mockFindUnique.mockResolvedValue(
+        row({ state: 'OPEN', ciStatus: 'SUCCESS', hasMergeConflict: true, reviewState: null })
+      );
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        prHasMergeConflict: true,
+        ratchetState: 'MERGE_CONFLICT',
+      });
+    });
+
+    it('falls back to the side-table defaults when a row is missing', async () => {
+      mockFindUnique.mockResolvedValue({ id: 'ws-1', ratchet: null, pr: null });
+
+      await expect(workspaceAccessor.findById('ws-1')).resolves.toMatchObject({
+        // Defaults are enabled + no PR, which derives to IDLE.
+        ratchetEnabled: true,
+        prState: 'NONE',
+        ratchetState: 'IDLE',
+      });
+    });
+
+    it('drops the relation objects so callers see only the flat shape', async () => {
+      mockFindUnique.mockResolvedValue(row({ state: 'OPEN', ciStatus: 'PENDING' }));
+
+      const workspace = await workspaceAccessor.findById('ws-1');
+
+      expect(workspace).not.toHaveProperty('ratchet');
+      expect(workspace).not.toHaveProperty('pr');
+      expect(workspace).toMatchObject({ ratchetState: 'CI_RUNNING' });
+    });
+  });
+
   describe('PR aggregate writes with dispatch reset', () => {
     /**
      * The aggregate lives on WorkspacePR and the dispatch on WorkspaceRatchet, so
@@ -319,6 +399,54 @@ describe('workspaceAccessor', () => {
       expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
     });
 
+    it('refuses an observation whose PR is no longer the one attached', async () => {
+      // The workspace was re-pointed at a new PR while the check was off fetching
+      // the old one. The aggregate compare-and-swap cannot see this: it reads its
+      // guard inside the write transaction, so it catches a racing write, not a
+      // stale observation. Without the guard a check that saw MERGED on the old PR
+      // would stamp it onto the new one -- and a workspace deriving MERGED leaves
+      // the ratchet poll set entirely.
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/99', number: 99 })
+      );
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'MERGED',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+      expect(mockPrUpdateMany).not.toHaveBeenCalled();
+      expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('accepts an observation when the cached PR number is not yet known', async () => {
+      // Discovery attaches a url without a number, and the check's own number came
+      // from parsing that url, so a null is "not known yet" rather than a different
+      // PR. Rejecting it would block the first observation of a discovered PR.
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/42', number: null })
+      );
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'OPEN',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toMatchObject({ applied: true });
+    });
+
     it('resets settled metadata for a changed direct CI observation', async () => {
       mockPrFindUnique.mockResolvedValue(
         currentColumns({ url: 'https://github.com/org/repo/pull/42', number: 42 })
@@ -327,8 +455,12 @@ describe('workspaceAccessor', () => {
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
-        workspaceAccessor.applyCIObservationWithDispatchReset('ws-1', {
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
           prCiStatus: 'PENDING',
+          prState: 'OPEN',
+          prReviewState: null,
+          prHasMergeConflict: false,
           prUpdatedAt,
         })
       ).resolves.toEqual({ applied: true, dispatchReset: true });

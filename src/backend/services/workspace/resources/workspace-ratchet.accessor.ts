@@ -1,21 +1,28 @@
 import type { Prisma, RatchetDispatchOutcome, WorkspaceRatchet } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { flattenWorkspacePR } from '@/backend/services/workspace/resources/workspace-pr.accessor';
-import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import {
+  type CIStatus,
+  deriveRatchetState,
+  type PRState,
+  type RatchetState,
+  type WorkspaceStatus,
+} from '@/shared/core';
 
 /**
  * Persistence for `WorkspaceRatchet`, the ratchet's own 1:1 row per workspace.
  *
- * This file is the only writer of that table. Before the split these seven
- * fields sat on `Workspace` alongside six other concerns, and a bespoke lint
- * rule (`scripts/check-single-writer.mjs`) was what stopped other services
- * writing them. Now the type system does it: no other accessor can name these
- * columns.
+ * This file is the only writer of that table, enforced by the owned-side-table
+ * rule in `scripts/check-single-writer.mjs`. Before the split these fields sat on
+ * `Workspace` alongside six other concerns, policed field-by-field by that same
+ * script.
  *
- * Every conditional write below guards on `enabled` and/or `state` in the same
- * statement it writes, which is why those two live here rather than staying on
- * `Workspace` — a cross-table guard would need a transaction to say what one
- * `updateMany` says now.
+ * `state` is no longer among them. It was a projection of the PR observation, so
+ * it is computed by `deriveRatchetState` at the point of reading and there is
+ * nothing here to keep in step with `WorkspacePR`. What is left is genuinely
+ * mutable — the toggle and the dispatch record — and every conditional write
+ * below guards on `enabled` in the same statement it writes, which is why the
+ * toggle lives next to the dispatch record.
  */
 
 /**
@@ -29,7 +36,6 @@ import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/
  */
 export interface WorkspaceRatchetFields {
   ratchetEnabled: boolean;
-  ratchetState: RatchetState;
   ratchetLastCheckedAt: Date | null;
   ratchetActiveSessionId: string | null;
   ratchetDispatchSnapshotKey: string | null;
@@ -49,7 +55,6 @@ export interface WorkspaceRatchetFields {
  */
 export const WORKSPACE_RATCHET_DEFAULTS: WorkspaceRatchetFields = {
   ratchetEnabled: true,
-  ratchetState: 'IDLE',
   ratchetLastCheckedAt: null,
   ratchetActiveSessionId: null,
   ratchetDispatchSnapshotKey: null,
@@ -69,7 +74,6 @@ export function flattenWorkspaceRatchet(
   }
   return {
     ratchetEnabled: ratchet.enabled,
-    ratchetState: ratchet.state,
     ratchetLastCheckedAt: ratchet.lastCheckedAt,
     ratchetActiveSessionId: ratchet.activeSessionId,
     ratchetDispatchSnapshotKey: ratchet.dispatchSnapshotKey,
@@ -83,7 +87,11 @@ export interface WorkspaceForRatchet extends WorkspaceRatchetFields {
   prUrl: string;
   prNumber: number | null;
   prState: PRState;
+  prReviewState: string | null;
   prCiStatus: CIStatus;
+  prHasMergeConflict: boolean;
+  /** Derived, not stored. See `deriveRatchetState`. */
+  ratchetState: RatchetState;
   defaultSessionProvider: Prisma.WorkspaceGetPayload<object>['defaultSessionProvider'];
   ratchetSessionProvider: Prisma.WorkspaceGetPayload<object>['ratchetSessionProvider'];
   prReviewLastCheckedAt: Date | null;
@@ -109,18 +117,36 @@ type RatchetCandidateRow = Prisma.WorkspaceGetPayload<{ select: typeof ratchetCa
  */
 function toWorkspaceForRatchet(row: RatchetCandidateRow): WorkspaceForRatchet | null {
   const { ratchet, pr, ...workspace } = row;
-  const { prUrl, prNumber, prState, prCiStatus, prReviewLastCheckedAt } = flattenWorkspacePR(pr);
+  const {
+    prUrl,
+    prNumber,
+    prState,
+    prReviewState,
+    prCiStatus,
+    prHasMergeConflict,
+    prReviewLastCheckedAt,
+  } = flattenWorkspacePR(pr);
   if (prUrl === null) {
     return null;
   }
+  const ratchetFields = flattenWorkspaceRatchet(ratchet);
   return {
     ...workspace,
     prUrl,
     prNumber,
     prState,
+    prReviewState,
     prCiStatus,
+    prHasMergeConflict,
     prReviewLastCheckedAt,
-    ...flattenWorkspaceRatchet(ratchet),
+    ...ratchetFields,
+    ratchetState: deriveRatchetState({
+      ratchetEnabled: ratchetFields.ratchetEnabled,
+      prState,
+      prCiStatus,
+      prHasMergeConflict,
+      prReviewState,
+    }),
   };
 }
 
@@ -136,8 +162,12 @@ class WorkspaceRatchetAccessor {
     const rows = await prisma.workspace.findMany({
       where: {
         status: 'READY',
-        pr: { url: { not: null }, state: { not: 'CLOSED' } },
-        ratchet: { enabled: true, state: { not: 'MERGED' } },
+        // Closed and merged PRs are both skipped on the cached `prState`. That
+        // used to be two conditions -- `pr.state != CLOSED` and
+        // `ratchet.state != MERGED` -- reading the same fact from two tables
+        // that could disagree about it.
+        pr: { url: { not: null }, state: { notIn: ['CLOSED', 'MERGED'] } },
+        ratchet: { enabled: true },
       },
       select: ratchetCandidateSelect,
       orderBy: { ratchet: { lastCheckedAt: 'asc' } },
@@ -159,23 +189,32 @@ class WorkspaceRatchetAccessor {
   ): Promise<
     | (Pick<
         WorkspaceRatchetFields,
-        'ratchetEnabled' | 'ratchetState' | 'ratchetDispatchOutcome' | 'ratchetDispatchRetryCount'
-      > & { status: WorkspaceStatus })
+        'ratchetEnabled' | 'ratchetDispatchOutcome' | 'ratchetDispatchRetryCount'
+      > & { ratchetState: RatchetState; status: WorkspaceStatus })
     | null
   > {
     const row = await prisma.workspace.findUnique({
       where: { id: workspaceId },
-      select: { status: true, ratchet: true },
+      // `pr` joins in because the projected state is derived from it. Still
+      // narrow: two 1:1 rows rather than the whole workspace.
+      select: { status: true, ratchet: true, pr: true },
     });
     if (!row) {
       return null;
     }
-    const { ratchetEnabled, ratchetState, ratchetDispatchOutcome, ratchetDispatchRetryCount } =
+    const { ratchetEnabled, ratchetDispatchOutcome, ratchetDispatchRetryCount } =
       flattenWorkspaceRatchet(row.ratchet);
+    const { prState, prCiStatus, prHasMergeConflict, prReviewState } = flattenWorkspacePR(row.pr);
     return {
       status: row.status,
       ratchetEnabled,
-      ratchetState,
+      ratchetState: deriveRatchetState({
+        ratchetEnabled,
+        prState,
+        prCiStatus,
+        prHasMergeConflict,
+        prReviewState,
+      }),
       ratchetDispatchOutcome,
       ratchetDispatchRetryCount,
     };
@@ -245,35 +284,18 @@ class WorkspaceRatchetAccessor {
   }
 
   /**
-   * Compare-and-swap state transition, mirroring `transitionWithCas`. Persists
-   * only while ratcheting remains enabled AND the state still matches the one
-   * the caller observed, so stale in-flight checks can neither overwrite the
-   * disabled state nor a concurrent transition, and emitted `fromState` values
-   * are accurate by construction. Transition validity is checked by the caller
-   * against RATCHET_VALID_TRANSITIONS (see `ratchet-state-machine.ts`).
+   * Stamp the check timestamp, only while ratcheting is still enabled.
+   *
+   * Returning false is how a check learns it was disabled while it ran, which is
+   * the one thing the old state CAS detected that still matters. The state
+   * half of that CAS is gone with the column: there is no stored value left for
+   * a stale check to overwrite, and the `fromState` it protected on
+   * `RATCHET_STATE_CHANGED` is now computed from the row the emitter read.
    */
-  async transitionStateIfEnabled(
-    workspaceId: string,
-    fromState: RatchetState,
-    data: { ratchetState: RatchetState; ratchetLastCheckedAt: Date }
-  ): Promise<boolean> {
+  async recordCheckIfEnabled(workspaceId: string, checkedAt: Date): Promise<boolean> {
     const result = await prisma.workspaceRatchet.updateMany({
-      where: { workspaceId, enabled: true, state: fromState },
-      data: { state: data.ratchetState, lastCheckedAt: data.ratchetLastCheckedAt },
-    });
-    return result.count > 0;
-  }
-
-  /**
-   * Settle state to IDLE for a workspace whose ratcheting is disabled, CAS on
-   * the observed `fromState`. The disabled condition keeps this write from
-   * clobbering a concurrent re-enable; the `fromState` condition keeps the
-   * emitted transition accurate.
-   */
-  async settleIdleWhileDisabled(workspaceId: string, fromState: RatchetState): Promise<boolean> {
-    const result = await prisma.workspaceRatchet.updateMany({
-      where: { workspaceId, enabled: false, state: fromState },
-      data: { state: 'IDLE', lastCheckedAt: new Date() },
+      where: { workspaceId, enabled: true },
+      data: { lastCheckedAt: checkedAt },
     });
     return result.count > 0;
   }
@@ -308,7 +330,6 @@ class WorkspaceRatchetAccessor {
       where: { workspaceId },
       data: {
         enabled: false,
-        state: 'IDLE',
         activeSessionId: null,
         dispatchSnapshotKey: null,
         dispatchOutcome: null,

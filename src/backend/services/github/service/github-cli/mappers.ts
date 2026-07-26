@@ -7,7 +7,6 @@ import type {
   GitHubStatusCheck,
 } from '@/shared/github-types';
 import type { fullPRDetailsSchema } from './schemas';
-import type { PRStatusFromGitHub } from './types';
 
 const CHECK_STATUS_VALUES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'QUEUED'] as const;
 const CHECK_CONCLUSION_VALUES = [
@@ -166,9 +165,18 @@ export function computeCIStatus(
 }
 
 /**
- * Convert GitHub PR status to our PRState enum.
+ * Fold a raw GitHub observation into the enriched `PRState` the cache stores.
+ *
+ * The parameter is structural rather than `PRStatusFromGitHub` so the ratchet can
+ * reach it through its bridge: its PR fetch returns the same three fields with
+ * looser types, and both writers of `WorkspacePR.state` have to agree on what
+ * `DRAFT` and `APPROVED` mean.
  */
-export function computePRState(status: PRStatusFromGitHub): PRState {
+export function computePRState(status: {
+  state: string;
+  isDraft: boolean;
+  reviewDecision: string | null;
+}): PRState {
   // Check if merged first
   if (status.state === 'MERGED') {
     return PRState.MERGED;
