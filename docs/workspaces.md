@@ -192,8 +192,11 @@ column for one observed boolean.
 The migration backfills it from two places. `state = 'MERGE_CONFLICT'` is the obvious one but it
 under-reports, because a failing build outranked a conflict in the derivation — a PR with both was
 stored as `CI_FAILED`. The dispatch snapshot key records the conflict independently
-(`|merge:conflict`), so it recovers the masked cases; it is consulted only for PRs still open, where
-the flag is read at all and where the key is freshest.
+(`|merge:conflict`), so it recovers the masked cases — but the key outlives the dispatch that set it,
+so it is believed only on `CI_FAILED` rows, which is exactly the masked case: any other state proves
+there was no conflict at the last observation, because a conflict would have produced
+`MERGE_CONFLICT` instead. Restricted to still-open PRs too, since a closed or merged PR
+short-circuits before the flag is read.
 
 **The ratchet check persists the whole observation, not just CI.** This is the part that makes the
 projection sound: `ratchetState` is read from the cache, so anything a check saw and kept to itself
@@ -202,7 +205,12 @@ straight into a `state` column, so a merge or a new changes-requested review rea
 while the cache lagged the PR-sync poller. `recordPrObservation` now writes `prState`,
 `prReviewState`, `prCiStatus` and `hasMergeConflict` together, mapping the raw observation through
 the github capsule's own `computePRState` so both writers of `WorkspacePR.state` agree on what
-`DRAFT` and `APPROVED` mean. The conflict flag also joins the aggregate change detector and its
+`DRAFT` and `APPROVED` mean. It also publishes `PR_SNAPSHOT_UPDATED` for every applied write, the
+same event the PR-sync poller publishes — otherwise a merge the ratchet saw first would reach the
+database and stop there, leaving the client on `OPEN` and the linked Linear issue uncompleted until
+the poller came round. `PR_DISPATCH_INVALIDATED` is gone: it had one emitter and one handler and
+fired only when a settled dispatch was reset, which is now carried as `ratchetDispatchChanged` on
+the snapshot event. The conflict flag also joins the aggregate change detector and its
 compare-and-swap guard, so a conflict appearing or clearing invalidates a settled dispatch like any
 other aggregate field and the two writers cannot race.
 

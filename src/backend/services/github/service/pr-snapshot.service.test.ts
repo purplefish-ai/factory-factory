@@ -48,7 +48,6 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import {
-  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
   PR_URL_ATTACHED,
   type PRSnapshotUpdatedEvent,
@@ -396,6 +395,7 @@ describe('PRSnapshotService', () => {
       const refresh = prSnapshotService.refreshWorkspace('w-ordered');
       await vi.waitFor(() => expect(mockFetchAndComputePRState).toHaveBeenCalledTimes(1));
       const directObservation = prSnapshotService.recordPrObservation('w-ordered', {
+        prNumber: 1,
         ciStatus: 'FAILURE',
         prState: 'OPEN',
         reviewState: null,
@@ -425,6 +425,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T00:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-1', {
+        prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
         reviewState: null,
@@ -445,6 +446,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T01:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-2', {
+        prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
         reviewState: null,
@@ -466,6 +468,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T02:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-3', {
+        prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
         reviewState: null,
@@ -490,15 +493,16 @@ describe('PRSnapshotService', () => {
       prSnapshotService.removeAllListeners();
     });
 
-    it('invalidates dispatch ownership when a ratchet observation resets it', async () => {
+    it('publishes a snapshot update for a ratchet observation that reset a dispatch', async () => {
       mockApplyPrObservationWithDispatchReset.mockResolvedValue({
         applied: true,
         dispatchReset: true,
       });
       const events: Array<{ workspaceId: string }> = [];
-      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-exhausted', {
+        prNumber: 1,
         ciStatus: 'PENDING',
         prState: 'OPEN',
         reviewState: null,
@@ -506,22 +510,79 @@ describe('PRSnapshotService', () => {
         observedAt: new Date('2026-07-17T12:00:00.000Z'),
       });
 
-      // The event carries the PR state too, so the snapshot learns a merge or
-      // close the ratchet check observed rather than only the CI status.
       expect(events).toEqual([
-        { workspaceId: 'ws-exhausted', prCiStatus: 'PENDING', prState: 'OPEN' },
+        {
+          workspaceId: 'ws-exhausted',
+          prNumber: 1,
+          prState: 'OPEN',
+          prCiStatus: 'PENDING',
+          prReviewState: null,
+          ratchetDispatchChanged: true,
+        },
       ]);
     });
 
-    it('does not invalidate from a ratchet observation rejected by the guard', async () => {
+    it('publishes a snapshot update even when no dispatch was reset', async () => {
+      // The gap this closes: publication used to be conditional on a settled
+      // dispatch being reset, so a merge the ratchet saw first reached the
+      // database and stopped there — the client stayed on OPEN and the linked
+      // Linear issue waited for the PR poller.
+      mockApplyPrObservationWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: false,
+      });
+      const events: Array<{ workspaceId: string; prState: string }> = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
+
+      await prSnapshotService.recordPrObservation('ws-merged', {
+        prNumber: 2,
+        ciStatus: 'SUCCESS',
+        prState: 'MERGED',
+        reviewState: null,
+        hasMergeConflict: false,
+        observedAt: new Date('2026-07-17T12:00:00.000Z'),
+      });
+
+      expect(events).toEqual([
+        {
+          workspaceId: 'ws-merged',
+          prNumber: 2,
+          prState: 'MERGED',
+          prCiStatus: 'SUCCESS',
+          prReviewState: null,
+        },
+      ]);
+    });
+
+    it('omits prUrl so a ratchet observation is never read as a PR switch', async () => {
+      mockApplyPrObservationWithDispatchReset.mockResolvedValue({
+        applied: true,
+        dispatchReset: false,
+      });
+      const events: Record<string, unknown>[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
+
+      await prSnapshotService.recordPrObservation('ws-same-pr', {
+        prNumber: 3,
+        ciStatus: 'SUCCESS',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
+      });
+
+      expect(events[0]).not.toHaveProperty('prUrl');
+    });
+
+    it('publishes nothing for a ratchet observation rejected by the guard', async () => {
       mockApplyPrObservationWithDispatchReset.mockResolvedValue({
         applied: false,
         dispatchReset: false,
       });
       const events: Array<{ workspaceId: string }> = [];
-      prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-stale-ci', {
+        prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
         reviewState: null,

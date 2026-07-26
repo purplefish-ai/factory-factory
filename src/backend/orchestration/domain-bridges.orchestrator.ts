@@ -333,6 +333,7 @@ export function configureDomainBridges(services: BridgeServices): void {
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
     recordPrObservation: ({
       workspaceId,
+      prNumber,
       ciStatus,
       prState,
       reviewState,
@@ -341,6 +342,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       observedAt,
     }) =>
       prSnapshotService.recordPrObservation(workspaceId, {
+        prNumber,
         ciStatus,
         prState,
         reviewState,

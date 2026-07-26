@@ -879,6 +879,7 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
       await this.snapshot.recordPrObservation({
         workspaceId: workspace.id,
+        prNumber: prStateInfo.prNumber,
         ciStatus: prStateInfo.ciStatus,
         prState: prStateInfo.cachedPrState,
         reviewState: prStateInfo.reviewDecision,

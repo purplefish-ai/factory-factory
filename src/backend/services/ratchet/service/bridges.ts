@@ -140,6 +140,7 @@ export interface RatchetPRSnapshotBridge {
    */
   recordPrObservation(input: {
     workspaceId: string;
+    prNumber: number;
     ciStatus: CIStatus;
     prState: PRState;
     reviewState: string | null;

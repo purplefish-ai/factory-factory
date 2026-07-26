@@ -22,10 +22,8 @@ import {
 } from '@/backend/lib/session-summaries';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
-  PR_DISPATCH_INVALIDATED,
   PR_SNAPSHOT_UPDATED,
   PR_URL_ATTACHED,
-  type PRDispatchInvalidatedEvent,
   type PRSnapshotUpdatedEvent,
   type PRUrlAttachedEvent,
   type prFetchRegistry,
@@ -779,23 +777,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
     dependencies.prSnapshotService.off(PR_URL_ATTACHED, prUrlAttachedHandler)
-  );
-
-  const prDispatchInvalidatedHandler = (event: PRDispatchInvalidatedEvent) => {
-    // The ratchet's observation writes `prState` as well as `prCiStatus` now, so
-    // this event carries both; patching only CI would leave the snapshot showing
-    // an open PR the check just saw merged.
-    coalescer.enqueue(
-      event.workspaceId,
-      { prCiStatus: event.prCiStatus, prState: event.prState },
-      'event:pr_dispatch_invalidated',
-      { immediate: true }
-    );
-    requestAuthoritativeRatchetProjection(event.workspaceId);
-  };
-  dependencies.prSnapshotService.on(PR_DISPATCH_INVALIDATED, prDispatchInvalidatedHandler);
-  state.teardownListeners.push(() =>
-    dependencies.prSnapshotService.off(PR_DISPATCH_INVALIDATED, prDispatchInvalidatedHandler)
   );
 
   // 3. Ratchet state changes

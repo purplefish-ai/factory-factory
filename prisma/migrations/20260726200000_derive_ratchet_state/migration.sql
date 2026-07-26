@@ -41,9 +41,14 @@ CREATE INDEX "WorkspacePR_syncedAt_idx" ON "WorkspacePR"("syncedAt");
 -- `state` alone under-reports, because a failing build outranked a conflict in
 -- the derivation: a PR with both was stored as CI_FAILED. The dispatch snapshot
 -- key records the conflict independently (`|merge:conflict`), so it recovers the
--- masked cases. It is only consulted for PRs that are still open, where the flag
--- is actually read -- a closed or merged PR short-circuits before the projection
--- looks at it, and its dispatch key is the stalest.
+-- masked cases.
+--
+-- The key persists after its dispatch settles, so it cannot be trusted on its own
+-- -- a resolved conflict leaves the suffix behind. CI_FAILED is the only state
+-- where it is safe to believe, and that is exactly the masked case: any other
+-- state proves there was no conflict at the last observation, because a conflict
+-- would have produced MERGE_CONFLICT instead. Restricted to still-open PRs too,
+-- since a closed or merged PR short-circuits before the flag is read.
 UPDATE "WorkspacePR"
 SET "hasMergeConflict" = true
 WHERE "workspaceId" IN (
@@ -55,7 +60,8 @@ SET "hasMergeConflict" = true
 WHERE "state" IN ('OPEN', 'DRAFT', 'CHANGES_REQUESTED', 'APPROVED')
   AND "workspaceId" IN (
     SELECT "workspaceId" FROM "WorkspaceRatchet"
-    WHERE "dispatchSnapshotKey" LIKE '%|merge:conflict'
+    WHERE "state" = 'CI_FAILED'
+      AND "dispatchSnapshotKey" LIKE '%|merge:conflict'
 );
 
 CREATE TABLE "new_WorkspaceRatchet" (
