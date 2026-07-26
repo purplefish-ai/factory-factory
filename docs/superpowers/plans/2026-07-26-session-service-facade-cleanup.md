@@ -121,8 +121,8 @@ git commit -m "Inject session lifecycle prompt sender"
 - Produces: `sessionPromptTurnCompletionService: SessionPromptTurnCompletionService`
 - Produces: `sessionRetryService: SessionRetryService`
 - Produces: `sessionLifecycleService: SessionLifecycleService`
-- Produces: `sessionService: SessionService`
-- Produces: `SessionService.clearQueuedAcpPrompts(sessionId: string): void` for lifecycle hooks
+- Produces: `sessionService: SessionPromptService`, narrowed to the public prompt API
+- Keeps: a private `SessionService` coordinator whose queue cleanup is used only by lifecycle hooks
 
 - [ ] **Step 1: Point behavioral tests at the intended focused instances**
 
@@ -202,7 +202,11 @@ export const acpEventProcessor = new AcpEventProcessor({
   sessionConfigService,
   onToolCallTimeout: cancelTimedOutToolPrompt,
 });
-export const sessionService = new SessionService({
+export type SessionPromptService = Pick<
+  SessionService,
+  'configure' | 'sendAcpMessage' | 'sendSessionMessage'
+>;
+const sessionPromptCoordinator = new SessionService({
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
   acpEventProcessor,
@@ -212,6 +216,7 @@ export const sessionService = new SessionService({
   isSessionStopping: (sessionId) =>
     sessionLifecycleService.isSessionStopping(sessionId),
 });
+export const sessionService: SessionPromptService = sessionPromptCoordinator;
 export const sessionLifecycleService = new SessionLifecycleService({
   repository: sessionRepository,
   promptBuilder: sessionPromptBuilder,
@@ -225,9 +230,9 @@ export const sessionLifecycleService = new SessionLifecycleService({
   sendSessionMessage: (sessionId, content) =>
     sessionService.sendSessionMessage(sessionId, content),
   onBeforeStopSession: (sessionId) =>
-    sessionService.clearQueuedAcpPrompts(sessionId),
+    sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId),
   onSessionExit: (sessionId) =>
-    sessionService.clearQueuedAcpPrompts(sessionId),
+    sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId),
 });
 ```
 
