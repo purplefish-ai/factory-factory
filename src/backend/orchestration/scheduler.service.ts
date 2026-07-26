@@ -1,8 +1,9 @@
 /**
  * Scheduler Service
  *
- * Local background job scheduler for periodic tasks.
- * Replaces Inngest for PR status sync.
+ * Keeps the cached PR state fresh: syncs the PRs already known to workspaces
+ * and discovers PRs opened for workspaces that do not have one yet. The
+ * recurring lifecycle belongs to `jobRunner`; this file owns only the work.
  */
 
 import pLimit from 'p-limit';
@@ -10,6 +11,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   computePRDiscoveryNextCheckAt,
@@ -44,59 +46,54 @@ interface PRDiscoveryRepositoryGroup<
   candidates: Candidate[];
 }
 
+/** Job name this service registers with the shared runner. */
+const PR_POLL_JOB = 'pr-poll';
+
 class SchedulerService {
-  private syncInterval: NodeJS.Timeout | null = null;
-  private isShuttingDown = false;
-  private syncInProgress: Promise<unknown> | null = null;
-
   /**
-   * Start the scheduler
+   * The signal of the run currently executing. Batches consult it between
+   * workspaces so a shutdown does not have to wait out the whole list.
    */
-  start(): void {
-    if (this.syncInterval) {
-      return; // Already running
-    }
+  private runSignal: AbortSignal | null = null;
 
-    // Reset shutdown flag in case we're restarting
-    this.isShuttingDown = false;
-
-    this.syncInterval = setInterval(() => {
-      if (this.isShuttingDown || this.syncInProgress !== null) {
-        return;
-      }
-
-      this.syncInProgress = Promise.all([
-        this.syncPRStatuses().catch((err) => {
-          logger.error('PR sync batch failed', toError(err));
-        }),
-        this.discoverNewPRs().catch((err) => {
-          logger.error('PR discovery batch failed', toError(err));
-        }),
-      ]).finally(() => {
-        this.syncInProgress = null;
-      });
-    }, SERVICE_INTERVAL_MS.schedulerPrSync);
-
-    logger.info('Scheduler started', { prSyncIntervalMs: SERVICE_INTERVAL_MS.schedulerPrSync });
+  constructor() {
+    jobRunner.register({
+      name: PR_POLL_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.schedulerPrSync,
+      // Sync and discovery stay a single job so they keep sharing one cadence
+      // and one in-flight window, as they did under the old shared interval.
+      // Pacing them separately would let them overlap against the same GitHub
+      // budget, which is a change for the fetch coordinator to make and not
+      // for this one.
+      run: (signal) => {
+        this.runSignal = signal;
+        return Promise.all([
+          this.syncPRStatuses().catch((err) => {
+            logger.error('PR sync batch failed', toError(err));
+          }),
+          this.discoverNewPRs().catch((err) => {
+            logger.error('PR discovery batch failed', toError(err));
+          }),
+        ]);
+      },
+    });
   }
 
-  /**
-   * Stop the scheduler and wait for in-flight tasks
-   */
+  private get isShuttingDown(): boolean {
+    return this.runSignal?.aborted ?? false;
+  }
+
+  start(): void {
+    // Drop the previous run's signal, which is aborted after a stop. The
+    // manual entry points read the same guard, and until the first new run
+    // assigns a signal they would otherwise see a service that is still
+    // shutting down.
+    this.runSignal = null;
+    jobRunner.start(PR_POLL_JOB);
+  }
+
   async stop(): Promise<void> {
-    this.isShuttingDown = true;
-
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-      this.syncInterval = null;
-    }
-
-    if (this.syncInProgress !== null) {
-      logger.debug('Waiting for in-flight PR sync to complete');
-      await this.syncInProgress;
-    }
-
-    logger.info('Scheduler stopped');
+    await jobRunner.stop(PR_POLL_JOB);
   }
 
   /**

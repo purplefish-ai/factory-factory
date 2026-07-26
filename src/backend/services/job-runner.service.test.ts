@@ -53,13 +53,15 @@ describe('jobRunner', () => {
   });
 
   describe('registration', () => {
-    it('records jobs in registration order without starting them', async () => {
+    it('does not start a job just because it was registered', async () => {
+      // Services declare their job at construction; nothing should be polling
+      // until the server explicitly starts it.
       const run = vi.fn().mockResolvedValue(undefined);
       jobRunner.register({ name: 'first', intervalMs: 1000, run });
       jobRunner.register({ name: 'second', intervalMs: 1000, run });
 
-      expect(jobRunner.registeredJobs()).toEqual(['first', 'second']);
       expect(jobRunner.isRunning('first')).toBe(false);
+      expect(jobRunner.isRunning('second')).toBe(false);
 
       await vi.advanceTimersByTimeAsync(10_000);
       expect(run).not.toHaveBeenCalled();
@@ -72,8 +74,6 @@ describe('jobRunner', () => {
       const second = vi.fn().mockResolvedValue(undefined);
       jobRunner.register({ name: 'dup', intervalMs: 1000, run: first });
       jobRunner.register({ name: 'dup', intervalMs: 1000, run: second });
-
-      expect(jobRunner.registeredJobs()).toEqual(['dup']);
 
       jobRunner.start('dup');
       await vi.advanceTimersByTimeAsync(1000);
@@ -332,6 +332,58 @@ describe('jobRunner', () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(run).toHaveBeenCalledTimes(1);
       expect(jobRunner.isRunning('restartable')).toBe(true);
+    });
+  });
+
+  describe('abort signal', () => {
+    it('aborts the in-flight run when the job is stopped', async () => {
+      // The loops this replaced checked a shutdown flag at intermediate points
+      // so a stop partway through a batch would not walk every workspace
+      // first. The signal is how that check survives.
+      let observed: AbortSignal | undefined;
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'abortable',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: (signal) => {
+          observed = signal;
+          return job.run();
+        },
+      });
+      jobRunner.start('abortable');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(observed?.aborted).toBe(false);
+
+      const stopping = jobRunner.stop('abortable');
+      expect(observed?.aborted).toBe(true);
+
+      job.finish();
+      await stopping;
+    });
+
+    it('hands a restarted job a signal that is not already aborted', async () => {
+      const signals: AbortSignal[] = [];
+      jobRunner.register({
+        name: 'restarted',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: (signal) => {
+          signals.push(signal);
+          return Promise.resolve();
+        },
+      });
+
+      jobRunner.start('restarted');
+      await vi.advanceTimersByTimeAsync(0);
+      await jobRunner.stop('restarted');
+      expect(signals[0]?.aborted).toBe(true);
+
+      jobRunner.start('restarted');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signals).toHaveLength(2);
+      expect(signals[1]?.aborted).toBe(false);
     });
   });
 

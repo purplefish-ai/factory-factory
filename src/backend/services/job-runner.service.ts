@@ -31,8 +31,15 @@ export interface JobDefinition {
   name: string;
   /** Base delay between the end of one run and the start of the next. */
   intervalMs: number;
-  /** The work. Rejections are logged and the loop continues. */
-  run: () => Promise<unknown>;
+  /**
+   * The work. Rejections are logged and the loop continues.
+   *
+   * The signal aborts when the job is asked to stop, so a run partway through
+   * a long batch can give up instead of finishing it. Every loop this replaced
+   * checked a shutdown flag at intermediate points for exactly that reason --
+   * without it, stopping the PR poll would still walk every workspace.
+   */
+  run: (signal: AbortSignal) => Promise<unknown>;
   /**
    * Run once at `start()` instead of waiting out the first delay. Matches what
    * the ratchet, periodic-task and snapshot-reconciliation loops did; the PR
@@ -51,6 +58,8 @@ interface JobState {
   /** The running loop, or null when the job is stopped. */
   loop: Promise<void> | null;
   stopping: boolean;
+  /** Aborted by `stop()`, handed to the run so it can bail out mid-batch. */
+  abortController: AbortController;
   /** The run currently executing, exposed through `waitForCurrentRun`. */
   currentRun: Promise<void> | null;
   /** Settles the pending sleep early. Null when the job is not sleeping. */
@@ -77,14 +86,10 @@ export class JobRunner {
       definition,
       loop: null,
       stopping: false,
+      abortController: new AbortController(),
       currentRun: null,
       cancelSleep: null,
     });
-  }
-
-  /** Registered job names, in registration order. */
-  registeredJobs(): string[] {
-    return [...this.jobs.keys()];
   }
 
   isRunning(name: string): boolean {
@@ -97,6 +102,9 @@ export class JobRunner {
       return; // Already running
     }
     state.stopping = false;
+    // Fresh controller per start: a job stopped and started again must not
+    // hand its runs a signal that is already aborted.
+    state.abortController = new AbortController();
     // A loop that dies must not take the process with it, and must not leave
     // `stop()` awaiting a rejected promise.
     state.loop = this.runLoop(state).catch((error) => {
@@ -137,6 +145,7 @@ export class JobRunner {
   async stop(name: string): Promise<void> {
     const state = this.get(name);
     state.stopping = true;
+    state.abortController.abort();
     state.cancelSleep?.();
 
     if (state.loop !== null) {
@@ -188,9 +197,10 @@ export class JobRunner {
   }
 
   private async runOnce(state: JobState): Promise<void> {
+    const { signal } = state.abortController;
     const run = (async () => {
       try {
-        await state.definition.run();
+        await state.definition.run(signal);
       } catch (error) {
         logger.error(`Job run failed: ${state.definition.name}`, toError(error));
       }

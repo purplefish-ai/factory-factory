@@ -545,5 +545,28 @@ describe('SchedulerService', () => {
       await stopPromise;
       expect(stopped).toBe(true);
     });
+
+    it('does not treat a restarted scheduler as still shutting down', async () => {
+      // The shutdown guard reads the abort signal of the run in flight. After a
+      // stop that signal is aborted, so a restart has to drop it -- otherwise a
+      // manually triggered sync in the gap before the first new run sees a
+      // service that is shutting down and silently no-ops.
+      mockFindNeedingPRSync.mockResolvedValue([]);
+      mockFindNeedingPRDiscovery.mockResolvedValue([]);
+
+      schedulerService.start();
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await schedulerService.stop();
+
+      await expect(schedulerService.syncPRStatuses()).resolves.toEqual({ synced: 0, failed: 0 });
+      const callsWhileStopped = mockFindNeedingPRSync.mock.calls.length;
+
+      schedulerService.start();
+      await schedulerService.syncPRStatuses();
+
+      expect(mockFindNeedingPRSync.mock.calls.length).toBe(callsWhileStopped + 1);
+
+      await schedulerService.stop();
+    });
   });
 });

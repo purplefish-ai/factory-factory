@@ -1,6 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
 import { isProcessRunning } from '@/backend/lib/process-liveness';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('reconciliation');
@@ -27,12 +28,29 @@ export interface ReconciliationTerminalBridge {
   recoverOrphanedSessions(): Promise<number>;
 }
 
+/** Job name this service registers with the shared runner. */
+const RECONCILIATION_CLEANUP_JOB = 'reconciliation-cleanup';
+
 class ReconciliationService {
-  private reconciliationInterval: NodeJS.Timeout | null = null;
-  private isShuttingDown = false;
-  private reconciliationInProgress: Promise<void> | null = null;
   private _workspace: ReconciliationWorkspaceBridge | null = null;
   private _terminal: ReconciliationTerminalBridge | null = null;
+  /** The signal of the run currently executing; see `isShuttingDown`. */
+  private runSignal: AbortSignal | null = null;
+
+  constructor() {
+    jobRunner.register({
+      name: RECONCILIATION_CLEANUP_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.reconciliationCleanup,
+      run: (signal) => {
+        this.runSignal = signal;
+        return this.runPeriodicReconciliation();
+      },
+    });
+  }
+
+  private get isShuttingDown(): boolean {
+    return this.runSignal?.aborted ?? false;
+  }
 
   configure(bridges: {
     workspace: ReconciliationWorkspaceBridge;
@@ -69,59 +87,17 @@ class ReconciliationService {
    * Start periodic reconciliation and orphan cleanup.
    */
   startPeriodicCleanup(): void {
-    if (this.reconciliationInterval) {
-      return; // Already running
-    }
-
-    this.isShuttingDown = false;
-
-    this.reconciliationInterval = setInterval(() => {
-      // Skip if shutdown has started
-      if (this.isShuttingDown) {
-        return;
-      }
-
-      // Avoid overlapping reconciliation runs.
-      if (this.reconciliationInProgress !== null) {
-        return;
-      }
-
-      // Track the reconciliation promise so we can wait for it during shutdown
-      const reconciliationPromise = this.runPeriodicReconciliation()
-        .catch((err) => {
-          logger.error('Periodic reconciliation failed', toError(err));
-        })
-        .finally(() => {
-          if (this.reconciliationInProgress === reconciliationPromise) {
-            this.reconciliationInProgress = null;
-          }
-        });
-      this.reconciliationInProgress = reconciliationPromise;
-    }, SERVICE_INTERVAL_MS.reconciliationCleanup);
-
-    logger.info('Started periodic reconciliation', {
-      intervalMs: SERVICE_INTERVAL_MS.reconciliationCleanup,
-    });
+    // `cleanupOrphans` is also called directly at startup and reads the same
+    // guard, so the previous run's aborted signal must not outlive the stop.
+    this.runSignal = null;
+    jobRunner.start(RECONCILIATION_CLEANUP_JOB);
   }
 
   /**
    * Stop periodic reconciliation and wait for any in-flight run to complete
    */
   async stopPeriodicCleanup(): Promise<void> {
-    this.isShuttingDown = true;
-
-    if (this.reconciliationInterval) {
-      clearInterval(this.reconciliationInterval);
-      this.reconciliationInterval = null;
-    }
-
-    // Wait for any in-flight reconciliation to complete
-    if (this.reconciliationInProgress !== null) {
-      logger.debug('Waiting for in-flight reconciliation to complete');
-      await this.reconciliationInProgress;
-    }
-
-    logger.info('Stopped periodic reconciliation');
+    await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
   }
 
   private async runPeriodicReconciliation(): Promise<void> {

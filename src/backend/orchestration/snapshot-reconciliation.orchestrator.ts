@@ -47,7 +47,7 @@ import {
 const GIT_CONCURRENCY = 10;
 
 /** Job name this service registers with the shared runner. */
-export const SNAPSHOT_RECONCILIATION_JOB = 'snapshot-reconciliation';
+const SNAPSHOT_RECONCILIATION_JOB = 'snapshot-reconciliation';
 
 // ---------------------------------------------------------------------------
 // Types

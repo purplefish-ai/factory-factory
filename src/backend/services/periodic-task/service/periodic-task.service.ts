@@ -10,6 +10,7 @@
 
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskAccessor } from '@/backend/services/periodic-task/resources/periodic-task.accessor';
 import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
@@ -58,16 +59,29 @@ export interface PeriodicTaskWorkspaceStatusBridge {
   } | null>;
 }
 
+/** Job name this service registers with the shared runner. */
+const PERIODIC_TASK_POLL_JOB = 'periodic-task-poll';
+
 export class PeriodicTaskService {
-  private isShuttingDown = false;
-  private pollLoop: Promise<void> | null = null;
-  private sleepTimeout: NodeJS.Timeout | null = null;
-  private sleepResolve: (() => void) | null = null;
+  /** The signal of the run currently executing; see `isShuttingDown`. */
+  private runSignal: AbortSignal | null = null;
 
   private workspaceBridge: PeriodicTaskWorkspaceBridge | null = null;
   private statusBridge: PeriodicTaskWorkspaceStatusBridge | null = null;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(private readonly logger: Logger) {
+    jobRunner.register({
+      name: PERIODIC_TASK_POLL_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.periodicTaskPoll,
+      // The loop polled once before its first sleep, and still does.
+      runImmediately: true,
+      run: (signal) => this.runCycle(signal),
+    });
+  }
+
+  private get isShuttingDown(): boolean {
+    return this.runSignal?.aborted ?? false;
+  }
 
   configure(bridges: {
     workspace: PeriodicTaskWorkspaceBridge;
@@ -112,39 +126,26 @@ export class PeriodicTaskService {
   }
 
   start(): void {
-    if (this.pollLoop !== null) {
-      return;
-    }
-    this.isShuttingDown = false;
-    this.logger.info('Periodic task service starting');
-    this.pollLoop = this.runLoop();
+    // See the equivalent in the ratchet service: a restart must not inherit
+    // the aborted signal that the previous stop left behind.
+    this.runSignal = null;
+    jobRunner.start(PERIODIC_TASK_POLL_JOB);
   }
 
   async stop(): Promise<void> {
-    if (!this.pollLoop) {
-      return;
-    }
-    this.isShuttingDown = true;
-    this.wakeSleep();
-    await this.pollLoop;
-    this.pollLoop = null;
-    this.logger.info('Periodic task service stopped');
+    await jobRunner.stop(PERIODIC_TASK_POLL_JOB);
   }
 
   // ─── Main Loop ──────────────────────────────────────────────────────────
 
-  private async runLoop(): Promise<void> {
-    while (!this.isShuttingDown) {
-      try {
-        await this.pollDueTasks();
-        await this.checkRunningExecutions();
-      } catch (error) {
-        this.logger.error('Periodic task poll error', toError(error));
-      }
-
-      if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.periodicTaskPoll);
-      }
+  /** One poll cycle: dispatch anything due, then advance running executions. */
+  private async runCycle(signal: AbortSignal): Promise<void> {
+    this.runSignal = signal;
+    try {
+      await this.pollDueTasks();
+      await this.checkRunningExecutions();
+    } catch (error) {
+      this.logger.error('Periodic task poll error', toError(error));
     }
   }
 
@@ -361,30 +362,6 @@ export class PeriodicTaskService {
         executionId: execution.id,
         error: toError(error).message,
       });
-    }
-  }
-
-  // ─── Sleep helpers ──────────────────────────────────────────────────────
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      this.sleepResolve = resolve;
-      this.sleepTimeout = setTimeout(() => {
-        this.sleepResolve = null;
-        this.sleepTimeout = null;
-        resolve();
-      }, ms);
-    });
-  }
-
-  private wakeSleep(): void {
-    if (this.sleepTimeout) {
-      clearTimeout(this.sleepTimeout);
-      this.sleepTimeout = null;
-    }
-    if (this.sleepResolve) {
-      this.sleepResolve();
-      this.sleepResolve = null;
     }
   }
 }
