@@ -1,4 +1,4 @@
-import type { ChildProcess } from 'node:child_process';
+import { ChildProcess } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
@@ -48,12 +48,14 @@ type ProxyServiceInternals = {
   cloudflaredUnavailable: boolean;
 };
 
-function createChildProcess(pid = 1234): ChildProcess {
-  return {
-    pid,
-    exitCode: null,
-    kill: vi.fn(),
-  } as unknown as ChildProcess;
+function createChildProcess(pid = 1234, exitCode: number | null = null): ChildProcess {
+  const childProcess = new ChildProcess();
+  Object.defineProperties(childProcess, {
+    pid: { value: pid },
+    exitCode: { value: exitCode },
+    kill: { value: vi.fn() },
+  });
+  return childProcess;
 }
 
 function sendRawHttpRequest(params: { port: number; rawRequest: string }): Promise<string> {
@@ -94,6 +96,36 @@ function parseStatusCode(rawHttpResponse: string): number {
   const firstLine = rawHttpResponse.split('\r\n')[0] ?? '';
   const match = firstLine.match(/^HTTP\/1\.1\s+(\d{3})/);
   return Number(match?.[1] ?? 0);
+}
+
+function canConnectToPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      resolve(false);
+    }, 250);
+
+    socket.once('connect', () => {
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+  });
+}
+
+async function waitForPortToClose(port: number): Promise<boolean> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!(await canConnectToPort(port))) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return false;
 }
 
 describe('RunScriptProxyService', () => {
@@ -148,6 +180,119 @@ describe('RunScriptProxyService', () => {
     expect(second).toMatch(/^https:\/\/abc\.trycloudflare\.com\?token=/);
     expect(mockKillProcessWithTimeout).toHaveBeenCalledTimes(1);
     expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears a tunnel URL when its cloudflared process exits', async () => {
+    const service = new RunScriptProxyService();
+    const process = createChildProcess(1235);
+    mockStartCloudflaredTunnel.mockResolvedValueOnce({
+      publicUrl: 'https://abc.trycloudflare.com',
+      proc: process,
+    });
+
+    await service.ensureTunnel('w1', 3000);
+    process.emit('exit', 1, null);
+
+    expect(service.getTunnelUrl('w1')).toBeNull();
+  });
+
+  it('keeps a replacement tunnel URL when the previous process exits', async () => {
+    const service = new RunScriptProxyService();
+    const firstProcess = createChildProcess(1235);
+    const secondProcess = createChildProcess(1236);
+    mockStartCloudflaredTunnel
+      .mockResolvedValueOnce({
+        publicUrl: 'https://first.trycloudflare.com',
+        proc: firstProcess,
+      })
+      .mockResolvedValueOnce({
+        publicUrl: 'https://second.trycloudflare.com',
+        proc: secondProcess,
+      });
+
+    await service.ensureTunnel('w1', 3000);
+    const replacementUrl = await service.ensureTunnel('w1', 4173);
+    firstProcess.emit('exit', 1, null);
+
+    expect(service.getTunnelUrl('w1')).toBe(replacementUrl);
+  });
+
+  it('cleans up a tunnel whose cloudflared process exited before listener registration', async () => {
+    const service = new RunScriptProxyService();
+    const exitedProcess = createChildProcess(1237, 1);
+    let authProxyPort = 0;
+    mockStartCloudflaredTunnel.mockImplementationOnce(({ targetUrl }: { targetUrl: string }) => {
+      authProxyPort = Number(new URL(targetUrl).port);
+      return {
+        publicUrl: 'https://exited.trycloudflare.com',
+        proc: exitedProcess,
+      };
+    });
+
+    const ensureResult = await service.ensureTunnel('w1', 3000);
+    const tunnelUrlAfterStart = service.getTunnelUrl('w1');
+    const authProxyClosed = await waitForPortToClose(authProxyPort);
+    await service.cleanup();
+
+    expect(ensureResult).toBeNull();
+    expect(tunnelUrlAfterStart).toBeNull();
+    expect(authProxyClosed).toBe(true);
+  });
+
+  it('closes an exited tunnel auth proxy without removing an overlapping replacement', async () => {
+    const service = new RunScriptProxyService();
+    const firstProcess = createChildProcess(1238);
+    const replacementProcess = createChildProcess(1239);
+    let firstAuthProxyPort = 0;
+    let replacementAuthProxyPort = 0;
+    let resolveFirstTunnel:
+      | ((tunnel: { publicUrl: string; proc: ChildProcess }) => void)
+      | undefined;
+    let resolveReplacementTunnel:
+      | ((tunnel: { publicUrl: string; proc: ChildProcess }) => void)
+      | undefined;
+
+    mockStartCloudflaredTunnel
+      .mockImplementationOnce(
+        ({ targetUrl }: { targetUrl: string }) =>
+          new Promise((resolve) => {
+            firstAuthProxyPort = Number(new URL(targetUrl).port);
+            resolveFirstTunnel = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        ({ targetUrl }: { targetUrl: string }) =>
+          new Promise((resolve) => {
+            replacementAuthProxyPort = Number(new URL(targetUrl).port);
+            resolveReplacementTunnel = resolve;
+          })
+      );
+
+    const firstTunnelPromise = service.ensureTunnel('w1', 3000);
+    await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(1));
+    const replacementTunnelPromise = service.ensureTunnel('w1', 4173);
+    await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2));
+
+    resolveFirstTunnel?.({
+      publicUrl: 'https://first.trycloudflare.com',
+      proc: firstProcess,
+    });
+    await firstTunnelPromise;
+    resolveReplacementTunnel?.({
+      publicUrl: 'https://replacement.trycloudflare.com',
+      proc: replacementProcess,
+    });
+    const replacementUrl = await replacementTunnelPromise;
+
+    firstProcess.emit('exit', 1, null);
+    const firstAuthProxyClosed = await waitForPortToClose(firstAuthProxyPort);
+    const replacementAuthProxyAvailable = await canConnectToPort(replacementAuthProxyPort);
+    const activeTunnelUrl = service.getTunnelUrl('w1');
+    await service.cleanup();
+
+    expect(firstAuthProxyClosed).toBe(true);
+    expect(replacementAuthProxyAvailable).toBe(true);
+    expect(activeTunnelUrl).toBe(replacementUrl);
   });
 
   it('marks cloudflared unavailable on command-not-found errors', async () => {

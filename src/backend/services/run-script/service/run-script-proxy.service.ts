@@ -183,6 +183,32 @@ export class RunScriptProxyService {
     return this.tunnels.get(workspaceId)?.authenticatedUrl ?? null;
   }
 
+  private watchTunnelExit(
+    workspaceId: string,
+    cloudflaredProcess: ChildProcess,
+    closeAuthProxy: () => Promise<void>
+  ): boolean {
+    let exitHandled = false;
+    const handleExit = () => {
+      if (exitHandled) {
+        return;
+      }
+      exitHandled = true;
+
+      const current = this.tunnels.get(workspaceId);
+      if (current?.cloudflaredProcess === cloudflaredProcess) {
+        this.tunnels.delete(workspaceId);
+      }
+
+      void closeAuthProxy().catch(() => undefined);
+    };
+    cloudflaredProcess.once('exit', handleExit);
+    if (cloudflaredProcess.exitCode !== null || cloudflaredProcess.signalCode !== null) {
+      handleExit();
+    }
+    return !exitHandled;
+  }
+
   async ensureTunnel(workspaceId: string, upstreamPort: number): Promise<string | null> {
     if (!this.isEnabled() || this.cloudflaredUnavailable) {
       return null;
@@ -212,13 +238,17 @@ export class RunScriptProxyService {
       cloudflaredProcess = tunnel.proc;
 
       const authenticatedUrl = `${tunnel.publicUrl}?${TOKEN_QUERY_PARAM}=${authToken}`;
-      this.tunnels.set(workspaceId, {
+      const activeTunnel: ActiveTunnel = {
         upstreamPort,
         publicUrl: tunnel.publicUrl,
         authenticatedUrl,
         cloudflaredProcess,
         closeAuthProxy,
-      });
+      };
+      this.tunnels.set(workspaceId, activeTunnel);
+      if (!this.watchTunnelExit(workspaceId, cloudflaredProcess, closeAuthProxy)) {
+        return null;
+      }
 
       logger.info('Started run-script proxy tunnel', {
         workspaceId,
