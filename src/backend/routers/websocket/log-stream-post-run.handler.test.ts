@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { createPostRunLogsUpgradeHandler, postRunLogsConnections } from './post-run-logs.handler';
+import { createPostRunLogsUpgradeHandler, postRunLogsConnections } from './log-stream.handler';
 
 const allowedOrigin = 'http://localhost:3000';
 

@@ -6,7 +6,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { MAX_WEBSOCKET_STREAM_BUFFERED_BYTES } from '@/backend/lib/websocket-send';
-import { createDevLogsUpgradeHandler } from './dev-logs.handler';
+import { createDevLogsUpgradeHandler } from './log-stream.handler';
 
 const allowedOrigin = 'http://localhost:3000';
 

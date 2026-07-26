@@ -8,12 +8,10 @@ export { createChatUpgradeHandler } from './chat.handler';
 export { disposeChatTransportForApplication } from './chat-connection-registry';
 export {
   createDevLogsUpgradeHandler,
-  devLogsConnections,
-} from './dev-logs.handler';
-export {
   createPostRunLogsUpgradeHandler,
+  devLogsConnections,
   postRunLogsConnections,
-} from './post-run-logs.handler';
+} from './log-stream.handler';
 export { createSetupTerminalUpgradeHandler } from './setup-terminal.handler';
 export {
   createSnapshotsUpgradeHandler,
