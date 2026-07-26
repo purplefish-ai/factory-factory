@@ -23,6 +23,11 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
+import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
+import {
+  type JobRunner,
+  jobRunner as sharedJobRunner,
+} from '@/backend/services/job-runner.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { sessionLifecycleService } from '@/backend/services/session';
 import {
@@ -39,8 +44,10 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const RECONCILIATION_INTERVAL_MS = 60_000;
 const GIT_CONCURRENCY = 10;
+
+/** Job name this service registers with the shared runner. */
+export const SNAPSHOT_RECONCILIATION_JOB = 'snapshot-reconciliation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +75,11 @@ export interface SnapshotReconciliationDependencies extends ReconciliationBridge
     typeof workspaceSnapshotStore,
     'getAllWorkspaceIds' | 'getByWorkspaceId' | 'remove' | 'upsert'
   >;
+  /**
+   * Defaults to the process-wide runner. Injected so a test can drive this
+   * service's loop without touching the jobs the rest of the app registered.
+   */
+  jobRunner?: JobRunner;
 }
 
 export interface ReconciliationResult {
@@ -168,73 +180,26 @@ export class SnapshotReconciliationService {
     ReturnType<typeof createLogger>,
     'debug' | 'error' | 'info' | 'warn'
   >;
-  private interval: NodeJS.Timeout | null = null;
-  private isShuttingDown = false;
-  private reconcileInProgress: Promise<ReconciliationResult> | null = null;
+  private readonly jobRunner: JobRunner;
 
   constructor(private readonly dependencies: Readonly<SnapshotReconciliationDependencies>) {
     this.logger = dependencies.createLogger('snapshot-reconciliation');
+    this.jobRunner = dependencies.jobRunner ?? sharedJobRunner;
+    this.jobRunner.register({
+      name: SNAPSHOT_RECONCILIATION_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.snapshotReconciliation,
+      // Seeds the snapshot store; the /snapshots handler waits on this run.
+      runImmediately: true,
+      run: () => this.reconcile(),
+    });
   }
 
   start(): void {
-    if (this.interval) {
-      return; // Already started
-    }
-    this.isShuttingDown = false;
-
-    // Run initial reconciliation immediately
-    this.reconcileInProgress = this.reconcile()
-      .catch((err) => {
-        this.logger.error('Initial reconciliation failed', { error: String(err) });
-        return {
-          workspacesScanned: 0,
-          workspacesChanged: 0,
-          deltasEmitted: 0,
-          workspacesReconciled: 0,
-          driftsDetected: 0,
-          staleEntriesRemoved: 0,
-          gitStatsComputed: 0,
-          durationMs: 0,
-        };
-      })
-      .finally(() => {
-        this.reconcileInProgress = null;
-      });
-
-    // Set up periodic reconciliation
-    this.interval = setInterval(() => {
-      if (this.isShuttingDown || this.reconcileInProgress !== null) {
-        return;
-      }
-      this.reconcileInProgress = this.reconcile()
-        .catch((err) => {
-          this.logger.error('Reconciliation tick failed', { error: String(err) });
-          return {
-            workspacesScanned: 0,
-            workspacesChanged: 0,
-            deltasEmitted: 0,
-            workspacesReconciled: 0,
-            driftsDetected: 0,
-            staleEntriesRemoved: 0,
-            gitStatsComputed: 0,
-            durationMs: 0,
-          };
-        })
-        .finally(() => {
-          this.reconcileInProgress = null;
-        });
-    }, RECONCILIATION_INTERVAL_MS);
+    this.jobRunner.start(SNAPSHOT_RECONCILIATION_JOB);
   }
 
   async stop(): Promise<void> {
-    this.isShuttingDown = true;
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
-    if (this.reconcileInProgress !== null) {
-      await this.reconcileInProgress;
-    }
+    await this.jobRunner.stop(SNAPSHOT_RECONCILIATION_JOB);
   }
 
   /**
@@ -243,10 +208,7 @@ export class SnapshotReconciliationService {
    * message until the store is populated on startup.
    */
   waitForInProgress(): Promise<void> {
-    if (this.reconcileInProgress !== null) {
-      return this.reconcileInProgress.then(() => undefined);
-    }
-    return Promise.resolve();
+    return this.jobRunner.waitForCurrentRun(SNAPSHOT_RECONCILIATION_JOB);
   }
 
   /**
