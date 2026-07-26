@@ -43,7 +43,6 @@ import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
   type getWorkspaceInitPolicy,
-  type kanbanStateService,
   type WorkspaceCreationService,
   type WorkspaceInitPolicyInput,
   type workspaceActivityService,
@@ -79,7 +78,6 @@ export type BridgeServices = {
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
-  kanbanStateService: typeof kanbanStateService;
   logbookService: typeof logbookService;
   periodicTaskService: typeof periodicTaskService;
   prFetchRegistry: typeof prFetchRegistry;
@@ -263,7 +261,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     getWorkspaceInitPolicy,
     githubCLIService,
     initializeWorkspaceWorktree,
-    kanbanStateService,
     logbookService,
     periodicTaskService,
     prFetchRegistry,
@@ -368,14 +365,6 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
 
   // === Workspace domain bridges ===
-  kanbanStateService.configure({
-    session: {
-      isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
-      getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
-      getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
-    },
-  });
-
   workspaceQueryService.configure({
     session: {
       isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
@@ -393,9 +382,6 @@ export function configureDomainBridges(services: BridgeServices): void {
 
   // === GitHub domain bridges ===
   prSnapshotService.configure({
-    kanban: {
-      updateCachedKanbanColumn: (id) => kanbanStateService.updateCachedKanbanColumn(id),
-    },
     workspace: {
       findPRContext: (id) => workspaceDataService.findPRContext(id),
       recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),

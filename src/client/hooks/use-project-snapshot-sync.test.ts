@@ -149,7 +149,7 @@ describe('useProjectSnapshotSync', () => {
       expect(result.workspaces).toHaveLength(0);
     });
 
-    it('preserves existing stateComputedAt and sets snapshotComputedAt', () => {
+    it('preserves existing DB-only fields and sets snapshotComputedAt', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -165,10 +165,10 @@ describe('useProjectSnapshotSync', () => {
 
       const [, updater] = mockSetData.mock.calls[0]!;
       const result = updater({
-        workspaces: [{ id: 'ws-1', stateComputedAt: '2026-01-01T00:00:00Z' }],
+        workspaces: [{ id: 'ws-1', githubIssueNumber: 42 }],
         reviewCount: 0,
       });
-      expect(result.workspaces[0].stateComputedAt).toBe('2026-01-01T00:00:00Z');
+      expect(result.workspaces[0].githubIssueNumber).toBe(42);
       expect(result.workspaces[0].snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
     });
 
@@ -240,7 +240,7 @@ describe('useProjectSnapshotSync', () => {
       expect(result.workspaces).toHaveLength(1);
     });
 
-    it('does not overwrite existing stateComputedAt during upsert', () => {
+    it('does not overwrite existing DB-only fields during upsert', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -253,10 +253,10 @@ describe('useProjectSnapshotSync', () => {
 
       const [, updater] = mockSetData.mock.calls[0]!;
       const result = updater({
-        workspaces: [{ id: 'ws-1', name: 'old', stateComputedAt: '2026-01-01T00:00:00Z' }],
+        workspaces: [{ id: 'ws-1', name: 'old', githubIssueNumber: 42 }],
         reviewCount: 0,
       });
-      expect(result.workspaces[0].stateComputedAt).toBe('2026-01-01T00:00:00Z');
+      expect(result.workspaces[0].githubIssueNumber).toBe(42);
       expect(result.workspaces[0].snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
     });
 
@@ -296,7 +296,7 @@ describe('useProjectSnapshotSync', () => {
       const [, updater] = mockSetData.mock.calls[0]!;
       const result = updater(undefined);
       expect(result.workspaces).toHaveLength(1);
-      expect(result.workspaces[0].stateComputedAt).toBeNull();
+      expect(result.workspaces[0].githubIssueNumber).toBeNull();
       expect(result.workspaces[0].snapshotComputedAt).toBe('2026-01-15T10:00:00Z');
       expect(result.reviewCount).toBe(0);
     });

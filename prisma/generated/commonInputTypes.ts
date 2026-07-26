@@ -296,13 +296,6 @@ export type EnumAutoIterationStatusNullableFilter<$PrismaModel = never> = {
   not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
 }
 
-export type EnumKanbanColumnFilter<$PrismaModel = never> = {
-  equals?: $Enums.KanbanColumn | Prisma.EnumKanbanColumnFieldRefInput<$PrismaModel>
-  in?: $Enums.KanbanColumn[]
-  notIn?: $Enums.KanbanColumn[]
-  not?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel> | $Enums.KanbanColumn
-}
-
 export type EnumWorkspaceStatusWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceStatus | Prisma.EnumWorkspaceStatusFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceStatus[]
@@ -431,16 +424,6 @@ export type EnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaModel = n
   _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
-}
-
-export type EnumKanbanColumnWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.KanbanColumn | Prisma.EnumKanbanColumnFieldRefInput<$PrismaModel>
-  in?: $Enums.KanbanColumn[]
-  notIn?: $Enums.KanbanColumn[]
-  not?: Prisma.NestedEnumKanbanColumnWithAggregatesFilter<$PrismaModel> | $Enums.KanbanColumn
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel>
 }
 
 export type EnumSessionStatusFilter<$PrismaModel = never> = {
@@ -828,13 +811,6 @@ export type NestedEnumAutoIterationStatusNullableFilter<$PrismaModel = never> = 
   not?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel> | $Enums.AutoIterationStatus | null
 }
 
-export type NestedEnumKanbanColumnFilter<$PrismaModel = never> = {
-  equals?: $Enums.KanbanColumn | Prisma.EnumKanbanColumnFieldRefInput<$PrismaModel>
-  in?: $Enums.KanbanColumn[]
-  notIn?: $Enums.KanbanColumn[]
-  not?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel> | $Enums.KanbanColumn
-}
-
 export type NestedEnumWorkspaceStatusWithAggregatesFilter<$PrismaModel = never> = {
   equals?: $Enums.WorkspaceStatus | Prisma.EnumWorkspaceStatusFieldRefInput<$PrismaModel>
   in?: $Enums.WorkspaceStatus[]
@@ -974,16 +950,6 @@ export type NestedEnumAutoIterationStatusNullableWithAggregatesFilter<$PrismaMod
   _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
   _min?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
   _max?: Prisma.NestedEnumAutoIterationStatusNullableFilter<$PrismaModel>
-}
-
-export type NestedEnumKanbanColumnWithAggregatesFilter<$PrismaModel = never> = {
-  equals?: $Enums.KanbanColumn | Prisma.EnumKanbanColumnFieldRefInput<$PrismaModel>
-  in?: $Enums.KanbanColumn[]
-  notIn?: $Enums.KanbanColumn[]
-  not?: Prisma.NestedEnumKanbanColumnWithAggregatesFilter<$PrismaModel> | $Enums.KanbanColumn
-  _count?: Prisma.NestedIntFilter<$PrismaModel>
-  _min?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel>
-  _max?: Prisma.NestedEnumKanbanColumnFilter<$PrismaModel>
 }
 
 export type NestedEnumSessionStatusFilter<$PrismaModel = never> = {

@@ -179,8 +179,6 @@ function createOptimisticWorkingWorkspace(params: {
     ratchetDispatchOutcome: null,
     ratchetDispatchRetryCount: 0,
     hasHadSessions: false,
-    cachedKanbanColumn: 'WORKING',
-    stateComputedAt: null,
     mode: params.mode ?? 'STANDARD',
     autoIterationStatus: null,
     autoIterationConfig: null,

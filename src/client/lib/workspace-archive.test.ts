@@ -36,16 +36,11 @@ describe('isWorkspaceDoneOrMerged', () => {
     expect(isWorkspaceDoneOrMerged({ kanbanColumn: 'DONE' })).toBe(true);
   });
 
-  it('returns true when cached kanban column is done', () => {
-    expect(isWorkspaceDoneOrMerged({ cachedKanbanColumn: 'DONE' })).toBe(true);
-  });
-
   it('returns false for non-merged non-done workspaces', () => {
     expect(
       isWorkspaceDoneOrMerged({
         prState: 'OPEN',
         kanbanColumn: 'WAITING',
-        cachedKanbanColumn: 'WAITING',
       })
     ).toBe(false);
   });

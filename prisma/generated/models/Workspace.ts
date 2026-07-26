@@ -106,8 +106,6 @@ export type WorkspaceMinAggregateOutputType = {
   periodicTaskId: string | null
   parentWorkspaceId: string | null
   hasHadSessions: boolean | null
-  cachedKanbanColumn: $Enums.KanbanColumn | null
-  stateComputedAt: Date | null
 }
 
 export type WorkspaceMaxAggregateOutputType = {
@@ -168,8 +166,6 @@ export type WorkspaceMaxAggregateOutputType = {
   periodicTaskId: string | null
   parentWorkspaceId: string | null
   hasHadSessions: boolean | null
-  cachedKanbanColumn: $Enums.KanbanColumn | null
-  stateComputedAt: Date | null
 }
 
 export type WorkspaceCountAggregateOutputType = {
@@ -233,8 +229,6 @@ export type WorkspaceCountAggregateOutputType = {
   periodicTaskId: number
   parentWorkspaceId: number
   hasHadSessions: number
-  cachedKanbanColumn: number
-  stateComputedAt: number
   _all: number
 }
 
@@ -319,8 +313,6 @@ export type WorkspaceMinAggregateInputType = {
   periodicTaskId?: true
   parentWorkspaceId?: true
   hasHadSessions?: true
-  cachedKanbanColumn?: true
-  stateComputedAt?: true
 }
 
 export type WorkspaceMaxAggregateInputType = {
@@ -381,8 +373,6 @@ export type WorkspaceMaxAggregateInputType = {
   periodicTaskId?: true
   parentWorkspaceId?: true
   hasHadSessions?: true
-  cachedKanbanColumn?: true
-  stateComputedAt?: true
 }
 
 export type WorkspaceCountAggregateInputType = {
@@ -446,8 +436,6 @@ export type WorkspaceCountAggregateInputType = {
   periodicTaskId?: true
   parentWorkspaceId?: true
   hasHadSessions?: true
-  cachedKanbanColumn?: true
-  stateComputedAt?: true
   _all?: true
 }
 
@@ -598,8 +586,6 @@ export type WorkspaceGroupByOutputType = {
   periodicTaskId: string | null
   parentWorkspaceId: string | null
   hasHadSessions: boolean
-  cachedKanbanColumn: $Enums.KanbanColumn
-  stateComputedAt: Date | null
   _count: WorkspaceCountAggregateOutputType | null
   _avg: WorkspaceAvgAggregateOutputType | null
   _sum: WorkspaceSumAggregateOutputType | null
@@ -686,8 +672,6 @@ export type WorkspaceWhereInput = {
   periodicTaskId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   parentWorkspaceId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   hasHadSessions?: Prisma.BoolFilter<"Workspace"> | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFilter<"Workspace"> | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   agentSessions?: Prisma.AgentSessionListRelationFilter
   terminalSessions?: Prisma.TerminalSessionListRelationFilter
@@ -760,8 +744,6 @@ export type WorkspaceOrderByWithRelationInput = {
   periodicTaskId?: Prisma.SortOrderInput | Prisma.SortOrder
   parentWorkspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
   hasHadSessions?: Prisma.SortOrder
-  cachedKanbanColumn?: Prisma.SortOrder
-  stateComputedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   project?: Prisma.ProjectOrderByWithRelationInput
   agentSessions?: Prisma.AgentSessionOrderByRelationAggregateInput
   terminalSessions?: Prisma.TerminalSessionOrderByRelationAggregateInput
@@ -837,8 +819,6 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   periodicTaskId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   parentWorkspaceId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   hasHadSessions?: Prisma.BoolFilter<"Workspace"> | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFilter<"Workspace"> | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   agentSessions?: Prisma.AgentSessionListRelationFilter
   terminalSessions?: Prisma.TerminalSessionListRelationFilter
@@ -911,8 +891,6 @@ export type WorkspaceOrderByWithAggregationInput = {
   periodicTaskId?: Prisma.SortOrderInput | Prisma.SortOrder
   parentWorkspaceId?: Prisma.SortOrderInput | Prisma.SortOrder
   hasHadSessions?: Prisma.SortOrder
-  cachedKanbanColumn?: Prisma.SortOrder
-  stateComputedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.WorkspaceCountOrderByAggregateInput
   _avg?: Prisma.WorkspaceAvgOrderByAggregateInput
   _max?: Prisma.WorkspaceMaxOrderByAggregateInput
@@ -984,8 +962,6 @@ export type WorkspaceScalarWhereWithAggregatesInput = {
   periodicTaskId?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
   parentWorkspaceId?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
   hasHadSessions?: Prisma.BoolWithAggregatesFilter<"Workspace"> | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnWithAggregatesFilter<"Workspace"> | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
 }
 
 export type WorkspaceCreateInput = {
@@ -1046,8 +1022,6 @@ export type WorkspaceCreateInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -1120,8 +1094,6 @@ export type WorkspaceUncheckedCreateInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -1188,8 +1160,6 @@ export type WorkspaceUpdateInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -1262,8 +1232,6 @@ export type WorkspaceUncheckedUpdateInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -1333,8 +1301,6 @@ export type WorkspaceCreateManyInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
 }
 
 export type WorkspaceUpdateManyMutationInput = {
@@ -1395,8 +1361,6 @@ export type WorkspaceUpdateManyMutationInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type WorkspaceUncheckedUpdateManyInput = {
@@ -1460,8 +1424,6 @@ export type WorkspaceUncheckedUpdateManyInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type WorkspaceListRelationFilter = {
@@ -1540,8 +1502,6 @@ export type WorkspaceCountOrderByAggregateInput = {
   periodicTaskId?: Prisma.SortOrder
   parentWorkspaceId?: Prisma.SortOrder
   hasHadSessions?: Prisma.SortOrder
-  cachedKanbanColumn?: Prisma.SortOrder
-  stateComputedAt?: Prisma.SortOrder
 }
 
 export type WorkspaceAvgOrderByAggregateInput = {
@@ -1613,8 +1573,6 @@ export type WorkspaceMaxOrderByAggregateInput = {
   periodicTaskId?: Prisma.SortOrder
   parentWorkspaceId?: Prisma.SortOrder
   hasHadSessions?: Prisma.SortOrder
-  cachedKanbanColumn?: Prisma.SortOrder
-  stateComputedAt?: Prisma.SortOrder
 }
 
 export type WorkspaceMinOrderByAggregateInput = {
@@ -1675,8 +1633,6 @@ export type WorkspaceMinOrderByAggregateInput = {
   periodicTaskId?: Prisma.SortOrder
   parentWorkspaceId?: Prisma.SortOrder
   hasHadSessions?: Prisma.SortOrder
-  cachedKanbanColumn?: Prisma.SortOrder
-  stateComputedAt?: Prisma.SortOrder
 }
 
 export type WorkspaceSumOrderByAggregateInput = {
@@ -1807,10 +1763,6 @@ export type EnumWorkspaceModeFieldUpdateOperationsInput = {
 
 export type NullableEnumAutoIterationStatusFieldUpdateOperationsInput = {
   set?: $Enums.AutoIterationStatus | null
-}
-
-export type EnumKanbanColumnFieldUpdateOperationsInput = {
-  set?: $Enums.KanbanColumn
 }
 
 export type WorkspaceUpdateOneWithoutChildWorkspacesNestedInput = {
@@ -2023,8 +1975,6 @@ export type WorkspaceCreateWithoutProjectInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
@@ -2095,8 +2045,6 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2194,8 +2142,6 @@ export type WorkspaceScalarWhereInput = {
   periodicTaskId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   parentWorkspaceId?: Prisma.StringNullableFilter<"Workspace"> | string | null
   hasHadSessions?: Prisma.BoolFilter<"Workspace"> | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFilter<"Workspace"> | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
 }
 
 export type WorkspaceCreateWithoutChildWorkspacesInput = {
@@ -2256,8 +2202,6 @@ export type WorkspaceCreateWithoutChildWorkspacesInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -2329,8 +2273,6 @@ export type WorkspaceUncheckedCreateWithoutChildWorkspacesInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2401,8 +2343,6 @@ export type WorkspaceCreateWithoutParentWorkspaceInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -2473,8 +2413,6 @@ export type WorkspaceUncheckedCreateWithoutParentWorkspaceInput = {
   autoIterationSessionId?: string | null
   periodicTaskId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -2561,8 +2499,6 @@ export type WorkspaceUpdateWithoutChildWorkspacesInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -2634,8 +2570,6 @@ export type WorkspaceUncheckedUpdateWithoutChildWorkspacesInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -2717,8 +2651,6 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
@@ -2790,8 +2722,6 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -2873,8 +2803,6 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
@@ -2946,8 +2874,6 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -3013,8 +2939,6 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionCreateNestedManyWithoutWorkspaceInput
@@ -3086,8 +3010,6 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -3169,8 +3091,6 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
@@ -3242,8 +3162,6 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -3309,8 +3227,6 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -3382,8 +3298,6 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedCreateNestedOneWithoutWorkspaceInput
@@ -3465,8 +3379,6 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -3538,8 +3450,6 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   periodicTaskExecution?: Prisma.PeriodicTaskExecutionUncheckedUpdateOneWithoutWorkspaceNestedInput
@@ -3605,8 +3515,6 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -3677,8 +3585,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   autoIterationSessionId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3770,8 +3676,6 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -3843,8 +3747,6 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -3926,8 +3828,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -3999,8 +3899,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4066,8 +3964,6 @@ export type WorkspaceCreateWithoutNotificationsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   project: Prisma.ProjectCreateNestedOneWithoutWorkspacesInput
   agentSessions?: Prisma.AgentSessionCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionCreateNestedManyWithoutWorkspaceInput
@@ -4139,8 +4035,6 @@ export type WorkspaceUncheckedCreateWithoutNotificationsInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   terminalSessions?: Prisma.TerminalSessionUncheckedCreateNestedManyWithoutWorkspaceInput
   closedSessions?: Prisma.ClosedSessionUncheckedCreateNestedManyWithoutWorkspaceInput
@@ -4222,8 +4116,6 @@ export type WorkspaceUpdateWithoutNotificationsInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -4295,8 +4187,6 @@ export type WorkspaceUncheckedUpdateWithoutNotificationsInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4364,8 +4254,6 @@ export type WorkspaceCreateManyProjectInput = {
   periodicTaskId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
 }
 
 export type WorkspaceUpdateWithoutProjectInput = {
@@ -4426,8 +4314,6 @@ export type WorkspaceUpdateWithoutProjectInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUpdateManyWithoutWorkspaceNestedInput
@@ -4498,8 +4384,6 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4568,8 +4452,6 @@ export type WorkspaceUncheckedUpdateManyWithoutProjectInput = {
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type WorkspaceCreateManyParentWorkspaceInput = {
@@ -4632,8 +4514,6 @@ export type WorkspaceCreateManyParentWorkspaceInput = {
   autoIterationSessionId?: string | null
   periodicTaskId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
 }
 
 export type WorkspaceUpdateWithoutParentWorkspaceInput = {
@@ -4694,8 +4574,6 @@ export type WorkspaceUpdateWithoutParentWorkspaceInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -4766,8 +4644,6 @@ export type WorkspaceUncheckedUpdateWithoutParentWorkspaceInput = {
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -4836,8 +4712,6 @@ export type WorkspaceUncheckedUpdateManyWithoutParentWorkspaceInput = {
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   periodicTaskId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 export type WorkspaceCreateManyPeriodicTaskInput = {
@@ -4900,8 +4774,6 @@ export type WorkspaceCreateManyPeriodicTaskInput = {
   autoIterationSessionId?: string | null
   parentWorkspaceId?: string | null
   hasHadSessions?: boolean
-  cachedKanbanColumn?: $Enums.KanbanColumn
-  stateComputedAt?: Date | string | null
 }
 
 export type WorkspaceUpdateWithoutPeriodicTaskInput = {
@@ -4962,8 +4834,6 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   autoIterationProgress?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   project?: Prisma.ProjectUpdateOneRequiredWithoutWorkspacesNestedInput
   agentSessions?: Prisma.AgentSessionUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUpdateManyWithoutWorkspaceNestedInput
@@ -5034,8 +4904,6 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   agentSessions?: Prisma.AgentSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   terminalSessions?: Prisma.TerminalSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
   closedSessions?: Prisma.ClosedSessionUncheckedUpdateManyWithoutWorkspaceNestedInput
@@ -5104,8 +4972,6 @@ export type WorkspaceUncheckedUpdateManyWithoutPeriodicTaskInput = {
   autoIterationSessionId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   parentWorkspaceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hasHadSessions?: Prisma.BoolFieldUpdateOperationsInput | boolean
-  cachedKanbanColumn?: Prisma.EnumKanbanColumnFieldUpdateOperationsInput | $Enums.KanbanColumn
-  stateComputedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
 }
 
 
@@ -5236,8 +5102,6 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   periodicTaskId?: boolean
   parentWorkspaceId?: boolean
   hasHadSessions?: boolean
-  cachedKanbanColumn?: boolean
-  stateComputedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
   terminalSessions?: boolean | Prisma.Workspace$terminalSessionsArgs<ExtArgs>
@@ -5311,8 +5175,6 @@ export type WorkspaceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   periodicTaskId?: boolean
   parentWorkspaceId?: boolean
   hasHadSessions?: boolean
-  cachedKanbanColumn?: boolean
-  stateComputedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -5379,8 +5241,6 @@ export type WorkspaceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   periodicTaskId?: boolean
   parentWorkspaceId?: boolean
   hasHadSessions?: boolean
-  cachedKanbanColumn?: boolean
-  stateComputedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   periodicTask?: boolean | Prisma.Workspace$periodicTaskArgs<ExtArgs>
   parentWorkspace?: boolean | Prisma.Workspace$parentWorkspaceArgs<ExtArgs>
@@ -5447,11 +5307,9 @@ export type WorkspaceSelectScalar = {
   periodicTaskId?: boolean
   parentWorkspaceId?: boolean
   hasHadSessions?: boolean
-  cachedKanbanColumn?: boolean
-  stateComputedAt?: boolean
 }
 
-export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prDiscoveryLastCheckedAt" | "prDiscoveryRetryCount" | "prDiscoveryNextCheckAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "ratchetDispatchOutcome" | "ratchetDispatchRetryCount" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions" | "cachedKanbanColumn" | "stateComputedAt", ExtArgs["result"]["workspace"]>
+export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prDiscoveryLastCheckedAt" | "prDiscoveryRetryCount" | "prDiscoveryNextCheckAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "ratchetDispatchOutcome" | "ratchetDispatchRetryCount" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "parentWorkspaceId" | "hasHadSessions", ExtArgs["result"]["workspace"]>
 export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
@@ -5549,8 +5407,6 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     periodicTaskId: string | null
     parentWorkspaceId: string | null
     hasHadSessions: boolean
-    cachedKanbanColumn: $Enums.KanbanColumn
-    stateComputedAt: Date | null
   }, ExtArgs["result"]["workspace"]>
   composites: {}
 }
@@ -6043,8 +5899,6 @@ export interface WorkspaceFieldRefs {
   readonly periodicTaskId: Prisma.FieldRef<"Workspace", 'String'>
   readonly parentWorkspaceId: Prisma.FieldRef<"Workspace", 'String'>
   readonly hasHadSessions: Prisma.FieldRef<"Workspace", 'Boolean'>
-  readonly cachedKanbanColumn: Prisma.FieldRef<"Workspace", 'KanbanColumn'>
-  readonly stateComputedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
 }
     
 

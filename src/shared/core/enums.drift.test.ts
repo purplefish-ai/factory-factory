@@ -22,6 +22,13 @@ const SCHEMA_PATH = fileURLToPath(new URL('../../../prisma/schema.prisma', impor
 /** Enums declared in the Prisma schema that are deliberately not mirrored into shared. */
 const PRISMA_ONLY_ENUMS = new Set(['RatchetDispatchOutcome', 'NotificationDirection']);
 
+/**
+ * Shared enums with no Prisma counterpart because nothing persists them.
+ * `KanbanColumn` is derived from workspace state on every read, so there is no
+ * column for it to drift against.
+ */
+const SHARED_ONLY_ENUMS = new Set(['KanbanColumn']);
+
 /** Parse `enum Name { A B }` blocks out of a Prisma schema, ignoring comments. */
 function parsePrismaEnums(schema: string): Map<string, string[]> {
   const enums = new Map<string, string[]>();
@@ -84,12 +91,24 @@ describe('prisma <-> shared enum drift guard', () => {
   });
 
   it('does not export shared enums that no longer exist in the Prisma schema', () => {
-    const orphaned = [...sharedEnumsByName.keys()].filter((name) => !prismaEnums.has(name));
+    const orphaned = [...sharedEnumsByName.keys()].filter(
+      (name) => !(SHARED_ONLY_ENUMS.has(name) || prismaEnums.has(name))
+    );
 
     expect(orphaned).toEqual([]);
   });
 
-  it.each([...sharedEnumsByName.keys()])('keeps %s synchronized with the Prisma schema', (name) => {
+  it('does not allowlist shared-only enums that the schema actually declares', () => {
+    // Keeps SHARED_ONLY_ENUMS from silently exempting an enum that gained a
+    // column later, which would drop it out of the sync assertions below.
+    const stale = [...SHARED_ONLY_ENUMS].filter((name) => prismaEnums.has(name));
+
+    expect(stale).toEqual([]);
+  });
+
+  it.each(
+    [...sharedEnumsByName.keys()].filter((name) => !SHARED_ONLY_ENUMS.has(name))
+  )('keeps %s synchronized with the Prisma schema', (name) => {
     const shared = sharedEnumsByName.get(name);
     const prismaValues = prismaEnums.get(name);
 

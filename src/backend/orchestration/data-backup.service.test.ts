@@ -11,7 +11,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import {
   CIStatus,
-  KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
@@ -149,8 +148,6 @@ const mockWorkspace: Workspace = {
   ratchetDispatchOutcome: null,
   ratchetDispatchRetryCount: 0,
   hasHadSessions: true,
-  cachedKanbanColumn: KanbanColumn.WORKING,
-  stateComputedAt: new Date('2025-01-01T00:35:00.000Z'),
   mode: WorkspaceMode.STANDARD,
   autoIterationStatus: null,
   autoIterationConfig: null,
@@ -296,8 +293,6 @@ function createImportData(
           ratchetActiveSessionId: 'session-123',
           ratchetLastCiRunId: 'run-123',
           hasHadSessions: true,
-          cachedKanbanColumn: KanbanColumn.WORKING,
-          stateComputedAt: '2025-01-01T00:35:00.000Z',
           createdAt: '2025-01-01T00:00:00.000Z',
           updatedAt: '2025-01-01T00:35:00.000Z',
         },

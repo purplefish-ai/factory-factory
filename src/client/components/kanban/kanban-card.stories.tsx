@@ -66,8 +66,6 @@ const baseWorkspace: WorkspaceWithKanban = {
   linearIssueIdentifier: null,
   linearIssueUrl: null,
   hasHadSessions: true,
-  cachedKanbanColumn: 'WORKING',
-  stateComputedAt: new Date(),
   runScriptCommand: null,
   runScriptPostRunCommand: null,
   runScriptCleanupCommand: null,

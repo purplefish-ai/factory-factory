@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import type { GitHubKanbanBridge, GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
+import type { GitHubPRDiscoveryClaim, GitHubWorkspaceBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 
 const logger = createLogger('pr-snapshot');
@@ -83,12 +83,10 @@ interface ApplySnapshotOptions {
 }
 
 class PRSnapshotService extends EventEmitter {
-  private kanbanBridge: GitHubKanbanBridge | null = null;
   private workspaceBridge: GitHubWorkspaceBridge | null = null;
   private readonly workspaceOperations = new Map<string, Promise<void>>();
 
-  configure(bridges: { kanban: GitHubKanbanBridge; workspace: GitHubWorkspaceBridge }): void {
-    this.kanbanBridge = bridges.kanban;
+  configure(bridges: { workspace: GitHubWorkspaceBridge }): void {
     this.workspaceBridge = bridges.workspace;
   }
 
@@ -99,15 +97,6 @@ class PRSnapshotService extends EventEmitter {
       );
     }
     return this.workspaceBridge;
-  }
-
-  private get kanban(): GitHubKanbanBridge {
-    if (!this.kanbanBridge) {
-      throw new Error(
-        'PRSnapshotService not configured: kanban bridge missing. Call configure() first.'
-      );
-    }
-    return this.kanbanBridge;
   }
 
   private runWorkspaceOperation<T>(workspaceId: string, operation: () => Promise<T>): Promise<T> {
@@ -146,7 +135,6 @@ class PRSnapshotService extends EventEmitter {
           prCiStatus: input.ciStatus,
         } satisfies PRDispatchInvalidatedEvent);
       }
-      await this.kanban.updateCachedKanbanColumn(workspaceId);
     });
   }
 
@@ -209,7 +197,6 @@ class PRSnapshotService extends EventEmitter {
           workspaceId,
           prUrl,
         } satisfies PRUrlAttachedEvent);
-        await this.kanban.updateCachedKanbanColumn(workspaceId);
         logger.warn('Attached PR URL but could not fetch snapshot', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
       }
@@ -308,7 +295,6 @@ class PRSnapshotService extends EventEmitter {
           workspaceId,
           prUrl,
         } satisfies PRUrlAttachedEvent);
-        await this.kanban.updateCachedKanbanColumn(workspaceId);
         logger.warn('Attached discovered PR URL but could not fetch snapshot', {
           workspaceId,
           prUrl,
@@ -332,7 +318,6 @@ class PRSnapshotService extends EventEmitter {
         return { success: false, reason: 'claim_stale' };
       }
 
-      await this.kanban.updateCachedKanbanColumn(workspaceId);
       this.emit(PR_SNAPSHOT_UPDATED, {
         workspaceId,
         prUrl,
@@ -456,7 +441,6 @@ class PRSnapshotService extends EventEmitter {
       ...(result.dispatchReset ? { ratchetDispatchChanged: true as const } : {}),
     } satisfies PRSnapshotUpdatedEvent);
 
-    await this.kanban.updateCachedKanbanColumn(workspaceId);
     return true;
   }
 }

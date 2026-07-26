@@ -21,7 +21,6 @@ import type {
   RunScriptStatus,
   WorkspaceStatus,
 } from '@/shared/core';
-import { KanbanColumn } from '@/shared/core';
 
 const autoIterationExecutionContextSelect = {
   worktreePath: true,
@@ -122,9 +121,6 @@ interface UpdateWorkspaceInput {
   ratchetDispatchRetryCount?: number;
   // Activity tracking
   hasHadSessions?: boolean;
-  // Cached kanban column
-  cachedKanbanColumn?: KanbanColumn;
-  stateComputedAt?: Date | null;
   // Run script tracking
   runScriptCommand?: string | null;
   runScriptPostRunCommand?: string | null;
@@ -174,24 +170,9 @@ type PrAggregatePersistenceInput = Partial<
   >
 > & { prUpdatedAt: Date };
 
-export type KanbanOwnershipTuple = Pick<
-  Workspace,
-  | 'status'
-  | 'prUrl'
-  | 'prState'
-  | 'prCiStatus'
-  | 'prUpdatedAt'
-  | 'ratchetEnabled'
-  | 'ratchetState'
-  | 'ratchetDispatchOutcome'
-  | 'ratchetDispatchRetryCount'
-  | 'cachedKanbanColumn'
->;
-
 interface FindByProjectIdFilters {
   status?: WorkspaceStatus;
   excludeStatuses?: WorkspaceStatus[];
-  kanbanColumn?: KanbanColumn;
   limit?: number;
   offset?: number;
 }
@@ -366,10 +347,6 @@ class WorkspaceAccessor {
       where.status = filters.status;
     }
 
-    if (filters?.kanbanColumn) {
-      where.cachedKanbanColumn = filters.kanbanColumn;
-    }
-
     return prisma.workspace.findMany({
       where,
       take: filters?.limit,
@@ -400,10 +377,6 @@ class WorkspaceAccessor {
 
     if (filters?.excludeStatuses && filters.excludeStatuses.length > 0) {
       where.status = { notIn: filters.excludeStatuses };
-    }
-
-    if (filters?.kanbanColumn) {
-      where.cachedKanbanColumn = filters.kanbanColumn;
     }
 
     return prisma.workspace.findMany({
@@ -439,30 +412,6 @@ class WorkspaceAccessor {
       where: { id },
       data,
     });
-  }
-
-  async updateCachedKanbanColumnIfOwnershipMatches(
-    id: string,
-    expected: KanbanOwnershipTuple,
-    data: Pick<UpdateWorkspaceInput, 'cachedKanbanColumn' | 'stateComputedAt'>
-  ): Promise<boolean> {
-    const result = await prisma.workspace.updateMany({
-      where: {
-        id,
-        status: expected.status,
-        prUrl: expected.prUrl,
-        prState: expected.prState,
-        prCiStatus: expected.prCiStatus,
-        prUpdatedAt: expected.prUpdatedAt,
-        ratchetEnabled: expected.ratchetEnabled,
-        ratchetState: expected.ratchetState,
-        ratchetDispatchOutcome: expected.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: expected.ratchetDispatchRetryCount,
-        cachedKanbanColumn: expected.cachedKanbanColumn,
-      },
-      data,
-    });
-    return result.count === 1;
   }
 
   /**
@@ -595,8 +544,6 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
-        cachedKanbanColumn: KanbanColumn.WORKING,
-        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -619,8 +566,6 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'PROVISIONING',
-        cachedKanbanColumn: KanbanColumn.WORKING,
-        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
@@ -642,8 +587,6 @@ class WorkspaceAccessor {
       },
       data: {
         status: 'NEW',
-        cachedKanbanColumn: KanbanColumn.WORKING,
-        stateComputedAt: new Date(),
         initRetryCount: { increment: 1 },
         initStartedAt: null,
         initCompletedAt: null,

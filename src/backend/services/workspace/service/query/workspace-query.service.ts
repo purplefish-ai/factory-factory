@@ -260,9 +260,7 @@ class WorkspaceQueryService {
           ciObservation: derivedState.ciObservation,
           statusReason: derivedState.statusReason,
           runScriptStatus: w.runScriptStatus,
-          cachedKanbanColumn: derivedState.kanbanColumn,
-          // DB timestamp for last cached kanban-state recompute/change.
-          stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
+          kanbanColumn: derivedState.kanbanColumn,
           pendingRequestType,
         };
       }),
@@ -277,7 +275,9 @@ class WorkspaceQueryService {
     limit?: number;
     offset?: number;
   }) {
-    const { projectId, ...filters } = input;
+    // kanbanColumn is deliberately not a query filter: the column is derived
+    // below from live session state, so the database cannot pre-select on it.
+    const { projectId, kanbanColumn, ...filters } = input;
 
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
       ...filters,
@@ -336,7 +336,7 @@ class WorkspaceQueryService {
           return false;
         }
 
-        return !input.kanbanColumn || workspace.kanbanColumn === input.kanbanColumn;
+        return !kanbanColumn || workspace.kanbanColumn === kanbanColumn;
       })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }

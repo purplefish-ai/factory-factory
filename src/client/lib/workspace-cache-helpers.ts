@@ -19,6 +19,8 @@ export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
       activityState: 'IDLE' as const,
       ciState: 'NONE' as const,
     },
+    // A freshly created workspace is always NEW, which the server derives as WORKING.
+    kanbanColumn: 'WORKING' as const,
     ratchetButtonAnimated: false,
     flowPhase: 'NO_PR' as const,
     ciObservation: 'NOT_FETCHED' as const,

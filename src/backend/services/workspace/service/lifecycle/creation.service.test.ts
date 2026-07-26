@@ -62,8 +62,6 @@ describe('WorkspaceCreationService', () => {
     ratchetDispatchOutcome: null,
     ratchetDispatchRetryCount: 0,
     hasHadSessions: false,
-    cachedKanbanColumn: 'WAITING',
-    stateComputedAt: null,
     initErrorMessage: null,
     initOutput: null,
     initStartedAt: null,

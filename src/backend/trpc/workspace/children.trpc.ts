@@ -22,7 +22,7 @@ export const workspaceChildrenRouter = router({
   listChildren: publicProcedure
     .input(z.object({ parentWorkspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { workspaceRelationshipsService } = ctx.appContext.services;
+      const { workspaceRelationshipsService, workspaceSnapshotStore } = ctx.appContext.services;
       const children = await workspaceRelationshipsService.findChildrenWithStatus(
         input.parentWorkspaceId
       );
@@ -33,7 +33,9 @@ export const workspaceChildrenRouter = router({
         status: child.status,
         prState: child.prState,
         prUrl: child.prUrl,
-        cachedKanbanColumn: child.cachedKanbanColumn,
+        // Children can live in any project, and the snapshot store covers every
+        // non-archived workspace, so this is the same column the board shows.
+        kanbanColumn: workspaceSnapshotStore.getByWorkspaceId(child.id)?.kanbanColumn ?? null,
         projectId: child.projectId,
         projectName: child.project.name,
         projectSlug: child.project.slug,

@@ -189,6 +189,7 @@ export const workspaceCoreRouter = router({
     return {
       ...workspace,
       sessionSummaries,
+      kanbanColumn: derivedState.kanbanColumn,
       sidebarStatus: derivedState.sidebarStatus,
       ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
       flowPhase: derivedState.flowPhase,

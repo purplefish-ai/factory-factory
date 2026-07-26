@@ -12,7 +12,6 @@ import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   IssueProvider as CoreIssueProvider,
-  KanbanColumn as CoreKanbanColumn,
   PRState as CorePRState,
   RatchetReviewTriggerMode as CoreRatchetReviewTriggerMode,
   RatchetState as CoreRatchetState,
@@ -39,7 +38,6 @@ const RunScriptStatus = z.enum(enumValues(CoreRunScriptStatus));
 const WorkspaceMode = z.enum(enumValues(CoreWorkspaceMode));
 const PRState = z.enum(enumValues(CorePRState));
 const CIStatus = z.enum(enumValues(CoreCIStatus));
-const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
 const RatchetReviewTriggerMode = z.enum(enumValues(CoreRatchetReviewTriggerMode));
 const SessionStatus = z.enum(enumValues(CoreSessionStatus));
@@ -114,8 +112,6 @@ const exportedWorkspaceSchema = z.object({
   ratchetActiveSessionId: z.string().nullable(),
   ratchetLastCiRunId: z.string().nullable(),
   hasHadSessions: z.boolean(),
-  cachedKanbanColumn: KanbanColumn,
-  stateComputedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -4,7 +4,6 @@ interface ArchiveWorkspaceStateLike {
   prState?: PRState | null;
   ratchetState?: RatchetState | null;
   kanbanColumn?: KanbanColumn | null;
-  cachedKanbanColumn?: KanbanColumn | null;
   sidebarStatus?: {
     ciState?: WorkspaceSidebarCiState | null;
   } | null;
@@ -27,7 +26,6 @@ export function isWorkspaceDoneOrMerged(
     workspace.ratchetState === 'MERGED' ||
     workspace.sidebarStatus?.ciState === 'MERGED' ||
     workspace.sidebarStatus?.ciState === 'CLOSED' ||
-    workspace.kanbanColumn === 'DONE' ||
-    workspace.cachedKanbanColumn === 'DONE'
+    workspace.kanbanColumn === 'DONE'
   );
 }

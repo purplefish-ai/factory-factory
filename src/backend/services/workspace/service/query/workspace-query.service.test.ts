@@ -181,7 +181,6 @@ describe('WorkspaceQueryService', () => {
         ratchetDispatchRetryCount: 0,
         runScriptStatus: RunScriptStatus.IDLE,
         hasHadSessions: true,
-        stateComputedAt: null,
         agentSessions: [],
         terminalSessions: [],
       },
@@ -206,7 +205,6 @@ describe('WorkspaceQueryService', () => {
     expect(result.workspaces[0]).toMatchObject({
       id: 'w-ci',
       isWorking: false,
-      cachedKanbanColumn: 'WORKING',
     });
   });
 
@@ -221,7 +219,6 @@ describe('WorkspaceQueryService', () => {
         ratchetState: RatchetState.IDLE,
         runScriptStatus: RunScriptStatus.IDLE,
         hasHadSessions: true,
-        cachedKanbanColumn: 'WAITING',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },
     ]);
@@ -247,12 +244,56 @@ describe('WorkspaceQueryService', () => {
 
     expect(result).toHaveLength(0);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
-      kanbanColumn: 'WAITING',
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
 
-  it('listWithKanbanState returns FAILED workspaces from the WAITING cache bucket', async () => {
+  it('listWithKanbanState matches a column that only live session state produces', async () => {
+    // A READY workspace with no PR is WAITING by its persisted fields alone; it
+    // is WORKING only because a session is live. Filtering used to run against
+    // the persisted cachedKanbanColumn in SQL, which dropped this workspace
+    // from the result (and so from bulk archive) before derivation ever ran.
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'w-live',
+        status: WorkspaceStatus.READY,
+        prUrl: null,
+        prState: PRState.NONE,
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetState: RatchetState.IDLE,
+        runScriptStatus: RunScriptStatus.IDLE,
+        hasHadSessions: true,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s-1'],
+      isSessionWorking: true,
+      isWorking: true,
+      flowState: {
+        hasActivePr: false,
+        isWorking: false,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({
+      projectId: 'proj-1',
+      kanbanColumn: 'WORKING',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 'w-live', kanbanColumn: 'WORKING' });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
+  it('listWithKanbanState returns FAILED workspaces when filtering for WAITING', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -263,7 +304,6 @@ describe('WorkspaceQueryService', () => {
         ratchetState: RatchetState.IDLE,
         runScriptStatus: RunScriptStatus.IDLE,
         hasHadSessions: true,
-        cachedKanbanColumn: 'WAITING',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },
     ]);
@@ -294,7 +334,6 @@ describe('WorkspaceQueryService', () => {
       kanbanColumn: 'WAITING',
     });
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
-      kanbanColumn: 'WAITING',
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
@@ -314,8 +353,6 @@ describe('WorkspaceQueryService', () => {
       ratchetState: RatchetState.IDLE,
       runScriptStatus: RunScriptStatus.IDLE,
       hasHadSessions: true,
-      cachedKanbanColumn: 'WAITING',
-      stateComputedAt: null,
       agentSessions: [
         {
           id: 's1',
@@ -383,8 +420,6 @@ describe('WorkspaceQueryService', () => {
         ratchetState: 'IDLE',
         runScriptStatus: 'IDLE',
         hasHadSessions: true,
-        cachedKanbanColumn: 'WAITING',
-        stateComputedAt: null,
         agentSessions: [{ updatedAt: new Date('2026-01-03T00:00:00.000Z') }],
         terminalSessions: [],
       },
@@ -401,8 +436,6 @@ describe('WorkspaceQueryService', () => {
         ratchetEnabled: true,
         ratchetState: 'REVIEW_PENDING',
         runScriptStatus: 'RUNNING',
-        cachedKanbanColumn: 'WORKING',
-        stateComputedAt: new Date('2026-01-02T10:00:00.000Z'),
         agentSessions: [],
         terminalSessions: [{ updatedAt: new Date('2026-01-04T00:00:00.000Z') }],
       },
@@ -474,7 +507,6 @@ describe('WorkspaceQueryService', () => {
       ratchetState: RatchetState.REVIEW_PENDING,
       runScriptStatus: RunScriptStatus.IDLE,
       hasHadSessions: true,
-      stateComputedAt: null,
       githubIssueNumber: null,
       linearIssueId: null,
       agentSessions: [{ updatedAt: new Date('2026-01-01T00:20:00.000Z') }],
@@ -546,7 +578,7 @@ describe('WorkspaceQueryService', () => {
     expect(summaryWorkspace?.flowPhase).toBe(snapshotEntry?.flowPhase);
     expect(summaryWorkspace?.ciObservation).toBe(snapshotEntry?.ciObservation);
     expect(summaryWorkspace?.sidebarStatus).toEqual(snapshotEntry?.sidebarStatus);
-    expect(summaryWorkspace?.cachedKanbanColumn).toBe(snapshotEntry?.kanbanColumn);
+    expect(summaryWorkspace?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
     expect(summaryWorkspace?.statusReason).toEqual(snapshotEntry?.statusReason);
 
     expect(kanban[0]?.flowPhase).toBe(snapshotEntry?.flowPhase);

@@ -21,12 +21,8 @@ function byNewest(a: ServerWorkspace, b: ServerWorkspace): number {
 
 export function groupWorkspacesForSidebar(workspaces: ServerWorkspace[]): SidebarWorkspaceGroups {
   return {
-    waiting: workspaces
-      .filter((workspace) => workspace.cachedKanbanColumn === 'WAITING')
-      .sort(byNewest),
-    working: workspaces
-      .filter((workspace) => workspace.cachedKanbanColumn === 'WORKING')
-      .sort(byNewest),
-    done: workspaces.filter((workspace) => workspace.cachedKanbanColumn === 'DONE').sort(byNewest),
+    waiting: workspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING').sort(byNewest),
+    working: workspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING').sort(byNewest),
+    done: workspaces.filter((workspace) => workspace.kanbanColumn === 'DONE').sort(byNewest),
   };
 }

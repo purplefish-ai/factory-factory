@@ -10,6 +10,7 @@ const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindChildrenWithStatus = vi.hoisted(() => vi.fn());
 const mockFindParentWorkspace = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
+const mockGetSnapshotByWorkspaceId = vi.hoisted(() => vi.fn());
 
 import { workspaceChildrenRouter } from './children.trpc';
 
@@ -38,6 +39,9 @@ function createCaller(requestTrust?: {
     },
     workspaceNotificationService: {
       countPending: (...args: unknown[]) => mockCountPending(...args),
+    },
+    workspaceSnapshotStore: {
+      getByWorkspaceId: (...args: unknown[]) => mockGetSnapshotByWorkspaceId(...args),
     },
   };
   return {
@@ -115,6 +119,7 @@ describe('workspaceChildrenRouter', () => {
 
   it('lists child summaries and resolves the parent summary', async () => {
     const createdAt = new Date('2026-07-17T12:00:00.000Z');
+    mockGetSnapshotByWorkspaceId.mockReturnValue({ kanbanColumn: 'WORKING' });
     mockFindChildrenWithStatus.mockResolvedValue([
       {
         ...child,
@@ -122,7 +127,6 @@ describe('workspaceChildrenRouter', () => {
         status: 'READY',
         prState: 'NONE',
         prUrl: null,
-        cachedKanbanColumn: 'WAITING',
         project: { name: 'Child Project', slug: 'child-project' },
         createdAt,
       },
@@ -141,10 +145,10 @@ describe('workspaceChildrenRouter', () => {
         status: 'READY',
         prState: 'NONE',
         prUrl: null,
-        cachedKanbanColumn: 'WAITING',
         projectId: 'child-project-1',
         projectName: 'Child Project',
         projectSlug: 'child-project',
+        kanbanColumn: 'WORKING',
         createdAt,
       },
     ]);

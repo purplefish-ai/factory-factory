@@ -35,12 +35,7 @@ export interface ServerWorkspace {
   ciObservation?: string | null;
   statusReason?: WorkspaceStatusReason | null;
   runScriptStatus?: RunScriptStatus | null;
-  cachedKanbanColumn?: string | null;
-  /**
-   * Timestamp (from DB) when cached kanban state was last recomputed due to a
-   * column change. This is not the snapshot transport timestamp.
-   */
-  stateComputedAt?: string | null;
+  kanbanColumn?: string | null;
   /** Timestamp for the latest snapshot message applied in client cache. */
   snapshotComputedAt?: string | null;
   sidebarStatus?: WorkspaceSidebarStatus;
