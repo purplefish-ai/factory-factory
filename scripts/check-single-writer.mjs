@@ -578,13 +578,20 @@ const SIDE_TABLE_RELATIONS = {
 };
 
 /**
- * Nested relation operations that mutate an existing side-table row. `create` is
- * absent deliberately: all three rows are created with their workspace, and they
- * have to be, or the row-guarded writes would skip a workspace. Creating the
- * paired rows is part of creating a workspace; changing them afterwards belongs
- * to the owning accessor.
+ * Nested relation operations that reach a side-table row.
+ *
+ * `create` is here, but only enforced outside a `workspace.create()` payload:
+ * all three rows are created with their workspace, and they have to be, or the
+ * row-guarded writes would skip a workspace. That exemption used to be blanket —
+ * `create` was simply absent from this set — which also permitted the one nested
+ * write Prisma allows that is not a creation at all:
+ * `workspace.update({ data: { runScript: { create: { status: 'RUNNING' } } } })`
+ * inserts a row with caller-chosen column values for a workspace whose row was
+ * deleted, from any file. Creating the paired rows is part of creating a
+ * workspace; reaching them afterwards belongs to the owning accessor.
  */
 const NESTED_MUTATION_KEYS = new Set([
+  'create',
   'update',
   'updateMany',
   'upsert',
@@ -596,13 +603,18 @@ const NESTED_MUTATION_KEYS = new Set([
   'set',
 ]);
 
+/** Nested operations a `workspace.create()` payload may legitimately carry. */
+const NESTED_CREATION_KEYS = new Set(['create']);
+
 /**
  * Flag `prisma.<table>.<write>()` / `transaction.<table>.<write>()` outside the
  * one file that owns the table. Reads are unrestricted; any accessor may join a
  * side table to reproduce the flat workspace shape.
  */
 function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
-  const visit = (node) => {
+  const visit = (node, creatingWorkspace) => {
+    let insideWorkspaceCreate = creatingWorkspace;
+
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -616,18 +628,25 @@ function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
           `${relPath}: unauthorized write to ${table} via ${method}(); ${table} is written only by ${owner}`
         );
       }
+      // Everything under this call's payload is creating a workspace, so the
+      // paired rows may be created with it. The flag covers the subtree rather
+      // than the file: a `workspace.update()` elsewhere in the same file is
+      // still policed.
+      if (table === 'workspace' && method === 'create') {
+        insideWorkspaceCreate = true;
+      }
     }
 
     // A nested relation write reaches the same rows without naming the table:
     // `prisma.workspace.update({ data: { pr: { update: ... } } })`. Only `data:`
     // payloads count -- `pr: { url: null }` under `where:` is a relation filter.
     if (ts.isPropertyAssignment(node) && propertyName(node) === 'data') {
-      checkNestedSideTableMutation(relPath, node.initializer, violations);
+      checkNestedSideTableMutation(relPath, node.initializer, violations, insideWorkspaceCreate);
     }
 
-    ts.forEachChild(node, visit);
+    ts.forEachChild(node, (child) => visit(child, insideWorkspaceCreate));
   };
-  visit(sourceFile);
+  visit(sourceFile, false);
 }
 
 function propertyName(assignment) {
@@ -638,7 +657,7 @@ function propertyName(assignment) {
   return null;
 }
 
-function checkNestedSideTableMutation(relPath, dataExpression, violations) {
+function checkNestedSideTableMutation(relPath, dataExpression, violations, insideWorkspaceCreate) {
   if (!ts.isObjectLiteralExpression(dataExpression)) {
     return;
   }
@@ -661,11 +680,15 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations) {
       const key = ts.isPropertyAssignment(operation)
         ? propertyName(operation)
         : operation.name.text;
-      if (key && NESTED_MUTATION_KEYS.has(key)) {
-        violations.push(
-          `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
-        );
+      if (!key || !NESTED_MUTATION_KEYS.has(key)) {
+        continue;
       }
+      if (insideWorkspaceCreate && NESTED_CREATION_KEYS.has(key)) {
+        continue;
+      }
+      violations.push(
+        `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
+      );
     }
   }
 }

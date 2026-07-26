@@ -251,17 +251,23 @@ describe('check-single-writer', () => {
       );
     });
 
-    // Both rows are created with their workspace and have to be, or the
+    // All three rows are created with their workspace and have to be, or the
     // row-guarded writes would skip it. Restoring a backup creates them the same
     // way, before any accessor could reach the rows.
-    it('allows nested creation of both rows alongside a workspace', () => {
+    it('allows nested creation of all three rows alongside a workspace', () => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/orchestration/data-backup.service.ts',
           content: `
             async function restore(tx, projectId) {
               await tx.workspace.create({
-                data: { projectId, name: 'x', pr: { create: { url: null } }, ratchet: { create: { enabled: true } } },
+                data: {
+                  projectId,
+                  name: 'x',
+                  pr: { create: { url: null } },
+                  ratchet: { create: { enabled: true } },
+                  runScript: { create: { command: 'pnpm dev' } },
+                },
               });
             }
           `,
@@ -271,6 +277,60 @@ describe('check-single-writer', () => {
       const result = runChecker(tempRoot);
 
       expect(result.status).toBe(0);
+    });
+
+    // The exemption above is for creating a workspace, not for the `create` key.
+    // Prisma accepts a nested `create` in an *update* payload too, and that one
+    // inserts caller-chosen column values into a row the owning accessor never
+    // saw -- the single write path the blanket `create` exemption used to allow.
+    it('rejects a nested create of a side table in a workspace update', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function reinstate(tx, id) {
+              await tx.workspace.update({
+                where: { id },
+                data: { runScript: { create: { status: 'RUNNING', pid: 4242 } } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'unauthorized nested create of the workspaceRunScript relation'
+      );
+    });
+
+    // The creation exemption follows the call, not the file: a file that legally
+    // creates a workspace does not thereby earn a second write path.
+    it('rejects a nested create in an update beside a legitimate workspace create', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function restore(tx, projectId, id) {
+              await tx.workspace.create({
+                data: { projectId, name: 'x', runScript: { create: { command: 'pnpm dev' } } },
+              });
+              await tx.workspace.update({
+                where: { id },
+                data: { pr: { create: { url: 'https://example.test/pr/1' } } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized nested create of the workspacePR relation');
+      expect(result.output).not.toContain('workspaceRunScript');
     });
 
     // `pr: { url: null }` under `where:` is a relation filter, not a write. The
