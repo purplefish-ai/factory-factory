@@ -41,6 +41,8 @@ import {
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
+const MAX_PORT = 65_535;
+
 export { createApplication, disposeApplication } from './app-context';
 export type { ServerInstance };
 
@@ -140,6 +142,9 @@ export function createServer(application: Application, requestedPort?: number): 
 
     for (let attempt = 0; attempt < PORT_BIND_MAX_ATTEMPTS; attempt++) {
       const candidatePort = REQUESTED_PORT + attempt;
+      if (candidatePort > MAX_PORT) {
+        break;
+      }
 
       try {
         await listenOnPort(candidatePort);

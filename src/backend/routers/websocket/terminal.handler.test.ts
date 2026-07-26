@@ -596,6 +596,56 @@ describe('createTerminalUpgradeHandler', () => {
     expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
   });
 
+  it('clears the persisted PID when a terminal is destroyed via WebSocket', async () => {
+    const workspaceId = 'workspace-1';
+    const terminalId = 'terminal-1';
+    const { terminalService, outputListeners, exitListeners } = createTerminalService();
+    terminalService.getTerminalsForWorkspace.mockReturnValue([
+      {
+        id: terminalId,
+        createdAt: new Date('2026-07-25T00:00:00.000Z'),
+        outputBuffer: '',
+      },
+    ]);
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalSessionService,
+        terminalService,
+        workspaceDataService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const ws = new MockWebSocket();
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    handler(
+      createRequest(),
+      { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      createWss(ws),
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    await vi.waitFor(() => {
+      expect(exitListeners.get(terminalId)?.size).toBe(1);
+    });
+
+    ws.emit('message', JSON.stringify({ type: 'destroy', terminalId }));
+
+    await vi.waitFor(() => {
+      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, terminalId);
+      expect(mockClearTerminalPid).toHaveBeenCalledWith(workspaceId, terminalId);
+    });
+    expect(outputListeners.get(terminalId)?.size).toBe(0);
+    expect(exitListeners.get(terminalId)?.size).toBe(0);
+  });
+
   it('includes output buffered before listeners attach in the created message', async () => {
     const workspaceId = 'workspace-1';
     const { terminalService } = createTerminalService();

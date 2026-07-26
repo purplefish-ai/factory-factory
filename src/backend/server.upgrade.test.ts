@@ -631,6 +631,36 @@ describe('server websocket upgrade routing', () => {
     }
   });
 
+  it('does not try to bind ports above the valid TCP range', async () => {
+    const harness = createTestHarness({ backendHost: '127.0.0.1' });
+    const server = createTestServer(harness.application, 65_535);
+    const httpServer = server.getHttpServer();
+    const addressInUseError = Object.assign(new Error('address in use'), {
+      code: 'EADDRINUSE',
+    });
+    const listenSpy = vi
+      .spyOn(httpServer, 'listen')
+      .mockImplementationOnce(() => {
+        queueMicrotask(() => httpServer.emit('error', addressInUseError));
+        return httpServer;
+      })
+      .mockImplementation(() => {
+        throw Object.assign(new RangeError('bad port'), {
+          code: 'ERR_SOCKET_BAD_PORT',
+        });
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(
+        'Could not bind server to an available port starting from 65535'
+      );
+      expect(listenSpy).toHaveBeenCalledOnce();
+      expect(listenSpy).toHaveBeenCalledWith(65_535, '127.0.0.1');
+    } finally {
+      listenSpy.mockRestore();
+    }
+  });
+
   it('rejects start when http server emits an error', async () => {
     const harness = createTestHarness();
     const server = createTestServer(harness.application, 0);

@@ -12,6 +12,7 @@ import { createLogger } from './logger.service';
 
 const logger = createLogger('port-service');
 const execAsync = promisify(exec);
+const MAX_PORT = 65_535;
 
 /**
  * Check if a port is in use by checking actual listening processes.
@@ -66,6 +67,9 @@ export async function isPortAvailable(port: number): Promise<boolean> {
 export async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i;
+    if (port > MAX_PORT) {
+      break;
+    }
     if (await isPortAvailable(port)) {
       if (i > 0) {
         logger.info('Found available port', { startPort, foundPort: port, attempts: i + 1 });
