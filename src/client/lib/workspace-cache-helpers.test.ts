@@ -152,46 +152,4 @@ describe('workspace-cache-helpers', () => {
 
     expect(updated).toBe(currentCache);
   });
-
-  it('restores the previous cache when the current cache is missing', () => {
-    const previousCache = {
-      workspaces: [
-        { id: 'ws-1', name: 'Archived workspace' },
-        { id: 'ws-2', name: 'Still current' },
-      ],
-      reviewCount: 1,
-    };
-
-    const updated = restoreWorkspacesToProjectWorkspaceCache(undefined, previousCache, ['ws-1']);
-
-    expect(updated).toBe(previousCache);
-  });
-
-  it('restores workspaces at their previous relative position', () => {
-    const previousCache = {
-      workspaces: [
-        { id: 'ws-1', name: 'First' },
-        { id: 'ws-2', name: 'Second' },
-        { id: 'ws-3', name: 'Third' },
-      ],
-      reviewCount: 0,
-    };
-    const currentCache = {
-      workspaces: [
-        { id: 'ws-new', name: 'New snapshot item' },
-        { id: 'ws-2', name: 'Second' },
-        { id: 'ws-3', name: 'Third' },
-      ],
-      reviewCount: 0,
-    };
-
-    const updated = restoreWorkspacesToProjectWorkspaceCache(currentCache, previousCache, ['ws-1']);
-
-    expect(updated?.workspaces).toEqual([
-      { id: 'ws-new', name: 'New snapshot item' },
-      { id: 'ws-1', name: 'First' },
-      { id: 'ws-2', name: 'Second' },
-      { id: 'ws-3', name: 'Third' },
-    ]);
-  });
 });

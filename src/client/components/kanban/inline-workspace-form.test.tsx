@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
   createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
-  workspaceListCache: undefined as { workspaces: Array<{ id: string }> } | undefined,
+  workspaceListCache: undefined as
+    | { workspaces: Array<{ id: string }>; reviewCount: number }
+    | undefined,
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
@@ -96,7 +98,8 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 
-vi.mock('@/client/lib/workspace-cache-helpers', () => ({
+vi.mock('@/client/lib/workspace-cache-helpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/lib/workspace-cache-helpers')>()),
   createOptimisticWorkspaceCacheData: vi.fn(),
 }));
 
@@ -326,7 +329,12 @@ describe('InlineWorkspaceForm', () => {
     container.remove();
   });
 
-  it('restores an empty project list cache when optimistic workspace creation fails', async () => {
+  it('drops only the optimistic row when workspace creation fails', async () => {
+    // Rolling the whole cache back to its pre-mutation value would also revert
+    // snapshot deltas that arrived during the create, and this cache backs the
+    // sidebar too.
+    mocks.workspaceListCache = { workspaces: [{ id: 'ws-existing' }], reviewCount: 3 };
+
     const { container, root } = renderForm();
     const mutationOptions = mocks.createWorkspaceMutationOptions as {
       onMutate: (input: {
@@ -334,7 +342,7 @@ describe('InlineWorkspaceForm', () => {
         projectId: string;
         name: string;
         ratchetEnabled?: boolean;
-      }) => Promise<{ optimisticWorkspaceId: string; previousWorkspaces: unknown }>;
+      }) => Promise<{ optimisticWorkspaceId: string }>;
       onError: (error: Error, input: unknown, context: unknown) => void;
     };
 
@@ -345,19 +353,21 @@ describe('InlineWorkspaceForm', () => {
       ratchetEnabled: true,
     });
 
-    expect(mocks.workspaceListCache?.workspaces).toHaveLength(1);
+    expect(mocks.workspaceListCache?.workspaces).toHaveLength(2);
     expect(mocks.workspaceListCache?.workspaces[0]).toMatchObject({
       id: context.optimisticWorkspaceId,
       name: 'New Workspace',
     });
 
+    // A snapshot delta lands while the create is still in flight.
+    mocks.workspaceListCache?.workspaces.push({ id: 'ws-live' });
     mutationOptions.onError(new Error('boom'), undefined, context);
 
-    expect(mocks.listForProjectSetDataMock).toHaveBeenLastCalledWith(
-      { projectId: 'project-1' },
-      undefined
-    );
-    expect(mocks.workspaceListCache).toBeUndefined();
+    expect(mocks.workspaceListCache?.workspaces.map((workspace) => workspace.id)).toEqual([
+      'ws-existing',
+      'ws-live',
+    ]);
+    expect(mocks.workspaceListCache?.reviewCount).toBe(3);
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to create workspace: boom');
 
     root.unmount();

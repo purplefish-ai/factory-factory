@@ -10,7 +10,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
+import {
+  createOptimisticWorkspaceCacheData,
+  removeWorkspaceFromProjectWorkspaceCache,
+} from '@/client/lib/workspace-cache-helpers';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { collectAttachments } from '@/components/chat/chat-input/hooks/attachment-file-conversion';
 import { usePasteDropHandler } from '@/components/chat/chat-input/hooks/use-paste-drop-handler';
@@ -111,7 +114,6 @@ type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
 
 interface CreateWorkspaceMutationContext {
   optimisticWorkspaceId: string;
-  previousWorkspaces: ProjectWorkspaceCache | undefined;
 }
 
 function createOptimisticWorkingWorkspace(params: {
@@ -470,13 +472,12 @@ export function InlineWorkspaceForm({
       });
 
       await utils.workspace.listForProject.cancel({ projectId });
-      const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
 
       utils.workspace.listForProject.setData({ projectId }, (old) =>
         withOptimisticWorkspaceFirst(old, optimisticWorkspace, [optimisticWorkspaceId])
       );
 
-      return { optimisticWorkspaceId, previousWorkspaces };
+      return { optimisticWorkspaceId };
     },
     onSuccess: (workspace, _input, context) => {
       const optimisticWorkspace = createOptimisticWorkingWorkspace({
@@ -506,7 +507,13 @@ export function InlineWorkspaceForm({
     },
     onError: (error, _input, context) => {
       if (context) {
-        utils.workspace.listForProject.setData({ projectId }, context.previousWorkspaces);
+        // Drop only the optimistic row. Restoring the pre-mutation cache would
+        // also revert snapshot deltas and concurrent mutations that landed
+        // while the create was in flight, and this cache backs the sidebar as
+        // well as the board.
+        utils.workspace.listForProject.setData({ projectId }, (old) =>
+          removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
+        );
       }
       toast.error(`Failed to create workspace: ${error.message}`);
     },
