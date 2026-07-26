@@ -5,6 +5,7 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import { createLogger } from '@/backend/services/logger.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,
@@ -335,7 +336,7 @@ class WorkspaceQueryService {
     }
 
     if (!workspace.prUrl) {
-      await workspaceAccessor.resetPRDiscoveryBackoff(workspaceId);
+      await workspacePrAccessor.resetDiscoveryBackoff(workspaceId);
       return { success: false, reason: 'no_pr_url' as const };
     }
 

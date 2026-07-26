@@ -11,6 +11,8 @@ const mockExecuteRaw = vi.fn();
 const mockTransaction = vi.fn();
 const mockRatchetFindUnique = vi.fn();
 const mockRatchetUpdateMany = vi.fn();
+const mockPrFindUnique = vi.fn();
+const mockPrUpdateMany = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -27,6 +29,10 @@ vi.mock('@/backend/db', () => ({
       findUnique: (...args: unknown[]) => mockRatchetFindUnique(...args),
       updateMany: (...args: unknown[]) => mockRatchetUpdateMany(...args),
     },
+    workspacePR: {
+      findUnique: (...args: unknown[]) => mockPrFindUnique(...args),
+      updateMany: (...args: unknown[]) => mockPrUpdateMany(...args),
+    },
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
     $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
@@ -41,6 +47,7 @@ describe('workspaceAccessor', () => {
     // would spill from a test that queues more than it consumes into the next.
     mockUpdateMany.mockReset();
     mockRatchetUpdateMany.mockReset();
+    mockPrUpdateMany.mockReset();
   });
 
   describe('create', () => {
@@ -61,7 +68,7 @@ describe('workspaceAccessor', () => {
           githubIssueNumber: 12,
           ratchet: { create: { enabled: false } },
         }),
-        include: { ratchet: true },
+        include: { ratchet: true, pr: true },
       });
     });
 
@@ -79,7 +86,7 @@ describe('workspaceAccessor', () => {
           name: 'Manual workspace',
           ratchet: { create: { enabled: undefined } },
         }),
-        include: { ratchet: true },
+        include: { ratchet: true, pr: true },
       });
     });
 
@@ -103,7 +110,7 @@ describe('workspaceAccessor', () => {
     expect(mockFindMany).toHaveBeenCalledWith({
       where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
       orderBy: { updatedAt: 'desc' },
-      include: { agentSessions: true, terminalSessions: true, ratchet: true },
+      include: { agentSessions: true, terminalSessions: true, ratchet: true, pr: true },
     });
   });
 
@@ -125,205 +132,12 @@ describe('workspaceAccessor', () => {
     });
     expect(mockFindMany).toHaveBeenNthCalledWith(2, {
       where: { id: { in: ['ws-2'] } },
-      include: { project: true },
+      include: { project: true, pr: true },
     });
   });
 
-  describe('PR discovery scheduling', () => {
-    it('finds a bounded due set with GitHub metadata and reset candidates first', async () => {
-      const dueAt = new Date('2026-07-17T12:00:00.000Z');
-      mockFindMany.mockResolvedValue([]);
-
-      await workspaceAccessor.findNeedingPRDiscovery(25, dueAt);
-
-      expect(mockFindMany).toHaveBeenCalledWith({
-        where: {
-          status: 'READY',
-          prUrl: null,
-          branchName: { not: null },
-          project: {
-            githubOwner: { not: null },
-            githubRepo: { not: null },
-          },
-          OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: dueAt } }],
-        },
-        include: { project: true },
-        orderBy: [{ prDiscoveryNextCheckAt: 'asc' }, { updatedAt: 'desc' }],
-        take: 25,
-      });
-    });
-
-    it('uses the current time as the default due threshold', async () => {
-      const now = new Date('2026-07-17T12:00:00.000Z');
-      vi.useFakeTimers();
-      vi.setSystemTime(now);
-      mockFindMany.mockResolvedValue([]);
-
-      try {
-        await workspaceAccessor.findNeedingPRDiscovery(10);
-      } finally {
-        vi.useRealTimers();
-      }
-
-      expect(mockFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            OR: [{ prDiscoveryNextCheckAt: null }, { prDiscoveryNextCheckAt: { lte: now } }],
-          }),
-        })
-      );
-    });
-
-    it('claims an attempt only while all observed eligibility values still match', async () => {
-      const expectedUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
-      const expectedNextCheckAt = new Date('2026-07-17T11:58:00.000Z');
-      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
-      const nextCheckAt = new Date('2026-07-17T12:06:00.000Z');
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-
-      await expect(
-        workspaceAccessor.claimPRDiscoveryAttempt('ws-1', {
-          branchName: 'feature/pr-discovery',
-          expectedUpdatedAt,
-          expectedRetryCount: 1,
-          expectedNextCheckAt,
-          checkedAt,
-          nextCheckAt,
-        })
-      ).resolves.toBe(true);
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'ws-1',
-          status: 'READY',
-          prUrl: null,
-          branchName: 'feature/pr-discovery',
-          updatedAt: expectedUpdatedAt,
-          prDiscoveryRetryCount: 1,
-          prDiscoveryNextCheckAt: expectedNextCheckAt,
-        },
-        data: {
-          prDiscoveryLastCheckedAt: checkedAt,
-          prDiscoveryRetryCount: { increment: 1 },
-          prDiscoveryNextCheckAt: nextCheckAt,
-        },
-      });
-    });
-
-    it('guards a claim whose observed next-check timestamp was null', async () => {
-      const expectedUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
-      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
-      const nextCheckAt = new Date('2026-07-17T12:03:00.000Z');
-      mockUpdateMany.mockResolvedValue({ count: 0 });
-
-      await expect(
-        workspaceAccessor.claimPRDiscoveryAttempt('ws-1', {
-          branchName: 'feature/pr-discovery',
-          expectedUpdatedAt,
-          expectedRetryCount: 0,
-          expectedNextCheckAt: null,
-          checkedAt,
-          nextCheckAt,
-        })
-      ).resolves.toBe(false);
-
-      expect(mockUpdateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ prDiscoveryNextCheckAt: null }),
-        })
-      );
-    });
-
-    it('attaches a discovered PR only while the exact discovery claim remains current', async () => {
-      const checkedAt = new Date('2026-07-17T12:00:00.000Z');
-      const nextCheckAt = new Date('2026-07-17T12:06:00.000Z');
-      const prUpdatedAt = new Date('2026-07-17T12:01:00.000Z');
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-
-      await expect(
-        workspaceAccessor.attachDiscoveredPRIfClaimMatches(
-          'ws-1',
-          'https://github.com/org/repo/pull/12',
-          {
-            branchName: 'feature/pr-discovery',
-            checkedAt,
-            retryCount: 2,
-            nextCheckAt,
-          },
-          prUpdatedAt
-        )
-      ).resolves.toBe(true);
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'ws-1',
-          status: 'READY',
-          prUrl: null,
-          branchName: 'feature/pr-discovery',
-          prDiscoveryLastCheckedAt: checkedAt,
-          prDiscoveryRetryCount: 2,
-          prDiscoveryNextCheckAt: nextCheckAt,
-        },
-        data: {
-          prUrl: 'https://github.com/org/repo/pull/12',
-          prUpdatedAt,
-        },
-      });
-    });
-
-    it('updates a discovered PR snapshot only while its URL remains attached', async () => {
-      const prUpdatedAt = new Date('2026-07-17T12:02:00.000Z');
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-
-      await expect(
-        workspaceAccessor.updatePRSnapshotIfUrlMatches(
-          'ws-1',
-          'https://github.com/org/repo/pull/12',
-          {
-            prNumber: 12,
-            prState: 'OPEN',
-            prReviewState: 'APPROVED',
-            prCiStatus: 'SUCCESS',
-          },
-          prUpdatedAt
-        )
-      ).resolves.toBe(true);
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'ws-1',
-          prUrl: 'https://github.com/org/repo/pull/12',
-        },
-        data: {
-          prNumber: 12,
-          prState: 'OPEN',
-          prReviewState: 'APPROVED',
-          prCiStatus: 'SUCCESS',
-          prUpdatedAt,
-        },
-      });
-    });
-
-    it('resets discovery backoff only while the workspace remains eligible', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 });
-
-      await expect(workspaceAccessor.resetPRDiscoveryBackoff('ws-1')).resolves.toBe(true);
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'ws-1',
-          status: 'READY',
-          prUrl: null,
-          branchName: { not: null },
-        },
-        data: {
-          prDiscoveryLastCheckedAt: null,
-          prDiscoveryRetryCount: 0,
-          prDiscoveryNextCheckAt: null,
-        },
-      });
-    });
-  });
+  // PR discovery scheduling moved with its columns to
+  // `workspace-pr.accessor.test.ts`.
 
   it('marks workspace as having had sessions with guarded updateMany', async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
@@ -338,18 +152,18 @@ describe('workspaceAccessor', () => {
 
   describe('PR aggregate writes with dispatch reset', () => {
     /**
-     * The aggregate lives on Workspace and the dispatch on WorkspaceRatchet, so
-     * the two writes are separate statements in one transaction. Each is
-     * guarded by the state it was decided from, and the aggregate goes first.
+     * The aggregate lives on WorkspacePR and the dispatch on WorkspaceRatchet, so
+     * the two writes are separate statements in one transaction. Each is guarded
+     * by the state it was decided from, and the aggregate goes first.
      */
-    function currentAggregate(overrides: Record<string, unknown> = {}) {
+    function currentColumns(overrides: Record<string, unknown> = {}) {
       return {
-        prUrl: null,
-        prNumber: 41,
-        prState: 'CHANGES_REQUESTED',
-        prCiStatus: 'FAILURE',
-        prReviewState: 'CHANGES_REQUESTED',
-        prUpdatedAt: new Date('2026-07-17T11:59:00.000Z'),
+        url: null,
+        number: 41,
+        state: 'CHANGES_REQUESTED',
+        ciStatus: 'FAILURE',
+        reviewState: 'CHANGES_REQUESTED',
+        syncedAt: new Date('2026-07-17T11:59:00.000Z'),
         ...overrides,
       };
     }
@@ -376,6 +190,10 @@ describe('workspaceAccessor', () => {
             findUnique: mockRatchetFindUnique,
             updateMany: mockRatchetUpdateMany,
           },
+          workspacePR: {
+            findUnique: mockPrFindUnique,
+            updateMany: mockPrUpdateMany,
+          },
         })
       );
     }
@@ -390,34 +208,71 @@ describe('workspaceAccessor', () => {
     };
 
     beforeEach(() => {
-      mockFindUnique.mockResolvedValue(currentAggregate());
+      mockPrFindUnique.mockResolvedValue(currentColumns());
       mockRatchetFindUnique.mockResolvedValue(currentDispatch());
       runInTransaction();
     });
 
     it('writes the changed aggregate guarded on the aggregate alone', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
         workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
       ).resolves.toEqual({ applied: true, dispatchReset: true });
 
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: { id: 'ws-1', ...currentAggregate() },
+      expect(mockPrUpdateMany).toHaveBeenCalledWith({
+        where: { workspaceId: 'ws-1', ...currentColumns() },
         data: {
-          prNumber: 42,
-          prState: 'OPEN',
-          prCiStatus: 'PENDING',
-          prReviewState: 'CHANGES_REQUESTED',
-          prUpdatedAt,
+          number: 42,
+          state: 'OPEN',
+          ciStatus: 'PENDING',
+          reviewState: 'CHANGES_REQUESTED',
+          syncedAt: prUpdatedAt,
         },
       });
+    });
+
+    it('leaves the workspace row alone when no branch correction came with it', async () => {
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('writes a corrected branch name only after the aggregate write holds', async () => {
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+        ...changedObservation,
+        branchName: 'feature/actual-head',
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: 'ws-1' },
+        data: { branchName: 'feature/actual-head' },
+      });
+    });
+
+    it('does not write the branch name when the aggregate write lost its guard', async () => {
+      mockPrUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
+          ...changedObservation,
+          branchName: 'feature/actual-head',
+        })
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('resets the settled dispatch guarded on every field it was read with', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
       await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation);
@@ -429,18 +284,18 @@ describe('workspaceAccessor', () => {
     });
 
     it('keeps the aggregate write when a newer dispatch wins the reset guard', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
       mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
 
       await expect(
         workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
       ).resolves.toEqual({ applied: true, dispatchReset: false });
 
-      expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrUpdateMany).toHaveBeenCalledTimes(1);
     });
 
     it('skips the dispatch reset entirely when the aggregate write loses its guard', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 0 });
+      mockPrUpdateMany.mockResolvedValue({ count: 0 });
 
       await expect(
         workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
@@ -451,7 +306,7 @@ describe('workspaceAccessor', () => {
 
     it('leaves a RUNNING dispatch alone even when the aggregate changed', async () => {
       mockRatchetFindUnique.mockResolvedValue(currentDispatch({ dispatchOutcome: 'RUNNING' }));
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
         workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
@@ -461,10 +316,10 @@ describe('workspaceAccessor', () => {
     });
 
     it('leaves settled dispatch metadata alone for an identical aggregate', async () => {
-      mockFindUnique.mockResolvedValue(
-        currentAggregate({ prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42 })
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/42', number: 42 })
       );
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
 
       await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', {
         prUrl: 'https://github.com/org/repo/pull/42',
@@ -479,10 +334,10 @@ describe('workspaceAccessor', () => {
     });
 
     it('resets settled metadata for a changed direct CI observation', async () => {
-      mockFindUnique.mockResolvedValue(
-        currentAggregate({ prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42 })
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/42', number: 42 })
       );
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
@@ -500,13 +355,38 @@ describe('workspaceAccessor', () => {
 
     it('does not reset when the workspace has no ratchet row at all', async () => {
       mockRatchetFindUnique.mockResolvedValue(null);
-      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
         workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
       ).resolves.toEqual({ applied: true, dispatchReset: false });
 
       expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('reports no write at all when the workspace has no PR row', async () => {
+      mockPrFindUnique.mockResolvedValue(null);
+
+      await expect(
+        workspaceAccessor.applyPrSnapshotWithDispatchReset('ws-1', changedObservation)
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+      expect(mockPrUpdateMany).not.toHaveBeenCalled();
+      expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // PR discovery scheduling moved with its columns to
+  // `workspace-pr.accessor.test.ts`.
+
+  it('marks workspace as having had sessions with guarded updateMany', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+
+    await workspaceAccessor.markHasHadSessions('ws-1');
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'ws-1', hasHadSessions: false },
+      data: { hasHadSessions: true },
     });
   });
 
@@ -693,13 +573,13 @@ describe('workspaceAccessor', () => {
 
       const result = await workspaceAccessor.findStaleArchivingWithProject();
 
-      expect(result).toEqual([staleWorkspace]);
+      expect(result).toEqual([expect.objectContaining(staleWorkspace)]);
       expect(mockFindMany).toHaveBeenCalledWith({
         where: {
           status: 'ARCHIVING',
           updatedAt: { lt: expect.any(Date) },
         },
-        include: { project: true },
+        include: { project: true, pr: true },
         orderBy: { updatedAt: 'asc' },
       });
 

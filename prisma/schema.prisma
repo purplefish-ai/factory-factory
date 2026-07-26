@@ -220,7 +220,6 @@ model Workspace {
   runScriptStartedAt      DateTime?         // When the run script was started
   runScriptStatus         RunScriptStatus   @default(IDLE)  // Run script runtime status
 
-  prUrl               String?
   githubIssueNumber   Int?
   githubIssueUrl      String?
   linearIssueId         String?   // Linear issue UUID
@@ -234,25 +233,8 @@ model Workspace {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
-  // PR tracking (cached from GitHub)
-  prNumber            Int?
-  prState             PRState           @default(NONE)
-  prReviewState       String?           // Raw GitHub review state
-  prCiStatus          CIStatus          @default(UNKNOWN)  // CI check status
-  prUpdatedAt         DateTime?         // Last PR sync time
-
-  // PR discovery scheduling
-  prDiscoveryLastCheckedAt DateTime?
-  prDiscoveryRetryCount    Int       @default(0)
-  prDiscoveryNextCheckAt   DateTime?
-
-  // CI failure tracking
-  prCiFailedAt        DateTime?         // When CI first failed (cleared on success)
-  prCiLastNotifiedAt  DateTime?         // Last time we notified about CI failure
-
-  // PR Review tracking
-  prReviewLastCheckedAt   DateTime?     // When PR review comments were last checked
-  prReviewLastCommentId   String?       // ID of the last processed review comment
+  // PR tracking (cached from GitHub) — see WorkspacePR
+  pr                  WorkspacePR?
 
   // Ratchet tracking (centralized PR progression) — see WorkspaceRatchet
   ratchet             WorkspaceRatchet?
@@ -285,9 +267,61 @@ model Workspace {
   @@index([projectId, status])
   @@index([projectId, updatedAt])
   @@index([projectId, createdAt])
-  @@index([status, prUrl])
-  @@index([status, prUrl, prDiscoveryNextCheckAt])
-  @@index([status, prUpdatedAt])
+  // The three composite indexes that used to lead with `status` and continue
+  // into `prUrl` / `prUpdatedAt` / `prDiscoveryNextCheckAt` are gone with those
+  // columns. Their queries now filter `status` here and the PR columns on
+  // WorkspacePR, which carries the matching indexes.
+}
+
+/// What GitHub last told us about the workspace's pull request, plus the
+/// bookkeeping for finding that PR and for the notifications we derive from it.
+///
+/// This is a cache, not a source of truth: every field here is either a copy of
+/// GitHub state or a cursor into it, and losing the whole row costs one refresh.
+/// It is split out of `Workspace` because that distinction was invisible while
+/// the columns sat beside the workspace's own durable identity, and because the
+/// compare-and-swap writes that attach and refresh a PR need to guard a row no
+/// other concern writes.
+///
+/// Field names drop the `pr` prefix the columns carried on `Workspace`, where it
+/// was doing the work this model's name now does. The flat `pr*` names are still
+/// what every caller sees: `workspacePrAccessor` maps between the two, so the
+/// split stops at the accessor.
+///
+/// Exactly one row per workspace, created with the workspace, so the writes that
+/// run before a PR exists — discovery claims and their backoff — have a row to
+/// guard. Reads substitute defaults if a row is ever missing rather than making
+/// every caller handle the null.
+model WorkspacePR {
+  workspaceId String    @id
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  url         String?                      // The attached PR, or null while none is known
+  number      Int?
+  state       PRState   @default(NONE)
+  reviewState String?                      // Raw GitHub review state
+  ciStatus    CIStatus  @default(UNKNOWN)  // CI check status
+  // When this cache was last written, not GitHub's PR `updated_at`: every caller
+  // passes its own observation time. Callers still say `prUpdatedAt`, which is
+  // why the old column read as PR metadata; `syncedAt` is what it always held.
+  syncedAt    DateTime?
+
+  // Discovery: locating the PR for the workspace's branch, with backoff.
+  discoveryLastCheckedAt DateTime?
+  discoveryRetryCount    Int       @default(0)
+  discoveryNextCheckAt   DateTime?
+
+  // CI failure notification bookkeeping.
+  ciFailedAt       DateTime?               // When CI first failed (cleared on success)
+  ciLastNotifiedAt DateTime?               // Last time we notified about CI failure
+
+  // Review comment cursor.
+  reviewLastCheckedAt DateTime?            // When PR review comments were last checked
+  reviewLastCommentId String?              // ID of the last processed review comment
+
+  @@index([url])
+  @@index([syncedAt])
+  @@index([discoveryNextCheckAt])
 }
 
 /// The ratchet's own state for one workspace: whether it is watching the PR,

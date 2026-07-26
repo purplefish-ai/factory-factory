@@ -383,7 +383,7 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
 
     const result = await workspaceMaintenanceService.findNeedingWorktree();
 
-    expect(result).toContainEqual(newWorkspace);
+    expect(result).toContainEqual(expect.objectContaining(newWorkspace));
     expect(mockFindMany).toHaveBeenCalledWith({
       where: {
         OR: [
@@ -394,7 +394,7 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
           },
         ],
       },
-      include: { project: true },
+      include: { project: true, pr: true },
       orderBy: { createdAt: 'asc' },
     });
   });
@@ -414,7 +414,7 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
 
     const result = await workspaceMaintenanceService.findNeedingWorktree();
 
-    expect(result).toContainEqual(staleWorkspace);
+    expect(result).toContainEqual(expect.objectContaining(staleWorkspace));
 
     // Verify the threshold calculation
     const callArgs = mockFindMany.mock.calls[0]![0];

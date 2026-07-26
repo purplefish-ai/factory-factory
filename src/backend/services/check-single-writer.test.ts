@@ -87,6 +87,9 @@ describe('check-single-writer', () => {
     expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
   });
 
+  // The PR aggregate mutators now write one Workspace column -- the branch name a
+  // refresh may correct. The rest of what they carry lands on WorkspacePR, which
+  // this checker does not police because nothing else can name those columns.
   it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
     const tempRoot = createTempBackend([
       {
@@ -95,14 +98,8 @@ describe('check-single-writer', () => {
           async function writeSnapshots(workspaceAccessor) {
             await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
               prNumber: 1,
-              prState: 'OPEN',
-              prReviewState: null,
-              prCiStatus: 'SUCCESS',
               prUpdatedAt: new Date(),
-            });
-            await workspaceAccessor.applyCIObservationWithDispatchReset('ws', {
-              prCiStatus: 'FAILURE',
-              prUpdatedAt: new Date(),
+              branchName: 'feature/actual-head',
             });
           }
         `,
@@ -112,7 +109,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "prState"');
+    expect(result.output).toContain('unauthorized write of workspace field "branchName"');
   });
 
   it('allows workspace PR snapshot capability dispatch-reset writes', () => {
@@ -124,10 +121,8 @@ describe('check-single-writer', () => {
           async function writeSnapshots(workspaceAccessor) {
             await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
               prNumber: 1,
-              prState: 'OPEN',
-              prReviewState: null,
-              prCiStatus: 'SUCCESS',
               prUpdatedAt: new Date(),
+              branchName: 'feature/actual-head',
             });
           }
         `,

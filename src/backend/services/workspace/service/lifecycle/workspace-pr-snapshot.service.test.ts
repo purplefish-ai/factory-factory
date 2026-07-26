@@ -5,11 +5,15 @@ const {
   mockApplyPrSnapshotWithDispatchReset,
   mockAttachDiscoveredPRIfClaimMatches,
   mockUpdatePRSnapshotIfUrlMatches,
+  mockWrite,
+  mockRecordPrSnapshotWithBranchName,
 } = vi.hoisted(() => ({
   mockApplyCIObservationWithDispatchReset: vi.fn(),
   mockApplyPrSnapshotWithDispatchReset: vi.fn(),
   mockAttachDiscoveredPRIfClaimMatches: vi.fn(),
   mockUpdatePRSnapshotIfUrlMatches: vi.fn(),
+  mockWrite: vi.fn(),
+  mockRecordPrSnapshotWithBranchName: vi.fn(),
 }));
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
@@ -18,9 +22,17 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
       mockApplyCIObservationWithDispatchReset(...args),
     applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
       mockApplyPrSnapshotWithDispatchReset(...args),
+    recordPrSnapshotWithBranchName: (...args: unknown[]) =>
+      mockRecordPrSnapshotWithBranchName(...args),
+  },
+}));
+
+vi.mock('@/backend/services/workspace/resources/workspace-pr.accessor', () => ({
+  workspacePrAccessor: {
     attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
       mockAttachDiscoveredPRIfClaimMatches(...args),
-    updatePRSnapshotIfUrlMatches: (...args: unknown[]) => mockUpdatePRSnapshotIfUrlMatches(...args),
+    updateSnapshotIfUrlMatches: (...args: unknown[]) => mockUpdatePRSnapshotIfUrlMatches(...args),
+    write: (...args: unknown[]) => mockWrite(...args),
   },
 }));
 

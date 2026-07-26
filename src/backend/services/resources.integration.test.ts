@@ -107,18 +107,20 @@ async function createWorkspaceFixture(
   projectId: string,
   overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
     ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput;
+    pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
   } = {}
 ) {
-  const { ratchet, ...workspaceOverrides } = overrides;
+  const { ratchet, pr, ...workspaceOverrides } = overrides;
   return await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
       status: WorkspaceStatus.NEW,
       ...workspaceOverrides,
-      // Mirrors workspaceAccessor.create: every workspace gets a ratchet row,
-      // so the row-guarded ratchet writes under test have one to guard.
+      // Mirrors workspaceAccessor.create: every workspace gets both side-table
+      // rows, so the row-guarded writes under test have one to guard.
       ratchet: { create: ratchet ?? {} },
+      pr: { create: pr ?? {} },
     },
   });
 }
@@ -262,22 +264,24 @@ describe('resource accessors integration', () => {
 
       const included = await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
-        prUrl: 'https://github.com/acme/repo/pull/1',
-        prNumber: 1,
-        prState: PRState.OPEN,
-        prCiStatus: CIStatus.PENDING,
+        pr: {
+          url: 'https://github.com/acme/repo/pull/1',
+          number: 1,
+          state: PRState.OPEN,
+          ciStatus: CIStatus.PENDING,
+        },
         ratchet: { enabled: true, state: RatchetState.CI_RUNNING },
       });
 
       await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
-        prUrl: 'https://github.com/acme/repo/pull/2',
+        pr: { url: 'https://github.com/acme/repo/pull/2' },
         ratchet: { enabled: false },
       });
 
       await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
-        prUrl: 'https://github.com/acme/repo/pull/3',
+        pr: { url: 'https://github.com/acme/repo/pull/3' },
         ratchet: { enabled: true, state: RatchetState.MERGED },
       });
 
@@ -366,10 +370,12 @@ describe('resource accessors integration', () => {
     it('resets settled Ratchet ownership only for changed PR aggregates', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
-        prNumber: 42,
-        prState: PRState.CHANGES_REQUESTED,
-        prReviewState: 'CHANGES_REQUESTED',
-        prCiStatus: CIStatus.FAILURE,
+        pr: {
+          number: 42,
+          state: PRState.CHANGES_REQUESTED,
+          reviewState: 'CHANGES_REQUESTED',
+          ciStatus: CIStatus.FAILURE,
+        },
         ratchet: {
           dispatchSnapshotKey: 'rich-dispatch-snapshot',
           dispatchOutcome: 'DIED',
@@ -407,10 +413,7 @@ describe('resource accessors integration', () => {
       expect(reset.ratchetDispatchSnapshotKey).toBe('rich-dispatch-snapshot');
 
       const ciChangedWorkspace = await createWorkspaceFixture(project.id, {
-        prNumber: 42,
-        prState: PRState.OPEN,
-        prReviewState: null,
-        prCiStatus: CIStatus.PENDING,
+        pr: { number: 42, state: PRState.OPEN, reviewState: null, ciStatus: CIStatus.PENDING },
         ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
       });
       await expect(
@@ -424,10 +427,7 @@ describe('resource accessors integration', () => {
       ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       const reviewChangedWorkspace = await createWorkspaceFixture(project.id, {
-        prNumber: 42,
-        prState: PRState.OPEN,
-        prReviewState: null,
-        prCiStatus: CIStatus.FAILURE,
+        pr: { number: 42, state: PRState.OPEN, reviewState: null, ciStatus: CIStatus.FAILURE },
         ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
       });
       await expect(
@@ -441,10 +441,12 @@ describe('resource accessors integration', () => {
       ).resolves.toEqual({ applied: true, dispatchReset: true });
 
       const runningWorkspace = await createWorkspaceFixture(project.id, {
-        prNumber: 42,
-        prState: PRState.CHANGES_REQUESTED,
-        prReviewState: 'CHANGES_REQUESTED',
-        prCiStatus: CIStatus.FAILURE,
+        pr: {
+          number: 42,
+          state: PRState.CHANGES_REQUESTED,
+          reviewState: 'CHANGES_REQUESTED',
+          ciStatus: CIStatus.FAILURE,
+        },
         ratchet: { dispatchOutcome: 'RUNNING', dispatchRetryCount: 1 },
       });
       await expect(

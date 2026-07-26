@@ -97,10 +97,12 @@ const mockProject: Project = {
 };
 
 /**
- * A workspace row as the export reads it: the row plus its ratchet, which the
- * v4 format carries as flat `ratchet*` workspace fields.
+ * A workspace row as the export reads it: the row plus its ratchet and PR cache,
+ * which the v4 format carries as flat `ratchet*` and `pr*` workspace fields.
  */
-type WorkspaceForExport = Prisma.WorkspaceGetPayload<{ include: { ratchet: true } }>;
+type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
+  include: { ratchet: true; pr: true };
+}>;
 
 const mockWorkspace: WorkspaceForExport = {
   id: 'ws-1',
@@ -126,10 +128,6 @@ const mockWorkspace: WorkspaceForExport = {
   runScriptPort: 3000,
   runScriptStartedAt: new Date('2025-01-01T00:10:00.000Z'),
   runScriptStatus: RunScriptStatus.RUNNING,
-  prUrl: 'https://github.com/test/repo/pull/1',
-  prDiscoveryLastCheckedAt: null,
-  prDiscoveryRetryCount: 0,
-  prDiscoveryNextCheckAt: null,
   githubIssueNumber: 123,
   githubIssueUrl: 'https://github.com/test/repo/issues/123',
   linearIssueId: null,
@@ -137,15 +135,22 @@ const mockWorkspace: WorkspaceForExport = {
   linearIssueUrl: null,
   defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
   ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
-  prNumber: 1,
-  prState: PRState.OPEN,
-  prReviewState: 'APPROVED',
-  prCiStatus: CIStatus.SUCCESS,
-  prUpdatedAt: new Date('2025-01-01T00:15:00.000Z'),
-  prCiFailedAt: null,
-  prCiLastNotifiedAt: null,
-  prReviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
-  prReviewLastCommentId: 'comment-123',
+  pr: {
+    workspaceId: 'ws-1',
+    url: 'https://github.com/test/repo/pull/1',
+    number: 1,
+    state: PRState.OPEN,
+    reviewState: 'APPROVED',
+    ciStatus: CIStatus.SUCCESS,
+    syncedAt: new Date('2025-01-01T00:15:00.000Z'),
+    discoveryLastCheckedAt: null,
+    discoveryRetryCount: 0,
+    discoveryNextCheckAt: null,
+    ciFailedAt: null,
+    ciLastNotifiedAt: null,
+    reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
+    reviewLastCommentId: 'comment-123',
+  },
   ratchet: {
     workspaceId: 'ws-1',
     enabled: true,

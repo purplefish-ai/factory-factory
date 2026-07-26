@@ -194,7 +194,6 @@ async function importWorkspaces(
           workspace.autoIterationConfig != null
             ? (workspace.autoIterationConfig as Prisma.InputJsonValue)
             : undefined,
-        prUrl: workspace.prUrl,
         githubIssueNumber: workspace.githubIssueNumber,
         githubIssueUrl: workspace.githubIssueUrl,
         linearIssueId: workspace.linearIssueId,
@@ -202,16 +201,24 @@ async function importWorkspaces(
         linearIssueUrl: workspace.linearIssueUrl,
         defaultSessionProvider: workspace.defaultSessionProvider,
         ratchetSessionProvider: workspace.ratchetSessionProvider,
-        prNumber: workspace.prNumber,
-        prState: workspace.prState,
-        prReviewState: workspace.prReviewState,
-        prCiStatus: workspace.prCiStatus,
-        prUpdatedAt: parseDate(workspace.prUpdatedAt),
-        prCiFailedAt: parseDate(workspace.prCiFailedAt),
-        prCiLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
-        // Phase 3+ PR review tracking fields
-        prReviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
-        prReviewLastCommentId: workspace.prReviewLastCommentId,
+        // The v4 export carries the PR cache as flat workspace fields; it now
+        // lives in the WorkspacePR row this create brings with it. Discovery
+        // scheduling was never exported, so it restores at its defaults and the
+        // next poll re-derives it.
+        pr: {
+          create: {
+            url: workspace.prUrl,
+            number: workspace.prNumber,
+            state: workspace.prState,
+            reviewState: workspace.prReviewState,
+            ciStatus: workspace.prCiStatus,
+            syncedAt: parseDate(workspace.prUpdatedAt),
+            ciFailedAt: parseDate(workspace.prCiFailedAt),
+            ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
+            reviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
+            reviewLastCommentId: workspace.prReviewLastCommentId,
+          },
+        },
         // Phase 3+ ratchet fields, restored into the WorkspaceRatchet row this
         // create brings with it. A workspace without one would be invisible to
         // the ratchet's row-guarded writes.
@@ -429,7 +436,6 @@ class DataBackupService {
           runScriptStatus: w.runScriptStatus,
           mode: w.mode,
           autoIterationConfig: parseAutoIterationConfigForExport(w.autoIterationConfig),
-          prUrl: w.prUrl,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
           linearIssueId: w.linearIssueId,
@@ -437,16 +443,19 @@ class DataBackupService {
           linearIssueUrl: w.linearIssueUrl,
           defaultSessionProvider: w.defaultSessionProvider,
           ratchetSessionProvider: w.ratchetSessionProvider,
-          prNumber: w.prNumber,
-          prState: w.prState,
-          prReviewState: w.prReviewState,
-          prCiStatus: w.prCiStatus,
-          prUpdatedAt: toISOString(w.prUpdatedAt),
-          prCiFailedAt: toISOString(w.prCiFailedAt),
-          prCiLastNotifiedAt: toISOString(w.prCiLastNotifiedAt),
-          // Phase 3+ PR review tracking fields
-          prReviewLastCheckedAt: toISOString(w.prReviewLastCheckedAt),
-          prReviewLastCommentId: w.prReviewLastCommentId,
+          // Flattened out of WorkspacePR: the v4 export format carries the PR
+          // cache as workspace fields, and `prUpdatedAt` keeps the name it has in
+          // files already on disk even though the column is now `syncedAt`.
+          prUrl: w.pr?.url ?? null,
+          prNumber: w.pr?.number ?? null,
+          prState: w.pr?.state ?? 'NONE',
+          prReviewState: w.pr?.reviewState ?? null,
+          prCiStatus: w.pr?.ciStatus ?? 'UNKNOWN',
+          prUpdatedAt: toISOString(w.pr?.syncedAt ?? null),
+          prCiFailedAt: toISOString(w.pr?.ciFailedAt ?? null),
+          prCiLastNotifiedAt: toISOString(w.pr?.ciLastNotifiedAt ?? null),
+          prReviewLastCheckedAt: toISOString(w.pr?.reviewLastCheckedAt ?? null),
+          prReviewLastCommentId: w.pr?.reviewLastCommentId ?? null,
           // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
           // the v4 export format carries them as workspace fields, and
           // `ratchetLastCiRunId` keeps the name it has in files already on disk.
