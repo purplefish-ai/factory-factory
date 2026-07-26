@@ -7,8 +7,6 @@ node_modules/
 # Testing
 coverage/
 
-# Next.js
-.next/
 out/
 build/
 dist/
@@ -36,7 +34,6 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
 # IDEs
 .idea/
