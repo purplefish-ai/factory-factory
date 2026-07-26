@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import { sessionConfigService } from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SetConfigOptionMessage } from '@/shared/websocket';
@@ -41,7 +41,7 @@ function getErrorMessage(error: unknown): string {
 export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOptionMessage> {
   return async ({ ws, sessionId, message }) => {
     try {
-      await sessionService.setSessionConfigOption(sessionId, message.configId, message.value);
+      await sessionConfigService.setSessionConfigOption(sessionId, message.configId, message.value);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Set config option', {
           sessionId,
@@ -64,7 +64,7 @@ export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOpti
       // to the real server-confirmed value instead of sticking to the rejected one.
       // Skip if there's no live ACP handle to read the real options from, since an
       // empty list would wipe the client's config selector instead of correcting it.
-      const configOptions = sessionService.getSessionConfigOptions(sessionId);
+      const configOptions = sessionConfigService.getSessionConfigOptions(sessionId);
       if (configOptions.length > 0) {
         sessionDomainService.emitDelta(sessionId, {
           type: 'config_options_update',

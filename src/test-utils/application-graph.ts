@@ -121,7 +121,10 @@ vi.mock('@/backend/services/session', () => ({
   sessionDomainService: {},
   sessionEventBus: {},
   sessionFileLogger: {},
+  sessionLifecycleService: {},
   sessionProviderResolverService: {},
+  sessionPromptTurnCompletionService: {},
+  sessionRepository: {},
   sessionService: {},
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
@@ -228,7 +231,10 @@ import {
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
+  sessionLifecycleService,
+  sessionPromptTurnCompletionService,
   sessionProviderResolverService,
+  sessionRepository,
   sessionService,
 } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
@@ -315,9 +321,10 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     getMaxSessionsPerWorkspace: vi.fn(() => graphSystemConfig.maxSessionsPerWorkspace),
     getCorsConfig: vi.fn(() => graphSystemConfig.cors),
   }) satisfies typeof configService;
-  const graphSessionService = Object.assign({}, sessionService, {
+  const graphSessionService = Object.assign({}, sessionService, {}) satisfies typeof sessionService;
+  const graphSessionLifecycleService = Object.assign({}, sessionLifecycleService, {
     getRuntimeSnapshot: vi.fn(),
-  }) satisfies typeof sessionService;
+  }) satisfies typeof sessionLifecycleService;
   const graphChatEventForwarderService = Object.assign({}, chatEventForwarderService, {
     getAllPendingRequests: vi.fn(() => new Map()),
   }) satisfies typeof chatEventForwarderService;
@@ -381,7 +388,10 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     sessionDomainService,
     sessionEventBus,
     sessionFileLogger,
+    sessionLifecycleService: graphSessionLifecycleService,
     sessionProviderResolverService,
+    sessionPromptTurnCompletionService,
+    sessionRepository,
     sessionService: graphSessionService,
     startupScriptService,
     terminalService,
@@ -421,7 +431,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       createLogger: services.createLogger,
       gitOpsService: services.gitOpsService,
       session: {
-        getRuntimeSnapshot: services.sessionService.getRuntimeSnapshot,
+        getRuntimeSnapshot: services.sessionLifecycleService.getRuntimeSnapshot,
         getAllPendingRequests: services.chatEventForwarderService.getAllPendingRequests,
       },
       workspaceMaintenanceService: services.workspaceMaintenanceService,

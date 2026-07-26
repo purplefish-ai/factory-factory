@@ -123,8 +123,10 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       cleanup: vi.fn(),
       cleanupOldLogs: vi.fn(),
     },
-    sessionService: {
+    sessionLifecycleService: {
       stopAllClients: vi.fn(async () => undefined),
+    },
+    sessionRepository: {
       recoverStaleSessionStates: vi.fn(async () => 0),
     },
     terminalService: {
@@ -472,7 +474,7 @@ describe('server websocket upgrade routing', () => {
 
     await expect(server.start()).rejects.toThrow('Server startup has already been initiated');
     expect(harness.lifecycle.interceptors.stop).not.toHaveBeenCalled();
-    expect(harness.services.sessionService.stopAllClients).not.toHaveBeenCalled();
+    expect(harness.services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
     expect(harness.services.schedulerService.stop).not.toHaveBeenCalled();
     expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
@@ -499,7 +501,7 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockRejectedValueOnce(
       new Error('cleanup failed')
     );
-    vi.mocked(harness.services.sessionService.recoverStaleSessionStates).mockRejectedValueOnce(
+    vi.mocked(harness.services.sessionRepository.recoverStaleSessionStates).mockRejectedValueOnce(
       new Error('session recovery failed')
     );
     vi.mocked(harness.services.reconciliationService.reconcile).mockRejectedValueOnce(
@@ -687,7 +689,7 @@ describe('server websocket upgrade routing', () => {
 
     expect(server.getHttpServer().listening).toBe(false);
     expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
-    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
+    expect(harness.services.sessionLifecycleService.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();
@@ -719,7 +721,7 @@ describe('server websocket upgrade routing', () => {
 
     await server.stop();
     expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
-    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledOnce();
+    expect(harness.services.sessionLifecycleService.stopAllClients).toHaveBeenCalledOnce();
     expect(harness.services.schedulerService.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
@@ -731,7 +733,7 @@ describe('server websocket upgrade routing', () => {
     await server.stop();
 
     expect(harness.lifecycle.interceptors.stop).toHaveBeenCalledOnce();
-    expect(harness.services.sessionService.stopAllClients).toHaveBeenCalledWith(5000);
+    expect(harness.services.sessionLifecycleService.stopAllClients).toHaveBeenCalledWith(5000);
     expect(harness.services.terminalService.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.sessionFileLogger.cleanup).toHaveBeenCalledOnce();
     expect(harness.services.acpTraceLogger.cleanup).toHaveBeenCalledOnce();

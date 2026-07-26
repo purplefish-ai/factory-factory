@@ -32,8 +32,10 @@ const mockGetQuickAction = vi.hoisted(() => vi.fn());
 import { sessionRouter } from './session.trpc';
 
 function createCaller() {
-  const sessionService = {
+  const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
+  };
+  const sessionLifecycleService = {
     startSession: vi.fn(async () => undefined),
     stopSession: vi.fn(async () => undefined),
   };
@@ -59,7 +61,8 @@ function createCaller() {
           configService: {
             getMaxSessionsPerWorkspace: () => 2,
           },
-          sessionService,
+          acpRuntimeManager,
+          sessionLifecycleService,
           sessionDomainService,
           sessionDataService: mockSessionDataService,
           terminalSessionService: {
@@ -76,7 +79,8 @@ function createCaller() {
         },
       },
     } as never),
-    sessionService,
+    acpRuntimeManager,
+    sessionLifecycleService,
     sessionDomainService,
     cliHealthService,
   };
@@ -179,7 +183,7 @@ describe('sessionRouter', () => {
   });
 
   it('creates and starts a session in one mutation', async () => {
-    const { caller, sessionService } = createCaller();
+    const { caller, sessionLifecycleService } = createCaller();
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
@@ -210,7 +214,7 @@ describe('sessionRouter', () => {
       's-started',
       'Stored before start'
     );
-    expect(sessionService.startSession).toHaveBeenCalledWith('s-started', {
+    expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('s-started', {
       initialPrompt: '',
     });
     expect(mockSessionDataService.deleteAgentSession).not.toHaveBeenCalled();
@@ -218,7 +222,7 @@ describe('sessionRouter', () => {
 
   it('deletes a newly created session when startup fails', async () => {
     const startupError = new Error('Runtime failed to start');
-    const { caller, sessionService, sessionDomainService } = createCaller();
+    const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
@@ -229,7 +233,7 @@ describe('sessionRouter', () => {
         workspaceId: 'w1',
       },
     });
-    sessionService.startSession.mockRejectedValue(startupError);
+    sessionLifecycleService.startSession.mockRejectedValue(startupError);
 
     await expect(
       caller.createAndStartSession({
@@ -240,7 +244,7 @@ describe('sessionRouter', () => {
       })
     ).rejects.toThrow('Runtime failed to start');
 
-    expect(sessionService.stopSession).toHaveBeenCalledWith('s-orphan', {
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s-orphan', {
       cleanupTransientRatchetSession: false,
     });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s-orphan');
@@ -249,7 +253,7 @@ describe('sessionRouter', () => {
 
   it('marks the created session failed when startup rollback deletion fails', async () => {
     const startupError = new Error('Runtime failed to start');
-    const { caller, sessionService, sessionDomainService } = createCaller();
+    const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
@@ -260,8 +264,8 @@ describe('sessionRouter', () => {
         workspaceId: 'w1',
       },
     });
-    sessionService.startSession.mockRejectedValue(startupError);
-    sessionService.stopSession.mockRejectedValue(new Error('Stop failed'));
+    sessionLifecycleService.startSession.mockRejectedValue(startupError);
+    sessionLifecycleService.stopSession.mockRejectedValue(new Error('Stop failed'));
     mockSessionDataService.deleteAgentSession.mockRejectedValue(new Error('Delete failed'));
 
     await expect(
@@ -285,7 +289,7 @@ describe('sessionRouter', () => {
 
   it('preserves startup errors even when rollback repair also fails', async () => {
     const startupError = new Error('Runtime failed to start');
-    const { caller, sessionService, sessionDomainService } = createCaller();
+    const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
@@ -296,7 +300,7 @@ describe('sessionRouter', () => {
         workspaceId: 'w1',
       },
     });
-    sessionService.startSession.mockRejectedValue(startupError);
+    sessionLifecycleService.startSession.mockRejectedValue(startupError);
     mockSessionDataService.deleteAgentSession.mockRejectedValue(new Error('Delete failed'));
     mockSessionDataService.updateAgentSession.mockRejectedValue(new Error('Update failed'));
 
@@ -320,7 +324,7 @@ describe('sessionRouter', () => {
   });
 
   it('handles start/stop/delete flows and terminal session procedures', async () => {
-    const { caller, sessionService, sessionDomainService } = createCaller();
+    const { caller, sessionLifecycleService, sessionDomainService } = createCaller();
     mockSessionDataService.findAgentSessionById.mockResolvedValue({ id: 's1' });
     mockSessionDataService.deleteAgentSession.mockResolvedValue({ deleted: true });
     mockSessionDataService.findTerminalSessionsByWorkspaceId.mockResolvedValue([{ id: 't1' }]);
@@ -333,8 +337,10 @@ describe('sessionRouter', () => {
     await caller.stopSession({ id: 's1' });
     await caller.deleteSession({ id: 's1' });
 
-    expect(sessionService.startSession).toHaveBeenCalledWith('s1', { initialPrompt: 'hello' });
-    expect(sessionService.stopSession).toHaveBeenCalledWith('s1', {
+    expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('s1', {
+      initialPrompt: 'hello',
+    });
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1', {
       cleanupTransientRatchetSession: false,
     });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s1');

@@ -78,6 +78,11 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
+  acpRuntimeManager: {
+    isSessionRunning: vi.fn(),
+    isSessionWorking: vi.fn(),
+    isAnySessionWorking: vi.fn(),
+  },
   sessionDataService: {
     findAgentSessionById: vi.fn(),
     createAgentSession: vi.fn(),
@@ -88,15 +93,17 @@ vi.mock('@/backend/services/session', () => ({
   },
   sessionService: {
     configure: vi.fn(),
-    setPromptTurnCompleteHandler: vi.fn(),
-    isSessionRunning: vi.fn(),
-    isSessionWorking: vi.fn(),
-    isAnySessionWorking: vi.fn(),
+    sendSessionMessage: vi.fn(),
+    sendAcpMessage: vi.fn(),
+  },
+  sessionLifecycleService: {
+    configure: vi.fn(),
     getRuntimeSnapshot: vi.fn(),
     stopSession: vi.fn(),
     startSession: vi.fn(),
-    sendSessionMessage: vi.fn(),
-    sendAcpMessage: vi.fn(),
+  },
+  sessionPromptTurnCompletionService: {
+    setHandler: vi.fn(),
   },
   sessionDomainService: {
     clearSession: vi.fn(),
@@ -154,10 +161,13 @@ import { periodicTaskService } from '@/backend/services/periodic-task';
 import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
+  acpRuntimeManager,
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
+  sessionLifecycleService,
+  sessionPromptTurnCompletionService,
   sessionService,
 } from '@/backend/services/session';
 import { terminalSessionService } from '@/backend/services/terminal';
@@ -197,6 +207,7 @@ function createAutoIterationServiceMock(): AutoIterationServiceBridge {
 
 function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeServices {
   return {
+    acpRuntimeManager,
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
@@ -212,6 +223,8 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     reconciliationService,
     sessionDataService,
     sessionDomainService,
+    sessionLifecycleService,
+    sessionPromptTurnCompletionService,
     sessionService,
     startupScriptService,
     terminalSessionService,
@@ -278,7 +291,8 @@ describe('configureDomainBridges', () => {
     expect(chatEventForwarderService.configure).toHaveBeenCalledTimes(1);
     expect(chatMessageHandlerService.configure).toHaveBeenCalledTimes(1);
     expect(sessionService.configure).toHaveBeenCalledTimes(1);
-    expect(sessionService.setPromptTurnCompleteHandler).toHaveBeenCalledTimes(1);
+    expect(sessionLifecycleService.configure).toHaveBeenCalledTimes(1);
+    expect(sessionPromptTurnCompletionService.setHandler).toHaveBeenCalledTimes(1);
   });
 
   it('configures run-script domain services', () => {
@@ -310,28 +324,28 @@ describe('configureDomainBridges', () => {
   });
 
   describe('ratchet bridge delegation', () => {
-    it('session bridge delegates isSessionRunning to sessionService', () => {
+    it('session bridge delegates isSessionRunning to acpRuntimeManager', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
       bridge.session.isSessionRunning('s1');
-      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('s1');
+      expect(acpRuntimeManager.isSessionRunning).toHaveBeenCalledWith('s1');
     });
 
-    it('session bridge delegates stopSession to sessionService', () => {
+    it('session bridge delegates stopSession to sessionLifecycleService', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
       bridge.session.stopSession('s1');
-      expect(sessionService.stopSession).toHaveBeenCalledWith('s1');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1');
     });
 
-    it('session bridge delegates startSession to sessionService', () => {
+    it('session bridge delegates startSession to sessionLifecycleService', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
       bridge.session.startSession('s1', { initialPrompt: 'hello' });
-      expect(sessionService.startSession).toHaveBeenCalledWith('s1', {
+      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('s1', {
         initialPrompt: 'hello',
       });
     });
@@ -487,7 +501,7 @@ describe('configureDomainBridges', () => {
       const bridge = getBridge(workspaceQueryService.configure);
 
       bridge.session.getRuntimeSnapshot('s1');
-      expect(sessionService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
+      expect(sessionLifecycleService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
     });
 
     it('workspaceQueryService gets prSnapshot bridge with refreshWorkspace', () => {
@@ -554,7 +568,7 @@ describe('configureDomainBridges', () => {
         { id: 'session-1' },
         { id: 'session-2' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
-      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(true);
+      vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(true);
 
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(periodicTaskService.configure);
@@ -566,7 +580,10 @@ describe('configureDomainBridges', () => {
         isAgentWorking: true,
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
       });
-      expect(sessionService.isAnySessionWorking).toHaveBeenCalledWith(['session-1', 'session-2']);
+      expect(acpRuntimeManager.isAnySessionWorking).toHaveBeenCalledWith([
+        'session-1',
+        'session-2',
+      ]);
     });
 
     it('treats queued periodic task session messages as active agent work', async () => {
@@ -580,8 +597,8 @@ describe('configureDomainBridges', () => {
         { id: 'session-1' },
         { id: 'session-2' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
-      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
-      vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+      vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
       vi.mocked(sessionDomainService.getQueueLength).mockReturnValueOnce(0).mockReturnValueOnce(1);
 
       configureDomainBridges(createBridgeServices());
@@ -608,8 +625,8 @@ describe('configureDomainBridges', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
-      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
-      vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+      vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
 
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(periodicTaskService.configure);
@@ -617,7 +634,7 @@ describe('configureDomainBridges', () => {
       await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toMatchObject({
         isAgentWorking: false,
       });
-      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('session-1');
+      expect(acpRuntimeManager.isSessionRunning).toHaveBeenCalledWith('session-1');
       expect(sessionDomainService.getQueueLength).not.toHaveBeenCalled();
     });
   });
@@ -629,7 +646,7 @@ describe('configureDomainBridges', () => {
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
-      vi.mocked(sessionService.startSession).mockRejectedValueOnce(startupError);
+      vi.mocked(sessionLifecycleService.startSession).mockRejectedValueOnce(startupError);
 
       configureDomainBridges(
         createBridgeServices({ autoIterationService: autoIterationServiceMock })
@@ -644,7 +661,7 @@ describe('configureDomainBridges', () => {
         })
       ).rejects.toThrow(startupError);
 
-      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
     });
@@ -703,7 +720,7 @@ describe('configureDomainBridges', () => {
       expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
         { type: 'text', text: 'handoff prompt' },
       ]);
-      expect(sessionService.stopSession).not.toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).not.toHaveBeenCalledWith('new-session');
       expect(sessionDomainService.clearSession).not.toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).not.toHaveBeenCalledWith('new-session');
       expect(workspaceAutoIterationService.finishSessionIfMatching).not.toHaveBeenCalled();
@@ -721,7 +738,7 @@ describe('configureDomainBridges', () => {
       vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
         id: 'new-session',
       } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
-      vi.mocked(sessionService.startSession).mockRejectedValueOnce(startupError);
+      vi.mocked(sessionLifecycleService.startSession).mockRejectedValueOnce(startupError);
 
       configureDomainBridges(
         createBridgeServices({ autoIterationService: autoIterationServiceMock })
@@ -733,8 +750,8 @@ describe('configureDomainBridges', () => {
         startupError
       );
 
-      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
-      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
@@ -774,7 +791,7 @@ describe('configureDomainBridges', () => {
         creationError
       );
 
-      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('old-session');
       expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
         status: SessionStatus.COMPLETED,
         providerProcessPid: null,
@@ -784,7 +801,7 @@ describe('configureDomainBridges', () => {
         'old-session',
         AutoIterationStatus.FAILED
       );
-      expect(sessionService.startSession).not.toHaveBeenCalled();
+      expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
       expect(sessionDataService.deleteAgentSession).not.toHaveBeenCalled();
     });
 
@@ -853,15 +870,15 @@ describe('configureDomainBridges', () => {
         sendError
       );
 
-      expect(sessionService.stopSession).toHaveBeenCalledWith('old-session');
-      expect(sessionService.startSession).toHaveBeenCalledWith('new-session', {
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('old-session');
+      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('new-session', {
         startupModePreset: 'non_interactive',
       });
       expect(workspaceAutoIterationService.setSession).toHaveBeenCalledWith('ws-1', 'new-session');
       expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
         { type: 'text', text: 'handoff prompt' },
       ]);
-      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
@@ -903,7 +920,7 @@ describe('configureDomainBridges', () => {
         'prompt failed'
       );
 
-      expect(sessionService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(workspaceAutoIterationService.setSession).toHaveBeenCalledTimes(1);
@@ -1039,25 +1056,25 @@ describe('configureDomainBridges', () => {
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
     });
 
-    it('sessionService workspace bridge delegates ratchet session end recording', async () => {
+    it('session lifecycle workspace bridge delegates ratchet session end recording', async () => {
       configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(sessionService.configure);
+      const bridge = getBridge(sessionLifecycleService.configure);
 
       await bridge.workspace.recordRatchetSessionEnd('ws1', 's1', 'DIED');
       expect(ratchetService.recordSessionEnd).toHaveBeenCalledWith('ws1', 's1', 'DIED');
     });
 
-    it('sessionService message queue bridge delegates pending dispatch to chat handlers', async () => {
+    it('session lifecycle message queue bridge delegates pending dispatch to chat handlers', async () => {
       configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(sessionService.configure);
+      const bridge = getBridge(sessionLifecycleService.configure);
 
       await bridge.messageQueue?.tryDispatchNextMessage('s1');
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
     });
 
-    it('sessionService prompt-turn callback delegates queue dispatch to chat handlers', async () => {
+    it('prompt completion service delegates queue dispatch to chat handlers', async () => {
       configureDomainBridges(createBridgeServices());
-      const onPromptTurnComplete = vi.mocked(sessionService.setPromptTurnCompleteHandler).mock
+      const onPromptTurnComplete = vi.mocked(sessionPromptTurnCompletionService.setHandler).mock
         .calls[0]?.[0];
 
       expect(onPromptTurnComplete).toBeTypeOf('function');

@@ -2,7 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
   ChatMessageHandler,
-  ChatMessageHandlerSessionService,
+  ChatMessageHandlerConfigService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import type { SetModelMessage } from '@/shared/websocket';
 import { sendWebSocketError } from './utils';
@@ -10,17 +10,20 @@ import { sendWebSocketError } from './utils';
 const logger = createLogger('chat-message-handlers');
 
 export function createSetModelHandler(deps: {
-  sessionService: ChatMessageHandlerSessionService;
+  sessionConfigService: ChatMessageHandlerConfigService;
 }): ChatMessageHandler<SetModelMessage> {
-  const { sessionService } = deps;
+  const { sessionConfigService } = deps;
 
   return async ({ ws, sessionId, message }) => {
     try {
-      await sessionService.setSessionModel(sessionId, message.model);
+      await sessionConfigService.setSessionModel(sessionId, message.model);
       if ('reasoningEffort' in message) {
-        await sessionService.setSessionReasoningEffort(sessionId, message.reasoningEffort ?? null);
+        await sessionConfigService.setSessionReasoningEffort(
+          sessionId,
+          message.reasoningEffort ?? null
+        );
       }
-      const capabilities = await sessionService.getChatBarCapabilities(sessionId);
+      const capabilities = await sessionConfigService.getChatBarCapabilities(sessionId);
       ws.send(
         JSON.stringify({
           type: 'chat_capabilities',

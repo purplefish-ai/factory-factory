@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   setSessionThinkingBudget: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
-  sessionService: {
+vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+  sessionConfigService: {
     setSessionThinkingBudget: mocks.setSessionThinkingBudget,
   },
 }));

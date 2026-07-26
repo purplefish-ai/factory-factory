@@ -74,8 +74,7 @@ function createCaller() {
     resetUsageStats: vi.fn(),
   };
 
-  const sessionService = {
-    isSessionRunning: vi.fn(() => true),
+  const sessionLifecycleService = {
     stopSession: vi.fn(async () => undefined),
   };
 
@@ -106,6 +105,7 @@ function createCaller() {
 
   const acpRuntimeManager = {
     getAllActiveProcesses: vi.fn<() => Record<string, unknown>[]>(() => []),
+    isSessionRunning: vi.fn(() => true),
   };
 
   const ratchetService = {
@@ -140,7 +140,7 @@ function createCaller() {
         acpRuntimeManager,
         terminalService,
         ratchetService,
-        sessionService,
+        sessionLifecycleService,
         dataBackupService: {
           exportData: (...args: unknown[]) => mockExportData(...args),
           importData: (...args: unknown[]) => mockImportData(...args),
@@ -167,7 +167,7 @@ function createCaller() {
   return {
     caller,
     rateLimiter,
-    sessionService,
+    sessionLifecycleService,
     cliHealthService,
     acpRuntimeManager,
     terminalService,
@@ -254,7 +254,7 @@ describe('adminRouter', () => {
   });
 
   it('handles health checks, decision-log export, data import/export, and session stop', async () => {
-    const { caller, sessionService } = createCaller();
+    const { caller, acpRuntimeManager, sessionLifecycleService } = createCaller();
     const logDate = new Date('2026-02-10T00:00:00.000Z');
     mockDecisionLogList.mockResolvedValue([
       {
@@ -349,8 +349,8 @@ describe('adminRouter', () => {
     });
 
     await expect(caller.stopSession({ sessionId: 's-1' })).resolves.toEqual({ wasRunning: true });
-    expect(sessionService.isSessionRunning).toHaveBeenCalledWith('s-1');
-    expect(sessionService.stopSession).toHaveBeenCalledWith('s-1');
+    expect(acpRuntimeManager.isSessionRunning).toHaveBeenCalledWith('s-1');
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s-1');
   });
 
   it('wraps provider upgrade failures as tRPC errors', async () => {

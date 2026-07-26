@@ -49,7 +49,7 @@ import type {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
-  sessionService,
+  sessionLifecycleService,
 } from '@/backend/services/session';
 import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
@@ -133,7 +133,7 @@ export type EventCollectorDependencies = {
   runScriptStateMachine: typeof runScriptStateMachine;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
-  sessionService: typeof sessionService;
+  sessionLifecycleService: typeof sessionLifecycleService;
   terminalService: typeof terminalService;
   workspaceActivityService: typeof workspaceActivityService;
   workspaceDataService: typeof workspaceDataService;
@@ -422,7 +422,7 @@ async function refreshWorkspaceSessionSummaries(
       return;
     }
     const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
-      state.dependencies.sessionService.getRuntimeSnapshot(sessionId)
+      state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId)
     );
     coalescer.enqueue(
       workspaceId,
@@ -685,7 +685,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
-        dependencies.sessionService.stopWorkspaceSessions(event.workspaceId),
+        dependencies.sessionLifecycleService.stopWorkspaceSessions(event.workspaceId),
         Promise.resolve().then(() => {
           dependencies.terminalService.destroyWorkspaceTerminals(event.workspaceId);
         }),

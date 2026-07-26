@@ -68,7 +68,10 @@ import {
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
+  sessionLifecycleService,
+  sessionPromptTurnCompletionService,
   sessionProviderResolverService,
+  sessionRepository,
   sessionService,
 } from './services/session';
 import { userSettingsService } from './services/settings';
@@ -129,7 +132,10 @@ export type ApplicationServices = BridgeServices & {
   serverInstanceService: ServerInstanceService;
   sessionEventBus: typeof sessionEventBus;
   sessionFileLogger: SessionFileLogger;
+  sessionLifecycleService: typeof sessionLifecycleService;
   sessionProviderResolverService: typeof sessionProviderResolverService;
+  sessionPromptTurnCompletionService: typeof sessionPromptTurnCompletionService;
+  sessionRepository: typeof sessionRepository;
   terminalService: typeof terminalService;
   userSettingsQueryService: typeof userSettingsService;
   workspaceDataService: typeof workspaceDataService;
@@ -236,7 +242,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionDomainService,
     sessionEventBus,
     sessionFileLogger,
+    sessionLifecycleService,
     sessionProviderResolverService,
+    sessionPromptTurnCompletionService,
+    sessionRepository,
     sessionService,
     startupScriptService,
     terminalService,
@@ -292,7 +301,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         createLogger: services.createLogger,
         gitOpsService: services.gitOpsService,
         session: {
-          getRuntimeSnapshot: (id) => services.sessionService.getRuntimeSnapshot(id),
+          getRuntimeSnapshot: (id) => services.sessionLifecycleService.getRuntimeSnapshot(id),
           getAllPendingRequests: () => services.chatEventForwarderService.getAllPendingRequests(),
         },
         workspaceMaintenanceService: services.workspaceMaintenanceService,

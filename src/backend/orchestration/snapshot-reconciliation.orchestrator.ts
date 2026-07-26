@@ -24,7 +24,7 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import type { createLogger } from '@/backend/services/logger.service';
-import type { sessionService } from '@/backend/services/session';
+import type { sessionLifecycleService } from '@/backend/services/session';
 import {
   computePendingRequestType,
   type gitOpsService,
@@ -48,7 +48,9 @@ const GIT_CONCURRENCY = 10;
 
 export interface ReconciliationBridges {
   session: {
-    getRuntimeSnapshot(sessionId: string): ReturnType<typeof sessionService.getRuntimeSnapshot>;
+    getRuntimeSnapshot(
+      sessionId: string
+    ): ReturnType<typeof sessionLifecycleService.getRuntimeSnapshot>;
     getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
   };
 }

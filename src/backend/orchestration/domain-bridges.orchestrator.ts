@@ -32,10 +32,13 @@ import type {
 } from '@/backend/services/ratchet';
 import type { startupScriptService } from '@/backend/services/run-script';
 import type {
+  acpRuntimeManager,
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
+  sessionLifecycleService,
+  sessionPromptTurnCompletionService,
   sessionService,
 } from '@/backend/services/session';
 import type { terminalSessionService } from '@/backend/services/terminal';
@@ -63,7 +66,7 @@ import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator'
 
 type SessionDataService = typeof sessionDataService;
 type SessionDomainService = typeof sessionDomainService;
-type SessionService = typeof sessionService;
+type SessionLifecycleService = typeof sessionLifecycleService;
 type WorkspaceAutoIterationService = typeof workspaceAutoIterationService;
 type AutoIterationRollbackReason =
   | 'auto_iteration_startup_failed_after_create'
@@ -84,8 +87,11 @@ export type BridgeServices = {
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
+  acpRuntimeManager: typeof acpRuntimeManager;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
+  sessionLifecycleService: typeof sessionLifecycleService;
+  sessionPromptTurnCompletionService: typeof sessionPromptTurnCompletionService;
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
   terminalSessionService: typeof terminalSessionService;
@@ -103,22 +109,22 @@ export type BridgeServices = {
 };
 
 async function stopSessionBestEffort(
-  sessionService: SessionService,
+  sessionLifecycleService: SessionLifecycleService,
   sessionId: string
 ): Promise<void> {
   try {
-    await sessionService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId);
   } catch {
     // Best-effort cleanup
   }
 }
 
 async function stopPreviousAutoIterationSession(
-  sessionService: SessionService,
+  sessionLifecycleService: SessionLifecycleService,
   sessionId: string
 ): Promise<void> {
   try {
-    await sessionService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId);
   } catch (error) {
     if (!(error instanceof Error && /already stopped|not found/i.test(error.message))) {
       throw error;
@@ -145,13 +151,13 @@ async function finishFailedAutoIterationSessionIfMatching(
 }
 
 async function rollbackCreatedAutoIterationSession(
-  sessionService: SessionService,
+  sessionLifecycleService: SessionLifecycleService,
   sessionDataService: SessionDataService,
   sessionDomainService: SessionDomainService,
   sessionId: string,
   rollbackReason: AutoIterationRollbackReason
 ): Promise<void> {
-  await stopSessionBestEffort(sessionService, sessionId);
+  await stopSessionBestEffort(sessionLifecycleService, sessionId);
 
   try {
     sessionDomainService.clearSession(sessionId);
@@ -223,7 +229,7 @@ async function finishFailedRecycleIfSessionMatches(
 }
 
 async function cleanupFailedAutoIterationRecycle(
-  sessionService: SessionService,
+  sessionLifecycleService: SessionLifecycleService,
   sessionDataService: SessionDataService,
   sessionDomainService: SessionDomainService,
   workspaceAutoIterationService: WorkspaceAutoIterationService,
@@ -239,7 +245,7 @@ async function cleanupFailedAutoIterationRecycle(
   );
   if (replacementSessionId) {
     await rollbackCreatedAutoIterationSession(
-      sessionService,
+      sessionLifecycleService,
       sessionDataService,
       sessionDomainService,
       replacementSessionId,
@@ -253,6 +259,7 @@ async function cleanupFailedAutoIterationRecycle(
 
 export function configureDomainBridges(services: BridgeServices): void {
   const {
+    acpRuntimeManager,
     autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
@@ -269,6 +276,8 @@ export function configureDomainBridges(services: BridgeServices): void {
     reconciliationService,
     sessionDataService,
     sessionDomainService,
+    sessionLifecycleService,
+    sessionPromptTurnCompletionService,
     sessionService,
     startupScriptService,
     terminalSessionService,
@@ -292,11 +301,11 @@ export function configureDomainBridges(services: BridgeServices): void {
     findSessionsByWorkspaceId: (workspaceId) =>
       sessionDataService.findAgentSessionsByWorkspaceId(workspaceId),
     acquireFixerSession: (input) => sessionDataService.acquireFixerSession(input),
-    isSessionRunning: (id) => sessionService.isSessionRunning(id),
-    isSessionWorking: (id) => sessionService.isSessionWorking(id),
-    stopSession: (id) => sessionService.stopSession(id),
-    startSession: (id, opts) => sessionService.startSession(id, opts),
-    restartSession: (id, opts) => sessionService.restartSession(id, opts),
+    isSessionRunning: (id) => acpRuntimeManager.isSessionRunning(id),
+    isSessionWorking: (id) => acpRuntimeManager.isSessionWorking(id),
+    stopSession: (id) => sessionLifecycleService.stopSession(id),
+    startSession: (id, opts) => sessionLifecycleService.startSession(id, opts),
+    restartSession: (id, opts) => sessionLifecycleService.restartSession(id, opts),
     sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
@@ -383,7 +392,7 @@ export function configureDomainBridges(services: BridgeServices): void {
   workspaceQueryService.configure({
     session: {
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
-      getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
+      getRuntimeSnapshot: (id) => sessionLifecycleService.getRuntimeSnapshot(id),
     },
     github: {
       checkHealth: () => githubCLIService.checkHealth(),
@@ -420,16 +429,26 @@ export function configureDomainBridges(services: BridgeServices): void {
     },
   });
 
+  const sessionWorkspaceBridge = {
+    markSessionRunning: (wsId: string, sId: string) =>
+      workspaceActivityService.markSessionRunning(wsId, sId),
+    markSessionIdle: (wsId: string, sId: string, generation?: number) =>
+      workspaceActivityService.markSessionIdle(wsId, sId, generation),
+    recordRatchetSessionEnd: (
+      workspaceId: string,
+      sessionId: string,
+      outcome: 'COMPLETED' | 'DIED'
+    ) => ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
+    resetPRDiscoveryBackoff: (workspaceId: string) =>
+      workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
+  };
+
   sessionService.configure({
-    workspace: {
-      markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
-      markSessionIdle: (wsId, sId, generation) =>
-        workspaceActivityService.markSessionIdle(wsId, sId, generation),
-      recordRatchetSessionEnd: (workspaceId, sessionId, outcome) =>
-        ratchetService.recordSessionEnd(workspaceId, sessionId, outcome),
-      resetPRDiscoveryBackoff: (workspaceId) =>
-        workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
-    },
+    workspace: sessionWorkspaceBridge,
+  });
+
+  sessionLifecycleService.configure({
+    workspace: sessionWorkspaceBridge,
     messageQueue: {
       tryDispatchNextMessage: (sessionId) =>
         chatMessageHandlerService.tryDispatchNextMessage(sessionId),
@@ -445,7 +464,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),
     },
   });
-  sessionService.setPromptTurnCompleteHandler((sessionId) =>
+  sessionPromptTurnCompletionService.setHandler((sessionId) =>
     chatMessageHandlerService.tryDispatchNextMessage(sessionId, {
       bypassTurnInProgressBackoff: true,
     })
@@ -495,13 +514,13 @@ export function configureDomainBridges(services: BridgeServices): void {
         workflow: 'auto-iteration',
       });
       try {
-        await sessionService.startSession(session.id, {
+        await sessionLifecycleService.startSession(session.id, {
           initialPrompt: opts.initialPrompt,
           startupModePreset: opts.startupModePreset,
         });
       } catch (err) {
         await rollbackCreatedAutoIterationSession(
-          sessionService,
+          sessionLifecycleService,
           sessionDataService,
           sessionDomainService,
           session.id,
@@ -518,7 +537,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       // sendAcpMessage already blocks until the turn completes
     },
     async stopSession(sessionId) {
-      await sessionService.stopSession(sessionId);
+      await sessionLifecycleService.stopSession(sessionId);
     },
     getLastAssistantMessage(sessionId): Promise<string> {
       const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
@@ -550,7 +569,7 @@ export function configureDomainBridges(services: BridgeServices): void {
       const ws = await workspaceAutoIterationService.getExecutionContext(workspaceId);
       const previousSessionId = ws?.autoIterationSessionId ?? undefined;
       if (previousSessionId) {
-        await stopPreviousAutoIterationSession(sessionService, previousSessionId);
+        await stopPreviousAutoIterationSession(sessionLifecycleService, previousSessionId);
       }
       let newSession: Awaited<ReturnType<SessionDataService['createAgentSession']>>;
       try {
@@ -561,7 +580,7 @@ export function configureDomainBridges(services: BridgeServices): void {
         });
       } catch (err) {
         await cleanupFailedAutoIterationRecycle(
-          sessionService,
+          sessionLifecycleService,
           sessionDataService,
           sessionDomainService,
           workspaceAutoIterationService,
@@ -571,10 +590,12 @@ export function configureDomainBridges(services: BridgeServices): void {
         throw err;
       }
       try {
-        await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+        await sessionLifecycleService.startSession(newSession.id, {
+          startupModePreset: 'non_interactive',
+        });
       } catch (err) {
         await cleanupFailedAutoIterationRecycle(
-          sessionService,
+          sessionLifecycleService,
           sessionDataService,
           sessionDomainService,
           workspaceAutoIterationService,
@@ -592,7 +613,7 @@ export function configureDomainBridges(services: BridgeServices): void {
         }
       } catch (err) {
         await cleanupFailedAutoIterationRecycle(
-          sessionService,
+          sessionLifecycleService,
           sessionDataService,
           sessionDomainService,
           workspaceAutoIterationService,
@@ -657,10 +678,10 @@ export function configureDomainBridges(services: BridgeServices): void {
           prUrl: ws.prUrl,
           prNumber: ws.prNumber,
           isAgentWorking:
-            sessionService.isAnySessionWorking(sessionIds) ||
+            acpRuntimeManager.isAnySessionWorking(sessionIds) ||
             sessionIds.some(
               (sessionId) =>
-                sessionService.isSessionRunning(sessionId) &&
+                acpRuntimeManager.isSessionRunning(sessionId) &&
                 sessionDomainService.getQueueLength(sessionId) > 0
             ),
           initCompletedAt: ws.initCompletedAt,

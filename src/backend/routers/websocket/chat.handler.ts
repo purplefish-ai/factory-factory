@@ -32,6 +32,7 @@ import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
 export function createChatUpgradeHandler(appContext: AppContext) {
   const {
+    acpRuntimeManager,
     chatEventForwarderService,
     chatMessageHandlerService,
     configService,
@@ -39,7 +40,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     sessionFileLogger,
     sessionEventBus,
     sessionDomainService,
-    sessionService,
+    sessionLifecycleService,
   } = appContext.services;
   const chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
 
@@ -52,7 +53,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   // ==========================================================================
 
   /**
-   * Get or create a session client by delegating to sessionService.
+   * Get or create a session client through the lifecycle service.
    * All sessions use ACP runtime; event forwarding is handled by AcpClientHandler.
    */
   async function getOrCreateChatClient(
@@ -65,11 +66,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     }
   ): Promise<unknown> {
     if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
+      logger.info('[Chat WS] Getting or creating client via sessionLifecycleService', {
+        dbSessionId,
+      });
     }
 
-    // Delegate client lifecycle to sessionService (all sessions use ACP runtime)
-    const client = await sessionService.getOrCreateSessionClient(dbSessionId, {
+    // Delegate client lifecycle to the focused lifecycle service.
+    const client = await sessionLifecycleService.getOrCreateSessionClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
       model: options.model,
       reasoningEffort: options.reasoningEffort,
@@ -216,7 +219,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           return;
         }
         if (
-          !sessionService.isSessionRunning(dbSessionId) &&
+          !acpRuntimeManager.isSessionRunning(dbSessionId) &&
           chatConnectionRegistry.countViewers(dbSessionId) === 0
         ) {
           sessionDomainService.clearSession(dbSessionId);

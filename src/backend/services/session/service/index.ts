@@ -25,13 +25,25 @@ export { sessionProviderResolverService } from './data/session-provider-resolver
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
+export { SessionConfigService } from './lifecycle/session.config.service';
+export { SessionLifecycleService } from './lifecycle/session.lifecycle.service';
+export { SessionPermissionService } from './lifecycle/session.permission.service';
 export {
   buildChildWorkspaceContext,
   sessionPromptBuilder,
 } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
-// Session lifecycle (start/stop/create)
-export { createSessionService, sessionService } from './lifecycle/session.service';
+export { SessionService } from './lifecycle/session.service';
+export type { SessionPromptService } from './lifecycle/session-services';
+export {
+  acpEventProcessor,
+  sessionConfigService,
+  sessionLifecycleService,
+  sessionPermissionService,
+  sessionPromptTurnCompletionService,
+  sessionRetryService,
+  sessionService,
+} from './lifecycle/session-services';
 export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';

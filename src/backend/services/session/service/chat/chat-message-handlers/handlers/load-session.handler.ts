@@ -10,7 +10,10 @@ import {
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
-import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import {
+  sessionConfigService,
+  sessionLifecycleService,
+} from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
@@ -71,7 +74,7 @@ export function createLoadSessionHandler(
 
     await hydrateProviderHistoryIfNeeded(sessionId, dbSession);
 
-    const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
+    const sessionRuntime = sessionLifecycleService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
       sessionRuntime,
@@ -88,12 +91,12 @@ export function createLoadSessionHandler(
         dbSession.workspace.status === 'ARCHIVING' || dbSession.workspace.status === 'ARCHIVED',
     });
 
-    const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
+    const chatCapabilities = await sessionConfigService.getChatBarCapabilities(sessionId);
     sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',
       capabilities: chatCapabilities,
     });
-    const configOptions = await sessionService.getSessionConfigOptionsWithFallback(sessionId);
+    const configOptions = await sessionConfigService.getSessionConfigOptionsWithFallback(sessionId);
     if (configOptions.length > 0) {
       sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',

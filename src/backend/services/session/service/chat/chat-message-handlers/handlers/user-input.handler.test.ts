@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatMessageHandlerSessionService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import type {
+  ChatMessageHandlerPromptService,
+  ChatMessageHandlerRuntimeManager,
+} from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import { createUserInputHandler } from './user-input.handler';
 
-function createDeps(overrides?: Partial<ChatMessageHandlerSessionService>) {
-  const deps: ChatMessageHandlerSessionService = {
-    isSessionRunning: vi.fn(() => false),
-    sendSessionMessage: vi.fn(async () => undefined),
-    respondToAcpPermission: vi.fn(),
-    setSessionModel: vi.fn(async () => undefined),
-    setSessionReasoningEffort: vi.fn(),
-    getChatBarCapabilities: vi.fn(async () => ({})),
-    ...overrides,
+function createDeps(options?: { isSessionRunning?: boolean }) {
+  const acpRuntimeManager: ChatMessageHandlerRuntimeManager = {
+    isSessionRunning: vi.fn(() => options?.isSessionRunning ?? false),
   };
-  return deps;
+  const sessionService: ChatMessageHandlerPromptService = {
+    sendSessionMessage: vi.fn(async () => undefined),
+  };
+  return { acpRuntimeManager, sessionService };
 }
 
 describe('createUserInputHandler', () => {
@@ -21,8 +21,8 @@ describe('createUserInputHandler', () => {
   });
 
   it('ignores empty or whitespace-only content', () => {
-    const sessionService = createDeps();
-    const handler = createUserInputHandler({ sessionService });
+    const deps = createDeps();
+    const handler = createUserInputHandler(deps);
     const ws = { send: vi.fn() };
 
     void handler({
@@ -39,13 +39,13 @@ describe('createUserInputHandler', () => {
       message: { type: 'user_input' } as never,
     });
 
-    expect(sessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('forwards text input to active session', async () => {
-    const sessionService = createDeps({ isSessionRunning: vi.fn(() => true) });
-    const handler = createUserInputHandler({ sessionService });
+    const deps = createDeps({ isSessionRunning: true });
+    const handler = createUserInputHandler(deps);
     const ws = { send: vi.fn() };
 
     void handler({
@@ -56,13 +56,13 @@ describe('createUserInputHandler', () => {
     });
 
     await Promise.resolve();
-    expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
     expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('forwards structured content arrays to active session', async () => {
-    const sessionService = createDeps({ isSessionRunning: vi.fn(() => true) });
-    const handler = createUserInputHandler({ sessionService });
+    const deps = createDeps({ isSessionRunning: true });
+    const handler = createUserInputHandler(deps);
     const ws = { send: vi.fn() };
     const content = [{ type: 'text', text: 'from array' }];
 
@@ -74,13 +74,13 @@ describe('createUserInputHandler', () => {
     });
 
     await Promise.resolve();
-    expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
+    expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
     expect(ws.send).not.toHaveBeenCalled();
   });
 
   it('returns websocket error when no active session exists', () => {
-    const sessionService = createDeps({ isSessionRunning: vi.fn(() => false) });
-    const handler = createUserInputHandler({ sessionService });
+    const deps = createDeps({ isSessionRunning: false });
+    const handler = createUserInputHandler(deps);
     const ws = { send: vi.fn() };
 
     void handler({

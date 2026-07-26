@@ -44,7 +44,7 @@ function createCaller(requestTrust?: {
     sessionDomainService: {
       getAllPendingRequests: () => mockGetAllPendingRequests(),
     },
-    sessionService: {
+    sessionLifecycleService: {
       getRuntimeSnapshot: (...args: unknown[]) => mockGetRuntimeSnapshot(...args),
     },
   };

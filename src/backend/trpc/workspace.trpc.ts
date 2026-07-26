@@ -122,14 +122,15 @@ export const workspaceCoreRouter = router({
 
   // Get workspace by ID
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
-    const { sessionDomainService, sessionService, workspaceDataService } = ctx.appContext.services;
+    const { sessionDomainService, sessionLifecycleService, workspaceDataService } =
+      ctx.appContext.services;
     const workspace = await workspaceDataService.findById(input.id);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions ?? [], (id) =>
-      sessionService.getRuntimeSnapshot(id)
+      sessionLifecycleService.getRuntimeSnapshot(id)
     );
     const sessionIds = workspace.agentSessions?.map((session) => session.id) ?? [];
     const pendingRequestType = computePendingRequestType(

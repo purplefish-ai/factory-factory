@@ -44,6 +44,9 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
         setupClientEvents: vi.fn(),
         setupWorkspaceNotifications: vi.fn(),
       },
+      acpRuntimeManager: {
+        isSessionRunning: vi.fn(() => false),
+      },
       chatMessageHandlerService: {
         setClientCreator: vi.fn(),
         tryDispatchNextMessage: vi.fn(),
@@ -61,11 +64,8 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
         closeSession: vi.fn(),
       },
       sessionEventBus: eventBus,
-      sessionService: {
-        getOrCreateClient: vi.fn(),
+      sessionLifecycleService: {
         getOrCreateSessionClient: vi.fn(async () => ({})),
-        getSessionOptions: vi.fn(),
-        isSessionRunning: vi.fn(() => false),
       },
       sessionDomainService: {
         clearSession: vi.fn(),
@@ -82,7 +82,7 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
     logger,
     sessionFileLogger: appContext.services.sessionFileLogger,
     sessionDomainService: appContext.services.sessionDomainService,
-    sessionService: appContext.services.sessionService,
+    acpRuntimeManager: appContext.services.acpRuntimeManager,
   };
 }
 
@@ -366,9 +366,9 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('clears in-memory state when the last viewer disconnects from a stopped session', () => {
-    const { appContext, sessionDomainService, sessionService } = createTestContext(tempRootDir);
+    const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
 
     const ws = new MockWebSocket();
     const wss = {
@@ -399,9 +399,9 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('does not clear in-memory state when the disconnected session is still running', () => {
-    const { appContext, sessionDomainService, sessionService } = createTestContext(tempRootDir);
+    const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
 
     const ws = new MockWebSocket();
     const wss = {
@@ -430,10 +430,10 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('waits for in-flight message handling before clearing disconnected session state', async () => {
-    const { appContext, chatMessageHandlerService, sessionDomainService, sessionService } =
+    const { appContext, chatMessageHandlerService, sessionDomainService, acpRuntimeManager } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
 
     let releaseMessage: (() => void) | undefined;
     const messageHandled = new Promise<void>((resolve) => {

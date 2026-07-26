@@ -67,7 +67,8 @@ export function createServer(application: Application, requestedPort?: number): 
     runScriptStateMachine,
     schedulerService,
     sessionFileLogger,
-    sessionService,
+    sessionLifecycleService,
+    sessionRepository,
     terminalService,
     workspaceAutoIterationService,
     workspaceGitStateService,
@@ -438,8 +439,8 @@ export function createServer(application: Application, requestedPort?: number): 
       disposeSnapshotsHandlerState(application);
       await closeBoundServer();
 
-      // Stop all Claude clients via sessionService (unified lifecycle management)
-      await sessionService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
+      // Stop all ACP clients through the session lifecycle owner.
+      await sessionLifecycleService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
 
       terminalService.cleanup();
       sessionFileLogger.cleanup();
@@ -491,7 +492,12 @@ export function createServer(application: Application, requestedPort?: number): 
         // Live ACP runtimes are in-memory only, so after a backend restart these
         // records must not drive workspace "Working" state.
         await runStartupTask('Failed to recover stale agent sessions on startup', async () => {
-          await sessionService.recoverStaleSessionStates();
+          const recoveredCount = await sessionRepository.recoverStaleRunningSessions();
+          if (recoveredCount > 0) {
+            logger.info('Recovered stale agent session states on startup', {
+              recoveredCount,
+            });
+          }
         });
 
         // Reconcile workspaces that may have been left in inconsistent states

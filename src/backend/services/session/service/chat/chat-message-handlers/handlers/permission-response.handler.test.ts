@@ -28,15 +28,10 @@ describe('createPermissionResponseHandler', () => {
 
   it('responds to pending ACP permission request', () => {
     const ws = { send: vi.fn() };
-    const respondToAcpPermission = vi.fn(() => true);
+    const respondToPermission = vi.fn(() => true);
     const handler = createPermissionResponseHandler({
-      sessionService: {
-        isSessionRunning: vi.fn(),
-        sendSessionMessage: vi.fn(),
-        respondToAcpPermission,
-        setSessionModel: vi.fn(),
-        setSessionReasoningEffort: vi.fn(),
-        getChatBarCapabilities: vi.fn(),
+      sessionPermissionService: {
+        respondToPermission,
       },
     });
 
@@ -52,7 +47,7 @@ describe('createPermissionResponseHandler', () => {
       } as never,
     });
 
-    expect(respondToAcpPermission).toHaveBeenCalledWith('session-1', 'req-1', 'allow_once', {
+    expect(respondToPermission).toHaveBeenCalledWith('session-1', 'req-1', 'allow_once', {
       mode: ['default'],
     });
     expect(ws.send).not.toHaveBeenCalled();
@@ -64,15 +59,10 @@ describe('createPermissionResponseHandler', () => {
 
   it('sends websocket error when no pending request is found', () => {
     const ws = { send: vi.fn() };
-    const respondToAcpPermission = vi.fn(() => false);
+    const respondToPermission = vi.fn(() => false);
     const handler = createPermissionResponseHandler({
-      sessionService: {
-        isSessionRunning: vi.fn(),
-        sendSessionMessage: vi.fn(),
-        respondToAcpPermission,
-        setSessionModel: vi.fn(),
-        setSessionReasoningEffort: vi.fn(),
-        getChatBarCapabilities: vi.fn(),
+      sessionPermissionService: {
+        respondToPermission,
       },
     });
 
@@ -101,17 +91,12 @@ describe('createPermissionResponseHandler', () => {
 
   it('sends websocket error when permission response throws', () => {
     const ws = { send: vi.fn() };
-    const respondToAcpPermission = vi.fn(() => {
+    const respondToPermission = vi.fn(() => {
       throw new Error('bridge down');
     });
     const handler = createPermissionResponseHandler({
-      sessionService: {
-        isSessionRunning: vi.fn(),
-        sendSessionMessage: vi.fn(),
-        respondToAcpPermission,
-        setSessionModel: vi.fn(),
-        setSessionReasoningEffort: vi.fn(),
-        getChatBarCapabilities: vi.fn(),
+      sessionPermissionService: {
+        respondToPermission,
       },
     });
 

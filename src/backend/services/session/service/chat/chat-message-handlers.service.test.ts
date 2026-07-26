@@ -47,7 +47,14 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   sessionDomainService: mockSessionDomainService,
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
+vi.mock('@/backend/services/session/service/acp', () => ({
+  acpRuntimeManager: mockSessionService,
+}));
+
+vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+  sessionConfigService: mockSessionService,
+  sessionLifecycleService: mockSessionService,
+  sessionPermissionService: {},
   sessionService: mockSessionService,
 }));
 

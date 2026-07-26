@@ -2,15 +2,24 @@ import type { WebSocket } from 'ws';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 
-export interface ChatMessageHandlerSessionService {
+export interface ChatMessageHandlerRuntimeManager {
   isSessionRunning: (sessionId: string) => boolean;
+}
+
+export interface ChatMessageHandlerPromptService {
   sendSessionMessage: (sessionId: string, content: string | AgentContentItem[]) => Promise<void>;
-  respondToAcpPermission: (
+}
+
+export interface ChatMessageHandlerPermissionService {
+  respondToPermission: (
     sessionId: string,
     requestId: string,
     optionId: string,
     answers?: Record<string, string[]>
   ) => boolean;
+}
+
+export interface ChatMessageHandlerConfigService {
   setSessionModel: (sessionId: string, model?: string) => Promise<void>;
   setSessionReasoningEffort: (
     sessionId: string,
@@ -43,7 +52,10 @@ export type ChatMessageHandler<T extends ChatMessageInput = ChatMessageInput> = 
 ) => Promise<void> | void;
 
 export interface HandlerRegistryDependencies {
-  sessionService?: ChatMessageHandlerSessionService;
+  acpRuntimeManager?: ChatMessageHandlerRuntimeManager;
+  sessionConfigService?: ChatMessageHandlerConfigService;
+  sessionPermissionService?: ChatMessageHandlerPermissionService;
+  sessionService?: ChatMessageHandlerPromptService;
   getClientCreator: () => ClientCreator | null;
   tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   setManualDispatchResume: (sessionId: string, resumed: boolean) => void;

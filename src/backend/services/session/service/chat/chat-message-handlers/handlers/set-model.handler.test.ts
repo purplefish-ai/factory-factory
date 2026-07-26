@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatMessageHandlerSessionService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import type { ChatMessageHandlerConfigService } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 
 const mocks = vi.hoisted(() => ({
   setSessionModel: vi.fn(),
@@ -10,11 +10,8 @@ const mocks = vi.hoisted(() => ({
 import { createSetModelHandler } from './set-model.handler';
 
 describe('createSetModelHandler', () => {
-  const deps: { sessionService: ChatMessageHandlerSessionService } = {
-    sessionService: {
-      isSessionRunning: vi.fn(),
-      sendSessionMessage: vi.fn(),
-      respondToAcpPermission: vi.fn(),
+  const deps: { sessionConfigService: ChatMessageHandlerConfigService } = {
+    sessionConfigService: {
       setSessionModel: mocks.setSessionModel,
       setSessionReasoningEffort: mocks.setSessionReasoningEffort,
       getChatBarCapabilities: mocks.getChatBarCapabilities,

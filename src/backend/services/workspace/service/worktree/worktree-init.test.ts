@@ -72,7 +72,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  sessionService: {
+  sessionLifecycleService: {
     startSession: mocks.startSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },

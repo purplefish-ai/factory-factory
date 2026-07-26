@@ -369,17 +369,17 @@ export const adminRouter = router({
   stopSession: publicProcedure
     .input(z.object({ sessionId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionService } = ctx.appContext.services;
+      const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;
       const logger = getLogger(ctx);
 
-      const wasRunning = sessionService.isSessionRunning(input.sessionId);
+      const wasRunning = acpRuntimeManager.isSessionRunning(input.sessionId);
 
       logger.info('Admin stopping session', {
         sessionId: input.sessionId,
         wasRunning,
       });
 
-      await sessionService.stopSession(input.sessionId);
+      await sessionLifecycleService.stopSession(input.sessionId);
 
       return {
         wasRunning,

@@ -93,6 +93,7 @@ export type SessionLifecycleServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   retryService: SessionRetryService;
+  sendSessionMessage: SendSessionMessage;
   onBeforeStopSession?: (sessionId: string) => void;
   onSessionExit?: (sessionId: string) => void;
 };
@@ -107,6 +108,7 @@ export class SessionLifecycleService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
+  private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly stoppingSessions = new Set<string>();
@@ -126,6 +128,7 @@ export class SessionLifecycleService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.retryService = options.retryService;
+    this.sendSessionMessage = options.sendSessionMessage;
     this.onBeforeStopSession = options.onBeforeStopSession;
     this.onSessionExit = options.onSessionExit;
   }
@@ -140,11 +143,7 @@ export class SessionLifecycleService {
     this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
-  async startSession(
-    sessionId: string,
-    sendSessionMessage: SendSessionMessage,
-    options?: StartSessionOptions
-  ): Promise<void> {
+  async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
     const stopGeneration = this.getStopGeneration(sessionId);
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
@@ -175,17 +174,13 @@ export class SessionLifecycleService {
       dispatchableNotificationCount === 0 ||
       (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault);
     if (shouldSendInitialPrompt && initialPrompt) {
-      await sendSessionMessage(sessionId, initialPrompt);
+      await this.sendSessionMessage(sessionId, initialPrompt);
     }
 
     logger.info('Session started', { sessionId, provider: session.provider });
   }
 
-  async restartSession(
-    sessionId: string,
-    sendSessionMessage: SendSessionMessage,
-    options?: StartSessionOptions
-  ): Promise<void> {
+  async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
     const isRunning = this.runtimeManager.isSessionRunning(sessionId);
     const isStopInProgress = this.runtimeManager.isStopInProgress(sessionId);
 
@@ -208,7 +203,6 @@ export class SessionLifecycleService {
     }
     await this.startSession(
       sessionId,
-      sendSessionMessage,
       options ?? {
         initialPrompt: 'Continue with the task.',
         initialPromptIsDefault: true,

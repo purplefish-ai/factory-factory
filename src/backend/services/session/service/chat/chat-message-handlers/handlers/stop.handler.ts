@@ -3,14 +3,14 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-services';
 import type { StopMessage } from '@/shared/websocket';
 
 export function createStopHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<StopMessage> {
   return async ({ sessionId }) => {
-    await sessionService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId);
     // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
     // to avoid race conditions where a new client is created before the old one exits
     chatEventForwarderService.clearPendingRequest(sessionId);

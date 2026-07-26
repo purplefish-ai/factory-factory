@@ -34,7 +34,7 @@ export const workspaceChildrenRouter = router({
   listChildren: publicProcedure
     .input(z.object({ parentWorkspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { sessionDomainService, sessionService, workspaceRelationshipsService } =
+      const { sessionDomainService, sessionLifecycleService, workspaceRelationshipsService } =
         ctx.appContext.services;
       const children = await workspaceRelationshipsService.findChildrenWithStatus(
         input.parentWorkspaceId
@@ -43,7 +43,7 @@ export const workspaceChildrenRouter = router({
 
       return children.map((child) => {
         const sessionSummaries = buildWorkspaceSessionSummaries(child.agentSessions, (id) =>
-          sessionService.getRuntimeSnapshot(id)
+          sessionLifecycleService.getRuntimeSnapshot(id)
         );
         // Derived on read through the same function workspace.get uses. The
         // query already loads each child with its sessions, so this does not

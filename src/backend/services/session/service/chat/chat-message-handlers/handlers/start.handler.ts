@@ -7,7 +7,7 @@ import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
-import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { WorkspaceStatus } from '@/shared/core';
 import type { StartMessageInput } from '@/shared/websocket';
@@ -23,7 +23,7 @@ export function createStartHandler(
       ws.send(JSON.stringify({ type: 'error', message: 'Client creator not configured' }));
       return;
     }
-    const sessionOpts = await sessionService.getSessionOptions(sessionId);
+    const sessionOpts = await sessionLifecycleService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
       sessionDomainService.markError(sessionId, 'Session not found');

@@ -1,7 +1,8 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   ChatMessageHandler,
-  ChatMessageHandlerSessionService,
+  ChatMessageHandlerPromptService,
+  ChatMessageHandlerRuntimeManager,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
@@ -9,9 +10,10 @@ import type { UserInputMessage } from '@/shared/websocket';
 const logger = createLogger('chat-message-handlers');
 
 export function createUserInputHandler(deps: {
-  sessionService: ChatMessageHandlerSessionService;
+  acpRuntimeManager: ChatMessageHandlerRuntimeManager;
+  sessionService: ChatMessageHandlerPromptService;
 }): ChatMessageHandler<UserInputMessage> {
-  const { sessionService } = deps;
+  const { acpRuntimeManager, sessionService } = deps;
 
   return ({ ws, sessionId, message }) => {
     const rawContent = message.content || message.text;
@@ -27,7 +29,7 @@ export function createUserInputHandler(deps: {
     const messageContent =
       typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
 
-    if (sessionService.isSessionRunning(sessionId)) {
+    if (acpRuntimeManager.isSessionRunning(sessionId)) {
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
         logger.error('Failed to send message to provider', { sessionId, error });
       });

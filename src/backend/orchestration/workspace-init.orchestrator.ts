@@ -12,7 +12,7 @@ import {
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
-  sessionService,
+  sessionLifecycleService,
 } from '@/backend/services/session';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
@@ -140,7 +140,7 @@ async function handleWorkspaceInitFailure(
     }
   }
   try {
-    await sessionService.stopWorkspaceSessions(workspaceId);
+    await sessionLifecycleService.stopWorkspaceSessions(workspaceId);
   } catch (stopError) {
     logger.warn('Failed to stop Claude sessions after init failure', {
       workspaceId,
@@ -388,7 +388,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
-    await sessionService.startSession(session.id, {
+    await sessionLifecycleService.startSession(session.id, {
       initialPrompt: '',
       startupModePreset,
     });

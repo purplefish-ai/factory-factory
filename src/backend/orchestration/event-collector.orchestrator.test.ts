@@ -94,7 +94,7 @@ vi.mock('@/backend/services/session', () => ({
     on: vi.fn(),
     off: vi.fn(),
   },
-  sessionService: {
+  sessionLifecycleService: {
     getRuntimeSnapshot: vi.fn().mockReturnValue({
       phase: 'idle',
       processState: 'alive',
@@ -136,7 +136,7 @@ import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
-  sessionService,
+  sessionLifecycleService,
 } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import {
@@ -169,7 +169,7 @@ function configureEventCollector(): void {
     runScriptStateMachine,
     sessionDataService,
     sessionDomainService,
-    sessionService,
+    sessionLifecycleService,
     terminalService,
     workspaceActivityService,
     workspaceSnapshotStore,
@@ -609,7 +609,7 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.remove).toHaveBeenCalledWith('ws-archived');
     expect(workspaceActivityService.clearWorkspace).toHaveBeenCalledWith('ws-archived');
     expect(prFetchRegistry.removeWorkspace).toHaveBeenCalledWith('ws-archived');
-    expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
+    expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-archived');
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });
@@ -1660,7 +1660,7 @@ describe('per-graph event collector lifecycle', () => {
       runScriptStateMachine: createSource(),
       sessionDataService,
       sessionDomainService: createSource(),
-      sessionService,
+      sessionLifecycleService,
       terminalService,
       workspaceActivityService: Object.assign(createSource(), { clearWorkspace: vi.fn() }),
       workspaceSnapshotStore: Object.assign(store, { getAllWorkspaceIds: vi.fn(() => []) }),
