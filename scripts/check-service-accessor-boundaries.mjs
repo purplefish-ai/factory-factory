@@ -23,6 +23,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-pr.accessor',
   },
+  workspaceRunScriptAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-run-script.accessor',
+  },
   workspaceNotificationAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',

@@ -79,6 +79,26 @@ function exportedRatchetState(workspace: WorkspaceForExport): RatchetState {
   });
 }
 
+/**
+ * The six run-script fields a v4 export file carries, flattened out of
+ * `WorkspaceRunScript`.
+ *
+ * Extracted rather than inlined into the workspace mapper because the mapper is
+ * at the lint's complexity ceiling and every `??` on a joined row costs a branch.
+ * `postRunCommand` is absent because the format never carried it.
+ */
+function exportedRunScriptFields(workspace: WorkspaceForExport) {
+  const runScript = workspace.runScript;
+  return {
+    runScriptCommand: runScript?.command ?? null,
+    runScriptCleanupCommand: runScript?.cleanupCommand ?? null,
+    runScriptPid: runScript?.pid ?? null,
+    runScriptPort: runScript?.port ?? null,
+    runScriptStartedAt: toISOString(runScript?.startedAt ?? null),
+    runScriptStatus: runScript?.status ?? 'IDLE',
+  };
+}
+
 function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
   if (!config || typeof config !== 'object') {
     return null;
@@ -202,12 +222,6 @@ async function importWorkspaces(
         initStartedAt: parseDate(workspace.initStartedAt),
         initCompletedAt: parseDate(workspace.initCompletedAt),
         initRetryCount: workspace.initRetryCount,
-        runScriptCommand: workspace.runScriptCommand,
-        runScriptCleanupCommand: workspace.runScriptCleanupCommand,
-        runScriptPid: workspace.runScriptPid,
-        runScriptPort: workspace.runScriptPort,
-        runScriptStartedAt: parseDate(workspace.runScriptStartedAt),
-        runScriptStatus: workspace.runScriptStatus,
         mode: workspace.mode,
         autoIterationConfig:
           workspace.autoIterationConfig != null
@@ -256,6 +270,21 @@ async function importWorkspaces(
             lastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
             activeSessionId: workspace.ratchetActiveSessionId,
             dispatchSnapshotKey: workspace.ratchetLastCiRunId,
+          },
+        },
+        // The v4 export carries six of the seven run-script fields as flat
+        // workspace fields; they now live in the WorkspaceRunScript row this
+        // create brings with it. `postRunCommand` was never exported, so it
+        // restores as null and the next reconcile reads it back out of the
+        // worktree's factory-factory.json.
+        runScript: {
+          create: {
+            command: workspace.runScriptCommand,
+            cleanupCommand: workspace.runScriptCleanupCommand,
+            pid: workspace.runScriptPid,
+            port: workspace.runScriptPort,
+            startedAt: parseDate(workspace.runScriptStartedAt),
+            status: workspace.runScriptStatus,
           },
         },
         hasHadSessions: workspace.hasHadSessions,
@@ -455,12 +484,9 @@ class DataBackupService {
           initStartedAt: toISOString(w.initStartedAt),
           initCompletedAt: toISOString(w.initCompletedAt),
           initRetryCount: w.initRetryCount,
-          runScriptCommand: w.runScriptCommand,
-          runScriptCleanupCommand: w.runScriptCleanupCommand,
-          runScriptPid: w.runScriptPid,
-          runScriptPort: w.runScriptPort,
-          runScriptStartedAt: toISOString(w.runScriptStartedAt),
-          runScriptStatus: w.runScriptStatus,
+          // Flattened out of WorkspaceRunScript, same as the PR cache below: the
+          // v4 export format carries these as workspace fields.
+          ...exportedRunScriptFields(w),
           mode: w.mode,
           autoIterationConfig: parseAutoIterationConfigForExport(w.autoIterationConfig),
           githubIssueNumber: w.githubIssueNumber,

@@ -14,6 +14,15 @@ import {
   type WorkspaceRatchetRow,
   workspaceRatchetAccessor,
 } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
+import {
+  flattenWorkspaceRunScript,
+  type RunScriptCommandFields,
+  type RunScriptExecutionFields,
+  type RunScriptExecutionUpdate,
+  type WorkspaceRunScriptFields,
+  type WorkspaceRunScriptRow,
+  workspaceRunScriptAccessor,
+} from '@/backend/services/workspace/resources/workspace-run-script.accessor';
 import type {
   WorkspaceFixerContext,
   WorkspacePRContext,
@@ -35,20 +44,16 @@ const autoIterationExecutionContextSelect = {
   autoIterationSessionId: true,
 } satisfies Prisma.WorkspaceSelect;
 
-const runScriptExecutionStateSelect = {
-  runScriptStatus: true,
-  runScriptPid: true,
-  runScriptPort: true,
-  runScriptStartedAt: true,
-} satisfies Prisma.WorkspaceSelect;
-
 export type AutoIterationExecutionContext = Prisma.WorkspaceGetPayload<{
   select: typeof autoIterationExecutionContextSelect;
 }>;
 
-export type RunScriptExecutionState = Prisma.WorkspaceGetPayload<{
-  select: typeof runScriptExecutionStateSelect;
-}>;
+/**
+ * The four process columns, under the flat names they had on `Workspace`. Now a
+ * `WorkspaceRunScript` read; the shape is unchanged because the run-script state
+ * machine passes it around.
+ */
+export type RunScriptExecutionState = RunScriptExecutionFields;
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.
@@ -107,14 +112,7 @@ interface UpdateWorkspaceInput {
   ratchetSessionProvider?: Prisma.WorkspaceUpdateInput['ratchetSessionProvider'];
   // Activity tracking
   hasHadSessions?: boolean;
-  // Run script tracking
-  runScriptCommand?: string | null;
-  runScriptPostRunCommand?: string | null;
-  runScriptCleanupCommand?: string | null;
-  runScriptPid?: number | null;
-  runScriptPort?: number | null;
-  runScriptStartedAt?: Date | null;
-  runScriptStatus?: RunScriptStatus;
+  // The run-script group lives on WorkspaceRunScript; see workspaceRunScriptAccessor.
   // Auto-iteration tracking
   autoIterationStatus?: Prisma.WorkspaceUpdateInput['autoIterationStatus'];
   autoIterationConfig?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
@@ -209,11 +207,11 @@ function prAggregateChanged(
 }
 
 /**
- * The ratchet and the PR cache live in their own tables now, but the reads that
- * feed derived state and the snapshot stream consumed them as flat `ratchet*` and
- * `pr*` fields on the workspace. `flatten` keeps that shape, so both splits stop
- * at this accessor instead of rippling out through derived state, the snapshot
- * wire and the client.
+ * The ratchet, the PR cache and the run-script group live in their own tables
+ * now, but the reads that feed derived state and the snapshot stream consumed
+ * them as flat `ratchet*`, `pr*` and `runScript*` fields on the workspace.
+ * `flatten` keeps that shape, so all three splits stop at this accessor instead
+ * of rippling out through derived state, the snapshot wire and the client.
  *
  * `ratchetState` is in that shape too, but it is no longer read from a column: it
  * is projected here from the PR fields joined in alongside it. Computing it at the
@@ -221,20 +219,26 @@ function prAggregateChanged(
  * disagree with them — and what let the projection land without touching any of
  * the forty files that read `workspace.ratchetState`.
  */
-type Flattened<T> = Omit<T, 'ratchet' | 'pr'> &
+type Flattened<T> = Omit<T, 'ratchet' | 'pr' | 'runScript'> &
   WorkspaceRatchetFields &
-  WorkspacePRFields & { ratchetState: RatchetState };
+  WorkspacePRFields &
+  WorkspaceRunScriptFields & { ratchetState: RatchetState };
 
-function flatten<T extends { ratchet?: WorkspaceRatchetRow | null; pr?: WorkspacePRRow | null }>(
-  row: T
-): Flattened<T> {
-  const { ratchet, pr, ...rest } = row;
+function flatten<
+  T extends {
+    ratchet?: WorkspaceRatchetRow | null;
+    pr?: WorkspacePRRow | null;
+    runScript?: WorkspaceRunScriptRow | null;
+  },
+>(row: T): Flattened<T> {
+  const { ratchet, pr, runScript, ...rest } = row;
   const ratchetFields = flattenWorkspaceRatchet(ratchet);
   const prFields = flattenWorkspacePR(pr);
   return {
     ...rest,
     ...ratchetFields,
     ...prFields,
+    ...flattenWorkspaceRunScript(runScript),
     ratchetState: deriveRatchetState({
       ratchetEnabled: ratchetFields.ratchetEnabled,
       prState: prFields.prState,
@@ -246,16 +250,22 @@ function flatten<T extends { ratchet?: WorkspaceRatchetRow | null; pr?: Workspac
 }
 
 /** Included on every read that has to reproduce the old flat workspace shape. */
-const sideTables = { ratchet: true, pr: true } satisfies Prisma.WorkspaceInclude;
+const sideTables = {
+  ratchet: true,
+  pr: true,
+  runScript: true,
+} satisfies Prisma.WorkspaceInclude;
+
+type SideTableInclude = { ratchet: true; pr: true; runScript: true };
 
 /** A bare workspace row with its side-table fields flattened on. */
 export type WorkspaceWithRatchet = Flattened<
-  Prisma.WorkspaceGetPayload<{ include: { ratchet: true; pr: true } }>
+  Prisma.WorkspaceGetPayload<{ include: SideTableInclude }>
 >;
 
 type WorkspaceWithAgentSessions = Flattened<
   Prisma.WorkspaceGetPayload<{
-    include: { agentSessions: true; terminalSessions: true; ratchet: true; pr: true };
+    include: { agentSessions: true; terminalSessions: true } & SideTableInclude;
   }>
 >;
 
@@ -287,9 +297,7 @@ type WorkspaceWithAgentSessionsAndProject = Flattened<
       agentSessions: true;
       terminalSessions: true;
       project: true;
-      ratchet: true;
-      pr: true;
-    };
+    } & SideTableInclude;
   }>
 >;
 
@@ -310,11 +318,13 @@ class WorkspaceAccessor {
         linearIssueIdentifier: data.linearIssueIdentifier,
         linearIssueUrl: data.linearIssueUrl,
         isAutoGeneratedBranch: data.isAutoGeneratedBranch ?? false,
-        // Every workspace gets both side-table rows here, so no later code path
-        // can create a workspace that their row-guarded writes would skip. PR
-        // discovery in particular claims its backoff before any PR exists.
+        // Every workspace gets all three side-table rows here, so no later code
+        // path can create a workspace that their row-guarded writes would skip. PR
+        // discovery in particular claims its backoff before any PR exists, and the
+        // run-script status compare-and-swap needs a row before the first start.
         ratchet: { create: { enabled: data.ratchetEnabled } },
         pr: { create: {} },
+        runScript: { create: {} },
         defaultSessionProvider: data.defaultSessionProvider,
         ratchetSessionProvider: data.ratchetSessionProvider,
         creationSource: data.creationSource,
@@ -428,17 +438,11 @@ class WorkspaceAccessor {
   }
 
   findRunScriptExecutionState(id: string): Promise<RunScriptExecutionState | null> {
-    return prisma.workspace.findUnique({
-      where: { id },
-      select: runScriptExecutionStateSelect,
-    });
+    return workspaceRunScriptAccessor.findExecutionState(id);
   }
 
   findRunScriptExecutionStateOrThrow(id: string): Promise<RunScriptExecutionState> {
-    return prisma.workspace.findUniqueOrThrow({
-      where: { id },
-      select: runScriptExecutionStateSelect,
-    });
+    return workspaceRunScriptAccessor.findExecutionStateOrThrow(id);
   }
 
   findByProjectId(projectId: string): Promise<Workspace[]> {
@@ -519,12 +523,34 @@ class WorkspaceAccessor {
   casRunScriptStatusUpdate(
     id: string,
     currentStatus: RunScriptStatus,
-    data: Prisma.WorkspaceUpdateManyMutationInput
+    data: RunScriptExecutionUpdate
   ): Promise<{ count: number }> {
-    return prisma.workspace.updateMany({
-      where: { id, runScriptStatus: currentStatus },
-      data,
+    return workspaceRunScriptAccessor.casExecutionUpdate(id, currentStatus, data);
+  }
+
+  /**
+   * Write the cached `factory-factory.json` commands alongside the worktree the
+   * config was read from.
+   *
+   * The worktree columns are the workspace's own and the commands are the
+   * run-script row's, so this is the transaction that keeps a freshly initialized
+   * worktree from being observable without the commands it declared — one
+   * statement before the split.
+   */
+  async registerInitializedWorktree(
+    id: string,
+    worktree: { worktreePath: string; branchName: string | null; isAutoGeneratedBranch: boolean },
+    commands: RunScriptCommandFields
+  ): Promise<void> {
+    await prisma.$transaction(async (transaction) => {
+      await transaction.workspace.update({ where: { id }, data: worktree });
+      await workspaceRunScriptAccessor.writeCommands(id, commands, transaction);
     });
+  }
+
+  /** Refresh the cached commands from the worktree's `factory-factory.json`. */
+  setRunScriptCommands(id: string, commands: RunScriptCommandFields): Promise<void> {
+    return workspaceRunScriptAccessor.writeCommands(id, commands);
   }
 
   async finishAutoIterationIfSessionMatches(
@@ -585,32 +611,8 @@ class WorkspaceAccessor {
    * in-flight by a server crash or restart.
    * Returns the affected workspaces (id + prior status) for logging/event emission.
    */
-  async resetStaleRunScriptStatuses(): Promise<
-    Array<{ id: string; runScriptStatus: RunScriptStatus }>
-  > {
-    const stale = await prisma.workspace.findMany({
-      where: { runScriptStatus: { in: ['STARTING', 'STOPPING'] } },
-      select: { id: true, runScriptStatus: true },
-    });
-
-    if (stale.length === 0) {
-      return [];
-    }
-
-    await prisma.workspace.updateMany({
-      where: {
-        id: { in: stale.map((w) => w.id) },
-        runScriptStatus: { in: ['STARTING', 'STOPPING'] },
-      },
-      data: {
-        runScriptStatus: 'IDLE',
-        runScriptPid: null,
-        runScriptPort: null,
-        runScriptStartedAt: null,
-      },
-    });
-
-    return stale;
+  resetStaleRunScriptStatuses(): Promise<Array<{ id: string; runScriptStatus: RunScriptStatus }>> {
+    return workspaceRunScriptAccessor.resetStaleTransientStatuses();
   }
 
   /**
@@ -998,7 +1000,7 @@ class WorkspaceAccessor {
   async findChildrenWithStatus(parentId: string): Promise<
     Flattened<
       Prisma.WorkspaceGetPayload<{
-        include: { agentSessions: true; project: true; ratchet: true; pr: true };
+        include: { agentSessions: true; project: true } & SideTableInclude;
       }>
     >[]
   > {
