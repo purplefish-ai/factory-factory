@@ -181,6 +181,7 @@ describe('StartupScriptService', () => {
   it('reports a process terminated by the timeout signal as timed out', async () => {
     vi.useFakeTimers();
     const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
     mockSpawn.mockReturnValue(proc);
 
     const resultPromise = service.runStartupScript(
@@ -201,6 +202,31 @@ describe('StartupScriptService', () => {
       timedOut: true,
     });
     expect(markFailed).toHaveBeenCalledWith('w1', 'Script timed out after 1 seconds');
+  });
+
+  it('does not report a different termination signal as the startup-script timeout', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit('close', null, 'SIGINT');
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: false,
+      exitCode: null,
+      timedOut: false,
+    });
   });
 
   it('marks workspace failed when spawn emits error', async () => {

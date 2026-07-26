@@ -241,7 +241,7 @@ class StartupScriptService {
         });
       }
 
-      let timeoutTriggered = false;
+      const timeoutSignalsSent = new Set<NodeJS.Signals>();
       let stdout = '';
       let stderr = '';
       let killTimeoutHandle: NodeJS.Timeout | undefined;
@@ -266,9 +266,14 @@ class StartupScriptService {
       };
 
       const timeoutHandle = setTimeout(() => {
-        timeoutTriggered = true;
-        proc.kill('SIGTERM');
-        killTimeoutHandle = setTimeout(() => proc.kill('SIGKILL'), gracePeriodMs);
+        if (proc.kill('SIGTERM')) {
+          timeoutSignalsSent.add('SIGTERM');
+        }
+        killTimeoutHandle = setTimeout(() => {
+          if (proc.kill('SIGKILL')) {
+            timeoutSignalsSent.add('SIGKILL');
+          }
+        }, gracePeriodMs);
       }, timeoutMs);
 
       const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
@@ -299,7 +304,7 @@ class StartupScriptService {
 
       proc.on('close', async (code, signal) => {
         await cleanupTimeouts();
-        const timedOut = timeoutTriggered && signal !== null;
+        const timedOut = signal !== null && timeoutSignalsSent.has(signal);
         resolve({ success: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
       });
 

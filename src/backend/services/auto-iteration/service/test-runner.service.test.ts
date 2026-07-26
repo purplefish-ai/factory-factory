@@ -46,6 +46,7 @@ describe('runTestCommand', () => {
   it('reports a process terminated by the timeout signal as timed out', async () => {
     vi.useFakeTimers();
     const child = new FakeChild();
+    child.kill.mockReturnValue(true);
     mockSpawn.mockReturnValue(child);
 
     const resultPromise = runTestCommand('/tmp/worktree', 'pnpm test', 1);
@@ -58,6 +59,43 @@ describe('runTestCommand', () => {
       stderr: '',
       exitCode: 1,
       timedOut: true,
+    });
+  });
+
+  it('does not report a different termination signal as the test-runner timeout', async () => {
+    vi.useFakeTimers();
+    const child = new FakeChild();
+    child.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(child);
+
+    const resultPromise = runTestCommand('/tmp/worktree', 'pnpm test', 1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    child.emit('close', null, 'SIGINT');
+
+    await expect(resultPromise).resolves.toEqual({
+      stdout: '',
+      stderr: '',
+      exitCode: 1,
+      timedOut: false,
+    });
+  });
+
+  it('does not report a timeout when killing the process emits an error', async () => {
+    vi.useFakeTimers();
+    const child = new FakeChild();
+    mockSpawn.mockReturnValue(child);
+
+    const resultPromise = runTestCommand('/tmp/worktree', 'pnpm test', 1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    child.emit('error', new Error('kill failed'));
+
+    await expect(resultPromise).resolves.toEqual({
+      stdout: '',
+      stderr: '\nkill failed',
+      exitCode: 1,
+      timedOut: false,
     });
   });
 });
