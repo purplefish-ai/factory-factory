@@ -52,9 +52,17 @@ type RemoteCleanupCandidate = {
 };
 
 type PendingBranchNamingCall = {
+  inputSnapshot: BranchNamingInputSnapshot;
   matches: BranchNamingMatch[];
   remoteCleanupCandidate?: RemoteCleanupCandidate;
 };
+
+type BranchNamingInputSnapshot = readonly [
+  toolName: string,
+  command: string | undefined,
+  cmd: string | undefined,
+  title: string | undefined,
+];
 
 type BranchNamingMatch = {
   command: string;
@@ -269,6 +277,23 @@ function pendingCallKey(sessionId: string, toolUseId: string): string {
   return JSON.stringify([sessionId, toolUseId]);
 }
 
+function captureBranchNamingInput(event: ToolEvent): BranchNamingInputSnapshot {
+  const stringValue = (value: unknown): string | undefined =>
+    typeof value === 'string' ? value : undefined;
+
+  return [
+    event.toolName,
+    stringValue(event.input.command),
+    stringValue(event.input.cmd),
+    stringValue(event.input.title),
+  ];
+}
+
+function hasSameBranchNamingInput(snapshot: BranchNamingInputSnapshot, event: ToolEvent): boolean {
+  const completedSnapshot = captureBranchNamingInput(event);
+  return snapshot.every((value, index) => value === completedSnapshot[index]);
+}
+
 class BranchNamingInterceptor implements ToolInterceptor {
   readonly name = 'branch-naming';
   readonly tools = '*';
@@ -480,7 +505,10 @@ class BranchNamingInterceptor implements ToolInterceptor {
       return command ? [{ command, handler }] : [];
     });
 
-    const pending = { matches };
+    const pending = {
+      inputSnapshot: captureBranchNamingInput(event),
+      matches,
+    };
     this.trackPendingCall(context.sessionId, event.toolUseId, pending);
 
     for (const match of matches) {
@@ -501,6 +529,7 @@ class BranchNamingInterceptor implements ToolInterceptor {
       const command = this.findManualRenameCommand(event);
       if (command) {
         const fallback = {
+          inputSnapshot: captureBranchNamingInput(event),
           matches: [{ command, handler: this.manualRenameHandler }],
         };
         await this.runHandler(
@@ -515,15 +544,18 @@ class BranchNamingInterceptor implements ToolInterceptor {
     }
     this.pendingCalls.delete(key);
 
-    const completedManualRenameCommand = pending.matches.some(
+    const hasManualRenameMatch = pending.matches.some(
       (match) => match.handler === this.manualRenameHandler
-    )
+    );
+    const shouldRescanManualRename =
+      hasManualRenameMatch && !hasSameBranchNamingInput(pending.inputSnapshot, event);
+    const completedManualRenameCommand = shouldRescanManualRename
       ? this.findManualRenameCommand(event)
       : undefined;
 
     for (const match of pending.matches) {
       let command = match.command;
-      if (match.handler === this.manualRenameHandler) {
+      if (match.handler === this.manualRenameHandler && shouldRescanManualRename) {
         if (!completedManualRenameCommand) {
           continue;
         }

@@ -129,6 +129,25 @@ describe('branchNamingInterceptor routing', () => {
     expect(mocks.extractMatchingCommands).toHaveBeenCalledOnce();
   });
 
+  it('does not rescan unchanged manual rename input on completion', async () => {
+    const interceptor = createBranchNamingInterceptor();
+    const event = createEvent({
+      input: { command: 'git branch -m chosen-name' },
+    });
+
+    await interceptor.onToolStart!(event, context);
+    await interceptor.onToolComplete!(
+      {
+        ...event,
+        input: { ...event.input },
+        output: { content: '', isError: false },
+      },
+      context
+    );
+
+    expect(mocks.extractMatchingCommands).toHaveBeenCalledOnce();
+  });
+
   it('dispatches every matching handler in table order', async () => {
     const interceptor = createBranchNamingInterceptor();
     mocks.gitCommand.mockResolvedValue({
