@@ -37,7 +37,14 @@ export function extractMatchingCommands(
   const cmd = extractInputValue(event.input, 'cmd', isString, event.toolName, logger);
   const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
 
-  return [command, cmd, title, event.toolName].filter(
-    (candidate): candidate is string => candidate !== undefined && commandRegex.test(candidate)
-  );
+  return [command, cmd, title, event.toolName].filter((candidate): candidate is string => {
+    if (candidate === undefined) {
+      return false;
+    }
+
+    commandRegex.lastIndex = 0;
+    const matches = commandRegex.test(candidate);
+    commandRegex.lastIndex = 0;
+    return matches;
+  });
 }

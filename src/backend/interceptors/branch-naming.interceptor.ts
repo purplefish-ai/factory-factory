@@ -453,6 +453,12 @@ class BranchNamingInterceptor implements ToolInterceptor {
     }
   }
 
+  private findManualRenameCommand(event: ToolEvent): string | undefined {
+    return extractMatchingCommands(event, GIT_BRANCH_RENAME_TEXT_REGEX, logger).find(
+      containsGitBranchRenameCommand
+    );
+  }
+
   start(): void {
     this.renamer.reset();
     this.pendingCalls.clear();
@@ -492,9 +498,7 @@ class BranchNamingInterceptor implements ToolInterceptor {
     const key = pendingCallKey(context.sessionId, event.toolUseId);
     const pending = this.pendingCalls.get(key);
     if (!pending) {
-      const command = extractMatchingCommands(event, GIT_BRANCH_RENAME_TEXT_REGEX, logger).find(
-        containsGitBranchRenameCommand
-      );
+      const command = this.findManualRenameCommand(event);
       if (command) {
         const fallback = {
           matches: [{ command, handler: this.manualRenameHandler }],
@@ -511,11 +515,24 @@ class BranchNamingInterceptor implements ToolInterceptor {
     }
     this.pendingCalls.delete(key);
 
+    const completedManualRenameCommand = pending.matches.some(
+      (match) => match.handler === this.manualRenameHandler
+    )
+      ? this.findManualRenameCommand(event)
+      : undefined;
+
     for (const match of pending.matches) {
+      let command = match.command;
+      if (match.handler === this.manualRenameHandler) {
+        if (!completedManualRenameCommand) {
+          continue;
+        }
+        command = completedManualRenameCommand;
+      }
       await this.runHandler(
         match.handler,
         'complete',
-        () => match.handler.onComplete?.(event, context, pending, match.command),
+        () => match.handler.onComplete?.(event, context, pending, command),
         event,
         context
       );
