@@ -11,15 +11,15 @@ class WorkspaceAutoIterationService {
   }
 
   setStatus(workspaceId: string, status: AutoIterationStatus) {
-    return workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
+    return workspaceAccessor.setAutoIterationStatus(workspaceId, status);
   }
 
   setProgress(workspaceId: string, progress: AutoIterationProgress) {
-    return workspaceAccessor.update(workspaceId, { autoIterationProgress: progress });
+    return workspaceAccessor.setAutoIterationProgress(workspaceId, progress);
   }
 
   setSession(workspaceId: string, sessionId: string | null) {
-    return workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
+    return workspaceAccessor.setAutoIterationSessionId(workspaceId, sessionId);
   }
 
   finishSessionIfMatching(

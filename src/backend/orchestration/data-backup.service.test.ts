@@ -102,7 +102,7 @@ const mockProject: Project = {
  * `runScript*` workspace fields.
  */
 type WorkspaceForExport = Prisma.WorkspaceGetPayload<{
-  include: { ratchet: true; pr: true; runScript: true };
+  include: { ratchet: true; pr: true; runScript: true; autoIteration: true };
 }>;
 
 const mockWorkspace: WorkspaceForExport = {
@@ -166,11 +166,14 @@ const mockWorkspace: WorkspaceForExport = {
     dispatchRetryCount: 0,
   },
   hasHadSessions: true,
-  mode: WorkspaceMode.STANDARD,
-  autoIterationStatus: null,
-  autoIterationConfig: null,
-  autoIterationProgress: null,
-  autoIterationSessionId: null,
+  autoIteration: {
+    workspaceId: 'ws-1',
+    mode: WorkspaceMode.STANDARD,
+    status: null,
+    config: null,
+    progress: null,
+    sessionId: null,
+  },
   periodicTaskId: null,
   parentWorkspaceId: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
@@ -436,11 +439,16 @@ describe('DataBackupService', () => {
     it('exports and imports auto-iteration workspace configuration', async () => {
       const autoIterationWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
-        mode: WorkspaceMode.AUTO_ITERATION,
-        autoIterationConfig: mockAutoIterationConfig,
-        autoIterationStatus: 'RUNNING',
-        autoIterationProgress: { currentIteration: 2 },
-        autoIterationSessionId: 'auto-session-1',
+        autoIteration: {
+          workspaceId: 'ws-1',
+          mode: WorkspaceMode.AUTO_ITERATION,
+          config: mockAutoIterationConfig,
+          // Set, and deliberately not exported: the loop does not survive a
+          // backup, so only `mode` and `config` are in the v4 format.
+          status: 'RUNNING',
+          progress: { currentIteration: 2 },
+          sessionId: 'auto-session-1',
+        },
       };
 
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
@@ -474,11 +482,18 @@ describe('DataBackupService', () => {
       const result = await dataBackupService.importData(exported);
 
       expect(result.workspaces.imported).toBe(1);
+      // The two exported fields restore into the WorkspaceAutoIteration row the
+      // create brings with it; the three unexported ones are left at defaults,
+      // so a loop that was running when the backup was taken comes back idle.
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          mode: WorkspaceMode.AUTO_ITERATION,
-          autoIterationConfig: mockAutoIterationConfig,
+          autoIteration: {
+            create: {
+              mode: WorkspaceMode.AUTO_ITERATION,
+              config: mockAutoIterationConfig,
+            },
+          },
         }),
       });
     });
@@ -584,7 +599,7 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           id: 'ws-1',
-          mode: WorkspaceMode.STANDARD,
+          autoIteration: { create: { mode: WorkspaceMode.STANDARD, config: undefined } },
           // The v4 format's flat run-script fields land in the nested row too.
           // `postRunCommand` is absent because the format never carried it, so it
           // restores as null and the next reconcile reads it back off disk.

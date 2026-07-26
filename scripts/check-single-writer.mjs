@@ -99,19 +99,11 @@ const workspaceFieldOwners = {
   // detect an owner that no longer writes, so it went on granting permission
   // nobody used.
 
-  mode: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
-  autoIterationStatus: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
-  ]),
-  autoIterationConfig: new Set([
-    'src/backend/services/workspace/service/lifecycle/creation.service.ts',
-  ]),
-  autoIterationProgress: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
-  ]),
-  autoIterationSessionId: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-auto-iteration.service.ts',
-  ]),
+  // The auto-iteration group's five fields are absent for the same reason as the
+  // three groups above: they live on `WorkspaceAutoIteration` now, and
+  // OWNED_SIDE_TABLES keeps the write in one file. `mode` went with them --
+  // every consumer of it is an auto-iteration consumer, so it is that group's
+  // discriminant rather than a workspace attribute that happens to sit nearby.
 };
 
 const workspaceMutationDeniedFields = new Set([
@@ -138,14 +130,6 @@ const workspaceMutationRules = {
       'worktreePath',
       'branchName',
     ],
-  },
-  finishAutoIterationIfSessionMatches: {
-    type: 'static',
-    fields: ['autoIterationStatus', 'autoIterationSessionId'],
-  },
-  clearAutoIterationSessionIfMatches: {
-    type: 'static',
-    fields: ['autoIterationSessionId'],
   },
   startProvisioningRetryIfAllowed: {
     type: 'static',
@@ -183,10 +167,6 @@ const workspaceMutationRules = {
   clearInitOutput: { type: 'static', fields: ['initOutput'] },
   setInitScriptPid: { type: 'static', fields: ['initScriptPid'] },
   clearInitScriptPid: { type: 'static', fields: ['initScriptPid'] },
-  resetStaleAutoIterationStatuses: {
-    type: 'static',
-    fields: ['autoIterationStatus', 'autoIterationSessionId'],
-  },
 };
 
 const workspaceMutationAliasRules = {
@@ -558,13 +538,23 @@ const OWNED_SIDE_TABLES = {
   workspaceRatchet: 'src/backend/services/workspace/resources/workspace-ratchet.accessor.ts',
   workspaceRunScript:
     'src/backend/services/workspace/resources/workspace-run-script.accessor.ts',
+  workspaceAutoIteration:
+    'src/backend/services/workspace/resources/workspace-auto-iteration.accessor.ts',
 };
 
+/**
+ * Every Prisma write a client exposes for a model. The `*AndReturn` pair is easy
+ * to miss because nothing in this repo calls them yet -- they were absent here
+ * while the other seven were listed, which left an unpoliced way to write any of
+ * the four owned tables from any file.
+ */
 const SIDE_TABLE_WRITE_METHODS = new Set([
   'create',
   'createMany',
+  'createManyAndReturn',
   'update',
   'updateMany',
+  'updateManyAndReturn',
   'upsert',
   'delete',
   'deleteMany',
@@ -575,6 +565,7 @@ const SIDE_TABLE_RELATIONS = {
   pr: 'workspacePR',
   ratchet: 'workspaceRatchet',
   runScript: 'workspaceRunScript',
+  autoIteration: 'workspaceAutoIteration',
 };
 
 /**

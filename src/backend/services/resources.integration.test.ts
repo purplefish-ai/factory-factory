@@ -108,20 +108,22 @@ async function createWorkspaceFixture(
     ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput;
     pr?: Prisma.WorkspacePRCreateWithoutWorkspaceInput;
     runScript?: Prisma.WorkspaceRunScriptCreateWithoutWorkspaceInput;
+    autoIteration?: Prisma.WorkspaceAutoIterationCreateWithoutWorkspaceInput;
   } = {}
 ) {
-  const { ratchet, pr, runScript, ...workspaceOverrides } = overrides;
+  const { ratchet, pr, runScript, autoIteration, ...workspaceOverrides } = overrides;
   return await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
       status: WorkspaceStatus.NEW,
       ...workspaceOverrides,
-      // Mirrors workspaceAccessor.create: every workspace gets all three
+      // Mirrors workspaceAccessor.create: every workspace gets all four
       // side-table rows, so the row-guarded writes under test have one to guard.
       ratchet: { create: ratchet ?? {} },
       pr: { create: pr ?? {} },
       runScript: { create: runScript ?? {} },
+      autoIteration: { create: autoIteration ?? {} },
     },
   });
 }
@@ -507,7 +509,7 @@ describe('resource accessors integration', () => {
     it('clears auto-iteration session only when the expected pointer still matches', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
-        autoIterationSessionId: 'session-1',
+        autoIteration: { sessionId: 'session-1' },
       });
 
       await expect(

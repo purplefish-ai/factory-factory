@@ -14,6 +14,8 @@ const mockRatchetUpdateMany = vi.fn();
 const mockPrFindUnique = vi.fn();
 const mockPrUpdateMany = vi.fn();
 const mockRunScriptUpdateMany = vi.fn();
+const mockAutoIterationFindMany = vi.fn();
+const mockAutoIterationUpdateMany = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -37,6 +39,10 @@ vi.mock('@/backend/db', () => ({
     workspaceRunScript: {
       updateMany: (...args: unknown[]) => mockRunScriptUpdateMany(...args),
     },
+    workspaceAutoIteration: {
+      findMany: (...args: unknown[]) => mockAutoIterationFindMany(...args),
+      updateMany: (...args: unknown[]) => mockAutoIterationUpdateMany(...args),
+    },
     $executeRaw: (...args: unknown[]) => mockExecuteRaw(...args),
     $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
@@ -53,6 +59,7 @@ describe('workspaceAccessor', () => {
     mockRatchetUpdateMany.mockReset();
     mockPrUpdateMany.mockReset();
     mockRunScriptUpdateMany.mockReset();
+    mockAutoIterationUpdateMany.mockReset();
   });
 
   describe('create', () => {
@@ -74,8 +81,9 @@ describe('workspaceAccessor', () => {
           ratchet: { create: { enabled: false } },
           pr: { create: {} },
           runScript: { create: {} },
+          autoIteration: { create: { mode: undefined, config: undefined } },
         }),
-        include: { ratchet: true, pr: true, runScript: true },
+        include: { ratchet: true, pr: true, runScript: true, autoIteration: true },
       });
     });
 
@@ -94,8 +102,9 @@ describe('workspaceAccessor', () => {
           ratchet: { create: { enabled: undefined } },
           pr: { create: {} },
           runScript: { create: {} },
+          autoIteration: { create: { mode: undefined, config: undefined } },
         }),
-        include: { ratchet: true, pr: true, runScript: true },
+        include: { ratchet: true, pr: true, runScript: true, autoIteration: true },
       });
     });
 
@@ -125,6 +134,7 @@ describe('workspaceAccessor', () => {
         ratchet: true,
         pr: true,
         runScript: true,
+        autoIteration: true,
       },
     });
   });
@@ -147,7 +157,7 @@ describe('workspaceAccessor', () => {
     });
     expect(mockFindMany).toHaveBeenNthCalledWith(2, {
       where: { id: { in: ['ws-2'] } },
-      include: { project: true, pr: true },
+      include: { project: true, pr: true, autoIteration: true },
     });
   });
 
@@ -176,7 +186,12 @@ describe('workspaceAccessor', () => {
 
       expect(mockFindUnique).toHaveBeenCalledWith(
         expect.objectContaining({
-          include: expect.objectContaining({ ratchet: true, pr: true, runScript: true }),
+          include: expect.objectContaining({
+            ratchet: true,
+            pr: true,
+            runScript: true,
+            autoIteration: true,
+          }),
         })
       );
     });
@@ -523,41 +538,18 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('finishes auto-iteration only when the session pointer still matches', async () => {
-    mockUpdateMany.mockResolvedValue({ count: 1 });
+  // The auto-iteration compare-and-swaps moved with their columns; the guard,
+  // the column names and both race outcomes are asserted in
+  // workspace-auto-iteration.accessor.test.ts.
 
-    await expect(
-      workspaceAccessor.finishAutoIterationIfSessionMatches('ws-1', 'session-1', 'STOPPED')
-    ).resolves.toBe(true);
-
-    expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'ws-1', autoIterationSessionId: 'session-1' },
-      data: {
-        autoIterationStatus: 'STOPPED',
-        autoIterationSessionId: null,
-      },
-    });
-  });
-
-  it('clears auto-iteration session only when the expected pointer still matches', async () => {
-    mockUpdateMany.mockResolvedValue({ count: 0 });
-
-    await expect(
-      workspaceAccessor.clearAutoIterationSessionIfMatches('ws-1', 'session-1')
-    ).resolves.toBe(false);
-
-    expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'ws-1', autoIterationSessionId: 'session-1' },
-      data: { autoIterationSessionId: null },
-    });
-  });
-
-  it('selects only the auto-iteration execution context', async () => {
+  it('joins the auto-iteration session onto the workspace execution context', async () => {
     mockFindUnique.mockResolvedValue({
       worktreePath: '/tmp/worktree',
-      autoIterationSessionId: 'session-1',
+      autoIteration: { sessionId: 'session-1' },
     });
 
+    // The context spans both tables now, but the caller-facing shape is the flat
+    // one it always was.
     await expect(workspaceAccessor.findAutoIterationExecutionContext('ws-1')).resolves.toEqual({
       worktreePath: '/tmp/worktree',
       autoIterationSessionId: 'session-1',
@@ -565,8 +557,23 @@ describe('workspaceAccessor', () => {
 
     expect(mockFindUnique).toHaveBeenCalledWith({
       where: { id: 'ws-1' },
-      select: { worktreePath: true, autoIterationSessionId: true },
+      select: { worktreePath: true, autoIteration: { select: { sessionId: true } } },
     });
+  });
+
+  it('reads a missing auto-iteration row as a null session rather than throwing', async () => {
+    mockFindUnique.mockResolvedValue({ worktreePath: '/tmp/worktree', autoIteration: null });
+
+    await expect(workspaceAccessor.findAutoIterationExecutionContext('ws-1')).resolves.toEqual({
+      worktreePath: '/tmp/worktree',
+      autoIterationSessionId: null,
+    });
+  });
+
+  it('returns null when the workspace itself is missing', async () => {
+    mockFindUnique.mockResolvedValue(null);
+
+    await expect(workspaceAccessor.findAutoIterationExecutionContext('gone')).resolves.toBeNull();
   });
 
   it('appends init output and skips existence check when update succeeds', async () => {
@@ -626,7 +633,7 @@ describe('workspaceAccessor', () => {
           status: 'ARCHIVING',
           updatedAt: { lt: expect.any(Date) },
         },
-        include: { project: true, pr: true },
+        include: { project: true, pr: true, autoIteration: true },
         orderBy: { updatedAt: 'asc' },
       });
 

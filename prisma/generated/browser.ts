@@ -121,6 +121,37 @@ export type WorkspaceRatchet = Prisma.WorkspaceRatchetModel
  */
 export type WorkspaceRunScript = Prisma.WorkspaceRunScriptModel
 /**
+ * Model WorkspaceAutoIteration
+ * The auto-iteration loop's state, split off `Workspace` (issue: the model
+ * carried six unrelated concerns). After creation it is written only by
+ * `workspace-auto-iteration.accessor.ts`; the row itself is created with its
+ * workspace by `workspaceAccessor.create`, which sets `mode` and `config` from
+ * the creation input and is the one other writer the ownership rule permits.
+ * Reads are flattened back onto the workspace under the old
+ * `mode`/`autoIteration*` names, so the v4 export format and the client are
+ * unchanged.
+ * 
+ * `mode` travels with the group rather than staying on `Workspace`. It reads
+ * like a general workspace attribute, but every consumer is an auto-iteration
+ * consumer: the kanban card gates its badge on it, the right panel and the
+ * progress banner derive `isAutoIteration` from it, creation only validates it
+ * against `autoIterationConfig`, and `auto-iteration.trpc.ts` uses it as an
+ * entry guard. It is this group's discriminant, so it is this group's column --
+ * the same call made for `ratchetEnabled` in the ratchet split.
+ * 
+ * Unlike the run script's, none of these fields are on the snapshot wire: the
+ * client's snapshot adapter lists all five under `mutationOnlyFieldDefaults`,
+ * because they change through explicit mutations rather than live activity.
+ * The v4 export carries only `mode` and `autoIterationConfig`, both already
+ * optional with defaults.
+ * 
+ * Same `updatedAt` consequence as the three splits before it: these writes no
+ * longer touch `Workspace.updatedAt`, so loop progress does not float its
+ * workspace up the sidebar and board. Deliberate, and consistent -- the
+ * activity the UI displays is computed from session timestamps.
+ */
+export type WorkspaceAutoIteration = Prisma.WorkspaceAutoIterationModel
+/**
  * Model AgentSession
  * 
  */

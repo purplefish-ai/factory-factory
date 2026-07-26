@@ -6,7 +6,9 @@ import type { CIStatus, PRState } from '@/shared/core';
 /**
  * Persistence for `WorkspacePR`, the cached view of a workspace's pull request.
  *
- * This file is the only writer of that table. Before the split these thirteen
+ * This file is the only writer of that table after creation -- the row is
+ * created, empty, with its workspace by `workspaceAccessor.create`. Before the
+ * split these thirteen
  * columns sat on `Workspace`, and `scripts/check-single-writer.mjs` was what
  * stopped four different services writing them; now the type system is, because
  * no other accessor can name the columns.

@@ -12,8 +12,9 @@ import {
 /**
  * Persistence for `WorkspaceRatchet`, the ratchet's own 1:1 row per workspace.
  *
- * This file is the only writer of that table, enforced by the owned-side-table
- * rule in `scripts/check-single-writer.mjs`. Before the split these fields sat on
+ * This file is the only writer of that table after creation, enforced by the
+ * owned-side-table rule in `scripts/check-single-writer.mjs`; the row is created
+ * with its workspace by `workspaceAccessor.create`, which sets `enabled`. Before the split these fields sat on
  * `Workspace` alongside six other concerns, policed field-by-field by that same
  * script.
  *

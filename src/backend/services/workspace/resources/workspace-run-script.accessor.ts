@@ -6,7 +6,9 @@ import type { RunScriptStatus } from '@/shared/core';
  * Persistence for `WorkspaceRunScript`, the cached run-script commands and the
  * process running one of them.
  *
- * This file is the only writer of that table. Before the split these seven
+ * This file is the only writer of that table after creation -- the row is
+ * created, empty, with its workspace by `workspaceAccessor.create`. Before the
+ * split these seven
  * columns sat on `Workspace` and `scripts/check-single-writer.mjs` was what kept
  * them to one writer; now no other accessor can name the columns.
  *

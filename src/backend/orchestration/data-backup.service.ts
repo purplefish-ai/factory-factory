@@ -99,6 +99,22 @@ function exportedRunScriptFields(workspace: WorkspaceForExport) {
   };
 }
 
+/**
+ * The two auto-iteration fields a v4 export file carries, flattened out of
+ * `WorkspaceAutoIteration`. Extracted for the same reason as the run-script
+ * fields above: the mapper is at the lint's complexity ceiling.
+ *
+ * `status`, `progress` and `sessionId` are absent because the format never
+ * carried them — they describe a loop that does not survive an export.
+ */
+function exportedAutoIterationFields(workspace: WorkspaceForExport) {
+  const autoIteration = workspace.autoIteration;
+  return {
+    mode: autoIteration?.mode ?? 'STANDARD',
+    autoIterationConfig: parseAutoIterationConfigForExport(autoIteration?.config ?? null),
+  };
+}
+
 function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
   if (!config || typeof config !== 'object') {
     return null;
@@ -222,11 +238,6 @@ async function importWorkspaces(
         initStartedAt: parseDate(workspace.initStartedAt),
         initCompletedAt: parseDate(workspace.initCompletedAt),
         initRetryCount: workspace.initRetryCount,
-        mode: workspace.mode,
-        autoIterationConfig:
-          workspace.autoIterationConfig != null
-            ? (workspace.autoIterationConfig as Prisma.InputJsonValue)
-            : undefined,
         githubIssueNumber: workspace.githubIssueNumber,
         githubIssueUrl: workspace.githubIssueUrl,
         linearIssueId: workspace.linearIssueId,
@@ -285,6 +296,21 @@ async function importWorkspaces(
             port: workspace.runScriptPort,
             startedAt: parseDate(workspace.runScriptStartedAt),
             status: workspace.runScriptStatus,
+          },
+        },
+        // The v4 export carries two of the five auto-iteration fields as flat
+        // workspace fields; they now live in the WorkspaceAutoIteration row this
+        // create brings with it. `status`, `progress` and `sessionId` were never
+        // exported — they describe a loop that does not survive the export — so
+        // they restore at their defaults, and a workspace whose loop was running
+        // when the backup was taken comes back idle rather than half-resumed.
+        autoIteration: {
+          create: {
+            mode: workspace.mode,
+            config:
+              workspace.autoIterationConfig != null
+                ? (workspace.autoIterationConfig as Prisma.InputJsonValue)
+                : undefined,
           },
         },
         hasHadSessions: workspace.hasHadSessions,
@@ -487,8 +513,9 @@ class DataBackupService {
           // Flattened out of WorkspaceRunScript, same as the PR cache below: the
           // v4 export format carries these as workspace fields.
           ...exportedRunScriptFields(w),
-          mode: w.mode,
-          autoIterationConfig: parseAutoIterationConfigForExport(w.autoIterationConfig),
+          // Flattened out of WorkspaceAutoIteration. Only two of the five are in
+          // the v4 format; see the helper.
+          ...exportedAutoIterationFields(w),
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
           linearIssueId: w.linearIssueId,

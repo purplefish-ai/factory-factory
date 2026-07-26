@@ -57,6 +57,7 @@ export const ModelName = {
   WorkspacePR: 'WorkspacePR',
   WorkspaceRatchet: 'WorkspaceRatchet',
   WorkspaceRunScript: 'WorkspaceRunScript',
+  WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -139,11 +140,6 @@ export const WorkspaceScalarFieldEnum = {
   ratchetSessionProvider: 'ratchetSessionProvider',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  mode: 'mode',
-  autoIterationStatus: 'autoIterationStatus',
-  autoIterationConfig: 'autoIterationConfig',
-  autoIterationProgress: 'autoIterationProgress',
-  autoIterationSessionId: 'autoIterationSessionId',
   periodicTaskId: 'periodicTaskId',
   parentWorkspaceId: 'parentWorkspaceId',
   hasHadSessions: 'hasHadSessions'
@@ -198,6 +194,18 @@ export const WorkspaceRunScriptScalarFieldEnum = {
 } as const
 
 export type WorkspaceRunScriptScalarFieldEnum = (typeof WorkspaceRunScriptScalarFieldEnum)[keyof typeof WorkspaceRunScriptScalarFieldEnum]
+
+
+export const WorkspaceAutoIterationScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  mode: 'mode',
+  status: 'status',
+  config: 'config',
+  progress: 'progress',
+  sessionId: 'sessionId'
+} as const
+
+export type WorkspaceAutoIterationScalarFieldEnum = (typeof WorkspaceAutoIterationScalarFieldEnum)[keyof typeof WorkspaceAutoIterationScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {
