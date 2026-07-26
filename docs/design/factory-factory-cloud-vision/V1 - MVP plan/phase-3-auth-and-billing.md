@@ -1,5 +1,7 @@
 # Phase 3: Auth & Billing
 
+Status: proposed
+
 **Goal:** Add user management and billing so the cloud server can serve multiple users securely.
 
 ## 3.1 Auth & User Management

@@ -1,4 +1,7 @@
 # Factory Factory Cloud Vision
+
+Status: proposed
+
 This document lays out my vision for what a "Cloud" version for Factory Factory could look like
 
 ## How it behaves

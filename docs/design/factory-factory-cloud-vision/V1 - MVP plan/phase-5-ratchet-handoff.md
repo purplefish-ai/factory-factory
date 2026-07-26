@@ -1,5 +1,7 @@
 # Phase 5: Ratchet Handoff
 
+Status: proposed
+
 **Goal:** Make ratchet (auto-fix) work seamlessly across desktop and cloud.
 
 ## 5.1 Location-Aware Ratchet

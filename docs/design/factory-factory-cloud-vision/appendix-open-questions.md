@@ -1,5 +1,7 @@
 # Appendix: Open Questions
 
+Status: proposed
+
 ## How does Claude CLI work?
 
 **Where are the Claude API docs?**

@@ -1,5 +1,7 @@
 # Phase 2: FF Cloud Server + VM Execution
 
+Status: proposed
+
 **Goal:** Stand up the cloud server and get workspaces executing in per-user VMs. No web frontend yet — this phase proves the execution model works, accessed only from the desktop app.
 
 ## 2.1 New Private Repo

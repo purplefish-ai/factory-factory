@@ -1,5 +1,7 @@
 # V1 - Cloud MVP Plan
 
+Status: proposed
+
 This document breaks down the work required to ship a Cloud MVP for Factory Factory. The MVP enables users to send workspaces to the cloud, interact with them via a web UI, and have ratchet (auto-fix) work seamlessly across desktop and cloud.
 
 ## Key Decisions

@@ -1,5 +1,7 @@
 # Appendix: Alternative Approaches Considered
 
+Status: proposed
+
 We evaluated two architectural approaches before choosing Approach #2 (Library-based). This appendix documents both approaches and the reasoning behind the decision.
 
 ## Approach #1: Decoupled FF Cloud + Full FF-per-VM
