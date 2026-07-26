@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   emitDelta: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
-  sessionService: {
+vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+  sessionConfigService: {
     setSessionConfigOption: mocks.setSessionConfigOption,
     getSessionConfigOptions: mocks.getSessionConfigOptions,
   },

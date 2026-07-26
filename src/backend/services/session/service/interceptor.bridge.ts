@@ -1,5 +1,12 @@
-import type { HistoryMessage } from '@/shared/acp-protocol';
-import { sessionService } from './lifecycle/session.service';
+import type {
+  AgentContentItem,
+  AgentMessage,
+  ChatMessage,
+  HistoryMessage,
+} from '@/shared/acp-protocol';
+import { acpRuntimeManager } from './acp';
+import { sessionService } from './lifecycle/session-services';
+import { sessionDomainService } from './session-domain.service';
 
 /**
  * Session capabilities exposed to backend interceptors.
@@ -11,9 +18,56 @@ export interface SessionInterceptorBridge {
   sendSessionMessage(sessionId: string, message: string): Promise<void>;
 }
 
+function extractMessageText(message: AgentMessage): string {
+  const content = message.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .filter((item): item is Extract<AgentContentItem, { type: 'text' }> => item.type === 'text')
+    .map((item) => item.text)
+    .join('\n')
+    .trim();
+}
+
+function mapTranscriptEntryToHistory(entry: ChatMessage): HistoryMessage[] {
+  if (entry.source === 'user') {
+    return entry.text
+      ? [
+          {
+            type: 'user',
+            content: entry.text,
+            timestamp: entry.timestamp,
+          },
+        ]
+      : [];
+  }
+
+  const message = entry.message;
+  if (!message || (message.type !== 'assistant' && message.type !== 'user')) {
+    return [];
+  }
+
+  const content = extractMessageText(message);
+  if (!content) {
+    return [];
+  }
+
+  return [
+    {
+      type: message.type,
+      content,
+      timestamp: entry.timestamp,
+    },
+  ];
+}
+
 export const sessionInterceptorBridge: SessionInterceptorBridge = {
-  getSessionConversationHistory: (sessionId, workingDir) =>
-    sessionService.getSessionConversationHistory(sessionId, workingDir),
-  isSessionRunning: (sessionId) => sessionService.isSessionRunning(sessionId),
+  getSessionConversationHistory: (sessionId, _workingDir) =>
+    sessionDomainService.getTranscriptSnapshot(sessionId).flatMap(mapTranscriptEntryToHistory),
+  isSessionRunning: (sessionId) => acpRuntimeManager.isSessionRunning(sessionId),
   sendSessionMessage: (sessionId, message) => sessionService.sendSessionMessage(sessionId, message),
 };

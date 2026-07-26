@@ -73,7 +73,7 @@ const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
     stopRunScript: vi.fn(),
     evictWorkspaceBuffers: vi.fn(),
   },
-  sessionService: {
+  sessionLifecycleService: {
     stopWorkspaceSessions: vi.fn(),
   },
   terminalService: {
@@ -106,7 +106,9 @@ describe('archiveWorkspace', () => {
     );
     vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([]);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
-    vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+    vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
+      undefined as never
+    );
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
       unsafeCoerce({ success: true } as const)
     );
@@ -142,7 +144,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
-      expect(services.sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
     });
   });
@@ -160,7 +162,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(services.sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
       expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
       expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(
@@ -221,7 +223,7 @@ describe('archiveWorkspace', () => {
     });
 
     it('fails archive when session stop fails', async () => {
-      vi.mocked(services.sessionService.stopWorkspaceSessions).mockRejectedValue(
+      vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockRejectedValue(
         new Error('session stop failed')
       );
       const workspace = makeWorkspace();
@@ -236,7 +238,9 @@ describe('archiveWorkspace', () => {
     it('retains multiple runtime cleanup failures as an aggregate cause', async () => {
       const sessionError = new Error('session stop failed');
       const terminalError = new Error('terminal destroy failed');
-      vi.mocked(services.sessionService.stopWorkspaceSessions).mockRejectedValue(sessionError);
+      vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockRejectedValue(
+        sessionError
+      );
       vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         throw terminalError;
       });
@@ -446,7 +450,7 @@ describe('archiveWorkspace', () => {
   describe('ordering guarantees', () => {
     it('stops processes before cleaning up worktree', async () => {
       const callOrder: string[] = [];
-      vi.mocked(services.sessionService.stopWorkspaceSessions).mockImplementation((() => {
+      vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockImplementation((() => {
         callOrder.push('stopSessions');
         return Promise.resolve(undefined);
       }) as never);
@@ -537,7 +541,9 @@ describe('recoverStaleArchivingWorkspaces', () => {
       unsafeCoerce({ id: 'ws-1', status: 'FAILED' })
     );
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
-    vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+    vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
+      undefined as never
+    );
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
       unsafeCoerce({ success: true } as const)
     );
@@ -561,7 +567,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
 
     expect(result).toEqual({ archived: ['ws-1'], failed: [] });
     expect(workspaceStateMachine.startArchivingWithSourceStatus).not.toHaveBeenCalled();
-    expect(services.sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+    expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
     expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
     expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {

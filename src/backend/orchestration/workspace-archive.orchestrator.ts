@@ -28,7 +28,7 @@ export type ArchiveWorkspaceDependencies = {
     stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }>;
     evictWorkspaceBuffers(workspaceId: string): void;
   };
-  sessionService: {
+  sessionLifecycleService: {
     stopWorkspaceSessions(workspaceId: string): Promise<void>;
   };
   terminalService: {
@@ -38,7 +38,7 @@ export type ArchiveWorkspaceDependencies = {
 
 export type WorkspaceRuntimeCleanupDependencies = {
   runScriptService: Pick<ArchiveWorkspaceDependencies['runScriptService'], 'stopRunScript'>;
-  sessionService: ArchiveWorkspaceDependencies['sessionService'];
+  sessionLifecycleService: ArchiveWorkspaceDependencies['sessionLifecycleService'];
   terminalService: ArchiveWorkspaceDependencies['terminalService'];
 };
 
@@ -52,10 +52,10 @@ export async function cleanupWorkspaceRuntimeResources(
   services: WorkspaceRuntimeCleanupDependencies,
   operation: 'archive' | 'delete'
 ): Promise<void> {
-  const { runScriptService, sessionService, terminalService } = services;
+  const { runScriptService, sessionLifecycleService, terminalService } = services;
 
   const cleanupResults = await Promise.allSettled([
-    sessionService.stopWorkspaceSessions(workspaceId),
+    sessionLifecycleService.stopWorkspaceSessions(workspaceId),
     (async () => {
       const result = await runScriptService.stopRunScript(workspaceId);
       if (!result.success) {

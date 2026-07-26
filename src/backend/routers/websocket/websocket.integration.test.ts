@@ -250,12 +250,11 @@ function createChatAppContext(worktreeBaseDir: string) {
         log: vi.fn(),
       },
       sessionEventBus,
-      sessionService: {
-        getOrCreateClient: vi.fn(),
+      acpRuntimeManager: {
+        isSessionRunning: vi.fn(),
+      },
+      sessionLifecycleService: {
         getOrCreateSessionClient: vi.fn(),
-        getSessionOptions: vi.fn(),
-        setOnClientCreated: vi.fn(),
-        setOnCodexTerminalTurn: vi.fn(),
       },
     },
   });

@@ -61,6 +61,7 @@ function createLifecycleService(options?: {
     acpEventProcessor: {} as never,
     promptTurnCompletionService: {} as never,
     retryService: {} as never,
+    sendSessionMessage: vi.fn(async () => undefined),
   });
   service.configure({
     workspace: {
@@ -108,6 +109,7 @@ function createStoppableLifecycleService() {
     acpEventProcessor: {} as never,
     promptTurnCompletionService: {} as never,
     retryService: {} as never,
+    sendSessionMessage: vi.fn(async () => undefined),
   });
   const stopSession = vi.fn((_sessionId: string): Promise<void> => Promise.resolve());
   (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
@@ -832,6 +834,7 @@ function createStartableLifecycleService(options?: {
     retryService: {
       run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
     } as never,
+    sendSessionMessage,
   });
   service.configure({
     workspace: {
@@ -866,7 +869,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     const { service, sendSessionMessage, tryDispatchNextMessage, sessionConfigService } =
       createStartableLifecycleService({ pendingNotificationCount: 2 });
 
-    await service.startSession('session-1', sendSessionMessage);
+    await service.startSession('session-1');
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).not.toHaveBeenCalled();
@@ -889,7 +892,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       }
     );
 
-    await service.startSession('session-1', sendSessionMessage, { initialPrompt: 'Follow up' });
+    await service.startSession('session-1', { initialPrompt: 'Follow up' });
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Follow up');
@@ -909,9 +912,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     vi.mocked(userSettingsService.get).mockReturnValueOnce(pendingSettings);
     const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
 
-    const startResult = service
-      .startSession('session-1', sendSessionMessage)
-      .catch((error) => error);
+    const startResult = service.startSession('session-1').catch((error) => error);
     await vi.waitFor(() => {
       expect(userSettingsService.get).toHaveBeenCalled();
     });
@@ -940,9 +941,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     });
     runtimeManager.getOrCreateClient.mockReturnValueOnce(pendingClient);
 
-    const startResult = service
-      .startSession('session-1', sendSessionMessage)
-      .catch((error) => error);
+    const startResult = service.startSession('session-1').catch((error) => error);
     await vi.waitFor(() => {
       expect(runtimeManager.getOrCreateClient).toHaveBeenCalled();
     });
@@ -975,7 +974,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       }
     );
 
-    await service.restartSession('session-1', sendSessionMessage);
+    await service.restartSession('session-1');
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).not.toHaveBeenCalled();
@@ -988,7 +987,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       }
     );
 
-    await service.restartSession('session-1', sendSessionMessage, {
+    await service.restartSession('session-1', {
       initialPrompt: 'Fix the failing checks',
       startupModePreset: 'non_interactive',
     });
@@ -1010,7 +1009,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       }
     );
 
-    await expect(service.startSession('session-1', sendSessionMessage)).resolves.toBeUndefined();
+    await expect(service.startSession('session-1')).resolves.toBeUndefined();
 
     expect(tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     expect(sendSessionMessage).not.toHaveBeenCalled();

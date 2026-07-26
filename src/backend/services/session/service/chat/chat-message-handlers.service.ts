@@ -10,10 +10,16 @@
 
 import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
+import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
-import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
+import {
+  sessionConfigService,
+  sessionLifecycleService,
+  sessionPermissionService,
+  sessionService,
+} from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import {
@@ -129,6 +135,9 @@ class ChatMessageHandlerService {
   }
 
   private handlerRegistry = createChatMessageHandlerRegistry({
+    acpRuntimeManager,
+    sessionConfigService,
+    sessionPermissionService,
     sessionService,
     getClientCreator: () => this.clientCreator,
     tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
@@ -194,7 +203,7 @@ class ChatMessageHandlerService {
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
-    const stopGeneration = sessionService.getStopGeneration(dbSessionId);
+    const stopGeneration = sessionLifecycleService.getStopGeneration(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
     }
@@ -401,7 +410,7 @@ class ChatMessageHandlerService {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
       });
-      if (sessionService.isSessionRunning(dbSessionId)) {
+      if (acpRuntimeManager.isSessionRunning(dbSessionId)) {
         sessionDomainService.markIdle(dbSessionId, 'alive');
       }
       sessionDomainService.emitDelta(dbSessionId, {
@@ -422,7 +431,7 @@ class ChatMessageHandlerService {
       sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
         emitSnapshot: false,
       });
-      if (sessionService.isSessionRunning(dbSessionId)) {
+      if (acpRuntimeManager.isSessionRunning(dbSessionId)) {
         sessionDomainService.markRunning(dbSessionId);
       }
       sessionDomainService.requeueFront(dbSessionId, msg);
@@ -443,7 +452,7 @@ class ChatMessageHandlerService {
     });
     // Avoid clobbering markProcessExit() runtime/lastExit when the process
     // has already stopped and exit handling is in flight.
-    if (sessionService.isSessionRunning(dbSessionId)) {
+    if (acpRuntimeManager.isSessionRunning(dbSessionId)) {
       sessionDomainService.markIdle(dbSessionId, 'alive');
     }
     sessionDomainService.requeueFront(dbSessionId, msg);
@@ -494,7 +503,7 @@ class ChatMessageHandlerService {
     dbSessionId: string,
     msg: QueuedMessage
   ): Promise<{ client: unknown } | null> {
-    let client = sessionService.getSessionClient(dbSessionId);
+    let client = sessionLifecycleService.getSessionClient(dbSessionId);
 
     let justAutoStarted = false;
     if (!client) {
@@ -502,7 +511,7 @@ class ChatMessageHandlerService {
       if (!started) {
         return null;
       }
-      client = sessionService.getSessionClient(dbSessionId);
+      client = sessionLifecycleService.getSessionClient(dbSessionId);
       justAutoStarted = true;
     }
 
@@ -576,10 +585,13 @@ class ChatMessageHandlerService {
     // Keep this before state mutation so provider errors can be safely requeued.
     if (isThinkingBudgetClient(client)) {
       const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-      await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
+      await sessionConfigService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
     }
-    await sessionService.setSessionModel(dbSessionId, msg.settings.selectedModel ?? undefined);
-    await sessionService.setSessionReasoningEffort(
+    await sessionConfigService.setSessionModel(
+      dbSessionId,
+      msg.settings.selectedModel ?? undefined
+    );
+    await sessionConfigService.setSessionReasoningEffort(
       dbSessionId,
       msg.settings.reasoningEffort ?? null
     );
@@ -707,8 +719,8 @@ class ChatMessageHandlerService {
 
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
     return (
-      !sessionService.isSessionStopping(dbSessionId) &&
-      sessionService.getStopGeneration(dbSessionId) === stopGeneration
+      !sessionLifecycleService.isSessionStopping(dbSessionId) &&
+      sessionLifecycleService.getStopGeneration(dbSessionId) === stopGeneration
     );
   }
 
@@ -716,10 +728,10 @@ class ChatMessageHandlerService {
     dbSessionId: string,
     client?: unknown
   ): 'working' | 'compacting' | 'stopped' | null {
-    if (sessionService.isSessionWorking(dbSessionId)) {
+    if (acpRuntimeManager.isSessionWorking(dbSessionId)) {
       return 'working';
     }
-    if (!sessionService.isSessionRunning(dbSessionId)) {
+    if (!acpRuntimeManager.isSessionRunning(dbSessionId)) {
       return 'stopped';
     }
     if (isClaudeCompactionClient(client) && client.isCompactingActive()) {

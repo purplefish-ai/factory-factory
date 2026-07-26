@@ -41,7 +41,7 @@ vi.mock('@/backend/services/session', () => ({
     enqueue: vi.fn(),
     emitDelta: vi.fn(),
   },
-  sessionService: {
+  sessionLifecycleService: {
     startSession: vi.fn(),
     stopWorkspaceSessions: vi.fn(),
   },
@@ -118,7 +118,7 @@ import {
   chatMessageHandlerService,
   sessionDataService,
   sessionDomainService,
-  sessionService,
+  sessionLifecycleService,
 } from '@/backend/services/session';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
@@ -206,8 +206,8 @@ function setupHappyPath(overrides = {}) {
   vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('testuser');
   vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([]);
-  vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
-  vi.mocked(sessionService.startSession).mockResolvedValue(undefined as never);
+  vi.mocked(sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+  vi.mocked(sessionLifecycleService.startSession).mockResolvedValue(undefined as never);
   vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
   vi.mocked(terminalSessionService.registerSession).mockResolvedValue(unsafeCoerce({}));
   vi.mocked(terminalSessionService.releaseSessionPid).mockResolvedValue(undefined);
@@ -255,7 +255,9 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce({}));
       vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(null);
       vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
-      vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+      vi.mocked(sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
+        undefined as never
+      );
       vi.mocked(worktreeLifecycleService.clearInitMode).mockResolvedValue(undefined);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
@@ -272,7 +274,9 @@ describe('initializeWorkspaceWorktree', () => {
         unsafeCoerce({ id: WORKSPACE_ID, project: null })
       );
       vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
-      vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+      vi.mocked(sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
+        undefined as never
+      );
       vi.mocked(worktreeLifecycleService.clearInitMode).mockResolvedValue(undefined);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
@@ -383,7 +387,7 @@ describe('initializeWorkspaceWorktree', () => {
         workspaceId: WORKSPACE_ID,
         workingDir: '/worktrees/existing-ws-1',
       });
-      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
+      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('session-1', {
         initialPrompt: '',
         startupModePreset: 'non_interactive',
       });
@@ -707,7 +711,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       // Sessions are not stopped — failure is non-blocking
-      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      expect(sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
       // Workspace reaches READY with a warning
       expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
         WORKSPACE_ID,
@@ -772,7 +776,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       // Sessions are not stopped — failure is non-blocking
-      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      expect(sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
       // Workspace reaches READY with a warning
       expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
         WORKSPACE_ID,
@@ -807,7 +811,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
+      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('session-1', {
         initialPrompt: '',
         startupModePreset: 'non_interactive',
       });
@@ -829,7 +833,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
+      expect(sessionLifecycleService.startSession).toHaveBeenCalledWith('session-1', {
         initialPrompt: '',
         startupModePreset: 'plan',
       });
@@ -841,7 +845,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.startSession).not.toHaveBeenCalled();
+      expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
     });
 
     it('dispatches queued messages after session start', async () => {
@@ -1485,7 +1489,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
     it('does not throw when stopping sessions fails after init failure', async () => {
@@ -1493,7 +1497,9 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(gitOpsService.createWorktree).mockRejectedValue(
         new Error('git worktree add failed')
       );
-      vi.mocked(sessionService.stopWorkspaceSessions).mockRejectedValue(new Error('stop failed'));
+      vi.mocked(sessionLifecycleService.stopWorkspaceSessions).mockRejectedValue(
+        new Error('stop failed')
+      );
 
       // Should not throw
       await initializeWorkspaceWorktree(WORKSPACE_ID);
@@ -1564,7 +1570,7 @@ describe('initializeWorkspaceWorktree', () => {
         WORKSPACE_ID,
         'db update error'
       );
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
     it('marks workspace failed when workspace update throws', async () => {
@@ -1589,7 +1595,9 @@ describe('initializeWorkspaceWorktree', () => {
       );
 
       const startSessionDeferred = createDeferredPromise<void>();
-      vi.mocked(sessionService.startSession).mockReturnValue(startSessionDeferred.promise as never);
+      vi.mocked(sessionLifecycleService.startSession).mockReturnValue(
+        startSessionDeferred.promise as never
+      );
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
@@ -1600,12 +1608,12 @@ describe('initializeWorkspaceWorktree', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      expect(sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
 
       startSessionDeferred.resolve(undefined);
       await initializationPromise;
 
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
       expect(terminalSessionService.releaseSessionPid).toHaveBeenCalledWith(
         WORKSPACE_ID,

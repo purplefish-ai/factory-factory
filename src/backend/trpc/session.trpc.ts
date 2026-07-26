@@ -116,7 +116,7 @@ export const sessionRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService } = ctx.appContext.services;
+      const { acpRuntimeManager, sessionDataService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
       const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(
         workspaceId,
@@ -125,7 +125,7 @@ export const sessionRouter = router({
       // Augment sessions with real-time working status from in-memory process state
       return sessions.map((session) => ({
         ...session,
-        isWorking: sessionService.isSessionWorking(session.id),
+        isWorking: acpRuntimeManager.isSessionWorking(session.id),
       }));
     }),
 
@@ -152,16 +152,17 @@ export const sessionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService, sessionDomainService } = ctx.appContext.services;
+      const { sessionDataService, sessionLifecycleService, sessionDomainService } =
+        ctx.appContext.services;
       const session = await createAgentSessionFromInput(ctx, input);
 
       try {
-        await sessionService.startSession(session.id, {
+        await sessionLifecycleService.startSession(session.id, {
           initialPrompt: input.initialPrompt,
         });
       } catch (error) {
         try {
-          await sessionService.stopSession(session.id, {
+          await sessionLifecycleService.stopSession(session.id, {
             cleanupTransientRatchetSession: false,
           });
         } catch {
@@ -201,8 +202,8 @@ export const sessionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService } = ctx.appContext.services;
-      await sessionService.startSession(input.id, {
+      const { sessionDataService, sessionLifecycleService } = ctx.appContext.services;
+      await sessionLifecycleService.startSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
       return sessionDataService.findAgentSessionById(input.id);
@@ -212,8 +213,8 @@ export const sessionRouter = router({
   stopSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService } = ctx.appContext.services;
-      await sessionService.stopSession(input.id, {
+      const { sessionDataService, sessionLifecycleService } = ctx.appContext.services;
+      await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
       return sessionDataService.findAgentSessionById(input.id);
@@ -223,8 +224,8 @@ export const sessionRouter = router({
   restartSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService } = ctx.appContext.services;
-      await sessionService.restartSession(input.id);
+      const { sessionDataService, sessionLifecycleService } = ctx.appContext.services;
+      await sessionLifecycleService.restartSession(input.id);
       return sessionDataService.findAgentSessionById(input.id);
     }),
 
@@ -232,9 +233,10 @@ export const sessionRouter = router({
   deleteSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { sessionDataService, sessionService, sessionDomainService } = ctx.appContext.services;
+      const { sessionDataService, sessionLifecycleService, sessionDomainService } =
+        ctx.appContext.services;
       // Stop process first to prevent orphaned session processes
-      await sessionService.stopSession(input.id, {
+      await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
       // Clear any in-memory session store state

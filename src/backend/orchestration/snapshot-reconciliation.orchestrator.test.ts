@@ -48,7 +48,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  sessionService: { getRuntimeSnapshot: vi.fn() },
+  sessionLifecycleService: { getRuntimeSnapshot: vi.fn() },
   chatEventForwarderService: { getAllPendingRequests: vi.fn() },
 }));
 

@@ -2,7 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
   ChatMessageHandler,
-  ChatMessageHandlerSessionService,
+  ChatMessageHandlerPermissionService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import type { PermissionResponseMessage } from '@/shared/websocket';
 import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
@@ -10,16 +10,16 @@ import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
 const logger = createLogger('chat-message-handlers');
 
 export function createPermissionResponseHandler(deps: {
-  sessionService: ChatMessageHandlerSessionService;
+  sessionPermissionService: ChatMessageHandlerPermissionService;
 }): ChatMessageHandler<PermissionResponseMessage> {
-  const { sessionService } = deps;
+  const { sessionPermissionService } = deps;
 
   return ({ ws, sessionId, message }) => {
     const { requestId, optionId, answers } = message;
 
     try {
       // ACP permission response -- route through bridge
-      const resolved = sessionService.respondToAcpPermission(
+      const resolved = sessionPermissionService.respondToPermission(
         sessionId,
         requestId,
         optionId,

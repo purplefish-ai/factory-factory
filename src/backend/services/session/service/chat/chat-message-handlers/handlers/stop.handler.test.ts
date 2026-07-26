@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   resetDispatchState: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session.service', () => ({
-  sessionService: {
+vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+  sessionLifecycleService: {
     stopSession: mocks.stopSession,
   },
 }));
