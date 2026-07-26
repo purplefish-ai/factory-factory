@@ -2,8 +2,6 @@
 // Public API for the GitHub domain module.
 // Consumers should import from '@/backend/services/github' only.
 
-// Bridge interfaces for orchestration layer wiring
-export type { GitHubKanbanBridge } from './bridges';
 export { classifyError as classifyGitHubCLIError } from './github-cli/errors';
 // --- GitHub CLI wrapper ---
 export {

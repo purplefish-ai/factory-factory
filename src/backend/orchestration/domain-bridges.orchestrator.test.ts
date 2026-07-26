@@ -35,7 +35,6 @@ vi.mock('./reconciliation.service', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
-  kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
   WorkspaceCreationService: class {
     create = mockWorkspaceCreationService.create;
   },
@@ -164,7 +163,6 @@ import {
 import { terminalSessionService } from '@/backend/services/terminal';
 import {
   getWorkspaceInitPolicy,
-  kanbanStateService,
   workspaceActivityService,
   workspaceAutoIterationService,
   workspaceDataService,
@@ -206,7 +204,6 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     fixerSessionService,
     getWorkspaceInitPolicy,
     githubCLIService,
-    kanbanStateService,
     logbookService,
     periodicTaskService,
     prFetchRegistry,
@@ -266,7 +263,6 @@ describe('configureDomainBridges', () => {
   it('configures workspace domain services', () => {
     configureDomainBridges(createBridgeServices());
 
-    expect(kanbanStateService.configure).toHaveBeenCalledTimes(1);
     expect(workspaceQueryService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -478,30 +474,6 @@ describe('configureDomainBridges', () => {
   });
 
   describe('workspace bridge delegation', () => {
-    it('kanban session bridge delegates isAnySessionWorking', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(kanbanStateService.configure);
-
-      bridge.session.isAnySessionWorking(['s1', 's2']);
-      expect(sessionService.isAnySessionWorking).toHaveBeenCalledWith(['s1', 's2']);
-    });
-
-    it('kanban session bridge delegates getAllPendingRequests', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(kanbanStateService.configure);
-
-      bridge.session.getAllPendingRequests();
-      expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalled();
-    });
-
-    it('kanban session bridge delegates getRuntimeSnapshot', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(kanbanStateService.configure);
-
-      bridge.session.getRuntimeSnapshot('s1');
-      expect(sessionService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
-    });
-
     it('workspaceQueryService gets github bridge with checkHealth', () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);
@@ -1114,23 +1086,13 @@ describe('configureDomainBridges', () => {
     });
   });
 
-  describe('github domain bridge delegation', () => {
-    it('prSnapshotService gets kanban bridge with updateCachedKanbanColumn', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(prSnapshotService.configure);
-
-      bridge.kanban.updateCachedKanbanColumn('ws1');
-      expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws1');
-    });
-  });
-
   describe('idempotency', () => {
     it('can be called multiple times without error', () => {
       configureDomainBridges(createBridgeServices());
       configureDomainBridges(createBridgeServices());
 
       expect(ratchetService.configure).toHaveBeenCalledTimes(2);
-      expect(kanbanStateService.configure).toHaveBeenCalledTimes(2);
+      expect(workspaceQueryService.configure).toHaveBeenCalledTimes(2);
     });
   });
 });

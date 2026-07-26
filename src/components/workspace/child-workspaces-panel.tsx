@@ -250,12 +250,12 @@ export function ChildWorkspacesPanel({ workspaceId }: ChildWorkspacesPanelProps)
                     <p className="text-sm font-medium truncate">{child.name}</p>
                     <p className="text-[11px] text-muted-foreground truncate">
                       {child.projectName}
-                      {child.cachedKanbanColumn && (
+                      {child.kanbanColumn && (
                         <>
                           {' '}
                           &middot;{' '}
                           <span className="capitalize">
-                            {child.cachedKanbanColumn.toLowerCase().replace('_', ' ')}
+                            {child.kanbanColumn.toLowerCase().replace('_', ' ')}
                           </span>
                         </>
                       )}

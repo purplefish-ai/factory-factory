@@ -119,8 +119,9 @@ the next Ratchet poll. Identical periodic refreshes do not clear exhaustion. The
 `ratchetLastCiRunId` snapshot key remains intact so Ratchet still decides whether the changed
 aggregate actually warrants another fixer.
 
-Archived workspaces retain their last pre-archive `cachedKanbanColumn`; the live derivation
-returns `null` so they remain off the active board unless archived items are explicitly shown.
+Archiving and archived workspaces derive a `null` column, which keeps them off the active board.
+The column is never persisted: `computeKanbanColumn` runs on every read, so the board, the
+sidebar, the snapshot stream, and the child-workspace panel cannot disagree about it.
 
 ## Cached and Live State Propagation
 

@@ -10,6 +10,8 @@ const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindChildrenWithStatus = vi.hoisted(() => vi.fn());
 const mockFindParentWorkspace = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
+const mockGetAllPendingRequests = vi.hoisted(() => vi.fn());
+const mockGetRuntimeSnapshot = vi.hoisted(() => vi.fn());
 
 import { workspaceChildrenRouter } from './children.trpc';
 
@@ -38,6 +40,12 @@ function createCaller(requestTrust?: {
     },
     workspaceNotificationService: {
       countPending: (...args: unknown[]) => mockCountPending(...args),
+    },
+    sessionDomainService: {
+      getAllPendingRequests: () => mockGetAllPendingRequests(),
+    },
+    sessionService: {
+      getRuntimeSnapshot: (...args: unknown[]) => mockGetRuntimeSnapshot(...args),
     },
   };
   return {
@@ -69,6 +77,13 @@ describe('workspaceChildrenRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeliverWorkspaceNotification.mockResolvedValue({ delivered: true });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
   });
 
   it('creates child workspaces through the child orchestration use case', async () => {
@@ -122,8 +137,8 @@ describe('workspaceChildrenRouter', () => {
         status: 'READY',
         prState: 'NONE',
         prUrl: null,
-        cachedKanbanColumn: 'WAITING',
         project: { name: 'Child Project', slug: 'child-project' },
+        agentSessions: [],
         createdAt,
       },
     ]);
@@ -141,10 +156,10 @@ describe('workspaceChildrenRouter', () => {
         status: 'READY',
         prState: 'NONE',
         prUrl: null,
-        cachedKanbanColumn: 'WAITING',
         projectId: 'child-project-1',
         projectName: 'Child Project',
         projectSlug: 'child-project',
+        kanbanColumn: 'WAITING',
         createdAt,
       },
     ]);
@@ -155,6 +170,37 @@ describe('workspaceChildrenRouter', () => {
       projectName: 'Parent Project',
       projectSlug: 'parent-project',
     });
+  });
+
+  it('derives a child column from live session state, not a snapshot entry', async () => {
+    // The child panel used to read a persisted column. Deriving on read means a
+    // child with a live session shows WORKING even when nothing has populated
+    // the snapshot store yet, and uses the same predicate as the board.
+    mockFindChildrenWithStatus.mockResolvedValue([
+      {
+        ...child,
+        description: null,
+        status: 'READY',
+        prState: 'NONE',
+        prUrl: null,
+        project: { name: 'Child Project', slug: 'child-project' },
+        agentSessions: [
+          { id: 'sess-1', name: null, workflow: null, model: null, status: 'ACTIVE' },
+        ],
+        createdAt: new Date('2026-07-17T12:00:00.000Z'),
+      },
+    ]);
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: '2026-07-17T12:00:00.000Z',
+    });
+    const { caller } = createCaller();
+
+    const children = await caller.listChildren({ parentWorkspaceId: 'parent-1' });
+
+    expect(children[0]?.kanbanColumn).toBe('WORKING');
   });
 
   it('returns null when a child has no parent summary', async () => {

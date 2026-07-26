@@ -17,40 +17,40 @@ function makeWorkspace(
     prNumber: null,
     prState: null,
     prCiStatus: null,
-    cachedKanbanColumn: 'WAITING',
+    kanbanColumn: 'WAITING',
     ...rest,
   };
 }
 
 describe('groupWorkspacesForSidebar', () => {
-  it('groups strictly by cachedKanbanColumn', () => {
+  it('groups strictly by kanbanColumn', () => {
     const workspaces = [
       makeWorkspace({
         id: 'waiting-and-working',
         name: 'Waiting and working',
         createdAt: '2024-02-01T00:00:00Z',
-        cachedKanbanColumn: 'WAITING',
+        kanbanColumn: 'WAITING',
         isWorking: true,
       }),
       makeWorkspace({
         id: 'done-and-working',
         name: 'Done and working',
         createdAt: '2024-02-02T00:00:00Z',
-        cachedKanbanColumn: 'DONE',
+        kanbanColumn: 'DONE',
         isWorking: true,
       }),
       makeWorkspace({
         id: 'waiting-only',
         name: 'Waiting only',
         createdAt: '2024-02-03T00:00:00Z',
-        cachedKanbanColumn: 'WAITING',
+        kanbanColumn: 'WAITING',
         isWorking: false,
       }),
       makeWorkspace({
         id: 'working-only',
         name: 'Working only',
         createdAt: '2024-02-04T00:00:00Z',
-        cachedKanbanColumn: 'WORKING',
+        kanbanColumn: 'WORKING',
         isWorking: false,
       }),
     ];

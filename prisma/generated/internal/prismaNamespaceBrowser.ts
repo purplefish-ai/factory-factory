@@ -170,9 +170,7 @@ export const WorkspaceScalarFieldEnum = {
   autoIterationSessionId: 'autoIterationSessionId',
   periodicTaskId: 'periodicTaskId',
   parentWorkspaceId: 'parentWorkspaceId',
-  hasHadSessions: 'hasHadSessions',
-  cachedKanbanColumn: 'cachedKanbanColumn',
-  stateComputedAt: 'stateComputedAt'
+  hasHadSessions: 'hasHadSessions'
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]

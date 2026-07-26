@@ -57,7 +57,6 @@ import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
   type computePendingRequestType,
-  type kanbanStateService,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   type workspaceActivityService,
@@ -129,7 +128,6 @@ export type EventCollectorDependencies = {
   computePendingRequestType: typeof computePendingRequestType;
   createLogger(component: string): Logger;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
-  kanbanStateService: typeof kanbanStateService;
   linearStateSyncService: typeof linearStateSyncService;
   prFetchRegistry: typeof prFetchRegistry;
   prSnapshotService: typeof prSnapshotService;
@@ -144,17 +142,6 @@ export type EventCollectorDependencies = {
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
 };
-
-function refreshCachedKanbanColumn(state: EventCollectorState, workspaceId: string): void {
-  void state.dependencies.kanbanStateService
-    .updateCachedKanbanColumn(workspaceId)
-    .catch((error) => {
-      state.logger.warn('Failed to refresh cached kanban column after Ratchet change', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
-}
 
 async function projectAuthoritativeRatchetState(
   state: EventCollectorState,
@@ -810,7 +797,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       { immediate: true }
     );
     requestAuthoritativeRatchetProjection(event.workspaceId);
-    refreshCachedKanbanColumn(state, event.workspaceId);
   };
   dependencies.prSnapshotService.on(PR_DISPATCH_INVALIDATED, prDispatchInvalidatedHandler);
   state.teardownListeners.push(() =>
@@ -828,7 +814,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       );
     }
     requestAuthoritativeRatchetProjection(event.workspaceId);
-    refreshCachedKanbanColumn(state, event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_STATE_CHANGED, ratchetStateChangedHandler);
   state.teardownListeners.push(() =>
@@ -844,7 +829,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       { immediate: true }
     );
     requestAuthoritativeRatchetProjection(event.workspaceId);
-    refreshCachedKanbanColumn(state, event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_TOGGLED, ratchetToggledHandler);
   state.teardownListeners.push(() =>
@@ -854,7 +838,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   // 5. Ratchet dispatch ownership changes
   const ratchetDispatchChangedHandler = (event: RatchetDispatchChangedEvent) => {
     requestAuthoritativeRatchetProjection(event.workspaceId);
-    refreshCachedKanbanColumn(state, event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_DISPATCH_CHANGED, ratchetDispatchChangedHandler);
   state.teardownListeners.push(() =>

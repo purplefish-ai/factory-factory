@@ -45,7 +45,6 @@ vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn(), off: vi.fn() },
   workspaceActivityService: { on: vi.fn(), off: vi.fn(), clearWorkspace: vi.fn() },
-  kanbanStateService: { updateCachedKanbanColumn: vi.fn().mockResolvedValue(undefined) },
   workspaceDataService: { findRatchetProjection: vi.fn() },
   workspaceSnapshotStore: {
     upsert: vi.fn(),
@@ -144,7 +143,6 @@ import {
 import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
-  kanbanStateService,
   workspaceActivityService,
   workspaceDataService,
   workspaceSnapshotStore,
@@ -166,7 +164,6 @@ function configureEventCollector(): void {
     computePendingRequestType,
     createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     getWorkspaceLinearContext,
-    kanbanStateService,
     linearStateSyncService,
     prFetchRegistry,
     prSnapshotService,
@@ -790,10 +787,9 @@ describe('configureEventCollector', () => {
         expect.any(Number)
       )
     );
-    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
 
-  it('ratchet_dispatch_changed publishes authoritative ownership and refreshes the cache', async () => {
+  it('ratchet_dispatch_changed publishes authoritative ownership', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
@@ -824,7 +820,6 @@ describe('configureEventCollector', () => {
         expect.any(Number)
       )
     );
-    expect(kanbanStateService.updateCachedKanbanColumn).toHaveBeenCalledWith('ws-1');
   });
 
   it('projects the direct CI status carried by a dispatch invalidation', () => {

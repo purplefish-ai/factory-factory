@@ -44,9 +44,6 @@ type KanbanWorkspace = NonNullable<KanbanCacheData>[number];
 type PendingRequestType = WorkspaceSnapshotEntry['pendingRequestType'];
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
-// NOTE: `stateComputedAt` is DB-backed kanban-state timing and is preserved by
-// snapshot mappers; snapshot transport recency uses `snapshotComputedAt`.
-
 // =============================================================================
 // Kanban cache update helpers (extracted to keep handleMessage under complexity limit)
 // =============================================================================

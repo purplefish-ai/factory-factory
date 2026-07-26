@@ -10,7 +10,6 @@ import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@pri
 import { describe, expect, it } from 'vitest';
 import {
   CIStatus as PrismaCIStatus,
-  KanbanColumn as PrismaKanbanColumn,
   PRState as PrismaPRState,
   RatchetState as PrismaRatchetState,
   RunScriptStatus as PrismaRunScriptStatus,
@@ -135,8 +134,6 @@ describe('Enum sync with Prisma schema', () => {
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: null,
       hasHadSessions: false,
-      cachedKanbanColumn: 'WAITING',
-      stateComputedAt: null,
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
@@ -197,8 +194,6 @@ describe('Enum sync with Prisma schema', () => {
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: null,
       hasHadSessions: false,
-      cachedKanbanColumn: 'WAITING',
-      stateComputedAt: null,
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
@@ -221,12 +216,6 @@ describe('Enum sync with Prisma schema', () => {
   it('CIStatus matches Prisma', () => {
     const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.prCiStatus);
     const prismaValues = Object.values(PrismaCIStatus);
-    expect(zodValues).toEqual(prismaValues);
-  });
-
-  it('KanbanColumn matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.cachedKanbanColumn);
-    const prismaValues = Object.values(PrismaKanbanColumn);
     expect(zodValues).toEqual(prismaValues);
   });
 

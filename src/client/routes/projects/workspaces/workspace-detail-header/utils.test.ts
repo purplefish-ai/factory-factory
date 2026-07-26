@@ -10,7 +10,7 @@ import {
 type TestWorkspace = {
   id: string;
   createdAt: string;
-  cachedKanbanColumn: 'WAITING' | 'WORKING' | 'DONE';
+  kanbanColumn: 'WAITING' | 'WORKING' | 'DONE';
   pendingRequestType: string | null;
 };
 
@@ -20,31 +20,31 @@ describe('groupWorkspaceSwitcherItems', () => {
       {
         id: 'todo-old',
         createdAt: '2025-01-01T00:00:00.000Z',
-        cachedKanbanColumn: 'WAITING',
+        kanbanColumn: 'WAITING',
         pendingRequestType: null,
       },
       {
         id: 'todo-new',
         createdAt: '2025-02-01T00:00:00.000Z',
-        cachedKanbanColumn: 'WAITING',
+        kanbanColumn: 'WAITING',
         pendingRequestType: null,
       },
       {
         id: 'waiting',
         createdAt: '2025-03-01T00:00:00.000Z',
-        cachedKanbanColumn: 'WAITING',
+        kanbanColumn: 'WAITING',
         pendingRequestType: 'REVIEW',
       },
       {
         id: 'working',
         createdAt: '2025-04-01T00:00:00.000Z',
-        cachedKanbanColumn: 'WORKING',
+        kanbanColumn: 'WORKING',
         pendingRequestType: null,
       },
       {
         id: 'done',
         createdAt: '2025-05-01T00:00:00.000Z',
-        cachedKanbanColumn: 'DONE',
+        kanbanColumn: 'DONE',
         pendingRequestType: null,
       },
     ];

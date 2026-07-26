@@ -9,7 +9,6 @@ import {
   getWorkspaceInitPolicy,
   gitCloneService,
   gitOpsService,
-  kanbanStateService,
   // Lifecycle
   WorkspaceCreationService,
   WorkspaceSnapshotStore,
@@ -50,10 +49,6 @@ describe('Workspace domain exports', () => {
 
   it('exports computeKanbanColumn as a function', () => {
     expect(typeof computeKanbanColumn).toBe('function');
-  });
-
-  it('exports kanbanStateService as an object', () => {
-    expect(kanbanStateService).toBeDefined();
   });
 
   it('exports getWorkspaceInitPolicy as a function', () => {

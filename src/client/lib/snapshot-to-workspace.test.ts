@@ -107,22 +107,12 @@ describe('workspace snapshot cache projections', () => {
     }
   });
 
-  it('maps transport recency separately from preserved DB state timing', () => {
+  it('stamps transport recency from the snapshot message', () => {
     const entry = makeEntry({ computedAt: '2026-02-01T12:00:00Z' });
     const sidebarSeed = projectSnapshotToSidebarWorkspace(entry);
-    const sidebar = projectSnapshotToSidebarWorkspace(entry, {
-      ...sidebarSeed,
-      stateComputedAt: '2026-01-20T00:00:00Z',
-    });
-    const kanbanSeed = projectSnapshotToKanbanWorkspace(entry);
-    const kanban = projectSnapshotToKanbanWorkspace(entry, {
-      ...kanbanSeed,
-      stateComputedAt: new Date('2026-01-20T00:00:00Z'),
-    });
+    const sidebar = projectSnapshotToSidebarWorkspace(entry, sidebarSeed);
 
-    expect(sidebar.stateComputedAt).toBe('2026-01-20T00:00:00Z');
     expect(sidebar.snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
-    expect(kanban.stateComputedAt).toEqual(new Date('2026-01-20T00:00:00Z'));
   });
 
   it('applies transported PR update timing to kanban and detail caches', () => {
@@ -227,7 +217,6 @@ describe('workspace snapshot cache projections', () => {
       agentSessions: [],
       terminalSessions: [],
       parentWorkspaceId: null,
-      stateComputedAt: null,
       isArchived: false,
     });
   });

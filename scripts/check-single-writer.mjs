@@ -135,8 +135,6 @@ const workspaceFieldOwners = {
   hasHadSessions: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
-  cachedKanbanColumn: new Set(['src/backend/services/workspace/service/state/kanban-state.ts']),
-  stateComputedAt: new Set(['src/backend/services/workspace/service/state/kanban-state.ts']),
 
   worktreePath: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
@@ -295,10 +293,6 @@ const workspaceMutationRules = {
       'ratchetDispatchOutcome',
       'ratchetDispatchRetryCount',
     ],
-  },
-  updateCachedKanbanColumnIfOwnershipMatches: {
-    type: 'static',
-    fields: ['cachedKanbanColumn', 'stateComputedAt'],
   },
   recordRatchetDispatchIfEnabled: {
     type: 'static',

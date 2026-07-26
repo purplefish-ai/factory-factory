@@ -1296,9 +1296,7 @@ export const WorkspaceScalarFieldEnum = {
   autoIterationSessionId: 'autoIterationSessionId',
   periodicTaskId: 'periodicTaskId',
   parentWorkspaceId: 'parentWorkspaceId',
-  hasHadSessions: 'hasHadSessions',
-  cachedKanbanColumn: 'cachedKanbanColumn',
-  stateComputedAt: 'stateComputedAt'
+  hasHadSessions: 'hasHadSessions'
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
@@ -1590,13 +1588,6 @@ export type EnumWorkspaceModeFieldRefInput<$PrismaModel> = FieldRefInputType<$Pr
  * Reference to a field of type 'AutoIterationStatus'
  */
 export type EnumAutoIterationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AutoIterationStatus'>
-    
-
-
-/**
- * Reference to a field of type 'KanbanColumn'
- */
-export type EnumKanbanColumnFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'KanbanColumn'>
     
 
 

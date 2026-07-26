@@ -40,13 +40,7 @@ type CommonSnapshotWorkspace = {
 
 type KanbanSnapshotExtension = Pick<
   KanbanWorkspace,
-  | 'projectId'
-  | 'status'
-  | 'prUpdatedAt'
-  | 'hasHadSessions'
-  | 'cachedKanbanColumn'
-  | 'kanbanColumn'
-  | 'isArchived'
+  'projectId' | 'status' | 'prUpdatedAt' | 'hasHadSessions' | 'kanbanColumn' | 'isArchived'
 >;
 
 type KanbanWorkspaceDefaults = Omit<
@@ -91,13 +85,12 @@ export function projectSnapshotToSidebarWorkspace(
     linearIssueIdentifier: null,
     linearIssueUrl: null,
     creationSource: 'MANUAL',
-    stateComputedAt: null,
     ...existing,
     ...projectSnapshotToCommonWorkspace(entry),
     gitStats: entry.gitStats,
     lastActivityAt: entry.lastActivityAt,
     sidebarStatus: entry.sidebarStatus,
-    cachedKanbanColumn: entry.kanbanColumn,
+    kanbanColumn: entry.kanbanColumn,
   };
 }
 
@@ -139,7 +132,6 @@ function newKanbanWorkspaceDefaults(createdAt: Date): KanbanWorkspaceDefaults {
     ratchetLastCheckedAt: null,
     ratchetActiveSessionId: null,
     ratchetLastCiRunId: null,
-    stateComputedAt: null,
     mode: 'STANDARD',
     autoIterationStatus: null,
     autoIterationConfig: null,
@@ -162,7 +154,6 @@ export function projectSnapshotToKanbanWorkspace(
     status: entry.status,
     prUpdatedAt: entry.prUpdatedAt ? new Date(entry.prUpdatedAt) : null,
     hasHadSessions: entry.hasHadSessions,
-    cachedKanbanColumn: entry.kanbanColumn ?? existing?.cachedKanbanColumn ?? 'WAITING',
     kanbanColumn: entry.kanbanColumn,
     isArchived: existing?.isArchived ?? false,
   };
@@ -189,7 +180,7 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     status: entry.status,
     prUpdatedAt: entry.prUpdatedAt ? new Date(entry.prUpdatedAt) : null,
     hasHadSessions: entry.hasHadSessions,
-    cachedKanbanColumn: entry.kanbanColumn ?? existing.cachedKanbanColumn,
+    kanbanColumn: entry.kanbanColumn,
     sidebarStatus: entry.sidebarStatus,
   };
 }

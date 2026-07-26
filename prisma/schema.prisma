@@ -68,12 +68,6 @@ enum CIStatus {
   FAILURE   // One or more checks failed
 }
 
-enum KanbanColumn {
-  WORKING
-  WAITING
-  DONE
-}
-
 enum RatchetState {
   IDLE              // No PR or ratchet not active for this workspace
   CI_RUNNING        // CI checks in progress
@@ -290,17 +284,11 @@ model Workspace {
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
 
-  // Cached kanban column (for list performance)
-  cachedKanbanColumn  KanbanColumn      @default(WAITING)
-  stateComputedAt     DateTime?         // Last kanban column computation
-
   @@index([projectId])
   @@index([status])
-  @@index([cachedKanbanColumn])
   @@index([parentWorkspaceId])
   // Composite indexes for common query patterns
   @@index([projectId, status])
-  @@index([projectId, cachedKanbanColumn])
   @@index([projectId, updatedAt])
   @@index([projectId, createdAt])
   @@index([status, prUrl])

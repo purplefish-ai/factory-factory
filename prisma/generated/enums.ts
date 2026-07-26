@@ -89,15 +89,6 @@ export const CIStatus = {
 export type CIStatus = (typeof CIStatus)[keyof typeof CIStatus]
 
 
-export const KanbanColumn = {
-  WORKING: 'WORKING',
-  WAITING: 'WAITING',
-  DONE: 'DONE'
-} as const
-
-export type KanbanColumn = (typeof KanbanColumn)[keyof typeof KanbanColumn]
-
-
 export const RatchetState = {
   IDLE: 'IDLE',
   CI_RUNNING: 'CI_RUNNING',

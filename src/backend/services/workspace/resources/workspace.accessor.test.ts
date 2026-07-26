@@ -616,35 +616,6 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('conditionally writes a cached column against the ownership tuple', async () => {
-    mockUpdateMany.mockResolvedValue({ count: 0 });
-    const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');
-
-    await expect(
-      workspaceAccessor.updateCachedKanbanColumnIfOwnershipMatches(
-        'ws-1',
-        {
-          status: 'READY',
-          prUrl: 'https://github.com/org/repo/pull/42',
-          prState: 'OPEN',
-          prCiStatus: 'PENDING',
-          prUpdatedAt,
-          ratchetEnabled: true,
-          ratchetState: 'CI_RUNNING',
-          ratchetDispatchOutcome: null,
-          ratchetDispatchRetryCount: 0,
-          cachedKanbanColumn: 'WORKING',
-        },
-        { cachedKanbanColumn: 'WAITING' }
-      )
-    ).resolves.toBe(false);
-
-    expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: expect.objectContaining({ status: 'READY', prUpdatedAt }),
-      data: { cachedKanbanColumn: 'WAITING' },
-    });
-  });
-
   it('persists an identical PR aggregate without clearing settled dispatch metadata', async () => {
     const currentUpdatedAt = new Date('2026-07-17T11:59:00.000Z');
     const prUpdatedAt = new Date('2026-07-17T12:00:00.000Z');

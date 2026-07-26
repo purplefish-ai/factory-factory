@@ -5,11 +5,6 @@
  */
 import type { CIStatus, PRState } from '@/shared/core';
 
-/** Kanban state capability needed by GitHub domain */
-export interface GitHubKanbanBridge {
-  updateCachedKanbanColumn(workspaceId: string): Promise<void>;
-}
-
 export interface GitHubPRDiscoveryClaim {
   branchName: string;
   checkedAt: Date;

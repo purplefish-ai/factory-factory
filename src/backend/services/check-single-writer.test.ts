@@ -287,8 +287,8 @@ export const workspaceAccessor = new WorkspaceAccessor();
 
     const schemaPath = path.join(tempRoot, 'prisma/schema.prisma');
     const schemaWithNewField = schemaSource.replace(
-      '  stateComputedAt     DateTime?         // Last kanban column computation',
-      '  stateComputedAt     DateTime?         // Last kanban column computation\n  uncheckedMutableField String?'
+      '  // Activity tracking\n  hasHadSessions      Boolean           @default(false)',
+      '  // Activity tracking\n  hasHadSessions      Boolean           @default(false)\n  uncheckedMutableField String?'
     );
     writeFileSync(schemaPath, schemaWithNewField);
 

@@ -21,8 +21,6 @@ import { EventEmitter } from 'node:events';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import { deriveWorkspaceFlowStateFromWorkspace } from '@/backend/services/workspace/service/state/flow-state';
-import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import type { WorkspaceStatus } from '@/shared/core';
 
 const logger = createLogger('workspace-state-machine');
@@ -162,39 +160,6 @@ function applyTransitionData(
   }
 }
 
-function applyKanbanCacheData(
-  updateData: Prisma.WorkspaceUpdateManyMutationInput,
-  workspace: Workspace,
-  targetStatus: WorkspaceStatus,
-  now: Date
-): void {
-  if (targetStatus === 'ARCHIVING' || targetStatus === 'ARCHIVED') {
-    return;
-  }
-
-  const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-  const cachedKanbanColumn = computeKanbanColumn({
-    lifecycle: targetStatus,
-    sessionIsWorking: false,
-    flowIsWorking: flowState.isWorking,
-    prState: workspace.prState,
-    ratchetState: workspace.ratchetState,
-    pendingRequestType: null,
-    hasSessionRuntimeError: false,
-    ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-    ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-  });
-
-  if (cachedKanbanColumn === null) {
-    return;
-  }
-
-  updateData.cachedKanbanColumn = cachedKanbanColumn;
-  if (workspace.cachedKanbanColumn !== cachedKanbanColumn) {
-    updateData.stateComputedAt = now;
-  }
-}
-
 class WorkspaceStateMachineService extends EventEmitter {
   /**
    * Check if a state transition is valid.
@@ -265,7 +230,6 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     // Apply transition-specific updates
     applyTransitionData(updateData, currentStatus, targetStatus, now, options);
-    applyKanbanCacheData(updateData, workspace, targetStatus, now);
 
     // Use compare-and-swap to prevent race conditions
     const result = await workspaceAccessor.transitionWithCas(
