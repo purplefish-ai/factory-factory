@@ -40,9 +40,6 @@ jobs:
       - name: Check generated Prisma client is committed
         run: pnpm check:prisma-generated
 
-      - name: Build core library
-        run: pnpm --filter @factory-factory/core build
-
       - name: Check Prisma migrations are committed
         run: |
           pnpm exec prisma migrate diff \
@@ -90,9 +87,6 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Build core library
-        run: pnpm --filter @factory-factory/core build
-
       - name: Build
         run: pnpm build
 
@@ -120,9 +114,6 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
-
-      - name: Build core library
-        run: pnpm --filter @factory-factory/core build
 
       - name: Build Storybook
         run: pnpm build:storybook
@@ -152,9 +143,6 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
-
-      - name: Build core library
-        run: pnpm --filter @factory-factory/core build
 
       - name: Run tests with coverage
         run: pnpm test:coverage

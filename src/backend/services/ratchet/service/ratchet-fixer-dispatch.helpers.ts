@@ -94,6 +94,7 @@ async function handleStartedFixerResult(params: {
         sessionId: result.sessionId,
         promptCompletion: result.promptCompletion,
         sessionBridge,
+        onDispatchChanged,
       });
     }
   }
@@ -119,8 +120,9 @@ async function settleFailedPromptCompletion(params: {
   sessionId: string;
   promptCompletion: Promise<boolean>;
   sessionBridge: RatchetSessionBridge;
+  onDispatchChanged?: (event: { workspaceId: string }) => void;
 }): Promise<void> {
-  const { workspaceId, sessionId, promptCompletion, sessionBridge } = params;
+  const { workspaceId, sessionId, promptCompletion, sessionBridge, onDispatchChanged } = params;
 
   try {
     const completed = await promptCompletion;
@@ -129,7 +131,11 @@ async function settleFailedPromptCompletion(params: {
     }
 
     const settled = await workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, 'DIED');
-    if (settled && sessionBridge.isSessionRunning(sessionId)) {
+    if (!settled) {
+      return;
+    }
+    onDispatchChanged?.({ workspaceId });
+    if (sessionBridge.isSessionRunning(sessionId)) {
       await sessionBridge.stopSession(sessionId);
     }
   } catch (error) {

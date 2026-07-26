@@ -3657,6 +3657,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         promptCompletion: Promise.resolve(false),
       });
       vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      const events: RatchetDispatchChangedEvent[] = [];
+      ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+        events.push(event);
+      });
 
       const result = await unsafeCoerce<{
         triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
@@ -3684,6 +3688,12 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         )
       );
       expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('failed-prompt-session');
+      await vi.waitFor(() =>
+        expect(events).toEqual([
+          { workspaceId: 'ws-failed-prompt' },
+          { workspaceId: 'ws-failed-prompt' },
+        ])
+      );
     });
 
     it('does not stop a newer active session when an old prompt completion fails', async () => {
@@ -3695,6 +3705,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
       vi.mocked(workspaceRatchetService.recordSessionEnd).mockResolvedValue(false);
       vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      const events: RatchetDispatchChangedEvent[] = [];
+      ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+        events.push(event);
+      });
 
       await unsafeCoerce<{
         triggerFixer: (w: unknown, prStateInfo: unknown, retryCount: number) => Promise<unknown>;
@@ -3715,6 +3729,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await vi.waitFor(() => expect(workspaceRatchetService.recordSessionEnd).toHaveBeenCalled());
       expect(mockSessionBridge.stopSession).not.toHaveBeenCalled();
+      expect(events).toEqual([{ workspaceId: 'ws-replaced-prompt' }]);
     });
 
     it('cleans up a fixer through prompt failure after its dispatch record is persisted', async () => {
