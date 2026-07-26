@@ -16,7 +16,6 @@ const mockWorkspaceDataService = vi.hoisted(() => ({
 const mockWorkspaceQueryService = vi.hoisted(() => ({
   getProjectSummaryState: vi.fn(),
   listWithKanbanState: vi.fn(),
-  listWithRuntimeState: vi.fn(),
   refreshFactoryConfigs: vi.fn(),
   getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
