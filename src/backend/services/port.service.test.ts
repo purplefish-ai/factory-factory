@@ -202,5 +202,19 @@ describe('port.service', () => {
 
       expect(attemptCount).toBe(3);
     });
+
+    it('should not probe ports above the valid TCP range', async () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
+
+      await expect(findAvailablePort(65_535)).rejects.toThrow(
+        'Could not find an available port starting from 65535'
+      );
+
+      expect(mockExec).toHaveBeenCalledOnce();
+      expect(mockExec).toHaveBeenCalledWith('lsof -i :65535 -sTCP:LISTEN -t', {
+        timeout: 2000,
+      });
+    });
   });
 });
