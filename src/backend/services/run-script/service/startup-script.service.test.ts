@@ -204,6 +204,56 @@ describe('StartupScriptService', () => {
     expect(markFailed).toHaveBeenCalledWith('w1', 'Script timed out after 1 seconds');
   });
 
+  it('does not escalate after the process exits during the SIGTERM grace period', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(true);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit('exit', null, 'SIGTERM');
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(proc.kill).toHaveBeenCalledTimes(1);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    proc.emit('close', null, 'SIGTERM');
+    await resultPromise;
+  });
+
+  it('does not schedule SIGKILL escalation when SIGTERM was not sent', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    proc.kill.mockReturnValue(false);
+    mockSpawn.mockReturnValue(proc);
+
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      {
+        startupScriptCommand: 'pnpm test',
+        startupScriptPath: null,
+        startupScriptTimeout: 1,
+      } as never
+    );
+
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(proc.kill).toHaveBeenCalledTimes(1);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    proc.emit('close', 0, null);
+    await resultPromise;
+  });
+
   it('does not report a different termination signal as the startup-script timeout', async () => {
     vi.useFakeTimers();
     const proc = new FakeProc();
