@@ -1,5 +1,7 @@
 # Phase 4: WebSocket Relay + Web Frontend
 
+Status: proposed
+
 **Goal:** Wire up real-time communication and build a web UI so users can interact with cloud workspaces without the desktop app.
 
 ## 4.1 WebSocket Relay

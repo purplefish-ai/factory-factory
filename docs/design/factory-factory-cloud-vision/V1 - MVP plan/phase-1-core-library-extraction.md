@@ -1,5 +1,7 @@
 # Phase 1: Core Library Extraction
 
+Status: proposed
+
 **Goal:** Extract FF's execution primitives into a standalone library so both desktop and cloud can use them.
 
 ## 1.1 Monorepo Conversion

@@ -101,7 +101,7 @@ describe('icon library', () => {
     expect(legacyFillClasses).toEqual([]);
 
     const iconGuidance = readFileSync(
-      join(repositoryRoot, 'docs/design/ratchet-ux-simplification-plan.md'),
+      join(repositoryRoot, 'docs/design/archive/ratchet-ux-simplification-plan.md'),
       'utf8'
     );
     expect(iconGuidance).not.toContain(lucidePackage);
