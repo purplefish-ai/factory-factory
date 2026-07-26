@@ -28,29 +28,23 @@ export function generateBranchName(context: {
   return slug;
 }
 
-export function extractMatchingCommand(
+export function extractMatchingCommands(
   event: ToolEvent,
   commandRegex: RegExp,
   logger?: ValidationLogger
-): string | undefined {
+): string[] {
   const command = extractInputValue(event.input, 'command', isString, event.toolName, logger);
-  if (command && commandRegex.test(command)) {
-    return command;
-  }
-
   const cmd = extractInputValue(event.input, 'cmd', isString, event.toolName, logger);
-  if (cmd && commandRegex.test(cmd)) {
-    return cmd;
-  }
-
   const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
-  if (title && commandRegex.test(title)) {
-    return title;
-  }
 
-  if (commandRegex.test(event.toolName)) {
-    return event.toolName;
-  }
+  return [command, cmd, title, event.toolName].filter((candidate): candidate is string => {
+    if (candidate === undefined) {
+      return false;
+    }
 
-  return undefined;
+    commandRegex.lastIndex = 0;
+    const matches = commandRegex.test(candidate);
+    commandRegex.lastIndex = 0;
+    return matches;
+  });
 }

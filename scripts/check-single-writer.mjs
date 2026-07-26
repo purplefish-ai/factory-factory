@@ -81,7 +81,7 @@ const workspaceFieldOwners = {
   ]),
   branchName: new Set([
     'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
-    'src/backend/interceptors/branch-rename.interceptor.ts',
+    'src/backend/interceptors/branch-naming.interceptor.ts',
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
     'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
