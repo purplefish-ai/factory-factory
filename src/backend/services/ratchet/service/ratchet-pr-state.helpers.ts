@@ -316,11 +316,11 @@ export function buildSnapshotDiagnostics(
   return {
     ciSnapshotKey: computeCiSnapshotKey(prStateInfo.ciStatus, prStateInfo.statusCheckRollup),
     snapshotComparison: {
-      previousDispatchSnapshotKey: workspace.ratchetLastCiRunId,
+      previousDispatchSnapshotKey: workspace.ratchetDispatchSnapshotKey,
       currentSnapshotKey: prStateInfo.snapshotKey,
       changedSinceLastDispatch:
         decisionContext?.hasStateChangedSinceLastDispatch ??
-        workspace.ratchetLastCiRunId !== prStateInfo.snapshotKey,
+        workspace.ratchetDispatchSnapshotKey !== prStateInfo.snapshotKey,
     },
   };
 }

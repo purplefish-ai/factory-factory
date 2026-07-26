@@ -69,13 +69,13 @@ describe('check-single-writer', () => {
     };
   }
 
-  it('flags unauthorized ratchet field writes via recordRatchetSessionEnd mutator', () => {
+  it('flags unauthorized field writes made through a wrapper mutator', () => {
     const tempRoot = createTempBackend([
       {
         relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
         content: `
-          async function settleFromSession(workspaceAccessor) {
-            await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');
+          async function markActivity(workspaceAccessor) {
+            await workspaceAccessor.markHasHadSessions('ws');
           }
         `,
       },
@@ -84,9 +84,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain(
-      'unauthorized write of workspace field "ratchetActiveSessionId"'
-    );
+    expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
   });
 
   it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
@@ -114,9 +112,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain(
-      'unauthorized write of workspace field "ratchetDispatchOutcome"'
-    );
+    expect(result.output).toContain('unauthorized write of workspace field "prState"');
   });
 
   it('allows workspace PR snapshot capability dispatch-reset writes', () => {
@@ -143,13 +139,15 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
-  it('allows workspace ratchet capability recordRatchetSessionEnd writes', () => {
+  it('allows the run-script capability its own compare-and-swap writes', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
+        relPath: 'src/backend/services/workspace/service/lifecycle/workspace-run-script.service.ts',
         content: `
-          async function settleFromRatchet(workspaceAccessor) {
-            await workspaceAccessor.recordRatchetSessionEnd('ws', 'session', 'DIED');
+          async function markRunning(workspaceAccessor) {
+            await workspaceAccessor.casRunScriptStatusUpdate('ws', 'STARTING', {
+              runScriptStatus: 'RUNNING',
+            });
           }
         `,
       },
@@ -201,7 +199,7 @@ describe('check-single-writer', () => {
         relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
         content: `
           async function transition(workspaceAccessor) {
-            await workspaceAccessor.transitionWithCas('ws', 'READY', { ratchetState: 'IDLE' });
+            await workspaceAccessor.transitionWithCas('ws', 'READY', { initRetryCount: 0 });
           }
         `,
       },
@@ -210,7 +208,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "ratchetState"');
+    expect(result.output).toContain('unauthorized write of workspace field "initRetryCount"');
   });
 
   it('analyzes this.workspaces mutator calls without crashing', () => {
@@ -226,7 +224,7 @@ describe('check-single-writer', () => {
             }
 
             async clear(workspaceId, sessionId) {
-              await this.workspaces.recordRatchetSessionEnd(workspaceId, sessionId, 'COMPLETED');
+              await this.workspaces.markHasHadSessions(workspaceId);
             }
           }
         `,
@@ -236,9 +234,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain(
-      'unauthorized write of workspace field "ratchetActiveSessionId"'
-    );
+    expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
     expect(result.output).not.toContain('TypeError');
   });
 
@@ -252,7 +248,7 @@ describe('check-single-writer', () => {
   async unsafeExtraMutator(id: string): Promise<void> {
     await prisma.workspace.updateMany({
       where: { id },
-      data: { ratchetActiveSessionId: null },
+      data: { prReviewLastCommentId: null },
     });
   }
 }

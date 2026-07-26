@@ -1,9 +1,10 @@
-import type { UserSettings, Workspace } from '@prisma-gen/client';
+import type { UserSettings } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { createLogger } from '@/backend/services/logger.service';
 import * as userSettingsServiceModule from '@/backend/services/settings';
 import * as projectAccessorModule from '@/backend/services/workspace/resources/project.accessor';
+import type { WorkspaceWithRatchet } from '@/backend/services/workspace/resources/workspace.accessor';
 import * as workspaceAccessorModule from '@/backend/services/workspace/resources/workspace.accessor';
 import * as gitOpsServiceModule from '@/backend/services/workspace/service/worktree/git-ops.service';
 import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
@@ -23,7 +24,7 @@ describe('WorkspaceCreationService', () => {
   let service: WorkspaceCreationService;
   let mockLogger: Logger;
 
-  const mockWorkspace: Workspace = {
+  const mockWorkspace: WorkspaceWithRatchet = {
     id: 'ws-123',
     projectId: 'proj-1',
     name: 'Test Workspace',
@@ -58,7 +59,7 @@ describe('WorkspaceCreationService', () => {
     ratchetState: 'IDLE',
     ratchetLastCheckedAt: null,
     ratchetActiveSessionId: null,
-    ratchetLastCiRunId: null,
+    ratchetDispatchSnapshotKey: null,
     ratchetDispatchOutcome: null,
     ratchetDispatchRetryCount: 0,
     hasHadSessions: false,

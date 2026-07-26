@@ -57,6 +57,23 @@ export type DecisionLog = Prisma.DecisionLogModel
  */
 export type Workspace = Prisma.WorkspaceModel
 /**
+ * Model WorkspaceRatchet
+ * The ratchet's own state for one workspace: whether it is watching the PR,
+ * how far the PR progression has got, and the last fixer dispatch.
+ * 
+ * Split out of `Workspace` so that the compare-and-swap writes the ratchet
+ * relies on guard a row no other concern writes. Every conditional ratchet
+ * write tests `enabled` and/or `state` alongside the field it sets, so those
+ * two have to live next to the dispatch record for the guards to stay
+ * single-statement.
+ * 
+ * Exactly one row per workspace, created with the workspace. Reads go through
+ * `workspaceRatchetAccessor`, which substitutes these defaults if a row is
+ * ever missing (a pre-split backup restored, say) rather than making every
+ * caller handle the null.
+ */
+export type WorkspaceRatchet = Prisma.WorkspaceRatchetModel
+/**
  * Model AgentSession
  * 
  */

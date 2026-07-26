@@ -1,10 +1,10 @@
 import {
   type AgentSession,
+  type Prisma,
   type Project,
   SessionProvider,
   type TerminalSession,
   type UserSettings,
-  type Workspace,
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -96,7 +96,13 @@ const mockProject: Project = {
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
-const mockWorkspace: Workspace = {
+/**
+ * A workspace row as the export reads it: the row plus its ratchet, which the
+ * v4 format carries as flat `ratchet*` workspace fields.
+ */
+type WorkspaceForExport = Prisma.WorkspaceGetPayload<{ include: { ratchet: true } }>;
+
+const mockWorkspace: WorkspaceForExport = {
   id: 'ws-1',
   projectId: 'proj-1',
   name: 'Test Workspace',
@@ -140,13 +146,16 @@ const mockWorkspace: Workspace = {
   prCiLastNotifiedAt: null,
   prReviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
   prReviewLastCommentId: 'comment-123',
-  ratchetEnabled: true,
-  ratchetState: RatchetState.READY,
-  ratchetLastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
-  ratchetActiveSessionId: 'session-123',
-  ratchetLastCiRunId: 'run-123',
-  ratchetDispatchOutcome: null,
-  ratchetDispatchRetryCount: 0,
+  ratchet: {
+    workspaceId: 'ws-1',
+    enabled: true,
+    state: RatchetState.READY,
+    lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
+    activeSessionId: 'session-123',
+    dispatchSnapshotKey: 'run-123',
+    dispatchOutcome: null,
+    dispatchRetryCount: 0,
+  },
   hasHadSessions: true,
   mode: WorkspaceMode.STANDARD,
   autoIterationStatus: null,
@@ -416,7 +425,7 @@ describe('DataBackupService', () => {
     });
 
     it('exports and imports auto-iteration workspace configuration', async () => {
-      const autoIterationWorkspace: Workspace = {
+      const autoIterationWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         mode: WorkspaceMode.AUTO_ITERATION,
         autoIterationConfig: mockAutoIterationConfig,
@@ -466,12 +475,12 @@ describe('DataBackupService', () => {
     });
 
     it('preserves parent-child relationships through export and import', async () => {
-      const parentWorkspace: Workspace = {
+      const parentWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'parent-ws',
         name: 'Parent Workspace',
       };
-      const childWorkspace: Workspace = {
+      const childWorkspace: WorkspaceForExport = {
         ...mockWorkspace,
         id: 'child-ws',
         name: 'Child Workspace',
@@ -568,7 +577,17 @@ describe('DataBackupService', () => {
           id: 'ws-1',
           runScriptStatus: RunScriptStatus.RUNNING,
           mode: WorkspaceMode.STANDARD,
-          ratchetState: RatchetState.READY,
+          // The v4 format's flat ratchet fields land in the nested row, and
+          // `ratchetLastCiRunId` restores as `dispatchSnapshotKey`.
+          ratchet: {
+            create: {
+              enabled: true,
+              state: RatchetState.READY,
+              lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
+              activeSessionId: 'session-123',
+              dispatchSnapshotKey: 'run-123',
+            },
+          },
         }),
       });
 

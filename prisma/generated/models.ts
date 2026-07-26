@@ -11,6 +11,7 @@
 export type * from './models/Project'
 export type * from './models/DecisionLog'
 export type * from './models/Workspace'
+export type * from './models/WorkspaceRatchet'
 export type * from './models/AgentSession'
 export type * from './models/TerminalSession'
 export type * from './models/ClosedSession'

@@ -915,7 +915,7 @@ class RatchetService extends EventEmitter {
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
   ): boolean {
-    return workspace.ratchetLastCiRunId !== prStateInfo.snapshotKey;
+    return workspace.ratchetDispatchSnapshotKey !== prStateInfo.snapshotKey;
   }
 
   private async updateWorkspaceAfterCheck(

@@ -54,6 +54,7 @@ export const ModelName = {
   Project: 'Project',
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
+  WorkspaceRatchet: 'WorkspaceRatchet',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -156,13 +157,6 @@ export const WorkspaceScalarFieldEnum = {
   prCiLastNotifiedAt: 'prCiLastNotifiedAt',
   prReviewLastCheckedAt: 'prReviewLastCheckedAt',
   prReviewLastCommentId: 'prReviewLastCommentId',
-  ratchetEnabled: 'ratchetEnabled',
-  ratchetState: 'ratchetState',
-  ratchetLastCheckedAt: 'ratchetLastCheckedAt',
-  ratchetActiveSessionId: 'ratchetActiveSessionId',
-  ratchetLastCiRunId: 'ratchetLastCiRunId',
-  ratchetDispatchOutcome: 'ratchetDispatchOutcome',
-  ratchetDispatchRetryCount: 'ratchetDispatchRetryCount',
   mode: 'mode',
   autoIterationStatus: 'autoIterationStatus',
   autoIterationConfig: 'autoIterationConfig',
@@ -174,6 +168,20 @@ export const WorkspaceScalarFieldEnum = {
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspaceRatchetScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  enabled: 'enabled',
+  state: 'state',
+  lastCheckedAt: 'lastCheckedAt',
+  activeSessionId: 'activeSessionId',
+  dispatchSnapshotKey: 'dispatchSnapshotKey',
+  dispatchOutcome: 'dispatchOutcome',
+  dispatchRetryCount: 'dispatchRetryCount'
+} as const
+
+export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]
 
 
 export const AgentSessionScalarFieldEnum = {

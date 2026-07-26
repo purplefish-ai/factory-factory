@@ -105,14 +105,20 @@ async function createProjectFixture(overrides: Partial<Prisma.ProjectUncheckedCr
 
 async function createWorkspaceFixture(
   projectId: string,
-  overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> = {}
+  overrides: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
+    ratchet?: Prisma.WorkspaceRatchetCreateWithoutWorkspaceInput;
+  } = {}
 ) {
+  const { ratchet, ...workspaceOverrides } = overrides;
   return await prisma.workspace.create({
     data: {
       projectId,
       name: nextId('workspace'),
       status: WorkspaceStatus.NEW,
-      ...overrides,
+      ...workspaceOverrides,
+      // Mirrors workspaceAccessor.create: every workspace gets a ratchet row,
+      // so the row-guarded ratchet writes under test have one to guard.
+      ratchet: { create: ratchet ?? {} },
     },
   });
 }
@@ -260,21 +266,19 @@ describe('resource accessors integration', () => {
         prNumber: 1,
         prState: PRState.OPEN,
         prCiStatus: CIStatus.PENDING,
-        ratchetEnabled: true,
-        ratchetState: RatchetState.CI_RUNNING,
+        ratchet: { enabled: true, state: RatchetState.CI_RUNNING },
       });
 
       await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
         prUrl: 'https://github.com/acme/repo/pull/2',
-        ratchetEnabled: false,
+        ratchet: { enabled: false },
       });
 
       await createWorkspaceFixture(project.id, {
         status: WorkspaceStatus.READY,
         prUrl: 'https://github.com/acme/repo/pull/3',
-        ratchetEnabled: true,
-        ratchetState: RatchetState.MERGED,
+        ratchet: { enabled: true, state: RatchetState.MERGED },
       });
 
       const ratchetCandidates = await workspaceRatchetService.findCandidates();
@@ -335,7 +339,7 @@ describe('resource accessors integration', () => {
     it('settles ratchet session end only when session id matches', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
-        ratchetActiveSessionId: 'session-1',
+        ratchet: { activeSessionId: 'session-1' },
       });
 
       const mismatch = await workspaceRatchetService.recordSessionEnd(
@@ -366,9 +370,11 @@ describe('resource accessors integration', () => {
         prState: PRState.CHANGES_REQUESTED,
         prReviewState: 'CHANGES_REQUESTED',
         prCiStatus: CIStatus.FAILURE,
-        ratchetLastCiRunId: 'rich-dispatch-snapshot',
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: 3,
+        ratchet: {
+          dispatchSnapshotKey: 'rich-dispatch-snapshot',
+          dispatchOutcome: 'DIED',
+          dispatchRetryCount: 3,
+        },
       });
 
       const identical = await workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(
@@ -398,15 +404,14 @@ describe('resource accessors integration', () => {
       const reset = await findWorkspaceOrThrow(workspace.id);
       expect(reset.ratchetDispatchOutcome).toBeNull();
       expect(reset.ratchetDispatchRetryCount).toBe(0);
-      expect(reset.ratchetLastCiRunId).toBe('rich-dispatch-snapshot');
+      expect(reset.ratchetDispatchSnapshotKey).toBe('rich-dispatch-snapshot');
 
       const ciChangedWorkspace = await createWorkspaceFixture(project.id, {
         prNumber: 42,
         prState: PRState.OPEN,
         prReviewState: null,
         prCiStatus: CIStatus.PENDING,
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: 3,
+        ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
       });
       await expect(
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(ciChangedWorkspace.id, {
@@ -423,8 +428,7 @@ describe('resource accessors integration', () => {
         prState: PRState.OPEN,
         prReviewState: null,
         prCiStatus: CIStatus.FAILURE,
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: 3,
+        ratchet: { dispatchOutcome: 'DIED', dispatchRetryCount: 3 },
       });
       await expect(
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(reviewChangedWorkspace.id, {
@@ -441,8 +445,7 @@ describe('resource accessors integration', () => {
         prState: PRState.CHANGES_REQUESTED,
         prReviewState: 'CHANGES_REQUESTED',
         prCiStatus: CIStatus.FAILURE,
-        ratchetDispatchOutcome: 'RUNNING',
-        ratchetDispatchRetryCount: 1,
+        ratchet: { dispatchOutcome: 'RUNNING', dispatchRetryCount: 1 },
       });
       await expect(
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(runningWorkspace.id, {

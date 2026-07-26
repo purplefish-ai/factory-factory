@@ -15,6 +15,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace.accessor',
   },
+  workspaceRatchetAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-ratchet.accessor',
+  },
   workspaceNotificationAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-notification.accessor',

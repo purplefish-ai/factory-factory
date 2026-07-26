@@ -110,6 +110,10 @@ const exportedWorkspaceSchema = z.object({
   ratchetState: RatchetState,
   ratchetLastCheckedAt: z.string().nullable(),
   ratchetActiveSessionId: z.string().nullable(),
+  // Carries what the database now calls `WorkspaceRatchet.dispatchSnapshotKey`.
+  // The export name is deliberately left alone: it is required at
+  // `schemaVersion: 4` with no migration path, so renaming it would make every
+  // backup file already on disk fail validation.
   ratchetLastCiRunId: z.string().nullable(),
   hasHadSessions: z.boolean(),
   createdAt: z.string(),

@@ -212,12 +212,18 @@ async function importWorkspaces(
         // Phase 3+ PR review tracking fields
         prReviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
         prReviewLastCommentId: workspace.prReviewLastCommentId,
-        // Phase 3+ ratchet fields
-        ratchetEnabled: workspace.ratchetEnabled,
-        ratchetState: workspace.ratchetState,
-        ratchetLastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
-        ratchetActiveSessionId: workspace.ratchetActiveSessionId,
-        ratchetLastCiRunId: workspace.ratchetLastCiRunId,
+        // Phase 3+ ratchet fields, restored into the WorkspaceRatchet row this
+        // create brings with it. A workspace without one would be invisible to
+        // the ratchet's row-guarded writes.
+        ratchet: {
+          create: {
+            enabled: workspace.ratchetEnabled,
+            state: workspace.ratchetState,
+            lastCheckedAt: parseDate(workspace.ratchetLastCheckedAt),
+            activeSessionId: workspace.ratchetActiveSessionId,
+            dispatchSnapshotKey: workspace.ratchetLastCiRunId,
+          },
+        },
         hasHadSessions: workspace.hasHadSessions,
         createdAt: new Date(workspace.createdAt),
         updatedAt: new Date(workspace.updatedAt),
@@ -441,12 +447,14 @@ class DataBackupService {
           // Phase 3+ PR review tracking fields
           prReviewLastCheckedAt: toISOString(w.prReviewLastCheckedAt),
           prReviewLastCommentId: w.prReviewLastCommentId,
-          // Phase 3+ ratchet tracking fields
-          ratchetEnabled: w.ratchetEnabled,
-          ratchetState: w.ratchetState,
-          ratchetLastCheckedAt: toISOString(w.ratchetLastCheckedAt),
-          ratchetActiveSessionId: w.ratchetActiveSessionId,
-          ratchetLastCiRunId: w.ratchetLastCiRunId,
+          // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
+          // the v4 export format carries them as workspace fields, and
+          // `ratchetLastCiRunId` keeps the name it has in files already on disk.
+          ratchetEnabled: w.ratchet?.enabled ?? true,
+          ratchetState: w.ratchet?.state ?? 'IDLE',
+          ratchetLastCheckedAt: toISOString(w.ratchet?.lastCheckedAt ?? null),
+          ratchetActiveSessionId: w.ratchet?.activeSessionId ?? null,
+          ratchetLastCiRunId: w.ratchet?.dispatchSnapshotKey ?? null,
           hasHadSessions: w.hasHadSessions,
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),

@@ -102,29 +102,9 @@ const workspaceFieldOwners = {
     'src/backend/services/workspace/service/query/workspace-query.service.ts',
   ]),
 
-  ratchetEnabled: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetState: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetLastCheckedAt: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetActiveSessionId: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetLastCiRunId: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetDispatchOutcome: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
-  ratchetDispatchRetryCount: new Set([
-    'src/backend/services/workspace/service/lifecycle/workspace-pr-snapshot.service.ts',
-    'src/backend/services/workspace/service/lifecycle/workspace-ratchet.service.ts',
-  ]),
+  // The ratchet's seven fields are absent here on purpose. They live on
+  // WorkspaceRatchet, written only by workspace-ratchet.accessor.ts, so the type
+  // system enforces what this table used to have to.
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
@@ -275,10 +255,6 @@ const workspaceMutationRules = {
     ],
   },
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
-  recordRatchetSessionEnd: {
-    type: 'static',
-    fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
-  },
   applyPrAggregateUpdateWithDispatchReset: {
     type: 'static',
     fields: [
@@ -290,30 +266,7 @@ const workspaceMutationRules = {
       'prUpdatedAt',
       'prCiFailedAt',
       'branchName',
-      'ratchetDispatchOutcome',
-      'ratchetDispatchRetryCount',
     ],
-  },
-  recordRatchetDispatchIfEnabled: {
-    type: 'static',
-    fields: [
-      'ratchetActiveSessionId',
-      'ratchetLastCiRunId',
-      'ratchetDispatchOutcome',
-      'ratchetDispatchRetryCount',
-    ],
-  },
-  adoptRatchetActiveSessionIfEnabled: {
-    type: 'static',
-    fields: ['ratchetActiveSessionId', 'ratchetDispatchOutcome'],
-  },
-  transitionRatchetStateIfEnabled: {
-    type: 'static',
-    fields: ['ratchetState', 'ratchetLastCheckedAt'],
-  },
-  settleRatchetIdleWhileDisabled: {
-    type: 'static',
-    fields: ['ratchetState', 'ratchetLastCheckedAt'],
   },
   appendInitOutput: { type: 'static', fields: ['initOutput'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },

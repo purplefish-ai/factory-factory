@@ -114,9 +114,9 @@ itself does not force `WAITING`. After a fixer exits cleanly, Ratchet continues 
 CI state but suppresses another fixer dispatch while the dispatch snapshot is unchanged. A later
 PR identity, state, CI-status, or review-decision aggregate change clears settled dispatch
 ownership immediately, returning an exhausted workspace to normal automation ownership before
-the next Ratchet poll. Identical periodic refreshes do not clear exhaustion. The richer
-`ratchetLastCiRunId` snapshot key remains intact so Ratchet still decides whether the changed
-aggregate actually warrants another fixer.
+the next Ratchet poll. Identical periodic refreshes do not clear exhaustion. The dispatch
+snapshot key itself stays intact, so Ratchet still decides whether the changed aggregate actually
+warrants another fixer.
 
 Archiving and archived workspaces derive a `null` column, which keeps them off the active board.
 The column is never persisted: `computeKanbanColumn` runs on every read, so the board, the
@@ -127,6 +127,28 @@ workspace in a project with its derived state, and the board and the sidebar sel
 render from that single list — the board dropping rows whose column is `null`. Column-wide
 actions use `findWorkspaceIdsInKanbanColumn`, which derives the column rather than filtering in
 SQL, because live session state is not in the database.
+
+## Where Ratchet State Lives
+
+The ratchet's own state is a 1:1 `WorkspaceRatchet` row rather than seven columns on `Workspace`:
+`enabled`, `state`, `lastCheckedAt`, `activeSessionId`, `dispatchSnapshotKey`, `dispatchOutcome`,
+`dispatchRetryCount`. `workspace-ratchet.accessor.ts` is the only writer.
+
+The split is what makes single-writer ownership structural instead of a lint rule. It also keeps
+`enabled` and `state` next to the dispatch record, because every conditional ratchet write guards
+on one of them in the same statement it writes — the compare-and-swap that stops a disabled
+workspace being handed a fixer, and the one that stops a stale check overwriting a concurrent
+transition.
+
+Reads flatten the row back onto the workspace under the old `ratchet*` names, so derived state,
+the snapshot stream and the client see the shape they always did. `dispatchSnapshotKey` is the one
+rename: on `Workspace` it was `ratchetLastCiRunId`, whose schema comment described it as a
+misnomer kept to avoid a migration. It holds the full dispatch snapshot key — PR number, CI
+signature, review activity, merge conflict — not a CI run id.
+
+A row is created with every workspace, so no workspace can exist that the row-guarded writes would
+silently skip. The backup format still carries the fields flat, under the old names, because it is
+required at `schemaVersion: 4` with no migration path.
 
 ## Cached and Live State Propagation
 
