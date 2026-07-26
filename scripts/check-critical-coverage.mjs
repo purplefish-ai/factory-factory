@@ -90,7 +90,7 @@ const perFileThresholds = [
   { file: 'src/backend/trpc/decision-log.trpc.ts', threshold: 95 },
   { file: 'src/backend/services/workspace/service/worktree/git-ops.service.ts', threshold: 90 },
   { file: 'src/backend/services/rate-limiter.service.ts', threshold: 90 },
-  { file: 'src/backend/interceptors/branch-rename.interceptor.ts', threshold: 95 },
+  { file: 'src/backend/interceptors/branch-naming.interceptor.ts', threshold: 95 },
 ];
 
 function getEntry(filePath) {

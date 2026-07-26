@@ -1,14 +1,14 @@
 /**
  * Shared auto-generated branch rename routine.
  *
- * Two interceptors rename a workspace's auto-generated branch to a meaningful
- * one at the last safe moment before it becomes visible to anyone else:
- * `pre-pr-rename` on `gh pr create`, and `pre-push-rename` on `git push`.
+ * The branch-naming interceptor renames a workspace's auto-generated branch
+ * to a meaningful one at the last safe moment before it becomes visible to
+ * anyone else: on `gh pr create` or `git push`.
  *
  * The rename itself is identical in both — the once-per-workspace guard, the
  * `git branch -m`, persisting the new name, and unwinding the guard on every
  * failure path so a later attempt can retry. That logic lives here so it has
- * one definition; each interceptor supplies only its trigger and its own
+ * one definition; the interceptor supplies the trigger-specific labels and
  * follow-up work.
  */
 
