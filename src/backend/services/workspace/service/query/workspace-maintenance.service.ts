@@ -1,4 +1,5 @@
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 
 class WorkspaceMaintenanceService {
   findNeedingWorktree() {
@@ -10,18 +11,18 @@ class WorkspaceMaintenanceService {
   }
 
   findNeedingPRSync(staleThresholdMinutes?: number) {
-    return workspaceAccessor.findNeedingPRSync(staleThresholdMinutes);
+    return workspacePrAccessor.findNeedingSync(staleThresholdMinutes);
   }
 
   findNeedingPRDiscovery(limit: number, dueAt = new Date()) {
-    return workspaceAccessor.findNeedingPRDiscovery(limit, dueAt);
+    return workspacePrAccessor.findNeedingDiscovery(limit, dueAt);
   }
 
   claimPRDiscoveryAttempt(
     id: string,
-    attempt: Parameters<typeof workspaceAccessor.claimPRDiscoveryAttempt>[1]
+    attempt: Parameters<typeof workspacePrAccessor.claimDiscoveryAttempt>[1]
   ) {
-    return workspaceAccessor.claimPRDiscoveryAttempt(id, attempt);
+    return workspacePrAccessor.claimDiscoveryAttempt(id, attempt);
   }
 
   findActiveWithSessionsAndProject() {

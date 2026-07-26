@@ -33,8 +33,13 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
     findByProjectIdWithSessions: (...args: unknown[]) => mockFindByProjectIdWithSessions(...args),
     findById: (...args: unknown[]) => mockFindById(...args),
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
-    resetPRDiscoveryBackoff: (...args: unknown[]) => mockResetPRDiscoveryBackoff(...args),
     update: (...args: unknown[]) => mockWorkspaceUpdate(...args),
+  },
+}));
+
+vi.mock('@/backend/services/workspace/resources/workspace-pr.accessor', () => ({
+  workspacePrAccessor: {
+    resetDiscoveryBackoff: (...args: unknown[]) => mockResetPRDiscoveryBackoff(...args),
   },
 }));
 

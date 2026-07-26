@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindNeedingPRDiscovery = vi.fn();
 const mockClaimPRDiscoveryAttempt = vi.fn();
 
-vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
-  workspaceAccessor: {
-    findNeedingPRDiscovery: (...args: unknown[]) => mockFindNeedingPRDiscovery(...args),
-    claimPRDiscoveryAttempt: (...args: unknown[]) => mockClaimPRDiscoveryAttempt(...args),
+vi.mock('@/backend/services/workspace/resources/workspace-pr.accessor', () => ({
+  workspacePrAccessor: {
+    findNeedingDiscovery: (...args: unknown[]) => mockFindNeedingPRDiscovery(...args),
+    claimDiscoveryAttempt: (...args: unknown[]) => mockClaimPRDiscoveryAttempt(...args),
   },
+}));
+
+vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
+  workspaceAccessor: {},
 }));
 
 import { workspaceMaintenanceService } from './workspace-maintenance.service';

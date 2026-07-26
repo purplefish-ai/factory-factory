@@ -128,6 +128,36 @@ render from that single list — the board dropping rows whose column is `null`.
 actions use `findWorkspaceIdsInKanbanColumn`, which derives the column rather than filtering in
 SQL, because live session state is not in the database.
 
+## Where the PR Cache Lives
+
+Everything the app knows about a workspace's pull request is a 1:1 `WorkspacePR` row rather than
+thirteen columns on `Workspace`: `url`, `number`, `state`, `reviewState`, `ciStatus`, `syncedAt`,
+the three `discovery*` scheduling fields, `ciFailedAt`, `ciLastNotifiedAt`, and the two
+`reviewLast*` cursor fields. `workspace-pr.accessor.ts` is the only writer.
+
+The split says something the old layout hid: this is a cache, not a source of truth. Every field is
+a copy of GitHub state or a cursor into it, and losing the whole row costs one refresh. Sitting
+beside the workspace's own durable identity, that was invisible.
+
+A row is created with every workspace, including workspaces with no PR, because PR discovery claims
+its backoff on this row before any PR exists.
+
+Reads flatten the row back onto the workspace under the old `pr*` names, so derived state, the
+snapshot stream, the v4 backup format and the client see the shape they always did. `syncedAt` is
+the one rename: on `Workspace` it was `prUpdatedAt`, which read as GitHub's PR `updated_at` but
+always held the caller's own observation time.
+
+Two consequences worth knowing:
+
+- **Discovery polling no longer counts as workspace activity.** Claiming a discovery attempt used
+  to write a `Workspace` column, which bumped `updatedAt` and floated PR-less workspaces to the top
+  of any `updatedAt`-ordered list on every poll. The claim now writes only its own row. The
+  compare-and-swap is unaffected — the retry count still moves — and the guards on `status`,
+  `branchName` and `updatedAt` are relation filters.
+- **Three composite indexes are gone.** `[status, prUrl]`, `[status, prUrl, prDiscoveryNextCheckAt]`
+  and `[status, prUpdatedAt]` cannot span two tables. The PR-sync and PR-discovery queries are now
+  joins, filtering `status` on `Workspace` and the rest against indexes on `WorkspacePR`.
+
 ## Where Ratchet State Lives
 
 The ratchet's own state is a 1:1 `WorkspaceRatchet` row rather than seven columns on `Workspace`:

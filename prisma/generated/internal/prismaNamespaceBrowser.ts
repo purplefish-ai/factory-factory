@@ -54,6 +54,7 @@ export const ModelName = {
   Project: 'Project',
   DecisionLog: 'DecisionLog',
   Workspace: 'Workspace',
+  WorkspacePR: 'WorkspacePR',
   WorkspaceRatchet: 'WorkspaceRatchet',
   AgentSession: 'AgentSession',
   TerminalSession: 'TerminalSession',
@@ -135,7 +136,6 @@ export const WorkspaceScalarFieldEnum = {
   runScriptPort: 'runScriptPort',
   runScriptStartedAt: 'runScriptStartedAt',
   runScriptStatus: 'runScriptStatus',
-  prUrl: 'prUrl',
   githubIssueNumber: 'githubIssueNumber',
   githubIssueUrl: 'githubIssueUrl',
   linearIssueId: 'linearIssueId',
@@ -145,18 +145,6 @@ export const WorkspaceScalarFieldEnum = {
   ratchetSessionProvider: 'ratchetSessionProvider',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  prNumber: 'prNumber',
-  prState: 'prState',
-  prReviewState: 'prReviewState',
-  prCiStatus: 'prCiStatus',
-  prUpdatedAt: 'prUpdatedAt',
-  prDiscoveryLastCheckedAt: 'prDiscoveryLastCheckedAt',
-  prDiscoveryRetryCount: 'prDiscoveryRetryCount',
-  prDiscoveryNextCheckAt: 'prDiscoveryNextCheckAt',
-  prCiFailedAt: 'prCiFailedAt',
-  prCiLastNotifiedAt: 'prCiLastNotifiedAt',
-  prReviewLastCheckedAt: 'prReviewLastCheckedAt',
-  prReviewLastCommentId: 'prReviewLastCommentId',
   mode: 'mode',
   autoIterationStatus: 'autoIterationStatus',
   autoIterationConfig: 'autoIterationConfig',
@@ -168,6 +156,26 @@ export const WorkspaceScalarFieldEnum = {
 } as const
 
 export type WorkspaceScalarFieldEnum = (typeof WorkspaceScalarFieldEnum)[keyof typeof WorkspaceScalarFieldEnum]
+
+
+export const WorkspacePRScalarFieldEnum = {
+  workspaceId: 'workspaceId',
+  url: 'url',
+  number: 'number',
+  state: 'state',
+  reviewState: 'reviewState',
+  ciStatus: 'ciStatus',
+  syncedAt: 'syncedAt',
+  discoveryLastCheckedAt: 'discoveryLastCheckedAt',
+  discoveryRetryCount: 'discoveryRetryCount',
+  discoveryNextCheckAt: 'discoveryNextCheckAt',
+  ciFailedAt: 'ciFailedAt',
+  ciLastNotifiedAt: 'ciLastNotifiedAt',
+  reviewLastCheckedAt: 'reviewLastCheckedAt',
+  reviewLastCommentId: 'reviewLastCommentId'
+} as const
+
+export type WorkspacePRScalarFieldEnum = (typeof WorkspacePRScalarFieldEnum)[keyof typeof WorkspacePRScalarFieldEnum]
 
 
 export const WorkspaceRatchetScalarFieldEnum = {

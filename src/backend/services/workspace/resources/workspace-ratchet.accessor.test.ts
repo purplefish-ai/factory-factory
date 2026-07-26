@@ -86,8 +86,7 @@ describe('workspaceRatchetAccessor', () => {
         expect.objectContaining({
           where: {
             status: 'READY',
-            prUrl: { not: null },
-            prState: { not: 'CLOSED' },
+            pr: { url: { not: null }, state: { not: 'CLOSED' } },
             ratchet: { enabled: true, state: { not: 'MERGED' } },
           },
           orderBy: { ratchet: { lastCheckedAt: 'asc' } },
@@ -95,18 +94,20 @@ describe('workspaceRatchetAccessor', () => {
       );
     });
 
-    it('flattens the joined ratchet onto each candidate', async () => {
+    it('flattens the joined ratchet and PR rows onto each candidate', async () => {
       mockWorkspaceFindMany.mockResolvedValue([
         {
           id: 'ws-1',
-          prUrl: 'https://github.com/org/repo/pull/1',
-          prNumber: 1,
-          prState: 'OPEN',
-          prCiStatus: 'FAILURE',
           defaultSessionProvider: 'WORKSPACE_DEFAULT',
           ratchetSessionProvider: 'WORKSPACE_DEFAULT',
-          prReviewLastCheckedAt: null,
           ratchet: ratchetRow(),
+          pr: {
+            url: 'https://github.com/org/repo/pull/1',
+            number: 1,
+            state: 'OPEN',
+            ciStatus: 'FAILURE',
+            reviewLastCheckedAt: null,
+          },
         },
       ]);
 
@@ -114,11 +115,30 @@ describe('workspaceRatchetAccessor', () => {
 
       expect(candidate).toMatchObject({
         id: 'ws-1',
+        prUrl: 'https://github.com/org/repo/pull/1',
+        prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
         ratchetState: 'CI_RUNNING',
         ratchetDispatchSnapshotKey: 'snapshot-1',
         ratchetDispatchRetryCount: 2,
       });
       expect(candidate).not.toHaveProperty('ratchet');
+      expect(candidate).not.toHaveProperty('pr');
+    });
+
+    it('drops a candidate whose PR row carries no URL', async () => {
+      mockWorkspaceFindMany.mockResolvedValue([
+        {
+          id: 'ws-1',
+          defaultSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchet: ratchetRow(),
+          pr: null,
+        },
+      ]);
+
+      await expect(workspaceRatchetAccessor.findWithPRsForRatchet()).resolves.toEqual([]);
     });
 
     it('finds one candidate by id with READY and PR filters', async () => {
@@ -128,7 +148,7 @@ describe('workspaceRatchetAccessor', () => {
 
       expect(mockWorkspaceFindFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'ws-1', status: 'READY', prUrl: { not: null } },
+          where: { id: 'ws-1', status: 'READY', pr: { url: { not: null } } },
         })
       );
     });

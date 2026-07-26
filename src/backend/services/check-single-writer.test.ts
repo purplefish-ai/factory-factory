@@ -87,6 +87,9 @@ describe('check-single-writer', () => {
     expect(result.output).toContain('unauthorized write of workspace field "hasHadSessions"');
   });
 
+  // The PR aggregate mutators now write one Workspace column -- the branch name a
+  // refresh may correct. The rest of what they carry lands on WorkspacePR, which
+  // this checker does not police because nothing else can name those columns.
   it('checks ownership through public PR aggregate dispatch-reset mutators', () => {
     const tempRoot = createTempBackend([
       {
@@ -95,14 +98,8 @@ describe('check-single-writer', () => {
           async function writeSnapshots(workspaceAccessor) {
             await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
               prNumber: 1,
-              prState: 'OPEN',
-              prReviewState: null,
-              prCiStatus: 'SUCCESS',
               prUpdatedAt: new Date(),
-            });
-            await workspaceAccessor.applyCIObservationWithDispatchReset('ws', {
-              prCiStatus: 'FAILURE',
-              prUpdatedAt: new Date(),
+              branchName: 'feature/actual-head',
             });
           }
         `,
@@ -112,7 +109,7 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain('unauthorized write of workspace field "prState"');
+    expect(result.output).toContain('unauthorized write of workspace field "branchName"');
   });
 
   it('allows workspace PR snapshot capability dispatch-reset writes', () => {
@@ -124,10 +121,8 @@ describe('check-single-writer', () => {
           async function writeSnapshots(workspaceAccessor) {
             await workspaceAccessor.applyPrSnapshotWithDispatchReset('ws', {
               prNumber: 1,
-              prState: 'OPEN',
-              prReviewState: null,
-              prCiStatus: 'SUCCESS',
               prUpdatedAt: new Date(),
+              branchName: 'feature/actual-head',
             });
           }
         `,
@@ -137,6 +132,203 @@ describe('check-single-writer', () => {
     const result = runChecker(tempRoot);
 
     expect(result.status).toBe(0);
+  });
+
+  describe('owned side tables', () => {
+    // These tables were split off Workspace, so the field-ownership table cannot
+    // police them. dep-cruiser lets any file under services/*/resources/ import
+    // prisma, so without this rule a second accessor could write them freely.
+    it('rejects a WorkspacePR write from another accessor in the same directory', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function sneak(id) {
+              await prisma.workspacePR.updateMany({ where: { workspaceId: id }, data: { state: 'MERGED' } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
+    });
+
+    it('rejects a WorkspaceRatchet write from outside its accessor', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/ratchet/resources/ratchet.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function disable(id) {
+              await prisma.workspaceRatchet.update({ where: { workspaceId: id }, data: { enabled: false } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspaceRatchet via update()');
+    });
+
+    it('allows the owning accessor its own writes', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function write(id) {
+              await prisma.workspacePR.updateMany({ where: { workspaceId: id }, data: { state: 'MERGED' } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('allows any file to read a side table', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function read(id) {
+              return await prisma.workspacePR.findUnique({ where: { workspaceId: id } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('rejects a nested update of the pr relation', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function sneak(id) {
+              await prisma.workspace.update({ where: { id }, data: { pr: { update: { state: 'MERGED' } } } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized nested update of the workspacePR relation');
+    });
+
+    it('rejects a nested upsert of the ratchet relation', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/some.orchestrator.ts',
+          content: `
+            async function sneak(tx, id) {
+              await tx.workspace.update({ where: { id }, data: { ratchet: { upsert: { create: {}, update: {} } } } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'unauthorized nested upsert of the workspaceRatchet relation'
+      );
+    });
+
+    // Both rows are created with their workspace and have to be, or the
+    // row-guarded writes would skip it. Restoring a backup creates them the same
+    // way, before any accessor could reach the rows.
+    it('allows nested creation of both rows alongside a workspace', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function restore(tx, projectId) {
+              await tx.workspace.create({
+                data: { projectId, name: 'x', pr: { create: { url: null } }, ratchet: { create: { enabled: true } } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    // `pr: { url: null }` under `where:` is a relation filter, not a write. The
+    // PR accessor's own compare-and-swaps depend on those.
+    it('allows relation filters that name a side table in a where clause', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function read(id) {
+              return await prisma.workspace.findMany({
+                where: { id, pr: { url: null }, ratchet: { enabled: true } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('allows writes through a transaction client in the owning accessor', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
+          content: `
+            async function write(transaction, id) {
+              await transaction.workspacePR.updateMany({ where: { workspaceId: id }, data: {} });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('rejects writes through a transaction client elsewhere', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace.accessor.ts',
+          content: `
+            async function write(transaction, id) {
+              await transaction.workspacePR.updateMany({ where: { workspaceId: id }, data: {} });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
+    });
   });
 
   it('allows the run-script capability its own compare-and-swap writes', () => {

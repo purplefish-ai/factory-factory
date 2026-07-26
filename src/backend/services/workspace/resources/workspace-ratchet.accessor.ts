@@ -1,5 +1,6 @@
 import type { Prisma, RatchetDispatchOutcome, WorkspaceRatchet } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import { flattenWorkspacePR } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 
 /**
@@ -90,14 +91,10 @@ export interface WorkspaceForRatchet extends WorkspaceRatchetFields {
 
 const ratchetCandidateSelect = {
   id: true,
-  prUrl: true,
-  prNumber: true,
-  prState: true,
-  prCiStatus: true,
   defaultSessionProvider: true,
   ratchetSessionProvider: true,
-  prReviewLastCheckedAt: true,
   ratchet: true,
+  pr: true,
 } satisfies Prisma.WorkspaceSelect;
 
 type RatchetCandidateRow = Prisma.WorkspaceGetPayload<{ select: typeof ratchetCandidateSelect }>;
@@ -105,19 +102,24 @@ type RatchetCandidateRow = Prisma.WorkspaceGetPayload<{ select: typeof ratchetCa
 /**
  * Flatten a candidate row, dropping one with no PR URL.
  *
- * Every query feeding this filters on `prUrl: { not: null }`, so the null branch
- * is unreachable; it is here because that guarantee lives in the where-clause
- * rather than the type, and dropping the row is the honest way to narrow it.
- * (The previous version asserted the whole array's type with a cast instead.)
+ * Every query feeding this filters on `pr: { url: { not: null } }`, so the null
+ * branch is unreachable; it is here because that guarantee lives in the
+ * where-clause rather than the type, and dropping the row is the honest way to
+ * narrow it. (The previous version asserted the whole array's type with a cast.)
  */
 function toWorkspaceForRatchet(row: RatchetCandidateRow): WorkspaceForRatchet | null {
-  const { ratchet, prUrl, ...workspace } = row;
+  const { ratchet, pr, ...workspace } = row;
+  const { prUrl, prNumber, prState, prCiStatus, prReviewLastCheckedAt } = flattenWorkspacePR(pr);
   if (prUrl === null) {
     return null;
   }
   return {
     ...workspace,
     prUrl,
+    prNumber,
+    prState,
+    prCiStatus,
+    prReviewLastCheckedAt,
     ...flattenWorkspaceRatchet(ratchet),
   };
 }
@@ -134,8 +136,7 @@ class WorkspaceRatchetAccessor {
     const rows = await prisma.workspace.findMany({
       where: {
         status: 'READY',
-        prUrl: { not: null },
-        prState: { not: 'CLOSED' },
+        pr: { url: { not: null }, state: { not: 'CLOSED' } },
         ratchet: { enabled: true, state: { not: 'MERGED' } },
       },
       select: ratchetCandidateSelect,
@@ -183,7 +184,7 @@ class WorkspaceRatchetAccessor {
   /** A single READY workspace with a PR, for ratchet processing. */
   async findForRatchetById(id: string): Promise<WorkspaceForRatchet | null> {
     const row = await prisma.workspace.findFirst({
-      where: { id, status: 'READY', prUrl: { not: null } },
+      where: { id, status: 'READY', pr: { url: { not: null } } },
       select: ratchetCandidateSelect,
     });
     return row ? toWorkspaceForRatchet(row) : null;
