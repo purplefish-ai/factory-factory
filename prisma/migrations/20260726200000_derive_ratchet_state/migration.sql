@@ -61,6 +61,27 @@ WHERE "workspaceId" IN (
     SELECT "workspaceId" FROM "WorkspaceRatchet" WHERE "state" = 'MERGE_CONFLICT'
 );
 
+-- The under-reported rows are handed to the ratchet first instead of guessed at.
+--
+-- CI_FAILED is the only state that could have masked a conflict, so an open PR in
+-- it migrates with an unestablished flag. Left alone, the flag would be correct
+-- once the ratchet re-observed the PR -- but the PR-sync poller writes `ciStatus`
+-- without touching `hasMergeConflict`, so if it saw green CI first the derivation
+-- would report READY for a PR GitHub still calls DIRTY, until the next ratchet
+-- check came round.
+--
+-- Nulling `lastCheckedAt` puts these rows at the front of the ratchet poll, which
+-- orders by it ascending and sorts NULLs first. That establishes the flag from a
+-- live observation on the first cycle after the migration, without this migration
+-- having to guess at a value it cannot know.
+UPDATE "WorkspaceRatchet"
+SET "lastCheckedAt" = NULL
+WHERE "state" = 'CI_FAILED'
+  AND "workspaceId" IN (
+    SELECT "workspaceId" FROM "WorkspacePR"
+    WHERE "state" IN ('OPEN', 'DRAFT', 'CHANGES_REQUESTED', 'APPROVED')
+);
+
 CREATE TABLE "new_WorkspaceRatchet" (
     "workspaceId" TEXT NOT NULL PRIMARY KEY,
     "enabled" BOOLEAN NOT NULL DEFAULT true,

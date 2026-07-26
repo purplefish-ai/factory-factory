@@ -193,10 +193,17 @@ The migration backfills it from `state = 'MERGE_CONFLICT'`, which under-reports:
 outranked a conflict in the derivation, so a PR with both was stored as `CI_FAILED` and migrates as
 clean. That is accepted rather than patched. The dispatch snapshot key carries a conflict too
 (`|merge:conflict`) but it records whenever the last fixer was dispatched, not the last observation,
-so it cannot distinguish a live conflict from one resolved after its dispatch. Under-reporting costs
-nothing observable — while CI is failing the derivation returns `CI_FAILED` and never reads the flag,
-and the first ratchet check after CI turns green writes the true flag in the same statement that
-turns it green. Over-reporting would be visible.
+so it cannot distinguish a live conflict from one resolved after its dispatch. While CI is failing the derivation returns
+`CI_FAILED` and never reads the flag, and a ratchet check that turns CI green writes the true flag in
+the same statement — but the PR-sync poller writes `ciStatus` without touching `hasMergeConflict`, so
+if it observed green first the derivation would report `READY` for a PR GitHub still calls `DIRTY`.
+
+So the migration nulls `lastCheckedAt` on exactly those rows — open PRs whose ratchet state was
+`CI_FAILED`, the only state that could mask a conflict. The ratchet poll orders by `lastCheckedAt`
+ascending and SQLite sorts NULLs first, so they are re-observed on the first cycle after the
+migration and the flag is established from a live fetch rather than guessed at. Over-reporting would
+be visible — a spurious conflict badge, and a conflict fixer dispatched against a clean PR — which is
+why no value is inferred.
 
 **The ratchet check persists the whole observation, not just CI.** This is the part that makes the
 projection sound: `ratchetState` is read from the cache, so anything a check saw and kept to itself
