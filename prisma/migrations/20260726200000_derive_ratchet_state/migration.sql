@@ -34,13 +34,28 @@ DROP TABLE "WorkspacePR";
 ALTER TABLE "new_WorkspacePR" RENAME TO "WorkspacePR";
 CREATE INDEX "WorkspacePR_url_discoveryNextCheckAt_idx" ON "WorkspacePR"("url", "discoveryNextCheckAt");
 CREATE INDEX "WorkspacePR_syncedAt_idx" ON "WorkspacePR"("syncedAt");
--- Backfill: recover the conflict flag from the state that encoded it. Runs after
--- WorkspacePR has been rebuilt with the new column and before WorkspaceRatchet
--- loses `state`.
+-- Backfill: recover the conflict flag from the two places that encoded it. Runs
+-- after WorkspacePR has been rebuilt with the new column and before
+-- WorkspaceRatchet loses `state`.
+--
+-- `state` alone under-reports, because a failing build outranked a conflict in
+-- the derivation: a PR with both was stored as CI_FAILED. The dispatch snapshot
+-- key records the conflict independently (`|merge:conflict`), so it recovers the
+-- masked cases. It is only consulted for PRs that are still open, where the flag
+-- is actually read -- a closed or merged PR short-circuits before the projection
+-- looks at it, and its dispatch key is the stalest.
 UPDATE "WorkspacePR"
 SET "hasMergeConflict" = true
 WHERE "workspaceId" IN (
     SELECT "workspaceId" FROM "WorkspaceRatchet" WHERE "state" = 'MERGE_CONFLICT'
+);
+
+UPDATE "WorkspacePR"
+SET "hasMergeConflict" = true
+WHERE "state" IN ('OPEN', 'DRAFT', 'CHANGES_REQUESTED', 'APPROVED')
+  AND "workspaceId" IN (
+    SELECT "workspaceId" FROM "WorkspaceRatchet"
+    WHERE "dispatchSnapshotKey" LIKE '%|merge:conflict'
 );
 
 CREATE TABLE "new_WorkspaceRatchet" (

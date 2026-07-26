@@ -6,6 +6,7 @@
 
 import type {
   CIStatus,
+  PRState,
   SessionProvider,
   SessionStatus,
   WorkspaceProviderSelection,
@@ -74,6 +75,8 @@ export interface RatchetPRFullDetails {
   state: string;
   number: number;
   url: string;
+  /** Needed to fold the observation into the cache's enriched `PRState`. */
+  isDraft: boolean;
   reviewDecision: string | null;
   mergeStateStatus?: string;
   reviews: Array<{
@@ -127,15 +130,21 @@ export interface RatchetPRStateSnapshot {
 
 /** PR snapshot capabilities needed by ratchet domain services */
 export interface RatchetPRSnapshotBridge {
-  recordCIObservation(input: {
+  /**
+   * Persist what a ratchet check observed about the PR.
+   *
+   * Every field here is an input to `deriveRatchetState`, which is why this
+   * carries the PR and review state and not just CI: the projection reads the
+   * cache, so an observation the check keeps to itself is an observation the rest
+   * of the app never sees.
+   */
+  recordPrObservation(input: {
     workspaceId: string;
     ciStatus: CIStatus;
-    /**
-     * GitHub's `mergeStateStatus == DIRTY`. Travels with CI because the ratchet's
-     * PR fetch is the only place either is observed, and `deriveRatchetState`
-     * needs both.
-     */
-    hasMergeConflict?: boolean;
+    prState: PRState;
+    reviewState: string | null;
+    /** GitHub's `mergeStateStatus == DIRTY`. */
+    hasMergeConflict: boolean;
     failedAt?: Date | null;
     observedAt?: Date;
   }): Promise<void>;
@@ -164,6 +173,16 @@ export interface RatchetGitHubBridge {
     signal?: AbortSignal
   ): Promise<Set<number>>;
   computeCIStatus(statusChecks: RatchetStatusCheckInput[] | null): CIStatus;
+  /**
+   * Fold a raw observation into the enriched `PRState` the cache stores. Same
+   * mapper the PR-sync poller uses, so the two writers cannot disagree about
+   * what `DRAFT` or `APPROVED` means.
+   */
+  computePRState(input: {
+    state: string;
+    isDraft: boolean;
+    reviewDecision: string | null;
+  }): PRState;
   getAuthenticatedUsername(signal?: AbortSignal): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
   /** True when another service has an in-flight or recent PR fetch for this workspace. */

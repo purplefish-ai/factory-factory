@@ -486,6 +486,14 @@ export async function fetchPRState(params: {
 
     const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
     const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
+    const reviewDecision = prDetails.reviewDecision ?? null;
+    // The same observation in the cache's vocabulary, computed by the github
+    // capsule's mapper so this writer and the PR-sync poller agree on it.
+    const cachedPrState = github.computePRState({
+      state: prDetails.state,
+      isDraft: prDetails.isDraft,
+      reviewDecision,
+    });
     // Review activity (and thus the dispatch snapshot key) is computed over ALL
     // review comments, resolved or not. Resolving a thread does not touch the
     // comments' timestamps, so this keeps the snapshot key stable when threads
@@ -550,6 +558,8 @@ export async function fetchPRState(params: {
       latestReviewActivityAtMs,
       statusCheckRollup: reducedStatusCheckRollup,
       prState: prDetails.state,
+      cachedPrState,
+      reviewDecision,
       prNumber: prDetails.number,
       reviewComments: [...filteredReviewComments, ...reviewSummaries],
     };

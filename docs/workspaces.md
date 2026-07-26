@@ -187,9 +187,24 @@ What that replaced:
 **One column was added, not just removed.** `WorkspacePR.hasMergeConflict` (GitHub's
 `mergeStateStatus == DIRTY`) was observed on every ratchet fetch but never persisted: the ratchet
 folded it into `RatchetState.MERGE_CONFLICT` and stored that. So the trade is one derived enum
-column for one observed boolean, and the migration backfills the boolean from the enum because that
-value was the only record a conflict had. The ratchet's CI observation carries the flag, since its
-fetch is the only place either is seen.
+column for one observed boolean.
+
+The migration backfills it from two places. `state = 'MERGE_CONFLICT'` is the obvious one but it
+under-reports, because a failing build outranked a conflict in the derivation — a PR with both was
+stored as `CI_FAILED`. The dispatch snapshot key records the conflict independently
+(`|merge:conflict`), so it recovers the masked cases; it is consulted only for PRs still open, where
+the flag is read at all and where the key is freshest.
+
+**The ratchet check persists the whole observation, not just CI.** This is the part that makes the
+projection sound: `ratchetState` is read from the cache, so anything a check saw and kept to itself
+is something no later read can derive. That used not to matter — the check wrote its conclusion
+straight into a `state` column, so a merge or a new changes-requested review reached the app even
+while the cache lagged the PR-sync poller. `recordPrObservation` now writes `prState`,
+`prReviewState`, `prCiStatus` and `hasMergeConflict` together, mapping the raw observation through
+the github capsule's own `computePRState` so both writers of `WorkspacePR.state` agree on what
+`DRAFT` and `APPROVED` mean. The conflict flag also joins the aggregate change detector and its
+compare-and-swap guard, so a conflict appearing or clearing invalidates a settled dispatch like any
+other aggregate field and the two writers cannot race.
 
 **Behaviour changes worth knowing:**
 

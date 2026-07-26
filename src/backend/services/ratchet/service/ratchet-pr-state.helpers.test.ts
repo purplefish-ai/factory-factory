@@ -35,6 +35,8 @@ function makePRState(overrides: Partial<PRStateInfo> = {}): PRStateInfo {
     latestReviewActivityAtMs: null,
     statusCheckRollup: null,
     prState: 'OPEN',
+    cachedPrState: 'OPEN',
+    reviewDecision: null,
     prNumber: 1,
     reviewComments: [],
     ...overrides,
@@ -180,6 +182,7 @@ describe('fetchPRState', () => {
       getReviewComments: vi.fn(),
       getResolvedReviewCommentIds: vi.fn(async () => new Set<number>()),
       computeCIStatus: vi.fn(),
+      computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
@@ -217,6 +220,7 @@ describe('fetchPRState', () => {
     const github = makeGitHub({
       isRecentlyFetched: vi.fn(() => true),
       getPRFullDetails: vi.fn().mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 123,
         url: 'https://github.com/example/repo/pull/123',
@@ -228,6 +232,7 @@ describe('fetchPRState', () => {
       }),
       getReviewComments: vi.fn().mockResolvedValue([]),
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
+      computePRState: vi.fn(() => 'OPEN' as const),
     });
 
     const result = await fetchPRState({
@@ -423,6 +428,7 @@ describe('fetchPRState', () => {
     return {
       extractPRInfo: vi.fn().mockReturnValue({ owner: 'example', repo: 'repo', number: 123 }),
       getPRFullDetails: vi.fn().mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 123,
         url: 'https://github.com/example/repo/pull/123',
@@ -435,6 +441,7 @@ describe('fetchPRState', () => {
       getReviewComments: vi.fn().mockResolvedValue([]),
       getResolvedReviewCommentIds: vi.fn(async () => new Set<number>()),
       computeCIStatus: vi.fn().mockReturnValue(CIStatus.SUCCESS),
+      computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
       isRecentlyFetched: vi.fn(() => false),
@@ -555,6 +562,7 @@ describe('fetchPRState', () => {
   it('excludes top-level commented summaries and ordinary comments in changes-requested mode', async () => {
     const github = makeFetchGitHub({
       getPRFullDetails: vi.fn().mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 123,
         url: 'https://github.com/example/repo/pull/123',
@@ -587,6 +595,7 @@ describe('fetchPRState', () => {
   it('includes top-level commented summaries in all-feedback mode', async () => {
     const github = makeFetchGitHub({
       getPRFullDetails: vi.fn().mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 123,
         url: 'https://github.com/example/repo/pull/123',

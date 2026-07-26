@@ -391,6 +391,7 @@ describe('workspacePrAccessor', () => {
         state: 'OPEN',
         reviewState: null,
         ciStatus: 'PENDING',
+        hasMergeConflict: false,
         syncedAt: new Date('2026-07-26T12:00:00.000Z'),
       });
 
@@ -400,6 +401,7 @@ describe('workspacePrAccessor', () => {
         prState: 'OPEN',
         prReviewState: null,
         prCiStatus: 'PENDING',
+        prHasMergeConflict: false,
         prUpdatedAt: new Date('2026-07-26T12:00:00.000Z'),
       });
     });
@@ -418,12 +420,14 @@ describe('workspacePrAccessor', () => {
         prState: 'OPEN' as const,
         prReviewState: null,
         prCiStatus: 'PENDING' as const,
+        prHasMergeConflict: false,
         prUpdatedAt: new Date('2026-07-26T12:00:00.000Z'),
       };
 
       await expect(
         workspacePrAccessor.applyAggregateIfUnchanged(transaction, 'ws-1', guard, {
           prCiStatus: 'SUCCESS',
+          prHasMergeConflict: false,
           prUpdatedAt: new Date('2026-07-26T12:05:00.000Z'),
         })
       ).resolves.toBe(true);
@@ -436,9 +440,14 @@ describe('workspacePrAccessor', () => {
           state: 'OPEN',
           reviewState: null,
           ciStatus: 'PENDING',
+          hasMergeConflict: false,
           syncedAt: new Date('2026-07-26T12:00:00.000Z'),
         },
-        data: { ciStatus: 'SUCCESS', syncedAt: new Date('2026-07-26T12:05:00.000Z') },
+        data: {
+          ciStatus: 'SUCCESS',
+          hasMergeConflict: false,
+          syncedAt: new Date('2026-07-26T12:05:00.000Z'),
+        },
       });
     });
 
@@ -455,6 +464,7 @@ describe('workspacePrAccessor', () => {
             prState: 'NONE',
             prReviewState: null,
             prCiStatus: 'UNKNOWN',
+            prHasMergeConflict: false,
             prUpdatedAt: null,
           },
           { prCiStatus: 'SUCCESS' }

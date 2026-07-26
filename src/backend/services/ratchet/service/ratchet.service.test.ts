@@ -99,6 +99,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   getReviewComments: vi.fn(),
   getResolvedReviewCommentIds: vi.fn(),
   computeCIStatus: vi.fn(),
+  computePRState: vi.fn(() => 'OPEN' as const),
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
   isRecentlyFetched: vi.fn(),
@@ -109,7 +110,7 @@ const mockGitHubBridge: RatchetGitHubBridge = {
 };
 
 const mockSnapshotBridge: RatchetPRSnapshotBridge = {
-  recordCIObservation: vi.fn(),
+  recordPrObservation: vi.fn(),
   recordCINotification: vi.fn(),
   recordReviewCheck: vi.fn(),
 };
@@ -1107,6 +1108,113 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     ratchetService.removeAllListeners();
   });
 
+  it('persists PR state and review decision the check observed, not just CI', async () => {
+    // The projection reads the cache, so an observation the check keeps to itself
+    // is one no later read can derive from. Before the projection this did not
+    // matter — the check wrote its conclusion into a `state` column — which is
+    // exactly how a merge or a new changes-requested review used to reach the app
+    // while the cache lagged.
+    const workspace = {
+      id: 'ws-observation',
+      prUrl: 'https://github.com/example/repo/pull/44',
+      prNumber: 44,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.SUCCESS,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'observation-snapshot',
+      prReviewLastCheckedAt: null,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'observation-snapshot',
+      hasChangesRequested: true,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      cachedPrState: 'CHANGES_REQUESTED',
+      reviewDecision: 'CHANGES_REQUESTED',
+      prNumber: 44,
+      reviewComments: [],
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+
+    await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'ws-observation',
+        prState: 'CHANGES_REQUESTED',
+        reviewState: 'CHANGES_REQUESTED',
+        ciStatus: CIStatus.SUCCESS,
+        hasMergeConflict: false,
+      })
+    );
+  });
+
+  it('persists a merge observed by the check even when CI status is unchanged', async () => {
+    // Without this write a merged PR keeps deriving from the cached `OPEN`, which
+    // leaves it in the ratchet poll set.
+    const workspace = {
+      id: 'ws-merged',
+      prUrl: 'https://github.com/example/repo/pull/45',
+      prNumber: 45,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.SUCCESS,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'merged-snapshot',
+      prReviewLastCheckedAt: null,
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'merged-snapshot',
+      hasChangesRequested: false,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'MERGED',
+      cachedPrState: 'MERGED',
+      reviewDecision: null,
+      prNumber: 45,
+      reviewComments: [],
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+
+    await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'ws-merged', prState: 'MERGED' })
+    );
+  });
+
   it('persists a newly observed merge conflict even when CI status is unchanged', async () => {
     // The conflict flag is the one input to `deriveRatchetState` that no poller
     // persisted before: the ratchet folded it into `MERGE_CONFLICT` and stored
@@ -1142,7 +1250,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       latestReviewActivityAtMs: null,
       statusCheckRollup: null,
       prState: 'OPEN',
+      cachedPrState: 'OPEN',
+      reviewDecision: null,
       prNumber: 43,
+      reviewComments: [],
     });
     vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
 
@@ -1150,7 +1261,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
-    expect(mockSnapshotBridge.recordCIObservation).toHaveBeenCalledWith(
+    expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'ws-conflict',
         ciStatus: CIStatus.SUCCESS,
@@ -2626,6 +2737,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
       vi.mocked(mockGitHubBridge.isRecentlyFetched).mockReturnValue(true);
       vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 9,
         url: 'https://github.com/example/repo/pull/9',
@@ -2680,6 +2792,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       // settled by the rerun.
       vi.mocked(mockGitHubBridge.isFetchInFlight).mockReturnValueOnce(true).mockReturnValue(false);
       vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
+        isDraft: false,
         state: 'OPEN',
         number: 9,
         url: 'https://github.com/example/repo/pull/9',

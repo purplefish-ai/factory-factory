@@ -311,6 +311,8 @@ export function configureDomainBridges(services: BridgeServices): void {
   const ratchetGithubBridge: RatchetGitHubBridge = {
     extractPRInfo: (url) => githubCLIService.extractPRInfo(url),
     getPRFullDetails: (repo, pr, signal) => githubCLIService.getPRFullDetails(repo, pr, signal),
+    computePRState: ({ state, isDraft, reviewDecision }) =>
+      githubCLIService.computePRState({ state, isDraft, reviewDecision }),
     getReviewComments: (repo, pr, since, signal) =>
       githubCLIService.getReviewComments(repo, pr, since, signal),
     getResolvedReviewCommentIds: (repo, pr, signal) =>
@@ -329,9 +331,19 @@ export function configureDomainBridges(services: BridgeServices): void {
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
-    recordCIObservation: ({ workspaceId, ciStatus, hasMergeConflict, failedAt, observedAt }) =>
-      prSnapshotService.recordCIObservation(workspaceId, {
+    recordPrObservation: ({
+      workspaceId,
+      ciStatus,
+      prState,
+      reviewState,
+      hasMergeConflict,
+      failedAt,
+      observedAt,
+    }) =>
+      prSnapshotService.recordPrObservation(workspaceId, {
         ciStatus,
+        prState,
+        reviewState,
         hasMergeConflict,
         failedAt,
         observedAt,
@@ -387,8 +399,8 @@ export function configureDomainBridges(services: BridgeServices): void {
       recordSnapshot: (id, data) => workspacePrSnapshotService.record(id, data),
       applyPrSnapshotWithDispatchReset: (id, observation) =>
         workspacePrSnapshotService.applyPrSnapshotWithDispatchReset(id, observation),
-      applyCIObservationWithDispatchReset: (id, observation) =>
-        workspacePrSnapshotService.applyCIObservationWithDispatchReset(id, observation),
+      applyPrObservationWithDispatchReset: (id, observation) =>
+        workspacePrSnapshotService.applyPrObservationWithDispatchReset(id, observation),
       attachDiscoveredPRIfClaimMatches: (id, url, claim, updatedAt) =>
         workspacePrSnapshotService.attachDiscoveredPRIfClaimMatches(id, url, claim, updatedAt),
       updatePRSnapshotIfUrlMatches: (id, url, snapshot, updatedAt) =>

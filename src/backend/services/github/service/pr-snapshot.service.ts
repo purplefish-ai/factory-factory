@@ -47,6 +47,11 @@ export const PR_DISPATCH_INVALIDATED = 'pr_dispatch_invalidated' as const;
 export interface PRDispatchInvalidatedEvent {
   workspaceId: string;
   prCiStatus: SnapshotData['prCiStatus'];
+  /**
+   * Carried so the snapshot learns a PR state the ratchet observed. The ratchet
+   * writes the cache now, and this is the event that write publishes.
+   */
+  prState: SnapshotData['prState'];
 }
 
 export interface PRSnapshotUpdatedEvent {
@@ -65,13 +70,13 @@ export interface PRUrlAttachedEvent {
   prUrl: string;
 }
 
-interface CIObservationInput {
+/** One ratchet check's observation of a PR: every input `deriveRatchetState` reads. */
+interface PrObservationInput {
   ciStatus: SnapshotData['prCiStatus'];
-  /**
-   * GitHub's `mergeStateStatus == DIRTY`, observed by the same fetch that
-   * computed `ciStatus`. Absent when the caller did not look.
-   */
-  hasMergeConflict?: boolean;
+  prState: SnapshotData['prState'];
+  reviewState: string | null;
+  /** GitHub's `mergeStateStatus == DIRTY`. */
+  hasMergeConflict: boolean;
   failedAt?: Date | null;
   observedAt?: Date;
 }
@@ -124,14 +129,14 @@ class PRSnapshotService extends EventEmitter {
    * Record CI status observation for a workspace.
    * This is the canonical write path for CI tracking fields.
    */
-  async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
+  async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
     await this.runWorkspaceOperation(workspaceId, async () => {
-      const result = await this.workspace.applyCIObservationWithDispatchReset(workspaceId, {
+      const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
         prCiStatus: input.ciStatus,
+        prState: input.prState,
+        prReviewState: input.reviewState,
+        prHasMergeConflict: input.hasMergeConflict,
         prUpdatedAt: input.observedAt ?? new Date(),
-        ...(input.hasMergeConflict !== undefined
-          ? { prHasMergeConflict: input.hasMergeConflict }
-          : {}),
         ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
       });
       if (!result.applied) {
@@ -141,6 +146,7 @@ class PRSnapshotService extends EventEmitter {
         this.emit(PR_DISPATCH_INVALIDATED, {
           workspaceId,
           prCiStatus: input.ciStatus,
+          prState: input.prState,
         } satisfies PRDispatchInvalidatedEvent);
       }
     });

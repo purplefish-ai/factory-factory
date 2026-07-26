@@ -329,7 +329,7 @@ class GitHubCLIService {
     return computeCIStatus(statusCheckRollup);
   }
 
-  computePRState(status: PRStatusFromGitHub) {
+  computePRState(status: { state: string; isDraft: boolean; reviewDecision: string | null }) {
     return computePRState(status);
   }
 

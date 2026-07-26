@@ -782,9 +782,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prDispatchInvalidatedHandler = (event: PRDispatchInvalidatedEvent) => {
+    // The ratchet's observation writes `prState` as well as `prCiStatus` now, so
+    // this event carries both; patching only CI would leave the snapshot showing
+    // an open PR the check just saw merged.
     coalescer.enqueue(
       event.workspaceId,
-      { prCiStatus: event.prCiStatus },
+      { prCiStatus: event.prCiStatus, prState: event.prState },
       'event:pr_dispatch_invalidated',
       { immediate: true }
     );

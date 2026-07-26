@@ -11,7 +11,7 @@ function deferred<T>() {
 const mockFindById = vi.fn();
 const mockUpdate = vi.fn();
 const mockApplyPrSnapshotWithDispatchReset = vi.fn();
-const mockApplyCIObservationWithDispatchReset = vi.fn();
+const mockApplyPrObservationWithDispatchReset = vi.fn();
 const mockAttachDiscoveredPRIfClaimMatches = vi.fn();
 const mockUpdatePRSnapshotIfUrlMatches = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
@@ -24,8 +24,8 @@ vi.mock('@/backend/services/workspace', () => ({
     record: (...args: unknown[]) => mockUpdate(...args),
     applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
       mockApplyPrSnapshotWithDispatchReset(...args),
-    applyCIObservationWithDispatchReset: (...args: unknown[]) =>
-      mockApplyCIObservationWithDispatchReset(...args),
+    applyPrObservationWithDispatchReset: (...args: unknown[]) =>
+      mockApplyPrObservationWithDispatchReset(...args),
     attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
       mockAttachDiscoveredPRIfClaimMatches(...args),
     updatePRSnapshotIfUrlMatches: (...args: unknown[]) => mockUpdatePRSnapshotIfUrlMatches(...args),
@@ -63,7 +63,7 @@ describe('PRSnapshotService', () => {
       applied: true,
       dispatchReset: false,
     });
-    mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+    mockApplyPrObservationWithDispatchReset.mockResolvedValue({
       applied: true,
       dispatchReset: false,
     });
@@ -74,8 +74,8 @@ describe('PRSnapshotService', () => {
         recordSnapshot: (...args: unknown[]) => mockUpdate(...args),
         applyPrSnapshotWithDispatchReset: (...args: unknown[]) =>
           mockApplyPrSnapshotWithDispatchReset(...args),
-        applyCIObservationWithDispatchReset: (...args: unknown[]) =>
-          mockApplyCIObservationWithDispatchReset(...args),
+        applyPrObservationWithDispatchReset: (...args: unknown[]) =>
+          mockApplyPrObservationWithDispatchReset(...args),
         attachDiscoveredPRIfClaimMatches: (...args: unknown[]) =>
           mockAttachDiscoveredPRIfClaimMatches(...args),
         updatePRSnapshotIfUrlMatches: (...args: unknown[]) =>
@@ -395,13 +395,16 @@ describe('PRSnapshotService', () => {
 
       const refresh = prSnapshotService.refreshWorkspace('w-ordered');
       await vi.waitFor(() => expect(mockFetchAndComputePRState).toHaveBeenCalledTimes(1));
-      const directObservation = prSnapshotService.recordCIObservation('w-ordered', {
+      const directObservation = prSnapshotService.recordPrObservation('w-ordered', {
         ciStatus: 'FAILURE',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         observedAt: new Date('2026-07-17T12:01:00.000Z'),
       });
       await Promise.resolve();
 
-      expect(mockApplyCIObservationWithDispatchReset).not.toHaveBeenCalled();
+      expect(mockApplyPrObservationWithDispatchReset).not.toHaveBeenCalled();
 
       pendingFetch.resolve({
         prNumber: 123,
@@ -412,22 +415,28 @@ describe('PRSnapshotService', () => {
       await Promise.all([refresh, directObservation]);
 
       expect(mockApplyPrSnapshotWithDispatchReset.mock.invocationCallOrder[0]).toBeLessThan(
-        mockApplyCIObservationWithDispatchReset.mock.invocationCallOrder[0]!
+        mockApplyPrObservationWithDispatchReset.mock.invocationCallOrder[0]!
       );
     });
   });
 
-  describe('recordCIObservation', () => {
+  describe('recordPrObservation', () => {
     it('does not clear failure timestamp when failedAt is omitted', async () => {
       const observedAt = new Date('2026-02-11T00:00:00Z');
 
-      await prSnapshotService.recordCIObservation('w-ci-1', {
+      await prSnapshotService.recordPrObservation('w-ci-1', {
         ciStatus: 'SUCCESS',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         observedAt,
       });
 
-      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
+      expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
         prCiStatus: 'SUCCESS',
+        prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prUpdatedAt: observedAt,
       });
     });
@@ -435,14 +444,20 @@ describe('PRSnapshotService', () => {
     it('does not clear failure timestamp when failedAt is undefined', async () => {
       const observedAt = new Date('2026-02-11T01:00:00Z');
 
-      await prSnapshotService.recordCIObservation('w-ci-2', {
+      await prSnapshotService.recordPrObservation('w-ci-2', {
         ciStatus: 'SUCCESS',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         failedAt: undefined,
         observedAt,
       });
 
-      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
+      expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
         prCiStatus: 'SUCCESS',
+        prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prUpdatedAt: observedAt,
       });
     });
@@ -450,14 +465,20 @@ describe('PRSnapshotService', () => {
     it('clears failure timestamp when failedAt is null', async () => {
       const observedAt = new Date('2026-02-11T02:00:00Z');
 
-      await prSnapshotService.recordCIObservation('w-ci-3', {
+      await prSnapshotService.recordPrObservation('w-ci-3', {
         ciStatus: 'SUCCESS',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         failedAt: null,
         observedAt,
       });
 
-      expect(mockApplyCIObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
+      expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
         prCiStatus: 'SUCCESS',
+        prState: 'OPEN',
+        prReviewState: null,
+        prHasMergeConflict: false,
         prCiFailedAt: null,
         prUpdatedAt: observedAt,
       });
@@ -469,32 +490,42 @@ describe('PRSnapshotService', () => {
       prSnapshotService.removeAllListeners();
     });
 
-    it('invalidates dispatch ownership when a direct CI observation resets it', async () => {
-      mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+    it('invalidates dispatch ownership when a ratchet observation resets it', async () => {
+      mockApplyPrObservationWithDispatchReset.mockResolvedValue({
         applied: true,
         dispatchReset: true,
       });
       const events: Array<{ workspaceId: string }> = [];
       prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
 
-      await prSnapshotService.recordCIObservation('ws-exhausted', {
+      await prSnapshotService.recordPrObservation('ws-exhausted', {
         ciStatus: 'PENDING',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         observedAt: new Date('2026-07-17T12:00:00.000Z'),
       });
 
-      expect(events).toEqual([{ workspaceId: 'ws-exhausted', prCiStatus: 'PENDING' }]);
+      // The event carries the PR state too, so the snapshot learns a merge or
+      // close the ratchet check observed rather than only the CI status.
+      expect(events).toEqual([
+        { workspaceId: 'ws-exhausted', prCiStatus: 'PENDING', prState: 'OPEN' },
+      ]);
     });
 
-    it('does not invalidate from a direct CI observation rejected by the guard', async () => {
-      mockApplyCIObservationWithDispatchReset.mockResolvedValue({
+    it('does not invalidate from a ratchet observation rejected by the guard', async () => {
+      mockApplyPrObservationWithDispatchReset.mockResolvedValue({
         applied: false,
         dispatchReset: false,
       });
       const events: Array<{ workspaceId: string }> = [];
       prSnapshotService.on(PR_DISPATCH_INVALIDATED, (event) => events.push(event));
 
-      await prSnapshotService.recordCIObservation('ws-stale-ci', {
+      await prSnapshotService.recordPrObservation('ws-stale-ci', {
         ciStatus: 'SUCCESS',
+        prState: 'OPEN',
+        reviewState: null,
+        hasMergeConflict: false,
         observedAt: new Date('2026-07-17T12:01:00.000Z'),
       });
       expect(events).toEqual([]);

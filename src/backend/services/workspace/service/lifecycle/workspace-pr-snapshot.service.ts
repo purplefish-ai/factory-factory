@@ -58,11 +58,11 @@ class WorkspacePrSnapshotService {
     return workspaceAccessor.applyPrSnapshotWithDispatchReset(workspaceId, observation);
   }
 
-  applyCIObservationWithDispatchReset(
+  applyPrObservationWithDispatchReset(
     workspaceId: string,
-    observation: Parameters<typeof workspaceAccessor.applyCIObservationWithDispatchReset>[1]
+    observation: Parameters<typeof workspaceAccessor.applyPrObservationWithDispatchReset>[1]
   ) {
-    return workspaceAccessor.applyCIObservationWithDispatchReset(workspaceId, observation);
+    return workspaceAccessor.applyPrObservationWithDispatchReset(workspaceId, observation);
   }
 }
 

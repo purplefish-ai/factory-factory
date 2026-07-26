@@ -407,8 +407,11 @@ describe('workspaceAccessor', () => {
       mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
 
       await expect(
-        workspaceAccessor.applyCIObservationWithDispatchReset('ws-1', {
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
           prCiStatus: 'PENDING',
+          prState: 'OPEN',
+          prReviewState: null,
+          prHasMergeConflict: false,
           prUpdatedAt,
         })
       ).resolves.toEqual({ applied: true, dispatchReset: true });

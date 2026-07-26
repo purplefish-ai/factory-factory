@@ -862,17 +862,26 @@ class RatchetService extends EventEmitter {
       signal.throwIfAborted();
     }
 
-    // The conflict flag rides along with CI because this fetch is the only place
-    // either is observed. Before the projection it was never persisted at all: the
-    // ratchet folded it into `MERGE_CONFLICT` and stored that instead.
+    // Persist the whole observation, not just CI.
+    //
+    // `ratchetState` is projected from this cache, so anything the check saw and
+    // kept to itself is something no later read can derive from. That used not to
+    // matter: the check wrote its conclusion straight into a `state` column, so a
+    // merge or a new changes-requested review reached the rest of the app even
+    // though the cache had not caught up. Now the cache *is* the answer, and this
+    // fetch is the only observer of the conflict flag at all.
     if (
       prStateInfo.ciStatus !== workspace.prCiStatus ||
+      prStateInfo.cachedPrState !== workspace.prState ||
+      prStateInfo.reviewDecision !== workspace.prReviewState ||
       prStateInfo.hasMergeConflict !== workspace.prHasMergeConflict
     ) {
       signal.throwIfAborted();
-      await this.snapshot.recordCIObservation({
+      await this.snapshot.recordPrObservation({
         workspaceId: workspace.id,
         ciStatus: prStateInfo.ciStatus,
+        prState: prStateInfo.cachedPrState,
+        reviewState: prStateInfo.reviewDecision,
         hasMergeConflict: prStateInfo.hasMergeConflict,
         observedAt: now,
       });

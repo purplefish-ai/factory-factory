@@ -132,9 +132,16 @@ export interface PrSnapshotPersistenceInput {
   branchName?: string;
 }
 
-export interface CIObservationPersistenceInput {
+/**
+ * One ratchet check's observation. Every field is an input to
+ * `deriveRatchetState`, which is why this is no longer CI-only: the projection
+ * reads the cache, so the check has to write what it saw.
+ */
+export interface PrObservationPersistenceInput {
   prCiStatus: CIStatus;
-  prHasMergeConflict?: boolean;
+  prState: PRState;
+  prReviewState: string | null;
+  prHasMergeConflict: boolean;
   prUpdatedAt: Date;
   prCiFailedAt?: Date | null;
 }
@@ -178,6 +185,11 @@ function prAggregateChanged(
     'prState',
     'prReviewState',
     'prCiStatus',
+    // A conflict appearing or clearing changes the PR state a fixer was
+    // dispatched for, so it invalidates a settled dispatch like any other
+    // aggregate field. It joins the guard as well as the comparison, so the two
+    // writers of this column cannot race each other.
+    'prHasMergeConflict',
   ];
   return compared.some(
     (field) => observation[field] !== undefined && current[field] !== observation[field]
@@ -755,9 +767,9 @@ class WorkspaceAccessor {
     return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
   }
 
-  applyCIObservationWithDispatchReset(
+  applyPrObservationWithDispatchReset(
     workspaceId: string,
-    observation: CIObservationPersistenceInput
+    observation: PrObservationPersistenceInput
   ): Promise<PrAggregatePersistenceResult> {
     return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
   }

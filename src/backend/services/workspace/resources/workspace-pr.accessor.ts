@@ -161,13 +161,14 @@ function toColumns(fields: WorkspacePRWriteFields): Prisma.WorkspacePRUpdateInpu
   return columns;
 }
 
-/** The five aggregate fields a refresh compares against before writing. */
+/** The aggregate fields a refresh compares against before writing. */
 export interface PRAggregateGuard {
   prUrl: string | null;
   prNumber: number | null;
   prState: PRState;
   prReviewState: string | null;
   prCiStatus: CIStatus;
+  prHasMergeConflict: boolean;
   prUpdatedAt: Date | null;
 }
 
@@ -423,6 +424,7 @@ class WorkspacePRAccessor {
         state: true,
         reviewState: true,
         ciStatus: true,
+        hasMergeConflict: true,
         syncedAt: true,
       },
     });
@@ -435,6 +437,7 @@ class WorkspacePRAccessor {
       prState: row.state,
       prReviewState: row.reviewState,
       prCiStatus: row.ciStatus,
+      prHasMergeConflict: row.hasMergeConflict,
       prUpdatedAt: row.syncedAt,
     };
   }
@@ -457,6 +460,7 @@ class WorkspacePRAccessor {
         number: guard.prNumber,
         state: guard.prState,
         reviewState: guard.prReviewState,
+        hasMergeConflict: guard.prHasMergeConflict,
         ciStatus: guard.prCiStatus,
         syncedAt: guard.prUpdatedAt,
       },
