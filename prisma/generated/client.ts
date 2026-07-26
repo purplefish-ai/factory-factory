@@ -147,10 +147,13 @@ export type WorkspaceRunScript = Prisma.WorkspaceRunScriptModel
 /**
  * Model WorkspaceAutoIteration
  * The auto-iteration loop's state, split off `Workspace` (issue: the model
- * carried six unrelated concerns). Written only by
- * `workspace-auto-iteration.accessor.ts`; reads are flattened back onto the
- * workspace under the old `mode`/`autoIteration*` names, so the v4 export
- * format and the client are unchanged.
+ * carried six unrelated concerns). After creation it is written only by
+ * `workspace-auto-iteration.accessor.ts`; the row itself is created with its
+ * workspace by `workspaceAccessor.create`, which sets `mode` and `config` from
+ * the creation input and is the one other writer the ownership rule permits.
+ * Reads are flattened back onto the workspace under the old
+ * `mode`/`autoIteration*` names, so the v4 export format and the client are
+ * unchanged.
  * 
  * `mode` travels with the group rather than staying on `Workspace`. It reads
  * like a general workspace attribute, but every consumer is an auto-iteration

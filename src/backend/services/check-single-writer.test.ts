@@ -176,6 +176,31 @@ describe('check-single-writer', () => {
       expect(result.output).toContain('unauthorized write to workspaceRatchet via update()');
     });
 
+    // Prisma exposes nine writes per model, not seven. These two were missing
+    // from SIDE_TABLE_WRITE_METHODS, which left a way to write any of the four
+    // owned tables from any file -- unused today, and unpoliced.
+    it.each([
+      'createManyAndReturn',
+      'updateManyAndReturn',
+    ])('rejects a %s write from outside the owning accessor', (method) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+              import { prisma } from '@/backend/db';
+              async function write() {
+                return await prisma.workspaceRunScript.${method}({ data: [{ workspaceId: 'ws' }] });
+              }
+            `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(`unauthorized write to workspaceRunScript via ${method}()`);
+    });
+
     it('allows the owning accessor its own writes', () => {
       const tempRoot = createTempBackend([
         {

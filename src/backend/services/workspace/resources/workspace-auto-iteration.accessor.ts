@@ -6,7 +6,9 @@ import type { AutoIterationStatus, WorkspaceMode } from '@/shared/core';
  * Persistence for `WorkspaceAutoIteration`, the mode discriminant and the
  * auto-iteration loop's state.
  *
- * This file is the only writer of that table. Before the split these five
+ * This file is the only writer of that table after creation -- the row is
+ * created with its workspace by `workspaceAccessor.create`, which sets `mode`
+ * and `config`. Before the split these five
  * columns sat on `Workspace` and `scripts/check-single-writer.mjs` was what kept
  * them to their two writers; now no other accessor can name the columns.
  *
@@ -121,35 +123,43 @@ class WorkspaceAutoIterationAccessor {
 
   /**
    * Reset loops left RUNNING by a crash or restart to FAILED, and report which
-   * workspaces they were so the caller can emit a status change per row.
+   * workspaces were actually reset so the caller can emit a status change per row.
    *
    * FAILED rather than PAUSED: the in-memory loop context does not survive a
    * restart, so there is nothing to resume. Only RUNNING is swept — PAUSED is a
    * state the user chose, and COMPLETED/FAILED are results they have not seen.
+   *
+   * The sweep reads and writes in two steps, so each write is guarded on the
+   * `sessionId` its row was observed with, not just on RUNNING. Without that, a
+   * loop started between the read and the write is RUNNING under a *new* session
+   * when the write lands, and a blanket `status: 'RUNNING'` update would fail a
+   * loop that is alive — the same race the two session compare-and-swaps above
+   * exist to prevent. A guard that does not match leaves the row alone and keeps
+   * it out of the returned list, so no status-changed event is emitted for a
+   * workspace this did not touch.
    */
   async resetStaleRunningStatuses(): Promise<Array<{ id: string }>> {
     const stale = await prisma.workspaceAutoIteration.findMany({
       where: { status: 'RUNNING' },
-      select: { workspaceId: true },
+      select: { workspaceId: true, sessionId: true },
     });
 
     if (stale.length === 0) {
       return [];
     }
 
-    await prisma.workspaceAutoIteration.updateMany({
-      where: {
-        workspaceId: { in: stale.map((row) => row.workspaceId) },
-        status: 'RUNNING',
-      },
-      data: {
-        status: 'FAILED',
-        sessionId: null,
-      },
-    });
+    const outcomes = await Promise.all(
+      stale.map(async (row) => {
+        const result = await prisma.workspaceAutoIteration.updateMany({
+          where: { workspaceId: row.workspaceId, status: 'RUNNING', sessionId: row.sessionId },
+          data: { status: 'FAILED', sessionId: null },
+        });
+        // Callers keyed off `id` before the split and still do.
+        return result.count === 1 ? { id: row.workspaceId } : null;
+      })
+    );
 
-    // Callers keyed off `id` before the split and still do.
-    return stale.map((row) => ({ id: row.workspaceId }));
+    return outcomes.filter((outcome) => outcome !== null);
   }
 }
 

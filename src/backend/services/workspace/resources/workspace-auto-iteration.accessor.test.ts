@@ -159,7 +159,10 @@ describe('workspaceAutoIterationAccessor', () => {
     });
 
     it('fails the stale loops, clears their sessions, and reports them under `id`', async () => {
-      mockFindMany.mockResolvedValue([{ workspaceId: 'ws-1' }, { workspaceId: 'ws-2' }]);
+      mockFindMany.mockResolvedValue([
+        { workspaceId: 'ws-1', sessionId: 'sess-1' },
+        { workspaceId: 'ws-2', sessionId: null },
+      ]);
 
       // The caller emits one status-changed event per entry and keyed off `id`
       // before the split, so the column rename stops at this boundary.
@@ -170,12 +173,36 @@ describe('workspaceAutoIterationAccessor', () => {
 
       expect(mockFindMany).toHaveBeenCalledWith({
         where: { status: 'RUNNING' },
-        select: { workspaceId: true },
+        select: { workspaceId: true, sessionId: true },
       });
+      // Each write is guarded on the session the row was read with, so a loop
+      // that started between the two steps is not failed by this sweep.
       expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: { workspaceId: { in: ['ws-1', 'ws-2'] }, status: 'RUNNING' },
+        where: { workspaceId: 'ws-1', status: 'RUNNING', sessionId: 'sess-1' },
         data: { status: 'FAILED', sessionId: null },
       });
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { workspaceId: 'ws-2', status: 'RUNNING', sessionId: null },
+        data: { status: 'FAILED', sessionId: null },
+      });
+    });
+
+    it('omits a row whose loop restarted under a new session between the two steps', async () => {
+      mockFindMany.mockResolvedValue([
+        { workspaceId: 'ws-restarted', sessionId: 'old-session' },
+        { workspaceId: 'ws-still-stale', sessionId: 'dead-session' },
+      ]);
+      // The restarted row is RUNNING again under a different session, so its
+      // guard matches nothing and the sweep leaves the live loop alone.
+      mockUpdateMany.mockImplementation((args: { where: { sessionId: string | null } }) =>
+        Promise.resolve({ count: args.where.sessionId === 'old-session' ? 0 : 1 })
+      );
+
+      // Only the row actually reset is reported, so no status-changed event is
+      // emitted for a workspace this did not touch.
+      await expect(workspaceAutoIterationAccessor.resetStaleRunningStatuses()).resolves.toEqual([
+        { id: 'ws-still-stale' },
+      ]);
     });
 
     it('leaves PAUSED, COMPLETED and FAILED alone', async () => {

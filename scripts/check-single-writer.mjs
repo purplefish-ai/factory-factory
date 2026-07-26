@@ -542,11 +542,19 @@ const OWNED_SIDE_TABLES = {
     'src/backend/services/workspace/resources/workspace-auto-iteration.accessor.ts',
 };
 
+/**
+ * Every Prisma write a client exposes for a model. The `*AndReturn` pair is easy
+ * to miss because nothing in this repo calls them yet -- they were absent here
+ * while the other seven were listed, which left an unpoliced way to write any of
+ * the four owned tables from any file.
+ */
 const SIDE_TABLE_WRITE_METHODS = new Set([
   'create',
   'createMany',
+  'createManyAndReturn',
   'update',
   'updateMany',
+  'updateManyAndReturn',
   'upsert',
   'delete',
   'deleteMany',
