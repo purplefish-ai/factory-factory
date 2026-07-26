@@ -587,6 +587,28 @@ const SIDE_TABLE_WRITE_METHODS = new Set([
   'deleteMany',
 ]);
 
+/** The relation field each owned side table hangs off `Workspace` under. */
+const SIDE_TABLE_RELATIONS = { pr: 'workspacePR', ratchet: 'workspaceRatchet' };
+
+/**
+ * Nested relation operations that mutate an existing side-table row. `create` is
+ * absent deliberately: both rows are created with their workspace, and they have
+ * to be, or the row-guarded writes would skip a workspace. Creating the paired
+ * row is part of creating a workspace; changing it afterwards belongs to the
+ * owning accessor.
+ */
+const NESTED_MUTATION_KEYS = new Set([
+  'update',
+  'updateMany',
+  'upsert',
+  'delete',
+  'deleteMany',
+  'connect',
+  'connectOrCreate',
+  'disconnect',
+  'set',
+]);
+
 /**
  * Flag `prisma.<table>.<write>()` / `transaction.<table>.<write>()` outside the
  * one file that owns the table. Reads are unrestricted; any accessor may join a
@@ -608,9 +630,57 @@ function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
         );
       }
     }
+
+    // A nested relation write reaches the same rows without naming the table:
+    // `prisma.workspace.update({ data: { pr: { update: ... } } })`. Only `data:`
+    // payloads count -- `pr: { url: null }` under `where:` is a relation filter.
+    if (ts.isPropertyAssignment(node) && propertyName(node) === 'data') {
+      checkNestedSideTableMutation(relPath, node.initializer, violations);
+    }
+
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
+}
+
+function propertyName(assignment) {
+  const name = assignment.name;
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function checkNestedSideTableMutation(relPath, dataExpression, violations) {
+  if (!ts.isObjectLiteralExpression(dataExpression)) {
+    return;
+  }
+  for (const property of dataExpression.properties) {
+    if (!ts.isPropertyAssignment(property)) {
+      continue;
+    }
+    const table = SIDE_TABLE_RELATIONS[propertyName(property) ?? ''];
+    if (!table || !ts.isObjectLiteralExpression(property.initializer)) {
+      continue;
+    }
+    const owner = OWNED_SIDE_TABLES[table];
+    if (relPath === owner) {
+      continue;
+    }
+    for (const operation of property.initializer.properties) {
+      if (!ts.isPropertyAssignment(operation) && !ts.isShorthandPropertyAssignment(operation)) {
+        continue;
+      }
+      const key = ts.isPropertyAssignment(operation)
+        ? propertyName(operation)
+        : operation.name.text;
+      if (key && NESTED_MUTATION_KEYS.has(key)) {
+        violations.push(
+          `${relPath}: unauthorized nested ${key} of the ${table} relation; ${table} is written only by ${owner}`
+        );
+      }
+    }
+  }
 }
 
 function checkWorkspaceSchemaCoverage({ rootDir, violations }) {

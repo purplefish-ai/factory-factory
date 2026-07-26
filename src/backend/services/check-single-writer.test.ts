@@ -212,6 +212,89 @@ describe('check-single-writer', () => {
       expect(result.status).toBe(0);
     });
 
+    it('rejects a nested update of the pr relation', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function sneak(id) {
+              await prisma.workspace.update({ where: { id }, data: { pr: { update: { state: 'MERGED' } } } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized nested update of the workspacePR relation');
+    });
+
+    it('rejects a nested upsert of the ratchet relation', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/some.orchestrator.ts',
+          content: `
+            async function sneak(tx, id) {
+              await tx.workspace.update({ where: { id }, data: { ratchet: { upsert: { create: {}, update: {} } } } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'unauthorized nested upsert of the workspaceRatchet relation'
+      );
+    });
+
+    // Both rows are created with their workspace and have to be, or the
+    // row-guarded writes would skip it. Restoring a backup creates them the same
+    // way, before any accessor could reach the rows.
+    it('allows nested creation of both rows alongside a workspace', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          content: `
+            async function restore(tx, projectId) {
+              await tx.workspace.create({
+                data: { projectId, name: 'x', pr: { create: { url: null } }, ratchet: { create: { enabled: true } } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    // `pr: { url: null }` under `where:` is a relation filter, not a write. The
+    // PR accessor's own compare-and-swaps depend on those.
+    it('allows relation filters that name a side table in a where clause', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function read(id) {
+              return await prisma.workspace.findMany({
+                where: { id, pr: { url: null }, ratchet: { enabled: true } },
+              });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
     it('allows writes through a transaction client in the owning accessor', () => {
       const tempRoot = createTempBackend([
         {

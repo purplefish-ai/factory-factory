@@ -337,7 +337,7 @@ class WorkspacePRAccessor {
     transaction: Prisma.TransactionClient,
     workspaceId: string
   ): Promise<void> {
-    await transaction.workspacePR.updateMany({
+    const result = await transaction.workspacePR.updateMany({
       where: { workspaceId },
       data: {
         discoveryLastCheckedAt: null,
@@ -345,6 +345,11 @@ class WorkspacePRAccessor {
         discoveryNextCheckAt: null,
       },
     });
+    // Same reasoning as `writeInTransaction`: this is half of a pair, and the
+    // other half is the branch rename that makes the old backoff wrong.
+    if (result.count === 0) {
+      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
+    }
   }
 
   /**
@@ -368,7 +373,13 @@ class WorkspacePRAccessor {
     }
   }
 
-  /** As `write`, in the caller's transaction. */
+  /**
+   * As `write`, in the caller's transaction — including the missing-row throw,
+   * which matters more here than it does there. Its caller pairs this with a
+   * `branchName` update, so swallowing a zero-row PR update would commit the
+   * rename with no PR cache write beside it. The throw rolls the transaction back
+   * instead.
+   */
   async writeInTransaction(
     transaction: Prisma.TransactionClient,
     workspaceId: string,
@@ -378,7 +389,10 @@ class WorkspacePRAccessor {
     if (Object.keys(data).length === 0) {
       return;
     }
-    await transaction.workspacePR.updateMany({ where: { workspaceId }, data });
+    const result = await transaction.workspacePR.updateMany({ where: { workspaceId }, data });
+    if (result.count === 0) {
+      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
+    }
   }
 
   /**
