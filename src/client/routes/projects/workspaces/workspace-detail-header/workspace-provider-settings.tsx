@@ -56,8 +56,7 @@ export function WorkspaceProviderSettings({
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
     onSuccess: () => {
       utils.workspace.get.invalidate({ id: workspaceId });
-      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+      utils.workspace.listForProject.invalidate({ projectId: workspace.projectId });
       setDialogOpen(false);
     },
   });

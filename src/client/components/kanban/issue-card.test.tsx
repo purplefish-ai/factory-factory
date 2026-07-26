@@ -7,8 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueCard } from './issue-card';
 
 const mocks = vi.hoisted(() => ({
-  listWithKanbanStateInvalidateMock: vi.fn(),
-  getProjectSummaryStateInvalidateMock: vi.fn(),
+  listForProjectInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
   createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
@@ -39,11 +38,8 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({
       workspace: {
         get: { setData: mocks.getSetDataMock },
-        listWithKanbanState: {
-          invalidate: mocks.listWithKanbanStateInvalidateMock,
-        },
-        getProjectSummaryState: {
-          invalidate: mocks.getProjectSummaryStateInvalidateMock,
+        listForProject: {
+          invalidate: mocks.listForProjectInvalidateMock,
         },
       },
     }),
@@ -177,7 +173,7 @@ describe('IssueCard', () => {
     container.remove();
   });
 
-  it('invalidates sidebar project summary after creating a workspace from an issue', () => {
+  it('invalidates the project workspace list after creating a workspace from an issue', () => {
     const { container, root } = renderCard();
 
     openLaunchSheet(container);
@@ -190,10 +186,7 @@ describe('IssueCard', () => {
 
     mutationOptions.onSuccess({ id: 'ws-1' });
 
-    expect(mocks.listWithKanbanStateInvalidateMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-    });
-    expect(mocks.getProjectSummaryStateInvalidateMock).toHaveBeenCalledWith({
+    expect(mocks.listForProjectInvalidateMock).toHaveBeenCalledWith({
       projectId: 'project-1',
     });
 

@@ -86,7 +86,7 @@ export function WorkspaceDetailHeaderSlot({
     try {
       await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
       await Promise.all([
-        utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
       setIsEditing(false);

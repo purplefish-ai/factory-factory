@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
-  projectSnapshotToKanbanWorkspace,
-  projectSnapshotToSidebarWorkspace,
+  type ProjectWorkspace,
+  projectSnapshotToWorkspace,
   type WorkspaceDetail,
 } from './snapshot-to-workspace';
 
@@ -52,8 +53,17 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
   });
 }
 
+/**
+ * A detail cache entry seeded from a list row, as the app holds after a fetch.
+ * `workspace.get` returns the whole database row, so the fields this test does
+ * not assert on are irrelevant to the merge under test.
+ */
+function seedDetail(listed: ProjectWorkspace): WorkspaceDetail {
+  return unsafeCoerce<WorkspaceDetail>({ ...listed, hasHadSessions: true, prUpdatedAt: null });
+}
+
 describe('workspace snapshot cache projections', () => {
-  it('projects common real-time fields consistently across all three cache views', () => {
+  it('projects the same live fields into the list and detail caches', () => {
     const entry = makeEntry({
       sessionSummaries: [
         {
@@ -71,19 +81,15 @@ describe('workspace snapshot cache projections', () => {
         },
       ],
     });
-    const kanban = projectSnapshotToKanbanWorkspace(entry);
-    const detailSeed: WorkspaceDetail = {
-      ...kanban,
-      sessionSummaries: entry.sessionSummaries,
-      sidebarStatus: entry.sidebarStatus,
-    };
-    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, detailSeed);
-    const projections = [projectSnapshotToSidebarWorkspace(entry), kanban, detail];
+    const listed = projectSnapshotToWorkspace(entry);
+    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, seedDetail(listed));
 
-    for (const projection of projections) {
+    for (const projection of [listed, detail]) {
       expect(projection).toMatchObject({
         id: 'ws-1',
+        projectId: 'proj-1',
         name: 'my-workspace',
+        status: 'READY',
         createdAt: new Date('2026-01-10T08:00:00Z'),
         branchName: 'feat/snapshot',
         prUrl: 'https://github.com/org/repo/pull/42',
@@ -92,75 +98,60 @@ describe('workspace snapshot cache projections', () => {
         prCiStatus: 'SUCCESS',
         ratchetEnabled: true,
         ratchetState: 'IDLE',
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: 2,
         runScriptStatus: 'IDLE',
         isWorking: true,
         sessionSummaries: entry.sessionSummaries,
         pendingRequestType: 'plan_approval',
+        kanbanColumn: 'WORKING',
+        sidebarStatus: entry.sidebarStatus,
         ratchetButtonAnimated: false,
         flowPhase: 'CI_WAIT',
         ciObservation: 'CHECKS_PASSED',
         statusReason: entry.statusReason,
-        snapshotComputedAt: '2026-01-15T10:00:00Z',
       });
     }
   });
 
-  it('stamps transport recency from the snapshot message', () => {
-    const entry = makeEntry({ computedAt: '2026-02-01T12:00:00Z' });
-    const sidebarSeed = projectSnapshotToSidebarWorkspace(entry);
-    const sidebar = projectSnapshotToSidebarWorkspace(entry, sidebarSeed);
+  it('projects git stats and last activity into the list cache', () => {
+    const listed = projectSnapshotToWorkspace(makeEntry());
 
-    expect(sidebar.snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
+    expect(listed.gitStats).toEqual({
+      total: 10,
+      additions: 7,
+      deletions: 3,
+      hasUncommitted: false,
+    });
+    expect(listed.lastActivityAt).toBe('2026-01-15T09:55:00Z');
   });
 
-  it('applies transported PR update timing to kanban and detail caches', () => {
+  it('applies transported PR update timing and dispatch state to the detail cache', () => {
     const entry = makeEntry({ prUpdatedAt: '2026-02-02T12:00:00Z' });
-    const kanban = projectSnapshotToKanbanWorkspace(entry);
-    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, {
-      ...kanban,
-      sessionSummaries: entry.sessionSummaries,
-      sidebarStatus: entry.sidebarStatus,
-    });
+    const detail = mergeProjectSnapshotIntoWorkspaceDetail(
+      entry,
+      seedDetail(projectSnapshotToWorkspace(entry))
+    );
 
-    expect(kanban.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
     expect(detail?.prUpdatedAt).toEqual(new Date('2026-02-02T12:00:00Z'));
+    expect(detail?.ratchetDispatchOutcome).toBe('DIED');
+    expect(detail?.ratchetDispatchRetryCount).toBe(2);
+    expect(detail?.hasHadSessions).toBe(true);
   });
 
-  it('preserves DB-only issue, creation, and parent fields', () => {
+  it('preserves mutation-only issue and creation fields from the existing entry', () => {
     const entry = makeEntry({ name: 'snapshot-name' });
-    const sidebarSeed = projectSnapshotToSidebarWorkspace(entry);
-    const sidebar = projectSnapshotToSidebarWorkspace(entry, {
-      ...sidebarSeed,
+    const existing: ProjectWorkspace = {
+      ...projectSnapshotToWorkspace(entry),
       githubIssueNumber: 1959,
       githubIssueUrl: 'https://github.com/purplefish-ai/factory-factory/issues/1959',
       linearIssueId: 'linear-id',
       linearIssueIdentifier: 'ENG-1959',
       linearIssueUrl: 'https://linear.app/issue/ENG-1959',
       creationSource: 'CHILD_WORKSPACE',
-    });
-    const kanbanSeed = projectSnapshotToKanbanWorkspace(entry);
-    const existingKanban = {
-      ...kanbanSeed,
-      githubIssueNumber: 1959,
-      githubIssueUrl: 'https://github.com/purplefish-ai/factory-factory/issues/1959',
-      linearIssueId: 'linear-id',
-      linearIssueIdentifier: 'ENG-1959',
-      linearIssueUrl: 'https://linear.app/issue/ENG-1959',
-      creationSource: 'CHILD_WORKSPACE' as const,
-      creationMetadata: { reason: 'delegated' },
-      parentWorkspaceId: 'parent-ws',
+      mode: 'AUTO_ITERATION',
+      initErrorMessage: 'setup failed once',
     };
-    const kanban = projectSnapshotToKanbanWorkspace(entry, existingKanban);
-    const detailExisting: WorkspaceDetail = {
-      ...existingKanban,
-      sessionSummaries: entry.sessionSummaries,
-      sidebarStatus: entry.sidebarStatus,
-    };
-    const detail = mergeProjectSnapshotIntoWorkspaceDetail(entry, detailExisting);
 
-    expect(sidebar).toMatchObject({
+    expect(projectSnapshotToWorkspace(entry, existing)).toMatchObject({
       name: 'snapshot-name',
       githubIssueNumber: 1959,
       githubIssueUrl: 'https://github.com/purplefish-ai/factory-factory/issues/1959',
@@ -168,56 +159,24 @@ describe('workspace snapshot cache projections', () => {
       linearIssueIdentifier: 'ENG-1959',
       linearIssueUrl: 'https://linear.app/issue/ENG-1959',
       creationSource: 'CHILD_WORKSPACE',
-    });
-    expect(kanban).toMatchObject({
-      name: 'snapshot-name',
-      githubIssueNumber: 1959,
-      githubIssueUrl: 'https://github.com/purplefish-ai/factory-factory/issues/1959',
-      linearIssueId: 'linear-id',
-      linearIssueIdentifier: 'ENG-1959',
-      linearIssueUrl: 'https://linear.app/issue/ENG-1959',
-      creationSource: 'CHILD_WORKSPACE',
-      creationMetadata: { reason: 'delegated' },
-      parentWorkspaceId: 'parent-ws',
-    });
-    expect(detail).toMatchObject({
-      name: 'snapshot-name',
-      githubIssueNumber: 1959,
-      githubIssueUrl: 'https://github.com/purplefish-ai/factory-factory/issues/1959',
-      linearIssueId: 'linear-id',
-      linearIssueIdentifier: 'ENG-1959',
-      linearIssueUrl: 'https://linear.app/issue/ENG-1959',
-      creationSource: 'CHILD_WORKSPACE',
-      creationMetadata: { reason: 'delegated' },
-      parentWorkspaceId: 'parent-ws',
+      mode: 'AUTO_ITERATION',
+      initErrorMessage: 'setup failed once',
     });
   });
 
-  it('preserves archived state from an existing kanban cache entry', () => {
-    const entry = makeEntry();
-    const existing = {
-      ...projectSnapshotToKanbanWorkspace(entry),
-      isArchived: true,
-    };
-
-    expect(projectSnapshotToKanbanWorkspace(entry, existing).isArchived).toBe(true);
-  });
-
-  it('supplies only the router-required defaults for a new kanban entry', () => {
-    const result = projectSnapshotToKanbanWorkspace(makeEntry());
-
-    expect(result).toMatchObject({
-      projectId: 'proj-1',
-      description: null,
-      status: 'READY',
+  it('supplies mutation-only defaults for a workspace the snapshot introduces first', () => {
+    expect(projectSnapshotToWorkspace(makeEntry())).toMatchObject({
       creationSource: 'MANUAL',
-      creationMetadata: null,
+      mode: 'STANDARD',
       initErrorMessage: null,
-      updatedAt: new Date('2026-01-10T08:00:00Z'),
-      agentSessions: [],
-      terminalSessions: [],
-      parentWorkspaceId: null,
-      isArchived: false,
+      githubIssueNumber: null,
+      githubIssueUrl: null,
+      linearIssueId: null,
+      linearIssueIdentifier: null,
+      linearIssueUrl: null,
+      autoIterationStatus: null,
+      autoIterationConfig: null,
+      autoIterationProgress: null,
     });
   });
 

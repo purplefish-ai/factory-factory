@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 
-const mockFindByProjectId = vi.hoisted(() => vi.fn());
+const mockListForProject = vi.hoisted(() => vi.fn());
 const mockCountPending = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceWithWorktree = vi.hoisted(() => vi.fn());
 
@@ -21,7 +21,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 describe('workspace router composition', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFindByProjectId.mockResolvedValue([]);
+    mockListForProject.mockResolvedValue({ workspaces: [], reviewCount: 0 });
     mockCountPending.mockResolvedValue(0);
     mockGetWorkspaceWithWorktree.mockResolvedValue(null);
   });
@@ -39,8 +39,8 @@ describe('workspace router composition', () => {
     const fakeGraph = createFakeApplicationGraph('workspace-composition');
     const services = {
       ...fakeGraph.services,
-      workspaceDataService: Object.assign({}, fakeGraph.services.workspaceDataService, {
-        findByProjectId: mockFindByProjectId,
+      workspaceQueryService: Object.assign({}, fakeGraph.services.workspaceQueryService, {
+        listForProject: mockListForProject,
       }),
       workspaceNotificationService: Object.assign(
         {},
@@ -58,7 +58,10 @@ describe('workspace router composition', () => {
       })
     );
 
-    await expect(caller.list({ projectId: 'project-1' })).resolves.toEqual([]);
+    await expect(caller.listForProject({ projectId: 'project-1' })).resolves.toEqual({
+      workspaces: [],
+      reviewCount: 0,
+    });
     await expect(caller.getPendingNotificationCount({ workspaceId: 'workspace-1' })).resolves.toBe(
       0
     );

@@ -386,7 +386,7 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    DB[Database: prCiStatus = FAILURE] --> tRPC[tRPC: workspace.list]
+    DB[Database: prCiStatus = FAILURE] --> tRPC[tRPC: workspace.listForProject]
     tRPC --> List[Workspace List View]
     tRPC --> Kanban[Kanban Board]
     tRPC --> Detail[Workspace Detail]

@@ -36,7 +36,7 @@ export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
 
 type WorkspaceWithId = { id: string };
 
-export type ProjectSummaryCacheData<TWorkspace extends WorkspaceWithId> = {
+export type ProjectWorkspaceCacheData<TWorkspace extends WorkspaceWithId> = {
   workspaces: TWorkspace[];
   reviewCount: number;
 };
@@ -68,10 +68,10 @@ function restoreWorkspacesByPreviousOrder<TWorkspace extends WorkspaceWithId>(
   return restoredWorkspaces;
 }
 
-export function removeWorkspaceFromProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
-  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
+export function removeWorkspaceFromProjectWorkspaceCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectWorkspaceCacheData<TWorkspace> | undefined,
   workspaceId: string
-): ProjectSummaryCacheData<TWorkspace> | undefined {
+): ProjectWorkspaceCacheData<TWorkspace> | undefined {
   if (!cache) {
     return cache;
   }
@@ -84,10 +84,10 @@ export function removeWorkspaceFromProjectSummaryCache<TWorkspace extends Worksp
   return { ...cache, workspaces };
 }
 
-export function removeWorkspacesFromProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
-  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
+export function removeWorkspacesFromProjectWorkspaceCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectWorkspaceCacheData<TWorkspace> | undefined,
   workspaceIds: Iterable<string>
-): ProjectSummaryCacheData<TWorkspace> | undefined {
+): ProjectWorkspaceCacheData<TWorkspace> | undefined {
   if (!cache) {
     return cache;
   }
@@ -105,41 +105,11 @@ export function removeWorkspacesFromProjectSummaryCache<TWorkspace extends Works
   return { ...cache, workspaces };
 }
 
-export function restoreWorkspacesToListCache<TWorkspace extends WorkspaceWithId>(
-  cache: TWorkspace[] | undefined,
-  previousCache: TWorkspace[] | undefined,
+export function restoreWorkspacesToProjectWorkspaceCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectWorkspaceCacheData<TWorkspace> | undefined,
+  previousCache: ProjectWorkspaceCacheData<TWorkspace> | undefined,
   workspaceIds: Iterable<string>
-): TWorkspace[] | undefined {
-  if (!previousCache) {
-    return cache;
-  }
-
-  const idsToRestore = new Set(workspaceIds);
-  if (idsToRestore.size === 0) {
-    return cache;
-  }
-
-  if (!cache) {
-    return previousCache;
-  }
-
-  const currentIds = new Set(cache.map((workspace) => workspace.id));
-  const workspacesToRestore = previousCache.filter(
-    (workspace) => idsToRestore.has(workspace.id) && !currentIds.has(workspace.id)
-  );
-
-  if (workspacesToRestore.length === 0) {
-    return cache;
-  }
-
-  return restoreWorkspacesByPreviousOrder(cache, previousCache, workspacesToRestore);
-}
-
-export function restoreWorkspacesToProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
-  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
-  previousCache: ProjectSummaryCacheData<TWorkspace> | undefined,
-  workspaceIds: Iterable<string>
-): ProjectSummaryCacheData<TWorkspace> | undefined {
+): ProjectWorkspaceCacheData<TWorkspace> | undefined {
   if (!previousCache) {
     return cache;
   }

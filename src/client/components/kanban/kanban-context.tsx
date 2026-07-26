@@ -6,10 +6,9 @@ import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
 import {
-  removeWorkspaceFromProjectSummaryCache,
-  removeWorkspacesFromProjectSummaryCache,
-  restoreWorkspacesToListCache,
-  restoreWorkspacesToProjectSummaryCache,
+  removeWorkspaceFromProjectWorkspaceCache,
+  removeWorkspacesFromProjectWorkspaceCache,
+  restoreWorkspacesToProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
 import type { IssueProvider } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
@@ -64,12 +63,12 @@ export function KanbanProvider({
 }: KanbanProviderProps) {
   const utils = trpc.useUtils();
   const {
-    data: workspaces,
+    data: projectWorkspaces,
     isLoading: isLoadingWorkspaces,
     isError: isErrorWorkspaces,
     error: errorWorkspaces,
     refetch: refetchWorkspaces,
-  } = trpc.workspace.listWithKanbanState.useQuery(
+  } = trpc.workspace.listForProject.useQuery(
     { projectId },
     {
       // Kanban workspace state is live-synced via /snapshots (useProjectSnapshotSync).
@@ -77,6 +76,14 @@ export function KanbanProvider({
       staleTime: Number.POSITIVE_INFINITY,
       refetchOnWindowFocus: false,
     }
+  );
+
+  // The board and the sidebar read one list. A null column means the board
+  // excludes the workspace (it is archiving), so that filter is the board's
+  // view of the shared data rather than a separate fetch.
+  const workspaces = useMemo(
+    () => projectWorkspaces?.workspaces.filter((workspace) => workspace.kanbanColumn !== null),
+    [projectWorkspaces]
   );
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
@@ -144,31 +151,18 @@ export function KanbanProvider({
 
   const renameWorkspace = async (workspaceId: string, name: string) => {
     await renameMutation.mutateAsync({ id: workspaceId, name });
-    await Promise.all([
-      refetchWorkspaces(),
-      utils.workspace.getProjectSummaryState.invalidate({ projectId }),
-      utils.workspace.get.invalidate({ id: workspaceId }),
-    ]);
+    await Promise.all([refetchWorkspaces(), utils.workspace.get.invalidate({ id: workspaceId })]);
   };
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
 
-    await Promise.all([
-      utils.workspace.listWithKanbanState.cancel({ projectId }),
-      utils.workspace.getProjectSummaryState.cancel({ projectId }),
-    ]);
+    await utils.workspace.listForProject.cancel({ projectId });
 
-    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
-    const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
-      projectId,
-    });
+    const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
 
-    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-      old?.filter((item) => item.id !== workspaceId)
-    );
-    utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-      removeWorkspaceFromProjectSummaryCache(old, workspaceId)
+    utils.workspace.listForProject.setData({ projectId }, (old) =>
+      removeWorkspaceFromProjectWorkspaceCache(old, workspaceId)
     );
 
     setArchivingWorkspaceIds((prev) => {
@@ -188,11 +182,8 @@ export function KanbanProvider({
       try {
         await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
       } catch {
-        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-          restoreWorkspacesToListCache(old, previousWorkspaceList, [workspaceId])
-        );
-        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-          restoreWorkspacesToProjectSummaryCache(old, previousProjectSummaryState, [workspaceId])
+        utils.workspace.listForProject.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, [workspaceId])
         );
         // Error feedback is surfaced by the mutation's onError toast;
         // callers fire-and-forget, so don't propagate an unhandled rejection.
@@ -201,7 +192,6 @@ export function KanbanProvider({
 
       await Promise.allSettled([
         refetchWorkspaces(),
-        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
     } finally {
@@ -230,21 +220,12 @@ export function KanbanProvider({
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
 
-    await Promise.all([
-      utils.workspace.listWithKanbanState.cancel({ projectId }),
-      utils.workspace.getProjectSummaryState.cancel({ projectId }),
-    ]);
+    await utils.workspace.listForProject.cancel({ projectId });
 
-    const previousWorkspaceList = utils.workspace.listWithKanbanState.getData({ projectId });
-    const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
-      projectId,
-    });
+    const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
 
-    utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-      old?.filter((workspace) => !workspaceIdsToArchive.includes(workspace.id))
-    );
-    utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-      removeWorkspacesFromProjectSummaryCache(old, workspaceIdsToArchive)
+    utils.workspace.listForProject.setData({ projectId }, (old) =>
+      removeWorkspacesFromProjectWorkspaceCache(old, workspaceIdsToArchive)
     );
 
     setArchivingWorkspaceIds((prev) => {
@@ -282,37 +263,22 @@ export function KanbanProvider({
           });
         }
         if (failedWorkspaceIds.length > 0) {
-          utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-            restoreWorkspacesToListCache(old, previousWorkspaceList, failedWorkspaceIds)
-          );
-          utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-            restoreWorkspacesToProjectSummaryCache(
-              old,
-              previousProjectSummaryState,
-              failedWorkspaceIds
-            )
+          utils.workspace.listForProject.setData({ projectId }, (old) =>
+            restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, failedWorkspaceIds)
           );
         }
       } catch {
-        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-          restoreWorkspacesToListCache(old, previousWorkspaceList, workspaceIdsToArchive)
-        );
-        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-          restoreWorkspacesToProjectSummaryCache(
-            old,
-            previousProjectSummaryState,
-            workspaceIdsToArchive
-          )
+        utils.workspace.listForProject.setData({ projectId }, (old) =>
+          restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, workspaceIdsToArchive)
         );
         // Error feedback is surfaced by the mutation's onError toast;
         // callers fire-and-forget, so don't propagate an unhandled rejection.
         return;
       }
 
-      await Promise.allSettled([
-        refetchWorkspaces(),
-        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
-      ]);
+      // The archive already succeeded, so a failing refresh must not surface as
+      // an archive failure.
+      await Promise.allSettled([refetchWorkspaces()]);
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);

@@ -41,7 +41,6 @@ const baseWorkspace = {
   runScriptStatus: 'IDLE',
   pendingRequestType: null,
   kanbanColumn: null,
-  snapshotComputedAt: null,
   githubIssueNumber: null,
   githubIssueUrl: null,
   linearIssueId: null,

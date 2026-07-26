@@ -171,10 +171,7 @@ type PrAggregatePersistenceInput = Partial<
 > & { prUpdatedAt: Date };
 
 interface FindByProjectIdFilters {
-  status?: WorkspaceStatus;
   excludeStatuses?: WorkspaceStatus[];
-  limit?: number;
-  offset?: number;
 }
 
 type WorkspaceWithAgentSessions = Prisma.WorkspaceGetPayload<{
@@ -340,40 +337,19 @@ class WorkspaceAccessor {
     });
   }
 
-  findByProjectId(projectId: string, filters?: FindByProjectIdFilters): Promise<Workspace[]> {
-    const where: Prisma.WorkspaceWhereInput = { projectId };
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
+  findByProjectId(projectId: string): Promise<Workspace[]> {
     return prisma.workspace.findMany({
-      where,
-      take: filters?.limit,
-      skip: filters?.offset,
+      where: { projectId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
-  /**
-   * Find workspaces with sessions included (for kanban state computation).
-   *
-   * @throws Error if both status and excludeStatuses filters are specified
-   */
+  /** Find workspaces with sessions included, for derived-state computation. */
   findByProjectIdWithSessions(
     projectId: string,
     filters?: FindByProjectIdFilters
   ): Promise<WorkspaceWithSessions[]> {
-    // Validate mutually exclusive filters
-    if (filters?.status && filters?.excludeStatuses?.length) {
-      throw new Error('Cannot specify both status and excludeStatuses filters');
-    }
-
     const where: Prisma.WorkspaceWhereInput = { projectId };
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
 
     if (filters?.excludeStatuses && filters.excludeStatuses.length > 0) {
       where.status = { notIn: filters.excludeStatuses };
@@ -381,8 +357,6 @@ class WorkspaceAccessor {
 
     return prisma.workspace.findMany({
       where,
-      take: filters?.limit,
-      skip: filters?.offset,
       orderBy: { updatedAt: 'desc' },
       include: {
         agentSessions: true,

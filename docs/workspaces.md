@@ -62,8 +62,7 @@ Workspace provisioning transitions are enforced by
 - `ARCHIVING -> READY | FAILED | ARCHIVED`;
 - `ARCHIVED` is terminal.
 
-Invalid transitions throw `WorkspaceStateMachineError`. Lifecycle transitions also refresh
-the cached Kanban column when the target is not `ARCHIVING` or `ARCHIVED`.
+Invalid transitions throw `WorkspaceStateMachineError`.
 
 ## PR and Ratchet Progression
 
@@ -122,6 +121,12 @@ aggregate actually warrants another fixer.
 Archiving and archived workspaces derive a `null` column, which keeps them off the active board.
 The column is never persisted: `computeKanbanColumn` runs on every read, so the board, the
 sidebar, the snapshot stream, and the child-workspace panel cannot disagree about it.
+
+There is also one project-scoped read behind it. `workspace.listForProject` returns every live
+workspace in a project with its derived state, and the board and the sidebar select what they
+render from that single list — the board dropping rows whose column is `null`. Column-wide
+actions use `findWorkspaceIdsInKanbanColumn`, which derives the column rather than filtering in
+SQL, because live session state is not in the database.
 
 ## Cached and Live State Propagation
 

@@ -9,16 +9,14 @@ import { InlineWorkspaceForm } from './inline-workspace-form';
 const mocks = vi.hoisted(() => ({
   detectFileMentionMock: vi.fn(),
   toastErrorMock: vi.fn(),
-  listWithKanbanStateCancelMock: vi.fn(),
-  listWithKanbanStateGetDataMock: vi.fn(),
-  listWithKanbanStateSetDataMock: vi.fn(),
-  listWithKanbanStateInvalidateMock: vi.fn(),
-  listInvalidateMock: vi.fn(),
-  getProjectSummaryStateInvalidateMock: vi.fn(),
+  listForProjectCancelMock: vi.fn(),
+  listForProjectGetDataMock: vi.fn(),
+  listForProjectSetDataMock: vi.fn(),
+  listForProjectInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
   createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
-  kanbanCache: undefined as unknown[] | undefined,
+  workspaceListCache: undefined as { workspaces: Array<{ id: string }> } | undefined,
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
@@ -40,14 +38,12 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({
       workspace: {
         get: { setData: mocks.getSetDataMock },
-        listWithKanbanState: {
-          cancel: mocks.listWithKanbanStateCancelMock,
-          getData: mocks.listWithKanbanStateGetDataMock,
-          setData: mocks.listWithKanbanStateSetDataMock,
-          invalidate: mocks.listWithKanbanStateInvalidateMock,
+        listForProject: {
+          cancel: mocks.listForProjectCancelMock,
+          getData: mocks.listForProjectGetDataMock,
+          setData: mocks.listForProjectSetDataMock,
+          invalidate: mocks.listForProjectInvalidateMock,
         },
-        list: { invalidate: mocks.listInvalidateMock },
-        getProjectSummaryState: { invalidate: mocks.getProjectSummaryStateInvalidateMock },
       },
       periodicTask: {
         list: { invalidate: vi.fn() },
@@ -243,13 +239,14 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
-  mocks.kanbanCache = undefined;
+  mocks.workspaceListCache = undefined;
   mocks.createWorkspaceMutationOptions = undefined;
-  mocks.listWithKanbanStateCancelMock.mockResolvedValue(undefined);
-  mocks.listWithKanbanStateGetDataMock.mockImplementation(() => mocks.kanbanCache);
-  mocks.listWithKanbanStateSetDataMock.mockImplementation((_input, updater) => {
-    mocks.kanbanCache = typeof updater === 'function' ? updater(mocks.kanbanCache) : updater;
-    return mocks.kanbanCache;
+  mocks.listForProjectCancelMock.mockResolvedValue(undefined);
+  mocks.listForProjectGetDataMock.mockImplementation(() => mocks.workspaceListCache);
+  mocks.listForProjectSetDataMock.mockImplementation((_input, updater) => {
+    mocks.workspaceListCache =
+      typeof updater === 'function' ? updater(mocks.workspaceListCache) : updater;
+    return mocks.workspaceListCache;
   });
 });
 
@@ -329,7 +326,7 @@ describe('InlineWorkspaceForm', () => {
     container.remove();
   });
 
-  it('restores an empty kanban cache when optimistic workspace creation fails', async () => {
+  it('restores an empty project list cache when optimistic workspace creation fails', async () => {
     const { container, root } = renderForm();
     const mutationOptions = mocks.createWorkspaceMutationOptions as {
       onMutate: (input: {
@@ -337,7 +334,7 @@ describe('InlineWorkspaceForm', () => {
         projectId: string;
         name: string;
         ratchetEnabled?: boolean;
-      }) => Promise<{ optimisticWorkspaceId: string; previousWorkspaces: unknown[] | undefined }>;
+      }) => Promise<{ optimisticWorkspaceId: string; previousWorkspaces: unknown }>;
       onError: (error: Error, input: unknown, context: unknown) => void;
     };
 
@@ -348,20 +345,19 @@ describe('InlineWorkspaceForm', () => {
       ratchetEnabled: true,
     });
 
-    expect(Array.isArray(mocks.kanbanCache)).toBe(true);
-    expect(mocks.kanbanCache).toHaveLength(1);
-    expect(mocks.kanbanCache?.[0]).toMatchObject({
+    expect(mocks.workspaceListCache?.workspaces).toHaveLength(1);
+    expect(mocks.workspaceListCache?.workspaces[0]).toMatchObject({
       id: context.optimisticWorkspaceId,
       name: 'New Workspace',
     });
 
     mutationOptions.onError(new Error('boom'), undefined, context);
 
-    expect(mocks.listWithKanbanStateSetDataMock).toHaveBeenLastCalledWith(
+    expect(mocks.listForProjectSetDataMock).toHaveBeenLastCalledWith(
       { projectId: 'project-1' },
       undefined
     );
-    expect(mocks.kanbanCache).toBeUndefined();
+    expect(mocks.workspaceListCache).toBeUndefined();
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to create workspace: boom');
 
     root.unmount();
