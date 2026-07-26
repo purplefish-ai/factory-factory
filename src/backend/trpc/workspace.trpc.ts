@@ -141,8 +141,6 @@ export const workspaceCoreRouter = router({
         projectId: z.string(),
         status: z.nativeEnum(WorkspaceStatus).optional(),
         kanbanColumn: z.nativeEnum(KanbanColumn).optional(),
-        limit: z.number().min(1).max(100).optional(),
-        offset: z.number().min(0).optional(),
       })
     )
     .query(({ ctx, input }) =>

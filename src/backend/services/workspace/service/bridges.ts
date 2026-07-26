@@ -8,7 +8,6 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 /** Session capabilities needed by workspace domain */
 export interface WorkspaceSessionBridge {
-  isAnySessionWorking(sessionIds: string[]): boolean;
   getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState;
 }

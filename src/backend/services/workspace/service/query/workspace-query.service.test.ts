@@ -57,11 +57,9 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 describe('WorkspaceQueryService', () => {
-  const mockIsAnySessionWorking = vi.fn<WorkspaceSessionBridge['isAnySessionWorking']>();
   const mockGetAllPendingRequests = vi.fn<WorkspaceSessionBridge['getAllPendingRequests']>();
   const mockGetRuntimeSnapshot = vi.fn<WorkspaceQuerySessionBridge['getRuntimeSnapshot']>();
   const mockSessionBridge: WorkspaceQuerySessionBridge = {
-    isAnySessionWorking: mockIsAnySessionWorking,
     getAllPendingRequests: mockGetAllPendingRequests,
     getRuntimeSnapshot: mockGetRuntimeSnapshot,
   };
@@ -246,6 +244,61 @@ describe('WorkspaceQueryService', () => {
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
+  });
+
+  it('treats an alive-but-idle session as working, matching the snapshot store', async () => {
+    // hasWorkingSessionSummary is true for runtimePhase 'running' even when no
+    // prompt is in flight. The snapshot store and reconciliation use that
+    // predicate, so this query must too — a narrower one (prompt-in-flight
+    // only) would report WAITING here while the live board reported WORKING.
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'w-alive',
+        status: WorkspaceStatus.READY,
+        prUrl: null,
+        prState: PRState.NONE,
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetState: RatchetState.IDLE,
+        runScriptStatus: RunScriptStatus.IDLE,
+        hasHadSessions: true,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        agentSessions: [
+          { id: 's-alive', name: null, workflow: null, model: null, status: 'ACTIVE' },
+        ],
+      },
+    ]);
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'running',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    // Let the service's own predicate decide, rather than stubbing the answer.
+    mockDeriveWorkspaceRuntimeState.mockImplementation(
+      (
+        workspace: { id: string },
+        resolveSessionWorking: (ids: string[], id: string) => boolean
+      ) => {
+        const isSessionWorking = resolveSessionWorking(['s-alive'], workspace.id);
+        return {
+          sessionIds: ['s-alive'],
+          isSessionWorking,
+          isWorking: isSessionWorking,
+          flowState: {
+            hasActivePr: false,
+            isWorking: false,
+            shouldAnimateRatchetButton: false,
+            phase: 'NO_PR',
+            ciObservation: 'CHECKS_UNKNOWN',
+          },
+        };
+      }
+    );
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
+
+    expect(result[0]).toMatchObject({ id: 'w-alive', kanbanColumn: 'WORKING', isWorking: true });
   });
 
   it('listWithKanbanState matches a column that only live session state produces', async () => {

@@ -1,6 +1,18 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
+import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
+import {
+  computeKanbanColumn,
+  computePendingRequestType,
+  deriveWorkspaceFlowStateFromWorkspace,
+} from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export const workspaceChildrenRouter = router({
   createChild: trustedLocalProcedure
@@ -22,25 +34,56 @@ export const workspaceChildrenRouter = router({
   listChildren: publicProcedure
     .input(z.object({ parentWorkspaceId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { workspaceRelationshipsService, workspaceSnapshotStore } = ctx.appContext.services;
+      const { sessionDomainService, sessionService, workspaceRelationshipsService } =
+        ctx.appContext.services;
       const children = await workspaceRelationshipsService.findChildrenWithStatus(
         input.parentWorkspaceId
       );
-      return children.map((child) => ({
-        id: child.id,
-        name: child.name,
-        description: child.description,
-        status: child.status,
-        prState: child.prState,
-        prUrl: child.prUrl,
-        // Children can live in any project, and the snapshot store covers every
-        // non-archived workspace, so this is the same column the board shows.
-        kanbanColumn: workspaceSnapshotStore.getByWorkspaceId(child.id)?.kanbanColumn ?? null,
-        projectId: child.projectId,
-        projectName: child.project.name,
-        projectSlug: child.project.slug,
-        createdAt: child.createdAt,
-      }));
+      const pendingRequests = sessionDomainService.getAllPendingRequests();
+
+      return children.map((child) => {
+        const sessionSummaries = buildWorkspaceSessionSummaries(child.agentSessions, (id) =>
+          sessionService.getRuntimeSnapshot(id)
+        );
+        // Derived on read through the same function workspace.get uses. The
+        // query already loads each child with its sessions, so this does not
+        // wait on the snapshot store having an entry.
+        const derivedState = assembleWorkspaceDerivedState(
+          {
+            lifecycle: child.status,
+            prUrl: child.prUrl,
+            prState: child.prState,
+            prCiStatus: child.prCiStatus,
+            ratchetState: child.ratchetState,
+            hasHadSessions: child.hasHadSessions,
+            sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
+            pendingRequestType: computePendingRequestType(
+              child.agentSessions.map((session) => session.id),
+              pendingRequests
+            ),
+            hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
+            ratchetDispatchOutcome: child.ratchetDispatchOutcome,
+            ratchetDispatchRetryCount: child.ratchetDispatchRetryCount,
+            runScriptStatus: child.runScriptStatus,
+            flowState: deriveWorkspaceFlowStateFromWorkspace(child),
+          },
+          { computeKanbanColumn, deriveSidebarStatus: deriveWorkspaceSidebarStatus }
+        );
+
+        return {
+          id: child.id,
+          name: child.name,
+          description: child.description,
+          status: child.status,
+          prState: child.prState,
+          prUrl: child.prUrl,
+          kanbanColumn: derivedState.kanbanColumn,
+          projectId: child.projectId,
+          projectName: child.project.name,
+          projectSlug: child.project.slug,
+          createdAt: child.createdAt,
+        };
+      });
     }),
 
   getParent: publicProcedure

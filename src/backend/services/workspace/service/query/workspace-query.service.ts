@@ -18,7 +18,10 @@ import { computePendingRequestType } from '@/backend/services/workspace/service/
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
-import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import {
+  findWorkspaceSessionRuntimeError,
+  hasWorkingSessionSummary,
+} from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -59,14 +62,26 @@ class WorkspaceQueryService {
     return this.sessionBridge;
   }
 
-  private hasSessionRuntimeError(workspace: {
+  /**
+   * Read both session-derived inputs to the Kanban column from one set of
+   * summaries.
+   *
+   * `isWorking` must use `hasWorkingSessionSummary`, the same predicate the
+   * snapshot store and reconciliation use. A narrower signal here (for example
+   * prompt-in-flight alone) makes this query and the live snapshot stream
+   * disagree about the column for a session that is alive between prompts.
+   */
+  private deriveSessionState(workspace: {
     agentSessions?: Parameters<typeof buildWorkspaceSessionSummaries>[0] | null;
-  }): boolean {
+  }): { isWorking: boolean; hasRuntimeError: boolean } {
     const sessionSummaries = buildWorkspaceSessionSummaries(
       workspace.agentSessions ?? [],
       (sessionId) => this.session.getRuntimeSnapshot(sessionId)
     );
-    return Boolean(findWorkspaceSessionRuntimeError(sessionSummaries));
+    return {
+      isWorking: hasWorkingSessionSummary(sessionSummaries),
+      hasRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
+    };
   }
 
   private get github(): WorkspaceGitHubBridge {
@@ -155,10 +170,12 @@ class WorkspaceQueryService {
       string,
       'plan_approval' | 'user_question' | 'permission_request' | null
     >();
+    const sessionStateByWorkspace = new Map<string, ReturnType<typeof this.deriveSessionState>>();
     for (const workspace of workspaces) {
-      const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
-        this.session.isAnySessionWorking(sessionIds)
-      );
+      const sessionState = this.deriveSessionState(workspace);
+      sessionStateByWorkspace.set(workspace.id, sessionState);
+
+      const runtimeState = deriveWorkspaceRuntimeState(workspace, () => sessionState.isWorking);
       runtimeStateByWorkspace.set(workspace.id, runtimeState);
 
       const pendingRequestType = computePendingRequestType(
@@ -214,7 +231,7 @@ class WorkspaceQueryService {
             hasHadSessions: w.hasHadSessions ?? true,
             sessionIsWorking: runtimeState?.isSessionWorking ?? false,
             pendingRequestType,
-            hasSessionRuntimeError: this.hasSessionRuntimeError(w),
+            hasSessionRuntimeError: sessionStateByWorkspace.get(w.id)?.hasRuntimeError ?? false,
             ratchetDispatchOutcome: w.ratchetDispatchOutcome,
             ratchetDispatchRetryCount: w.ratchetDispatchRetryCount,
             runScriptStatus: w.runScriptStatus,
@@ -268,15 +285,19 @@ class WorkspaceQueryService {
     };
   }
 
+  /**
+   * List a project's workspaces with their derived Kanban column.
+   *
+   * `kanbanColumn` filters in memory, not in SQL: the column depends on live
+   * session state the database cannot see. This endpoint therefore takes no
+   * limit/offset — paginating in SQL and then filtering on a derived value
+   * would drop matches that fall outside the fetched page.
+   */
   async listWithKanbanState(input: {
     projectId: string;
     status?: WorkspaceStatus;
     kanbanColumn?: KanbanColumn;
-    limit?: number;
-    offset?: number;
   }) {
-    // kanbanColumn is deliberately not a query filter: the column is derived
-    // below from live session state, so the database cannot pre-select on it.
     const { projectId, kanbanColumn, ...filters } = input;
 
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
@@ -289,9 +310,8 @@ class WorkspaceQueryService {
 
     return workspaces
       .map((workspace) => {
-        const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
-          this.session.isAnySessionWorking(sessionIds)
-        );
+        const sessionState = this.deriveSessionState(workspace);
+        const runtimeState = deriveWorkspaceRuntimeState(workspace, () => sessionState.isWorking);
         const pendingRequestType = computePendingRequestType(
           runtimeState.sessionIds,
           allPendingRequests
@@ -306,7 +326,7 @@ class WorkspaceQueryService {
             hasHadSessions: workspace.hasHadSessions,
             sessionIsWorking: runtimeState.isSessionWorking,
             pendingRequestType,
-            hasSessionRuntimeError: this.hasSessionRuntimeError(workspace),
+            hasSessionRuntimeError: sessionState.hasRuntimeError,
             ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
             ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
             runScriptStatus: workspace.runScriptStatus,

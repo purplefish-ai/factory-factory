@@ -367,7 +367,6 @@ export function configureDomainBridges(services: BridgeServices): void {
   // === Workspace domain bridges ===
   workspaceQueryService.configure({
     session: {
-      isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
       getRuntimeSnapshot: (id) => sessionService.getRuntimeSnapshot(id),
     },
