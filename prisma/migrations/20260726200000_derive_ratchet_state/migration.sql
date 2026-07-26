@@ -34,34 +34,31 @@ DROP TABLE "WorkspacePR";
 ALTER TABLE "new_WorkspacePR" RENAME TO "WorkspacePR";
 CREATE INDEX "WorkspacePR_url_discoveryNextCheckAt_idx" ON "WorkspacePR"("url", "discoveryNextCheckAt");
 CREATE INDEX "WorkspacePR_syncedAt_idx" ON "WorkspacePR"("syncedAt");
--- Backfill: recover the conflict flag from the two places that encoded it. Runs
--- after WorkspacePR has been rebuilt with the new column and before
--- WorkspaceRatchet loses `state`.
+-- Backfill: recover the conflict flag from the state that encoded it. Runs after
+-- WorkspacePR has been rebuilt with the new column and before WorkspaceRatchet
+-- loses `state`.
 --
--- `state` alone under-reports, because a failing build outranked a conflict in
--- the derivation: a PR with both was stored as CI_FAILED. The dispatch snapshot
--- key records the conflict independently (`|merge:conflict`), so it recovers the
--- masked cases.
+-- `state` is the only contemporaneous record of a conflict, and it under-reports:
+-- a failing build outranked a conflict in the derivation, so a PR with both was
+-- stored as CI_FAILED and migrates as clean.
 --
--- The key persists after its dispatch settles, so it cannot be trusted on its own
--- -- a resolved conflict leaves the suffix behind. CI_FAILED is the only state
--- where it is safe to believe, and that is exactly the masked case: any other
--- state proves there was no conflict at the last observation, because a conflict
--- would have produced MERGE_CONFLICT instead. Restricted to still-open PRs too,
--- since a closed or merged PR short-circuits before the flag is read.
+-- That is accepted rather than patched. The dispatch snapshot key also carries a
+-- conflict (`|merge:conflict`), but it records whenever the last fixer was
+-- dispatched, not the last observation -- a conflict resolved after its dispatch
+-- leaves the suffix behind, and a later CI failure puts the row back in CI_FAILED,
+-- so even restricting the recovery to that state cannot tell a live conflict from
+-- a stale one.
+--
+-- Under-reporting costs nothing observable: while CI is failing the derivation
+-- returns CI_FAILED and never consults the flag, and the first ratchet check after
+-- CI turns green writes the true flag in the same statement that turns it green
+-- (`recordPrObservation` writes all four projection inputs together). Over-
+-- reporting would be visible -- a spurious conflict badge, and a conflict fixer
+-- dispatched against a clean PR -- so the ambiguous source is left out.
 UPDATE "WorkspacePR"
 SET "hasMergeConflict" = true
 WHERE "workspaceId" IN (
     SELECT "workspaceId" FROM "WorkspaceRatchet" WHERE "state" = 'MERGE_CONFLICT'
-);
-
-UPDATE "WorkspacePR"
-SET "hasMergeConflict" = true
-WHERE "state" IN ('OPEN', 'DRAFT', 'CHANGES_REQUESTED', 'APPROVED')
-  AND "workspaceId" IN (
-    SELECT "workspaceId" FROM "WorkspaceRatchet"
-    WHERE "state" = 'CI_FAILED'
-      AND "dispatchSnapshotKey" LIKE '%|merge:conflict'
 );
 
 CREATE TABLE "new_WorkspaceRatchet" (

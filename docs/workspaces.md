@@ -189,14 +189,14 @@ What that replaced:
 folded it into `RatchetState.MERGE_CONFLICT` and stored that. So the trade is one derived enum
 column for one observed boolean.
 
-The migration backfills it from two places. `state = 'MERGE_CONFLICT'` is the obvious one but it
-under-reports, because a failing build outranked a conflict in the derivation — a PR with both was
-stored as `CI_FAILED`. The dispatch snapshot key records the conflict independently
-(`|merge:conflict`), so it recovers the masked cases — but the key outlives the dispatch that set it,
-so it is believed only on `CI_FAILED` rows, which is exactly the masked case: any other state proves
-there was no conflict at the last observation, because a conflict would have produced
-`MERGE_CONFLICT` instead. Restricted to still-open PRs too, since a closed or merged PR
-short-circuits before the flag is read.
+The migration backfills it from `state = 'MERGE_CONFLICT'`, which under-reports: a failing build
+outranked a conflict in the derivation, so a PR with both was stored as `CI_FAILED` and migrates as
+clean. That is accepted rather than patched. The dispatch snapshot key carries a conflict too
+(`|merge:conflict`) but it records whenever the last fixer was dispatched, not the last observation,
+so it cannot distinguish a live conflict from one resolved after its dispatch. Under-reporting costs
+nothing observable — while CI is failing the derivation returns `CI_FAILED` and never reads the flag,
+and the first ratchet check after CI turns green writes the true flag in the same statement that
+turns it green. Over-reporting would be visible.
 
 **The ratchet check persists the whole observation, not just CI.** This is the part that makes the
 projection sound: `ratchetState` is read from the cache, so anything a check saw and kept to itself
@@ -205,7 +205,13 @@ straight into a `state` column, so a merge or a new changes-requested review rea
 while the cache lagged the PR-sync poller. `recordPrObservation` now writes `prState`,
 `prReviewState`, `prCiStatus` and `hasMergeConflict` together, mapping the raw observation through
 the github capsule's own `computePRState` so both writers of `WorkspacePR.state` agree on what
-`DRAFT` and `APPROVED` mean. It also publishes `PR_SNAPSHOT_UPDATED` for every applied write, the
+`DRAFT` and `APPROVED` mean. The write is guarded on the PR number the observation was fetched
+for: the aggregate compare-and-swap reads its guard inside the write transaction, so it catches a
+racing write but not a workspace re-pointed at a new PR while the check was off fetching — and a
+stale `MERGED` stamped onto a fresh PR would drop it out of the ratchet poll set. A null cached
+number is treated as "not known yet", since discovery attaches a url without a number.
+
+`recordPrObservation` also publishes `PR_SNAPSHOT_UPDATED` for every applied write, the
 same event the PR-sync poller publishes — otherwise a merge the ratchet saw first would reach the
 database and stop there, leaving the client on `OPEN` and the linked Linear issue uncompleted until
 the poller came round. `PR_DISPATCH_INVALIDATED` is gone: it had one emitter and one handler and

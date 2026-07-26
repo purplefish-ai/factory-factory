@@ -128,6 +128,7 @@ class PRSnapshotService extends EventEmitter {
   async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
     await this.runWorkspaceOperation(workspaceId, async () => {
       const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
+        expectedPrNumber: input.prNumber,
         prCiStatus: input.ciStatus,
         prState: input.prState,
         prReviewState: input.reviewState,

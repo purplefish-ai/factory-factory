@@ -434,6 +434,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
+        expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
         prReviewState: null,
@@ -456,6 +457,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
+        expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
         prReviewState: null,
@@ -478,6 +480,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
+        expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
         prReviewState: null,

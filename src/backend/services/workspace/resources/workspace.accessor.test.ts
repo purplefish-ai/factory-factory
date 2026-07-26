@@ -399,6 +399,54 @@ describe('workspaceAccessor', () => {
       expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
     });
 
+    it('refuses an observation whose PR is no longer the one attached', async () => {
+      // The workspace was re-pointed at a new PR while the check was off fetching
+      // the old one. The aggregate compare-and-swap cannot see this: it reads its
+      // guard inside the write transaction, so it catches a racing write, not a
+      // stale observation. Without the guard a check that saw MERGED on the old PR
+      // would stamp it onto the new one -- and a workspace deriving MERGED leaves
+      // the ratchet poll set entirely.
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/99', number: 99 })
+      );
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'MERGED',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+      expect(mockPrUpdateMany).not.toHaveBeenCalled();
+      expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('accepts an observation when the cached PR number is not yet known', async () => {
+      // Discovery attaches a url without a number, and the check's own number came
+      // from parsing that url, so a null is "not known yet" rather than a different
+      // PR. Rejecting it would block the first observation of a discovered PR.
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/42', number: null })
+      );
+      mockPrUpdateMany.mockResolvedValue({ count: 1 });
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'OPEN',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toMatchObject({ applied: true });
+    });
+
     it('resets settled metadata for a changed direct CI observation', async () => {
       mockPrFindUnique.mockResolvedValue(
         currentColumns({ url: 'https://github.com/org/repo/pull/42', number: 42 })
@@ -408,6 +456,7 @@ describe('workspaceAccessor', () => {
 
       await expect(
         workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrNumber: 42,
           prCiStatus: 'PENDING',
           prState: 'OPEN',
           prReviewState: null,

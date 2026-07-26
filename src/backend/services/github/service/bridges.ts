@@ -50,6 +50,8 @@ export interface GitHubPRSnapshotPersistenceInput extends GitHubSnapshotFields {
  * observation the check does not write is one no later read can derive from.
  */
 export interface GitHubPrObservationPersistenceInput {
+  /** The PR the observation was fetched for. Guarded, not written. */
+  expectedPrNumber: number;
   prCiStatus: CIStatus;
   prState: PRState;
   prReviewState: string | null;

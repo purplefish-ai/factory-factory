@@ -113,6 +113,7 @@ describe('workspacePrSnapshotService', () => {
 
   it('owns atomic CI observation dispatch reset persistence', async () => {
     const observation = {
+      expectedPrNumber: 7,
       prCiStatus: 'FAILURE' as const,
       prState: 'OPEN' as const,
       prReviewState: null,

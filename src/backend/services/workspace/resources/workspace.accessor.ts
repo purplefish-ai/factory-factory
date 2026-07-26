@@ -138,6 +138,18 @@ export interface PrSnapshotPersistenceInput {
  * reads the cache, so the check has to write what it saw.
  */
 export interface PrObservationPersistenceInput {
+  /**
+   * The PR this observation was fetched for. Guarded, never written: the ratchet
+   * does not attach PRs, it reports on the one already attached.
+   *
+   * The aggregate compare-and-swap cannot cover this on its own, because it reads
+   * its guard inside the write transaction — it catches a write racing the
+   * transaction, not a workspace re-pointed at a new PR while the check was off
+   * fetching. Without this, a check that observed `MERGED` on the old PR could
+   * stamp it onto the new one, and a workspace deriving `MERGED` leaves the ratchet
+   * poll set altogether.
+   */
+  expectedPrNumber: number;
   prCiStatus: CIStatus;
   prState: PRState;
   prReviewState: string | null;
@@ -771,7 +783,8 @@ class WorkspaceAccessor {
     workspaceId: string,
     observation: PrObservationPersistenceInput
   ): Promise<PrAggregatePersistenceResult> {
-    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, observation);
+    const { expectedPrNumber, ...fields } = observation;
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, fields, expectedPrNumber);
   }
 
   /**
@@ -812,12 +825,28 @@ class WorkspaceAccessor {
 
   private async applyPrAggregateUpdateWithDispatchReset(
     workspaceId: string,
-    observation: PrAggregatePersistenceInput
+    observation: PrAggregatePersistenceInput,
+    /**
+     * When given, the PR number the observation was fetched for. A row now naming
+     * a different PR means the workspace was re-pointed mid-fetch, so this
+     * observation describes a PR that is no longer the workspace's.
+     */
+    expectedPrNumber?: number
   ): Promise<PrAggregatePersistenceResult> {
     const { branchName, ...prFields } = observation;
     return await prisma.$transaction(async (transaction) => {
       const current = await workspacePrAccessor.readAggregate(transaction, workspaceId);
       if (!current) {
+        return { applied: false, dispatchReset: false };
+      }
+      // A null cached number is "not known yet" rather than a different PR:
+      // discovery attaches a url without a number, and the check's own number came
+      // from parsing that url. Only a populated mismatch is a re-point.
+      if (
+        expectedPrNumber !== undefined &&
+        current.prNumber !== null &&
+        current.prNumber !== expectedPrNumber
+      ) {
         return { applied: false, dispatchReset: false };
       }
       const dispatch = await workspaceRatchetAccessor.readDispatchGuard(transaction, workspaceId);
