@@ -319,9 +319,13 @@ model WorkspacePR {
   reviewLastCheckedAt DateTime?            // When PR review comments were last checked
   reviewLastCommentId String?              // ID of the last processed review comment
 
-  @@index([url])
+  // Discovery seeks on `url IS NULL` plus a due time, so it wants both columns in
+  // one index; a leftmost-prefix scan also serves plain `url` lookups. Sync
+  // filters `url IS NOT NULL` and orders by `syncedAt`, and because that filter
+  // is a range on the leading column, a composite there would cost an ordering
+  // scan rather than save one -- measured with EXPLAIN QUERY PLAN.
+  @@index([url, discoveryNextCheckAt])
   @@index([syncedAt])
-  @@index([discoveryNextCheckAt])
 }
 
 /// The ratchet's own state for one workspace: whether it is watching the PR,

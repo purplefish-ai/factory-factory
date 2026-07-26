@@ -95,13 +95,10 @@ PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
 
 -- CreateIndex
-CREATE INDEX "WorkspacePR_url_idx" ON "WorkspacePR"("url");
+CREATE INDEX "WorkspacePR_url_discoveryNextCheckAt_idx" ON "WorkspacePR"("url", "discoveryNextCheckAt");
 
 -- CreateIndex
 CREATE INDEX "WorkspacePR_syncedAt_idx" ON "WorkspacePR"("syncedAt");
-
--- CreateIndex
-CREATE INDEX "WorkspacePR_discoveryNextCheckAt_idx" ON "WorkspacePR"("discoveryNextCheckAt");
 
 -- SQLite's RedefineTables above dropped and recreated "Workspace", which drops
 -- every trigger attached to it. Recreate the depth-1 guards verbatim; any future

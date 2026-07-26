@@ -134,6 +134,120 @@ describe('check-single-writer', () => {
     expect(result.status).toBe(0);
   });
 
+  describe('owned side tables', () => {
+    // These tables were split off Workspace, so the field-ownership table cannot
+    // police them. dep-cruiser lets any file under services/*/resources/ import
+    // prisma, so without this rule a second accessor could write them freely.
+    it('rejects a WorkspacePR write from another accessor in the same directory', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function sneak(id) {
+              await prisma.workspacePR.updateMany({ where: { workspaceId: id }, data: { state: 'MERGED' } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
+    });
+
+    it('rejects a WorkspaceRatchet write from outside its accessor', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/ratchet/resources/ratchet.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function disable(id) {
+              await prisma.workspaceRatchet.update({ where: { workspaceId: id }, data: { enabled: false } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspaceRatchet via update()');
+    });
+
+    it('allows the owning accessor its own writes', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function write(id) {
+              await prisma.workspacePR.updateMany({ where: { workspaceId: id }, data: { state: 'MERGED' } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('allows any file to read a side table', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
+          content: `
+            import { prisma } from '@/backend/db';
+            async function read(id) {
+              return await prisma.workspacePR.findUnique({ where: { workspaceId: id } });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('allows writes through a transaction client in the owning accessor', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
+          content: `
+            async function write(transaction, id) {
+              await transaction.workspacePR.updateMany({ where: { workspaceId: id }, data: {} });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(0);
+    });
+
+    it('rejects writes through a transaction client elsewhere', () => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/workspace/resources/workspace.accessor.ts',
+          content: `
+            async function write(transaction, id) {
+              await transaction.workspacePR.updateMany({ where: { workspaceId: id }, data: {} });
+            }
+          `,
+        },
+      ]);
+
+      const result = runChecker(tempRoot);
+
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('unauthorized write to workspacePR via updateMany()');
+    });
+  });
+
   it('allows the run-script capability its own compare-and-swap writes', () => {
     const tempRoot = createTempBackend([
       {

@@ -57,13 +57,11 @@ const workspaceFieldOwners = {
   creationMetadata: new Set(['src/backend/services/workspace/service/lifecycle/creation.service.ts']),
 
   // The PR cache's thirteen fields are absent here for the same reason as the
-  // ratchet's below: they live on WorkspacePR, written only by
-  // workspace-pr.accessor.ts, so the type system enforces what this table used
-  // to have to.
+  // ratchet's below: they live on their own table, and OWNED_SIDE_TABLES keeps
+  // the write in one file rather than one accessor method.
 
-  // The ratchet's seven fields are absent here on purpose. They live on
-  // WorkspaceRatchet, written only by workspace-ratchet.accessor.ts, so the type
-  // system enforces what this table used to have to.
+  // The ratchet's seven fields are absent here on purpose, same as the PR
+  // cache's above.
   defaultSessionProvider: new Set([
     'src/backend/services/workspace/service/lifecycle/data.service.ts',
   ]),
@@ -565,6 +563,56 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
   }
 }
 
+/**
+ * Tables split off `Workspace` whose single writer is one file.
+ *
+ * The field-ownership table above cannot police these: it works on `Workspace`
+ * columns, and these are not `Workspace` columns any more. Moving them made the
+ * old lint entries unnecessary but did not make the invariant self-enforcing —
+ * dep-cruiser limits `@/backend/db` to `services/*\/resources/`, so another
+ * accessor in that directory could still write them. This closes that.
+ */
+const OWNED_SIDE_TABLES = {
+  workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
+  workspaceRatchet: 'src/backend/services/workspace/resources/workspace-ratchet.accessor.ts',
+};
+
+const SIDE_TABLE_WRITE_METHODS = new Set([
+  'create',
+  'createMany',
+  'update',
+  'updateMany',
+  'upsert',
+  'delete',
+  'deleteMany',
+]);
+
+/**
+ * Flag `prisma.<table>.<write>()` / `transaction.<table>.<write>()` outside the
+ * one file that owns the table. Reads are unrestricted; any accessor may join a
+ * side table to reproduce the flat workspace shape.
+ */
+function checkOwnedSideTableWrites(relPath, sourceFile, violations) {
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isPropertyAccessExpression(node.expression.expression)
+    ) {
+      const method = node.expression.name.text;
+      const table = node.expression.expression.name.text;
+      const owner = OWNED_SIDE_TABLES[table];
+      if (owner && SIDE_TABLE_WRITE_METHODS.has(method) && relPath !== owner) {
+        violations.push(
+          `${relPath}: unauthorized write to ${table} via ${method}(); ${table} is written only by ${owner}`
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
+
 function checkWorkspaceSchemaCoverage({ rootDir, violations }) {
   const schemaPath = path.join(rootDir, PRISMA_SCHEMA_REL_PATH);
   const schemaText = readFileSync(schemaPath, 'utf8');
@@ -608,6 +656,8 @@ function checkSourceText(relPath, sourceText, violations) {
     true,
     getScriptKind(relPath)
   );
+
+  checkOwnedSideTableWrites(relPath, sourceFile, violations);
 
   function visit(node) {
     const mutationCall = getWorkspaceMutationCall(node);

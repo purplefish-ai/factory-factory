@@ -347,13 +347,25 @@ class WorkspacePRAccessor {
     });
   }
 
-  /** Unconditionally write the supplied subset of the PR cache. */
+  /**
+   * Unconditionally write the supplied subset of the PR cache.
+   *
+   * Throws if no row matched. A row exists for every workspace, so the only way
+   * to miss is a workspace deleted between an observation being fetched and
+   * persisted — which is what the pre-split write did too, by way of
+   * `prisma.workspace.update` raising on a missing row. Preserved deliberately:
+   * `updateMany` would otherwise report success for a discarded observation, and
+   * the PR sync scheduler counts those failures.
+   */
   async write(workspaceId: string, fields: WorkspacePRWriteFields): Promise<void> {
     const data = toColumns(fields);
     if (Object.keys(data).length === 0) {
       return;
     }
-    await prisma.workspacePR.updateMany({ where: { workspaceId }, data });
+    const result = await prisma.workspacePR.updateMany({ where: { workspaceId }, data });
+    if (result.count === 0) {
+      throw new Error(`WorkspacePR row not found for workspace: ${workspaceId}`);
+    }
   }
 
   /** As `write`, in the caller's transaction. */

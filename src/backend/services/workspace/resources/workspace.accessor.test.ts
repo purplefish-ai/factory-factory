@@ -136,20 +136,6 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  // PR discovery scheduling moved with its columns to
-  // `workspace-pr.accessor.test.ts`.
-
-  it('marks workspace as having had sessions with guarded updateMany', async () => {
-    mockUpdateMany.mockResolvedValue({ count: 1 });
-
-    await workspaceAccessor.markHasHadSessions('ws-1');
-
-    expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'ws-1', hasHadSessions: false },
-      data: { hasHadSessions: true },
-    });
-  });
-
   describe('PR aggregate writes with dispatch reset', () => {
     /**
      * The aggregate lives on WorkspacePR and the dispatch on WorkspaceRatchet, so
