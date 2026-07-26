@@ -78,8 +78,7 @@ export function WorkspaceHeaderOverflowMenu({
       setRenameOpen(false);
       await Promise.all([
         utils.workspace.get.invalidate({ id: workspaceId }),
-        utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
-        utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId }),
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
       ]);
     } catch {
       // onError handles user feedback via toast

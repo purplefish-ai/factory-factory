@@ -9,9 +9,9 @@ import {
   TreeStructureIcon,
   WarningIcon,
 } from '@phosphor-icons/react';
-import type { Workspace } from '@prisma-gen/browser';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
+import type { ProjectWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { shouldShowWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
@@ -27,21 +27,16 @@ import {
   WorkspaceStatusBadge,
 } from '@/components/workspace';
 import { cn } from '@/lib/utils';
-import type { KanbanColumn, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
-import { findWorkspaceSessionRuntimeError, type SessionSummary } from '@/shared/session-runtime';
+import type { PRState, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 
-export interface WorkspaceWithKanban extends Workspace {
-  kanbanColumn: KanbanColumn | null;
-  isWorking: boolean;
-  sessionSummaries?: SessionSummary[];
-  ratchetButtonAnimated?: boolean;
-  flowPhase?: string | null;
-  statusReason?: WorkspaceStatusReason | null;
-  isArchived?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
-}
+/**
+ * A card renders one row of the shared project workspace list, so its props
+ * follow that endpoint rather than the database row. Anything a card needs is
+ * added to the list payload once, for every surface that reads it.
+ */
+export type WorkspaceWithKanban = ProjectWorkspace;
 
 interface KanbanCardProps {
   workspace: WorkspaceWithKanban;
@@ -110,13 +105,7 @@ function BranchRow({ branchName }: { branchName: string | null }) {
   );
 }
 
-function CiRow({
-  ciState,
-  prState,
-}: {
-  ciState: WorkspaceSidebarCiState;
-  prState: Workspace['prState'];
-}) {
+function CiRow({ ciState, prState }: { ciState: WorkspaceSidebarCiState; prState: PRState }) {
   return (
     <div className="flex items-center gap-1.5">
       <CiStatusChip ciState={ciState} prState={prState} size="sm" />
@@ -296,8 +285,7 @@ function CardTitleIcons({
 
 function deriveCardState(workspace: WorkspaceWithKanban) {
   const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
-  const isArchived =
-    workspace.isArchived || workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
+  const isArchived = workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
   const sidebarStatus = deriveWorkspaceSidebarStatus({
     isWorking: workspace.isWorking,

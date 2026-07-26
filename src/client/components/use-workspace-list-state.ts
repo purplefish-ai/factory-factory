@@ -36,8 +36,6 @@ export interface ServerWorkspace {
   statusReason?: WorkspaceStatusReason | null;
   runScriptStatus?: RunScriptStatus | null;
   kanbanColumn?: string | null;
-  /** Timestamp for the latest snapshot message applied in client cache. */
-  snapshotComputedAt?: string | null;
   sidebarStatus?: WorkspaceSidebarStatus;
   pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
   githubIssueNumber?: number | null;

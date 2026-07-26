@@ -14,8 +14,8 @@ const mockWorkspaceDataService = vi.hoisted(() => ({
 }));
 
 const mockWorkspaceQueryService = vi.hoisted(() => ({
-  getProjectSummaryState: vi.fn(),
-  listWithKanbanState: vi.fn(),
+  listForProject: vi.fn(),
+  findWorkspaceIdsInKanbanColumn: vi.fn(),
   refreshFactoryConfigs: vi.fn(),
   getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
@@ -281,7 +281,7 @@ describe('workspaceCoreRouter', () => {
     );
   });
 
-  it('lists workspaces and returns enriched workspace details', async () => {
+  it('returns enriched workspace details', async () => {
     const workspace = {
       id: 'w1',
       projectId: 'p1',
@@ -294,11 +294,9 @@ describe('workspaceCoreRouter', () => {
       hasHadSessions: true,
       agentSessions: [],
     };
-    mockWorkspaceDataService.findByProjectId.mockResolvedValue([workspace]);
     mockWorkspaceDataService.findById.mockResolvedValue(workspace);
 
     const { caller } = createCaller();
-    await expect(caller.list({ projectId: 'p1' })).resolves.toEqual([workspace]);
     await expect(caller.get({ id: 'w1' })).resolves.toEqual(
       expect.objectContaining({
         id: 'w1',
@@ -351,10 +349,10 @@ describe('workspaceCoreRouter', () => {
   });
 
   it('includes error codes for individual bulk archive failures', async () => {
-    mockWorkspaceQueryService.listWithKanbanState.mockResolvedValue([
-      { id: 'w-success' },
-      { id: 'w-blocked' },
-      { id: 'w-missing' },
+    mockWorkspaceQueryService.findWorkspaceIdsInKanbanColumn.mockResolvedValue([
+      'w-success',
+      'w-blocked',
+      'w-missing',
     ]);
     mockArchiveWorkspace
       .mockResolvedValueOnce({ archived: true })

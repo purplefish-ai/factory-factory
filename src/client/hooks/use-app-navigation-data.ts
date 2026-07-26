@@ -101,7 +101,7 @@ export function useAppNavigationData() {
   const selectedProjectId = selectedProject?.id;
   const issueProvider = selectedProject?.issueProvider ?? 'GITHUB';
 
-  const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
+  const { data: projectState } = trpc.workspace.listForProject.useQuery(
     { projectId: selectedProjectId ?? '' },
     {
       enabled: !!selectedProjectId,

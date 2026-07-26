@@ -1,7 +1,7 @@
 /**
  * React hook that syncs /snapshots WebSocket messages into the
- * getProjectSummaryState (sidebar), listWithKanbanState (kanban), and
- * workspace.get (detail header/session runtime) React Query cache entries.
+ * workspace.listForProject (sidebar + kanban) and workspace.get (detail
+ * header/session runtime) React Query cache entries.
  *
  * Merge strategy — one strategy per cache per message:
  * - snapshot_changed / snapshot_removed deltas are pure setData patches;
@@ -21,8 +21,7 @@ import { useCallback, useRef } from 'react';
 import { overridePendingRatchetToggle } from '@/client/lib/ratchet-toggle-cache';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
-  projectSnapshotToKanbanWorkspace,
-  projectSnapshotToSidebarWorkspace,
+  projectSnapshotToWorkspace,
 } from '@/client/lib/snapshot-to-workspace';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
@@ -37,73 +36,10 @@ import {
 } from '@/shared/workspace-snapshot';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
-type ProjectSummaryCache = RouterOutputs['workspace']['getProjectSummaryState'];
-type SidebarWorkspace = ProjectSummaryCache['workspaces'][number];
-type KanbanCacheData = RouterOutputs['workspace']['listWithKanbanState'] | undefined;
-type KanbanWorkspace = NonNullable<KanbanCacheData>[number];
+type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
+type ProjectWorkspace = ProjectWorkspaceCache['workspaces'][number];
 type PendingRequestType = WorkspaceSnapshotEntry['pendingRequestType'];
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
-
-// =============================================================================
-// Kanban cache update helpers (extracted to keep handleMessage under complexity limit)
-// =============================================================================
-
-/** Build a kanban cache from a snapshot_full message, merging existing entries. */
-function buildKanbanCacheFromFull(
-  entries: WorkspaceSnapshotEntry[],
-  prev: KanbanCacheData
-): NonNullable<KanbanCacheData> {
-  const existingById = new Map<string, KanbanWorkspace>();
-  if (prev) {
-    for (const w of prev) {
-      existingById.set(w.id, w);
-    }
-  }
-  return entries
-    .filter((e) => e.kanbanColumn !== null)
-    .map((e) => projectSnapshotToKanbanWorkspace(e, existingById.get(e.workspaceId)));
-}
-
-/** Upsert or remove a single entry in the kanban cache from a snapshot_changed message. */
-function upsertKanbanCacheEntry(
-  entry: WorkspaceSnapshotEntry,
-  prev: KanbanCacheData
-): KanbanCacheData {
-  // If kanbanColumn is null, workspace doesn't belong on the kanban board -- remove it
-  if (entry.kanbanColumn === null) {
-    if (!prev) {
-      return prev;
-    }
-    return prev.filter((w) => w.id !== entry.workspaceId);
-  }
-
-  // Find existing cache entry to merge non-snapshot fields
-  const existingEntry = prev?.find((w) => w.id === entry.workspaceId);
-  const mapped = projectSnapshotToKanbanWorkspace(entry, existingEntry);
-
-  if (!prev) {
-    return [mapped];
-  }
-
-  const existingIndex = prev.findIndex((w) => w.id === entry.workspaceId);
-  const items = [...prev];
-
-  if (existingIndex >= 0) {
-    items[existingIndex] = mapped;
-  } else {
-    items.push(mapped);
-  }
-
-  return items;
-}
-
-/** Remove a workspace from the kanban cache. */
-function removeFromKanbanCache(workspaceId: string, prev: KanbanCacheData): KanbanCacheData {
-  if (!prev) {
-    return prev;
-  }
-  return prev.filter((w) => w.id !== workspaceId);
-}
 
 function triggerWorkspaceAttention(workspaceId: string): void {
   const event = new CustomEvent('workspace-attention-required', {
@@ -129,9 +65,7 @@ function triggerWorkspaceAttention(workspaceId: string): void {
  */
 function healWorkspaceCachesAfterReconnect(utils: TrpcUtils, projectId: string): void {
   utils.workspace.get.invalidate();
-  utils.workspace.list.invalidate({ projectId });
-  utils.workspace.getProjectSummaryState.invalidate({ projectId });
-  utils.workspace.listWithKanbanState.invalidate({ projectId });
+  utils.workspace.listForProject.invalidate({ projectId });
 }
 
 function seedPendingRequests(
@@ -157,6 +91,23 @@ function maybeTriggerPendingRequestAttention(
   pendingRequests.set(entry.workspaceId, nextPending);
 }
 
+/** Upsert one entry into the project list, preserving its position. */
+function upsertProjectWorkspace(
+  workspaces: ProjectWorkspace[],
+  entry: WorkspaceSnapshotEntry
+): ProjectWorkspace[] {
+  const existingIndex = workspaces.findIndex((workspace) => workspace.id === entry.workspaceId);
+  const mapped = projectSnapshotToWorkspace(entry, workspaces[existingIndex]);
+
+  if (existingIndex < 0) {
+    return [...workspaces, mapped];
+  }
+
+  const next = [...workspaces];
+  next[existingIndex] = mapped;
+  return next;
+}
+
 function applySnapshotFullMessage(
   utils: TrpcUtils,
   message: SnapshotFullMessage,
@@ -166,31 +117,18 @@ function applySnapshotFullMessage(
 
   seedPendingRequests(pendingRequests, entries);
 
-  const { setData } = utils.workspace.getProjectSummaryState;
-  const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
-  const { setData: setWorkspaceDetailData } = utils.workspace.get;
-
-  setData({ projectId: message.projectId }, (prev) => {
-    const existingById = new Map<string, SidebarWorkspace>();
-    if (prev) {
-      for (const w of prev.workspaces) {
-        existingById.set(w.id, w);
-      }
-    }
+  utils.workspace.listForProject.setData({ projectId: message.projectId }, (prev) => {
+    const existingById = new Map(prev?.workspaces.map((workspace) => [workspace.id, workspace]));
     return {
-      workspaces: entries.map((e) =>
-        projectSnapshotToSidebarWorkspace(e, existingById.get(e.workspaceId))
+      workspaces: entries.map((entry) =>
+        projectSnapshotToWorkspace(entry, existingById.get(entry.workspaceId))
       ),
       reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
     };
   });
 
-  setKanbanData({ projectId: message.projectId }, (prev) =>
-    buildKanbanCacheFromFull(entries, prev)
-  );
-
   for (const entry of entries) {
-    setWorkspaceDetailData({ id: entry.workspaceId }, (prev) =>
+    utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
       mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
     );
   }
@@ -206,35 +144,21 @@ function applySnapshotChangedMessage(
 
   maybeTriggerPendingRequestAttention(pendingRequests, entry);
 
-  const { setData } = utils.workspace.getProjectSummaryState;
-  const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
-  const { setData: setWorkspaceDetailData } = utils.workspace.get;
-
-  setData({ projectId }, (prev) => {
+  utils.workspace.listForProject.setData({ projectId }, (prev) => {
     if (!prev) {
       return {
-        workspaces: [projectSnapshotToSidebarWorkspace(entry)],
+        workspaces: [projectSnapshotToWorkspace(entry)],
         reviewCount: message.reviewCount ?? 0,
       };
     }
 
-    const existingEntry = prev.workspaces.find((w) => w.id === entry.workspaceId);
-    const mapped = projectSnapshotToSidebarWorkspace(entry, existingEntry);
-    const existingIndex = prev.workspaces.findIndex((w) => w.id === mapped.id);
-    const workspaces = [...prev.workspaces];
-
-    if (existingIndex >= 0) {
-      workspaces[existingIndex] = mapped;
-    } else {
-      workspaces.push(mapped);
-    }
-
-    return { workspaces, reviewCount: message.reviewCount ?? prev.reviewCount };
+    return {
+      workspaces: upsertProjectWorkspace(prev.workspaces, entry),
+      reviewCount: message.reviewCount ?? prev.reviewCount,
+    };
   });
 
-  setKanbanData({ projectId }, (prev) => upsertKanbanCacheEntry(entry, prev));
-
-  setWorkspaceDetailData({ id: entry.workspaceId }, (prev) =>
+  utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
     mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
   );
 }
@@ -247,23 +171,17 @@ function applySnapshotRemovedMessage(
 ): void {
   pendingRequests.delete(message.workspaceId);
 
-  const { setData } = utils.workspace.getProjectSummaryState;
-  const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
-  const { setData: setWorkspaceDetailData } = utils.workspace.get;
-
-  setData({ projectId }, (prev) => {
+  utils.workspace.listForProject.setData({ projectId }, (prev) => {
     if (!prev) {
       return prev;
     }
     return {
-      workspaces: prev.workspaces.filter((w) => w.id !== message.workspaceId),
+      workspaces: prev.workspaces.filter((workspace) => workspace.id !== message.workspaceId),
       reviewCount: message.reviewCount ?? prev.reviewCount,
     };
   });
 
-  setKanbanData({ projectId }, (prev) => removeFromKanbanCache(message.workspaceId, prev));
-
-  setWorkspaceDetailData({ id: message.workspaceId }, undefined);
+  utils.workspace.get.setData({ id: message.workspaceId }, undefined);
 }
 
 // =============================================================================
@@ -272,10 +190,9 @@ function applySnapshotRemovedMessage(
 
 /**
  * Subscribes to the /snapshots WebSocket endpoint for a given project
- * and updates the React Query caches for `workspace.getProjectSummaryState`
- * (sidebar), `workspace.listWithKanbanState` (kanban board), and
- * `workspace.get` (detail view) whenever snapshot_full, snapshot_changed,
- * or snapshot_removed messages arrive.
+ * and updates the React Query caches for `workspace.listForProject`
+ * (sidebar and kanban board) and `workspace.get` (detail view) whenever
+ * snapshot_full, snapshot_changed, or snapshot_removed messages arrive.
  *
  * Returns void -- the hook's side effect is updating the caches.
  */

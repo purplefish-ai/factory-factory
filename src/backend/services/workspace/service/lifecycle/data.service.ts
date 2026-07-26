@@ -1,6 +1,5 @@
 import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import type { WorkspaceStatus } from '@/shared/core';
 
 class WorkspaceDataService {
   findById(id: string) {
@@ -35,11 +34,8 @@ class WorkspaceDataService {
     return workspaceAccessor.findRawById(id);
   }
 
-  findByProjectId(
-    projectId: string,
-    filters?: { status?: WorkspaceStatus; limit?: number; offset?: number }
-  ) {
-    return workspaceAccessor.findByProjectId(projectId, filters);
+  findByProjectId(projectId: string) {
+    return workspaceAccessor.findByProjectId(projectId);
   }
 
   findByIdsWithProject(ids: string[]) {

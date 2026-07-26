@@ -72,14 +72,18 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('throws for mutually-exclusive status filters in findByProjectIdWithSessions', () => {
-    expect(() =>
-      workspaceAccessor.findByProjectIdWithSessions('project-1', {
-        status: 'READY',
-        excludeStatuses: ['FAILED'],
-      })
-    ).toThrow('Cannot specify both status and excludeStatuses filters');
-    expect(mockFindMany).not.toHaveBeenCalled();
+  it('excludes statuses in findByProjectIdWithSessions', async () => {
+    mockFindMany.mockResolvedValueOnce([]);
+
+    await workspaceAccessor.findByProjectIdWithSessions('project-1', {
+      excludeStatuses: ['ARCHIVING', 'ARCHIVED'],
+    });
+
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+      orderBy: { updatedAt: 'desc' },
+      include: { agentSessions: true, terminalSessions: true },
+    });
   });
 
   it('short-circuits findByIds and findByIdsWithProject for empty id arrays', async () => {

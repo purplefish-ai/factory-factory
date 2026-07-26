@@ -166,8 +166,7 @@ export function IssueLaunchSheet({
         return createOptimisticWorkspaceCacheData(workspace);
       });
 
-      utils.workspace.listWithKanbanState.invalidate({ projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId });
+      utils.workspace.listForProject.invalidate({ projectId });
       onOpenChange(false);
       onStarted?.();
     },

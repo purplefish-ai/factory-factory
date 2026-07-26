@@ -17,8 +17,7 @@ const mocks = vi.hoisted(() => ({
     githubRepo: 'factory-factory',
   } as { githubOwner: string; githubRepo: string } | null,
   isLoadingProject: false,
-  listWithKanbanStateInvalidateMock: vi.fn(),
-  getProjectSummaryStateInvalidateMock: vi.fn(),
+  listForProjectInvalidateMock: vi.fn(),
   getSetDataMock: vi.fn(),
   createWorkspaceMutateMock: vi.fn(),
   createOptimisticWorkspaceCacheDataMock: vi.fn(),
@@ -45,11 +44,8 @@ vi.mock('@/client/lib/trpc', () => ({
     useUtils: () => ({
       workspace: {
         get: { setData: mocks.getSetDataMock },
-        listWithKanbanState: {
-          invalidate: mocks.listWithKanbanStateInvalidateMock,
-        },
-        getProjectSummaryState: {
-          invalidate: mocks.getProjectSummaryStateInvalidateMock,
+        listForProject: {
+          invalidate: mocks.listForProjectInvalidateMock,
         },
       },
     }),

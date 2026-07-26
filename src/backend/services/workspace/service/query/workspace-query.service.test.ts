@@ -8,7 +8,14 @@ import type {
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
-import { CIStatus, PRState, RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
+import {
+  CIStatus,
+  KanbanColumn,
+  PRState,
+  RatchetState,
+  RunScriptStatus,
+  WorkspaceStatus,
+} from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceQueryService } from './workspace-query.service';
 
@@ -92,7 +99,7 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('listWithKanbanState shows empty workspaces and applies runtime-derived reasons', async () => {
+  it('listForProject applies runtime-derived reasons, newest first', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -134,7 +141,7 @@ describe('WorkspaceQueryService', () => {
     }));
     mockGetAllPendingRequests.mockReturnValue(new Map([['w2', { toolName: 'AskUserQuestion' }]]));
 
-    const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
+    const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
@@ -198,7 +205,7 @@ describe('WorkspaceQueryService', () => {
     mockGetAllPendingRequests.mockReturnValue(new Map());
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
 
-    const result = await workspaceQueryService.getProjectSummaryState('p1');
+    const result = await workspaceQueryService.listForProject('p1');
 
     expect(result.workspaces[0]).toMatchObject({
       id: 'w-ci',
@@ -206,7 +213,7 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('listWithKanbanState returns only workspaces matching the requested live kanbanColumn', async () => {
+  it('findWorkspaceIdsInKanbanColumn returns only ids matching the live column', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -235,12 +242,12 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.listWithKanbanState({
-      projectId: 'proj-1',
-      kanbanColumn: 'WAITING',
-    });
+    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
+      'proj-1',
+      KanbanColumn.WAITING
+    );
 
-    expect(result).toHaveLength(0);
+    expect(result).toEqual([]);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
@@ -296,12 +303,12 @@ describe('WorkspaceQueryService', () => {
     );
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
+    const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
     expect(result[0]).toMatchObject({ id: 'w-alive', kanbanColumn: 'WORKING', isWorking: true });
   });
 
-  it('listWithKanbanState matches a column that only live session state produces', async () => {
+  it('findWorkspaceIdsInKanbanColumn matches a column only live session state produces', async () => {
     // A READY workspace with no PR is WAITING by its persisted fields alone; it
     // is WORKING only because a session is live. Filtering used to run against
     // the persisted cachedKanbanColumn in SQL, which dropped this workspace
@@ -334,19 +341,18 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.listWithKanbanState({
-      projectId: 'proj-1',
-      kanbanColumn: 'WORKING',
-    });
+    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
+      'proj-1',
+      KanbanColumn.WORKING
+    );
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: 'w-live', kanbanColumn: 'WORKING' });
+    expect(result).toEqual(['w-live']);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
 
-  it('listWithKanbanState returns FAILED workspaces when filtering for WAITING', async () => {
+  it('findWorkspaceIdsInKanbanColumn returns FAILED workspaces for WAITING', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -375,23 +381,18 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.listWithKanbanState({
-      projectId: 'proj-1',
-      kanbanColumn: 'WAITING',
-    });
+    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
+      'proj-1',
+      KanbanColumn.WAITING
+    );
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      id: 'w1',
-      status: WorkspaceStatus.FAILED,
-      kanbanColumn: 'WAITING',
-    });
+    expect(result).toEqual(['w1']);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
 
-  it('surfaces session runtime errors in initial workspace query paths', async () => {
+  it('surfaces session runtime errors in the initial workspace query', async () => {
     const erroredWorkspace = {
       id: 'w1',
       name: 'W1',
@@ -443,20 +444,15 @@ describe('WorkspaceQueryService', () => {
     mockGetAllPendingRequests.mockReturnValue(new Map());
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
 
-    const summary = await workspaceQueryService.getProjectSummaryState('p1');
-    const kanban = await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+    const { workspaces } = await workspaceQueryService.listForProject('p1');
 
-    expect(summary.workspaces[0]?.statusReason).toMatchObject({
-      code: 'SESSION_ERROR',
-      label: 'Session error',
-    });
-    expect(kanban[0]?.statusReason).toMatchObject({
+    expect(workspaces[0]?.statusReason).toMatchObject({
       code: 'SESSION_ERROR',
       label: 'Session error',
     });
   });
 
-  it('getProjectSummaryState computes git stats and caches review count', async () => {
+  it('listForProject computes git stats and caches review count', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
@@ -522,13 +518,20 @@ describe('WorkspaceQueryService', () => {
     ]);
 
     // First call: no cache yet — returns 0 immediately and fires background refresh.
-    const first = await workspaceQueryService.getProjectSummaryState('p1');
+    const first = await workspaceQueryService.listForProject('p1');
     expect(first.reviewCount).toBe(0);
-    expect(first.workspaces).toHaveLength(2);
-    expect(first.workspaces[0]).toMatchObject({
+    // Newest first, so every surface renders the same order without re-sorting.
+    expect(first.workspaces.map((workspace) => workspace.id)).toEqual(['w2', 'w1']);
+    expect(first.workspaces[1]).toMatchObject({
       id: 'w1',
       isWorking: false,
       gitStats: expect.objectContaining({ total: 3 }),
+      lastActivityAt: '2026-01-03T00:00:00.000Z',
+    });
+    expect(first.workspaces[0]).toMatchObject({
+      id: 'w2',
+      gitStats: null,
+      lastActivityAt: '2026-01-04T00:00:00.000Z',
     });
     expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
 
@@ -537,7 +540,7 @@ describe('WorkspaceQueryService', () => {
 
     // Second call: cache is now warm — returns cached count without calling GitHub.
     mockGithubListReviewRequests.mockClear();
-    const second = await workspaceQueryService.getProjectSummaryState('p1');
+    const second = await workspaceQueryService.listForProject('p1');
     expect(second.reviewCount).toBe(1);
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
@@ -586,9 +589,8 @@ describe('WorkspaceQueryService', () => {
       flowState,
     });
 
-    const summary = await workspaceQueryService.getProjectSummaryState('p1');
-    const kanban = await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
-    const summaryWorkspace = summary.workspaces[0];
+    const listed = await workspaceQueryService.listForProject('p1');
+    const listedWorkspace = listed.workspaces[0];
 
     const snapshotStore = new WorkspaceSnapshotStore();
     snapshotStore.configure({
@@ -625,19 +627,13 @@ describe('WorkspaceQueryService', () => {
     const snapshotEntry = snapshotStore.getByWorkspaceId(workspace.id);
 
     expect(snapshotEntry).toBeDefined();
-    expect(summaryWorkspace).toBeDefined();
-    expect(kanban[0]).toBeDefined();
+    expect(listedWorkspace).toBeDefined();
 
-    expect(summaryWorkspace?.flowPhase).toBe(snapshotEntry?.flowPhase);
-    expect(summaryWorkspace?.ciObservation).toBe(snapshotEntry?.ciObservation);
-    expect(summaryWorkspace?.sidebarStatus).toEqual(snapshotEntry?.sidebarStatus);
-    expect(summaryWorkspace?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
-    expect(summaryWorkspace?.statusReason).toEqual(snapshotEntry?.statusReason);
-
-    expect(kanban[0]?.flowPhase).toBe(snapshotEntry?.flowPhase);
-    expect(kanban[0]?.ciObservation).toBe(snapshotEntry?.ciObservation);
-    expect(kanban[0]?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
-    expect(kanban[0]?.statusReason).toEqual(snapshotEntry?.statusReason);
+    expect(listedWorkspace?.flowPhase).toBe(snapshotEntry?.flowPhase);
+    expect(listedWorkspace?.ciObservation).toBe(snapshotEntry?.ciObservation);
+    expect(listedWorkspace?.sidebarStatus).toEqual(snapshotEntry?.sidebarStatus);
+    expect(listedWorkspace?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
+    expect(listedWorkspace?.statusReason).toEqual(snapshotEntry?.statusReason);
   });
 
   it('syncPRStatus and syncAllPRStatuses handle success and failure paths', async () => {
@@ -823,8 +819,8 @@ describe('WorkspaceQueryService', () => {
     mockGetAllPendingRequests.mockReturnValue(new Map());
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
 
-    await workspaceQueryService.getProjectSummaryState('p1');
-    await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+    await workspaceQueryService.listForProject('p1');
+    await workspaceQueryService.findWorkspaceIdsInKanbanColumn('p1', KanbanColumn.WORKING);
     await workspaceQueryService.syncAllPRStatuses('p1');
 
     expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(1, 'p1', {

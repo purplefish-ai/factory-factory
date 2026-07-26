@@ -204,7 +204,7 @@ function SidebarInner({
   working: ServerWorkspace[];
   done: ServerWorkspace[];
   selectedProjectId: string | undefined;
-  existingWorkspaceNames: string[] | undefined;
+  existingWorkspaceNames: string[];
   showNewWorkspaceForm: boolean;
   onShowNewWorkspaceFormChange: (show: boolean) => void;
   canCreateWorkspace: boolean;
@@ -459,7 +459,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     working,
     done,
     selectedProjectId: navData.selectedProjectId,
-    existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name),
+    existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name) ?? [],
     showNewWorkspaceForm,
     onShowNewWorkspaceFormChange: setShowNewWorkspaceForm,
     canCreateWorkspace: Boolean(navData.selectedProjectId && navData.selectedProjectSlug),

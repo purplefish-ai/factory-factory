@@ -41,13 +41,7 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
         }
         return applyRatchetToggleState(old, enabled);
       });
-      utils.workspace.listWithKanbanState.setData({ projectId }, (old) => {
-        if (!old) {
-          return old;
-        }
-        return updateWorkspaceRatchetState(old, workspaceId, enabled);
-      });
-      utils.workspace.getProjectSummaryState.setData({ projectId }, (old) => {
+      utils.workspace.listForProject.setData({ projectId }, (old) => {
         if (!old) {
           return old;
         }
@@ -67,8 +61,7 @@ export function useToggleRatcheting(projectId: string): UseToggleRatchetingRetur
         clearPendingRatchetToggle(workspaceId, context.pendingToggleToken);
       }
       utils.workspace.get.invalidate({ id: workspaceId });
-      utils.workspace.listWithKanbanState.invalidate({ projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId });
+      utils.workspace.listForProject.invalidate({ projectId });
     },
   });
 }

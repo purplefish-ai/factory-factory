@@ -14,7 +14,7 @@ import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
-import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { KanbanColumn } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
@@ -112,39 +112,12 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
 // =============================================================================
 
 export const workspaceCoreRouter = router({
-  // List workspaces for a project
-  list: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
-        limit: z.number().min(1).max(100).optional(),
-        offset: z.number().min(0).optional(),
-      })
-    )
-    .query(({ ctx, input }) => {
-      const { projectId, ...filters } = input;
-      return ctx.appContext.services.workspaceDataService.findByProjectId(projectId, filters);
-    }),
-
-  // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
-  getProjectSummaryState: publicProcedure
+  // The one project-scoped workspace list: rows plus derived state for the
+  // sidebar and the Kanban board, which select the fields they render.
+  listForProject: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(({ ctx, input }) =>
-      ctx.appContext.services.workspaceQueryService.getProjectSummaryState(input.projectId)
-    ),
-
-  // List workspaces with kanban state (for board view)
-  listWithKanbanState: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
-        kanbanColumn: z.nativeEnum(KanbanColumn).optional(),
-      })
-    )
-    .query(({ ctx, input }) =>
-      ctx.appContext.services.workspaceQueryService.listWithKanbanState(input)
+      ctx.appContext.services.workspaceQueryService.listForProject(input.projectId)
     ),
 
   // Get workspace by ID
@@ -412,35 +385,32 @@ export const workspaceCoreRouter = router({
       const { projectId, kanbanColumn, commitUncommitted = true } = input;
 
       // Get all workspaces in the specified kanban column
-      const workspacesWithState = await workspaceQueryService.listWithKanbanState({
+      const workspaceIds = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
         projectId,
-        kanbanColumn,
-      });
+        kanbanColumn
+      );
 
       logger.info('Bulk archiving workspaces', {
         projectId,
         kanbanColumn,
-        count: workspacesWithState.length,
+        count: workspaceIds.length,
       });
 
       // Archive each workspace sequentially
       const results = [];
-      for (const workspaceWithState of workspacesWithState) {
+      for (const workspaceId of workspaceIds) {
         try {
-          const workspace = await getWorkspaceWithProjectOrThrow(
-            workspaceDataService,
-            workspaceWithState.id
-          );
+          const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, workspaceId);
           await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
           const mappedError = normalizeBulkArchiveError(error);
           logger.error('Failed to archive workspace during bulk operation', {
-            workspaceId: workspaceWithState.id,
+            workspaceId,
             error: error instanceof Error ? error.message : String(error),
           });
           results.push({
-            id: workspaceWithState.id,
+            id: workspaceId,
             success: false,
             error: error instanceof Error ? error.message : String(error),
             code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
@@ -448,7 +418,7 @@ export const workspaceCoreRouter = router({
         }
       }
 
-      return { results, total: workspacesWithState.length };
+      return { results, total: workspaceIds.length };
     }),
 
   // Delete a workspace

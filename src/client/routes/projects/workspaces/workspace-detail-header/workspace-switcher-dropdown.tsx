@@ -31,7 +31,7 @@ export function WorkspaceSwitcherDropdown({
     'h-auto items-start py-1.5 data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground [&>span:first-child]:hidden [&>span:last-child]:block [&>span:last-child]:w-full';
 
   const navigate = useNavigate();
-  const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
+  const { data: projectState } = trpc.workspace.listForProject.useQuery(
     { projectId },
     {
       enabled: Boolean(projectId),

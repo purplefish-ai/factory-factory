@@ -17,7 +17,7 @@ vi.mock('react-router', () => ({
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     workspace: {
-      getProjectSummaryState: {
+      listForProject: {
         useQuery: () => ({ data: { workspaces: [] } }),
       },
     },

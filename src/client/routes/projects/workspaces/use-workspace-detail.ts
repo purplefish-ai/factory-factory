@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import {
-  removeWorkspaceFromProjectSummaryCache,
-  restoreWorkspacesToListCache,
-  restoreWorkspacesToProjectSummaryCache,
+  removeWorkspaceFromProjectWorkspaceCache,
+  restoreWorkspacesToProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
 import {
   type NewSessionProviderSelection,
@@ -199,30 +198,18 @@ export function useSessionManagement({
       const workspace = utils.workspace.get.getData({ id });
       const projectId = workspace?.projectId;
 
-      if (projectId) {
-        await Promise.all([
-          utils.workspace.listWithKanbanState.cancel({ projectId }),
-          utils.workspace.getProjectSummaryState.cancel({ projectId }),
-        ]);
+      if (!projectId) {
+        return { projectId, previousWorkspaces: undefined };
       }
 
-      const previousWorkspaceList = projectId
-        ? utils.workspace.listWithKanbanState.getData({ projectId })
-        : undefined;
-      const previousProjectSummaryState = projectId
-        ? utils.workspace.getProjectSummaryState.getData({ projectId })
-        : undefined;
+      await utils.workspace.listForProject.cancel({ projectId });
+      const previousWorkspaces = utils.workspace.listForProject.getData({ projectId });
 
-      if (projectId) {
-        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
-          old?.filter((workspaceItem) => workspaceItem.id !== id)
-        );
-        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
-          removeWorkspaceFromProjectSummaryCache(old, id)
-        );
-      }
+      utils.workspace.listForProject.setData({ projectId }, (old) =>
+        removeWorkspaceFromProjectWorkspaceCache(old, id)
+      );
 
-      return { projectId, previousWorkspaceList, previousProjectSummaryState };
+      return { projectId, previousWorkspaces };
     },
     onSuccess: () => {
       if (slug) {
@@ -238,26 +225,16 @@ export function useSessionManagement({
         toast.error(error.message || 'Failed to archive workspace');
       }
 
-      if (context?.projectId) {
-        if (context.previousWorkspaceList) {
-          utils.workspace.listWithKanbanState.setData({ projectId: context.projectId }, (old) =>
-            restoreWorkspacesToListCache(old, context.previousWorkspaceList, [_variables.id])
-          );
-        }
-        if (context.previousProjectSummaryState) {
-          utils.workspace.getProjectSummaryState.setData({ projectId: context.projectId }, (old) =>
-            restoreWorkspacesToProjectSummaryCache(old, context.previousProjectSummaryState, [
-              _variables.id,
-            ])
-          );
-        }
+      if (context?.projectId && context.previousWorkspaces) {
+        utils.workspace.listForProject.setData({ projectId: context.projectId }, (old) =>
+          restoreWorkspacesToProjectWorkspaceCache(old, context.previousWorkspaces, [_variables.id])
+        );
       }
     },
     onSettled: (_data, _error, variables, context) => {
       void utils.workspace.get.invalidate({ id: variables.id });
       if (context?.projectId) {
-        void utils.workspace.listWithKanbanState.invalidate({ projectId: context.projectId });
-        void utils.workspace.getProjectSummaryState.invalidate({ projectId: context.projectId });
+        void utils.workspace.listForProject.invalidate({ projectId: context.projectId });
       }
     },
   });
