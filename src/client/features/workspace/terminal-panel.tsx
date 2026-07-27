@@ -11,14 +11,13 @@ import {
   useRef,
   useState,
 } from 'react';
-
-import { cn } from '@/lib/utils';
 import {
   appendToRollingOutput,
   TERMINAL_OUTPUT_MAX_CHARS,
   TERMINAL_TRUNCATION_MARKER,
   trimRollingOutput,
-} from './rolling-output';
+} from '@/client/lib/rolling-output';
+import { cn } from '@/lib/utils';
 import { TerminalTabBar } from './terminal-tab-bar';
 import {
   claimPendingTerminalTab,
@@ -30,7 +29,7 @@ import { useTerminalWebSocket } from './use-terminal-websocket';
 // Lazy import to allow xterm.js to use static imports
 // xterm.js requires DOM APIs that aren't available during server-side rendering
 const TerminalInstance = lazy(() =>
-  import('./terminal-instance').then((m) => ({ default: m.TerminalInstance }))
+  import('@/client/components/terminal-instance').then((m) => ({ default: m.TerminalInstance }))
 );
 
 // =============================================================================

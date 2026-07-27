@@ -15,6 +15,7 @@ export { QueuedMessages } from './queued-messages';
 export type { TaskNotification } from './reducer';
 export type { RewindConfirmationDialogProps } from './rewind-confirmation-dialog';
 export { RewindConfirmationDialog } from './rewind-confirmation-dialog';
+export type { SessionData } from './session-tab-bar';
 export { SessionTabBar } from './session-tab-bar';
 export { TaskNotificationsPanel } from './task-notifications-panel';
 export { TodoPanel } from './todo-panel';

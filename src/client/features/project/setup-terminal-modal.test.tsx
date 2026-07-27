@@ -26,7 +26,7 @@ vi.mock('./use-setup-terminal', () => ({
   useSetupTerminal: () => ({ ...setupTerminalState }),
 }));
 
-vi.mock('@/client/features/workspace/terminal-instance', () => ({
+vi.mock('@/client/components/terminal-instance', () => ({
   TerminalInstance: () => null,
 }));
 

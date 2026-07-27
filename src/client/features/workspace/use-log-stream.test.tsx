@@ -4,8 +4,11 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  WORKSPACE_LOG_OUTPUT_MAX_CHARS,
+  WORKSPACE_LOG_TRUNCATION_MARKER,
+} from '@/client/lib/rolling-output';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
-import { WORKSPACE_LOG_OUTPUT_MAX_CHARS, WORKSPACE_LOG_TRUNCATION_MARKER } from './rolling-output';
 import { type UseLogStreamResult, useLogStream } from './use-log-stream';
 
 let capturedOptions: UseWebSocketTransportOptions | null = null;

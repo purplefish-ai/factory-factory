@@ -219,6 +219,23 @@ module.exports = {
       to: { path: '^src/components/', pathNot: '^src/components/ui/' },
     },
     {
+      name: 'cross-feature-imports-go-through-the-barrel',
+      severity: 'error',
+      comment:
+        "A client feature may consume another feature only through its index.ts, the same rule the backend service capsules follow. Reaching past the barrel makes every internal file another feature's public API. If the thing you need is genuinely shared, the fix is usually to move it rather than to widen a barrel: pure utilities go to src/client/lib/, and a group of modules with two feature consumers and no knowledge of either is its own feature (see src/client/features/composer/).",
+      from: { path: '^src/client/features/([^/]+)/' },
+      to: {
+        path: '^src/client/features/[^/]+/.+',
+        pathNot: [
+          // Your own feature's internals are yours.
+          '^src/client/features/$1/',
+          // The barrel itself. Anchored one level below features/, so a nested
+          // sub-barrel such as chat/agent-activity/index.ts stays private.
+          '^src/client/features/[^/]+/index\\.(ts|tsx)$',
+        ],
+      },
+    },
+    {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:

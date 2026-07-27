@@ -4,9 +4,9 @@ import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
+  type UseChatWebSocketReturn,
   VirtualizedMessageList,
 } from '@/client/features/chat';
-import type { UseChatWebSocketReturn } from '@/client/features/chat/use-chat-websocket';
 import { Button } from '@/components/ui/button';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
 

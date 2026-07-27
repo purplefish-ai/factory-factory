@@ -1,7 +1,5 @@
 import { memo } from 'react';
-import type { ChatMessage } from '@/client/features/chat';
-import { TodoPanel } from '@/client/features/chat/todo-panel';
-import { useTodoTracker } from '@/client/features/chat/use-todo-tracker';
+import { type ChatMessage, TodoPanel, useTodoTracker } from '@/client/features/chat';
 
 export interface TodoPanelContainerProps {
   messages: ChatMessage[];

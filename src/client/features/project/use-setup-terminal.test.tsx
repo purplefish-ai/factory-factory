@@ -3,10 +3,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  TERMINAL_OUTPUT_MAX_CHARS,
-  TERMINAL_TRUNCATION_MARKER,
-} from '@/client/features/workspace/rolling-output';
+import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { type UseSetupTerminalResult, useSetupTerminal } from './use-setup-terminal';
 

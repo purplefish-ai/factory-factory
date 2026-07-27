@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
-import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
-import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
   RollingOutputBuffer,
   WORKSPACE_LOG_OUTPUT_MAX_CHARS,
   WORKSPACE_LOG_TRUNCATION_MARKER,
-} from './rolling-output';
+} from '@/client/lib/rolling-output';
+import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
+import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 const LogStreamMessageSchema = z.object({
   type: z.literal('output'),

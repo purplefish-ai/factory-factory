@@ -9,7 +9,7 @@ import {
 import { useSetupTerminal } from './use-setup-terminal';
 
 const TerminalInstance = lazy(() =>
-  import('@/client/features/workspace/terminal-instance').then((m) => ({
+  import('@/client/components/terminal-instance').then((m) => ({
     default: m.TerminalInstance,
   }))
 );
