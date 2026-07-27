@@ -18,7 +18,7 @@
  * data but nothing directly usable could be extracted from it.
  */
 
-import { MAX_IMAGE_SIZE } from './image-utils';
+import { MAX_IMAGE_SIZE } from '@/lib/image-utils';
 
 const PNG_MIME = 'image/png';
 

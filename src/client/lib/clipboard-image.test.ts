@@ -2,8 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MAX_IMAGE_SIZE } from '@/lib/image-utils';
 import { getClipboardImageBlob } from './clipboard-image';
-import { MAX_IMAGE_SIZE } from './image-utils';
 
 function base64OfLength(length: number): string {
   return 'A'.repeat(length);

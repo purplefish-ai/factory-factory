@@ -1,12 +1,12 @@
-import type { MessageAttachment } from './chat-protocol';
-import { getClipboardImageBlob } from './clipboard-image';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import {
   fileToBase64,
   formatFileSize,
   generateAttachmentId,
   isSupportedImageType,
   MAX_IMAGE_SIZE,
-} from './image-utils';
+} from '@/lib/image-utils';
+import { getClipboardImageBlob } from './clipboard-image';
 
 /**
  * Threshold for considering text as "large" (number of lines).

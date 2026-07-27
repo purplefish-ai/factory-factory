@@ -9,8 +9,8 @@ import {
   LARGE_TEXT_LINE_THRESHOLD,
 } from './paste-utils';
 
-vi.mock('./image-utils', async () => {
-  const actual = await vi.importActual<typeof import('./image-utils')>('./image-utils');
+vi.mock('@/lib/image-utils', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/image-utils')>('@/lib/image-utils');
   return {
     ...actual,
     fileToBase64: vi.fn().mockResolvedValue('base64-data'),
@@ -23,8 +23,8 @@ vi.mock('./clipboard-image', () => ({
   getClipboardImageBlob: vi.fn().mockResolvedValue(null),
 }));
 
+import { fileToBase64, MAX_IMAGE_SIZE } from '@/lib/image-utils';
 import { getClipboardImageBlob } from './clipboard-image';
-import { fileToBase64, MAX_IMAGE_SIZE } from './image-utils';
 
 function createClipboardEvent(items?: DataTransferItem[]): ClipboardEvent {
   const event = new Event('paste') as ClipboardEvent;
