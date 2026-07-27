@@ -26,6 +26,39 @@ import {
   shouldSkipCleanPR,
 } from './ratchet-pr-state.helpers';
 
+interface FakeCoordinatorState {
+  /** A completed fetch inside the cooldown window; `ignoreCooldown` overrides it. */
+  cooldown?: boolean;
+  /** A concurrent fetch in flight; nothing overrides that. */
+  inFlight?: boolean;
+  /** Sink recording what the coordinator did with each claim. */
+  outcomes?: ('fetched' | 'released' | 'skipped')[];
+}
+
+/**
+ * Stand-in for the shared PR fetch coordinator, modelling the two reasons it
+ * declines to run a fetch and the two ways a claim is retired.
+ */
+function fakeCoordinator(
+  state: FakeCoordinatorState = {}
+): RatchetGitHubBridge['coordinatePrFetch'] {
+  return vi.fn(async (_workspaceId, fetch, options) => {
+    if (state.inFlight || (state.cooldown && !options?.ignoreCooldown)) {
+      state.outcomes?.push('skipped');
+      return { status: 'skipped' as const, reason: 'recently_fetched' as const };
+    }
+    try {
+      const value = await fetch();
+      state.outcomes?.push('fetched');
+      return { status: 'fetched' as const, value };
+    } catch (error) {
+      // Where the real coordinator releases the claim so a retry stays eligible.
+      state.outcomes?.push('released');
+      throw error;
+    }
+  });
+}
+
 function makePRState(overrides: Partial<PRStateInfo> = {}): PRStateInfo {
   return {
     ciStatus: CIStatus.SUCCESS,
@@ -185,18 +218,14 @@ describe('fetchPRState', () => {
       computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
-      isRecentlyFetched: vi.fn(() => false),
-      isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(() => 41),
-      registerFetch: vi.fn(),
-      cancelFetch: vi.fn(),
+      coordinatePrFetch: fakeCoordinator(),
       ...overrides,
     };
   }
 
   it('skips GitHub API calls when the workspace was recently fetched', async () => {
     const github = makeGitHub({
-      isRecentlyFetched: vi.fn(() => true),
+      coordinatePrFetch: fakeCoordinator({ cooldown: true }),
     });
 
     const result = await fetchPRState({
@@ -208,17 +237,18 @@ describe('fetchPRState', () => {
     });
 
     expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
-    expect(github.isRecentlyFetched).toHaveBeenCalledWith('ws-1');
-    expect(github.startFetch).not.toHaveBeenCalled();
+    expect(github.coordinatePrFetch).toHaveBeenCalledWith(
+      'ws-1',
+      expect.any(Function),
+      expect.objectContaining({ ignoreCooldown: false })
+    );
     expect(github.getPRFullDetails).not.toHaveBeenCalled();
     expect(github.getReviewComments).not.toHaveBeenCalled();
-    expect(github.registerFetch).not.toHaveBeenCalled();
-    expect(github.cancelFetch).not.toHaveBeenCalled();
   });
 
   it('fetches despite a recent fetch when bypassRecentFetchCooldown is set', async () => {
     const github = makeGitHub({
-      isRecentlyFetched: vi.fn(() => true),
+      coordinatePrFetch: fakeCoordinator({ cooldown: true }),
       getPRFullDetails: vi.fn().mockResolvedValue({
         isDraft: false,
         state: 'OPEN',
@@ -248,15 +278,18 @@ describe('fetchPRState', () => {
       throw new Error('Expected PR state fetch to return PR details');
     }
     expect(result.prState).toBe('OPEN');
-    // The bypassed fetch still claims and registers in the dedup registry.
-    expect(github.startFetch).toHaveBeenCalledWith('ws-1');
-    expect(github.registerFetch).toHaveBeenCalledWith('ws-1', 41);
+    // The bypass reaches the coordinator as `ignoreCooldown`, and the fetch
+    // still runs inside a claim rather than around it.
+    expect(github.coordinatePrFetch).toHaveBeenCalledWith(
+      'ws-1',
+      expect.any(Function),
+      expect.objectContaining({ ignoreCooldown: true })
+    );
   });
 
   it('still skips a bypassed fetch while another fetch is actively in flight', async () => {
     const github = makeGitHub({
-      isRecentlyFetched: vi.fn(() => true),
-      isFetchInFlight: vi.fn(() => true),
+      coordinatePrFetch: fakeCoordinator({ cooldown: true, inFlight: true }),
     });
 
     const result = await fetchPRState({
@@ -269,14 +302,15 @@ describe('fetchPRState', () => {
     });
 
     expect(result).toEqual({ skipped: true, reason: 'recently_fetched' });
-    expect(github.startFetch).not.toHaveBeenCalled();
     expect(github.getPRFullDetails).not.toHaveBeenCalled();
   });
 
   it('forwards cancellation, releases the fetch claim, and skips backoff', async () => {
     const controller = new AbortController();
     const timeoutError = new Error('Workspace check timed out after 1000ms');
+    const outcomes: ('fetched' | 'released' | 'skipped')[] = [];
     const github = makeGitHub({
+      coordinatePrFetch: fakeCoordinator({ outcomes }),
       getPRFullDetails: vi.fn(async (_repo, _pr, signal) => {
         await Promise.resolve();
         controller.abort(timeoutError);
@@ -314,7 +348,8 @@ describe('fetchPRState', () => {
       123,
       controller.signal
     );
-    expect(github.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
+    // The abort escapes the coordinated callback, which is what releases the claim.
+    expect(outcomes).toEqual(['released']);
     expect(backoff.handleError).not.toHaveBeenCalled();
   });
 });
@@ -444,11 +479,7 @@ describe('fetchPRState', () => {
       computePRState: vi.fn(() => 'OPEN' as const),
       getAuthenticatedUsername: vi.fn(),
       fetchAndComputePRState: vi.fn(),
-      isRecentlyFetched: vi.fn(() => false),
-      isFetchInFlight: vi.fn(() => false),
-      startFetch: vi.fn(() => 41),
-      registerFetch: vi.fn(),
-      cancelFetch: vi.fn(),
+      coordinatePrFetch: fakeCoordinator(),
       ...overrides,
     };
   }

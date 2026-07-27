@@ -11,6 +11,7 @@ import type {
   SessionStatus,
   WorkspaceProviderSelection,
 } from '@/shared/core';
+import type { PRStateInfo } from './ratchet.types';
 
 // --- Session bridge ---
 
@@ -186,14 +187,35 @@ export interface RatchetGitHubBridge {
   }): PRState;
   getAuthenticatedUsername(signal?: AbortSignal): Promise<string | null>;
   fetchAndComputePRState(prUrl: string): Promise<RatchetPRStateSnapshot | null>;
-  /** True when another service has an in-flight or recent PR fetch for this workspace. */
-  isRecentlyFetched(workspaceId: string): boolean;
-  /** True only while another service's PR fetch is actively in flight for this workspace. */
-  isFetchInFlight(workspaceId: string): boolean;
-  /** Claim this workspace as in-flight before starting an async fetch (dedup optimization). */
-  startFetch(workspaceId: string): number;
-  /** Record that a PR fetch completed successfully for this workspace (dedup optimization). */
-  registerFetch(workspaceId: string, claimToken: number): void;
-  /** Release an in-flight claim without recording a successful fetch (call on failure). */
-  cancelFetch(workspaceId: string, claimToken: number): void;
+  /**
+   * Run a PR fetch through the shared coordinator, which skips it when the
+   * scheduler's PR sync already fetched this workspace recently or is fetching
+   * it right now. A dedup optimization: skipping only costs the caller a stale
+   * cache read, never correctness.
+   *
+   * The claim is scoped to `fetch`, so returning normally records the fetch and
+   * throwing releases the claim — neither is the caller's to remember.
+   */
+  coordinatePrFetch(
+    workspaceId: string,
+    fetch: () => Promise<PRStateInfo>,
+    options?: RatchetCoordinateOptions
+  ): Promise<RatchetCoordinatedFetch>;
+}
+
+/**
+ * Narrowed mirror of the github capsule's `CoordinatedFetch`. The ratchet
+ * coordinates exactly one kind of fetch, so the bridge names it rather than
+ * carrying the capsule's type parameter across the boundary.
+ */
+export type RatchetCoordinatedFetch =
+  | { status: 'fetched'; value: PRStateInfo }
+  | { status: 'skipped'; reason: 'recently_fetched' };
+
+export interface RatchetCoordinateOptions {
+  /**
+   * Ignore the completed-fetch cooldown while still deferring to a fetch that
+   * is actively in flight.
+   */
+  ignoreCooldown?: boolean;
 }
