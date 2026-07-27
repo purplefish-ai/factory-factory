@@ -58,6 +58,24 @@ export function clipboardEventHasImageItem(event: ClipboardEvent): boolean {
 }
 
 /**
+ * Check whether a clipboard event has a file item with a definite `image/*`
+ * type, as opposed to only an empty-type item (which is ambiguous — it could
+ * be a macOS screenshot's neutered TIFF, or an unrelated untyped file).
+ *
+ * Used to decide whether a failed extraction warrants the image-specific
+ * error toast: an empty-type-only paste that turns out not to be an image
+ * should fail silently rather than claim the image couldn't be read.
+ */
+export function clipboardEventHasConfirmedImageType(event: ClipboardEvent): boolean {
+  const items = event.clipboardData?.items;
+  if (!items) {
+    return false;
+  }
+
+  return Array.from(items).some((item) => item.kind === 'file' && item.type.startsWith('image/'));
+}
+
+/**
  * Result of extracting images from clipboard.
  * Uses partial success pattern - returns both successful attachments and errors.
  */

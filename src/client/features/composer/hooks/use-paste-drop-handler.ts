@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import {
+  clipboardEventHasConfirmedImageType,
   clipboardEventHasImageItem,
   getClipboardImages,
   getClipboardText,
@@ -36,7 +37,8 @@ async function handleClipboardImagePaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
   setAttachments: (
     updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
-  ) => void
+  ) => void,
+  hasConfirmedImageType: boolean
 ): Promise<void> {
   try {
     const { attachments: imageAttachments, errors } = await getClipboardImages(event.nativeEvent);
@@ -47,11 +49,14 @@ async function handleClipboardImagePaste(
       toast.error(errors.join('; '));
       return;
     }
-    if (imageAttachments.length === 0) {
+    if (imageAttachments.length === 0 && hasConfirmedImageType) {
       toast.error(
         "Couldn't read the image from your clipboard. Try copying it again, or drag the file in instead."
       );
     }
+    // An empty-type-only paste (no confirmed image/* item) that produced
+    // nothing usable wasn't necessarily an image paste attempt — fail
+    // silently rather than showing a misleading image-specific error.
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to paste image';
     toast.error(message);
@@ -115,7 +120,8 @@ export function usePasteDropHandler({
       // Check for images first
       if (clipboardEventHasImageItem(event.nativeEvent)) {
         event.preventDefault();
-        void handleClipboardImagePaste(event, setAttachments);
+        const hasConfirmedImageType = clipboardEventHasConfirmedImageType(event.nativeEvent);
+        void handleClipboardImagePaste(event, setAttachments, hasConfirmedImageType);
         return;
       }
 

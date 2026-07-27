@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clipboardEventHasConfirmedImageType,
   clipboardEventHasImageItem,
   getClipboardImages,
   isLargeText,
@@ -171,6 +172,22 @@ describe('clipboardEventHasImageItem', () => {
 
   it('returns false when there is no clipboard data', () => {
     expect(clipboardEventHasImageItem(createClipboardEvent())).toBe(false);
+  });
+});
+
+describe('clipboardEventHasConfirmedImageType', () => {
+  it('matches a file item with a definite image/* type', () => {
+    const item = createClipboardItem({ type: 'image/png', file: null });
+    expect(clipboardEventHasConfirmedImageType(createClipboardEvent([item]))).toBe(true);
+  });
+
+  it('does not match a file item with an empty type', () => {
+    const item = createClipboardItem({ type: '', file: null });
+    expect(clipboardEventHasConfirmedImageType(createClipboardEvent([item]))).toBe(false);
+  });
+
+  it('returns false when there is no clipboard data', () => {
+    expect(clipboardEventHasConfirmedImageType(createClipboardEvent())).toBe(false);
   });
 });
 

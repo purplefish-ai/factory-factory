@@ -10,11 +10,17 @@ interface AppLike {
   quit(): void;
 }
 
+// Opaque marker compared by reference only, to check an IPC call's sender
+// frame against the trusted app window without depending on Electron's
+// WebFrameMain type.
+type WebFrameLike = object;
+
 interface BrowserWindowLike {
   loadURL(url: string): Promise<void>;
   on(event: 'focus' | 'blur' | 'closed', listener: () => void): void;
   webContents: {
     send(channel: string, focused: boolean): void;
+    mainFrame: WebFrameLike;
   };
   destroy(): void;
   isDestroyed(): boolean;
@@ -41,10 +47,14 @@ interface ClipboardLike {
   readImage(): NativeImageLike;
 }
 
+interface IpcMainInvokeEventLike {
+  senderFrame: WebFrameLike | null;
+}
+
 interface IpcMainLike {
   handle<Args extends unknown[], Result>(
     channel: string,
-    listener: (event: unknown, ...args: Args) => Result
+    listener: (event: IpcMainInvokeEventLike, ...args: Args) => Result
   ): void;
 }
 
@@ -78,6 +88,10 @@ export interface ElectronLifecycleController {
   handleActivate(): Promise<void>;
   handleWindowAllClosed(): void;
 }
+
+// Mirrors MAX_IMAGE_SIZE in src/lib/image-utils.ts (not imported directly —
+// electron/main is built as a separate program from src/).
+const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export function createElectronLifecycle({
   app,
@@ -253,12 +267,24 @@ export function createElectronLifecycle({
 
     // Bridge the OS clipboard so the renderer can obtain a PNG for images that
     // the browser's paste event only exposes as TIFF (e.g. macOS screenshots).
-    ipcMain.handle('clipboard:readImagePng', (_event: unknown): string | null => {
+    // This intentionally bypasses the browser's clipboard permission prompt, so
+    // it's restricted to calls from the app's own main frame — tied to the
+    // paste flow rather than reachable from an arbitrary subframe/webview.
+    ipcMain.handle('clipboard:readImagePng', (event: IpcMainInvokeEventLike): string | null => {
+      const currentWindow = resolveMainWindow();
+      if (!currentWindow || event.senderFrame !== currentWindow.webContents.mainFrame) {
+        return null;
+      }
+
       const image = clipboard.readImage();
       if (image.isEmpty()) {
         return null;
       }
-      return Buffer.from(image.toPNG()).toString('base64');
+      const png = image.toPNG();
+      if (png.byteLength > MAX_CLIPBOARD_IMAGE_BYTES) {
+        return null;
+      }
+      return Buffer.from(png).toString('base64');
     });
   };
 

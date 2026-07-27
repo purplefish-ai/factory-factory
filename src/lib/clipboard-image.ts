@@ -18,9 +18,19 @@
  * data but nothing directly usable could be extracted from it.
  */
 
+import { MAX_IMAGE_SIZE } from './image-utils';
+
 const PNG_MIME = 'image/png';
 
-function base64ToBlob(base64: string, type: string): Blob {
+// Base64 encodes 3 bytes as 4 characters; reject a payload whose decoded size
+// would exceed MAX_IMAGE_SIZE before paying the cost of decoding it.
+const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_SIZE / 3) * 4;
+
+function base64ToBlob(base64: string, type: string): Blob | null {
+  if (base64.length > MAX_BASE64_LENGTH) {
+    return null;
+  }
+
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -35,12 +45,17 @@ async function readFromElectron(): Promise<Blob | null> {
     return null;
   }
 
-  const base64 = await api.readClipboardImageAsPng();
-  if (!base64) {
+  try {
+    const base64 = await api.readClipboardImageAsPng();
+    if (!base64) {
+      return null;
+    }
+
+    return base64ToBlob(base64, PNG_MIME);
+  } catch {
+    // IPC failure — the caller falls back to the next channel.
     return null;
   }
-
-  return base64ToBlob(base64, PNG_MIME);
 }
 
 async function readFromAsyncClipboard(): Promise<Blob | null> {
@@ -61,7 +76,12 @@ async function readFromAsyncClipboard(): Promise<Blob | null> {
     // Chromium's async Clipboard API decodes and re-encodes images to PNG, so a
     // macOS screenshot's TIFF is exposed here as a clean `image/png`.
     if (item.types.includes(PNG_MIME)) {
-      return item.getType(PNG_MIME);
+      try {
+        return await item.getType(PNG_MIME);
+      } catch {
+        // This item's PNG representation failed to materialize — the loop
+        // continues to check any remaining items.
+      }
     }
   }
 
