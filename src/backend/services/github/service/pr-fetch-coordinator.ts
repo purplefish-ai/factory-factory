@@ -192,25 +192,36 @@ export class PRFetchCoordinator {
       return;
     }
 
-    let oldestWorkspaceId: string | undefined;
-    let oldestTimestamp = Number.POSITIVE_INFINITY;
-    for (const [candidateWorkspaceId, timestamp] of this.lastFetchedAt) {
-      if (timestamp < oldestTimestamp) {
-        oldestWorkspaceId = candidateWorkspaceId;
-        oldestTimestamp = timestamp;
-      }
-    }
-    for (const [candidateWorkspaceId, claim] of this.inFlightClaims) {
-      if (claim.startedAt < oldestTimestamp) {
-        oldestWorkspaceId = candidateWorkspaceId;
-        oldestTimestamp = claim.startedAt;
-      }
-    }
+    // Completed timestamps are evicted first. Evicting an active claim would
+    // un-claim a workspace whose fetch is still running, which is the one thing
+    // this map exists to prevent -- a second caller would then start a
+    // duplicate GitHub call alongside it. Losing a completed timestamp only
+    // costs a fetch that the cooldown would have skipped.
+    const oldestWorkspaceId =
+      this.oldestBy(this.lastFetchedAt, (timestamp) => timestamp) ??
+      // Every entry is in flight: something has to go, or the map is unbounded.
+      this.oldestBy(this.inFlightClaims, (claim) => claim.startedAt);
 
     if (oldestWorkspaceId !== undefined) {
       this.lastFetchedAt.delete(oldestWorkspaceId);
       this.inFlightClaims.delete(oldestWorkspaceId);
     }
+  }
+
+  private oldestBy<T>(
+    entries: Map<string, T>,
+    startedAt: (value: T) => number
+  ): string | undefined {
+    let oldestWorkspaceId: string | undefined;
+    let oldestTimestamp = Number.POSITIVE_INFINITY;
+    for (const [workspaceId, value] of entries) {
+      const timestamp = startedAt(value);
+      if (timestamp < oldestTimestamp) {
+        oldestWorkspaceId = workspaceId;
+        oldestTimestamp = timestamp;
+      }
+    }
+    return oldestWorkspaceId;
   }
 }
 

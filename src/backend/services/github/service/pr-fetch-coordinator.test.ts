@@ -265,6 +265,27 @@ describe('PRFetchCoordinator', () => {
       expect(coordinator.size()).toEqual({ completed: 1, inFlight: 0 });
     });
 
+    it('evicts a completed timestamp before an older in-flight claim', async () => {
+      // The claim is the oldest entry, but evicting it would un-claim a fetch
+      // that is still running and let a second caller duplicate it.
+      const deferred = deferredFetch();
+      const inFlight = coordinator.coordinate('claimed', deferred.fetch);
+
+      for (let index = 0; index < MAX_ENTRIES; index += 1) {
+        vi.advanceTimersByTime(1);
+        await coordinator.coordinate(`completed-${index}`, () => Promise.resolve('done'));
+      }
+
+      const duplicate = vi.fn(() => Promise.resolve('duplicate'));
+      await expect(coordinator.coordinate('claimed', duplicate)).resolves.toMatchObject({
+        status: 'skipped',
+      });
+      expect(duplicate).not.toHaveBeenCalled();
+
+      deferred.resolve();
+      await inFlight;
+    });
+
     it('evicts the oldest workspace when capacity is reached', async () => {
       await coordinator.coordinate('oldest-completed', () => Promise.resolve('done'));
 
