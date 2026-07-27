@@ -4,7 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ArchiveWorkspaceDialogProps } from '@/components/workspace/archive-workspace-dialog';
+import type { ArchiveWorkspaceDialogProps } from '@/client/features/workspace/archive-workspace-dialog';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 
 const archiveDialogMock = vi.hoisted(() =>
@@ -44,7 +44,7 @@ vi.mock('@/components/ui/sheet', () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => createElement('h2', null, children),
 }));
 
-vi.mock('@/components/workspace', () => ({
+vi.mock('@/client/features/workspace', () => ({
   ArchiveWorkspaceDialog: archiveDialogMock,
   RightPanel: () => createElement('aside', null, 'Right panel'),
   WorkspaceContentView: ({ children }: { children: ReactNode }) =>

@@ -55,26 +55,26 @@ vi.mock('@/client/components/project-selector', () => ({
   },
 }));
 
-vi.mock('@/components/data-import/data-import-button', () => ({
+vi.mock('@/client/features/data-import/data-import-button', () => ({
   DataImportButton: ({ children }: { children: ReactNode }) =>
     createElement('button', null, children),
 }));
 
-vi.mock('@/components/project/github-url-form', () => ({
+vi.mock('@/client/features/project/github-url-form', () => ({
   GithubUrlForm: ({ footerActions }: { footerActions?: ReactNode }) =>
     createElement('div', null, 'GitHub URL Form', footerActions),
 }));
 
-vi.mock('@/components/project/onboarding-cli-health', () => ({
+vi.mock('@/client/features/project/onboarding-cli-health', () => ({
   OnboardingCliHealth: () => createElement('div', null, 'CLI Health'),
 }));
 
-vi.mock('@/components/project/project-repo-form', () => ({
+vi.mock('@/client/features/project/project-repo-form', () => ({
   ProjectRepoForm: ({ footerActions }: { footerActions?: ReactNode }) =>
     createElement('div', null, 'Project Repo Form', footerActions),
 }));
 
-vi.mock('@/components/project/setup-terminal-modal', () => ({
+vi.mock('@/client/features/project/setup-terminal-modal', () => ({
   SetupTerminalModal: () => null,
 }));
 

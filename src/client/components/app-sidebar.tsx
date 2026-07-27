@@ -13,8 +13,8 @@ import {
   useState,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { InlineWorkspaceForm } from '@/client/components/kanban/inline-workspace-form';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
+import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
 import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';

@@ -6,9 +6,10 @@
 - `src/backend/services/{name}/service/`: Business logic for service `{name}`
 - `src/backend/services/{name}/resources/`: DB/resource access for service `{name}` (Prisma accessors)
 - `src/backend/orchestration/`: Cross-service coordination layer (bridges, workspace init/archive, child workspace coordination)
-- `src/client/`: React UI (routes/pages, plus client-specific hooks/components/lib; router in `src/client/router.tsx`)
+- `src/client/`: React UI. Routes/pages in `src/client/routes/` (router in `src/client/router.tsx`), feature UI in `src/client/features/{feature}/`, app-level shared components in `src/client/components/`, plus client-specific hooks and lib
+- `src/client/features/`: One folder per feature — `chat`, `workspace`, `agent-activity`, `project`, `kanban`, `data-import` — each holding its components, hooks and helpers together
 - `src/cli/`: CLI entrypoint and commands
-- `src/components/`: Shared UI components (shadcn/ui)
+- `src/components/`: The shadcn/ui design system, and nothing else. Enforced by the `components-dir-is-design-system-only` dependency-cruiser rule; the path is pinned by `components.json`, which is why the design system stays here while feature UI moved to `src/client/features/`. `src/hooks/` and `src/lib/` are pinned by the same file (`hooks`, `lib`, `utils` aliases) and hold shadcn-adjacent primitives, not feature code
 - `electron/`: Electron main process wrapper
 - `prisma/`: Prisma schema and migrations
 - `prompts/`: Prompt templates copied into `dist/` on build

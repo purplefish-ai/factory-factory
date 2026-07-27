@@ -25,7 +25,7 @@ Backend:
 Frontend:
 ├── src/client/hooks/use-window-focus.ts (NEW)
 │   └── Track browser/Electron window focus state
-└── src/components/workspace/WorkspaceNotificationManager.tsx (NEW)
+└── src/client/features/workspace/WorkspaceNotificationManager.tsx (NEW)
     └── Listen for workspace events and trigger notifications
 
 Electron:

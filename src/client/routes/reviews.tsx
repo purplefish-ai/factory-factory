@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
+import { WorkspacesBackLink } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
@@ -13,7 +14,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { WorkspacesBackLink } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { PRWithFullDetails } from '@/shared/github-types';
 

@@ -4,8 +4,8 @@ import {
   GitPullRequestIcon,
   XCircleIcon,
 } from '@phosphor-icons/react';
-import { CiStatusChip } from '@/components/shared/ci-status-chip';
-import { PrStateBadge } from '@/components/shared/pr-state-badge';
+import { CiStatusChip } from '@/client/components/ci-status-chip';
+import { PrStateBadge } from '@/client/components/pr-state-badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';

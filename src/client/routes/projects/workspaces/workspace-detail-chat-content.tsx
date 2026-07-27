@@ -6,14 +6,14 @@ import {
   WarningIcon,
 } from '@phosphor-icons/react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
-import type { useChatWebSocket } from '@/components/chat';
+import type { useChatWebSocket } from '@/client/features/chat';
 import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
   RewindConfirmationDialog,
   VirtualizedMessageList,
-} from '@/components/chat';
+} from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import { filterDuplicateResultMessages, groupAdjacentToolCalls } from '@/lib/chat-protocol';

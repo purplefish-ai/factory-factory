@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,

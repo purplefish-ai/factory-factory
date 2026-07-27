@@ -1,7 +1,7 @@
 import { SidebarSimpleIcon } from '@phosphor-icons/react';
+import { useWorkspacePanel } from '@/client/features/workspace';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useWorkspacePanel } from '@/components/workspace';
 import { cn } from '@/lib/utils';
 
 export function ToggleRightPanelButton() {

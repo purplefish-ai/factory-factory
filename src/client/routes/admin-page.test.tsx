@@ -62,29 +62,29 @@ vi.mock('@/client/lib/download-file', () => ({
   downloadFile: vi.fn(),
 }));
 
-vi.mock('@/components/data-import/data-import-button', () => ({
+vi.mock('@/client/features/data-import/data-import-button', () => ({
   DataImportButton: () => createElement('button', null, 'Import Data'),
 }));
 
-vi.mock('@/components/factory-config-scripts', () => ({
+vi.mock('@/client/components/factory-config-scripts', () => ({
   FactoryConfigScripts: () => createElement('div', null, 'Factory config scripts'),
 }));
 
-vi.mock('@/components/workspace', () => ({
+vi.mock('@/client/features/workspace', () => ({
   RatchetWrenchIcon: () => createElement('span', null, 'ratchet'),
   WorkspacesBackLink: ({ projectSlug }: { projectSlug: string }) =>
     createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Back'),
 }));
 
-vi.mock('@/components/workspace/dev-server-setup-panel', () => ({
+vi.mock('@/client/features/workspace/dev-server-setup-panel', () => ({
   DevServerSetupPanel: () => null,
 }));
 
-vi.mock('@/components/project/onboarding-cli-health', () => ({
+vi.mock('@/client/features/project/onboarding-cli-health', () => ({
   OnboardingCliHealth: () => createElement('div', null, 'CLI Health'),
 }));
 
-vi.mock('@/components/project/setup-terminal-modal', () => ({
+vi.mock('@/client/features/project/setup-terminal-modal', () => ({
   SetupTerminalModal: () => null,
 }));
 

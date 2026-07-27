@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
+import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
+import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
 import { TRPCProvider, useProjects } from '@/client/lib/providers';
-import { AppLayout } from '@/components/layout/resizable-layout';
 import { Toaster } from '@/components/ui/sonner';
-import { WorkspaceNotificationManager } from '@/components/workspace/WorkspaceNotificationManager';
 import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
 
 function RootLayout() {
