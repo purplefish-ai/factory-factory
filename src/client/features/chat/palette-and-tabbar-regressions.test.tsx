@@ -20,11 +20,15 @@ import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+  FileMentionPalette,
+  type FileMentionPaletteHandle,
+  SlashCommandPalette,
+  type SlashCommandPaletteHandle,
+} from '@/client/features/composer';
 import type { CommandInfo } from '@/lib/chat-protocol';
 import { SessionStatus } from '@/shared/core';
-import { FileMentionPalette, type FileMentionPaletteHandle } from './file-mention-palette';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
-import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 
 function makeSession(id: string, createdAt: string): SessionData {
   return {

@@ -103,15 +103,15 @@ vi.mock('@/client/lib/workspace-cache-helpers', async (importOriginal) => ({
   createOptimisticWorkspaceCacheData: vi.fn(),
 }));
 
-vi.mock('@/client/features/chat/attachment-preview', () => ({
+// One factory for the whole composer, because the form now consumes it through
+// a single barrel. Everything the form imports has to appear here: a partial
+// factory leaves the rest undefined rather than falling through to the real
+// module.
+vi.mock('@/client/features/composer', () => ({
   AttachmentPreview: () => null,
-}));
-
-vi.mock('@/client/features/chat/chat-input/hooks/attachment-file-conversion', () => ({
+  FileMentionPalette: () => null,
+  SlashCommandPalette: () => null,
   collectAttachments: vi.fn(),
-}));
-
-vi.mock('@/client/features/chat/chat-input/hooks/use-paste-drop-handler', () => ({
   usePasteDropHandler: () => ({
     handlePaste: vi.fn(),
     handleDrop: vi.fn(),
@@ -119,9 +119,6 @@ vi.mock('@/client/features/chat/chat-input/hooks/use-paste-drop-handler', () => 
     handleDragLeave: vi.fn(),
     isDragging: false,
   }),
-}));
-
-vi.mock('@/client/features/chat/chat-input/hooks/use-project-file-mentions', () => ({
   useProjectFileMentions: () => ({
     files: [],
     fileMentionMenuOpen: false,
@@ -133,17 +130,6 @@ vi.mock('@/client/features/chat/chat-input/hooks/use-project-file-mentions', () 
     detectFileMention: mocks.detectFileMentionMock,
     paletteRef: { current: null },
   }),
-}));
-
-vi.mock('@/client/features/chat/file-mention-palette', () => ({
-  FileMentionPalette: () => null,
-}));
-
-vi.mock('@/client/features/chat/slash-command-palette', () => ({
-  SlashCommandPalette: () => null,
-}));
-
-vi.mock('@/client/features/chat/chat-input/hooks/use-slash-commands', () => ({
   useSlashCommands: () => ({
     slashMenuOpen: false,
     slashFilter: '',

@@ -1,8 +1,7 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-import type { FileMentionKeyResult } from '@/client/features/chat/file-mention-palette';
-import type { SlashKeyResult } from '@/client/features/chat/slash-command-palette';
+import type { FileMentionKeyResult, SlashKeyResult } from '@/client/features/composer';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';

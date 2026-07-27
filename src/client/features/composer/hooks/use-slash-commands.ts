@@ -1,10 +1,7 @@
 import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type {
-  SlashCommandPaletteHandle,
-  SlashKeyResult,
-} from '@/client/features/chat/slash-command-palette';
 import type { CommandInfo } from '@/lib/chat-protocol';
+import type { SlashCommandPaletteHandle, SlashKeyResult } from '../slash-command-palette';
 
 interface UseSlashCommandsOptions {
   enabled?: boolean;

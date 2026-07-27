@@ -1,9 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type {
-  FileMentionKeyResult,
-  FileMentionPaletteHandle,
-} from '@/client/features/chat/file-mention-palette';
 import { trpc } from '@/client/lib/trpc';
+import type { FileMentionKeyResult, FileMentionPaletteHandle } from '../file-mention-palette';
 
 interface UseProjectFileMentionsOptions {
   projectId: string;

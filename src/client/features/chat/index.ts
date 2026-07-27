@@ -16,8 +16,6 @@ export type { TaskNotification } from './reducer';
 export type { RewindConfirmationDialogProps } from './rewind-confirmation-dialog';
 export { RewindConfirmationDialog } from './rewind-confirmation-dialog';
 export { SessionTabBar } from './session-tab-bar';
-export type { SlashCommandPaletteHandle, SlashKeyResult } from './slash-command-palette';
-export { SlashCommandPalette } from './slash-command-palette';
 export { TaskNotificationsPanel } from './task-notifications-panel';
 export { TodoPanel } from './todo-panel';
 // Hooks
