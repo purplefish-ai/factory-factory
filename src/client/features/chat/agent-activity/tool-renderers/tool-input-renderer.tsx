@@ -2,9 +2,9 @@ import { FileCodeIcon, LightningIcon } from '@phosphor-icons/react';
 import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
-import type { Todo } from '@/client/features/chat/use-todo-tracker';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
+import type { Todo } from '../../use-todo-tracker';
 import {
   isCodexFileChangeToolName,
   parseCodexFileChangeToolInput,

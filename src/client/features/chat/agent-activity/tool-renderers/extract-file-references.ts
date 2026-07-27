@@ -1,4 +1,4 @@
-import type { FileReference } from '@/client/features/agent-activity/types';
+import type { FileReference } from '../types';
 
 /**
  * Known tools that operate on files and their input field names.

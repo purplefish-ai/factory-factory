@@ -1,16 +1,16 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { GroupedMessageItemRenderer, LoadingIndicator } from '@/client/features/agent-activity';
-import { ThinkingCompletionProvider } from '@/client/features/agent-activity/message-renderers';
+import type { GroupedMessageItem } from '@/lib/chat-protocol';
+import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
+import type { WorkspaceInitBanner } from '@/shared/workspace-init';
+import { GroupedMessageItemRenderer, LoadingIndicator } from './agent-activity';
+import { ThinkingCompletionProvider } from './agent-activity/message-renderers';
 import {
   createToolCallExpansionKey,
   createToolSequenceExpansionKey,
   useWorkspaceToolExpansionState,
-} from '@/client/features/agent-activity/tool-renderers/tool-expansion-state';
-import type { GroupedMessageItem } from '@/lib/chat-protocol';
-import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
-import type { WorkspaceInitBanner } from '@/shared/workspace-init';
+} from './agent-activity/tool-renderers/tool-expansion-state';
 import { CompactingIndicator } from './compacting-indicator';
 
 // =============================================================================

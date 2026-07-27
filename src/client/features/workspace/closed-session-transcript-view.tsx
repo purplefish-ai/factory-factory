@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { GroupedMessageItemRenderer } from '@/client/features/agent-activity';
+import { GroupedMessageItemRenderer } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';

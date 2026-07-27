@@ -1,9 +1,9 @@
 import { ArrowCounterClockwiseIcon, CopyIcon, XIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
-import { AttachmentPreview } from '@/client/features/chat/attachment-preview';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { AttachmentPreview } from '../attachment-preview';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ChildWorkspaceUpdateRenderer } from './message-renderers/child-workspace-update-renderer';

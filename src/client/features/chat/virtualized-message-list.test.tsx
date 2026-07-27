@@ -4,8 +4,8 @@ import { type ComponentProps, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createToolSequenceExpansionKey } from '@/client/features/agent-activity/tool-renderers/tool-expansion-state';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
+import { createToolSequenceExpansionKey } from './agent-activity/tool-renderers/tool-expansion-state';
 import { VirtualizedMessageList } from './virtualized-message-list';
 
 const virtualizerMocks = vi.hoisted(() => ({
@@ -55,13 +55,13 @@ vi.mock('@tanstack/react-virtual', () => ({
   })),
 }));
 
-vi.mock('@/client/features/agent-activity', () => ({
+vi.mock('./agent-activity', () => ({
   GroupedMessageItemRenderer: (props: unknown) =>
     agentActivityMocks.groupedMessageItemRenderer(props),
   LoadingIndicator: () => null,
 }));
 
-vi.mock('@/client/features/agent-activity/message-renderers', () => ({
+vi.mock('./agent-activity/message-renderers', () => ({
   ThinkingCompletionProvider: ({ children }: { children: ReactNode }) => children,
 }));
 

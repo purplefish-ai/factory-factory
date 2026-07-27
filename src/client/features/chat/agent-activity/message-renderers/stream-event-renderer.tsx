@@ -1,10 +1,10 @@
 import { SpinnerGapIcon, WarningIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
-import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { CompactBoundaryIndicator } from '../../compact-boundary-indicator';
 import { useIsThinkingInProgress } from './thinking-completion-context';
 
 // =============================================================================
