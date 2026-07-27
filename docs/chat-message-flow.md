@@ -366,5 +366,5 @@ The architecture guarantees:
 | ChatMessageHandlerService | `src/backend/services/session/service/chat/chat-message-handlers.service.ts` |
 | Chat WebSocket Handler | `src/backend/routers/websocket/chat.handler.ts` |
 | Frontend Chat Reducer | `src/components/chat/chat-reducer.ts` |
-| Frontend WebSocket Hook | `src/components/chat/use-chat-websocket.ts` |
-| Frontend State Hook | `src/components/chat/use-chat-state.ts` |
+| Frontend WebSocket Hook | `src/client/features/chat/use-chat-websocket.ts` |
+| Frontend State Hook | `src/client/features/chat/use-chat-state.ts` |

@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { PageHeader } from '@/client/components/page-header';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
-import { ChatInput } from '@/components/chat';
-import { ProjectRepoForm } from '@/components/project/project-repo-form';
+import { ChatInput } from '@/client/features/chat';
+import { ProjectRepoForm } from '@/client/features/project/project-repo-form';
 import { Button } from '@/components/ui/button';
 import {
   Select,

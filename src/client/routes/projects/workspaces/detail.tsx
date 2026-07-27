@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { useParams } from 'react-router';
 import { Loading } from '@/client/components/loading';
-import { WorkspacePanelProvider } from '@/components/workspace';
+import { WorkspacePanelProvider } from '@/client/features/workspace';
 
 import { WorkspaceDetailContainer } from './workspace-detail-container';
 

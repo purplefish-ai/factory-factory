@@ -13,16 +13,18 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router';
 import { toast } from 'sonner';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
+import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { Loading } from '@/client/components/loading';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import { DataImportButton } from '@/client/features/data-import/data-import-button';
+import { OnboardingCliHealth } from '@/client/features/project/onboarding-cli-health';
+import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
+import { RatchetWrenchIcon, WorkspacesBackLink } from '@/client/features/workspace';
+import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { downloadFile } from '@/client/lib/download-file';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
-import { DataImportButton } from '@/components/data-import/data-import-button';
-import { FactoryConfigScripts } from '@/components/factory-config-scripts';
-import { OnboardingCliHealth } from '@/components/project/onboarding-cli-health';
-import { SetupTerminalModal } from '@/components/project/setup-terminal-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,8 +40,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
-import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import type { PublicIssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 import {
   ApiUsageSection,

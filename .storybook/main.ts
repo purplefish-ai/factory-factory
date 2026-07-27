@@ -7,8 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const config: StorybookConfig = {
   stories: [
-    '../src/components/**/*.stories.@(js|jsx|ts|tsx)',
-    '../src/frontend/components/**/*.stories.@(js|jsx|ts|tsx)',
+    // Design-system stories; everything else now lives under src/client/.
+    '../src/components/ui/**/*.stories.@(js|jsx|ts|tsx)',
     '../src/client/**/*.stories.@(js|jsx|ts|tsx)',
   ],
 

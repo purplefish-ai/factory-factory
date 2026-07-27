@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useChatWebSocket } from '@/client/features/chat';
+import { usePersistentScroll, useWorkspacePanel } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
-import { useChatWebSocket } from '@/components/chat';
-import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import {
   resolveEffectiveSessionProvider,

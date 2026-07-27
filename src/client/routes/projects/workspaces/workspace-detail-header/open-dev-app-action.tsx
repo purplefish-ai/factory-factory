@@ -1,6 +1,6 @@
 import { HardDrivesIcon } from '@phosphor-icons/react';
+import { useRunScriptLaunch } from '@/client/features/workspace';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { useRunScriptLaunch } from '@/components/workspace';
 
 export function OpenDevAppAction({
   workspaceId,

@@ -3,8 +3,8 @@ import {
   HeaderRightSlot,
   useAppHeader,
 } from '@/client/components/app-header-context';
-import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/components/kanban';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/features/kanban';
 import type { IssueProvider } from '@/shared/core';
 
 function BoardHeaderSlot({

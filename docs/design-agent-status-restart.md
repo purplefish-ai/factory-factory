@@ -50,7 +50,7 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 
 ### Session tab bar component
 
-`src/components/workspace/main-view-tab-bar.tsx` already accepts callback props (`onSelectSession`, `onCreateSession`, `onCloseSession`). Adding `onRestartSession` follows the same pattern. The `+` new-session button is currently the rightmost element — the Restart button goes after it.
+`src/client/features/workspace/main-view-tab-bar.tsx` already accepts callback props (`onSelectSession`, `onCreateSession`, `onCloseSession`). Adding `onRestartSession` follows the same pattern. The `+` new-session button is currently the rightmost element — the Restart button goes after it.
 
 ---
 
@@ -72,11 +72,11 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 
 ### 2. Frontend — wire the button
 
-**`src/components/chat/use-chat-websocket.ts`**
+**`src/client/features/chat/use-chat-websocket.ts`**
 - Add `trpc.session.restartSession.useMutation()`
 - Expose `restartSession: () => void` that calls the mutation with the current `sessionId`
 
-**`src/components/workspace/main-view-tab-bar.tsx`**
+**`src/client/features/workspace/main-view-tab-bar.tsx`**
 - Add optional prop `onRestartSession?: () => void`
 - Render a `<Button variant="ghost" size="sm">` with `<RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Restart</Button>` at the far right of the tab bar (after the `+` button)
 - Button is always rendered (never conditionally hidden); accepts `disabled` prop from the tab bar for consistency with other controls
@@ -84,7 +84,7 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 **`src/client/routes/projects/workspaces/workspace-detail-view.tsx`**
 - Add `onRestartSession` to `SessionTabsProps` interface and pass it through to wherever `SessionTabBar` is rendered
 
-**`src/components/workspace/workspace-content-view.tsx`** (or wherever `SessionTabBar` is instantiated)
+**`src/client/features/workspace/workspace-content-view.tsx`** (or wherever `SessionTabBar` is instantiated)
 - Pass `onRestartSession` from props down to `SessionTabBar`
 
 **`src/client/routes/projects/workspaces/workspace-detail-container.tsx`**
@@ -131,8 +131,8 @@ User clicks "Restart"
 | `src/backend/domains/session/lifecycle/session.lifecycle.service.ts` | Add `restartSession()` method |
 | `src/backend/domains/session/lifecycle/session.service.ts` | Expose `restartSession()` publicly |
 | `src/backend/trpc/session.trpc.ts` | Add `restartSession` procedure |
-| `src/components/chat/use-chat-websocket.ts` | Add `restartSession` mutation + expose from hook |
-| `src/components/workspace/main-view-tab-bar.tsx` | Add `onRestartSession` prop + Restart button UI |
+| `src/client/features/chat/use-chat-websocket.ts` | Add `restartSession` mutation + expose from hook |
+| `src/client/features/workspace/main-view-tab-bar.tsx` | Add `onRestartSession` prop + Restart button UI |
 | `src/client/routes/projects/workspaces/workspace-detail-view.tsx` | Add `onRestartSession` to `SessionTabsProps` |
-| `src/components/workspace/workspace-content-view.tsx` | Thread `onRestartSession` to `MainViewTabBar` |
+| `src/client/features/workspace/workspace-content-view.tsx` | Thread `onRestartSession` to `MainViewTabBar` |
 | `src/client/routes/projects/workspaces/workspace-detail-container.tsx` | Connect `restartSession` from hook to view props |

@@ -8,6 +8,7 @@ import {
   useAppHeader,
 } from '@/client/components/app-header-context';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { RunScriptButton, RunScriptPortBadge } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,7 +20,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { RunScriptButton, RunScriptPortBadge } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';

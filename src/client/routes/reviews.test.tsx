@@ -62,7 +62,7 @@ vi.mock('@/hooks/use-mobile', () => ({
   useIsMobile: () => false,
 }));
 
-vi.mock('@/components/workspace', () => ({
+vi.mock('@/client/features/workspace', () => ({
   WorkspacesBackLink: ({ projectSlug }: { projectSlug: string }) =>
     createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Workspaces'),
 }));

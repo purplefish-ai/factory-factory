@@ -25,7 +25,7 @@ Backend:
 Frontend:
 ├── src/client/hooks/use-window-focus.ts (NEW)
 │   └── Track browser/Electron window focus state
-└── src/components/workspace/WorkspaceNotificationManager.tsx (NEW)
+└── src/client/features/workspace/WorkspaceNotificationManager.tsx (NEW)
     └── Listen for workspace events and trigger notifications
 
 Electron:
@@ -935,7 +935,7 @@ export function useWindowFocus(): boolean {
 
 ### 5. Frontend: Workspace Notification Manager
 
-**File:** `src/components/workspace/WorkspaceNotificationManager.tsx` (NEW)
+**File:** `src/client/features/workspace/WorkspaceNotificationManager.tsx` (NEW)
 
 ```typescript
 import { useEffect } from 'react';
@@ -1032,7 +1032,7 @@ function showNotification(workspaceName: string, sessionCount: number): void {
 
 ### 6. Frontend: Integration with Chat WebSocket
 
-**File:** `src/components/chat/use-chat-websocket.ts` (MODIFY)
+**File:** `src/client/features/chat/use-chat-websocket.ts` (MODIFY)
 
 Update the WebSocket message handler to pass notification requests to the manager.
 
@@ -1180,12 +1180,12 @@ declare global {
 ### New Files (3)
 - `src/backend/services/workspace-activity.service.ts` - Workspace activity tracking
 - `src/client/hooks/use-window-focus.ts` - Window focus detection
-- `src/components/workspace/WorkspaceNotificationManager.tsx` - Notification manager component
+- `src/client/features/workspace/WorkspaceNotificationManager.tsx` - Notification manager component
 
 ### Modified Files (6)
 - `src/backend/routers/websocket/chat.handler.ts` - Add workspace activity tracking
 - `src/backend/services/notification.service.ts` - Add workspace notification method
-- `src/components/chat/use-chat-websocket.ts` - Forward notification requests
+- `src/client/features/chat/use-chat-websocket.ts` - Forward notification requests
 - `src/client/router.tsx` - Add notification manager to app
 - `electron/main/index.ts` - Track window focus events
 - `electron/preload/index.ts` - Expose focus API

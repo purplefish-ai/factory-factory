@@ -1,10 +1,10 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
-import { FactoryConfigScripts } from '@/components/factory-config-scripts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';

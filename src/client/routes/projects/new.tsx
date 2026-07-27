@@ -3,14 +3,17 @@ import { Link, useNavigate } from 'react-router';
 import { HeaderLeftStartSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Logo } from '@/client/components/logo';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { DataImportButton } from '@/client/features/data-import/data-import-button';
+import { GithubUrlForm } from '@/client/features/project/github-url-form';
+import { OnboardingCliHealth } from '@/client/features/project/onboarding-cli-health';
+import {
+  ProjectRepoForm,
+  type ProjectRepoFormProps,
+} from '@/client/features/project/project-repo-form';
+import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
+import type { ScriptType } from '@/client/features/project/startup-script-form';
 import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
 import { trpc } from '@/client/lib/trpc';
-import { DataImportButton } from '@/components/data-import/data-import-button';
-import { GithubUrlForm } from '@/components/project/github-url-form';
-import { OnboardingCliHealth } from '@/components/project/onboarding-cli-health';
-import { ProjectRepoForm, type ProjectRepoFormProps } from '@/components/project/project-repo-form';
-import { SetupTerminalModal } from '@/components/project/setup-terminal-modal';
-import type { ScriptType } from '@/components/project/startup-script-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

@@ -211,6 +211,14 @@ module.exports = {
       to: { path: '^src/backend/orchestration/' },
     },
     {
+      name: 'components-dir-is-design-system-only',
+      severity: 'error',
+      comment:
+        'src/components/ holds the shadcn design system and nothing else. Feature UI lives in src/client/features/{feature}/, app-level shared components in src/client/components/. The path is pinned by components.json, which is why the design system stays put while everything else moved.',
+      from: {},
+      to: { path: '^src/components/', pathNot: '^src/components/ui/' },
+    },
+    {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:

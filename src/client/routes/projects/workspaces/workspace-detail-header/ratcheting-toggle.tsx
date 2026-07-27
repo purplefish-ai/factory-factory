@@ -1,7 +1,7 @@
 import { LightningIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import { RatchetToggleButton } from '@/client/features/workspace';
 import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { RatchetToggleButton } from '@/components/workspace';
 import type { WorkspaceHeaderWorkspace } from './types';
 
 export function RatchetingToggle({

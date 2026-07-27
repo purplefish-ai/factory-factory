@@ -1,4 +1,4 @@
-import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/features/workspace/session-tab-runtime';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 

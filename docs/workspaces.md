@@ -309,7 +309,7 @@ Key tests are located at:
   `src/backend/services/workspace/service/query/workspace-query.service.test.ts`;
 - Ratchet behavior, dispatch retries, and disable semantics:
   `src/backend/services/ratchet/service/ratchet.service.test.ts`;
-- Ratchet visual-state helpers: `src/components/workspace/ratchet-state.test.ts`;
+- Ratchet visual-state helpers: `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:
   `src/backend/services/workspace-snapshot-store.service.test.ts` and
   `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;

@@ -1,0 +1,30 @@
+import { applyRendererMessages } from '@/client/features/chat/reducer/helpers';
+import type { ChatAction, ChatState } from '@/client/features/chat/reducer/types';
+import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
+
+export function reduceMessageCompactSlice(state: ChatState, action: ChatAction): ChatState {
+  switch (action.type) {
+    case 'COMPACT_BOUNDARY': {
+      const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
+      const compactBoundaryMessage: ChatMessage = {
+        id: `compact-boundary-${Date.now()}`,
+        source: 'agent',
+        message: {
+          type: 'system',
+          subtype: 'compact_boundary',
+        } as AgentMessage,
+        timestamp: new Date().toISOString(),
+        order: maxOrder + 1,
+      };
+      return applyRendererMessages(
+        {
+          ...state,
+          hasCompactBoundary: true,
+        },
+        [...state.messages, compactBoundaryMessage]
+      );
+    }
+    default:
+      return state;
+  }
+}
