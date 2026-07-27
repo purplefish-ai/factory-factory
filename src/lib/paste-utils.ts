@@ -71,10 +71,24 @@ interface ClipboardImageProcessingResult {
   error?: string;
 }
 
-function getClipboardImageItems(items: DataTransferItemList): DataTransferItem[] {
-  return Array.from(items).filter(
-    (item) => item.type.startsWith('image/') && isSupportedImageType(item.type)
-  );
+interface ExtractedClipboardImage {
+  type: string;
+  file: File | null;
+}
+
+/**
+ * Synchronously pull the type + File out of every supported image item.
+ *
+ * Clipboard `DataTransferItem`s are only live during the paste event's
+ * synchronous dispatch — once it completes (and certainly after any `await`),
+ * the item is neutered: `getAsFile()` returns null and `item.type` returns ''.
+ * We therefore capture everything we need up front, before any async work, so a
+ * later `await` can't turn a pasted image's type into an empty string.
+ */
+function extractClipboardImages(items: DataTransferItemList): ExtractedClipboardImage[] {
+  return Array.from(items)
+    .filter((item) => item.type.startsWith('image/') && isSupportedImageType(item.type))
+    .map((item) => ({ type: item.type, file: item.getAsFile() }));
 }
 
 function buildClipboardImageName(file: File, itemType: string): string {
@@ -86,12 +100,12 @@ function buildClipboardImageName(file: File, itemType: string): string {
   return `pasted-image-${Date.now()}.${extension}`;
 }
 
-async function processClipboardImageItem(
-  item: DataTransferItem
+async function processClipboardImage(
+  file: File | null,
+  type: string
 ): Promise<ClipboardImageProcessingResult> {
-  const file = item.getAsFile();
   if (!file) {
-    return { error: `Could not extract image from clipboard (${item.type})` };
+    return { error: `Could not extract image from clipboard (${type})` };
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
@@ -105,8 +119,8 @@ async function processClipboardImageItem(
     return {
       attachment: {
         id: generateAttachmentId(),
-        name: buildClipboardImageName(file, item.type),
-        type: item.type,
+        name: buildClipboardImageName(file, type),
+        type,
         size: file.size,
         data: base64,
         contentType: 'image',
@@ -165,9 +179,10 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Clipboa
   const attachments: MessageAttachment[] = [];
   const errors: string[] = [];
 
-  const imageItems = items ? getClipboardImageItems(items) : [];
-  for (const item of imageItems) {
-    const result = await processClipboardImageItem(item);
+  // Extract synchronously first — see extractClipboardImages — then convert.
+  const imageItems = items ? extractClipboardImages(items) : [];
+  for (const { file, type } of imageItems) {
+    const result = await processClipboardImage(file, type);
     if (result.attachment) {
       attachments.push(result.attachment);
     }

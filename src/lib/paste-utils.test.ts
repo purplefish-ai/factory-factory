@@ -99,6 +99,31 @@ describe('getClipboardImages', () => {
     expect(result.errors).toEqual(['Image too large: 6 B (max 5 B)']);
   });
 
+  it('captures the item type synchronously before the clipboard item is neutered', async () => {
+    // Real clipboard DataTransferItems neuter after the paste event / first
+    // await: getAsFile() succeeds once, then item.type reads back as ''. The
+    // attachment must still carry the original type, not the neutered empty one.
+    const file = { name: '', size: 4, type: 'image/png' } as File;
+    let neutered = false;
+    const item = {
+      kind: 'file',
+      get type() {
+        return neutered ? '' : 'image/png';
+      },
+      getAsFile: () => {
+        neutered = true;
+        return file;
+      },
+    } as unknown as DataTransferItem;
+
+    const result = await getClipboardImages(createClipboardEvent([item]));
+
+    expect(getClipboardImageBlob).not.toHaveBeenCalled();
+    expect(result.errors).toEqual([]);
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments[0]).toMatchObject({ type: 'image/png', contentType: 'image' });
+  });
+
   it('falls back to the platform PNG channel for an unsupported image type', async () => {
     const pngBlob = { size: 4, type: 'image/png' } as Blob;
     vi.mocked(getClipboardImageBlob).mockResolvedValueOnce(pngBlob);
