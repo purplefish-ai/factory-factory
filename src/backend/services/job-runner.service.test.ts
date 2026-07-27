@@ -438,6 +438,31 @@ describe('jobRunner', () => {
       job.finish();
     });
 
+    it('queues a restart requested from an abort listener', async () => {
+      // Abort listeners fire synchronously inside `abort()`, so the stop has to
+      // be observable by then. Published afterwards, a `start()` from a
+      // listener is refused as "already running" and silently dropped.
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'listener-restart',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: (signal) => {
+          signal.addEventListener('abort', () => jobRunner.start('listener-restart'));
+          return job.run();
+        },
+      });
+      jobRunner.start('listener-restart');
+      await vi.advanceTimersByTimeAsync(0);
+
+      const stopping = jobRunner.stop('listener-restart');
+      job.finish();
+      await stopping;
+
+      expect(jobRunner.isRunning('listener-restart')).toBe(true);
+      job.finish();
+    });
+
     it('drops a pending restart when a second stop supersedes it', async () => {
       const run = vi.fn().mockResolvedValue(undefined);
       const job = controllableRun();

@@ -19,6 +19,22 @@
  * Deliberately absent: a public "run this job now" API. The two loops that had
  * a cancellable sleep only ever cancelled it from their own `stop()`, so
  * interruptibility is a shutdown concern, not a scheduling feature.
+ *
+ * Expected usage, which is what the guarantees below are worth defending:
+ * a job is registered once when its service is constructed, and started and
+ * stopped from the composition root -- `server.ts` for the five real jobs. In
+ * that pattern `start()` and `stop()` never overlap and a job never touches
+ * its own lifecycle.
+ *
+ * The runner nonetheless survives the overlapping cases, because it is shared
+ * by five services and a lifecycle primitive that only works when called
+ * politely is a trap: concurrent stops share one wait, a start during a stop
+ * becomes a restart honoured when the old loop settles, a job that stops
+ * itself is stopped and waited for, and a loop that dies frees its slot. What
+ * it does *not* promise is ordering between concurrent callers -- last writer
+ * wins, so a `start()` and a `stop()` racing from two places leave the job in
+ * whichever state the later call asked for. Sequencing that is the caller's
+ * job, not this file's.
  */
 
 import { toError } from '@/backend/lib/error-utils';
@@ -215,11 +231,11 @@ export class JobRunner {
     }
 
     state.stopping = true;
-    state.abortController.abort();
-    state.cancelSleep?.();
 
-    // Everything above is synchronous, so a stop arriving after this point
-    // finds `stopPending` set and joins rather than starting a second teardown.
+    // Published before the abort is dispatched, not after. Abort listeners run
+    // synchronously inside `abort()`, so a `start()` issued from one has to be
+    // able to see that a stop is under way -- otherwise it is refused as
+    // "already running" and the restart is dropped rather than queued.
     const pending = (async () => {
       const { loop, currentRun } = state;
       if (loop !== null) {
@@ -232,6 +248,9 @@ export class JobRunner {
       }
     })();
     state.stopPending = pending;
+
+    state.abortController.abort();
+    state.cancelSleep?.();
 
     try {
       await pending;
