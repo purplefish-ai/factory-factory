@@ -214,9 +214,12 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Clipboa
     if (blob) {
       const result = await processClipboardImageBlob(blob);
       if (result.attachment) {
+        // The fallback recovered the same image the direct extraction above
+        // failed on — drop those errors so a successful paste doesn't still
+        // surface an error toast.
+        errors.length = 0;
         attachments.push(result.attachment);
-      }
-      if (result.error) {
+      } else if (result.error) {
         errors.push(result.error);
       }
     }

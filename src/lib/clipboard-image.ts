@@ -22,12 +22,22 @@ import { MAX_IMAGE_SIZE } from './image-utils';
 
 const PNG_MIME = 'image/png';
 
-// Base64 encodes 3 bytes as 4 characters; reject a payload whose decoded size
-// would exceed MAX_IMAGE_SIZE before paying the cost of decoding it.
-const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_SIZE / 3) * 4;
+// Base64 encodes 3 bytes as 4 characters, but the final group may be padded
+// with '=' to represent only 1 or 2 trailing bytes. A length-only estimate
+// rounds up to the nearest group of 4 and can therefore admit payloads up to
+// 2 bytes over the limit; deriving the exact decoded size from the padding
+// closes that gap.
+function base64DecodedByteLength(base64: string): number {
+  if (base64.length === 0 || base64.length % 4 !== 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return (base64.length / 4) * 3 - padding;
+}
 
 function base64ToBlob(base64: string, type: string): Blob | null {
-  if (base64.length > MAX_BASE64_LENGTH) {
+  if (base64DecodedByteLength(base64) > MAX_IMAGE_SIZE) {
     return null;
   }
 
