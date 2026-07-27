@@ -70,6 +70,8 @@ interface JobState {
    * the caller believing the job runs when nothing does.
    */
   restartRequested: boolean;
+  /** The stop in progress, so concurrent stops share one wait. */
+  stopPending: Promise<void> | null;
   /** Aborted by `stop()`, handed to the run so it can bail out mid-batch. */
   abortController: AbortController;
   /** The run currently executing, exposed through `waitForCurrentRun`. */
@@ -105,6 +107,7 @@ export class JobRunner {
       starting: false,
       stopping: false,
       restartRequested: false,
+      stopPending: null,
       abortController: new AbortController(),
       currentRun: null,
       cancelSleep: null,
@@ -117,7 +120,7 @@ export class JobRunner {
 
   start(name: string): void {
     const state = this.get(name);
-    if (state.stopping) {
+    if (state.stopPending !== null) {
       // A stop is still winding down. Starting here would be refused for as
       // long as the old loop lives and then never retried, leaving the caller
       // believing the job runs while nothing polls. Record the intent instead;
@@ -128,6 +131,10 @@ export class JobRunner {
     if (state.loop !== null || state.starting) {
       return; // Already running
     }
+    // `stop()` leaves this set so a loop still between its run and its `while`
+    // check cannot carry on; clearing it is the last thing that happens before
+    // a new loop exists, and the only place it happens.
+    state.stopping = false;
     // Fresh controller per start: a job stopped and started again must not
     // hand its runs a signal that is already aborted.
     state.abortController = new AbortController();
@@ -199,23 +206,42 @@ export class JobRunner {
    */
   async stop(name: string): Promise<void> {
     const state = this.get(name);
-    state.stopping = true;
     // An explicit stop supersedes a restart that was requested before it.
     state.restartRequested = false;
+
+    if (state.stopPending !== null) {
+      await state.stopPending; // A stop is already under way; share its wait.
+      return;
+    }
+
+    state.stopping = true;
     state.abortController.abort();
     state.cancelSleep?.();
 
-    // Read after the abort: concurrent stops then await the same loop.
-    const { loop } = state;
-    if (loop !== null) {
-      await loop;
-    } else if (state.currentRun !== null) {
-      // Inside the `starting` window the slot is not filled yet, but a run is
-      // already executing -- reachable when a job's own first run stops it.
-      await state.currentRun;
+    // Everything above is synchronous, so a stop arriving after this point
+    // finds `stopPending` set and joins rather than starting a second teardown.
+    const pending = (async () => {
+      const { loop, currentRun } = state;
+      if (loop !== null) {
+        await loop;
+      } else if (currentRun !== null) {
+        // Inside the `starting` window the slot is not filled yet, but a run
+        // is already executing -- reachable when a job's own first run stops
+        // it.
+        await currentRun;
+      }
+    })();
+    state.stopPending = pending;
+
+    try {
+      await pending;
+    } finally {
+      state.stopPending = null;
     }
 
-    state.stopping = false;
+    // `stopping` deliberately stays set: a loop may still be between its
+    // `runOnce` and its `while` check, and clearing the flag here would let it
+    // carry on as though nothing had happened. `start()` is what clears it.
     logger.info('Job stopped', { job: name });
 
     if (state.restartRequested) {
@@ -266,23 +292,28 @@ export class JobRunner {
 
   private async runOnce(state: JobState): Promise<void> {
     const { signal } = state.abortController;
-    const run = (async () => {
-      try {
-        await state.definition.run(signal);
-      } catch (error) {
-        logger.error(`Job run failed: ${state.definition.name}`, toError(error));
-      }
-    })();
 
+    // Published *before* the callback is invoked. Building the promise from
+    // the call would leave `currentRun` unset for the callback's synchronous
+    // prefix, and a job that stops itself from there would find nothing to
+    // wait on -- the stop would be lost rather than merely un-awaited.
+    let settle!: () => void;
+    const run = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
     state.currentRun = run;
+
     try {
-      await run;
+      await state.definition.run(signal);
+    } catch (error) {
+      logger.error(`Job run failed: ${state.definition.name}`, toError(error));
     } finally {
       // Identity-checked: only clear the slot if it still holds *this* run, so
       // a late settle cannot erase a newer run's promise.
       if (state.currentRun === run) {
         state.currentRun = null;
       }
+      settle();
     }
   }
 

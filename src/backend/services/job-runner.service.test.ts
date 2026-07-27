@@ -464,20 +464,28 @@ describe('jobRunner', () => {
       expect(run).toHaveBeenCalledTimes(1);
     });
 
-    it('waits for a first run that stops the job from inside itself', async () => {
-      // Inside the `starting` window the slot is not filled yet, so `stop()`
-      // would have had nothing to await and could resolve while the run was
-      // still going -- against the documented guarantee.
+    it('honours a stop issued synchronously from inside the first run', async () => {
+      // Two ways this used to fail, and the first is why the earlier version
+      // of this test passed for the wrong reason. `currentRun` was published
+      // only after the callback was invoked, so a stop from the callback's
+      // synchronous prefix found nothing to wait on -- and because `stop()`
+      // then cleared `stopping`, the loop carried on polling as though the
+      // stop had never happened.
+      let starts = 0;
       let stopPromise: Promise<void> | null = null;
-      let finished = false;
+      let runFinished = false;
+
       jobRunner.register({
         name: 'self-stopping',
         intervalMs: 1000,
         runImmediately: true,
         run: async () => {
-          stopPromise = jobRunner.stop('self-stopping');
+          starts += 1;
+          if (starts === 1) {
+            stopPromise = jobRunner.stop('self-stopping');
+          }
           await Promise.resolve();
-          finished = true;
+          runFinished = true;
         },
       });
 
@@ -486,7 +494,12 @@ describe('jobRunner', () => {
 
       expect(stopPromise).not.toBeNull();
       await stopPromise;
-      expect(finished).toBe(true);
+      expect(runFinished).toBe(true);
+
+      // The job is actually stopped, not merely un-awaited.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(starts).toBe(1);
+      expect(jobRunner.isRunning('self-stopping')).toBe(false);
     });
 
     it('makes a second stop wait for the same run as the first', async () => {
