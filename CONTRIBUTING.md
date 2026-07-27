@@ -122,10 +122,11 @@ src/
 │   ├── trpc/         # tRPC routers
 │   └── routers/      # REST/WebSocket route handlers
 ├── client/           # React frontend
-│   ├── components/   # UI components
+│   ├── components/   # App-level shared components
+│   ├── features/     # Feature UI (one folder per feature)
 │   └── routes/       # Page routes
 ├── cli/              # Command-line interface
-└── components/       # Shared UI components (shadcn/ui)
+└── components/       # shadcn/ui design system only
 
 electron/             # Electron main process
 prisma/               # Database schema and migrations
