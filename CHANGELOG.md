@@ -5,6 +5,33 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-07-27
+
+### Changed
+
+- Upgrade React Router and raise the supported Node.js baseline (#2012)
+- Remove unused core and Next.js remnants, dead endpoints, and duplicated handlers (#2023, #2024)
+- Derive Kanban and Ratchet state, share workspace list data, and split Ratchet, pull-request, run-script, and auto-iteration persistence into focused records (#2025, #2026, #2027, #2028, #2029, #2031, #2034)
+- Split session responsibilities into focused services and consolidate branch naming, background polling, and pull-request fetch coordination (#2032, #2033, #2035, #2036)
+- Move client UI into feature-owned modules and enforce public cross-feature boundaries (#2037, #2038)
+
+### Fixed
+
+- Prevent duplicate child-workspace messages and preserve workspace hierarchy during backup and restore (#1986, #2006)
+- Preserve ACP model selection and custom IDE commands, and insert file-mention whitespace correctly (#1987, #2003, #2004)
+- Stabilize chat and session lifecycle by ignoring summary-order drift, preventing error-order collisions and stopped-prompt revival, and closing unused session logs (#2005, #2008, #2009, #2011)
+- Publish attached pull-request URLs and prompt-failure dispatch state promptly, initialize Ratchet settings correctly, and stop mismatched Ratchet sessions after aborts (#2010, #2016, #2017, #2020)
+- Clean up failed auto-iteration and terminated runtime state while preserving required runtime files and clearing stale terminal PIDs and crashed proxy URLs (#2014, #2015, #2019, #2021)
+- Distinguish retry compare-and-swap failures, guard TCP port fallback exhaustion, and prevent false process-timeout reports (#2013, #2018, #2022)
+
+### Security
+
+- Update dependencies and resolve security alerts (#2007)
+
+### Documentation
+
+- Archive stale design documents (#2030)
+
 ## [0.4.1] - 2026-07-17
 
 ### Added
