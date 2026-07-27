@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import * as React from 'react';
 import { memo } from 'react';
+import type { ToolCallInfo } from '@/client/features/chat/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
@@ -23,7 +24,6 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import type { ToolCallInfo } from '../types';
 import { getDisplayToolName } from './tool-display-utils';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
