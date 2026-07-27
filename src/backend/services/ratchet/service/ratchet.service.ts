@@ -7,6 +7,7 @@ import {
   SERVICE_THRESHOLDS,
   SERVICE_TIMEOUT_MS,
 } from '@/backend/services/constants';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { userSettingsService } from '@/backend/services/settings';
@@ -96,11 +97,14 @@ export interface RatchetCheckOptions {
   bypassPrFetchCooldown?: boolean;
 }
 
+/** Job name this service registers with the shared runner. */
+const RATCHET_POLL_JOB = 'ratchet-poll';
+
 class RatchetService extends EventEmitter {
-  private isShuttingDown = false;
-  private monitorLoop: Promise<void> | null = null;
-  private sleepTimeout: NodeJS.Timeout | null = null;
-  private sleepResolve: (() => void) | null = null;
+  /** The signal of the run currently executing; see `isShuttingDown`. */
+  private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
   private workspaceCheckTimeoutMs = SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
   private readonly checkCoordinator = new RatchetWorkspaceCheckCoordinator(
     () => this.workspaceCheckTimeoutMs
@@ -112,6 +116,29 @@ class RatchetService extends EventEmitter {
   private githubBridge: RatchetGitHubBridge | null = null;
   private snapshotBridge: RatchetPRSnapshotBridge | null = null;
   private workspaceBridge: RatchetWorkspaceBridge | null = null;
+
+  constructor() {
+    super();
+    jobRunner.register({
+      name: RATCHET_POLL_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
+      // The loop polled once before its first sleep, and still does.
+      runImmediately: true,
+      run: (signal) => this.runCycle(signal),
+      computeDelay: (base) => this.nextPollDelay(base),
+    });
+  }
+
+  /**
+   * The service's own stopped state, or an abort on the run in flight. Both
+   * are needed: `checkAllWorkspaces` and `checkWorkspaceById` are triggered on
+   * demand by the admin router and the event collector and must respect a
+   * shutdown that has already happened, while the signal is what lets a poll
+   * already underway give up before checking the next workspace.
+   */
+  private get isShuttingDown(): boolean {
+    return this.stopped || (this.runSignal?.aborted ?? false);
+  }
 
   configure(bridges: {
     session: RatchetSessionBridge;
@@ -162,85 +189,41 @@ class RatchetService extends EventEmitter {
   }
 
   start(): void {
-    if (this.monitorLoop !== null) {
-      return;
-    }
-
-    this.isShuttingDown = false;
-    this.monitorLoop = this.runContinuousLoop();
-
-    logger.info('Ratchet service started', { intervalMs: SERVICE_INTERVAL_MS.ratchetPoll });
+    this.stopped = false;
+    jobRunner.start(RATCHET_POLL_JOB);
   }
 
   async stop(): Promise<void> {
-    this.isShuttingDown = true;
-    this.wakeSleep();
-
-    if (this.monitorLoop !== null) {
-      logger.debug('Waiting for ratchet monitor loop to complete');
-      await this.monitorLoop;
-      this.monitorLoop = null;
-    }
-
-    logger.info('Ratchet service stopped');
+    this.stopped = true;
+    await jobRunner.stop(RATCHET_POLL_JOB);
   }
 
-  private async runContinuousLoop(): Promise<void> {
-    while (!this.isShuttingDown) {
-      try {
-        this.backoff.beginCycle();
-        await this.checkAllWorkspaces();
-        this.backoff.resetIfCleanCycle(logger, 'Ratchet');
-      } catch (err) {
-        logger.error('Ratchet check failed', toError(err));
-      }
-
-      if (!this.isShuttingDown) {
-        const delayMs = this.backoff.computeDelay(SERVICE_INTERVAL_MS.ratchetPoll);
-        if (this.backoff.currentMultiplier > 1) {
-          logger.debug('Using backoff delay for next ratchet check', {
-            baseIntervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
-            backoffMultiplier: this.backoff.currentMultiplier,
-            delayMs,
-          });
-        }
-        await this.sleep(delayMs);
-      }
+  /** One poll cycle, with the rate-limit backoff bookkeeping around it. */
+  private async runCycle(signal: AbortSignal): Promise<void> {
+    this.runSignal = signal;
+    try {
+      this.backoff.beginCycle();
+      await this.checkAllWorkspaces();
+      this.backoff.resetIfCleanCycle(logger, 'Ratchet');
+    } catch (err) {
+      logger.error('Ratchet check failed', toError(err));
+    } finally {
+      // Scoped to this run; see the note in `scheduler.service.ts`.
+      this.runSignal = null;
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (this.sleepTimeout) {
-          clearTimeout(this.sleepTimeout);
-          this.sleepTimeout = null;
-        }
-        if (this.sleepResolve === finish) {
-          this.sleepResolve = null;
-        }
-        resolve();
-      };
-
-      this.sleepResolve = finish;
-      this.sleepTimeout = setTimeout(finish, ms);
-
-      if (this.isShuttingDown) {
-        finish();
-      }
-    });
-  }
-
-  private wakeSleep(): void {
-    const resolveSleep = this.sleepResolve;
-    if (resolveSleep) {
-      resolveSleep();
+  /** Stretch the poll interval while GitHub is rate-limiting us. */
+  private nextPollDelay(baseIntervalMs: number): number {
+    const delayMs = this.backoff.computeDelay(baseIntervalMs);
+    if (this.backoff.currentMultiplier > 1) {
+      logger.debug('Using backoff delay for next ratchet check', {
+        baseIntervalMs,
+        backoffMultiplier: this.backoff.currentMultiplier,
+        delayMs,
+      });
     }
+    return delayMs;
   }
 
   async checkAllWorkspaces(): Promise<RatchetCheckResult> {

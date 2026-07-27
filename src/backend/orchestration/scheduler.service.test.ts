@@ -545,5 +545,70 @@ describe('SchedulerService', () => {
       await stopPromise;
       expect(stopped).toBe(true);
     });
+
+    it('does not treat a restarted scheduler as still shutting down', async () => {
+      // A manual sync after a restart must run. The guard has to distinguish
+      // "this service is stopped" from "the run in flight was aborted";
+      // reading only the last run's signal would leave a restarted scheduler
+      // looking permanently shut down until its first new run began.
+      mockFindNeedingPRSync.mockResolvedValue([]);
+      mockFindNeedingPRDiscovery.mockResolvedValue([]);
+
+      schedulerService.start();
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await schedulerService.stop();
+
+      await expect(schedulerService.syncPRStatuses()).resolves.toEqual({ synced: 0, failed: 0 });
+      const callsWhileStopped = mockFindNeedingPRSync.mock.calls.length;
+
+      schedulerService.start();
+      await schedulerService.syncPRStatuses();
+
+      expect(mockFindNeedingPRSync.mock.calls.length).toBe(callsWhileStopped + 1);
+
+      await schedulerService.stop();
+    });
+
+    it('keeps a running batch abortable when start() is called a second time', async () => {
+      // The redundant `start()` must not reset the guard: the run in flight
+      // still has to see the abort when shutdown arrives, or a long batch
+      // keeps hitting GitHub and Prisma through teardown.
+      const deferredSync = createDeferred<{
+        success: boolean;
+        snapshot: { prNumber: number; prState: string; prReviewState: null; prCiStatus: string };
+      }>();
+
+      mockFindNeedingPRSync.mockResolvedValue([
+        { id: 'ws-1', prUrl: 'https://example.com/pull/1' },
+      ]);
+      mockFindNeedingPRDiscovery.mockResolvedValue([]);
+      mockRefreshWorkspace.mockImplementation(() => deferredSync.promise);
+
+      schedulerService.start();
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+
+      schedulerService.start();
+
+      const stopPromise = schedulerService.stop();
+      await Promise.resolve();
+
+      // Mid-shutdown, a fresh batch must decline before it queries anything,
+      // rather than starting more work against a database about to disconnect.
+      mockFindNeedingPRSync.mockResolvedValue([]);
+      const queriesBefore = mockFindNeedingPRSync.mock.calls.length;
+      await expect(schedulerService.syncPRStatuses()).resolves.toEqual({ synced: 0, failed: 0 });
+      expect(mockFindNeedingPRSync.mock.calls.length).toBe(queriesBefore);
+
+      deferredSync.resolve({
+        success: true,
+        snapshot: {
+          prNumber: 1,
+          prState: 'OPEN',
+          prReviewState: null,
+          prCiStatus: 'PENDING',
+        },
+      });
+      await stopPromise;
+    });
   });
 });

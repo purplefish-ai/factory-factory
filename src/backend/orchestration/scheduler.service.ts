@@ -1,8 +1,9 @@
 /**
  * Scheduler Service
  *
- * Local background job scheduler for periodic tasks.
- * Replaces Inngest for PR status sync.
+ * Keeps the cached PR state fresh: syncs the PRs already known to workspaces
+ * and discovers PRs opened for workspaces that do not have one yet. The
+ * recurring lifecycle belongs to `jobRunner`; this file owns only the work.
  */
 
 import pLimit from 'p-limit';
@@ -10,6 +11,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   computePRDiscoveryNextCheckAt,
@@ -44,59 +46,68 @@ interface PRDiscoveryRepositoryGroup<
   candidates: Candidate[];
 }
 
+/** Job name this service registers with the shared runner. */
+const PR_POLL_JOB = 'pr-poll';
+
 class SchedulerService {
-  private syncInterval: NodeJS.Timeout | null = null;
-  private isShuttingDown = false;
-  private syncInProgress: Promise<unknown> | null = null;
-
   /**
-   * Start the scheduler
+   * The signal of the run currently executing. Batches consult it between
+   * workspaces so a shutdown does not have to wait out the whole list.
    */
-  start(): void {
-    if (this.syncInterval) {
-      return; // Already running
-    }
+  private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
 
-    // Reset shutdown flag in case we're restarting
-    this.isShuttingDown = false;
-
-    this.syncInterval = setInterval(() => {
-      if (this.isShuttingDown || this.syncInProgress !== null) {
-        return;
-      }
-
-      this.syncInProgress = Promise.all([
-        this.syncPRStatuses().catch((err) => {
-          logger.error('PR sync batch failed', toError(err));
-        }),
-        this.discoverNewPRs().catch((err) => {
-          logger.error('PR discovery batch failed', toError(err));
-        }),
-      ]).finally(() => {
-        this.syncInProgress = null;
-      });
-    }, SERVICE_INTERVAL_MS.schedulerPrSync);
-
-    logger.info('Scheduler started', { prSyncIntervalMs: SERVICE_INTERVAL_MS.schedulerPrSync });
+  constructor() {
+    jobRunner.register({
+      name: PR_POLL_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.schedulerPrSync,
+      // Sync and discovery stay a single job so they keep sharing one cadence
+      // and one in-flight window, as they did under the old shared interval.
+      // Pacing them separately would let them overlap against the same GitHub
+      // budget, which is a change for the fetch coordinator to make and not
+      // for this one.
+      run: async (signal) => {
+        this.runSignal = signal;
+        try {
+          await Promise.all([
+            this.syncPRStatuses().catch((err) => {
+              logger.error('PR sync batch failed', toError(err));
+            }),
+            this.discoverNewPRs().catch((err) => {
+              logger.error('PR discovery batch failed', toError(err));
+            }),
+          ]);
+        } finally {
+          // The signal describes this run and nothing after it. Left in place
+          // it would outlive the run, and once aborted it would make the
+          // service look permanently shut down to the manual entry points.
+          this.runSignal = null;
+        }
+      },
+    });
   }
 
   /**
-   * Stop the scheduler and wait for in-flight tasks
+   * True while the service is stopped, and true for a run that has been asked
+   * to abort. Two conditions rather than one because they answer different
+   * questions: `stopped` is the service's own lifecycle, which is what the
+   * manual entry points need (they must not touch Prisma after shutdown has
+   * disconnected it), while the signal belongs to a single run and is what
+   * lets a batch already in flight give up between workspaces.
    */
+  private get isShuttingDown(): boolean {
+    return this.stopped || (this.runSignal?.aborted ?? false);
+  }
+
+  start(): void {
+    this.stopped = false;
+    jobRunner.start(PR_POLL_JOB);
+  }
+
   async stop(): Promise<void> {
-    this.isShuttingDown = true;
-
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-      this.syncInterval = null;
-    }
-
-    if (this.syncInProgress !== null) {
-      logger.debug('Waiting for in-flight PR sync to complete');
-      await this.syncInProgress;
-    }
-
-    logger.info('Scheduler stopped');
+    this.stopped = true;
+    await jobRunner.stop(PR_POLL_JOB);
   }
 
   /**

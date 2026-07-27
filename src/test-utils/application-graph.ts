@@ -207,6 +207,7 @@ import { configService } from '@/backend/services/config.service';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { decisionLogService } from '@/backend/services/decision-log';
 import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { JobRunner } from '@/backend/services/job-runner.service';
 import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
@@ -436,6 +437,10 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       },
       workspaceMaintenanceService: services.workspaceMaintenanceService,
       workspaceSnapshotStore: services.workspaceSnapshotStore,
+      // Its own runner, not the process-wide one. Job names are global, so two
+      // graphs built in one test process would otherwise register the same job
+      // and the first graph's `start()` would drive the second graph's service.
+      jobRunner: new JobRunner(),
     }),
     recoverStaleArchivingWorkspaces,
   } satisfies ApplicationLifecycle;

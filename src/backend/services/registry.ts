@@ -35,6 +35,10 @@ export const infrastructureServiceRegistry = {
     fileName: 'crypto.service.ts',
     description: 'Encryption for secrets stored at rest',
   },
+  'job-runner.service': {
+    fileName: 'job-runner.service.ts',
+    description: 'Process-wide lifecycle for recurring background jobs',
+  },
   'logger.service': {
     fileName: 'logger.service.ts',
     description: 'Process-wide structured logging',

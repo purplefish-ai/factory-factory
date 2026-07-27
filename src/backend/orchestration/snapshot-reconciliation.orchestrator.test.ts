@@ -893,7 +893,7 @@ describe('SnapshotReconciliationService', () => {
       });
     });
 
-    it('skips tick if previous reconciliation still in progress', async () => {
+    it('does not start a second reconciliation while one is still running', async () => {
       vi.useFakeTimers();
 
       // Make reconcile take a long time
@@ -905,8 +905,9 @@ describe('SnapshotReconciliationService', () => {
 
       service.start();
 
-      // Advance past reconciliation interval -- tick should be skipped
-      // because initial reconciliation is still in progress
+      // Advance well past the interval. Nothing else starts: the next delay is
+      // only scheduled once the current run finishes, so overlap is impossible
+      // rather than guarded against.
       vi.advanceTimersByTime(120_000);
 
       // findAllNonArchived should only have been called once (initial)
@@ -922,7 +923,7 @@ describe('SnapshotReconciliationService', () => {
       vi.useRealTimers();
     });
 
-    it('stop() clears interval and awaits in-progress reconciliation', async () => {
+    it('stop() cancels the pending delay and awaits in-progress reconciliation', async () => {
       let resolveReconcile: () => void;
       const longPromise = new Promise<void>((resolve) => {
         resolveReconcile = resolve;

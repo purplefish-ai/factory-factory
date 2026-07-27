@@ -26,6 +26,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   schedulerPrSync: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
   reconciliationCleanup: 5 * 60 * 1000,
   periodicTaskPoll: 60_000, // Check for due periodic tasks every 60 seconds
+  snapshotReconciliation: 60_000, // Safety-net recompute of workspace snapshots
 } as const);
 
 export const SERVICE_CACHE_TTL_MS = Object.freeze({

@@ -115,10 +115,30 @@ const mockSnapshotBridge: RatchetPRSnapshotBridge = {
   recordReviewCheck: vi.fn(),
 };
 
+/**
+ * The service reads its shutdown state off the abort signal the job runner
+ * hands each run, so a test that wants to exercise the shutdown branches has
+ * to supply a signal rather than set a flag.
+ */
+function setRatchetShuttingDown(shuttingDown: boolean): void {
+  const controller = new AbortController();
+  if (shuttingDown) {
+    controller.abort();
+  }
+  // Both halves of the guard: `stopped` is the service's own lifecycle, which
+  // an earlier test calling `ratchetService.stop()` leaves set on this module
+  // singleton, and the signal is the per-run abort.
+  const internals = unsafeCoerce<{ runSignal: AbortSignal | null; stopped: boolean }>(
+    ratchetService
+  );
+  internals.runSignal = controller.signal;
+  internals.stopped = shuttingDown;
+}
+
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+    setRatchetShuttingDown(false);
     unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs =
       SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
     ratchetService.configure({
@@ -2230,7 +2250,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('returns WAITING when shutting down', async () => {
-      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
+      setRatchetShuttingDown(true);
 
       const workspace = {
         id: 'ws-shutdown',
@@ -2289,7 +2309,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('checkAllWorkspaces', () => {
     it('returns zero counts when shutting down', async () => {
-      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
+      setRatchetShuttingDown(true);
 
       const result = await ratchetService.checkAllWorkspaces();
       expect(result).toEqual({ checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] });
@@ -2665,14 +2685,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('checkWorkspaceById', () => {
     it('returns null when shutting down', async () => {
-      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
+      setRatchetShuttingDown(true);
 
       const result = await ratchetService.checkWorkspaceById('ws-1');
       expect(result).toBeNull();
     });
 
     it('returns null when workspace not found', async () => {
-      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+      setRatchetShuttingDown(false);
       vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(null);
 
       const result = await ratchetService.checkWorkspaceById('ws-nonexistent');
@@ -2850,7 +2870,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
 
     it('deduplicates concurrent checks for the same workspace', async () => {
-      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+      setRatchetShuttingDown(false);
       const workspace = {
         id: 'ws-1',
         prUrl: 'https://github.com/example/repo/pull/1',
