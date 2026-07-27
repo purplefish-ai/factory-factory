@@ -420,12 +420,73 @@ describe('jobRunner', () => {
       jobRunner.start('winding-down');
       await vi.advanceTimersByTimeAsync(0);
 
+      // No second loop alongside the one winding down.
       expect(job.starts).toBe(1);
 
       job.finish();
       await stopping;
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(job.starts).toBe(1);
+
+      // The start is not dropped either: stop-then-start means started, so the
+      // job comes back once the old loop has settled -- with exactly one loop,
+      // which the interval below would expose as double-counting if not.
+      expect(jobRunner.isRunning('winding-down')).toBe(true);
+      expect(job.starts).toBe(2);
+
+      job.finish();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(job.starts).toBe(3);
+      job.finish();
+    });
+
+    it('drops a pending restart when a second stop supersedes it', async () => {
+      const run = vi.fn().mockResolvedValue(undefined);
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'superseded',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: () => {
+          run();
+          return job.run();
+        },
+      });
+      jobRunner.start('superseded');
+      await vi.advanceTimersByTimeAsync(0);
+
+      const first = jobRunner.stop('superseded');
+      jobRunner.start('superseded');
+      const second = jobRunner.stop('superseded');
+
+      job.finish();
+      await Promise.all([first, second]);
+
+      expect(jobRunner.isRunning('superseded')).toBe(false);
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for a first run that stops the job from inside itself', async () => {
+      // Inside the `starting` window the slot is not filled yet, so `stop()`
+      // would have had nothing to await and could resolve while the run was
+      // still going -- against the documented guarantee.
+      let stopPromise: Promise<void> | null = null;
+      let finished = false;
+      jobRunner.register({
+        name: 'self-stopping',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: async () => {
+          stopPromise = jobRunner.stop('self-stopping');
+          await Promise.resolve();
+          finished = true;
+        },
+      });
+
+      jobRunner.start('self-stopping');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(stopPromise).not.toBeNull();
+      await stopPromise;
+      expect(finished).toBe(true);
     });
 
     it('makes a second stop wait for the same run as the first', async () => {

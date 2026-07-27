@@ -64,6 +64,12 @@ interface JobState {
    */
   starting: boolean;
   stopping: boolean;
+  /**
+   * A `start()` that arrived while a stop was winding down. Honoured once the
+   * old loop settles, so "stop then start" ends up started instead of leaving
+   * the caller believing the job runs when nothing does.
+   */
+  restartRequested: boolean;
   /** Aborted by `stop()`, handed to the run so it can bail out mid-batch. */
   abortController: AbortController;
   /** The run currently executing, exposed through `waitForCurrentRun`. */
@@ -85,7 +91,12 @@ export class JobRunner {
    * would keep the old definition -- so it throws.
    */
   register(definition: JobDefinition): void {
-    if (this.jobs.get(definition.name)?.loop != null) {
+    const existing = this.jobs.get(definition.name);
+    // `starting` counts as running: during that window the first run is already
+    // executing under the old definition, so replacing the entry would leave
+    // that loop live while a later `start()` builds a second one for the new
+    // definition under the same name.
+    if (existing?.loop != null || existing?.starting) {
       throw new Error(`Job already running, cannot redefine: ${definition.name}`);
     }
     this.jobs.set(definition.name, {
@@ -93,6 +104,7 @@ export class JobRunner {
       loop: null,
       starting: false,
       stopping: false,
+      restartRequested: false,
       abortController: new AbortController(),
       currentRun: null,
       cancelSleep: null,
@@ -105,10 +117,17 @@ export class JobRunner {
 
   start(name: string): void {
     const state = this.get(name);
+    if (state.stopping) {
+      // A stop is still winding down. Starting here would be refused for as
+      // long as the old loop lives and then never retried, leaving the caller
+      // believing the job runs while nothing polls. Record the intent instead;
+      // `stop()` honours it once the old loop has settled.
+      state.restartRequested = true;
+      return;
+    }
     if (state.loop !== null || state.starting) {
       return; // Already running
     }
-    state.stopping = false;
     // Fresh controller per start: a job stopped and started again must not
     // hand its runs a signal that is already aborted.
     state.abortController = new AbortController();
@@ -181,6 +200,8 @@ export class JobRunner {
   async stop(name: string): Promise<void> {
     const state = this.get(name);
     state.stopping = true;
+    // An explicit stop supersedes a restart that was requested before it.
+    state.restartRequested = false;
     state.abortController.abort();
     state.cancelSleep?.();
 
@@ -188,8 +209,19 @@ export class JobRunner {
     const { loop } = state;
     if (loop !== null) {
       await loop;
+    } else if (state.currentRun !== null) {
+      // Inside the `starting` window the slot is not filled yet, but a run is
+      // already executing -- reachable when a job's own first run stops it.
+      await state.currentRun;
     }
+
+    state.stopping = false;
     logger.info('Job stopped', { job: name });
+
+    if (state.restartRequested) {
+      state.restartRequested = false;
+      this.start(name);
+    }
   }
 
   /**
