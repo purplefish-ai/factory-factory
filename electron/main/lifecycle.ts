@@ -10,11 +10,17 @@ interface AppLike {
   quit(): void;
 }
 
+// Opaque marker compared by reference only, to check an IPC call's sender
+// frame against the trusted app window without depending on Electron's
+// WebFrameMain type.
+type WebFrameLike = object;
+
 interface BrowserWindowLike {
   loadURL(url: string): Promise<void>;
   on(event: 'focus' | 'blur' | 'closed', listener: () => void): void;
   webContents: {
     send(channel: string, focused: boolean): void;
+    mainFrame: WebFrameLike;
   };
   destroy(): void;
   isDestroyed(): boolean;
@@ -32,10 +38,23 @@ interface DialogLike {
   showOpenDialog(window: unknown, options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
 }
 
+interface NativeImageLike {
+  isEmpty(): boolean;
+  toPNG(): Uint8Array;
+}
+
+interface ClipboardLike {
+  readImage(): NativeImageLike;
+}
+
+interface IpcMainInvokeEventLike {
+  senderFrame: WebFrameLike | null;
+}
+
 interface IpcMainLike {
-  handle(
+  handle<Args extends unknown[], Result>(
     channel: string,
-    listener: (_event: unknown, options: OpenDialogOptions) => Promise<OpenDialogReturnValue>
+    listener: (event: IpcMainInvokeEventLike, ...args: Args) => Result
   ): void;
 }
 
@@ -52,6 +71,7 @@ interface LoggerLike {
 export interface ElectronLifecycleDependencies {
   app: AppLike;
   browserWindow: BrowserWindowConstructorLike;
+  clipboard: ClipboardLike;
   dialog: DialogLike;
   ipcMain: IpcMainLike;
   logger: LoggerLike;
@@ -69,9 +89,14 @@ export interface ElectronLifecycleController {
   handleWindowAllClosed(): void;
 }
 
+// Mirrors MAX_IMAGE_SIZE in src/lib/image-utils.ts (not imported directly —
+// electron/main is built as a separate program from src/).
+const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
+
 export function createElectronLifecycle({
   app,
   browserWindow,
+  clipboard,
   dialog,
   ipcMain,
   logger,
@@ -231,13 +256,35 @@ export function createElectronLifecycle({
   };
 
   const registerIpcHandlers = (): void => {
-    ipcMain.handle('dialog:showOpen', (_event, options) => {
+    ipcMain.handle('dialog:showOpen', (_event: unknown, options: OpenDialogOptions) => {
       const currentWindow = resolveMainWindow();
       if (!currentWindow) {
         return Promise.resolve({ canceled: true, filePaths: [] });
       }
 
       return dialog.showOpenDialog(currentWindow, options);
+    });
+
+    // Bridge the OS clipboard so the renderer can obtain a PNG for images that
+    // the browser's paste event only exposes as TIFF (e.g. macOS screenshots).
+    // This intentionally bypasses the browser's clipboard permission prompt, so
+    // it's restricted to calls from the app's own main frame — tied to the
+    // paste flow rather than reachable from an arbitrary subframe/webview.
+    ipcMain.handle('clipboard:readImagePng', (event: IpcMainInvokeEventLike): string | null => {
+      const currentWindow = resolveMainWindow();
+      if (!currentWindow || event.senderFrame !== currentWindow.webContents.mainFrame) {
+        return null;
+      }
+
+      const image = clipboard.readImage();
+      if (image.isEmpty()) {
+        return null;
+      }
+      const png = image.toPNG();
+      if (png.byteLength > MAX_CLIPBOARD_IMAGE_BYTES) {
+        return null;
+      }
+      return Buffer.from(png).toString('base64');
     });
   };
 
