@@ -57,6 +57,12 @@ interface JobState {
   definition: JobDefinition;
   /** The running loop, or null when the job is stopped. */
   loop: Promise<void> | null;
+  /**
+   * Set for the window inside `start()` where the loop is executing its first
+   * run but `loop` has not been assigned yet. Without it the idempotence guard
+   * is blind during exactly that window.
+   */
+  starting: boolean;
   stopping: boolean;
   /** Aborted by `stop()`, handed to the run so it can bail out mid-batch. */
   abortController: AbortController;
@@ -85,6 +91,7 @@ export class JobRunner {
     this.jobs.set(definition.name, {
       definition,
       loop: null,
+      starting: false,
       stopping: false,
       abortController: new AbortController(),
       currentRun: null,
@@ -98,18 +105,41 @@ export class JobRunner {
 
   start(name: string): void {
     const state = this.get(name);
-    if (state.loop !== null) {
+    if (state.loop !== null || state.starting) {
       return; // Already running
     }
     state.stopping = false;
     // Fresh controller per start: a job stopped and started again must not
     // hand its runs a signal that is already aborted.
     state.abortController = new AbortController();
-    // A loop that dies must not take the process with it, and must not leave
-    // `stop()` awaiting a rejected promise.
-    state.loop = this.runLoop(state).catch((error) => {
-      logger.error(`Job loop terminated unexpectedly: ${name}`, toError(error));
-    });
+
+    // A `runImmediately` job executes its first run synchronously inside this
+    // call, before `state.loop` can be assigned. That is deliberate -- callers
+    // of `waitForCurrentRun` rely on the first run being observable the moment
+    // `start()` returns -- but it leaves the guard above blind, so a run that
+    // re-entered `start()` would get a second loop. `starting` covers exactly
+    // that window.
+    state.starting = true;
+    try {
+      const loop = this.runLoop(state)
+        // A loop that dies must not take the process with it, and must not
+        // leave `stop()` awaiting a rejected promise.
+        .catch((error) => {
+          logger.error(`Job loop terminated unexpectedly: ${name}`, toError(error));
+        })
+        .finally(() => {
+          // Free the slot however the loop ended. Without this, a throw from
+          // outside `runOnce` -- `computeDelay`, say -- leaves a settled
+          // promise parked here and `start()` refuses the job ever again.
+          if (state.loop === loop) {
+            state.loop = null;
+          }
+        });
+      state.loop = loop;
+    } finally {
+      state.starting = false;
+    }
+
     logger.info('Job started', { job: name, intervalMs: state.definition.intervalMs });
   }
 
@@ -141,6 +171,12 @@ export class JobRunner {
    * hold up process exit -- but bounding it here would silently change shutdown
    * to abandon work mid-flight, which is a behaviour decision and not part of
    * consolidating the loops.
+   *
+   * The slot stays occupied until the loop has actually settled. Clearing it
+   * up front would let a `start()` arriving during the wait build a second
+   * loop alongside the one still winding down -- two loops for one job, which
+   * is the single thing sequential pacing is supposed to make impossible --
+   * and would let a second `stop()` resolve while the first run is still going.
    */
   async stop(name: string): Promise<void> {
     const state = this.get(name);
@@ -148,9 +184,9 @@ export class JobRunner {
     state.abortController.abort();
     state.cancelSleep?.();
 
-    if (state.loop !== null) {
-      const { loop } = state;
-      state.loop = null;
+    // Read after the abort: concurrent stops then await the same loop.
+    const { loop } = state;
+    if (loop !== null) {
       await loop;
     }
     logger.info('Job stopped', { job: name });

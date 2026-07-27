@@ -55,6 +55,8 @@ class SchedulerService {
    * workspaces so a shutdown does not have to wait out the whole list.
    */
   private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
 
   constructor() {
     jobRunner.register({
@@ -65,34 +67,46 @@ class SchedulerService {
       // Pacing them separately would let them overlap against the same GitHub
       // budget, which is a change for the fetch coordinator to make and not
       // for this one.
-      run: (signal) => {
+      run: async (signal) => {
         this.runSignal = signal;
-        return Promise.all([
-          this.syncPRStatuses().catch((err) => {
-            logger.error('PR sync batch failed', toError(err));
-          }),
-          this.discoverNewPRs().catch((err) => {
-            logger.error('PR discovery batch failed', toError(err));
-          }),
-        ]);
+        try {
+          await Promise.all([
+            this.syncPRStatuses().catch((err) => {
+              logger.error('PR sync batch failed', toError(err));
+            }),
+            this.discoverNewPRs().catch((err) => {
+              logger.error('PR discovery batch failed', toError(err));
+            }),
+          ]);
+        } finally {
+          // The signal describes this run and nothing after it. Left in place
+          // it would outlive the run, and once aborted it would make the
+          // service look permanently shut down to the manual entry points.
+          this.runSignal = null;
+        }
       },
     });
   }
 
+  /**
+   * True while the service is stopped, and true for a run that has been asked
+   * to abort. Two conditions rather than one because they answer different
+   * questions: `stopped` is the service's own lifecycle, which is what the
+   * manual entry points need (they must not touch Prisma after shutdown has
+   * disconnected it), while the signal belongs to a single run and is what
+   * lets a batch already in flight give up between workspaces.
+   */
   private get isShuttingDown(): boolean {
-    return this.runSignal?.aborted ?? false;
+    return this.stopped || (this.runSignal?.aborted ?? false);
   }
 
   start(): void {
-    // Drop the previous run's signal, which is aborted after a stop. The
-    // manual entry points read the same guard, and until the first new run
-    // assigns a signal they would otherwise see a service that is still
-    // shutting down.
-    this.runSignal = null;
+    this.stopped = false;
     jobRunner.start(PR_POLL_JOB);
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     await jobRunner.stop(PR_POLL_JOB);
   }
 

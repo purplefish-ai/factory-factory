@@ -400,6 +400,134 @@ describe('jobRunner', () => {
     });
   });
 
+  describe('restart safety', () => {
+    it('refuses to build a second loop while a stop is still waiting on a run', async () => {
+      // Freeing the slot before awaiting would let this `start()` through, and
+      // one job would be running two loops -- the exact thing sequential
+      // pacing exists to make impossible.
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'winding-down',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: job.run,
+      });
+      jobRunner.start('winding-down');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(job.starts).toBe(1);
+
+      const stopping = jobRunner.stop('winding-down');
+      jobRunner.start('winding-down');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(job.starts).toBe(1);
+
+      job.finish();
+      await stopping;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(job.starts).toBe(1);
+    });
+
+    it('makes a second stop wait for the same run as the first', async () => {
+      const job = controllableRun();
+      jobRunner.register({ name: 'twice', intervalMs: 1000, runImmediately: true, run: job.run });
+      jobRunner.start('twice');
+      await vi.advanceTimersByTimeAsync(0);
+
+      let secondResolved = false;
+      const first = jobRunner.stop('twice');
+      const second = jobRunner.stop('twice').then(() => {
+        secondResolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(secondResolved).toBe(false);
+
+      job.finish();
+      await Promise.all([first, second]);
+      expect(secondResolved).toBe(true);
+    });
+
+    it('frees the slot when the loop dies outside a run, so the job can restart', async () => {
+      // `computeDelay` runs outside `runOnce`, so a throw there escapes the
+      // per-run catch and kills the loop. If the dead promise stayed parked in
+      // the slot, `start()` would refuse to run this job for the rest of the
+      // process.
+      let explode = true;
+      const run = vi.fn().mockResolvedValue(undefined);
+      jobRunner.register({
+        name: 'exploding',
+        intervalMs: 1000,
+        runImmediately: true,
+        run,
+        computeDelay: (base) => {
+          if (explode) {
+            throw new Error('backoff blew up');
+          }
+          return base;
+        },
+      });
+
+      jobRunner.start('exploding');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Job loop terminated unexpectedly: exploding',
+        expect.objectContaining({ message: 'backoff blew up' })
+      );
+      expect(jobRunner.isRunning('exploding')).toBe(false);
+
+      explode = false;
+      jobRunner.start('exploding');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it('has the first run observable the moment start() returns', async () => {
+      // `waitForCurrentRun` is how the /snapshots handler holds the first
+      // snapshot_full until the store is seeded. Deferring the first run by
+      // even one microtask would let a caller in the same tick see no run in
+      // flight and read an empty store.
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'sync-first',
+        intervalMs: 1000,
+        runImmediately: true,
+        run: job.run,
+      });
+
+      jobRunner.start('sync-first');
+
+      expect(job.starts).toBe(1);
+      let resolved = false;
+      void jobRunner.waitForCurrentRun('sync-first').then(() => {
+        resolved = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(resolved).toBe(false);
+
+      job.finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(resolved).toBe(true);
+    });
+
+    it('holds the idempotence guard even when the first run re-enters start()', async () => {
+      // A `runImmediately` job used to execute its first run synchronously
+      // inside `start()`, before the slot was filled, so a re-entrant call saw
+      // an unstarted job.
+      const run = vi.fn(() => {
+        jobRunner.start('reentrant');
+        return Promise.resolve();
+      });
+      jobRunner.register({ name: 'reentrant', intervalMs: 1000, runImmediately: true, run });
+
+      jobRunner.start('reentrant');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('startAll / stopAll', () => {
     it('starts every registered job', async () => {
       const first = vi.fn().mockResolvedValue(undefined);

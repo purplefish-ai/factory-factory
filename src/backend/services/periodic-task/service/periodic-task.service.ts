@@ -65,6 +65,8 @@ const PERIODIC_TASK_POLL_JOB = 'periodic-task-poll';
 export class PeriodicTaskService {
   /** The signal of the run currently executing; see `isShuttingDown`. */
   private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
 
   private workspaceBridge: PeriodicTaskWorkspaceBridge | null = null;
   private statusBridge: PeriodicTaskWorkspaceStatusBridge | null = null;
@@ -79,8 +81,12 @@ export class PeriodicTaskService {
     });
   }
 
+  /**
+   * The service's own stopped state, or an abort on the run in flight. See the
+   * equivalent in `scheduler.service.ts` for why both are needed.
+   */
   private get isShuttingDown(): boolean {
-    return this.runSignal?.aborted ?? false;
+    return this.stopped || (this.runSignal?.aborted ?? false);
   }
 
   configure(bridges: {
@@ -126,13 +132,12 @@ export class PeriodicTaskService {
   }
 
   start(): void {
-    // See the equivalent in the ratchet service: a restart must not inherit
-    // the aborted signal that the previous stop left behind.
-    this.runSignal = null;
+    this.stopped = false;
     jobRunner.start(PERIODIC_TASK_POLL_JOB);
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     await jobRunner.stop(PERIODIC_TASK_POLL_JOB);
   }
 
@@ -146,6 +151,9 @@ export class PeriodicTaskService {
       await this.checkRunningExecutions();
     } catch (error) {
       this.logger.error('Periodic task poll error', toError(error));
+    } finally {
+      // Scoped to this run; see the note in `scheduler.service.ts`.
+      this.runSignal = null;
     }
   }
 

@@ -103,6 +103,8 @@ const RATCHET_POLL_JOB = 'ratchet-poll';
 class RatchetService extends EventEmitter {
   /** The signal of the run currently executing; see `isShuttingDown`. */
   private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
   private workspaceCheckTimeoutMs = SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
   private readonly checkCoordinator = new RatchetWorkspaceCheckCoordinator(
     () => this.workspaceCheckTimeoutMs
@@ -127,8 +129,15 @@ class RatchetService extends EventEmitter {
     });
   }
 
+  /**
+   * The service's own stopped state, or an abort on the run in flight. Both
+   * are needed: `checkAllWorkspaces` and `checkWorkspaceById` are triggered on
+   * demand by the admin router and the event collector and must respect a
+   * shutdown that has already happened, while the signal is what lets a poll
+   * already underway give up before checking the next workspace.
+   */
   private get isShuttingDown(): boolean {
-    return this.runSignal?.aborted ?? false;
+    return this.stopped || (this.runSignal?.aborted ?? false);
   }
 
   configure(bridges: {
@@ -180,14 +189,12 @@ class RatchetService extends EventEmitter {
   }
 
   start(): void {
-    // `checkAllWorkspaces` and `checkWorkspaceById` are triggered on demand by
-    // the admin router and the event collector, and read the same guard, so
-    // the previous run's aborted signal must not outlive the stop.
-    this.runSignal = null;
+    this.stopped = false;
     jobRunner.start(RATCHET_POLL_JOB);
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     await jobRunner.stop(RATCHET_POLL_JOB);
   }
 
@@ -200,6 +207,9 @@ class RatchetService extends EventEmitter {
       this.backoff.resetIfCleanCycle(logger, 'Ratchet');
     } catch (err) {
       logger.error('Ratchet check failed', toError(err));
+    } finally {
+      // Scoped to this run; see the note in `scheduler.service.ts`.
+      this.runSignal = null;
     }
   }
 

@@ -125,7 +125,14 @@ function setRatchetShuttingDown(shuttingDown: boolean): void {
   if (shuttingDown) {
     controller.abort();
   }
-  unsafeCoerce<{ runSignal: AbortSignal | null }>(ratchetService).runSignal = controller.signal;
+  // Both halves of the guard: `stopped` is the service's own lifecycle, which
+  // an earlier test calling `ratchetService.stop()` leaves set on this module
+  // singleton, and the signal is the per-run abort.
+  const internals = unsafeCoerce<{ runSignal: AbortSignal | null; stopped: boolean }>(
+    ratchetService
+  );
+  internals.runSignal = controller.signal;
+  internals.stopped = shuttingDown;
 }
 
 describe('ratchet service (state-change + idle dispatch)', () => {

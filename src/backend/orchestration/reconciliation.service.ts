@@ -36,20 +36,34 @@ class ReconciliationService {
   private _terminal: ReconciliationTerminalBridge | null = null;
   /** The signal of the run currently executing; see `isShuttingDown`. */
   private runSignal: AbortSignal | null = null;
+  /** Whether the service itself has been stopped, independent of any run. */
+  private stopped = false;
 
   constructor() {
     jobRunner.register({
       name: RECONCILIATION_CLEANUP_JOB,
       intervalMs: SERVICE_INTERVAL_MS.reconciliationCleanup,
-      run: (signal) => {
+      run: async (signal) => {
         this.runSignal = signal;
-        return this.runPeriodicReconciliation();
+        try {
+          await this.runPeriodicReconciliation();
+        } finally {
+          // Scoped to this run; see the note in `scheduler.service.ts`.
+          this.runSignal = null;
+        }
       },
     });
   }
 
+  /**
+   * The service's own stopped state, or an abort on the run in flight. See the
+   * equivalent in `scheduler.service.ts` for why both are needed: `cleanupOrphans`
+   * is called directly at startup and must not reach Prisma after shutdown has
+   * disconnected it, while the signal is what lets a run already underway stop
+   * between steps.
+   */
   private get isShuttingDown(): boolean {
-    return this.runSignal?.aborted ?? false;
+    return this.stopped || (this.runSignal?.aborted ?? false);
   }
 
   configure(bridges: {
@@ -87,9 +101,7 @@ class ReconciliationService {
    * Start periodic reconciliation and orphan cleanup.
    */
   startPeriodicCleanup(): void {
-    // `cleanupOrphans` is also called directly at startup and reads the same
-    // guard, so the previous run's aborted signal must not outlive the stop.
-    this.runSignal = null;
+    this.stopped = false;
     jobRunner.start(RECONCILIATION_CLEANUP_JOB);
   }
 
@@ -97,6 +109,7 @@ class ReconciliationService {
    * Stop periodic reconciliation and wait for any in-flight run to complete
    */
   async stopPeriodicCleanup(): Promise<void> {
+    this.stopped = true;
     await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
   }
 
