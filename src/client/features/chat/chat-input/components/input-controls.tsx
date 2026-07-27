@@ -8,9 +8,9 @@ import {
   SquareIcon,
 } from '@phosphor-icons/react';
 import { memo, useState } from 'react';
-import { AttachmentPreview } from '@/client/features/chat/attachment-preview';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ContextWindowIndicator } from '@/client/features/chat/usage-stats';
+import { AttachmentPreview } from '@/client/features/composer';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
 import {

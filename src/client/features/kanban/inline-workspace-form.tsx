@@ -8,13 +8,15 @@ import {
 import type { inferRouterOutputs } from '@trpc/server';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { AttachmentPreview } from '@/client/features/chat/attachment-preview';
-import { collectAttachments } from '@/client/features/chat/chat-input/hooks/attachment-file-conversion';
-import { usePasteDropHandler } from '@/client/features/chat/chat-input/hooks/use-paste-drop-handler';
-import { useProjectFileMentions } from '@/client/features/chat/chat-input/hooks/use-project-file-mentions';
-import { useSlashCommands } from '@/client/features/chat/chat-input/hooks/use-slash-commands';
-import { FileMentionPalette } from '@/client/features/chat/file-mention-palette';
-import { SlashCommandPalette } from '@/client/features/chat/slash-command-palette';
+import {
+  AttachmentPreview,
+  collectAttachments,
+  FileMentionPalette,
+  SlashCommandPalette,
+  usePasteDropHandler,
+  useProjectFileMentions,
+  useSlashCommands,
+} from '@/client/features/composer';
 import { RatchetToggleButton } from '@/client/features/workspace';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';

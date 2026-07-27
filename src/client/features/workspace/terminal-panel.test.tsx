@@ -4,7 +4,7 @@ import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from './rolling-output';
+import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
 import { TerminalPanel, type TerminalPanelRef } from './terminal-panel';
 
 const mocks = vi.hoisted(() => ({
@@ -31,7 +31,7 @@ vi.mock('@phosphor-icons/react', () => ({
   TerminalIcon: () => null,
 }));
 
-vi.mock('./terminal-instance', () => ({
+vi.mock('@/client/components/terminal-instance', () => ({
   TerminalInstance: ({ output }: { output: string }) => {
     mocks.renderedOutput = output;
     return null;

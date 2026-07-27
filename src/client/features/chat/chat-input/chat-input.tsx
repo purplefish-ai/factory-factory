@@ -1,18 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import { FileMentionPalette } from '@/client/features/chat/file-mention-palette';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
-import { SlashCommandPalette } from '@/client/features/chat/slash-command-palette';
+import {
+  FileMentionPalette,
+  SlashCommandPalette,
+  usePasteDropHandler,
+  useSlashCommands,
+} from '@/client/features/composer';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-
 import { AttachmentSection, LeftControls, RightControls } from './components/input-controls';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
 import { useFileMentions } from './hooks/use-file-mentions';
-import { usePasteDropHandler } from './hooks/use-paste-drop-handler';
-import { useSlashCommands } from './hooks/use-slash-commands';
 import { useTextareaResize } from './hooks/use-textarea-resize';
 
 // =============================================================================

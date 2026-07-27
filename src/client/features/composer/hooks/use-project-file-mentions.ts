@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type {
   FileMentionKeyResult,
   FileMentionPaletteHandle,
-} from '@/client/features/chat/file-mention-palette';
+} from '@/client/features/composer/file-mention-palette';
 import { trpc } from '@/client/lib/trpc';
 
 interface UseProjectFileMentionsOptions {

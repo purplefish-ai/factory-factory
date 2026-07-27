@@ -1,8 +1,7 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
-import type { SessionData } from '@/client/features/chat/session-tab-bar';
-import { SessionTabBar } from '@/client/features/chat/session-tab-bar';
-import { QuickActionsMenu } from '@/client/features/workspace/quick-actions-menu';
+import { type SessionData, SessionTabBar } from '@/client/features/chat';
+import { QuickActionsMenu } from '@/client/features/workspace';
 import {
   Sheet,
   SheetContent,

@@ -1,6 +1,6 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
-import { ToolInfoRenderer } from '@/client/features/agent-activity/tool-renderers';
+import { ToolInfoRenderer } from '@/client/features/chat/agent-activity/tool-renderers';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,

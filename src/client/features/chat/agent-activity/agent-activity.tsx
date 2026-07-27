@@ -1,6 +1,6 @@
 import { ArrowCounterClockwiseIcon, CopyIcon, XIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
-import { AttachmentPreview } from '@/client/features/chat/attachment-preview';
+import { AttachmentPreview } from '@/client/features/composer';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';

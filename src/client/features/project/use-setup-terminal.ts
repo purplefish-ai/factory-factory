@@ -4,7 +4,7 @@ import {
   appendToRollingOutput,
   TERMINAL_OUTPUT_MAX_CHARS,
   TERMINAL_TRUNCATION_MARKER,
-} from '@/client/features/workspace/rolling-output';
+} from '@/client/lib/rolling-output';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 

@@ -167,13 +167,10 @@
     {
       "includes": [
         "src/backend/services/auto-iteration/service/auto-iteration.service.ts",
-        "src/backend/services/run-script.service.ts",
-        "src/client/features/agent-activity/tool-renderers/tool-info-renderer.tsx",
+        "src/client/features/chat/agent-activity/tool-renderers/tool-info-renderer.tsx",
         "src/client/features/chat/chat-input/hooks/use-chat-input-actions.ts",
         "src/client/features/chat/virtualized-message-list.tsx",
-        "src/frontend/components/pr-detail-panel.tsx",
-        "src/lib/diff/parse.ts",
-        "src/shared/claude/protocol/index.ts"
+        "src/lib/diff/parse.ts"
       ],
       "linter": {
         "rules": {
