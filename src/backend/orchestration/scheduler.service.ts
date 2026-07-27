@@ -10,7 +10,7 @@ import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
-import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
@@ -330,23 +330,25 @@ class SchedulerService {
       return { success: false, reason: 'no_pr_url' };
     }
 
-    if (prFetchRegistry.isRecentlyFetched(workspaceId)) {
-      logger.debug('Skipping PR sync — recently fetched by another service', { workspaceId });
-      return { success: true, reason: 'skipped_recent' };
-    }
-
-    // Claim the workspace synchronously before yielding to the event loop so that
-    // concurrent callers see it as in-flight and skip their own redundant fetches.
-    const claimToken = prFetchRegistry.startFetch(workspaceId);
     try {
-      const prResult = await prSnapshotService.refreshWorkspace(workspaceId, prUrl);
-      if (!prResult.success) {
-        logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
-        prFetchRegistry.cancelFetch(workspaceId, claimToken);
-        return { success: false, reason: 'fetch_failed' };
+      const outcome = await prFetchCoordinator.coordinate(
+        workspaceId,
+        () => prSnapshotService.refreshWorkspace(workspaceId, prUrl),
+        // A refresh reports failure as a value rather than an exception, and a
+        // failed one must not start a cooldown or the retry waits it out.
+        { countsAsFetched: (result) => result.success }
+      );
+
+      if (outcome.status === 'skipped') {
+        logger.debug('Skipping PR sync — recently fetched by another service', { workspaceId });
+        return { success: true, reason: 'skipped_recent' };
       }
 
-      prFetchRegistry.register(workspaceId, claimToken);
+      const prResult = outcome.value;
+      if (!prResult.success) {
+        logger.warn('Failed to fetch PR status', { workspaceId, prUrl });
+        return { success: false, reason: 'fetch_failed' };
+      }
 
       logger.debug('PR status synced', {
         workspaceId,
@@ -357,7 +359,6 @@ class SchedulerService {
 
       return { success: true };
     } catch (error) {
-      prFetchRegistry.cancelFetch(workspaceId, claimToken);
       logger.error('PR sync failed for workspace', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }

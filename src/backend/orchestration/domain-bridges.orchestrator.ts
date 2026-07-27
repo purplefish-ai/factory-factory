@@ -18,7 +18,7 @@ import type {
 } from '@/backend/services/auto-iteration';
 import type {
   githubCLIService,
-  prFetchRegistry,
+  prFetchCoordinator,
   prSnapshotService,
 } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
@@ -83,7 +83,7 @@ export type BridgeServices = {
   initializeWorkspaceWorktree: typeof initializeWorkspaceWorktree;
   logbookService: typeof logbookService;
   periodicTaskService: typeof periodicTaskService;
-  prFetchRegistry: typeof prFetchRegistry;
+  prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
@@ -270,7 +270,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     initializeWorkspaceWorktree,
     logbookService,
     periodicTaskService,
-    prFetchRegistry,
+    prFetchCoordinator,
     prSnapshotService,
     ratchetService,
     reconciliationService,
@@ -332,11 +332,8 @@ export function configureDomainBridges(services: BridgeServices): void {
       ),
     getAuthenticatedUsername: (signal) => githubCLIService.getAuthenticatedUsername(signal),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
-    isRecentlyFetched: (workspaceId) => prFetchRegistry.isRecentlyFetched(workspaceId),
-    isFetchInFlight: (workspaceId) => prFetchRegistry.isFetchInFlight(workspaceId),
-    startFetch: (workspaceId) => prFetchRegistry.startFetch(workspaceId),
-    registerFetch: (workspaceId, claimToken) => prFetchRegistry.register(workspaceId, claimToken),
-    cancelFetch: (workspaceId, claimToken) => prFetchRegistry.cancelFetch(workspaceId, claimToken),
+    coordinatePrFetch: (workspaceId, fetch, options) =>
+      prFetchCoordinator.coordinate(workspaceId, fetch, options),
   };
 
   const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {

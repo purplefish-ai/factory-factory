@@ -37,7 +37,7 @@ import { autoIterationService, insightsService, logbookService } from './service
 import { configService } from './services/config.service';
 import { cryptoService } from './services/crypto.service';
 import { decisionLogService } from './services/decision-log';
-import { githubCLIService, prFetchRegistry, prSnapshotService } from './services/github';
+import { githubCLIService, prFetchCoordinator, prSnapshotService } from './services/github';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
@@ -228,7 +228,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     listQuickActions,
     periodicTaskService,
     projectManagementService,
-    prFetchRegistry,
+    prFetchCoordinator,
     prSnapshotService,
     ratchetService,
     rateLimiter,

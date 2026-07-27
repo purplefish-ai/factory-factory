@@ -26,7 +26,7 @@ import {
   PR_URL_ATTACHED,
   type PRSnapshotUpdatedEvent,
   type PRUrlAttachedEvent,
-  type prFetchRegistry,
+  type prFetchCoordinator,
   type prSnapshotService,
 } from '@/backend/services/github';
 import type { linearStateSyncService } from '@/backend/services/linear';
@@ -127,7 +127,7 @@ export type EventCollectorDependencies = {
   createLogger(component: string): Logger;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   linearStateSyncService: typeof linearStateSyncService;
-  prFetchRegistry: typeof prFetchRegistry;
+  prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   runScriptStateMachine: typeof runScriptStateMachine;
@@ -402,7 +402,7 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
   }
   state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
-  state.dependencies.prFetchRegistry.removeWorkspace(workspaceId);
+  state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
 }
 
 async function refreshWorkspaceSessionSummaries(

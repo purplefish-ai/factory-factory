@@ -419,10 +419,9 @@ export async function fetchPRState(params: {
   signal?: AbortSignal;
   /**
    * Skip the completed-fetch cooldown. Used by event-driven checks that fire
-   * right after another service's fetch registered the workspace in the dedup
-   * registry — the whole point of those checks is to recompute now. An
-   * actively in-flight fetch is still honored, so the bypass never issues a
-   * duplicate concurrent GitHub call.
+   * right after another service's fetch completed — the whole point of those
+   * checks is to recompute now. An actively in-flight fetch is still honored,
+   * so the bypass never issues a duplicate concurrent GitHub call.
    */
   bypassRecentFetchCooldown?: boolean;
 }): Promise<PRStateFetchResult> {
@@ -433,141 +432,35 @@ export async function fetchPRState(params: {
     return null;
   }
 
-  const dedupSkip = params.bypassRecentFetchCooldown
-    ? github.isFetchInFlight(workspace.id)
-    : github.isRecentlyFetched(workspace.id);
-  if (dedupSkip) {
-    logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
-      workspaceId: workspace.id,
-      prUrl: workspace.prUrl,
-    });
-    return { skipped: true, reason: 'recently_fetched' };
-  }
-
-  let claimToken: number | undefined;
   try {
-    // Claim this workspace as in-flight before the async fetch so concurrent
-    // scheduler/ratchet calls see it and skip redundant fetches.
     signal?.throwIfAborted();
-    claimToken = github.startFetch(workspace.id);
-
-    const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
-      github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
-      github.getReviewComments(prContext.repo, prContext.prNumber, undefined, signal),
-      // Degrade gracefully: without resolution data, fall back to including
-      // all review comments (pre-filtering behavior) rather than failing the check.
-      github
-        .getResolvedReviewCommentIds(prContext.repo, prContext.prNumber, signal)
-        .catch((error) => {
-          signal?.throwIfAborted();
-          logger.warn('Failed to fetch resolved review threads; including all review comments', {
-            workspaceId: workspace.id,
-            prUrl: workspace.prUrl,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          return new Set<number>();
+    // The coordinator claims the workspace before the fetch yields, so a
+    // concurrent PR sync sees it in flight and skips its own call — and
+    // releasing that claim is its `finally`, not this function's obligation.
+    const outcome = await github.coordinatePrFetch(
+      workspace.id,
+      () =>
+        fetchPRStateNow({
+          workspace,
+          prContext,
+          authenticatedUsername,
+          reviewTriggerMode,
+          github,
+          signal,
         }),
-    ]);
-    signal?.throwIfAborted();
-
-    const statusCheckRollup =
-      prDetails.statusCheckRollup?.map((check) => ({
-        name: check.name,
-        workflowName: check.workflowName,
-        status: check.status,
-        conclusion: check.conclusion ?? undefined,
-        detailsUrl: check.detailsUrl,
-        startedAt: check.startedAt,
-        completedAt: check.completedAt,
-      })) ?? null;
-
-    const reducedStatusCheckRollup = reduceCheckRollupToLatestRunAttempts(statusCheckRollup);
-    const ciStatus = github.computeCIStatus(reducedStatusCheckRollup);
-
-    const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
-    const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
-    const reviewDecision = prDetails.reviewDecision ?? null;
-    // The same observation in the cache's vocabulary, computed by the github
-    // capsule's mapper so this writer and the PR-sync poller agree on it.
-    const cachedPrState = github.computePRState({
-      state: prDetails.state,
-      isDraft: prDetails.isDraft,
-      reviewDecision,
-    });
-    // Review activity (and thus the dispatch snapshot key) is computed over ALL
-    // review comments, resolved or not. Resolving a thread does not touch the
-    // comments' timestamps, so this keeps the snapshot key stable when threads
-    // get resolved; excluding resolved comments would change the key on every
-    // resolution and re-trigger dispatches.
-    const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
-      prDetails,
-      reviewComments,
-      authenticatedUsername,
-      reviewTriggerMode
-    );
-    const snapshotKey = computeDispatchSnapshotKey(
-      prDetails.number,
-      ciStatus,
-      hasChangesRequested,
-      latestReviewActivityAtMs,
-      reducedStatusCheckRollup,
-      hasMergeConflict
+      { ignoreCooldown: params.bypassRecentFetchCooldown ?? false }
     );
 
-    // Resolved threads are settled feedback: drop them from the fixer prompt
-    // and from the actionable-trigger count so they cannot re-trigger or
-    // re-litigate dispatches.
-    const filteredReviewComments = reviewComments
-      .filter(
-        (c) =>
-          !(
-            resolvedReviewCommentIds.has(c.id) ||
-            isIgnoredReviewAuthor(c.author.login, authenticatedUsername)
-          )
-      )
-      .map((c) => ({
-        author: c.author.login,
-        body: c.body,
-        path: c.path,
-        line: c.line,
-        url: c.url,
-      }));
-    if (filteredReviewComments.length < reviewComments.length) {
-      logger.debug('Filtered review comments for ratchet dispatch', {
+    if (outcome.status === 'skipped') {
+      logger.debug('Skipping ratchet PR fetch because workspace was recently fetched', {
         workspaceId: workspace.id,
-        totalComments: reviewComments.length,
-        includedComments: filteredReviewComments.length,
-        resolvedThreadCommentIds: resolvedReviewCommentIds.size,
+        prUrl: workspace.prUrl,
       });
+      return { skipped: true, reason: 'recently_fetched' };
     }
-    const reviewSummaries = buildReviewSummariesForPrompt(
-      prDetails,
-      authenticatedUsername,
-      reviewTriggerMode
-    );
 
-    // Record successful fetch completion so the dedup registry tracks this workspace.
-    signal?.throwIfAborted();
-    github.registerFetch(workspace.id, claimToken);
-
-    return {
-      ciStatus,
-      snapshotKey,
-      hasChangesRequested,
-      hasMergeConflict,
-      latestReviewActivityAtMs,
-      statusCheckRollup: reducedStatusCheckRollup,
-      prState: prDetails.state,
-      cachedPrState,
-      reviewDecision,
-      prNumber: prDetails.number,
-      reviewComments: [...filteredReviewComments, ...reviewSummaries],
-    };
+    return outcome.value;
   } catch (error) {
-    // Release the in-flight claim so the workspace is eligible for a future retry.
-    if (claimToken !== undefined) {
-      github.cancelFetch(workspace.id, claimToken);
-    }
     signal?.throwIfAborted();
     backoff.handleError(
       error,
@@ -578,6 +471,134 @@ export async function fetchPRState(params: {
     );
     return null;
   }
+}
+
+/**
+ * The fetch itself, with the dedup decision and the error handling lifted out.
+ * Runs inside the coordinator's claim: returning normally records the fetch,
+ * throwing releases the claim so the workspace stays eligible for a retry.
+ */
+async function fetchPRStateNow(params: {
+  workspace: WorkspaceWithPR;
+  prContext: { repo: string; prNumber: number };
+  authenticatedUsername: string | null;
+  reviewTriggerMode: RatchetReviewTriggerMode;
+  github: RatchetGitHubBridge;
+  signal?: AbortSignal;
+}): Promise<PRStateInfo> {
+  const { workspace, prContext, authenticatedUsername, reviewTriggerMode, github, signal } = params;
+
+  const [prDetails, reviewComments, resolvedReviewCommentIds] = await Promise.all([
+    github.getPRFullDetails(prContext.repo, prContext.prNumber, signal),
+    github.getReviewComments(prContext.repo, prContext.prNumber, undefined, signal),
+    // Degrade gracefully: without resolution data, fall back to including
+    // all review comments (pre-filtering behavior) rather than failing the check.
+    github
+      .getResolvedReviewCommentIds(prContext.repo, prContext.prNumber, signal)
+      .catch((error) => {
+        signal?.throwIfAborted();
+        logger.warn('Failed to fetch resolved review threads; including all review comments', {
+          workspaceId: workspace.id,
+          prUrl: workspace.prUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return new Set<number>();
+      }),
+  ]);
+  signal?.throwIfAborted();
+
+  const statusCheckRollup =
+    prDetails.statusCheckRollup?.map((check) => ({
+      name: check.name,
+      workflowName: check.workflowName,
+      status: check.status,
+      conclusion: check.conclusion ?? undefined,
+      detailsUrl: check.detailsUrl,
+      startedAt: check.startedAt,
+      completedAt: check.completedAt,
+    })) ?? null;
+
+  const reducedStatusCheckRollup = reduceCheckRollupToLatestRunAttempts(statusCheckRollup);
+  const ciStatus = github.computeCIStatus(reducedStatusCheckRollup);
+
+  const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
+  const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
+  const reviewDecision = prDetails.reviewDecision ?? null;
+  // The same observation in the cache's vocabulary, computed by the github
+  // capsule's mapper so this writer and the PR-sync poller agree on it.
+  const cachedPrState = github.computePRState({
+    state: prDetails.state,
+    isDraft: prDetails.isDraft,
+    reviewDecision,
+  });
+  // Review activity (and thus the dispatch snapshot key) is computed over ALL
+  // review comments, resolved or not. Resolving a thread does not touch the
+  // comments' timestamps, so this keeps the snapshot key stable when threads
+  // get resolved; excluding resolved comments would change the key on every
+  // resolution and re-trigger dispatches.
+  const latestReviewActivityAtMs = computeLatestReviewActivityAtMs(
+    prDetails,
+    reviewComments,
+    authenticatedUsername,
+    reviewTriggerMode
+  );
+  const snapshotKey = computeDispatchSnapshotKey(
+    prDetails.number,
+    ciStatus,
+    hasChangesRequested,
+    latestReviewActivityAtMs,
+    reducedStatusCheckRollup,
+    hasMergeConflict
+  );
+
+  // Resolved threads are settled feedback: drop them from the fixer prompt
+  // and from the actionable-trigger count so they cannot re-trigger or
+  // re-litigate dispatches.
+  const filteredReviewComments = reviewComments
+    .filter(
+      (c) =>
+        !(
+          resolvedReviewCommentIds.has(c.id) ||
+          isIgnoredReviewAuthor(c.author.login, authenticatedUsername)
+        )
+    )
+    .map((c) => ({
+      author: c.author.login,
+      body: c.body,
+      path: c.path,
+      line: c.line,
+      url: c.url,
+    }));
+  if (filteredReviewComments.length < reviewComments.length) {
+    logger.debug('Filtered review comments for ratchet dispatch', {
+      workspaceId: workspace.id,
+      totalComments: reviewComments.length,
+      includedComments: filteredReviewComments.length,
+      resolvedThreadCommentIds: resolvedReviewCommentIds.size,
+    });
+  }
+  const reviewSummaries = buildReviewSummariesForPrompt(
+    prDetails,
+    authenticatedUsername,
+    reviewTriggerMode
+  );
+
+  // Last chance to give up before this counts as a completed fetch.
+  signal?.throwIfAborted();
+
+  return {
+    ciStatus,
+    snapshotKey,
+    hasChangesRequested,
+    hasMergeConflict,
+    latestReviewActivityAtMs,
+    statusCheckRollup: reducedStatusCheckRollup,
+    prState: prDetails.state,
+    cachedPrState,
+    reviewDecision,
+    prNumber: prDetails.number,
+    reviewComments: [...filteredReviewComments, ...reviewSummaries],
+  };
 }
 
 export async function getAuthenticatedUsernameCached(params: {

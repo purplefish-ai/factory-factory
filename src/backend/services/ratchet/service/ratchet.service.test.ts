@@ -93,6 +93,14 @@ const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   recordSessionEnd: vi.fn(),
 };
 
+/**
+ * State behind `mockGitHubBridge.coordinatePrFetch`, modelling the two reasons
+ * the real coordinator declines a fetch: a completed one inside the cooldown
+ * window, which `ignoreCooldown` overrides, and a concurrent one in flight,
+ * which nothing overrides.
+ */
+const fakeCoordinator = { cooldownActive: false, inFlightSkips: 0 };
+
 const mockGitHubBridge: RatchetGitHubBridge = {
   extractPRInfo: vi.fn(),
   getPRFullDetails: vi.fn(),
@@ -102,11 +110,16 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   computePRState: vi.fn(() => 'OPEN' as const),
   getAuthenticatedUsername: vi.fn(),
   fetchAndComputePRState: vi.fn(),
-  isRecentlyFetched: vi.fn(),
-  isFetchInFlight: vi.fn(),
-  startFetch: vi.fn(() => 41),
-  registerFetch: vi.fn(),
-  cancelFetch: vi.fn(),
+  coordinatePrFetch: vi.fn(async (_workspaceId, fetch, options) => {
+    if (fakeCoordinator.inFlightSkips > 0) {
+      fakeCoordinator.inFlightSkips -= 1;
+      return { status: 'skipped' as const, reason: 'recently_fetched' as const };
+    }
+    if (fakeCoordinator.cooldownActive && !options?.ignoreCooldown) {
+      return { status: 'skipped' as const, reason: 'recently_fetched' as const };
+    }
+    return { status: 'fetched' as const, value: await fetch() };
+  }),
 };
 
 const mockSnapshotBridge: RatchetPRSnapshotBridge = {
@@ -138,6 +151,8 @@ function setRatchetShuttingDown(shuttingDown: boolean): void {
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fakeCoordinator.cooldownActive = false;
+    fakeCoordinator.inFlightSkips = 0;
     setRatchetShuttingDown(false);
     unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs =
       SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
@@ -2722,7 +2737,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         repo: 'repo',
         number: 9,
       });
-      vi.mocked(mockGitHubBridge.isRecentlyFetched).mockReturnValue(true);
+      fakeCoordinator.cooldownActive = true;
 
       const result = await ratchetService.checkWorkspaceById('ws-cooldown');
 
@@ -2755,7 +2770,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         repo: 'repo',
         number: 9,
       });
-      vi.mocked(mockGitHubBridge.isRecentlyFetched).mockReturnValue(true);
+      fakeCoordinator.cooldownActive = true;
       vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
         isDraft: false,
         state: 'OPEN',
@@ -2810,7 +2825,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       });
       // A concurrent fetch is in flight during the first attempt and has
       // settled by the rerun.
-      vi.mocked(mockGitHubBridge.isFetchInFlight).mockReturnValueOnce(true).mockReturnValue(false);
+      fakeCoordinator.inFlightSkips = 1;
       vi.mocked(mockGitHubBridge.getPRFullDetails).mockResolvedValue({
         isDraft: false,
         state: 'OPEN',
@@ -2858,14 +2873,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         number: 9,
       });
       // The concurrent fetch never settles: both attempts skip, no third try.
-      vi.mocked(mockGitHubBridge.isFetchInFlight).mockReturnValue(true);
+      fakeCoordinator.inFlightSkips = Number.POSITIVE_INFINITY;
 
       const result = await ratchetService.checkWorkspaceById('ws-rerun-cap', {
         bypassPrFetchCooldown: true,
       });
 
       expect(result?.action).toEqual({ type: 'WAITING', reason: 'recently_fetched' });
-      expect(mockGitHubBridge.isFetchInFlight).toHaveBeenCalledTimes(2);
+      expect(mockGitHubBridge.coordinatePrFetch).toHaveBeenCalledTimes(2);
       expect(mockGitHubBridge.getPRFullDetails).not.toHaveBeenCalled();
     });
 

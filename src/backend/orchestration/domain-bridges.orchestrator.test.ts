@@ -127,12 +127,8 @@ vi.mock('@/backend/services/github', () => ({
     checkHealth: vi.fn(),
     listReviewRequests: vi.fn(),
   },
-  prFetchRegistry: {
-    isRecentlyFetched: vi.fn(),
-    isFetchInFlight: vi.fn(),
-    register: vi.fn(),
-    startFetch: vi.fn(),
-    cancelFetch: vi.fn(),
+  prFetchCoordinator: {
+    coordinate: vi.fn(),
   },
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
@@ -155,7 +151,7 @@ vi.mock('./workspace-init.orchestrator', () => ({
 
 // --- Import mocked modules to get references ---
 
-import { githubCLIService, prFetchRegistry, prSnapshotService } from '@/backend/services/github';
+import { githubCLIService, prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { fixerSessionService, ratchetService } from '@/backend/services/ratchet';
@@ -217,7 +213,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     githubCLIService,
     logbookService,
     periodicTaskService,
-    prFetchRegistry,
+    prFetchCoordinator,
     prSnapshotService,
     ratchetService,
     reconciliationService,
@@ -424,46 +420,19 @@ describe('configureDomainBridges', () => {
       ]);
     });
 
-    it('github bridge delegates startFetch to prFetchRegistry', () => {
+    it('github bridge delegates coordinatePrFetch to prFetchCoordinator', async () => {
+      const value = { prNumber: 1 };
+      vi.mocked(prFetchCoordinator.coordinate).mockResolvedValue({ status: 'fetched', value });
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.github.startFetch('ws1');
-      expect(prFetchRegistry.startFetch).toHaveBeenCalledWith('ws1');
-    });
-
-    it('github bridge delegates isRecentlyFetched to prFetchRegistry', () => {
-      vi.mocked(prFetchRegistry.isRecentlyFetched).mockReturnValue(true);
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      expect(bridge.github.isRecentlyFetched('ws1')).toBe(true);
-      expect(prFetchRegistry.isRecentlyFetched).toHaveBeenCalledWith('ws1');
-    });
-
-    it('github bridge delegates isFetchInFlight to prFetchRegistry', () => {
-      vi.mocked(prFetchRegistry.isFetchInFlight).mockReturnValue(true);
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      expect(bridge.github.isFetchInFlight('ws1')).toBe(true);
-      expect(prFetchRegistry.isFetchInFlight).toHaveBeenCalledWith('ws1');
-    });
-
-    it('github bridge delegates registerFetch to prFetchRegistry', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.github.registerFetch('ws1', 1);
-      expect(prFetchRegistry.register).toHaveBeenCalledWith('ws1', 1);
-    });
-
-    it('github bridge delegates cancelFetch to prFetchRegistry', () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(ratchetService.configure);
-
-      bridge.github.cancelFetch('ws1', 1);
-      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws1', 1);
+      const fetch = vi.fn();
+      await expect(
+        bridge.github.coordinatePrFetch('ws1', fetch, { ignoreCooldown: true })
+      ).resolves.toEqual({ status: 'fetched', value });
+      expect(prFetchCoordinator.coordinate).toHaveBeenCalledWith('ws1', fetch, {
+        ignoreCooldown: true,
+      });
     });
   });
 

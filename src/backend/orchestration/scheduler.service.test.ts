@@ -9,6 +9,8 @@ const mockRefreshWorkspace = vi.fn();
 const mockAttachDiscoveredPRAndRefresh = vi.fn();
 const mockGetPRDiscoveryLimits = vi.fn();
 const mockLoggerInfo = vi.fn();
+/** Records `(workspaceId, countedAsFetched)` for each coordinated fetch. */
+const mockCoordinatorRecorded = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
   computePRDiscoveryNextCheckAt: (date: Date, retryCount: number) =>
@@ -34,11 +36,20 @@ vi.mock('@/backend/services/github', () => ({
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
     attachDiscoveredPRAndRefresh: (...args: unknown[]) => mockAttachDiscoveredPRAndRefresh(...args),
   },
-  prFetchRegistry: {
-    isRecentlyFetched: () => false,
-    startFetch: vi.fn(() => 41),
-    cancelFetch: vi.fn(),
-    register: vi.fn(),
+  prFetchCoordinator: {
+    // Runs every fetch and reports whether it counted, which is the only part
+    // of the coordinator the scheduler's behaviour depends on.
+    coordinate: vi.fn(
+      async (
+        _workspaceId: string,
+        fetch: () => Promise<unknown>,
+        options?: { countsAsFetched?: (value: unknown) => boolean }
+      ) => {
+        const value = await fetch();
+        mockCoordinatorRecorded(_workspaceId, options?.countsAsFetched?.(value) ?? true);
+        return { status: 'fetched' as const, value };
+      }
+    ),
   },
 }));
 
@@ -51,7 +62,6 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { prFetchRegistry } from '@/backend/services/github';
 import { schedulerService } from './scheduler.service';
 
 function createDeferred<T>() {
@@ -139,9 +149,11 @@ describe('SchedulerService', () => {
 
       expect(result).toEqual({ synced: 2, failed: 0 });
       expect(mockRefreshWorkspace).toHaveBeenCalledTimes(2);
-      expect(prFetchRegistry.startFetch).toHaveBeenCalledTimes(2);
-      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(1, 'ws-1', 41);
-      expect(prFetchRegistry.register).toHaveBeenNthCalledWith(2, 'ws-2', 41);
+      // Both syncs ran inside a coordinator claim and both counted as fetches.
+      expect(mockCoordinatorRecorded.mock.calls).toEqual([
+        ['ws-1', true],
+        ['ws-2', true],
+      ]);
     });
 
     it('counts failed syncs', async () => {
@@ -155,7 +167,8 @@ describe('SchedulerService', () => {
       const result = await schedulerService.syncPRStatuses();
 
       expect(result).toEqual({ synced: 0, failed: 2 });
-      expect(prFetchRegistry.cancelFetch).toHaveBeenCalledWith('ws-1', 41);
+      // A failed refresh must not start a cooldown, or the retry waits it out.
+      expect(mockCoordinatorRecorded).toHaveBeenCalledWith('ws-1', false);
     });
   });
 
