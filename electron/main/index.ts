@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import { registerFatalErrorHandlers } from './fatal-error-handlers.js';
 import { createElectronLifecycle } from './lifecycle.js';
 import { ServerManager } from './server-manager.js';
@@ -13,6 +13,7 @@ const serverManager = new ServerManager();
 const lifecycle = createElectronLifecycle({
   app,
   browserWindow: BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   logger: console,

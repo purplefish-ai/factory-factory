@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clipboardEventHasImageItem,
   getClipboardImages,
   isLargeText,
   LARGE_TEXT_CHAR_THRESHOLD,
@@ -17,6 +18,11 @@ vi.mock('./image-utils', async () => {
   };
 });
 
+vi.mock('./clipboard-image', () => ({
+  getClipboardImageBlob: vi.fn().mockResolvedValue(null),
+}));
+
+import { getClipboardImageBlob } from './clipboard-image';
 import { fileToBase64, MAX_IMAGE_SIZE } from './image-utils';
 
 function createClipboardEvent(items?: DataTransferItem[]): ClipboardEvent {
@@ -28,8 +34,13 @@ function createClipboardEvent(items?: DataTransferItem[]): ClipboardEvent {
   return event;
 }
 
-function createClipboardItem(options: { type: string; file?: File | null }): DataTransferItem {
+function createClipboardItem(options: {
+  type: string;
+  file?: File | null;
+  kind?: string;
+}): DataTransferItem {
   return {
+    kind: options.kind ?? 'file',
     type: options.type,
     getAsFile: () => options.file ?? null,
   } as DataTransferItem;
@@ -86,6 +97,55 @@ describe('getClipboardImages', () => {
 
     expect(result.attachments).toEqual([]);
     expect(result.errors).toEqual(['Image too large: 6 B (max 5 B)']);
+  });
+
+  it('falls back to the platform PNG channel for an unsupported image type', async () => {
+    const pngBlob = { size: 4, type: 'image/png' } as Blob;
+    vi.mocked(getClipboardImageBlob).mockResolvedValueOnce(pngBlob);
+
+    // A macOS screenshot's TIFF representation: present but not directly usable.
+    const tiffItem = createClipboardItem({ type: 'image/tiff', file: null });
+    const result = await getClipboardImages(createClipboardEvent([tiffItem]));
+
+    expect(getClipboardImageBlob).toHaveBeenCalledTimes(1);
+    expect(result.errors).toEqual([]);
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments[0]).toMatchObject({
+      type: 'image/png',
+      size: 4,
+      data: 'base64-data',
+      contentType: 'image',
+    });
+  });
+
+  it('does not use the platform fallback when a supported image was extracted', async () => {
+    const file = { name: 'clip.png', size: 4, type: 'image/png' } as File;
+    const item = createClipboardItem({ type: 'image/png', file });
+
+    await getClipboardImages(createClipboardEvent([item]));
+
+    expect(getClipboardImageBlob).not.toHaveBeenCalled();
+  });
+});
+
+describe('clipboardEventHasImageItem', () => {
+  it('matches an unsupported image file item (macOS screenshot TIFF)', () => {
+    const item = createClipboardItem({ type: 'image/tiff', file: null });
+    expect(clipboardEventHasImageItem(createClipboardEvent([item]))).toBe(true);
+  });
+
+  it('matches a file item with an empty type', () => {
+    const item = createClipboardItem({ type: '', file: null });
+    expect(clipboardEventHasImageItem(createClipboardEvent([item]))).toBe(true);
+  });
+
+  it('ignores pasted text (string items)', () => {
+    const item = createClipboardItem({ type: 'text/plain', kind: 'string' });
+    expect(clipboardEventHasImageItem(createClipboardEvent([item]))).toBe(false);
+  });
+
+  it('returns false when there is no clipboard data', () => {
+    expect(clipboardEventHasImageItem(createClipboardEvent())).toBe(false);
   });
 });
 

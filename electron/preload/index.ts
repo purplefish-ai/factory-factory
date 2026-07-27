@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   showOpenDialog: (options: OpenDialogOptions): Promise<OpenDialogResult> =>
     ipcRenderer.invoke('dialog:showOpen', options),
+  readClipboardImageAsPng: (): Promise<string | null> =>
+    ipcRenderer.invoke('clipboard:readImagePng'),
 });
 
 // Expose window focus API separately for type compatibility

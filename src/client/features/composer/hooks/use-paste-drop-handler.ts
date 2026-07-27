@@ -5,9 +5,9 @@ import { toast } from 'sonner';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import {
+  clipboardEventHasImageItem,
   getClipboardImages,
   getClipboardText,
-  hasClipboardImages,
   isLargeText,
   textToAttachment,
 } from '@/lib/paste-utils';
@@ -48,7 +48,9 @@ async function handleClipboardImagePaste(
       return;
     }
     if (imageAttachments.length === 0) {
-      toast.error('Could not paste image from clipboard');
+      toast.error(
+        "Couldn't read the image from your clipboard. Try copying it again, or drag the file in instead."
+      );
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to paste image';
@@ -111,7 +113,7 @@ export function usePasteDropHandler({
       }
 
       // Check for images first
-      if (hasClipboardImages(event.nativeEvent)) {
+      if (clipboardEventHasImageItem(event.nativeEvent)) {
         event.preventDefault();
         void handleClipboardImagePaste(event, setAttachments);
         return;

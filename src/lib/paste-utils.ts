@@ -1,4 +1,5 @@
 import type { MessageAttachment } from './chat-protocol';
+import { getClipboardImageBlob } from './clipboard-image';
 import {
   fileToBase64,
   formatFileSize,
@@ -31,16 +32,25 @@ export function isLargeText(text: string): boolean {
 }
 
 /**
- * Check if clipboard event contains images.
+ * Check if a clipboard event carries any pasted image data.
+ *
+ * Intentionally broader than the supported-format allow-list: it also matches
+ * file items whose type is an unsupported image (e.g. a macOS screenshot's
+ * `image/tiff`) or empty. Those can't be used directly, but their presence means
+ * the paste handler should try the platform PNG fallback in `getClipboardImages`
+ * rather than treating the paste as text.
  */
-export function hasClipboardImages(event: ClipboardEvent): boolean {
+export function clipboardEventHasImageItem(event: ClipboardEvent): boolean {
   const items = event.clipboardData?.items;
   if (!items) {
     return false;
   }
 
   for (const item of Array.from(items)) {
-    if (item.type.startsWith('image/') && isSupportedImageType(item.type)) {
+    if (item.kind !== 'file') {
+      continue;
+    }
+    if (item.type === '' || item.type.startsWith('image/')) {
       return true;
     }
   }
@@ -108,23 +118,54 @@ async function processClipboardImageItem(
   }
 }
 
+async function processClipboardImageBlob(blob: Blob): Promise<ClipboardImageProcessingResult> {
+  if (blob.size > MAX_IMAGE_SIZE) {
+    const actualSize = formatFileSize(blob.size);
+    const maxSize = formatFileSize(MAX_IMAGE_SIZE);
+    return { error: `Image too large: ${actualSize} (max ${maxSize})` };
+  }
+
+  const type = blob.type || 'image/png';
+  const extension = type.split('/')[1] ?? 'png';
+  const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type });
+
+  try {
+    const base64 = await fileToBase64(file);
+    return {
+      attachment: {
+        id: generateAttachmentId(),
+        name: file.name,
+        type,
+        size: blob.size,
+        data: base64,
+        contentType: 'image',
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { error: `Failed to read image: ${message}` };
+  }
+}
+
 /**
  * Extract images from clipboard and convert to MessageAttachments.
  * Uses partial success pattern - continues processing after individual failures,
  * returning both successful attachments and error messages.
  *
+ * Directly-usable items (supported image types) are extracted from the paste
+ * event first. If none produced an attachment but the paste still carried image
+ * data (e.g. a macOS screenshot's TIFF representation), the platform PNG channel
+ * is queried as a fallback.
+ *
  * @returns Object with `attachments` array and `errors` array
  */
 export async function getClipboardImages(event: ClipboardEvent): Promise<ClipboardImagesResult> {
   const items = event.clipboardData?.items;
-  if (!items) {
-    return { attachments: [], errors: [] };
-  }
 
   const attachments: MessageAttachment[] = [];
   const errors: string[] = [];
 
-  const imageItems = getClipboardImageItems(items);
+  const imageItems = items ? getClipboardImageItems(items) : [];
   for (const item of imageItems) {
     const result = await processClipboardImageItem(item);
     if (result.attachment) {
@@ -132,6 +173,19 @@ export async function getClipboardImages(event: ClipboardEvent): Promise<Clipboa
     }
     if (result.error) {
       errors.push(result.error);
+    }
+  }
+
+  if (attachments.length === 0) {
+    const blob = await getClipboardImageBlob();
+    if (blob) {
+      const result = await processClipboardImageBlob(blob);
+      if (result.attachment) {
+        attachments.push(result.attachment);
+      }
+      if (result.error) {
+        errors.push(result.error);
+      }
     }
   }
 

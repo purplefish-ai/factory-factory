@@ -32,10 +32,19 @@ interface DialogLike {
   showOpenDialog(window: unknown, options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
 }
 
+interface NativeImageLike {
+  isEmpty(): boolean;
+  toPNG(): Uint8Array;
+}
+
+interface ClipboardLike {
+  readImage(): NativeImageLike;
+}
+
 interface IpcMainLike {
-  handle(
+  handle<Args extends unknown[], Result>(
     channel: string,
-    listener: (_event: unknown, options: OpenDialogOptions) => Promise<OpenDialogReturnValue>
+    listener: (event: unknown, ...args: Args) => Result
   ): void;
 }
 
@@ -52,6 +61,7 @@ interface LoggerLike {
 export interface ElectronLifecycleDependencies {
   app: AppLike;
   browserWindow: BrowserWindowConstructorLike;
+  clipboard: ClipboardLike;
   dialog: DialogLike;
   ipcMain: IpcMainLike;
   logger: LoggerLike;
@@ -72,6 +82,7 @@ export interface ElectronLifecycleController {
 export function createElectronLifecycle({
   app,
   browserWindow,
+  clipboard,
   dialog,
   ipcMain,
   logger,
@@ -231,13 +242,23 @@ export function createElectronLifecycle({
   };
 
   const registerIpcHandlers = (): void => {
-    ipcMain.handle('dialog:showOpen', (_event, options) => {
+    ipcMain.handle('dialog:showOpen', (_event: unknown, options: OpenDialogOptions) => {
       const currentWindow = resolveMainWindow();
       if (!currentWindow) {
         return Promise.resolve({ canceled: true, filePaths: [] });
       }
 
       return dialog.showOpenDialog(currentWindow, options);
+    });
+
+    // Bridge the OS clipboard so the renderer can obtain a PNG for images that
+    // the browser's paste event only exposes as TIFF (e.g. macOS screenshots).
+    ipcMain.handle('clipboard:readImagePng', (_event: unknown): string | null => {
+      const image = clipboard.readImage();
+      if (image.isEmpty()) {
+        return null;
+      }
+      return Buffer.from(image.toPNG()).toString('base64');
     });
   };
 
