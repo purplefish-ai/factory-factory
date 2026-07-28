@@ -8,6 +8,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import { resolveAttachmentContentType, stripBase64LineEndings } from './attachment-utils';
 import {
   inspectSupportedImageFormat,
@@ -16,10 +17,7 @@ import {
 
 const logger = createLogger('attachment-processing');
 
-// Mirrors the upload limit enforced by src/lib/image-utils.ts. This boundary
-// cannot trust MessageAttachment.size because it is client-provided.
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_BASE64_IMAGE_CHARACTERS = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
+const MAX_BASE64_IMAGE_CHARACTERS = Math.ceil(MAX_IMAGE_SIZE / 3) * 4;
 const IMAGE_SIGNATURE_BASE64_CHARACTERS = 16;
 
 /**
@@ -75,7 +73,7 @@ function decodedBase64ByteLength(data: string): number {
 
 function exceedsImageSizeLimit(data: string): boolean {
   return (
-    data.length > MAX_BASE64_IMAGE_CHARACTERS || decodedBase64ByteLength(data) > MAX_IMAGE_BYTES
+    data.length > MAX_BASE64_IMAGE_CHARACTERS || decodedBase64ByteLength(data) > MAX_IMAGE_SIZE
   );
 }
 

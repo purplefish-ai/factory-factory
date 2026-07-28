@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import {
   buildCombinedTextContent,
   buildContentArray,
@@ -45,7 +46,7 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
 }
 
 function createOversizedPngBase64(): string {
-  const bytes = Buffer.alloc(10 * 1024 * 1024 + 1);
+  const bytes = Buffer.alloc(MAX_IMAGE_SIZE + 1);
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
   return bytes.toString('base64');
 }
@@ -148,7 +149,7 @@ describe('validateAttachment', () => {
 
   it('should reject image data larger than 10 MiB before format inspection', () => {
     const attachment = createImageAttachment({
-      data: 'A'.repeat(Math.ceil((10 * 1024 * 1024 + 1) / 3) * 4),
+      data: 'A'.repeat(Math.ceil((MAX_IMAGE_SIZE + 1) / 3) * 4),
     });
 
     expect(() => validateAttachment(attachment)).toThrow(
