@@ -41,12 +41,16 @@ For every other error caught after a message has been dequeued:
 - Do not mark the runtime idle. A prompt failure has already installed the ACP error runtime; an
   earlier configuration failure will be promoted to an error runtime by the dispatch handler.
 - Do not put the message back in the queue.
-- Publish one `FAILED` message-state transition with the normalized error text.
+- Publish one `FAILED` message-state transition with the normalized error text and the failed
+  message content, including its source session ID.
 
-The client already handles `FAILED` and `REJECTED` identically: it removes queue styling, removes
-the failed transcript entry, and restores the message text and attachments to the composer. The
-runtime error banner remains stable instead of alternating with idle state. The user can retry by
-sending the restored draft.
+The client handles `FAILED` and `REJECTED` identically, but a prompt can fail after the earlier
+`DISPATCHED` transition has removed its queued recovery record. The reducer will therefore prefer
+its queued or pending recovery content and fall back to the `FAILED` event's user-message payload.
+It removes queue styling and the failed transcript entry, then restores the message text and
+attachments to the composer only when the payload's source session still matches the selected
+session. The runtime error banner remains stable instead of alternating with idle state. The user
+can retry by sending the restored draft.
 
 Permanent attachment validation remains `REJECTED`, since the backend refuses that input before an
 ACP prompt begins. Stop-generation invalidation also remains unchanged: a dispatch invalidated by
@@ -62,8 +66,9 @@ starts; the failing live queue entry no longer spins.
 2. It emits `DISPATCHED`, commits `m1` for refresh safety, and awaits the ACP prompt.
 3. ACP rejects the prompt with `code -32603: Internal error`; the session runtime becomes `error`
    and schedules the normal completion callback.
-4. The dispatch handler removes the temporary transcript entry and emits `FAILED` for `m1` without
-   requeueing it or overwriting the runtime.
+4. The dispatch handler removes the temporary transcript entry and emits `FAILED` for `m1`, with
+   its recovery content and source session ID, without requeueing it or returning the runtime to
+   idle.
 5. The completion callback finds no queued head and exits.
 6. The client restores `m1` to the composer and displays one stable runtime error banner.
 
@@ -75,7 +80,11 @@ prove that the handler:
 - attempts the prompt exactly once;
 - rolls back the temporary transcript entry;
 - does not mark the session idle or requeue the message; and
-- emits one `FAILED` transition containing the normalized ACP error.
+- emits one `FAILED` transition containing the normalized ACP error and recovery content.
+
+Add a reducer regression that applies `ACCEPTED`, `DISPATCHED`, and then `FAILED`, proving the
+terminal event restores `lastRejectedMessage` from its payload after the queued record is gone and
+preserves the source session guard.
 
 Retain the existing busy-turn regression test to prove that the special backoff/requeue behavior is
 unchanged. Run the focused tests through a red-green cycle, then run the session test suite,

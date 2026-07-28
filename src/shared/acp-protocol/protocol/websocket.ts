@@ -154,6 +154,8 @@ interface WebSocketMessagePayloadByType {
       settings?: ChatSettings;
       /** Backend-assigned order for reliable sorting */
       order?: number;
+      /** Source session for restoring a failed message to the correct composer */
+      sessionId?: string;
     };
   };
   session_replay_batch: {

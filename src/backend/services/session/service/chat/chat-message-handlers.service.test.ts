@@ -249,34 +249,44 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
   });
 
-  it('reverts runtime to idle when dispatch fails after markRunning', async () => {
+  it('fails a message once when ACP reports an internal error', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
       endCompaction: vi.fn(),
       setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
     };
+    const internalError = {
+      code: -32_603,
+      message: 'Internal error',
+    };
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockSessionService.sendSessionMessage.mockRejectedValue(new Error('send failed'));
+    mockSessionService.sendSessionMessage.mockRejectedValue(internalError);
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
-    expect(mockSessionService.setSessionThinkingBudget).toHaveBeenCalledWith('s1', null);
-    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
-    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledOnce();
     expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
       emitSnapshot: false,
     });
-    expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
-    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
-    const removeCallOrder =
-      mockSessionDomainService.removeTranscriptMessageById.mock.invocationCallOrder[0];
-    const requeueCallOrder = mockSessionDomainService.requeueFront.mock.invocationCallOrder[0];
-    expect(removeCallOrder).toBeDefined();
-    expect(requeueCallOrder).toBeDefined();
-    expect(removeCallOrder!).toBeLessThan(requeueCallOrder!);
+    expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markError).toHaveBeenCalledWith(
+      's1',
+      'code -32603: Internal error'
+    );
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith('s1', {
+      type: 'message_state_changed',
+      id: 'm1',
+      newState: 'FAILED',
+      errorMessage: 'code -32603: Internal error',
+      userMessage: {
+        text: 'hello',
+        timestamp: '2026-02-01T00:00:00.000Z',
+        attachments: undefined,
+        sessionId: 's1',
+      },
+    });
   });
 
   it('marks a workspace notification delivered after its queued message commits', async () => {
@@ -591,7 +601,20 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       emitSnapshot: false,
     });
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
-    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.markError).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith('s1', {
+      type: 'message_state_changed',
+      id: 'm1',
+      newState: 'FAILED',
+      errorMessage: 'send failed',
+      userMessage: {
+        text: 'hello',
+        timestamp: '2026-02-01T00:00:00.000Z',
+        attachments: undefined,
+        sessionId: 's1',
+      },
+    });
   });
 
   it.each([

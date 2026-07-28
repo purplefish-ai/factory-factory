@@ -2742,6 +2742,82 @@ describe('chatReducer', () => {
       });
     });
 
+    it('should recover a failed dispatched message from the terminal event payload', () => {
+      const attachment = {
+        id: 'attachment-1',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 12,
+        data: 'draft notes',
+        contentType: 'text' as const,
+      };
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([
+          [
+            'msg-1',
+            {
+              text: 'Queued text',
+              attachments: [attachment],
+              sessionId: 'session-A',
+            },
+          ],
+        ]),
+      };
+
+      const acceptedState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            attachments: [attachment],
+          },
+        },
+      });
+      const dispatchedState = chatReducer(acceptedState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.DISPATCHED,
+          userMessage: {
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            attachments: [attachment],
+            order: 1,
+          },
+        },
+      });
+
+      expect(dispatchedState.pendingMessages.has('msg-1')).toBe(false);
+      expect(dispatchedState.queuedMessages.has('msg-1')).toBe(false);
+
+      const failedState = chatReducer(dispatchedState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.FAILED,
+          errorMessage: 'code -32603: Internal error',
+          userMessage: {
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            attachments: [attachment],
+            sessionId: 'session-A',
+          },
+        },
+      });
+
+      expect(failedState.messages.some((message) => message.id === 'msg-1')).toBe(false);
+      expect(failedState.lastRejectedMessage).toEqual({
+        text: 'Queued text',
+        attachments: [attachment],
+        error: 'code -32603: Internal error',
+        sessionId: 'session-A',
+      });
+    });
+
     it('should preserve source session across repeated accepted transitions', () => {
       const state: ChatState = {
         ...initialState,
