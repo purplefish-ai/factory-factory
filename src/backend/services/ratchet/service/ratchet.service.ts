@@ -486,6 +486,10 @@ class RatchetService extends EventEmitter {
 
       const prStateInfo = prStateResult;
       signal.throwIfAborted();
+      if (prStateInfo.prState === 'MERGED') {
+        await this.stopActiveRatchetSessionsForMergedPr(workspace.id, signal);
+        signal.throwIfAborted();
+      }
       const decisionContext = await this.buildRatchetDecisionContext(
         workspace,
         prStateInfo,
@@ -948,6 +952,29 @@ class RatchetService extends EventEmitter {
       },
     });
     return action;
+  }
+
+  private async stopActiveRatchetSessionsForMergedPr(
+    workspaceId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    signal.throwIfAborted();
+    const sessions = await this.session.findSessionsByWorkspaceId(workspaceId);
+    signal.throwIfAborted();
+    const activeRatchetSessions = sessions.filter(
+      (session) =>
+        session.workflow === 'ratchet' &&
+        (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
+    );
+
+    for (const session of activeRatchetSessions) {
+      signal.throwIfAborted();
+      if (!this.session.isSessionRunning(session.id)) {
+        continue;
+      }
+      await this.session.stopSession(session.id);
+      signal.throwIfAborted();
+    }
   }
 
   private async stopActiveRatchetSessionsAfterDisable(workspaceId: string): Promise<void> {

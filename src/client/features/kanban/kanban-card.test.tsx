@@ -10,6 +10,7 @@ vi.mock('@phosphor-icons/react', () => ({
   ArchiveIcon: () => null,
   ArrowsClockwiseIcon: () => null,
   ChatIcon: () => null,
+  DotOutlineIcon: () => null,
   GitBranchIcon: () => null,
   GitPullRequestIcon: () => null,
   PencilIcon: () => null,
@@ -83,17 +84,24 @@ const baseWorkspace = {
   pendingRequestType: null,
 } as unknown as WorkspaceWithKanban;
 
-function renderCard(workspace: WorkspaceWithKanban): { container: HTMLDivElement; root: Root } {
+function renderCard(
+  workspace: WorkspaceWithKanban,
+  onCardClick?: () => void
+): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   flushSync(() => {
     root.render(
-      createElement(KanbanCard, {
-        workspace,
-        projectSlug: 'project',
-      })
+      createElement(
+        'div',
+        { onClick: onCardClick },
+        createElement(KanbanCard, {
+          workspace,
+          projectSlug: 'project',
+        })
+      )
     );
   });
 
@@ -197,6 +205,103 @@ describe('KanbanCard', () => {
 
     expect(container.textContent).toContain('Needs permission');
     expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('opens a linked GitHub issue without navigating through the workspace card', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onCardClick = vi.fn();
+    const { container, root } = renderCard(
+      {
+        ...baseWorkspace,
+        githubIssueNumber: 1905,
+        githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+      },
+      onCardClick
+    );
+    const button = container.querySelector('button');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+
+    expect(container.textContent).toContain('#1905');
+    expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
+    expect(button).not.toBeNull();
+
+    button?.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(onCardClick).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://github.com/example/repo/issues/1905',
+      '_blank',
+      'noopener,noreferrer'
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('opens a linked Linear issue from card metadata', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      linearIssueIdentifier: 'ENG-42',
+      linearIssueUrl: 'https://linear.app/example/issue/ENG-42',
+    });
+    const button = container.querySelector('button');
+
+    expect(container.textContent).toContain('ENG-42');
+    expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
+    expect(button).not.toBeNull();
+
+    button?.click();
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://linear.app/example/issue/ENG-42',
+      '_blank',
+      'noopener,noreferrer'
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('prefers a complete Linear link when both issue providers are present', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      githubIssueNumber: 1905,
+      githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+      linearIssueIdentifier: 'ENG-42',
+      linearIssueUrl: 'https://linear.app/example/issue/ENG-42',
+    });
+    const button = container.querySelector('button');
+
+    expect(container.textContent).toContain('ENG-42');
+    expect(container.textContent).not.toContain('#1905');
+
+    button?.click();
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://linear.app/example/issue/ENG-42',
+      '_blank',
+      'noopener,noreferrer'
+    );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('does not render an issue identifier without its URL', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      linearIssueIdentifier: 'ENG-42',
+      linearIssueUrl: null,
+    });
+
+    expect(container.textContent).not.toContain('ENG-42');
+    expect(container.querySelector('[data-testid="card-content"]')).toBeNull();
 
     root.unmount();
     container.remove();

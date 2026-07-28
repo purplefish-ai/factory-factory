@@ -1201,7 +1201,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     );
   });
 
-  it('persists a merge observed by the check even when CI status is unchanged', async () => {
+  it('stops live ratchet sessions before persisting a merged PR', async () => {
     // Without this write a merged PR keeps deriving from the cached `OPEN`, which
     // leaves it in the ratchet poll set.
     const workspace = {
@@ -1239,15 +1239,108 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prNumber: 45,
       reviewComments: [],
     });
-    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 'ratchet-running',
+        workflow: 'ratchet',
+        status: SessionStatus.RUNNING,
+      },
+      {
+        id: 'ratchet-idle',
+        workflow: 'ratchet',
+        status: SessionStatus.IDLE,
+      },
+      {
+        id: 'ratchet-completed',
+        workflow: 'ratchet',
+        status: SessionStatus.COMPLETED,
+      },
+      {
+        id: 'manual-running',
+        workflow: 'default',
+        status: SessionStatus.RUNNING,
+      },
+    ] as never);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockImplementation((sessionId) =>
+      ['ratchet-running', 'ratchet-idle', 'manual-running'].includes(sessionId)
+    );
 
-    await unsafeCoerce<{
+    const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
     }>(ratchetService).processWorkspace(workspace);
 
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledTimes(2);
+    expect(mockSessionBridge.stopSession).toHaveBeenNthCalledWith(1, 'ratchet-running');
+    expect(mockSessionBridge.stopSession).toHaveBeenNthCalledWith(2, 'ratchet-idle');
     expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: 'ws-merged', prState: 'MERGED' })
     );
+    expect(vi.mocked(mockSessionBridge.stopSession).mock.invocationCallOrder.at(-1)).toBeLessThan(
+      vi.mocked(mockSnapshotBridge.recordPrObservation).mock.invocationCallOrder[0] ?? 0
+    );
+    expect(result).toMatchObject({
+      newState: RatchetState.MERGED,
+      action: { type: 'COMPLETED' },
+    });
+  });
+
+  it('does not persist a merged PR when stopping a ratchet session fails', async () => {
+    const workspace = {
+      id: 'ws-merged-stop-failure',
+      prUrl: 'https://github.com/example/repo/pull/46',
+      prNumber: 46,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.SUCCESS,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: 'ratchet-running',
+      ratchetDispatchSnapshotKey: 'merged-stop-failure-snapshot',
+      prReviewLastCheckedAt: null,
+      ratchetDispatchOutcome: 'RUNNING',
+      ratchetDispatchRetryCount: 0,
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'merged-stop-failure-snapshot',
+      hasChangesRequested: false,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'MERGED',
+      cachedPrState: 'MERGED',
+      reviewDecision: null,
+      prNumber: 46,
+      reviewComments: [],
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 'ratchet-running',
+        workflow: 'ratchet',
+        status: SessionStatus.RUNNING,
+      },
+    ] as never);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.stopSession).mockRejectedValue(new Error('stop failed'));
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<WorkspaceRatchetResult>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      previousState: RatchetState.READY,
+      newState: RatchetState.READY,
+      action: { type: 'ERROR', error: 'stop failed' },
+    });
+    expect(workspaceRatchetService.recordCheckIfEnabled).not.toHaveBeenCalled();
+    expect(mockSnapshotBridge.recordPrObservation).not.toHaveBeenCalled();
   });
 
   it('persists a newly observed merge conflict even when CI status is unchanged', async () => {
