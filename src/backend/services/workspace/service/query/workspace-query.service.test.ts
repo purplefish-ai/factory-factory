@@ -27,6 +27,7 @@ const mockResetPRDiscoveryBackoff = vi.fn();
 const mockProjectFindById = vi.fn();
 const mockDeriveWorkspaceRuntimeState = vi.fn();
 const mockGetWorkspaceGitStats = vi.fn();
+const mockGetCachedWorkspaceGitStats = vi.fn();
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -56,6 +57,7 @@ vi.mock('@/backend/services/workspace/service/state/workspace-runtime-state', ()
 vi.mock('@/backend/services/workspace/service/worktree/git-ops.service', () => ({
   gitOpsService: {
     getWorkspaceGitStats: (...args: unknown[]) => mockGetWorkspaceGitStats(...args),
+    getCachedWorkspaceGitStats: (...args: unknown[]) => mockGetCachedWorkspaceGitStats(...args),
   },
 }));
 
@@ -67,6 +69,43 @@ vi.mock('@/backend/services/logger.service', () => ({
     error: vi.fn(),
   }),
 }));
+
+function makeWorkspaceRow(id: string, worktreePath: string | null) {
+  return {
+    id,
+    projectId: 'p1',
+    name: id,
+    status: WorkspaceStatus.READY,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    worktreePath,
+    branchName: `feature/${id}`,
+    prUrl: null,
+    prNumber: null,
+    prState: 'NONE',
+    prCiStatus: null,
+    ratchetEnabled: false,
+    ratchetState: 'IDLE',
+    runScriptStatus: 'IDLE',
+    hasHadSessions: true,
+    agentSessions: [],
+    terminalSessions: [],
+  };
+}
+
+function defaultRuntimeState(workspace: { id: string }) {
+  return {
+    sessionIds: [workspace.id],
+    isSessionWorking: false,
+    isWorking: false,
+    flowState: {
+      hasActivePr: false,
+      isWorking: false,
+      shouldAnimateRatchetButton: false,
+      phase: 'NO_PR',
+      ciObservation: 'CHECKS_UNKNOWN',
+    },
+  };
+}
 
 describe('WorkspaceQueryService', () => {
   const mockGetAllPendingRequests = vi.fn<WorkspaceSessionBridge['getAllPendingRequests']>();
@@ -90,6 +129,8 @@ describe('WorkspaceQueryService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetCachedWorkspaceGitStats.mockReturnValue(null);
+    mockGetWorkspaceGitStats.mockResolvedValue(null);
     mockGetRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'alive',
@@ -457,7 +498,7 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('listForProject computes git stats and caches review count', async () => {
+  it('listForProject serves git stats and caches review count', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
@@ -509,12 +550,11 @@ describe('WorkspaceQueryService', () => {
     }));
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    mockGetWorkspaceGitStats.mockResolvedValueOnce({
-      total: 3,
-      additions: 2,
-      deletions: 1,
-      hasUncommitted: true,
-    });
+    mockGetCachedWorkspaceGitStats.mockImplementation((worktreePath: string) =>
+      worktreePath === '/tmp/w1'
+        ? { total: 3, additions: 2, deletions: 1, hasUncommitted: true }
+        : null
+    );
 
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: true, isAuthenticated: true });
     mockGithubListReviewRequests.mockResolvedValue([
@@ -538,7 +578,9 @@ describe('WorkspaceQueryService', () => {
       gitStats: null,
       lastActivityAt: '2026-01-04T00:00:00.000Z',
     });
-    expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
+    expect(mockGetCachedWorkspaceGitStats).toHaveBeenCalledWith('/tmp/w1', 'main');
+    // Served from cache: the response path spawns no git.
+    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
 
     // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
     await new Promise((resolve) => setImmediate(resolve));
@@ -548,6 +590,89 @@ describe('WorkspaceQueryService', () => {
     const second = await workspaceQueryService.listForProject('p1');
     expect(second.reviewCount).toBe(1);
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The board's first paint must not wait on git. Computing a worktree's diff
+   * stats costs several `git` spawns, and a project with dozens of live
+   * workspaces used to serialize all of them behind this one query — the
+   * Kanban sat on its loading state for as long as that took. The stats are a
+   * reconciliation field: the snapshot poll recomputes them and streams them
+   * into the very same client cache, so the list serves whatever is already
+   * cached and warms the misses in the background.
+   */
+  it('listForProject serves cached git stats without awaiting a recompute', async () => {
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      makeWorkspaceRow('cached', '/tmp/cached'),
+      makeWorkspaceRow('uncached', '/tmp/uncached'),
+      makeWorkspaceRow('no-worktree', null),
+    ]);
+    mockDeriveWorkspaceRuntimeState.mockImplementation(defaultRuntimeState);
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+
+    mockGetCachedWorkspaceGitStats.mockImplementation((worktreePath: string) =>
+      worktreePath === '/tmp/cached'
+        ? { total: 3, additions: 2, deletions: 1, hasUncommitted: true }
+        : null
+    );
+
+    // A recompute that never settles: if the query awaited it, this test would
+    // time out rather than fail an assertion.
+    let releaseRecompute: (() => void) | undefined;
+    mockGetWorkspaceGitStats.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseRecompute = () => resolve(null);
+        })
+    );
+
+    const result = await workspaceQueryService.listForProject('p1');
+
+    const byId = new Map(result.workspaces.map((w) => [w.id, w]));
+    expect(byId.get('cached')?.gitStats).toEqual({
+      total: 3,
+      additions: 2,
+      deletions: 1,
+      hasUncommitted: true,
+    });
+    // Not yet known — the snapshot stream fills it in once the warm completes.
+    expect(byId.get('uncached')?.gitStats).toBeNull();
+    expect(byId.get('no-worktree')?.gitStats).toBeNull();
+
+    // Only the cache miss with a worktree is warmed, and only in the background.
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledTimes(1);
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledWith('/tmp/uncached', 'main');
+
+    releaseRecompute?.();
+  });
+
+  it('listForProject does not stack duplicate background warms for the same worktree', async () => {
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([makeWorkspaceRow('w1', '/tmp/w1')]);
+    mockDeriveWorkspaceRuntimeState.mockImplementation(defaultRuntimeState);
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+    mockGetCachedWorkspaceGitStats.mockReturnValue(null);
+
+    let releaseRecompute: (() => void) | undefined;
+    mockGetWorkspaceGitStats.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseRecompute = () => resolve(null);
+        })
+    );
+
+    await workspaceQueryService.listForProject('p1');
+    await workspaceQueryService.listForProject('p1');
+    await workspaceQueryService.listForProject('p1');
+
+    // The first warm is still in flight; polling the board must not pile up
+    // another git recompute behind it on every refetch.
+    expect(mockGetWorkspaceGitStats).toHaveBeenCalledTimes(1);
+
+    releaseRecompute?.();
   });
 
   it('returns derived fields equivalent to snapshot store for identical raw inputs', async () => {

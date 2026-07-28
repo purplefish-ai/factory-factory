@@ -37,6 +37,20 @@ class GitOpsService {
   }
 
   /**
+   * Already-computed stats for a worktree, or null when none are cached.
+   *
+   * Never spawns `git`. For callers that must answer without waiting on a
+   * recompute; see {@link WorkspaceGitStateService.getCachedSnapshot}.
+   */
+  getCachedWorkspaceGitStats(
+    worktreePath: string,
+    defaultBranch: string
+  ): WorkspaceGitStats | null {
+    const snapshot = workspaceGitStateService.getCachedSnapshot({ worktreePath, defaultBranch });
+    return snapshot ? getStats(snapshot) : null;
+  }
+
+  /**
    * Check if a path is a valid git repository (worktree or regular repo).
    * Returns true if git commands can be run in this directory.
    */

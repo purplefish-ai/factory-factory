@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
@@ -107,7 +108,12 @@ export function WorkspaceContentView({
               </div>
 
               {!hasWorktreePath && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
+                <div
+                  className={[
+                    'border px-4 py-3 rounded-md text-sm',
+                    getStatusBannerClassName('warning'),
+                  ].join(' ')}
+                >
                   Workspace is initializing... Please wait for the worktree to be created.
                 </div>
               )}

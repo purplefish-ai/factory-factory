@@ -418,6 +418,58 @@ describe('WorkspaceGitStateService', () => {
     expect(service.getCachedSnapshotCount()).toBe(0);
   });
 
+  describe('getCachedSnapshot', () => {
+    it('returns null and spawns nothing when nothing is cached', () => {
+      expect(service.getCachedSnapshot(input)).toBeNull();
+      expect(runGit).not.toHaveBeenCalled();
+      // A peek must not install a watcher either — it is a pure read.
+      expect(watchPath).not.toHaveBeenCalled();
+    });
+
+    it('serves a cached snapshot without re-running git', async () => {
+      const computed = await service.getSnapshot(input);
+      runGit.mockClear();
+
+      expect(service.getCachedSnapshot(input)).toEqual(computed);
+      expect(runGit).not.toHaveBeenCalled();
+    });
+
+    it('normalizes the worktree path the same way getSnapshot does', async () => {
+      await service.getSnapshot(input);
+
+      expect(service.getCachedSnapshot({ ...input, worktreePath: '/repo/./w1' })).not.toBeNull();
+    });
+
+    it('does not serve a snapshot a watcher has invalidated', async () => {
+      await service.getSnapshot(input);
+      service.invalidate(input.worktreePath);
+
+      expect(service.getCachedSnapshot(input)).toBeNull();
+    });
+
+    it('expires a degraded snapshot on the short TTL', async () => {
+      runGit.mockImplementation((args) =>
+        isStatusCommand(args)
+          ? Promise.resolve({ code: 1, stdout: '', stderr: 'not a git repository' })
+          : Promise.resolve(defaultGitResult(args))
+      );
+      await service.getSnapshot(input);
+
+      now += 4999;
+      expect(service.getCachedSnapshot(input)).not.toBeNull();
+
+      now += 2;
+      expect(service.getCachedSnapshot(input)).toBeNull();
+    });
+
+    it('holds a healthy watched snapshot indefinitely', async () => {
+      await service.getSnapshot(input);
+
+      now += 10 * 60 * 1000;
+      expect(service.getCachedSnapshot(input)).not.toBeNull();
+    });
+  });
+
   it('falls back to the local default branch when the origin merge base is unavailable', async () => {
     runGit.mockImplementation((args) => {
       if (isStatusCommand(args)) {
