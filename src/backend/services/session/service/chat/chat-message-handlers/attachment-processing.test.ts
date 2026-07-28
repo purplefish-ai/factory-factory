@@ -183,6 +183,28 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
+  it.each([
+    {
+      label: 'text MIME type',
+      overrides: { type: 'text/plain', contentType: undefined },
+    },
+    {
+      label: 'text content discriminator',
+      overrides: { type: 'image/png', contentType: 'text' as const },
+    },
+    {
+      label: 'pasted-text name',
+      overrides: { name: 'Pasted text', type: '', contentType: undefined },
+    },
+  ])('should accept image-like text with a $label', ({ overrides }) => {
+    const attachment = createTextAttachment({
+      ...overrides,
+      data: 'iVBORw0KGgo=',
+    });
+
+    expect(() => validateAttachment(attachment)).not.toThrow();
+  });
+
   it('should reject a PNG whose image data fails its checksum', () => {
     const attachment = createImageAttachment({
       data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+c9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -531,6 +553,14 @@ describe('processAttachmentsAndBuildContent', () => {
       },
     });
     expect(attachment.type).toBe(declaredType);
+  });
+
+  it('should dispatch structurally invalid image-like text as text', () => {
+    const attachment = createTextAttachment({ data: 'iVBORw0KGgo=' });
+
+    expect(processAttachmentsAndBuildContent('Message', [attachment])).toBe(
+      'Message\n\n[Pasted content: Pasted text]\niVBORw0KGgo='
+    );
   });
 
   it('should return text as-is when no attachments', () => {

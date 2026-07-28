@@ -110,6 +110,9 @@ function normalizeAttachment(attachment: MessageAttachment): MessageAttachment {
 
   if (imageInspection) {
     if (!imageInspection.isValid) {
+      if (resolveAttachmentContentType(attachment) !== 'image') {
+        return attachment;
+      }
       logger.error('[Chat WS] Invalid image structure', {
         attachmentId: attachment.id,
         declaredType: attachment.type,
