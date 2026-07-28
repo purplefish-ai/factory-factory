@@ -1,4 +1,4 @@
-import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
+import type { ChatMessage, MessageState, QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
@@ -7,6 +7,10 @@ export interface RecentMessageRejection {
   errorMessage: string;
   rejectedAt: string;
   expiresAt: number;
+  state?: MessageState.REJECTED | MessageState.FAILED;
+  userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'> & {
+    sessionId?: string;
+  };
 }
 
 export interface SessionStore {

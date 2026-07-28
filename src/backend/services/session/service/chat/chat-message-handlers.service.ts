@@ -454,18 +454,8 @@ class ChatMessageHandlerService {
     if (acpRuntimeManager.isSessionRunning(dbSessionId)) {
       sessionDomainService.markError(dbSessionId, errorMessage);
     }
-    sessionDomainService.emitDelta(dbSessionId, {
-      type: 'message_state_changed',
-      id: msg.id,
-      newState: MessageState.FAILED,
-      errorMessage,
-      userMessage: {
-        text: msg.text,
-        timestamp: msg.timestamp,
-        attachments: msg.attachments,
-        sessionId: dbSessionId,
-      },
-    });
+    this.turnInProgressRetryAttempts.delete(dbSessionId);
+    sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
   }
 
   private scheduleTurnInProgressRetry(dbSessionId: string): void {

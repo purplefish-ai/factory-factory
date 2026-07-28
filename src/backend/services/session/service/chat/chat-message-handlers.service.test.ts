@@ -16,6 +16,7 @@ const {
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
     emitDelta: vi.fn(),
+    failMessage: vi.fn(),
     commitSentUserMessageAtOrder: vi.fn(),
     removeTranscriptMessageById: vi.fn(),
     removeQueuedMessage: vi.fn(),
@@ -275,18 +276,11 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       's1',
       'code -32603: Internal error'
     );
-    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith('s1', {
-      type: 'message_state_changed',
-      id: 'm1',
-      newState: 'FAILED',
-      errorMessage: 'code -32603: Internal error',
-      userMessage: {
-        text: 'hello',
-        timestamp: '2026-02-01T00:00:00.000Z',
-        attachments: undefined,
-        sessionId: 's1',
-      },
-    });
+    expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
+      's1',
+      queuedMessage,
+      'code -32603: Internal error'
+    );
   });
 
   it('marks a workspace notification delivered after its queued message commits', async () => {
@@ -603,18 +597,11 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markError).not.toHaveBeenCalled();
-    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith('s1', {
-      type: 'message_state_changed',
-      id: 'm1',
-      newState: 'FAILED',
-      errorMessage: 'send failed',
-      userMessage: {
-        text: 'hello',
-        timestamp: '2026-02-01T00:00:00.000Z',
-        attachments: undefined,
-        sessionId: 's1',
-      },
-    });
+    expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
+      's1',
+      queuedMessage,
+      'send failed'
+    );
   });
 
   it.each([
@@ -711,6 +698,46 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       await vi.advanceTimersByTimeAsync(1000);
       await vi.waitFor(() => {
         expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      chatMessageHandlerService.resetDispatchState('s1');
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts busy-turn backoff at the base delay after a terminal dispatch failure', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = {
+        isCompactingActive: vi.fn().mockReturnValue(false),
+        startCompaction: vi.fn(),
+        endCompaction: vi.fn(),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      const turnInProgressError = {
+        code: -32_600,
+        message: 'Invalid request',
+        data: { reason: 'A turn is already in progress for this session' },
+      };
+      mockSessionService.getSessionClient.mockReturnValue(client);
+      mockSessionService.sendSessionMessage
+        .mockRejectedValueOnce(turnInProgressError)
+        .mockRejectedValueOnce(new Error('send failed'))
+        .mockRejectedValueOnce(turnInProgressError)
+        .mockResolvedValueOnce(undefined);
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.waitFor(() => {
+        expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1', 'send failed');
+      });
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.waitFor(() => {
+        expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(4);
       });
     } finally {
       chatMessageHandlerService.resetDispatchState('s1');

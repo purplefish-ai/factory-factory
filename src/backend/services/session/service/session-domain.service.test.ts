@@ -145,6 +145,62 @@ describe('SessionDomainService', () => {
     );
   });
 
+  it('includes failed message recovery content in reconnect replay', async () => {
+    const attachment = {
+      id: 'attachment-1',
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 11,
+      data: 'draft notes',
+      contentType: 'text' as const,
+    };
+    sessionDomainService.failMessage(
+      's1',
+      {
+        id: 'failed-1',
+        text: 'retry this draft',
+        timestamp: '2026-02-14T00:00:00.000Z',
+        attachments: [attachment],
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      'code -32603: Internal error'
+    );
+
+    await sessionDomainService.subscribe({
+      sessionId: 's1',
+      sessionRuntime: {
+        phase: 'error',
+        processState: 'alive',
+        activity: 'WORKING',
+        errorMessage: 'code -32603: Internal error',
+        updatedAt: '2026-02-14T00:00:02.000Z',
+      },
+    });
+
+    const replayEvents = getLatestReplayBatch().replayEvents ?? [];
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'message_state_changed',
+          id: 'failed-1',
+          newState: 'FAILED',
+          errorMessage: 'code -32603: Internal error',
+          userMessage: {
+            text: 'retry this draft',
+            timestamp: '2026-02-14T00:00:00.000Z',
+            attachments: [attachment],
+            sessionId: 's1',
+          },
+        },
+      ])
+    );
+  });
+
   it('markProcessExit clears queue but preserves transcript for reload', () => {
     const listener = vi.fn();
     sessionDomainService.on('pending_request_changed', listener);
