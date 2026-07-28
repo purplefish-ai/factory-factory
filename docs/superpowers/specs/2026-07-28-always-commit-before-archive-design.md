@@ -48,10 +48,10 @@ bulk archive callbacks will no longer thread a commit choice. The first archive 
 only the workspace or column identity.
 
 The workspace and child tRPC archive inputs will remove `commitUncommitted`. The archive
-orchestrator and worktree lifecycle APIs will remove `WorktreeCleanupOptions`. `commitIfNeeded`
-will retain its existing repository validation, status check, staging, archive commit, and cache
-invalidation behavior, but will no longer accept or branch on a Boolean. Any detected changes are
-always committed.
+orchestrator and worktree lifecycle APIs will replace that option with a one-shot index-lock
+resolution action used only by the recovery flow. `commitIfNeeded` will retain its existing
+repository validation, status check, staging, archive commit, and cache invalidation behavior, but
+will no longer let callers disable committing. Any detected changes are always committed.
 
 Startup recovery uses the same option-free archive completion path, so an interrupted archive
 continues preserving changes before cleanup.
