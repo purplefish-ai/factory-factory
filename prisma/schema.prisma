@@ -258,6 +258,7 @@ model Workspace {
 
   @@index([projectId])
   @@index([status])
+  @@index([periodicTaskId])
   @@index([parentWorkspaceId])
   // Composite indexes for common query patterns
   @@index([projectId, status])
