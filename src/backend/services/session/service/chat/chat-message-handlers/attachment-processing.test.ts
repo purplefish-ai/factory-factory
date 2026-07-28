@@ -199,7 +199,7 @@ describe('validateAttachment', () => {
   ])('should accept image-like text with a $label', ({ overrides }) => {
     const attachment = createTextAttachment({
       ...overrides,
-      data: 'iVBORw0KGgo=',
+      data: 'iVBORw0KGgoAAAANSUhEUg==',
     });
 
     expect(() => validateAttachment(attachment)).not.toThrow();
@@ -556,10 +556,10 @@ describe('processAttachmentsAndBuildContent', () => {
   });
 
   it('should dispatch structurally invalid image-like text as text', () => {
-    const attachment = createTextAttachment({ data: 'iVBORw0KGgo=' });
+    const attachment = createTextAttachment({ data: 'iVBORw0KGgoAAAANSUhEUg==' });
 
     expect(processAttachmentsAndBuildContent('Message', [attachment])).toBe(
-      'Message\n\n[Pasted content: Pasted text]\niVBORw0KGgo='
+      'Message\n\n[Pasted content: Pasted text]\niVBORw0KGgoAAAANSUhEUg=='
     );
   });
 
