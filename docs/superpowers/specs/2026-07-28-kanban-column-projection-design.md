@@ -96,7 +96,12 @@ A fixer that settles `COMPLETED` without changing the PR state is not re-dispatc
 
 This matters most for conflicts. "The agent will pick it up" is true, and without a stall signal it stays permanently true-looking even when the agent picked it up and failed.
 
-The snapshot key cannot be recomputed from cached fields — it hashes `statusCheckRollup` detail that `WorkspacePR` does not store. So the ratchet persists its own conclusion rather than having it re-derived: a `dispatchStalled` boolean on `WorkspaceRatchet`, set when a check declines to re-dispatch a `COMPLETED` dispatch for an unchanged key, and cleared where dispatch state is already reset on a changed observation (`applyPrObservationWithDispatchReset`) or when a new dispatch begins. It is written only by `workspace-ratchet.accessor.ts`, consistent with the rest of that row.
+The snapshot key cannot be recomputed from cached fields — it hashes `statusCheckRollup` detail that `WorkspacePR` does not store. So the ratchet persists its own conclusion rather than having it re-derived: a `dispatchStalled` boolean on `WorkspaceRatchet`, cleared where dispatch state is already reset on a changed observation (`resetSettledDispatch`) and on `disable`, and set at the two points where a check concludes it will take no further action until the PR changes:
+
+- the unchanged-key gate in `decideRatchetAction` ("PR state unchanged since last ratchet dispatch"), reached only after an actionable fix trigger was confirmed and the `DIED` and active-session paths have already returned — so reaching it means a settled dispatch achieved nothing;
+- the exhausted-retries branch of `decideDiedFixerRetry`.
+
+Folding both into one flag is what keeps this from regressing. Today's `computeKanbanColumn` has its own `retriesExhausted` rule (`dispatchOutcome === 'DIED'` and retries at the threshold) that sends a workspace to WAITING. The projection removes that rule along with the rest of the column's independent inputs, so `dispatchStalled` has to cover the `DIED`-exhausted case too or the behavior is lost. With both covered, `ratchetDispatchOutcome` and `ratchetDispatchRetryCount` drop out of derivation entirely — they stay on the wire for the detail view, but `WorkspaceDerivedStateInput` replaces both with `dispatchStalled`.
 
 `RATCHET_STALLED` ("Auto-fix stalled", tone `attention`, `needsUser: true`) precedes the `RATCHET_FIXING` branches in `derivePrFlowReason`.
 
