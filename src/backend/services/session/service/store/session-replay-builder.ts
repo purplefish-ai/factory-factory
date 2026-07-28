@@ -49,8 +49,9 @@ function appendRecentRejectionEvents(
     replayEvents.push({
       type: 'message_state_changed',
       id: rejection.id,
-      newState: MessageState.REJECTED,
+      newState: rejection.state ?? MessageState.REJECTED,
       errorMessage: rejection.errorMessage,
+      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
     });
   }
 }

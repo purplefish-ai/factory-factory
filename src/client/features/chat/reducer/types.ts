@@ -331,6 +331,8 @@ export type ChatAction =
           settings?: ChatSettings;
           /** Backend-assigned order for reliable sorting. Undefined for ACCEPTED, defined for DISPATCHED. */
           order?: number;
+          /** Source session for restoring a failed message to the correct composer. */
+          sessionId?: string;
         };
       };
     }
