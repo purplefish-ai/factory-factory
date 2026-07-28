@@ -78,6 +78,31 @@ export const NoPR: Story = {
   },
 };
 
+export const GitHubIssue: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Fix session timeout handling',
+      githubIssueNumber: 1905,
+      githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
+export const LinearIssue: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Add SSO configuration',
+      linearIssueId: 'linear-42',
+      linearIssueIdentifier: 'ENG-42',
+      linearIssueUrl: 'https://linear.app/example/issue/ENG-42',
+    },
+    projectSlug: 'my-project',
+  },
+};
+
 export const DraftPR: Story = {
   args: {
     workspace: {
