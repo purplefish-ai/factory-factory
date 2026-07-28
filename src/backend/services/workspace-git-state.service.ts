@@ -239,6 +239,36 @@ export class WorkspaceGitStateService {
     return calculation;
   }
 
+  /**
+   * The cached snapshot for `input`, or null when there is none fresh enough
+   * to serve.
+   *
+   * The read-only half of {@link getSnapshot}: same freshness rules, but it
+   * never spawns `git` and never installs a watcher. Callers that must answer
+   * now — a list query whose response would otherwise serialize a `git` run
+   * per worktree — take this and treat a miss as "not known yet" rather than
+   * blocking on the recompute.
+   */
+  getCachedSnapshot(input: WorkspaceGitStateInput): WorkspaceGitStateSnapshot | null {
+    const key = this.cacheKey({ ...input, worktreePath: path.resolve(input.worktreePath) });
+    const cached = this.cache.get(key);
+    if (!cached) {
+      return null;
+    }
+
+    // No watcher means nothing is invalidating this entry on change, so it only
+    // holds for the fallback window — the same rule getSnapshot applies to a
+    // watcher that failed to install.
+    const watcher = this.watchers.get(path.resolve(input.worktreePath));
+    const ttl = isDegraded(cached.snapshot)
+      ? DEGRADED_TTL_MS
+      : watcher?.mode === 'healthy'
+        ? Number.POSITIVE_INFINITY
+        : FALLBACK_TTL_MS;
+
+    return this.now() - cached.snapshot.computedAt < ttl ? cached.snapshot : null;
+  }
+
   getMergeBase(input: WorkspaceGitStateInput): Promise<string | null> {
     return this.findMergeBase({ ...input, worktreePath: path.resolve(input.worktreePath) });
   }
