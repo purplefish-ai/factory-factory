@@ -1,0 +1,122 @@
+# Backend Image Media-Type Normalization Design
+
+## Context
+
+Workspace `cms4xzahi000ix0y4zu1k8dx2` was created with an initial text prompt and
+one PNG screenshot. The screenshot bytes and filename were valid, but its
+persisted MIME type was an empty string. Session `cms4xzai3000jx0y41byz30zt`
+started successfully and queued the initial message. When the workspace became
+ready, dispatch rejected the attachment with:
+
+```text
+Unsupported image format "(unknown)". Supported formats: JPEG, PNG, GIF, WebP.
+```
+
+Because attachment processing treats that error as permanent, it removed the
+whole queued message and the session remained idle with an empty transcript.
+
+The affected process was running npm package version 0.4.2. Current `main`
+already includes a client-side fix that captures clipboard MIME metadata before
+the browser neuters its `DataTransferItem`. The backend still trusts the
+client-supplied MIME type, so stale or malformed clients can reproduce the same
+message loss.
+
+## Goal
+
+Make the backend derive supported image media types from image bytes so valid
+PNG, JPEG, GIF, and WebP attachments remain deliverable when their declared MIME
+type is empty, non-canonical, or incorrect.
+
+## Scope
+
+The change applies to every image attachment processed through the session
+capsule, including initial workspace messages and interactive chat messages.
+
+The change does not add support for new image formats or transcode unsupported
+formats. TIFF, BMP, corrupt payloads, and arbitrary base64 remain permanent
+attachment errors.
+
+## Approach
+
+Add a pure image signature detector next to the existing attachment processing
+logic. It decodes the normalized base64 payload and recognizes:
+
+- PNG from its eight-byte signature.
+- JPEG from its leading `FF D8 FF` bytes.
+- GIF from `GIF87a` or `GIF89a`.
+- WebP from the `RIFF` container marker plus the `WEBP` form type.
+
+Detection returns the canonical ACP-compatible media type:
+`image/png`, `image/jpeg`, `image/gif`, or `image/webp`.
+
+Image normalization becomes the authoritative backend operation:
+
+1. Require attachment data.
+2. Remove base64 line endings and validate the encoded form.
+3. Detect the image format from decoded bytes.
+4. Reject bytes that do not identify a supported format.
+5. Return an attachment copy whose `type` is the detected canonical media type.
+
+The operation does not mutate the input attachment.
+
+`validateAttachment` will use the same operation and continue to expose its
+current validation-only contract to callers. `processAttachmentsAndBuildContent`
+will normalize attachments once before categorization and ACP content
+construction, ensuring the detected type—not untrusted metadata—is forwarded to
+the provider.
+
+## Data Flow
+
+```text
+client attachment
+  -> queue validation
+  -> base64 and signature validation
+  -> queued message
+  -> dispatch processing
+  -> canonical media-type normalization
+  -> ACP image content
+```
+
+Initial workspace messages bypass the interactive queue handler but still enter
+the same dispatch processing step, so they receive identical normalization.
+
+## Error Handling
+
+A valid supported image is accepted even if its declared MIME type is empty,
+`image/jpg`, or names a different supported format. The detected signature wins.
+
+An image whose decoded bytes do not match a supported signature is rejected as
+a `PermanentAttachmentError` with an actionable message indicating that the
+attachment does not contain supported image data. The queue retains its existing
+permanent-error behavior for genuinely invalid attachments.
+
+Text attachments are unchanged.
+
+## Testing
+
+Extend the co-located attachment-processing tests with hand-checked fixtures:
+
+- PNG bytes with an empty declared type normalize to `image/png`.
+- JPEG bytes declared as `image/png` normalize to `image/jpeg`.
+- JPEG bytes declared as `image/jpg` normalize to `image/jpeg`.
+- Valid GIF and WebP signatures produce their canonical media types.
+- Arbitrary valid base64 that is not a supported image is rejected permanently.
+- Existing line-wrapped base64 behavior remains accepted.
+- Text attachment behavior remains unchanged.
+
+The primary regression assertion exercises
+`processAttachmentsAndBuildContent`, because message delivery—not the detector's
+private implementation—is the user-visible contract. A focused test run will be
+followed by type checking and the repository guardrails.
+
+## Alternatives Considered
+
+Repairing only workspace creation metadata was rejected because ordinary chat
+messages and stale clients would retain the same failure.
+
+Dropping invalid attachments while delivering only their text was rejected
+because it silently loses user-provided context and hides corrupt payloads.
+
+Adding `sharp` or a browser TIFF decoder was rejected because this fix only
+needs to recover already-supported formats with inaccurate metadata; format
+conversion is outside scope.
