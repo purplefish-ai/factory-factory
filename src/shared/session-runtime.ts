@@ -166,6 +166,22 @@ export function hasWorkingSessionSummary(
   return summaries.some((summary) => isSessionSummaryWorking(summary));
 }
 
+/**
+ * A session that has been spawned but has not yet reported work.
+ *
+ * `isSessionSummaryWorking` counts only `running`/`WORKING`, so the window
+ * between spawning an ACP session and its first activity reads as not-working.
+ * Workspace init marks the workspace READY while that spawn is still in flight,
+ * so without this the card falls to the idle column mid-launch.
+ */
+export function hasStartingSessionSummary(
+  summaries: Pick<SessionSummary, 'runtimePhase'>[]
+): boolean {
+  return summaries.some(
+    (summary) => summary.runtimePhase === 'starting' || summary.runtimePhase === 'loading'
+  );
+}
+
 export function findWorkspaceSessionRuntimeError(
   summaries: SessionSummary[] | undefined
 ): { sessionId: string; message: string } | null {
