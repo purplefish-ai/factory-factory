@@ -12,12 +12,7 @@ import { resolveAttachmentContentType, stripBase64LineEndings } from './attachme
 
 const logger = createLogger('attachment-processing');
 
-const SUPPORTED_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
-type SupportedImageMediaType = (typeof SUPPORTED_IMAGE_MEDIA_TYPES)[number];
-
-function isSupportedImageMediaType(type: string): type is SupportedImageMediaType {
-  return (SUPPORTED_IMAGE_MEDIA_TYPES as readonly string[]).includes(type);
-}
+type SupportedImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
 /**
  * Thrown when an attachment is structurally invalid and cannot be dispatched.
@@ -27,19 +22,6 @@ export class PermanentAttachmentError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'PermanentAttachmentError';
-  }
-}
-
-/**
- * Thrown when an image attachment has an unsupported MIME type.
- * This is a permanent error — retrying will always fail.
- */
-export class UnsupportedImageTypeError extends PermanentAttachmentError {
-  constructor(type: string) {
-    super(
-      `Unsupported image format "${type || '(unknown)'}". Supported formats: JPEG, PNG, GIF, WebP.`
-    );
-    this.name = 'UnsupportedImageTypeError';
   }
 }
 
@@ -74,34 +56,74 @@ function validateImageBase64(attachment: MessageAttachment): void {
   }
 }
 
-/**
- * Validate that an image attachment has a MIME type supported by Claude's API.
- * @throws UnsupportedImageTypeError if the MIME type is not accepted
- */
-function validateImageMediaType(attachment: MessageAttachment): void {
-  if (!isSupportedImageMediaType(attachment.type)) {
-    logger.error('[Chat WS] Unsupported image media type', {
-      attachmentId: attachment.id,
-      type: attachment.type,
-    });
-    throw new UnsupportedImageTypeError(attachment.type);
+function detectSupportedImageMediaType(data: string): SupportedImageMediaType | null {
+  const bytes = Buffer.from(data, 'base64');
+
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'image/png';
   }
+
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (bytes.length >= 6) {
+    const signature = bytes.subarray(0, 6).toString('ascii');
+    if (signature === 'GIF87a' || signature === 'GIF89a') {
+      return 'image/gif';
+    }
+  }
+
+  if (
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  return null;
+}
+
+function normalizeAttachment(attachment: MessageAttachment): MessageAttachment {
+  validateAttachmentHasData(attachment);
+
+  if (resolveAttachmentContentType(attachment) !== 'image') {
+    return attachment;
+  }
+
+  validateImageBase64(attachment);
+  const detectedType = detectSupportedImageMediaType(stripBase64LineEndings(attachment.data));
+  if (!detectedType) {
+    logger.error('[Chat WS] Unsupported image data', {
+      attachmentId: attachment.id,
+      declaredType: attachment.type,
+    });
+    throw new PermanentAttachmentError(
+      `Attachment "${attachment.name}" does not contain supported image data`
+    );
+  }
+
+  return attachment.type === detectedType ? attachment : { ...attachment, type: detectedType };
 }
 
 /**
  * Validate an attachment before processing.
  * Checks for required data and validates base64 encoding for images.
  * @throws PermanentAttachmentError if attachment is structurally invalid
- * @throws UnsupportedImageTypeError if the MIME type is not accepted
  */
 export function validateAttachment(attachment: MessageAttachment): void {
-  validateAttachmentHasData(attachment);
-
-  const resolvedType = resolveAttachmentContentType(attachment);
-  if (resolvedType === 'image') {
-    validateImageBase64(attachment);
-    validateImageMediaType(attachment);
-  }
+  normalizeAttachment(attachment);
 }
 
 // ============================================================================
@@ -225,13 +247,10 @@ export function processAttachmentsAndBuildContent(
     return userText;
   }
 
-  // Validate all attachments before processing
-  for (const attachment of attachments) {
-    validateAttachment(attachment);
-  }
+  const normalizedAttachments = attachments.map(normalizeAttachment);
 
   // Categorize attachments by type
-  const { textAttachments, imageAttachments } = categorizeAttachments(attachments);
+  const { textAttachments, imageAttachments } = categorizeAttachments(normalizedAttachments);
 
   // Build combined text content (user message + text attachments)
   const combinedText = buildCombinedTextContent(userText, textAttachments);

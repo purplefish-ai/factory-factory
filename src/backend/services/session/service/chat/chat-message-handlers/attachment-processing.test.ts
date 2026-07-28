@@ -13,7 +13,6 @@ import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
   sanitizeAttachmentName,
-  UnsupportedImageTypeError,
   validateAttachment,
 } from './attachment-processing';
 
@@ -44,6 +43,39 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
     ...overrides,
   };
 }
+
+const SUPPORTED_IMAGE_FIXTURES = [
+  {
+    name: 'PNG with an empty declared type',
+    declaredType: '',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    expectedType: 'image/png',
+  },
+  {
+    name: 'JPEG declared as PNG',
+    declaredType: 'image/png',
+    data: '/9j/4AAQ',
+    expectedType: 'image/jpeg',
+  },
+  {
+    name: 'JPEG with a non-canonical declared type',
+    declaredType: 'image/jpg',
+    data: '/9j/4AAQ',
+    expectedType: 'image/jpeg',
+  },
+  {
+    name: 'GIF declared as PNG',
+    declaredType: 'image/png',
+    data: 'R0lGODlh',
+    expectedType: 'image/gif',
+  },
+  {
+    name: 'WebP declared as PNG',
+    declaredType: 'image/png',
+    data: 'UklGRgAAAABXRUJQ',
+    expectedType: 'image/webp',
+  },
+] as const;
 
 // ============================================================================
 // validateAttachment Tests
@@ -88,11 +120,14 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
-  it('should accept image attachment with valid base64 characters', () => {
+  it('should reject valid base64 that is not a supported image', () => {
     const attachment = createImageAttachment({
       data: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
     });
-    expect(() => validateAttachment(attachment)).not.toThrow();
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" does not contain supported image data'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should accept image attachment with line-wrapped base64 data', () => {
@@ -102,9 +137,11 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).not.toThrow();
   });
 
-  it('should throw a permanent error for unsupported image media types', () => {
-    const attachment = createImageAttachment({ type: 'image/bmp' });
-    expect(() => validateAttachment(attachment)).toThrow(UnsupportedImageTypeError);
+  it('should throw a permanent error for unsupported image bytes', () => {
+    const attachment = createImageAttachment({ type: 'image/bmp', data: 'Qk0AAAAA' });
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" does not contain supported image data'
+    );
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
@@ -341,6 +378,27 @@ describe('buildContentArray', () => {
 // ============================================================================
 
 describe('processAttachmentsAndBuildContent', () => {
+  it.each(SUPPORTED_IMAGE_FIXTURES)('should normalize $name from its bytes', ({
+    declaredType,
+    data,
+    expectedType,
+  }) => {
+    const attachment = createImageAttachment({ type: declaredType, data });
+
+    const result = processAttachmentsAndBuildContent('Message', [attachment]);
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: expectedType,
+        data,
+      },
+    });
+    expect(attachment.type).toBe(declaredType);
+  });
+
   it('should return text as-is when no attachments', () => {
     const result = processAttachmentsAndBuildContent('Hello world');
     expect(result).toBe('Hello world');
