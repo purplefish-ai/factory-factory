@@ -22,11 +22,13 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
+  AutoIterationStatus,
   CIStatus,
   KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
@@ -58,6 +60,8 @@ export interface SnapshotUpdateInput {
   createdAt?: string;
   branchName?: string | null;
   hasHadSessions?: boolean;
+  mode?: WorkspaceMode;
+  autoIterationStatus?: AutoIterationStatus | null;
 
   // PR fields (group: 'pr')
   prUrl?: string | null;
@@ -65,6 +69,7 @@ export interface SnapshotUpdateInput {
   prState?: PRState;
   prCiStatus?: CIStatus;
   prUpdatedAt?: string | null;
+  hasMergeConflict?: boolean;
 
   // Session fields (group: 'session')
   isWorking?: boolean;
@@ -76,6 +81,7 @@ export interface SnapshotUpdateInput {
   ratchetState?: RatchetState;
   ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
   ratchetDispatchRetryCount?: number;
+  ratchetDispatchStalled?: boolean;
 
   // Run-script fields (group: 'runScript')
   runScriptStatus?: RunScriptStatus;
@@ -165,14 +171,24 @@ const WORKSPACE_FIELDS = [
   'createdAt',
   'branchName',
   'hasHadSessions',
+  'mode',
+  'autoIterationStatus',
 ] as const;
-const PR_FIELDS = ['prUrl', 'prNumber', 'prState', 'prCiStatus', 'prUpdatedAt'] as const;
+const PR_FIELDS = [
+  'prUrl',
+  'prNumber',
+  'prState',
+  'prCiStatus',
+  'prUpdatedAt',
+  'hasMergeConflict',
+] as const;
 const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
 const RATCHET_FIELDS = [
   'ratchetEnabled',
   'ratchetState',
   'ratchetDispatchOutcome',
   'ratchetDispatchRetryCount',
+  'ratchetDispatchStalled',
 ] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
@@ -373,12 +389,16 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       prState: 'NONE' as PRState,
       prCiStatus: 'UNKNOWN' as CIStatus,
       prUpdatedAt: null,
+      hasMergeConflict: false,
       ratchetEnabled: false,
       ratchetState: 'IDLE' as RatchetState,
       ratchetDispatchOutcome: null,
       ratchetDispatchRetryCount: 0,
+      ratchetDispatchStalled: false,
       runScriptStatus: 'IDLE' as RunScriptStatus,
       hasHadSessions: false,
+      mode: 'STANDARD' as WorkspaceMode,
+      autoIterationStatus: null,
       isWorking: false,
       pendingRequestType: null,
       sessionSummaries: [],

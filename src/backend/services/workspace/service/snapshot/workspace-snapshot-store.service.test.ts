@@ -43,12 +43,16 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     prState: 'NONE',
     prCiStatus: 'UNKNOWN',
     prUpdatedAt: null,
+    hasMergeConflict: false,
     ratchetEnabled: false,
     ratchetState: 'IDLE',
     ratchetDispatchOutcome: null,
     ratchetDispatchRetryCount: 0,
+    ratchetDispatchStalled: false,
     runScriptStatus: 'IDLE',
     hasHadSessions: false,
+    mode: 'STANDARD',
+    autoIterationStatus: null,
     isWorking: false,
     pendingRequestType: null,
     gitStats: null,
@@ -157,6 +161,28 @@ describe('WorkspaceSnapshotStore', () => {
       store.upsert('ws-3', makeUpdate(), 'test', 100);
 
       expect(store.size()).toBe(3);
+    });
+
+    it('accepts and stores the merge conflict, mode, auto-iteration, and stall fields', () => {
+      store.upsert('ws-1', makeUpdate({ projectId: 'proj-A' }), 'test', 100);
+      store.upsert(
+        'ws-1',
+        makeUpdate({
+          hasMergeConflict: true,
+          mode: 'AUTO_ITERATION',
+          autoIterationStatus: 'RUNNING',
+          ratchetDispatchStalled: true,
+        }),
+        'test',
+        200
+      );
+
+      expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+        hasMergeConflict: true,
+        mode: 'AUTO_ITERATION',
+        autoIterationStatus: 'RUNNING',
+        ratchetDispatchStalled: true,
+      });
     });
   });
 

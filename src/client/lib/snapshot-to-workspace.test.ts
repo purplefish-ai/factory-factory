@@ -147,7 +147,6 @@ describe('workspace snapshot cache projections', () => {
       linearIssueIdentifier: 'ENG-1959',
       linearIssueUrl: 'https://linear.app/issue/ENG-1959',
       creationSource: 'CHILD_WORKSPACE',
-      mode: 'AUTO_ITERATION',
       initErrorMessage: 'setup failed once',
     };
 
@@ -159,15 +158,23 @@ describe('workspace snapshot cache projections', () => {
       linearIssueIdentifier: 'ENG-1959',
       linearIssueUrl: 'https://linear.app/issue/ENG-1959',
       creationSource: 'CHILD_WORKSPACE',
-      mode: 'AUTO_ITERATION',
       initErrorMessage: 'setup failed once',
     });
+  });
+
+  it('projects mode from the snapshot entry rather than the existing cache row', () => {
+    const entry = makeEntry({ mode: 'AUTO_ITERATION' });
+    const existing: ProjectWorkspace = {
+      ...projectSnapshotToWorkspace(makeEntry({ mode: 'STANDARD' })),
+      mode: 'STANDARD',
+    };
+
+    expect(projectSnapshotToWorkspace(entry, existing).mode).toBe('AUTO_ITERATION');
   });
 
   it('supplies mutation-only defaults for a workspace the snapshot introduces first', () => {
     expect(projectSnapshotToWorkspace(makeEntry())).toMatchObject({
       creationSource: 'MANUAL',
-      mode: 'STANDARD',
       initErrorMessage: null,
       githubIssueNumber: null,
       githubIssueUrl: null,
