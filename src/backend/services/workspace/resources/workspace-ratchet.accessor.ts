@@ -42,6 +42,7 @@ export interface WorkspaceRatchetFields {
   ratchetDispatchSnapshotKey: string | null;
   ratchetDispatchOutcome: RatchetDispatchOutcome | null;
   ratchetDispatchRetryCount: number;
+  ratchetDispatchStalled: boolean;
 }
 
 /**
@@ -61,6 +62,7 @@ export const WORKSPACE_RATCHET_DEFAULTS: WorkspaceRatchetFields = {
   ratchetDispatchSnapshotKey: null,
   ratchetDispatchOutcome: null,
   ratchetDispatchRetryCount: 0,
+  ratchetDispatchStalled: false,
 };
 
 /** The persisted row, as joined onto a workspace read. */
@@ -80,6 +82,7 @@ export function flattenWorkspaceRatchet(
     ratchetDispatchSnapshotKey: ratchet.dispatchSnapshotKey,
     ratchetDispatchOutcome: ratchet.dispatchOutcome,
     ratchetDispatchRetryCount: ratchet.dispatchRetryCount,
+    ratchetDispatchStalled: ratchet.dispatchStalled,
   };
 }
 
@@ -317,6 +320,18 @@ class WorkspaceRatchetAccessor {
     return result.count > 0;
   }
 
+  /**
+   * Record that the ratchet has concluded it will not act again for the current
+   * PR state. Cleared by `resetSettledDispatch` and `disable`, which already own
+   * the rest of the dispatch record's lifecycle.
+   */
+  async markDispatchStalled(workspaceId: string): Promise<void> {
+    await prisma.workspaceRatchet.updateMany({
+      where: { workspaceId },
+      data: { dispatchStalled: true },
+    });
+  }
+
   async enable(workspaceId: string): Promise<void> {
     await prisma.workspaceRatchet.updateMany({ where: { workspaceId }, data: { enabled: true } });
   }
@@ -335,6 +350,7 @@ class WorkspaceRatchetAccessor {
         dispatchSnapshotKey: null,
         dispatchOutcome: null,
         dispatchRetryCount: 0,
+        dispatchStalled: false,
       },
     });
   }
@@ -378,7 +394,7 @@ class WorkspaceRatchetAccessor {
   ): Promise<boolean> {
     const result = await transaction.workspaceRatchet.updateMany({
       where: { workspaceId, ...guard },
-      data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+      data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
     });
     return result.count > 0;
   }

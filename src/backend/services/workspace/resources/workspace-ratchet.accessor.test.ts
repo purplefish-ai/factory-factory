@@ -37,6 +37,7 @@ function ratchetRow(overrides: Partial<WorkspaceRatchetRow> = {}): WorkspaceRatc
     dispatchSnapshotKey: 'snapshot-1',
     dispatchOutcome: 'RUNNING' as const,
     dispatchRetryCount: 2,
+    dispatchStalled: false,
     ...overrides,
   };
 }
@@ -50,6 +51,7 @@ describe('flattenWorkspaceRatchet', () => {
       ratchetDispatchSnapshotKey: 'snapshot-1',
       ratchetDispatchOutcome: 'RUNNING',
       ratchetDispatchRetryCount: 2,
+      ratchetDispatchStalled: false,
     });
   });
 
@@ -66,6 +68,18 @@ describe('flattenWorkspaceRatchet', () => {
 
     expect(flattenWorkspaceRatchet(null).ratchetEnabled).toBe(true);
     expect(WORKSPACE_RATCHET_DEFAULTS.ratchetEnabled).toBe(true);
+  });
+});
+
+describe('flattenWorkspaceRatchet', () => {
+  it('defaults ratchetDispatchStalled to false when no ratchet row exists', () => {
+    expect(flattenWorkspaceRatchet(null)).toMatchObject({ ratchetDispatchStalled: false });
+  });
+
+  it('flattens dispatchStalled under the ratchet-prefixed read name', () => {
+    expect(flattenWorkspaceRatchet(ratchetRow({ dispatchStalled: true }))).toMatchObject({
+      ratchetDispatchStalled: true,
+    });
   });
 });
 
@@ -340,6 +354,7 @@ describe('workspaceRatchetAccessor', () => {
           dispatchSnapshotKey: null,
           dispatchOutcome: null,
           dispatchRetryCount: 0,
+          dispatchStalled: false,
         },
       });
     });
@@ -397,7 +412,7 @@ describe('workspaceRatchetAccessor', () => {
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', ...guard },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
       });
     });
 

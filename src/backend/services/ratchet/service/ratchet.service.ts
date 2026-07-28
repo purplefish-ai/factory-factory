@@ -657,6 +657,11 @@ class RatchetService extends EventEmitter {
     }
 
     if (!context.hasStateChangedSinceLastDispatch) {
+      // A settled dispatch achieved nothing for this PR state, and this gate is
+      // only reachable after an actionable trigger was confirmed and the DIED
+      // and active-session paths returned. Nothing further will happen here
+      // until the PR changes, so record it rather than looking busy.
+      await this.workspace.markDispatchStalled(context.workspace.id);
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'PR state unchanged since last ratchet dispatch' },
@@ -684,6 +689,7 @@ class RatchetService extends EventEmitter {
     signal: AbortSignal = new AbortController().signal
   ): Promise<RatchetDecision> {
     if (context.dispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries) {
+      await this.workspace.markDispatchStalled(context.workspace.id);
       return {
         type: 'RETURN_ACTION',
         action: {

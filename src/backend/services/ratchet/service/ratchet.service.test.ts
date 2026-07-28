@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
+import { SERVICE_THRESHOLDS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type {
@@ -91,6 +91,7 @@ const mockSessionBridge: RatchetSessionBridge = {
 const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   findFixerContext: vi.fn(),
   recordSessionEnd: vi.fn(),
+  markDispatchStalled: vi.fn(),
 };
 
 /**
@@ -234,6 +235,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prReviewLastCheckedAt: null,
         ratchetDispatchOutcome: null,
         ratchetDispatchRetryCount: 0,
+        ratchetDispatchStalled: false,
       },
     ]);
 
@@ -626,6 +628,137 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     expect(mockSessionBridge.findSessionsByWorkspaceId).not.toHaveBeenCalled();
     expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
+  });
+
+  it('marks the dispatch stalled when a settled dispatch achieved nothing', async () => {
+    // CI still failing and the snapshot key is unchanged since a dispatch that
+    // settled COMPLETED, so the ratchet declines to re-dispatch: nothing will
+    // happen here until the PR itself changes.
+    // (arrangement copied from 'does not dispatch when PR state unchanged since
+    // last dispatch', with ratchetDispatchOutcome set to 'COMPLETED')
+    const workspace = {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/5',
+      prNumber: 5,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: '2026-01-02T00:00:00Z',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+      ratchetDispatchOutcome: 'COMPLETED',
+      ratchetDispatchRetryCount: 0,
+    };
+    vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(workspace as never);
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: '2026-01-02T00:00:00Z',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 5,
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+
+    await ratchetService.checkWorkspaceById('ws-1');
+
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('marks the dispatch stalled when a DIED fixer exhausts its retries', async () => {
+    // arrangement copied from the DIED-retry test at line 1570, with
+    // ratchetDispatchRetryCount set to SERVICE_THRESHOLDS.ratchetDispatchMaxRetries
+    const workspace = {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/15',
+      prNumber: 15,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.FAILURE,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'same-snapshot',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+      ratchetDispatchOutcome: 'DIED',
+      ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+    };
+    vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(workspace as never);
+
+    vi.spyOn(
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: 'same-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 15,
+    });
+
+    await ratchetService.checkWorkspaceById('ws-1');
+
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('does not mark the dispatch stalled when the PR state has changed', async () => {
+    // Same as the first test, but the cached ratchetDispatchSnapshotKey differs
+    // from the key the fetch computes, so a fresh dispatch is warranted.
+    const workspace = {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/5',
+      prNumber: 5,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'old-snapshot',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+    };
+    vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(workspace as never);
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: '2026-01-02T00:00:00Z',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 5,
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'fresh-session',
+      promptSent: true,
+    } as never);
+
+    await ratchetService.checkWorkspaceById('ws-1');
+
+    expect(mockWorkspaceBridge.markDispatchStalled).not.toHaveBeenCalled();
   });
 
   it('does not dispatch repeatedly for unchanged CHANGES_REQUESTED state', async () => {

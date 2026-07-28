@@ -375,7 +375,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', ...currentDispatch() },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
       });
     });
 
@@ -497,7 +497,7 @@ describe('workspaceAccessor', () => {
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', ...currentDispatch() },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
       });
     });
 

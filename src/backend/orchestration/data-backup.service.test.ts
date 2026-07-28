@@ -164,6 +164,7 @@ const mockWorkspace: WorkspaceForExport = {
     dispatchSnapshotKey: 'run-123',
     dispatchOutcome: null,
     dispatchRetryCount: 0,
+    dispatchStalled: false,
   },
   hasHadSessions: true,
   autoIteration: {
