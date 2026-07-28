@@ -25,16 +25,64 @@ interface ModelInfo {
   relationFieldSets: string[][];
 }
 
+interface ColumnListScanState {
+  parenthesisDepth: number;
+  quote: '"' | "'" | null;
+  escaped: boolean;
+}
+
+function consumeColumnListCharacter(
+  character: string | undefined,
+  state: ColumnListScanState
+): boolean {
+  if (state.quote) {
+    if (state.escaped) {
+      state.escaped = false;
+    } else if (character === '\\') {
+      state.escaped = true;
+    } else if (character === state.quote) {
+      state.quote = null;
+    }
+    return false;
+  }
+
+  if (character === '"' || character === "'") {
+    state.quote = character;
+  } else if (character === '(') {
+    state.parenthesisDepth += 1;
+  } else if (character === ')') {
+    state.parenthesisDepth -= 1;
+  }
+
+  return character === ',' && state.parenthesisDepth === 0;
+}
+
 function parseColumnList(rawList: string): string[] {
   // Entries may carry arguments, e.g. "title(sort: Desc)" — keep the bare name.
-  return rawList
-    .split(',')
+  const entries: string[] = [];
+  let entryStart = 0;
+  const state: ColumnListScanState = {
+    parenthesisDepth: 0,
+    quote: null,
+    escaped: false,
+  };
+
+  for (let index = 0; index < rawList.length; index += 1) {
+    const character = rawList[index];
+    if (consumeColumnListCharacter(character, state)) {
+      entries.push(rawList.slice(entryStart, index));
+      entryStart = index + 1;
+    }
+  }
+  entries.push(rawList.slice(entryStart));
+
+  return entries
     .map((entry) => entry.trim().split(/[(:\s]/)[0] ?? '')
     .filter((name) => name.length > 0);
 }
 
 function parseModelLine(line: string, model: ModelInfo): void {
-  const blockAttribute = line.match(/^@@(index|unique|id)\(\[([^\]]*)\]/);
+  const blockAttribute = line.match(/^@@(index|unique|id)\([^[]*\[([^\]]*)\]/);
   if (blockAttribute) {
     model.indexes.push(parseColumnList(blockAttribute[2] ?? ''));
     return;
@@ -115,8 +163,8 @@ function checkModel(model: ModelInfo, errors: string[], seenExemptions: Set<stri
   }
 }
 
-function main(): void {
-  const models = parseModels(readFileSync(schemaPath, 'utf8'));
+export function collectForeignKeyIndexViolations(schemaText: string): string[] {
+  const models = parseModels(schemaText);
   const errors: string[] = [];
   const seenExemptions = new Set<string>();
 
@@ -132,6 +180,12 @@ function main(): void {
     }
   }
 
+  return errors;
+}
+
+function main(): void {
+  const errors = collectForeignKeyIndexViolations(readFileSync(schemaPath, 'utf8'));
+
   if (errors.length > 0) {
     process.stderr.write(
       ['Foreign key index check failed:', ...errors.map((error) => `- ${error}`), ''].join('\n')
@@ -142,4 +196,7 @@ function main(): void {
   process.stdout.write('Foreign key index check passed.\n');
 }
 
-main();
+const entryPath = process.argv[1];
+if (entryPath && path.resolve(entryPath) === scriptFile) {
+  main();
+}
