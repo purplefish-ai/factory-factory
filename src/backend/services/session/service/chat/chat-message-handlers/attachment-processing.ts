@@ -9,10 +9,12 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
 import { resolveAttachmentContentType, stripBase64LineEndings } from './attachment-utils';
+import {
+  inspectSupportedImageFormat,
+  type SupportedImageMediaType,
+} from './image-format-validation';
 
 const logger = createLogger('attachment-processing');
-
-type SupportedImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
 /**
  * Thrown when an attachment is structurally invalid and cannot be dispatched.
@@ -48,7 +50,7 @@ function validateImageBase64(attachment: MessageAttachment): void {
   const normalizedData = stripBase64LineEndings(attachment.data);
 
   // Basic base64 check - alphanumeric, +, /, =
-  if (!(normalizedData && /^[A-Za-z0-9+/=]+$/.test(normalizedData))) {
+  if (!hasValidBase64Characters(normalizedData)) {
     logger.error('[Chat WS] Invalid base64 data in attachment', {
       attachmentId: attachment.id,
     });
@@ -56,65 +58,52 @@ function validateImageBase64(attachment: MessageAttachment): void {
   }
 }
 
-function detectSupportedImageMediaType(data: string): SupportedImageMediaType | null {
-  const bytes = Buffer.from(data, 'base64');
-
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  ) {
-    return 'image/png';
-  }
-
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
-  }
-
-  if (bytes.length >= 6) {
-    const signature = bytes.subarray(0, 6).toString('ascii');
-    if (signature === 'GIF87a' || signature === 'GIF89a') {
-      return 'image/gif';
-    }
-  }
-
-  if (
-    bytes.length >= 12 &&
-    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
-    bytes.subarray(8, 12).toString('ascii') === 'WEBP'
-  ) {
-    return 'image/webp';
-  }
-
-  return null;
+function hasValidBase64Characters(data: string): boolean {
+  return Boolean(data && /^[A-Za-z0-9+/=]+$/.test(data));
 }
 
 function normalizeAttachment(attachment: MessageAttachment): MessageAttachment {
   validateAttachmentHasData(attachment);
+
+  const normalizedData = stripBase64LineEndings(attachment.data);
+  const imageInspection = hasValidBase64Characters(normalizedData)
+    ? inspectSupportedImageFormat(Buffer.from(normalizedData, 'base64'))
+    : null;
+
+  if (imageInspection) {
+    if (!imageInspection.isValid) {
+      logger.error('[Chat WS] Invalid image structure', {
+        attachmentId: attachment.id,
+        declaredType: attachment.type,
+        detectedType: imageInspection.mediaType,
+      });
+      throw new PermanentAttachmentError(
+        `Attachment "${attachment.name}" does not contain valid ${imageInspection.mediaType} data`
+      );
+    }
+
+    if (attachment.type === imageInspection.mediaType && attachment.contentType === 'image') {
+      return attachment;
+    }
+    return {
+      ...attachment,
+      type: imageInspection.mediaType,
+      contentType: 'image',
+    };
+  }
 
   if (resolveAttachmentContentType(attachment) !== 'image') {
     return attachment;
   }
 
   validateImageBase64(attachment);
-  const detectedType = detectSupportedImageMediaType(stripBase64LineEndings(attachment.data));
-  if (!detectedType) {
-    logger.error('[Chat WS] Unsupported image data', {
-      attachmentId: attachment.id,
-      declaredType: attachment.type,
-    });
-    throw new PermanentAttachmentError(
-      `Attachment "${attachment.name}" does not contain supported image data`
-    );
-  }
-
-  return attachment.type === detectedType ? attachment : { ...attachment, type: detectedType };
+  logger.error('[Chat WS] Unsupported image data', {
+    attachmentId: attachment.id,
+    declaredType: attachment.type,
+  });
+  throw new PermanentAttachmentError(
+    `Attachment "${attachment.name}" does not contain supported image data`
+  );
 }
 
 /**

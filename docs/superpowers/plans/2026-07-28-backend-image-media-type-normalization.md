@@ -2,7 +2,7 @@
 
 **Goal:** Deliver valid PNG, JPEG, GIF, and WebP attachments even when client MIME metadata is empty or incorrect.
 
-**Architecture:** Keep image handling inside the session capsule's attachment-processing boundary. Decode validated base64 once per processing pass, detect a supported signature, and return an immutable attachment copy carrying the canonical ACP media type.
+**Architecture:** Keep image handling inside the session capsule's attachment-processing boundary. Decode validated base64 once per processing pass, inspect supported container structures, and return an immutable attachment copy carrying the canonical ACP media type and image discriminator.
 
 **Tech Stack:** TypeScript, Node.js `Buffer`, Vitest
 
@@ -20,6 +20,7 @@
 **Files:**
 
 - Modify: `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.ts`
+- Create: `src/backend/services/session/service/chat/chat-message-handlers/image-format-validation.ts`
 - Test: `src/backend/services/session/service/chat/chat-message-handlers/attachment-processing.test.ts`
 
 **Interfaces:**
@@ -29,7 +30,7 @@
 
 - [ ] **Step 1: Write the failing regression tests**
 
-Add table-driven assertions to `attachment-processing.test.ts` using literal base64 fixtures for PNG, JPEG, GIF, and WebP. Assert that empty, incorrect, and non-canonical declared types are replaced by the detected canonical type in the ACP content returned by `processAttachmentsAndBuildContent`.
+Add table-driven assertions to `attachment-processing.test.ts` using literal base64 fixtures for PNG, JPEG, GIF, and WebP. Assert that empty, incorrect, non-canonical, and text-declaring metadata is replaced by the detected canonical type and image discriminator in the ACP content returned by `processAttachmentsAndBuildContent`.
 
 Add a corrupt-image assertion:
 
@@ -54,7 +55,7 @@ pnpm test src/backend/services/session/service/chat/chat-message-handlers/attach
 
 Expected: the empty-type PNG case fails with `UnsupportedImageTypeError`, proving the affected session behavior is reproduced.
 
-- [ ] **Step 3: Implement byte-signature detection and immutable normalization**
+- [ ] **Step 3: Implement structural image inspection and immutable normalization**
 
 In `attachment-processing.ts`, add a private detector returning:
 
@@ -62,23 +63,35 @@ In `attachment-processing.ts`, add a private detector returning:
 type SupportedImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 ```
 
-Recognize PNG's eight-byte signature, JPEG's leading `FF D8 FF`, GIF's `GIF87a`/`GIF89a`, and WebP's `RIFF....WEBP` markers.
+Recognize PNG, JPEG, GIF, and WebP signatures, then validate each complete
+container before accepting it: PNG chunk bounds, CRCs, `IDAT`, and `IEND`;
+JPEG segment bounds, frame, scan data, and `EOI`; GIF table and block bounds
+plus trailer; and WebP `RIFF` size plus a valid image payload chunk.
 
 Replace declared-type validation with a normalization operation that:
 
 ```typescript
-const detectedType = detectSupportedImageMediaType(
+const inspection = inspectSupportedImageFormat(
   Buffer.from(stripBase64LineEndings(attachment.data), 'base64')
 );
-if (!detectedType) {
+if (!inspection?.isValid) {
   throw new PermanentAttachmentError(
     `Attachment "${attachment.name}" does not contain supported image data`
   );
 }
-return { ...attachment, type: detectedType };
+return {
+  ...attachment,
+  type: inspection.mediaType,
+  contentType: 'image',
+};
 ```
 
-Keep `validateAttachment()` as a validation-only public API by invoking the same normalization and discarding its returned copy. Normalize the attachment array inside `processAttachmentsAndBuildContent()` before categorization and ACP content construction.
+Inspect bytes before the metadata-based classification gate so valid images
+mislabeled `text/plain` or `contentType: 'text'` cannot be pasted as base64
+text. Keep `validateAttachment()` as a validation-only public API by invoking
+the same normalization and discarding its returned copy. Normalize the
+attachment array inside `processAttachmentsAndBuildContent()` before
+categorization and ACP content construction.
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 

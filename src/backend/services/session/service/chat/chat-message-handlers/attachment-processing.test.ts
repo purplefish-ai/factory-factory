@@ -44,6 +44,9 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
   };
 }
 
+const VALID_JPEG_BASE64 =
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKK+ZP3E//Z';
+
 const SUPPORTED_IMAGE_FIXTURES = [
   {
     name: 'PNG with an empty declared type',
@@ -54,25 +57,25 @@ const SUPPORTED_IMAGE_FIXTURES = [
   {
     name: 'JPEG declared as PNG',
     declaredType: 'image/png',
-    data: '/9j/4AAQ',
+    data: VALID_JPEG_BASE64,
     expectedType: 'image/jpeg',
   },
   {
     name: 'JPEG with a non-canonical declared type',
     declaredType: 'image/jpg',
-    data: '/9j/4AAQ',
+    data: VALID_JPEG_BASE64,
     expectedType: 'image/jpeg',
   },
   {
     name: 'GIF declared as PNG',
     declaredType: 'image/png',
-    data: 'R0lGODlh',
+    data: 'R0lGODdhAQABAIEAAP8AAAAAAAAAAAAAACwAAAAAAQABAAAIBAABBAQAOw==',
     expectedType: 'image/gif',
   },
   {
     name: 'WebP declared as PNG',
     declaredType: 'image/png',
-    data: 'UklGRgAAAABXRUJQ',
+    data: 'UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoBAAEAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=',
     expectedType: 'image/webp',
   },
 ] as const;
@@ -135,6 +138,33 @@ describe('validateAttachment', () => {
       data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\nAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\n',
     });
     expect(() => validateAttachment(attachment)).not.toThrow();
+  });
+
+  it.each([
+    { format: 'PNG', data: 'iVBORw0KGgo=' },
+    { format: 'JPEG', data: '/9j/' },
+    { format: 'GIF', data: 'R0lGODlh' },
+    { format: 'WebP', data: 'UklGRgAAAABXRUJQ' },
+  ])('should reject a truncated $format with a recognized signature', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject a PNG whose image data fails its checksum', () => {
+    const attachment = createImageAttachment({
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+c9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject an animated WebP frame with no image payload chunk', () => {
+    const attachment = createImageAttachment({
+      data: 'UklGRhwAAABXRUJQQU5NRhAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should throw a permanent error for unsupported image bytes', () => {
@@ -378,6 +408,32 @@ describe('buildContentArray', () => {
 // ============================================================================
 
 describe('processAttachmentsAndBuildContent', () => {
+  it.each([
+    {
+      name: 'text MIME type',
+      overrides: { type: 'text/plain', contentType: undefined },
+    },
+    {
+      name: 'text content discriminator',
+      overrides: { type: 'image/png', contentType: 'text' as const },
+    },
+  ])('should detect image bytes despite a $name', ({ overrides }) => {
+    const attachment = createImageAttachment(overrides);
+
+    const result = processAttachmentsAndBuildContent('Message', [attachment]);
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png',
+        data: attachment.data,
+      },
+    });
+    expect(attachment).toMatchObject(overrides);
+  });
+
   it.each(SUPPORTED_IMAGE_FIXTURES)('should normalize $name from its bytes', ({
     declaredType,
     data,

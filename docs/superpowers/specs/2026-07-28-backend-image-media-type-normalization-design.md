@@ -38,13 +38,17 @@ attachment errors.
 
 ## Approach
 
-Add a pure image signature detector next to the existing attachment processing
-logic. It decodes the normalized base64 payload and recognizes:
+Add a pure image format inspector next to the existing attachment processing
+logic. It decodes the normalized base64 payload, recognizes the supported
+format, and validates its complete container structure:
 
-- PNG from its eight-byte signature.
-- JPEG from its leading `FF D8 FF` bytes.
-- GIF from `GIF87a` or `GIF89a`.
-- WebP from the `RIFF` container marker plus the `WEBP` form type.
+- PNG requires valid chunk boundaries and CRCs, one or more `IDAT` chunks, and
+  a terminal `IEND`.
+- JPEG requires bounded marker segments, a frame, scan data, and a terminal
+  `EOI`.
+- GIF requires bounded color tables and data blocks plus a terminal trailer.
+- WebP requires a size-consistent `RIFF` container and a structurally valid
+  image payload chunk.
 
 Detection returns the canonical ACP-compatible media type:
 `image/png`, `image/jpeg`, `image/gif`, or `image/webp`.
@@ -53,9 +57,12 @@ Image normalization becomes the authoritative backend operation:
 
 1. Require attachment data.
 2. Remove base64 line endings and validate the encoded form.
-3. Detect the image format from decoded bytes.
-4. Reject bytes that do not identify a supported format.
-5. Return an attachment copy whose `type` is the detected canonical media type.
+3. Inspect decoded bytes before consulting the declared MIME type or content
+   discriminator.
+4. Reject recognized but structurally invalid images and declared images whose
+   bytes do not identify a supported format.
+5. Return an attachment copy whose `type` is the detected canonical media type
+   and whose `contentType` discriminator is `image`.
 
 The operation does not mutate the input attachment.
 
@@ -70,7 +77,7 @@ the provider.
 ```text
 client attachment
   -> queue validation
-  -> base64 and signature validation
+  -> base64 and image-structure validation
   -> queued message
   -> dispatch processing
   -> canonical media-type normalization
@@ -83,14 +90,16 @@ the same dispatch processing step, so they receive identical normalization.
 ## Error Handling
 
 A valid supported image is accepted even if its declared MIME type is empty,
-`image/jpg`, or names a different supported format. The detected signature wins.
+`image/jpg`, names a different supported format, or is mislabeled as text. The
+validated bytes win over both MIME metadata fields.
 
 An image whose decoded bytes do not match a supported signature is rejected as
 a `PermanentAttachmentError` with an actionable message indicating that the
 attachment does not contain supported image data. The queue retains its existing
 permanent-error behavior for genuinely invalid attachments.
 
-Text attachments are unchanged.
+Ordinary text attachments are unchanged; only text-labeled attachments whose
+bytes form a complete supported image are reclassified.
 
 ## Testing
 
@@ -99,7 +108,11 @@ Extend the co-located attachment-processing tests with hand-checked fixtures:
 - PNG bytes with an empty declared type normalize to `image/png`.
 - JPEG bytes declared as `image/png` normalize to `image/jpeg`.
 - JPEG bytes declared as `image/jpg` normalize to `image/jpeg`.
-- Valid GIF and WebP signatures produce their canonical media types.
+- Valid GIF and WebP structures produce their canonical media types.
+- Valid image bytes labeled `text/plain` or `contentType: text` are still
+  dispatched as images.
+- Truncated PNG, JPEG, GIF, and WebP payloads are rejected permanently.
+- A PNG with a corrupt chunk checksum is rejected permanently.
 - Arbitrary valid base64 that is not a supported image is rejected permanently.
 - Existing line-wrapped base64 behavior remains accepted.
 - Text attachment behavior remains unchanged.
