@@ -2,6 +2,7 @@ import {
   ArchiveIcon,
   ArrowsClockwiseIcon,
   ChatIcon,
+  DotOutlineIcon,
   GitBranchIcon,
   GitPullRequestIcon,
   PencilIcon,
@@ -87,6 +88,50 @@ function PullRequestRow({
       >
         <GitPullRequestIcon className="h-3 w-3 shrink-0" />
         <span>#{workspace.prNumber}</span>
+      </button>
+    </div>
+  );
+}
+
+type IssueLink = {
+  label: string;
+  url: string;
+};
+
+function deriveIssueLink(workspace: WorkspaceWithKanban): IssueLink | null {
+  if (workspace.linearIssueIdentifier && workspace.linearIssueUrl) {
+    return {
+      label: workspace.linearIssueIdentifier,
+      url: workspace.linearIssueUrl,
+    };
+  }
+  if (workspace.githubIssueNumber != null && workspace.githubIssueUrl) {
+    return {
+      label: `#${workspace.githubIssueNumber}`,
+      url: workspace.githubIssueUrl,
+    };
+  }
+  return null;
+}
+
+function IssueRow({ issue }: { issue: IssueLink | null }) {
+  if (!issue) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(issue.url, '_blank', 'noopener,noreferrer');
+        }}
+        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+      >
+        <DotOutlineIcon className="h-3 w-3 shrink-0" />
+        <span>{issue.label}</span>
       </button>
     </div>
   );
@@ -285,6 +330,7 @@ function CardTitleIcons({
 
 function deriveCardState(workspace: WorkspaceWithKanban) {
   const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
+  const issue = deriveIssueLink(workspace);
   const isArchived = workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
   const sidebarStatus = deriveWorkspaceSidebarStatus({
@@ -307,11 +353,13 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     showCi ||
     showBranch ||
     showPR ||
+    !!issue ||
     !!sessionRuntimeError ||
     workspace.mode === 'AUTO_ITERATION' ||
     workspace.creationSource === 'CHILD_WORKSPACE';
   return {
     showPR,
+    issue,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
@@ -364,6 +412,7 @@ export function KanbanCard({
 }: KanbanCardProps) {
   const {
     showPR,
+    issue,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
@@ -488,6 +537,7 @@ export function KanbanCard({
                 <BranchRow branchName={workspace.branchName} />
               </div>
             )}
+            <IssueRow issue={issue} />
             {showPR && (
               <div className="flex items-center">
                 <PullRequestRow workspace={workspace} showPR={showPR} />
