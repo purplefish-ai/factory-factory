@@ -16,6 +16,12 @@ import {
 
 const logger = createLogger('attachment-processing');
 
+// Mirrors the upload limit enforced by src/lib/image-utils.ts. This boundary
+// cannot trust MessageAttachment.size because it is client-provided.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_BASE64_IMAGE_CHARACTERS = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
+const IMAGE_SIGNATURE_BASE64_CHARACTERS = 16;
+
 /**
  * Thrown when an attachment is structurally invalid and cannot be dispatched.
  * This is a permanent error — retrying will always fail.
@@ -62,10 +68,44 @@ function hasValidBase64Characters(data: string): boolean {
   return Boolean(data && /^[A-Za-z0-9+/=]+$/.test(data));
 }
 
+function decodedBase64ByteLength(data: string): number {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return Math.floor(((data.length - padding) * 3) / 4);
+}
+
+function exceedsImageSizeLimit(data: string): boolean {
+  return (
+    data.length > MAX_BASE64_IMAGE_CHARACTERS || decodedBase64ByteLength(data) > MAX_IMAGE_BYTES
+  );
+}
+
+function hasSupportedImageSignature(data: string): boolean {
+  const encodedSignature = data.slice(0, IMAGE_SIGNATURE_BASE64_CHARACTERS);
+  return (
+    hasValidBase64Characters(encodedSignature) &&
+    inspectSupportedImageFormat(Buffer.from(encodedSignature, 'base64')) !== null
+  );
+}
+
 function normalizeAttachment(attachment: MessageAttachment): MessageAttachment {
   validateAttachmentHasData(attachment);
 
   const normalizedData = stripBase64LineEndings(attachment.data);
+  if (exceedsImageSizeLimit(normalizedData)) {
+    if (
+      !hasSupportedImageSignature(normalizedData) &&
+      resolveAttachmentContentType(attachment) !== 'image'
+    ) {
+      return attachment;
+    }
+    logger.error('[Chat WS] Image attachment exceeds size limit', {
+      attachmentId: attachment.id,
+    });
+    throw new PermanentAttachmentError(
+      `Attachment "${attachment.name}" exceeds the 10 MiB image limit`
+    );
+  }
+
   const imageInspection = hasValidBase64Characters(normalizedData)
     ? inspectSupportedImageFormat(Buffer.from(normalizedData, 'base64'))
     : null;

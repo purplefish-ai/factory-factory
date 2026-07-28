@@ -11,6 +11,13 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 const JPEG_START_OF_FRAME_MARKERS = new Set([
   0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
 ]);
+const PNG_BIT_DEPTHS_BY_COLOR_TYPE = new Map<number, ReadonlySet<number>>([
+  [0, new Set([1, 2, 4, 8, 16])],
+  [2, new Set([8, 16])],
+  [3, new Set([1, 2, 4, 8])],
+  [4, new Set([8, 16])],
+  [6, new Set([8, 16])],
+]);
 
 function startsWith(bytes: Buffer, signature: Buffer): boolean {
   return bytes.length >= signature.length && bytes.subarray(0, signature.length).equals(signature);
@@ -58,10 +65,13 @@ function isValidPngHeader(bytes: Buffer, chunk: PngChunk): boolean {
     return false;
   }
 
+  const bitDepth = bytes.readUInt8(chunk.dataStart + 8);
+  const colorType = bytes.readUInt8(chunk.dataStart + 9);
   const interlaceMethod = bytes.readUInt8(chunk.dataStart + 12);
   return (
     bytes.readUInt32BE(chunk.dataStart) > 0 &&
     bytes.readUInt32BE(chunk.dataStart + 4) > 0 &&
+    PNG_BIT_DEPTHS_BY_COLOR_TYPE.get(colorType)?.has(bitDepth) === true &&
     bytes.readUInt8(chunk.dataStart + 10) === 0 &&
     bytes.readUInt8(chunk.dataStart + 11) === 0 &&
     (interlaceMethod === 0 || interlaceMethod === 1)
@@ -489,20 +499,84 @@ function isValidAnmfChunk(bytes: Buffer, dataStart: number, dataLength: number):
   return sawImageData;
 }
 
-type WebpChunkInspection = 'image' | 'metadata' | 'invalid';
+const WEBP_ANIMATION_FLAG = 0x02;
 
-function inspectWebpChunk(bytes: Buffer, chunk: RiffChunk): WebpChunkInspection {
+interface WebpValidationState {
+  hasAnimationFlag: boolean;
+  sawAnimationControl: boolean;
+  sawAnimationFrame: boolean;
+  sawStillImage: boolean;
+}
+
+function createWebpValidationState(bytes: Buffer, chunks: RiffChunk[]): WebpValidationState | null {
+  const firstChunk = chunks[0];
+  const hasExtendedHeader = firstChunk?.type === 'VP8X';
+  if (hasExtendedHeader && firstChunk.dataLength !== 10) {
+    return null;
+  }
+  const hasAnimationFlag =
+    hasExtendedHeader && (bytes.readUInt8(firstChunk.dataStart) & WEBP_ANIMATION_FLAG) !== 0;
+  return {
+    hasAnimationFlag,
+    sawAnimationControl: false,
+    sawAnimationFrame: false,
+    sawStillImage: false,
+  };
+}
+
+function consumeWebpAnimationControl(chunk: RiffChunk, state: WebpValidationState): boolean {
+  if (!state.hasAnimationFlag) {
+    return true;
+  }
+  if (chunk.dataLength !== 6 || state.sawAnimationControl || state.sawAnimationFrame) {
+    return false;
+  }
+  state.sawAnimationControl = true;
+  return true;
+}
+
+function consumeWebpAnimationFrame(
+  bytes: Buffer,
+  chunk: RiffChunk,
+  state: WebpValidationState
+): boolean {
+  if (
+    !(
+      state.hasAnimationFlag &&
+      state.sawAnimationControl &&
+      isValidAnmfChunk(bytes, chunk.dataStart, chunk.dataLength)
+    )
+  ) {
+    return false;
+  }
+  state.sawAnimationFrame = true;
+  return true;
+}
+
+function consumeWebpChunk(
+  bytes: Buffer,
+  chunk: RiffChunk,
+  index: number,
+  state: WebpValidationState
+): boolean {
   const simpleImageValid = inspectSimpleWebpImageChunk(bytes, chunk);
   if (simpleImageValid !== null) {
-    return simpleImageValid ? 'image' : 'invalid';
+    if (!simpleImageValid || state.hasAnimationFlag || state.sawStillImage) {
+      return false;
+    }
+    state.sawStillImage = true;
+    return true;
   }
   if (chunk.type === 'VP8X') {
-    return chunk.dataLength === 10 ? 'metadata' : 'invalid';
+    return index === 0;
+  }
+  if (chunk.type === 'ANIM') {
+    return consumeWebpAnimationControl(chunk, state);
   }
   if (chunk.type === 'ANMF') {
-    return isValidAnmfChunk(bytes, chunk.dataStart, chunk.dataLength) ? 'image' : 'invalid';
+    return consumeWebpAnimationFrame(bytes, chunk, state);
   }
-  return 'metadata';
+  return true;
 }
 
 function isValidWebp(bytes: Buffer): boolean {
@@ -510,21 +584,21 @@ function isValidWebp(bytes: Buffer): boolean {
     bytes.length >= 20 && bytes.readUInt32LE(4) === bytes.length - 8
       ? readRiffChunks(bytes, 12, bytes.length)
       : null;
-  if (!chunks) {
+  const state = chunks ? createWebpValidationState(bytes, chunks) : null;
+  if (!(chunks && state)) {
     return false;
   }
 
-  let sawImageData = false;
-  for (const chunk of chunks) {
-    const inspection = inspectWebpChunk(bytes, chunk);
-    if (inspection === 'invalid') {
-      return false;
-    }
-    if (inspection === 'image') {
-      sawImageData = true;
-    }
+  const chunksAreValid = chunks.every((chunk, index) =>
+    consumeWebpChunk(bytes, chunk, index, state)
+  );
+  if (!chunksAreValid) {
+    return false;
   }
-  return sawImageData;
+
+  return state.hasAnimationFlag
+    ? state.sawAnimationControl && state.sawAnimationFrame
+    : state.sawStillImage && !state.sawAnimationFrame;
 }
 
 export function inspectSupportedImageFormat(bytes: Buffer): ImageFormatInspection | null {

@@ -57,11 +57,13 @@ Image normalization becomes the authoritative backend operation:
 
 1. Require attachment data.
 2. Remove base64 line endings and validate the encoded form.
-3. Inspect decoded bytes before consulting the declared MIME type or content
+3. Enforce the existing 10 MiB image limit from the encoded payload rather than
+   trusting the client-provided `size` field.
+4. Inspect decoded bytes before consulting the declared MIME type or content
    discriminator.
-4. Reject recognized but structurally invalid images and declared images whose
+5. Reject recognized but structurally invalid images and declared images whose
    bytes do not identify a supported format.
-5. Return an attachment copy whose `type` is the detected canonical media type
+6. Return an attachment copy whose `type` is the detected canonical media type
    and whose `contentType` discriminator is `image`.
 
 The operation does not mutate the input attachment.
@@ -98,6 +100,9 @@ a `PermanentAttachmentError` with an actionable message indicating that the
 attachment does not contain supported image data. The queue retains its existing
 permanent-error behavior for genuinely invalid attachments.
 
+An image whose decoded payload exceeds 10 MiB is rejected permanently before
+allocating its decoded buffer or inspecting the container.
+
 Ordinary text attachments are unchanged; only text-labeled attachments whose
 bytes form a complete supported image are reclassified.
 
@@ -113,6 +118,11 @@ Extend the co-located attachment-processing tests with hand-checked fixtures:
   dispatched as images.
 - Truncated PNG, JPEG, GIF, and WebP payloads are rejected permanently.
 - A PNG with a corrupt chunk checksum is rejected permanently.
+- PNG headers with invalid color type and bit-depth combinations are rejected.
+- Animated WebP frames require an animation-flagged `VP8X` header followed by
+  `ANIM` and one or more `ANMF` chunks in order.
+- Image payloads over 10 MiB are rejected before complete decoding, including
+  supported image signatures carrying forged text metadata and `size` values.
 - Arbitrary valid base64 that is not a supported image is rejected permanently.
 - Existing line-wrapped base64 behavior remains accepted.
 - Text attachment behavior remains unchanged.

@@ -44,6 +44,12 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
   };
 }
 
+function createOversizedPngBase64(): string {
+  const bytes = Buffer.alloc(10 * 1024 * 1024 + 1);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  return bytes.toString('base64');
+}
+
 const VALID_JPEG_BASE64 =
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKK+ZP3E//Z';
 
@@ -140,6 +146,31 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).not.toThrow();
   });
 
+  it('should reject image data larger than 10 MiB before format inspection', () => {
+    const attachment = createImageAttachment({
+      data: 'A'.repeat(Math.ceil((10 * 1024 * 1024 + 1) / 3) * 4),
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject oversized PNG bytes despite text metadata and forged size', () => {
+    const attachment = createImageAttachment({
+      type: 'text/plain',
+      contentType: 'text',
+      size: 1,
+      data: createOversizedPngBase64(),
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
   it.each([
     { format: 'PNG', data: 'iVBORw0KGgo=' },
     { format: 'JPEG', data: '/9j/' },
@@ -159,12 +190,58 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
+  it.each([
+    {
+      name: 'unknown color type',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAEAAACCwvwwAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+    {
+      name: 'bit depth unsupported for truecolor',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBAIAAABVh77fAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+  ])('should reject a PNG IHDR with $name', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
   it('should reject an animated WebP frame with no image payload chunk', () => {
     const attachment = createImageAttachment({
       data: 'UklGRhwAAABXRUJQQU5NRhAAAAAAAAAAAAAAAAAAAAAAAAAA',
     });
 
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it.each([
+    {
+      layout: 'ANMF without VP8X and ANIM',
+      data: 'UklGRioAAABXRUJQQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAAA=',
+    },
+    {
+      layout: 'ANMF without ANIM',
+      data: 'UklGRjwAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAAA=',
+    },
+    {
+      layout: 'ANMF before ANIM',
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAABBTklNBgAAAAAAAAAAAA==',
+    },
+    {
+      layout: 'ANMF while the VP8X animation flag is clear',
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAAAAAAAAAAAAAAAQU5JTQYAAAAAAAAAAABBTk1GHgAAAAAAAAAAAAAAAAAAAAAAAABWUDhMBQAAAC8AAAAAAA==',
+    },
+  ])('should reject an animated WebP containing $layout', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should accept an animated WebP with VP8X, ANIM, and ANMF in order', () => {
+    const attachment = createImageAttachment({
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5JTQYAAAAAAAAAAABBTk1GHgAAAAAAAAAAAAAAAAAAAAAAAABWUDhMBQAAAC8AAAAAAA==',
+    });
+
+    expect(() => validateAttachment(attachment)).not.toThrow();
   });
 
   it('should throw a permanent error for unsupported image bytes', () => {
@@ -470,6 +547,19 @@ describe('processAttachmentsAndBuildContent', () => {
     const result = processAttachmentsAndBuildContent('Check this:', attachments);
     expect(result).toBe('Check this:\n\n[Pasted content: code.ts]\nconst x = 1;');
     expect(typeof result).toBe('string');
+  });
+
+  it('should not dispatch oversized PNG bytes mislabeled as text', () => {
+    const attachment = createImageAttachment({
+      type: 'text/plain',
+      contentType: 'text',
+      size: 1,
+      data: createOversizedPngBase64(),
+    });
+
+    expect(() => processAttachmentsAndBuildContent('Message', [attachment])).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
   });
 
   it('should process image-only attachments and return content array', () => {

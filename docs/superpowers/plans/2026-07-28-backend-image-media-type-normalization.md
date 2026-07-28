@@ -10,6 +10,7 @@
 
 - Do not add support for new image formats or transcode unsupported formats.
 - Do not add a runtime dependency.
+- Enforce the existing 10 MiB image limit from decoded data rather than client metadata.
 - Keep text attachment behavior unchanged.
 - Treat unsupported or corrupt image bytes as permanent attachment errors.
 
@@ -63,27 +64,52 @@ In `attachment-processing.ts`, add a private detector returning:
 type SupportedImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 ```
 
+Bound encoded and decoded image size before allocating a decoded buffer.
 Recognize PNG, JPEG, GIF, and WebP signatures, then validate each complete
-container before accepting it: PNG chunk bounds, CRCs, `IDAT`, and `IEND`;
-JPEG segment bounds, frame, scan data, and `EOI`; GIF table and block bounds
-plus trailer; and WebP `RIFF` size plus a valid image payload chunk.
+container before accepting it: PNG chunk bounds, CRCs, valid IHDR color
+type/bit-depth combinations, `IDAT`, and `IEND`; JPEG segment bounds, frame,
+scan data, and `EOI`; GIF table and block bounds plus trailer; and WebP `RIFF`
+size plus valid still-image or ordered animation chunks.
 
 Replace declared-type validation with a normalization operation that:
 
 ```typescript
-const inspection = inspectSupportedImageFormat(
-  Buffer.from(stripBase64LineEndings(attachment.data), 'base64')
-);
-if (!inspection?.isValid) {
+const normalizedData = stripBase64LineEndings(attachment.data);
+if (exceedsImageSizeLimit(normalizedData)) {
+  if (
+    !hasSupportedImageSignature(normalizedData) &&
+    resolveAttachmentContentType(attachment) !== 'image'
+  ) {
+    return attachment;
+  }
   throw new PermanentAttachmentError(
-    `Attachment "${attachment.name}" does not contain supported image data`
+    `Attachment "${attachment.name}" exceeds the 10 MiB image limit`
   );
 }
-return {
-  ...attachment,
-  type: inspection.mediaType,
-  contentType: 'image',
-};
+
+const inspection = hasValidBase64Characters(normalizedData)
+  ? inspectSupportedImageFormat(Buffer.from(normalizedData, 'base64'))
+  : null;
+if (inspection) {
+  if (!inspection.isValid) {
+    throw new PermanentAttachmentError(
+      `Attachment "${attachment.name}" does not contain valid ${inspection.mediaType} data`
+    );
+  }
+  return {
+    ...attachment,
+    type: inspection.mediaType,
+    contentType: 'image',
+  };
+}
+
+if (resolveAttachmentContentType(attachment) !== 'image') {
+  return attachment;
+}
+validateImageBase64(attachment);
+throw new PermanentAttachmentError(
+  `Attachment "${attachment.name}" does not contain supported image data`
+);
 ```
 
 Inspect bytes before the metadata-based classification gate so valid images
