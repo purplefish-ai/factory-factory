@@ -385,8 +385,8 @@ class ChatMessageHandlerService {
   // ============================================================================
 
   /**
-   * Handle a dispatch error. Permanent errors (e.g. unsupported image format) are
-   * rejected so the user sees a clear message. Transient errors are re-queued.
+   * Handle a dispatch error. Permanent input errors are rejected, provider-busy
+   * errors are re-queued with backoff, and all other errors fail for explicit retry.
    */
   private handleDispatchError(
     dbSessionId: string,
@@ -439,23 +439,23 @@ class ChatMessageHandlerService {
       return;
     }
 
-    // Transient errors: dispatch can fail after we pessimistically committed the
-    // user message to transcript for refresh safety. Roll it back before
-    // re-queueing so clients do not see the same message as both queued and committed.
-    logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
+    // Dispatch can fail after we pessimistically committed the user message to
+    // transcript for refresh safety. Roll it back before surfacing the failure.
+    const errorMessage = this.formatDispatchError(error);
+    logger.error('[Chat WS] Failed to dispatch message', {
       dbSessionId,
       messageId: msg.id,
-      error: this.formatDispatchError(error),
+      error: errorMessage,
     });
     sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
       emitSnapshot: false,
     });
-    // Avoid clobbering markProcessExit() runtime/lastExit when the process
-    // has already stopped and exit handling is in flight.
+    // Avoid clobbering markProcessExit() runtime/lastExit when exit handling is in flight.
     if (acpRuntimeManager.isSessionRunning(dbSessionId)) {
-      sessionDomainService.markIdle(dbSessionId, 'alive');
+      sessionDomainService.markError(dbSessionId, errorMessage);
     }
-    sessionDomainService.requeueFront(dbSessionId, msg);
+    this.turnInProgressRetryAttempts.delete(dbSessionId);
+    sessionDomainService.failMessage(dbSessionId, msg, errorMessage);
   }
 
   private scheduleTurnInProgressRetry(dbSessionId: string): void {

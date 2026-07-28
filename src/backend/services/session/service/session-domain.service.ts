@@ -23,7 +23,7 @@ import {
   setPendingInteractiveRequest,
 } from './store/session-queue';
 import { SessionRuntimeMachine } from './store/session-runtime-machine';
-import type { SessionStore } from './store/session-store.types';
+import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
 import { SessionStoreRegistry } from './store/session-store-registry';
 import {
   appendClaudeEvent,
@@ -145,14 +145,37 @@ export class SessionDomainService extends EventEmitter {
   }
 
   rejectMessage(sessionId: string, messageId: string, errorMessage: string): void {
+    this.recordRecentMessageRejection(sessionId, {
+      id: messageId,
+      errorMessage,
+    });
+  }
+
+  failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void {
+    this.recordRecentMessageRejection(sessionId, {
+      id: message.id,
+      errorMessage,
+      state: MessageState.FAILED,
+      userMessage: {
+        text: message.text,
+        timestamp: message.timestamp,
+        attachments: message.attachments,
+        sessionId,
+      },
+    });
+  }
+
+  private recordRecentMessageRejection(
+    sessionId: string,
+    rejection: Omit<RecentMessageRejection, 'rejectedAt' | 'expiresAt'>
+  ): void {
     const store = this.registry.getOrCreate(sessionId);
     const now = Date.now();
     store.recentRejections = store.recentRejections.filter(
-      (rejection) => rejection.expiresAt > now && rejection.id !== messageId
+      (recentRejection) => recentRejection.expiresAt > now && recentRejection.id !== rejection.id
     );
     store.recentRejections.push({
-      id: messageId,
-      errorMessage,
+      ...rejection,
       rejectedAt: this.nowIso(),
       expiresAt: now + RECENT_REJECTION_TTL_MS,
     });
@@ -163,9 +186,10 @@ export class SessionDomainService extends EventEmitter {
 
     this.publisher.emitDelta(sessionId, {
       type: 'message_state_changed',
-      id: messageId,
-      newState: MessageState.REJECTED,
-      errorMessage,
+      id: rejection.id,
+      newState: rejection.state ?? MessageState.REJECTED,
+      errorMessage: rejection.errorMessage,
+      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
     });
   }
 

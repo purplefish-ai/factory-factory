@@ -46,7 +46,7 @@ function applyMessageStateChange(
       return handleCancelledState(state, id);
     case MessageState.REJECTED:
     case MessageState.FAILED:
-      return handleRejectedOrFailedState(state, id, errorMessage);
+      return handleRejectedOrFailedState(state, id, errorMessage, userMessage);
     default:
       debugLog(`[chat-reducer] Ignoring state transition to ${newState} for message ${id}`);
       return state;
@@ -243,11 +243,12 @@ function handleCancelledState(state: ChatState, id: string): ChatState {
 function handleRejectedOrFailedState(
   state: ChatState,
   id: string,
-  errorMessage?: string
+  errorMessage?: string,
+  userMessage?: StateChangeUserMessage
 ): ChatState {
   const queuedMessage = state.queuedMessages.get(id);
   const pendingContent = state.pendingMessages.get(id);
-  const recoveryContent = queuedMessage ?? pendingContent;
+  const recoveryContent = queuedMessage ?? pendingContent ?? userMessage;
 
   const newQueuedMessages = new Map(state.queuedMessages);
   newQueuedMessages.delete(id);
@@ -262,10 +263,11 @@ function handleRejectedOrFailedState(
       pendingMessages: newPendingMessages,
       lastRejectedMessage: recoveryContent
         ? {
-            text: queuedMessage?.text ?? pendingContent?.text ?? '',
+            text: recoveryContent.text,
             attachments: recoveryContent.attachments,
             error: errorMessage ?? 'Message failed',
-            sessionId: recoveryContent.sessionId,
+            sessionId:
+              queuedMessage?.sessionId ?? pendingContent?.sessionId ?? userMessage?.sessionId,
           }
         : state.lastRejectedMessage,
     },
