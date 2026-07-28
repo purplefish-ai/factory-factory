@@ -14,6 +14,7 @@ import {
   RewindConfirmationDialog,
   VirtualizedMessageList,
 } from '@/client/features/chat';
+import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import { filterDuplicateResultMessages, groupAdjacentToolCalls } from '@/lib/chat-protocol';
@@ -124,16 +125,6 @@ function getInputPlaceholder({
   return 'Type a message...';
 }
 
-function getInitBannerClass(kind: WorkspaceInitBanner['kind']): string {
-  if (kind === 'error') {
-    return 'border-red-200 bg-red-50 text-red-900';
-  }
-  if (kind === 'warning') {
-    return 'border-yellow-200 bg-yellow-50 text-yellow-900';
-  }
-  return 'border-blue-200 bg-blue-50 text-blue-900';
-}
-
 const InitStatusBanner = memo(function InitStatusBanner({
   banner,
   retryPending,
@@ -147,7 +138,7 @@ const InitStatusBanner = memo(function InitStatusBanner({
       <div
         className={[
           'rounded-md border p-3 text-sm flex items-start gap-3',
-          getInitBannerClass(banner.kind),
+          getStatusBannerClassName(banner.kind),
         ].join(' ')}
       >
         {banner.kind === 'info' ? (
