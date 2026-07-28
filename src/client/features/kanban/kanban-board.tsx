@@ -1,8 +1,7 @@
 import { ArrowsClockwiseIcon, PlusIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArchiveWorkspaceDialog } from '@/client/features/workspace';
+import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
-import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -62,6 +61,9 @@ export function KanbanBoard() {
     renameWorkspace,
     archiveWorkspace,
     bulkArchiveColumn,
+    archiveGitLockWorkspaceIds,
+    dismissArchiveGitLock,
+    retryGitLockedArchives,
     isBulkArchiving,
     showInlineForm,
     setShowInlineForm,
@@ -87,9 +89,9 @@ export function KanbanBoard() {
     setBulkArchiveDialogOpen(true);
   };
 
-  const handleBulkArchiveConfirm = async (commitUncommitted: boolean) => {
+  const handleBulkArchiveConfirm = async () => {
     if (bulkArchiveColumnId) {
-      await bulkArchiveColumn(bulkArchiveColumnId, commitUncommitted);
+      await bulkArchiveColumn(bulkArchiveColumnId);
     }
   };
 
@@ -259,10 +261,6 @@ export function KanbanBoard() {
     bulkArchiveColumnId && bulkArchiveColumnId !== 'ISSUES'
       ? (workspacesByColumn[bulkArchiveColumnId as KanbanColumnType] ?? [])
       : [];
-  const shouldWarnForBulkArchive = workspacesInBulkArchiveColumn.some(
-    (workspace) => !isWorkspaceDoneOrMerged(workspace)
-  );
-
   return (
     <>
       <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
@@ -302,12 +300,20 @@ export function KanbanBoard() {
       <ArchiveWorkspaceDialog
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
-        hasUncommitted={shouldWarnForBulkArchive}
-        showCommitOption={shouldWarnForBulkArchive}
         onConfirm={handleBulkArchiveConfirm}
-        description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Archiving will remove the workspace worktrees from disk.`}
-        warningText="Warning: Some workspaces may have uncommitted changes and they will be committed before archiving."
-        checkboxLabel="Commit uncommitted changes before archiving"
+        description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Any uncommitted changes will be committed before the worktrees are removed.`}
+      />
+
+      <ArchiveGitLockDialog
+        open={archiveGitLockWorkspaceIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            dismissArchiveGitLock();
+          }
+        }}
+        workspaceCount={archiveGitLockWorkspaceIds.length}
+        onRetry={() => void retryGitLockedArchives(false)}
+        onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
       />
 
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />

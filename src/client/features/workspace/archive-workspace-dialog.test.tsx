@@ -42,26 +42,26 @@ describe('ArchiveWorkspaceDialog', () => {
     }
   });
 
-  it('blocks archive confirmation while Git status is loading', () => {
+  it('always allows archive confirmation and does not expose a commit choice', () => {
     const onConfirm = vi.fn();
     void act(() => {
       root.render(
         createElement(ArchiveWorkspaceDialog, {
           open: true,
           onOpenChange: vi.fn(),
-          hasUncommitted: false,
-          isCheckingGitStatus: true,
           onConfirm,
         })
       );
     });
 
-    const archiveButton = [...document.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Checking changes')
+    const archiveButton = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Archive'
     );
-    expect(archiveButton?.disabled).toBe(true);
+    expect(archiveButton?.disabled).toBe(false);
+    expect(document.querySelector('[role="checkbox"]')).toBeNull();
+    expect(document.body.textContent).toContain('committed before the worktree is removed');
 
     void act(() => archiveButton?.click());
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onConfirm).toHaveBeenCalledWith();
   });
 });

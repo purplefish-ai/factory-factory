@@ -43,7 +43,7 @@ interface KanbanColumnProps {
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   togglingWorkspaceId?: string | null;
-  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  onArchive?: (workspaceId: string) => void;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
   onOpenQuickChat?: (workspaceId: string) => void;

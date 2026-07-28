@@ -79,9 +79,7 @@ describe('worktreeLifecycleService cleanup', () => {
 
     try {
       await expect(
-        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
-          commitUncommitted: true,
-        })
+        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {})
       ).rejects.toThrow(WorktreePathSafetyError);
       expect(commitSpy).not.toHaveBeenCalled();
       expect(removeSpy).not.toHaveBeenCalled();
@@ -107,9 +105,8 @@ describe('worktreeLifecycleService cleanup', () => {
     });
 
     try {
-      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
-        commitUncommitted: true,
-      });
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
+      expect(gitOpsService.commitIfNeeded).toHaveBeenCalledWith(worktreePath, 'Workspace');
       expect(removeStateSpy).not.toHaveBeenCalled();
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
@@ -129,9 +126,7 @@ describe('worktreeLifecycleService cleanup', () => {
       project: { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' },
     });
 
-    await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
-      commitUncommitted: true,
-    });
+    await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
 
     expect(removeStateSpy).toHaveBeenCalledWith(worktreePath);
     expect(gitOpsService.commitIfNeeded).not.toHaveBeenCalled();
@@ -156,11 +151,37 @@ describe('worktreeLifecycleService cleanup', () => {
 
     try {
       await expect(
-        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
-          commitUncommitted: true,
-        })
+        worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {})
       ).rejects.toThrow('remove failed');
       expect(removeStateSpy).not.toHaveBeenCalled();
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('passes an explicit Git index-lock recovery action to Git operations', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-cleanup-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const worktreePath = path.join(worktreeBasePath, 'workspace');
+    await mkdir(worktreePath, { recursive: true });
+    const commitSpy = vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+    const workspace = unsafeCoerce<
+      Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
+    >({
+      name: 'Workspace',
+      worktreePath,
+      project: { repoPath: path.join(tempRoot, 'repo'), worktreeBasePath },
+    });
+
+    try {
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {
+        removeGitIndexLock: true,
+      });
+
+      expect(commitSpy).toHaveBeenCalledWith(worktreePath, 'Workspace', {
+        removeGitIndexLock: true,
+      });
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

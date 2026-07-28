@@ -26,13 +26,27 @@ type ToolResponse = z.infer<typeof toolResponseSchema>;
 async function callToolWithHttpResponse(options: {
   body: unknown;
   status: number;
-  toolName: 'spawn_child_workspace' | 'list_projects';
-}): Promise<{ requestMethod: string | undefined; response: ToolResponse }> {
+  toolName: 'spawn_child_workspace' | 'list_projects' | 'archive_child_workspace';
+  toolArguments?: Record<string, unknown>;
+}): Promise<{
+  requestBody: unknown;
+  requestMethod: string | undefined;
+  response: ToolResponse;
+}> {
   let requestMethod: string | undefined;
+  let requestBody: unknown;
   const server = createServer((req, res) => {
     requestMethod = req.method;
-    res.writeHead(options.status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(options.body));
+    let rawBody = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      rawBody += chunk;
+    });
+    req.on('end', () => {
+      requestBody = rawBody ? JSON.parse(rawBody) : undefined;
+      res.writeHead(options.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(options.body));
+    });
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -73,9 +87,10 @@ async function callToolWithHttpResponse(options: {
         params: {
           name: options.toolName,
           arguments:
-            options.toolName === 'spawn_child_workspace'
+            options.toolArguments ??
+            (options.toolName === 'spawn_child_workspace'
               ? { projectId: 'missing-project', name: 'Child workspace' }
-              : {},
+              : {}),
         },
       })}\n`
     );
@@ -83,7 +98,11 @@ async function callToolWithHttpResponse(options: {
     const [exitCode] = await once(child, 'exit');
     expect(exitCode).toBe(0);
     expect(stderr).toBe('');
-    return { requestMethod, response: toolResponseSchema.parse(JSON.parse(stdout.trim())) };
+    return {
+      requestBody,
+      requestMethod,
+      response: toolResponseSchema.parse(JSON.parse(stdout.trim())),
+    };
   } finally {
     server.close();
     await once(server, 'close');
@@ -144,5 +163,26 @@ describe('child workspace MCP tRPC errors', () => {
     });
 
     expect(response.result.content[0]?.text).toBe('Error: HTTP 503');
+  });
+
+  it('passes explicit Git index-lock recovery for child archive', async () => {
+    const { requestBody, response } = await callToolWithHttpResponse({
+      status: 200,
+      toolName: 'archive_child_workspace',
+      toolArguments: {
+        childWorkspaceId: 'child-1',
+        removeGitIndexLock: true,
+      },
+      body: { result: { data: { json: { archived: true } } } },
+    });
+
+    expect(requestBody).toEqual({
+      json: {
+        parentWorkspaceId: 'parent-workspace',
+        childWorkspaceId: 'child-1',
+        removeGitIndexLock: true,
+      },
+    });
+    expect(response.result.content[0]?.text).toBe('Child workspace archived successfully.');
   });
 });
