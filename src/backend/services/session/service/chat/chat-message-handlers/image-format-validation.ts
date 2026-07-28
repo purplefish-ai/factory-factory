@@ -16,21 +16,25 @@ function startsWith(bytes: Buffer, signature: Buffer): boolean {
   return bytes.length >= signature.length && bytes.subarray(0, signature.length).equals(signature);
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: PNG chunk validation is a linear format state machine.
-function isValidPng(bytes: Buffer): boolean {
+interface PngChunk {
+  type: string;
+  dataStart: number;
+  dataLength: number;
+  end: number;
+}
+
+function readPngChunks(bytes: Buffer): PngChunk[] | null {
   let cursor = PNG_SIGNATURE.length;
-  let sawHeader = false;
-  let sawImageData = false;
-  let imageDataEnded = false;
+  const chunks: PngChunk[] = [];
 
   while (cursor < bytes.length) {
     if (bytes.length - cursor < 12) {
-      return false;
+      return null;
     }
 
     const dataLength = bytes.readUInt32BE(cursor);
     if (dataLength > bytes.length - cursor - 12) {
-      return false;
+      return null;
     }
 
     const typeStart = cursor + 4;
@@ -38,162 +42,223 @@ function isValidPng(bytes: Buffer): boolean {
     const dataEnd = dataStart + dataLength;
     const chunkEnd = dataEnd + 4;
     const chunkType = bytes.subarray(typeStart, dataStart).toString('ascii');
-    const expectedCrc = bytes.readUInt32BE(dataEnd);
-    const actualCrc = crc32(bytes.subarray(typeStart, dataEnd));
-    if (actualCrc !== expectedCrc) {
-      return false;
+    if (crc32(bytes.subarray(typeStart, dataEnd)) !== bytes.readUInt32BE(dataEnd)) {
+      return null;
     }
 
-    if (!sawHeader) {
-      if (chunkType !== 'IHDR' || dataLength !== 13) {
-        return false;
-      }
-
-      const width = bytes.readUInt32BE(dataStart);
-      const height = bytes.readUInt32BE(dataStart + 4);
-      const compressionMethod = bytes.readUInt8(dataStart + 10);
-      const filterMethod = bytes.readUInt8(dataStart + 11);
-      const interlaceMethod = bytes.readUInt8(dataStart + 12);
-      if (
-        width === 0 ||
-        height === 0 ||
-        compressionMethod !== 0 ||
-        filterMethod !== 0 ||
-        (interlaceMethod !== 0 && interlaceMethod !== 1)
-      ) {
-        return false;
-      }
-      sawHeader = true;
-    } else if (chunkType === 'IHDR') {
-      return false;
-    }
-
-    if (chunkType === 'IDAT') {
-      if (imageDataEnded) {
-        return false;
-      }
-      sawImageData = true;
-    } else if (sawImageData) {
-      imageDataEnded = true;
-    }
-
-    if (chunkType === 'IEND') {
-      return dataLength === 0 && sawImageData && chunkEnd === bytes.length;
-    }
-
+    chunks.push({ type: chunkType, dataStart, dataLength, end: chunkEnd });
     cursor = chunkEnd;
   }
 
-  return false;
+  return chunks;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: JPEG marker validation is a linear format state machine.
-function isValidJpeg(bytes: Buffer): boolean {
-  let cursor = 2;
-  let pendingMarker: number | null = null;
-  let sawFrame = false;
-  let sawScan = false;
+function isValidPngHeader(bytes: Buffer, chunk: PngChunk): boolean {
+  if (chunk.type !== 'IHDR' || chunk.dataLength !== 13) {
+    return false;
+  }
 
-  while (cursor < bytes.length || pendingMarker !== null) {
-    let marker: number;
-    if (pendingMarker === null) {
-      if (bytes.readUInt8(cursor) !== 0xff) {
-        return false;
-      }
-      while (cursor < bytes.length && bytes.readUInt8(cursor) === 0xff) {
-        cursor += 1;
-      }
-      if (cursor === bytes.length || bytes.readUInt8(cursor) === 0x00) {
-        return false;
-      }
-      marker = bytes.readUInt8(cursor);
-      cursor += 1;
-    } else {
-      marker = pendingMarker;
-      pendingMarker = null;
-    }
+  const interlaceMethod = bytes.readUInt8(chunk.dataStart + 12);
+  return (
+    bytes.readUInt32BE(chunk.dataStart) > 0 &&
+    bytes.readUInt32BE(chunk.dataStart + 4) > 0 &&
+    bytes.readUInt8(chunk.dataStart + 10) === 0 &&
+    bytes.readUInt8(chunk.dataStart + 11) === 0 &&
+    (interlaceMethod === 0 || interlaceMethod === 1)
+  );
+}
 
-    if (marker === 0xd9) {
-      return sawFrame && sawScan && cursor === bytes.length;
+function findLastPngChunkIndex(chunks: PngChunk[], type: string): number {
+  for (let index = chunks.length - 1; index >= 0; index -= 1) {
+    if (chunks[index]?.type === type) {
+      return index;
     }
+  }
+  return -1;
+}
 
-    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
-      return false;
-    }
+function isValidPng(bytes: Buffer): boolean {
+  const chunks = readPngChunks(bytes);
+  const header = chunks?.[0];
+  const finalChunk = chunks?.at(-1);
+  if (!(chunks && header)) {
+    return false;
+  }
+  if (
+    !(finalChunk && isValidPngHeader(bytes, header)) ||
+    finalChunk.type !== 'IEND' ||
+    finalChunk.dataLength !== 0 ||
+    finalChunk.end !== bytes.length
+  ) {
+    return false;
+  }
 
-    if (bytes.length - cursor < 2) {
-      return false;
-    }
-    const segmentLength = bytes.readUInt16BE(cursor);
-    if (segmentLength < 2 || segmentLength > bytes.length - cursor) {
-      return false;
-    }
-    const segmentEnd = cursor + segmentLength;
+  const firstImageData = chunks.findIndex((chunk) => chunk.type === 'IDAT');
+  const lastImageData = findLastPngChunkIndex(chunks, 'IDAT');
+  return (
+    firstImageData > 0 &&
+    chunks.slice(firstImageData, lastImageData + 1).every((chunk) => chunk.type === 'IDAT') &&
+    chunks.slice(1).every((chunk) => chunk.type !== 'IHDR') &&
+    chunks.slice(0, -1).every((chunk) => chunk.type !== 'IEND')
+  );
+}
 
-    if (JPEG_START_OF_FRAME_MARKERS.has(marker)) {
-      if (segmentLength < 11) {
-        return false;
-      }
-      const height = bytes.readUInt16BE(cursor + 3);
-      const width = bytes.readUInt16BE(cursor + 5);
-      const componentCount = bytes.readUInt8(cursor + 7);
-      if (
-        width === 0 ||
-        height === 0 ||
-        componentCount === 0 ||
-        segmentLength !== 8 + 3 * componentCount
-      ) {
-        return false;
-      }
-      sawFrame = true;
-    }
+interface JpegValidationState {
+  cursor: number;
+  pendingMarker: number | null;
+  sawFrame: boolean;
+  sawScan: boolean;
+}
 
-    if (marker !== 0xda) {
-      cursor = segmentEnd;
+interface JpegSegment {
+  start: number;
+  length: number;
+  end: number;
+}
+
+function readJpegMarker(bytes: Buffer, state: JpegValidationState): number | null {
+  if (state.pendingMarker !== null) {
+    const marker = state.pendingMarker;
+    state.pendingMarker = null;
+    return marker;
+  }
+  if (state.cursor >= bytes.length || bytes.readUInt8(state.cursor) !== 0xff) {
+    return null;
+  }
+
+  while (state.cursor < bytes.length && bytes.readUInt8(state.cursor) === 0xff) {
+    state.cursor += 1;
+  }
+  if (state.cursor === bytes.length || bytes.readUInt8(state.cursor) === 0x00) {
+    return null;
+  }
+
+  const marker = bytes.readUInt8(state.cursor);
+  state.cursor += 1;
+  return marker;
+}
+
+function readJpegSegment(bytes: Buffer, start: number): JpegSegment | null {
+  if (bytes.length - start < 2) {
+    return null;
+  }
+  const length = bytes.readUInt16BE(start);
+  if (length < 2 || length > bytes.length - start) {
+    return null;
+  }
+  return { start, length, end: start + length };
+}
+
+function isValidJpegFrame(bytes: Buffer, segment: JpegSegment): boolean {
+  if (segment.length < 11) {
+    return false;
+  }
+  const componentCount = bytes.readUInt8(segment.start + 7);
+  return (
+    bytes.readUInt16BE(segment.start + 3) > 0 &&
+    bytes.readUInt16BE(segment.start + 5) > 0 &&
+    componentCount > 0 &&
+    segment.length === 8 + 3 * componentCount
+  );
+}
+
+function isValidJpegScanHeader(bytes: Buffer, segment: JpegSegment): boolean {
+  const componentCount = bytes.readUInt8(segment.start + 2);
+  return componentCount > 0 && segment.length === 6 + 2 * componentCount;
+}
+
+function consumeJpegScanData(bytes: Buffer, state: JpegValidationState): boolean {
+  let sawEntropyData = false;
+  while (state.cursor < bytes.length) {
+    if (bytes.readUInt8(state.cursor) !== 0xff) {
+      sawEntropyData = true;
+      state.cursor += 1;
       continue;
     }
 
-    const componentCount = bytes.readUInt8(cursor + 2);
-    if (componentCount === 0 || segmentLength !== 6 + 2 * componentCount) {
+    while (state.cursor < bytes.length && bytes.readUInt8(state.cursor) === 0xff) {
+      state.cursor += 1;
+    }
+    if (state.cursor === bytes.length) {
       return false;
     }
-    sawScan = true;
-    cursor = segmentEnd;
 
-    let sawEntropyData = false;
-    while (cursor < bytes.length) {
-      if (bytes.readUInt8(cursor) !== 0xff) {
-        sawEntropyData = true;
-        cursor += 1;
-        continue;
-      }
-
-      while (cursor < bytes.length && bytes.readUInt8(cursor) === 0xff) {
-        cursor += 1;
-      }
-      if (cursor === bytes.length) {
-        return false;
-      }
-
-      const scanMarker = bytes.readUInt8(cursor);
-      cursor += 1;
-      if (scanMarker === 0x00) {
-        sawEntropyData = true;
-        continue;
-      }
-      if (scanMarker >= 0xd0 && scanMarker <= 0xd7) {
-        continue;
-      }
-
-      pendingMarker = scanMarker;
-      break;
+    const marker = bytes.readUInt8(state.cursor);
+    state.cursor += 1;
+    if (marker === 0x00) {
+      sawEntropyData = true;
+      continue;
+    }
+    if (marker >= 0xd0 && marker <= 0xd7) {
+      continue;
     }
 
-    if (!sawEntropyData || pendingMarker === null) {
+    state.pendingMarker = marker;
+    return sawEntropyData;
+  }
+  return false;
+}
+
+function isStandaloneJpegMarker(marker: number): boolean {
+  return marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7);
+}
+
+type JpegMarkerResult = 'continue' | 'complete' | 'invalid';
+
+function consumeJpegMarker(
+  bytes: Buffer,
+  state: JpegValidationState,
+  marker: number
+): JpegMarkerResult {
+  if (marker === 0xd9) {
+    return state.sawFrame && state.sawScan && state.cursor === bytes.length
+      ? 'complete'
+      : 'invalid';
+  }
+  if (isStandaloneJpegMarker(marker)) {
+    return 'invalid';
+  }
+
+  const segment = readJpegSegment(bytes, state.cursor);
+  if (!segment) {
+    return 'invalid';
+  }
+  if (JPEG_START_OF_FRAME_MARKERS.has(marker)) {
+    if (!isValidJpegFrame(bytes, segment)) {
+      return 'invalid';
+    }
+    state.sawFrame = true;
+  }
+
+  state.cursor = segment.end;
+  if (marker !== 0xda) {
+    return 'continue';
+  }
+  if (!(isValidJpegScanHeader(bytes, segment) && consumeJpegScanData(bytes, state))) {
+    return 'invalid';
+  }
+  state.sawScan = true;
+  return 'continue';
+}
+
+function isValidJpeg(bytes: Buffer): boolean {
+  const state: JpegValidationState = {
+    cursor: 2,
+    pendingMarker: null,
+    sawFrame: false,
+    sawScan: false,
+  };
+
+  while (state.cursor < bytes.length || state.pendingMarker !== null) {
+    const marker = readJpegMarker(bytes, state);
+    const result = marker === null ? 'invalid' : consumeJpegMarker(bytes, state, marker);
+    if (result === 'complete') {
+      return true;
+    }
+    if (result === 'invalid') {
       return false;
     }
   }
-
   return false;
 }
 
@@ -213,16 +278,20 @@ function skipGifSubBlocks(bytes: Buffer, start: number): number | null {
   return null;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: GIF block validation is a linear format state machine.
-function isValidGif(bytes: Buffer): boolean {
+interface GifHeader {
+  firstBlock: number;
+  hasGlobalColorTable: boolean;
+}
+
+function readGifHeader(bytes: Buffer): GifHeader | null {
   if (bytes.length < 14) {
-    return false;
+    return null;
   }
 
   const width = bytes.readUInt16LE(6);
   const height = bytes.readUInt16LE(8);
   if (width === 0 || height === 0) {
-    return false;
+    return null;
   }
 
   const logicalScreenPacked = bytes.readUInt8(10);
@@ -230,66 +299,101 @@ function isValidGif(bytes: Buffer): boolean {
   const globalColorTableLength = hasGlobalColorTable
     ? 3 * 2 ** ((logicalScreenPacked & 0x07) + 1)
     : 0;
-  let cursor = 13 + globalColorTableLength;
-  if (cursor > bytes.length) {
+  const firstBlock = 13 + globalColorTableLength;
+  if (firstBlock > bytes.length) {
+    return null;
+  }
+
+  return { firstBlock, hasGlobalColorTable };
+}
+
+function readGifImageBlock(
+  bytes: Buffer,
+  start: number,
+  hasGlobalColorTable: boolean
+): number | null {
+  if (bytes.length - start < 10) {
+    return null;
+  }
+
+  const imageWidth = bytes.readUInt16LE(start + 5);
+  const imageHeight = bytes.readUInt16LE(start + 7);
+  const imagePacked = bytes.readUInt8(start + 9);
+  const hasLocalColorTable = (imagePacked & 0x80) !== 0;
+  const localColorTableLength = hasLocalColorTable ? 3 * 2 ** ((imagePacked & 0x07) + 1) : 0;
+  const codeSizeOffset = start + 10 + localColorTableLength;
+  if (
+    imageWidth === 0 ||
+    imageHeight === 0 ||
+    !(hasGlobalColorTable || hasLocalColorTable) ||
+    codeSizeOffset + 1 >= bytes.length
+  ) {
+    return null;
+  }
+
+  const minimumCodeSize = bytes.readUInt8(codeSizeOffset);
+  if (minimumCodeSize < 2 || minimumCodeSize > 8 || bytes.readUInt8(codeSizeOffset + 1) === 0) {
+    return null;
+  }
+  return skipGifSubBlocks(bytes, codeSizeOffset + 1);
+}
+
+interface GifValidationState {
+  cursor: number;
+  sawImage: boolean;
+}
+
+type GifBlockResult = 'continue' | 'complete' | 'invalid';
+
+function consumeGifBlock(
+  bytes: Buffer,
+  header: GifHeader,
+  state: GifValidationState
+): GifBlockResult {
+  const introducer = bytes.readUInt8(state.cursor);
+  if (introducer === 0x3b) {
+    return state.sawImage && state.cursor + 1 === bytes.length ? 'complete' : 'invalid';
+  }
+  if (introducer === 0x21) {
+    if (bytes.length - state.cursor < 3) {
+      return 'invalid';
+    }
+    const next = skipGifSubBlocks(bytes, state.cursor + 2);
+    if (next === null) {
+      return 'invalid';
+    }
+    state.cursor = next;
+    return 'continue';
+  }
+  if (introducer !== 0x2c) {
+    return 'invalid';
+  }
+
+  const next = readGifImageBlock(bytes, state.cursor, header.hasGlobalColorTable);
+  if (next === null) {
+    return 'invalid';
+  }
+  state.cursor = next;
+  state.sawImage = true;
+  return 'continue';
+}
+
+function isValidGif(bytes: Buffer): boolean {
+  const header = readGifHeader(bytes);
+  if (!header) {
     return false;
   }
 
-  let sawImage = false;
-  while (cursor < bytes.length) {
-    const introducer = bytes.readUInt8(cursor);
-    if (introducer === 0x3b) {
-      return sawImage && cursor + 1 === bytes.length;
+  const state: GifValidationState = { cursor: header.firstBlock, sawImage: false };
+  while (state.cursor < bytes.length) {
+    const result = consumeGifBlock(bytes, header, state);
+    if (result === 'complete') {
+      return true;
     }
-
-    if (introducer === 0x21) {
-      if (bytes.length - cursor < 3) {
-        return false;
-      }
-      const next = skipGifSubBlocks(bytes, cursor + 2);
-      if (next === null) {
-        return false;
-      }
-      cursor = next;
-      continue;
-    }
-
-    if (introducer !== 0x2c || bytes.length - cursor < 10) {
+    if (result === 'invalid') {
       return false;
     }
-
-    const imageWidth = bytes.readUInt16LE(cursor + 5);
-    const imageHeight = bytes.readUInt16LE(cursor + 7);
-    const imagePacked = bytes.readUInt8(cursor + 9);
-    const hasLocalColorTable = (imagePacked & 0x80) !== 0;
-    const localColorTableLength = hasLocalColorTable ? 3 * 2 ** ((imagePacked & 0x07) + 1) : 0;
-    cursor += 10 + localColorTableLength;
-    if (
-      imageWidth === 0 ||
-      imageHeight === 0 ||
-      !(hasGlobalColorTable || hasLocalColorTable) ||
-      cursor >= bytes.length
-    ) {
-      return false;
-    }
-
-    const minimumCodeSize = bytes.readUInt8(cursor);
-    if (
-      minimumCodeSize < 2 ||
-      minimumCodeSize > 8 ||
-      cursor + 1 >= bytes.length ||
-      bytes.readUInt8(cursor + 1) === 0
-    ) {
-      return false;
-    }
-    const next = skipGifSubBlocks(bytes, cursor + 1);
-    if (next === null) {
-      return false;
-    }
-    sawImage = true;
-    cursor = next;
   }
-
   return false;
 }
 
@@ -321,89 +425,106 @@ function isValidVp8lChunk(bytes: Buffer, dataStart: number, dataLength: number):
   );
 }
 
+interface RiffChunk {
+  type: string;
+  dataStart: number;
+  dataLength: number;
+}
+
+function readRiffChunks(bytes: Buffer, start: number, end: number): RiffChunk[] | null {
+  let cursor = start;
+  const chunks: RiffChunk[] = [];
+  while (cursor < end) {
+    if (end - cursor < 8) {
+      return null;
+    }
+
+    const type = bytes.subarray(cursor, cursor + 4).toString('ascii');
+    const dataLength = bytes.readUInt32LE(cursor + 4);
+    const dataStart = cursor + 8;
+    const dataEnd = dataStart + dataLength;
+    const chunkEnd = dataEnd + (dataLength % 2);
+    if (chunkEnd > end) {
+      return null;
+    }
+
+    chunks.push({ type, dataStart, dataLength });
+    cursor = chunkEnd;
+  }
+  return cursor === end ? chunks : null;
+}
+
+function inspectSimpleWebpImageChunk(bytes: Buffer, chunk: RiffChunk): boolean | null {
+  if (chunk.type === 'VP8 ') {
+    return isValidVp8Chunk(bytes, chunk.dataStart, chunk.dataLength);
+  }
+  if (chunk.type === 'VP8L') {
+    return isValidVp8lChunk(bytes, chunk.dataStart, chunk.dataLength);
+  }
+  return null;
+}
+
 function isValidAnmfChunk(bytes: Buffer, dataStart: number, dataLength: number): boolean {
   if (dataLength < 24) {
     return false;
   }
 
   const frameEnd = dataStart + dataLength;
-  let cursor = dataStart + 16;
-  let sawImageData = false;
-  while (cursor < frameEnd) {
-    if (frameEnd - cursor < 8) {
-      return false;
-    }
-
-    const chunkType = bytes.subarray(cursor, cursor + 4).toString('ascii');
-    const nestedDataLength = bytes.readUInt32LE(cursor + 4);
-    const nestedDataStart = cursor + 8;
-    const nestedDataEnd = nestedDataStart + nestedDataLength;
-    const nestedChunkEnd = nestedDataEnd + (nestedDataLength % 2);
-    if (nestedChunkEnd > frameEnd) {
-      return false;
-    }
-
-    if (chunkType === 'VP8 ') {
-      sawImageData = isValidVp8Chunk(bytes, nestedDataStart, nestedDataLength);
-    } else if (chunkType === 'VP8L') {
-      sawImageData = isValidVp8lChunk(bytes, nestedDataStart, nestedDataLength);
-    }
-    if ((chunkType === 'VP8 ' || chunkType === 'VP8L') && !sawImageData) {
-      return false;
-    }
-    cursor = nestedChunkEnd;
-  }
-
-  return sawImageData && cursor === frameEnd;
-}
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: WebP chunk validation is a linear format state machine.
-function isValidWebp(bytes: Buffer): boolean {
-  if (bytes.length < 20 || bytes.readUInt32LE(4) !== bytes.length - 8) {
+  const chunks = readRiffChunks(bytes, dataStart + 16, frameEnd);
+  if (!chunks) {
     return false;
   }
 
-  let cursor = 12;
   let sawImageData = false;
-  while (cursor < bytes.length) {
-    if (bytes.length - cursor < 8) {
+  for (const chunk of chunks) {
+    const imageChunkValid = inspectSimpleWebpImageChunk(bytes, chunk);
+    if (imageChunkValid === false) {
       return false;
     }
-
-    const chunkType = bytes.subarray(cursor, cursor + 4).toString('ascii');
-    const dataLength = bytes.readUInt32LE(cursor + 4);
-    const dataStart = cursor + 8;
-    const dataEnd = dataStart + dataLength;
-    const chunkEnd = dataEnd + (dataLength % 2);
-    if (dataEnd > bytes.length || chunkEnd > bytes.length) {
-      return false;
-    }
-
-    if (chunkType === 'VP8 ') {
-      if (!isValidVp8Chunk(bytes, dataStart, dataLength)) {
-        return false;
-      }
-      sawImageData = true;
-    } else if (chunkType === 'VP8L') {
-      if (!isValidVp8lChunk(bytes, dataStart, dataLength)) {
-        return false;
-      }
-      sawImageData = true;
-    } else if (chunkType === 'VP8X') {
-      if (dataLength !== 10) {
-        return false;
-      }
-    } else if (chunkType === 'ANMF') {
-      if (!isValidAnmfChunk(bytes, dataStart, dataLength)) {
-        return false;
-      }
+    if (imageChunkValid) {
       sawImageData = true;
     }
-
-    cursor = chunkEnd;
   }
 
-  return sawImageData && cursor === bytes.length;
+  return sawImageData;
+}
+
+type WebpChunkInspection = 'image' | 'metadata' | 'invalid';
+
+function inspectWebpChunk(bytes: Buffer, chunk: RiffChunk): WebpChunkInspection {
+  const simpleImageValid = inspectSimpleWebpImageChunk(bytes, chunk);
+  if (simpleImageValid !== null) {
+    return simpleImageValid ? 'image' : 'invalid';
+  }
+  if (chunk.type === 'VP8X') {
+    return chunk.dataLength === 10 ? 'metadata' : 'invalid';
+  }
+  if (chunk.type === 'ANMF') {
+    return isValidAnmfChunk(bytes, chunk.dataStart, chunk.dataLength) ? 'image' : 'invalid';
+  }
+  return 'metadata';
+}
+
+function isValidWebp(bytes: Buffer): boolean {
+  const chunks =
+    bytes.length >= 20 && bytes.readUInt32LE(4) === bytes.length - 8
+      ? readRiffChunks(bytes, 12, bytes.length)
+      : null;
+  if (!chunks) {
+    return false;
+  }
+
+  let sawImageData = false;
+  for (const chunk of chunks) {
+    const inspection = inspectWebpChunk(bytes, chunk);
+    if (inspection === 'invalid') {
+      return false;
+    }
+    if (inspection === 'image') {
+      sawImageData = true;
+    }
+  }
+  return sawImageData;
 }
 
 export function inspectSupportedImageFormat(bytes: Buffer): ImageFormatInspection | null {
