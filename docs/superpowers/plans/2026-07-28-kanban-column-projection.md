@@ -300,7 +300,7 @@ describe('hasStartingSessionSummary', () => {
 
 Add `hasStartingSessionSummary` to the existing import from `./session-runtime` at the top of that file.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 7: Run the test to verify it fails**
 
 Run: `pnpm test src/shared/session-runtime.test.ts -t "hasStartingSessionSummary"`
 Expected: FAIL with "hasStartingSessionSummary is not a function".
@@ -327,7 +327,7 @@ export function hasStartingSessionSummary(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 9: Run the test to verify it passes**
 
 Run: `pnpm test src/shared/session-runtime.test.ts`
 Expected: PASS.
@@ -550,15 +550,27 @@ git commit -m "Carry conflict, mode, and stall state on snapshot wire"
 
 ---
 
-### Task 4: Rewrite the status reason derivation
+### Task 4: Rewrite the status reason and project the column from it
+
+Merged from two tasks. The reason codes and the column map are one logical change: changing `WorkspaceStatusReasonInput` breaks both derivation call sites immediately, so splitting them would land a commit that does not typecheck, against this plan's Global Constraints.
 
 **Files:**
 - Modify: `src/shared/workspace-status-reason.ts`
 - Test: `src/shared/workspace-status-reason.test.ts`
+- Create: `src/shared/kanban-column-projection.ts`
+- Create: `src/shared/kanban-column-projection.test.ts`
+- Delete: `src/backend/services/workspace/service/state/kanban-state.ts`
+- Delete: `src/backend/services/workspace/service/state/kanban-state.test.ts`
+- Modify: `src/backend/lib/workspace-derived-state.ts`
+- Modify: `src/backend/services/workspace/service/query/workspace-query.service.ts`
+- Modify: `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
+- Modify: `src/backend/orchestration/domain-bridges.orchestrator.ts`
+- Modify: `src/backend/services/workspace/service/state/flow-state.ts`
+- Test: `src/backend/services/workspace/service/state/flow-state.test.ts`
 
 **Interfaces:**
 - Consumes: `hasStartingSessionSummary` (Task 2) indirectly — this task only takes the resulting boolean.
-- Produces: `WorkspaceStatusReasonInput` drops `runScriptStatus`, gains `isSessionStarting: boolean`, `hasMergeConflict: boolean`, `ratchetEnabled: boolean`, `dispatchStalled: boolean`, `mode: WorkspaceMode`, `autoIterationStatus: AutoIterationStatus | null`. `WORKSPACE_STATUS_REASON_CODES` drops `DEV_SERVER_RUNNING` and gains `STARTING_SESSION`, `AUTO_ITERATING`, `FIXING_MERGE_CONFLICT`, `MERGE_CONFLICT`, `RATCHET_STALLED`. Task 5 maps every code to a column.
+- Produces: `kanbanColumnForStatusReason(code: WorkspaceStatusReasonCode): KanbanColumn | null`. `WorkspaceStatusReasonInput` drops `runScriptStatus`, gains `isSessionStarting: boolean`, `hasMergeConflict: boolean`, `ratchetEnabled: boolean`, `dispatchStalled: boolean`, `mode: WorkspaceMode`, `autoIterationStatus: AutoIterationStatus | null`. `WORKSPACE_STATUS_REASON_CODES` drops `DEV_SERVER_RUNNING` and gains `STARTING_SESSION`, `AUTO_ITERATING`, `FIXING_MERGE_CONFLICT`, `MERGE_CONFLICT`, `RATCHET_STALLED`, and every code is mapped to a column in the same task.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -763,36 +775,9 @@ Change the two ready branches to report that a human owns the next action:
 Run: `pnpm test src/shared/workspace-status-reason.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+The status-reason module will not typecheck on its own between Steps 3 and 6 — its two call sites are updated in Step 11. Do not commit until Step 15, when the whole change is green.
 
-Type errors at the two call sites are expected and are fixed in Task 5; commit the shared module on its own so the projection lands as a reviewable unit.
-
-```bash
-pnpm check:fix
-git add src/shared/workspace-status-reason.ts src/shared/workspace-status-reason.test.ts
-git commit -m "Add starting, auto-iterating, conflict, and stall reasons"
-```
-
----
-
-### Task 5: Project the column from the status reason
-
-**Files:**
-- Create: `src/shared/kanban-column-projection.ts`
-- Create: `src/shared/kanban-column-projection.test.ts`
-- Delete: `src/backend/services/workspace/service/state/kanban-state.ts`
-- Delete: `src/backend/services/workspace/service/state/kanban-state.test.ts`
-- Modify: `src/backend/lib/workspace-derived-state.ts`
-- Modify: `src/backend/services/workspace/service/query/workspace-query.service.ts`
-- Modify: `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`
-- Modify: `src/backend/orchestration/domain-bridges.orchestrator.ts`
-- Modify: `src/backend/services/workspace/service/state/flow-state.ts`
-
-**Interfaces:**
-- Consumes: every code from Task 4; `hasStartingSessionSummary` from Task 2; the four wire fields from Task 3.
-- Produces: `kanbanColumnForStatusReason(code: WorkspaceStatusReasonCode): KanbanColumn | null`. Nothing later depends on it.
-
-- [ ] **Step 1: Write the failing projection test**
+- [ ] **Step 6: Write the failing projection test**
 
 Create `src/shared/kanban-column-projection.test.ts`:
 
@@ -854,12 +839,12 @@ describe('kanbanColumnForStatusReason', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 7: Run the test to verify it fails**
 
 Run: `pnpm test src/shared/kanban-column-projection.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the projection**
+- [ ] **Step 8: Write the projection**
 
 Create `src/shared/kanban-column-projection.ts`:
 
@@ -925,12 +910,12 @@ export function kanbanColumnForStatusReason(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 9: Run the test to verify it passes**
 
 Run: `pnpm test src/shared/kanban-column-projection.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Rewire the assembly**
+- [ ] **Step 10: Rewire the assembly**
 
 In `src/backend/lib/workspace-derived-state.ts`:
 
@@ -997,7 +982,7 @@ export function assembleWorkspaceDerivedState(
 
 Import `kanbanColumnForStatusReason` from `@/shared/kanban-column-projection`.
 
-- [ ] **Step 6: Update the two call sites**
+- [ ] **Step 11: Update the two call sites**
 
 In `src/backend/services/workspace/service/query/workspace-query.service.ts`, in `deriveProjectWorkspaces`, drop `computeKanbanColumn` from the injected `fns` object and from the imports, delete the `ratchetDispatchOutcome`/`ratchetDispatchRetryCount`/`runScriptStatus` inputs, and add:
 
@@ -1027,7 +1012,7 @@ and pass only `{ deriveSidebarStatus: this.derive.deriveSidebarStatus }` as the 
 
 In `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts`, remove `computeKanbanColumn` from the `SnapshotDerivationFns` interface. In `src/backend/orchestration/domain-bridges.orchestrator.ts`, remove it from the object passed to the store's `configure()` call and from that file's imports.
 
-- [ ] **Step 7: Delete the superseded module**
+- [ ] **Step 12: Delete the superseded module**
 
 ```bash
 git rm src/backend/services/workspace/service/state/kanban-state.ts src/backend/services/workspace/service/state/kanban-state.test.ts
@@ -1035,7 +1020,7 @@ git rm src/backend/services/workspace/service/state/kanban-state.ts src/backend/
 
 Its coverage now lives in `src/shared/kanban-column-projection.test.ts` (the mapping) and `src/shared/workspace-status-reason.test.ts` (the conditions that select each code).
 
-- [ ] **Step 8: Make the CI observation pure**
+- [ ] **Step 13: Make the CI observation pure**
 
 In `src/backend/services/workspace/service/state/flow-state.ts`, delete the `CI_UNKNOWN_GRACE_MS` constant and replace the `CIStatus.UNKNOWN` branch of `deriveWorkspaceCiObservation`:
 
@@ -1070,12 +1055,12 @@ it('reads an unfetched CI status as not fetched regardless of elapsed time', () 
 });
 ```
 
-- [ ] **Step 9: Run the full suite**
+- [ ] **Step 14: Run the full suite**
 
 Run: `pnpm test && pnpm typecheck && pnpm check`
 Expected: PASS with no dependency violations. Existing tests that construct `WorkspaceDerivedStateInput` or `WorkspaceStatusReasonInput` will need the new fields; add them with the defaults `false`, `'STANDARD'`, `null`.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 15: Commit**
 
 ```bash
 pnpm check:fix
@@ -1085,7 +1070,7 @@ git commit -m "Project Kanban column from workspace status reason"
 
 ---
 
-### Task 6: Stop a new workspace appearing on the board and in Todo at once
+### Task 5: Stop a new workspace appearing on the board and in Todo at once
 
 **Files:**
 - Modify: `src/client/hooks/use-project-snapshot-sync.ts`
@@ -1245,7 +1230,7 @@ git commit -m "Stop new workspaces showing in Todo and on the board"
 
 ---
 
-### Task 7: Update the documentation
+### Task 6: Update the documentation
 
 **Files:**
 - Modify: `AGENTS.md`
@@ -1290,7 +1275,7 @@ git commit -m "Document Kanban column projection"
 
 ## Manual Verification
 
-After Task 7, confirm the behavior the plan exists to fix:
+After Task 6, confirm the behavior the plan exists to fix:
 
 1. Run `pnpm dev` and open a project's Kanban board.
 2. Click Start on a Todo issue. The issue card should leave the Todo column as the workspace card appears — never both at once.
