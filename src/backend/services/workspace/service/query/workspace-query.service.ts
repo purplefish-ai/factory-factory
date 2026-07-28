@@ -60,6 +60,7 @@ class WorkspaceQueryService {
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
   private reviewCountRefreshPromise: Promise<number> | null = null;
   private readonly prStatusSyncProjectsInFlight = new Set<string>();
+  private readonly gitStatsWarmsInFlight = new Set<string>();
 
   private sessionBridge: WorkspaceQuerySessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
@@ -210,36 +211,68 @@ class WorkspaceQueryService {
       .sort((a, b) => b.workspace.createdAt.getTime() - a.workspace.createdAt.getTime());
   }
 
-  private async loadGitStats(
+  /**
+   * Git stats for each workspace, from cache only, warming the misses in the
+   * background.
+   *
+   * Deliberately does not await the misses. A worktree's stats cost several
+   * `git` spawns, so a project with dozens of live workspaces used to
+   * serialize dozens of those behind this one query and the Kanban held its
+   * loading state until the last one finished. `gitStats` is a reconciliation
+   * field: the snapshot poll recomputes it for every live workspace and
+   * streams it into the same client cache this response seeds, so a miss here
+   * resolves on its own moments later. Returning null for it costs a card its
+   * diff badge until then; awaiting it cost the whole board.
+   */
+  private loadGitStats(
     workspaces: Array<{ id: string; worktreePath: string | null }>,
     defaultBranch: string
-  ): Promise<Record<string, WorkspaceGitStats | null>> {
+  ): Record<string, WorkspaceGitStats | null> {
     const gitStatsResults: Record<string, WorkspaceGitStats | null> = {};
 
-    await Promise.all(
-      workspaces.map((workspace) =>
-        gitConcurrencyLimit(async () => {
-          if (!workspace.worktreePath) {
-            gitStatsResults[workspace.id] = null;
-            return;
-          }
-          try {
-            gitStatsResults[workspace.id] = await gitOpsService.getWorkspaceGitStats(
-              workspace.worktreePath,
-              defaultBranch
-            );
-          } catch (error) {
-            logger.debug('Failed to get git stats for workspace', {
-              workspaceId: workspace.id,
-              error: error instanceof Error ? error.message : String(error),
-            });
-            gitStatsResults[workspace.id] = null;
-          }
-        })
-      )
-    );
+    for (const workspace of workspaces) {
+      if (!workspace.worktreePath) {
+        gitStatsResults[workspace.id] = null;
+        continue;
+      }
+
+      const cached = gitOpsService.getCachedWorkspaceGitStats(
+        workspace.worktreePath,
+        defaultBranch
+      );
+      gitStatsResults[workspace.id] = cached;
+      if (!cached) {
+        this.warmGitStats(workspace.worktreePath, defaultBranch);
+      }
+    }
 
     return gitStatsResults;
+  }
+
+  /**
+   * Recompute one worktree's stats off the response path.
+   *
+   * Keyed in-flight tracking so a board that refetches while a warm is still
+   * running does not queue a second `git` run behind the first — the poll
+   * interval is shorter than a cold recompute takes under load.
+   */
+  private warmGitStats(worktreePath: string, defaultBranch: string): void {
+    const key = `${worktreePath}\0${defaultBranch}`;
+    if (this.gitStatsWarmsInFlight.has(key)) {
+      return;
+    }
+    this.gitStatsWarmsInFlight.add(key);
+
+    void gitConcurrencyLimit(() => gitOpsService.getWorkspaceGitStats(worktreePath, defaultBranch))
+      .catch((error: unknown) => {
+        logger.debug('Failed to warm git stats for worktree', {
+          worktreePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => {
+        this.gitStatsWarmsInFlight.delete(key);
+      });
   }
 
   /**
@@ -259,7 +292,7 @@ class WorkspaceQueryService {
       this.deriveProjectWorkspaces(projectId),
     ]);
 
-    const gitStatsByWorkspace = await this.loadGitStats(
+    const gitStatsByWorkspace = this.loadGitStats(
       derived.map(({ workspace }) => workspace),
       project?.defaultBranch ?? 'main'
     );
