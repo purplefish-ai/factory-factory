@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import {
   buildCombinedTextContent,
   buildContentArray,
@@ -13,7 +14,6 @@ import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
   sanitizeAttachmentName,
-  UnsupportedImageTypeError,
   validateAttachment,
 } from './attachment-processing';
 
@@ -44,6 +44,48 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
     ...overrides,
   };
 }
+
+function createOversizedPngBase64(): string {
+  const bytes = Buffer.alloc(MAX_IMAGE_SIZE + 1);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  return bytes.toString('base64');
+}
+
+const VALID_JPEG_BASE64 =
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKK+ZP3E//Z';
+
+const SUPPORTED_IMAGE_FIXTURES = [
+  {
+    name: 'PNG with an empty declared type',
+    declaredType: '',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    expectedType: 'image/png',
+  },
+  {
+    name: 'JPEG declared as PNG',
+    declaredType: 'image/png',
+    data: VALID_JPEG_BASE64,
+    expectedType: 'image/jpeg',
+  },
+  {
+    name: 'JPEG with a non-canonical declared type',
+    declaredType: 'image/jpg',
+    data: VALID_JPEG_BASE64,
+    expectedType: 'image/jpeg',
+  },
+  {
+    name: 'GIF declared as PNG',
+    declaredType: 'image/png',
+    data: 'R0lGODdhAQABAIEAAP8AAAAAAAAAAAAAACwAAAAAAQABAAAIBAABBAQAOw==',
+    expectedType: 'image/gif',
+  },
+  {
+    name: 'WebP declared as PNG',
+    declaredType: 'image/png',
+    data: 'UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoBAAEAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=',
+    expectedType: 'image/webp',
+  },
+] as const;
 
 // ============================================================================
 // validateAttachment Tests
@@ -88,11 +130,14 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
-  it('should accept image attachment with valid base64 characters', () => {
+  it('should reject valid base64 that is not a supported image', () => {
     const attachment = createImageAttachment({
       data: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
     });
-    expect(() => validateAttachment(attachment)).not.toThrow();
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" does not contain supported image data'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should accept image attachment with line-wrapped base64 data', () => {
@@ -102,9 +147,131 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).not.toThrow();
   });
 
-  it('should throw a permanent error for unsupported image media types', () => {
-    const attachment = createImageAttachment({ type: 'image/bmp' });
-    expect(() => validateAttachment(attachment)).toThrow(UnsupportedImageTypeError);
+  it('should reject image data larger than 10 MiB before format inspection', () => {
+    const attachment = createImageAttachment({
+      data: 'A'.repeat(Math.ceil((MAX_IMAGE_SIZE + 1) / 3) * 4),
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject oversized PNG bytes despite text metadata and forged size', () => {
+    const attachment = createImageAttachment({
+      type: 'text/plain',
+      contentType: 'text',
+      size: 1,
+      data: createOversizedPngBase64(),
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it.each([
+    { format: 'PNG', data: 'iVBORw0KGgo=' },
+    { format: 'JPEG', data: '/9j/' },
+    { format: 'GIF', data: 'R0lGODlh' },
+    { format: 'WebP', data: 'UklGRgAAAABXRUJQ' },
+  ])('should reject a truncated $format with a recognized signature', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it.each([
+    {
+      label: 'text MIME type',
+      overrides: { type: 'text/plain', contentType: undefined },
+    },
+    {
+      label: 'text content discriminator',
+      overrides: { type: 'image/png', contentType: 'text' as const },
+    },
+    {
+      label: 'pasted-text name',
+      overrides: { name: 'Pasted text', type: '', contentType: undefined },
+    },
+  ])('should accept image-like text with a $label', ({ overrides }) => {
+    const attachment = createTextAttachment({
+      ...overrides,
+      data: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+
+    expect(() => validateAttachment(attachment)).not.toThrow();
+  });
+
+  it('should reject a PNG whose image data fails its checksum', () => {
+    const attachment = createImageAttachment({
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+c9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it.each([
+    {
+      name: 'unknown color type',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAEAAACCwvwwAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+    {
+      name: 'bit depth unsupported for truecolor',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABBAIAAABVh77fAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    },
+  ])('should reject a PNG IHDR with $name', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject an animated WebP frame with no image payload chunk', () => {
+    const attachment = createImageAttachment({
+      data: 'UklGRhwAAABXRUJQQU5NRhAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it.each([
+    {
+      layout: 'ANMF without VP8X and ANIM',
+      data: 'UklGRioAAABXRUJQQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAAA=',
+    },
+    {
+      layout: 'ANMF without ANIM',
+      data: 'UklGRjwAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAAA=',
+    },
+    {
+      layout: 'ANMF before ANIM',
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5NRh4AAAAAAAAAAAAAAAAAAAAAAAAAVlA4TAUAAAAvAAAAAABBTklNBgAAAAAAAAAAAA==',
+    },
+    {
+      layout: 'ANMF while the VP8X animation flag is clear',
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAAAAAAAAAAAAAAAQU5JTQYAAAAAAAAAAABBTk1GHgAAAAAAAAAAAAAAAAAAAAAAAABWUDhMBQAAAC8AAAAAAA==',
+    },
+  ])('should reject an animated WebP containing $layout', ({ data }) => {
+    const attachment = createImageAttachment({ data });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should accept an animated WebP with VP8X, ANIM, and ANMF in order', () => {
+    const attachment = createImageAttachment({
+      data: 'UklGRkoAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5JTQYAAAAAAAAAAABBTk1GHgAAAAAAAAAAAAAAAAAAAAAAAABWUDhMBQAAAC8AAAAAAA==',
+    });
+
+    expect(() => validateAttachment(attachment)).not.toThrow();
+  });
+
+  it('should throw a permanent error for unsupported image bytes', () => {
+    const attachment = createImageAttachment({ type: 'image/bmp', data: 'Qk0AAAAA' });
+    expect(() => validateAttachment(attachment)).toThrow(
+      'Attachment "screenshot.png" does not contain supported image data'
+    );
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
@@ -341,6 +508,61 @@ describe('buildContentArray', () => {
 // ============================================================================
 
 describe('processAttachmentsAndBuildContent', () => {
+  it.each([
+    {
+      name: 'text MIME type',
+      overrides: { type: 'text/plain', contentType: undefined },
+    },
+    {
+      name: 'text content discriminator',
+      overrides: { type: 'image/png', contentType: 'text' as const },
+    },
+  ])('should detect image bytes despite a $name', ({ overrides }) => {
+    const attachment = createImageAttachment(overrides);
+
+    const result = processAttachmentsAndBuildContent('Message', [attachment]);
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png',
+        data: attachment.data,
+      },
+    });
+    expect(attachment).toMatchObject(overrides);
+  });
+
+  it.each(SUPPORTED_IMAGE_FIXTURES)('should normalize $name from its bytes', ({
+    declaredType,
+    data,
+    expectedType,
+  }) => {
+    const attachment = createImageAttachment({ type: declaredType, data });
+
+    const result = processAttachmentsAndBuildContent('Message', [attachment]);
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: expectedType,
+        data,
+      },
+    });
+    expect(attachment.type).toBe(declaredType);
+  });
+
+  it('should dispatch structurally invalid image-like text as text', () => {
+    const attachment = createTextAttachment({ data: 'iVBORw0KGgoAAAANSUhEUg==' });
+
+    expect(processAttachmentsAndBuildContent('Message', [attachment])).toBe(
+      'Message\n\n[Pasted content: Pasted text]\niVBORw0KGgoAAAANSUhEUg=='
+    );
+  });
+
   it('should return text as-is when no attachments', () => {
     const result = processAttachmentsAndBuildContent('Hello world');
     expect(result).toBe('Hello world');
@@ -356,6 +578,19 @@ describe('processAttachmentsAndBuildContent', () => {
     const result = processAttachmentsAndBuildContent('Check this:', attachments);
     expect(result).toBe('Check this:\n\n[Pasted content: code.ts]\nconst x = 1;');
     expect(typeof result).toBe('string');
+  });
+
+  it('should not dispatch oversized PNG bytes mislabeled as text', () => {
+    const attachment = createImageAttachment({
+      type: 'text/plain',
+      contentType: 'text',
+      size: 1,
+      data: createOversizedPngBase64(),
+    });
+
+    expect(() => processAttachmentsAndBuildContent('Message', [attachment])).toThrow(
+      'Attachment "screenshot.png" exceeds the 10 MiB image limit'
+    );
   });
 
   it('should process image-only attachments and return content array', () => {

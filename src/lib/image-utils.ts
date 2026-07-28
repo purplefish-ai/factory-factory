@@ -1,4 +1,7 @@
+import { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 import type { MessageAttachment } from './chat-protocol';
+
+export { MAX_IMAGE_SIZE } from '@/shared/attachment-limits';
 
 /**
  * Supported image MIME types for upload.
@@ -34,11 +37,6 @@ export const SUPPORTED_TEXT_EXTENSIONS = [
   '.xml',
   '.sh',
 ] as const;
-
-/**
- * Maximum file size for image uploads (10MB).
- */
-export const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 /**
  * Maximum file size for text file uploads (1MB).
