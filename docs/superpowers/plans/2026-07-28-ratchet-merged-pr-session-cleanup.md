@@ -6,7 +6,7 @@
 
 **Architecture:** Add a focused cleanup method to `RatchetService` that enumerates workspace sessions through the existing session bridge, filters active Ratchet workflows, and stops their live runtimes. Invoke it immediately after a fresh `MERGED` PR observation and before decision construction, allowing failures to flow through the existing workspace-check error path so later polls retry.
 
-**Tech Stack:** TypeScript, Express backend service capsules, Vitest, Prisma-backed workspace state.
+**Tech Stack:** TypeScript, Express backend service capsules, Vitest, projected Ratchet state backed by cached PR observations.
 
 ## Global Constraints
 
@@ -39,7 +39,7 @@ sessions, one stopped Ratchet session, and one live manual session:
 vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([
   { id: 'ratchet-running', workflow: 'ratchet', status: SessionStatus.RUNNING },
   { id: 'ratchet-idle', workflow: 'ratchet', status: SessionStatus.IDLE },
-  { id: 'ratchet-stopped', workflow: 'ratchet', status: SessionStatus.STOPPED },
+  { id: 'ratchet-completed', workflow: 'ratchet', status: SessionStatus.COMPLETED },
   { id: 'manual-running', workflow: 'default', status: SessionStatus.RUNNING },
 ] as never);
 vi.mocked(mockSessionBridge.isSessionRunning).mockImplementation((sessionId) =>
@@ -48,8 +48,7 @@ vi.mocked(mockSessionBridge.isSessionRunning).mockImplementation((sessionId) =>
 ```
 
 Assert that only `ratchet-running` and `ratchet-idle` are stopped, and that
-`workspaceRatchetService.transitionStateIfEnabled` persists
-`ratchetState: RatchetState.MERGED`.
+`mockSnapshotBridge.recordPrObservation` persists `prState: 'MERGED'`.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -72,7 +71,8 @@ vi.mocked(mockSessionBridge.stopSession).mockRejectedValue(new Error('stop faile
 
 Assert that the result contains
 `{ action: { type: 'ERROR', error: 'stop failed' } }` and that
-`workspaceRatchetService.transitionStateIfEnabled` is not called.
+`workspaceRatchetService.recordCheckIfEnabled` and
+`mockSnapshotBridge.recordPrObservation` are not called.
 
 - [ ] **Step 4: Run both focused tests and verify RED**
 
