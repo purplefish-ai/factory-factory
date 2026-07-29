@@ -5,6 +5,24 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-07-29
+
+### Changed
+
+- Normalize Kanban card status chips and tighten their metadata layout (#2073)
+- Show issue creators consistently across GitHub and Linear Todo cards, and clarify the provider-specific column heading (#2066)
+
+### Fixed
+
+- Preserve failed dispatch drafts after runtime crashes (#2072)
+- Await run-script cleanup during server shutdown (#2071)
+- Keep monthly periodic tasks anchored to their configured day (#2070)
+- Guard Ratchet observations against pull-request URL changes and clean up completed fixer sessions correctly (#2068, #2069)
+
+### Documentation
+
+- Correct the documented Ratchet observation guard to reflect pull-request URL keying (#2074)
+
 ## [0.4.3] - 2026-07-29
 
 ### Added
