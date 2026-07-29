@@ -160,7 +160,7 @@ gh pr create \
   --draft \
   --base main \
   --title "Update Codex CLI to 0.145.0" \
-  --body-file <(printf '%s\n' \
+  --body "$(printf '%s\n' \
     '## Summary' \
     '' \
     '- update the CI Codex CLI pin from 0.101.0 to 0.145.0' \
@@ -172,7 +172,7 @@ gh pr create \
     '- `pnpm check`' \
     '- `pnpm typecheck`' \
     '- `pnpm test`' \
-    '- `pnpm build`')
+    '- `pnpm build`')"
 ```
 
 Expected: GitHub returns the new draft pull request URL.
