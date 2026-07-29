@@ -152,6 +152,20 @@ export function KanbanBoard() {
     return workspacesByColumn[columnId as KanbanColumnType]?.length ?? 0;
   };
 
+  const archiveGitLockDialog = (
+    <ArchiveGitLockDialog
+      open={archiveGitLockWorkspaceIds.length > 0}
+      onOpenChange={(open) => {
+        if (!open) {
+          dismissArchiveGitLock();
+        }
+      }}
+      workspaceCount={archiveGitLockWorkspaceIds.length}
+      onRetry={() => void retryGitLockedArchives(false)}
+      onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
+    />
+  );
+
   if (isLoading) {
     return (
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto mx-auto w-full max-w-[1800px]">
@@ -189,71 +203,75 @@ export function KanbanBoard() {
     }
 
     return (
-      <div className="flex flex-col h-full gap-3">
-        {/* Column pills */}
-        <div className="flex gap-1.5 shrink-0">
-          {columns.map((column) => {
-            const count = getColumnCount(column.id);
-            const isActive = column.id === activeColumnId;
-            return (
-              <button
-                key={column.id}
-                type="button"
-                onClick={() => setActiveColumnId(column.id)}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                )}
-              >
-                {column.shortLabel ?? column.label}
-                <span
+      <>
+        <div className="flex flex-col h-full gap-3">
+          {/* Column pills */}
+          <div className="flex gap-1.5 shrink-0">
+            {columns.map((column) => {
+              const count = getColumnCount(column.id);
+              const isActive = column.id === activeColumnId;
+              return (
+                <button
+                  key={column.id}
+                  type="button"
+                  onClick={() => setActiveColumnId(column.id)}
                   className={cn(
-                    'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
-                    isActive ? 'bg-primary-foreground/20' : 'bg-background/50'
+                    'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   )}
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  {column.shortLabel ?? column.label}
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
+                      isActive ? 'bg-primary-foreground/20' : 'bg-background/50'
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 w-full"
+            onClick={handleMobileNewTaskClick}
+          >
+            <PlusIcon className="h-4 w-4" />
+            New Task
+          </Button>
+
+          {/* Active column content */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {activeColumn.id === 'ISSUES' ? (
+              <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
+            ) : (
+              <KanbanColumn
+                column={activeColumn}
+                workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
+                projectSlug={projectSlug}
+                onToggleRatcheting={toggleWorkspaceRatcheting}
+                togglingWorkspaceId={togglingWorkspaceId}
+                onArchive={archiveWorkspace}
+                onBulkArchive={() => handleBulkArchive(activeColumn.id)}
+                isBulkArchiving={isBulkArchiving}
+                onOpenQuickChat={openQuickChat}
+                onRename={renameWorkspace}
+              />
+            )}
+          </div>
+
+          <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 w-full"
-          onClick={handleMobileNewTaskClick}
-        >
-          <PlusIcon className="h-4 w-4" />
-          New Task
-        </Button>
-
-        {/* Active column content */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {activeColumn.id === 'ISSUES' ? (
-            <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
-          ) : (
-            <KanbanColumn
-              column={activeColumn}
-              workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
-              projectSlug={projectSlug}
-              onToggleRatcheting={toggleWorkspaceRatcheting}
-              togglingWorkspaceId={togglingWorkspaceId}
-              onArchive={archiveWorkspace}
-              onBulkArchive={() => handleBulkArchive(activeColumn.id)}
-              isBulkArchiving={isBulkArchiving}
-              onOpenQuickChat={openQuickChat}
-              onRename={renameWorkspace}
-            />
-          )}
-        </div>
-
-        <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
-      </div>
+        {archiveGitLockDialog}
+      </>
     );
   }
 
@@ -304,17 +322,7 @@ export function KanbanBoard() {
         description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Any uncommitted changes will be committed before the worktrees are removed.`}
       />
 
-      <ArchiveGitLockDialog
-        open={archiveGitLockWorkspaceIds.length > 0}
-        onOpenChange={(open) => {
-          if (!open) {
-            dismissArchiveGitLock();
-          }
-        }}
-        workspaceCount={archiveGitLockWorkspaceIds.length}
-        onRetry={() => void retryGitLockedArchives(false)}
-        onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
-      />
+      {archiveGitLockDialog}
 
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
     </>

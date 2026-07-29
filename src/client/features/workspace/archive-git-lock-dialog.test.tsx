@@ -8,8 +8,13 @@ import { ArchiveGitLockDialog } from './archive-git-lock-dialog';
 describe('ArchiveGitLockDialog', () => {
   let container: HTMLDivElement;
   let root: Root;
+  let originalActEnvironmentDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    originalActEnvironmentDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'IS_REACT_ACT_ENVIRONMENT'
+    );
     Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
       configurable: true,
       writable: true,
@@ -21,8 +26,20 @@ describe('ArchiveGitLockDialog', () => {
   });
 
   afterEach(() => {
-    void act(() => root.unmount());
-    document.body.innerHTML = '';
+    try {
+      void act(() => root.unmount());
+      document.body.innerHTML = '';
+    } finally {
+      if (originalActEnvironmentDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          'IS_REACT_ACT_ENVIRONMENT',
+          originalActEnvironmentDescriptor
+        );
+      } else {
+        Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+      }
+    }
   });
 
   it('offers a safe retry and an explicit remove-lock recovery action', () => {

@@ -190,7 +190,13 @@ describe('gitOpsService', () => {
       .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: ' M file.ts\n', stderr: '' })
       .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
-      .mockResolvedValueOnce(commitResult);
+      .mockResolvedValueOnce(commitResult)
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: '/repo/.git/worktrees/w1\n',
+        stderr: '',
+      });
+    mockPathExists.mockResolvedValueOnce(false);
 
     await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1')).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
@@ -198,6 +204,34 @@ describe('gitOpsService', () => {
       cause: commitResult,
     });
     expect(mockGitStateInvalidate).toHaveBeenCalledOnce();
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
+  });
+
+  it('classifies a failed commit with the worktree index lock present', async () => {
+    const commitResult = {
+      code: 128,
+      stdout: '',
+      stderr: 'fatal: Unable to create index.lock: File exists.',
+    };
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '.git', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: ' M file.ts\n', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce(commitResult)
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: '/repo/.git/worktrees/w1\n',
+        stderr: '',
+      });
+    mockPathExists.mockResolvedValueOnce(true);
+
+    await expect(gitOpsService.commitIfNeeded('/repo/w1', 'W1')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      kind: 'GIT_INDEX_LOCKED',
+      message: expect.stringContaining('Git is locked'),
+      cause: commitResult,
+    });
+    expect(mockPathExists).toHaveBeenCalledWith('/repo/.git/worktrees/w1/index.lock');
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/w1');
   });
 

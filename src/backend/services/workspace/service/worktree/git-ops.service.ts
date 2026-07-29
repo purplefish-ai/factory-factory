@@ -74,9 +74,10 @@ class GitOpsService {
     return path.join(path.resolve(worktreePath, gitDir), 'index.lock');
   }
 
-  private async createGitAddError(
+  private async createGitOperationError(
     worktreePath: string,
-    addResult: Awaited<ReturnType<typeof gitCommand>>
+    result: Awaited<ReturnType<typeof gitCommand>>,
+    fallbackMessage: string
   ): Promise<ApplicationError> {
     try {
       const indexLockPath = await this.resolveIndexLockPath(worktreePath);
@@ -85,17 +86,17 @@ class GitOpsService {
           'CONFLICT',
           'Git is locked. Another Git operation may be running, or an earlier operation may have stopped unexpectedly.',
           {
-            cause: addResult,
+            cause: result,
             kind: 'GIT_INDEX_LOCKED',
           }
         );
       }
     } catch {
-      // Classification is best-effort. Preserve the original add failure when
+      // Classification is best-effort. Preserve the original Git failure when
       // the worktree's Git metadata cannot be inspected safely.
     }
 
-    return new ApplicationError('INTERNAL_ERROR', 'Git add failed', { cause: addResult });
+    return new ApplicationError('INTERNAL_ERROR', fallbackMessage, { cause: result });
   }
 
   private async removeGitIndexLock(worktreePath: string): Promise<void> {
@@ -139,7 +140,7 @@ class GitOpsService {
     try {
       const addResult = await gitCommand(['add', '-A'], worktreePath);
       if (addResult.code !== 0) {
-        throw await this.createGitAddError(worktreePath, addResult);
+        throw await this.createGitOperationError(worktreePath, addResult, 'Git add failed');
       }
 
       const commitMessage = `Archive workspace ${workspaceName}`;
@@ -148,9 +149,7 @@ class GitOpsService {
         worktreePath
       );
       if (commitResult.code !== 0) {
-        throw new ApplicationError('INTERNAL_ERROR', 'Git commit failed', {
-          cause: commitResult,
-        });
+        throw await this.createGitOperationError(worktreePath, commitResult, 'Git commit failed');
       }
     } finally {
       workspaceGitStateService.invalidate(worktreePath);
