@@ -1,12 +1,13 @@
-import type { RatchetDispatchOutcome } from '@prisma-gen/client';
 import type {
+  AutoIterationStatus,
   CIStatus,
   KanbanColumn,
   PRState,
   RatchetState,
-  RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
+import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import {
@@ -33,24 +34,16 @@ export interface WorkspaceDerivedStateInput {
   sessionIsWorking: boolean;
   pendingRequestType: WorkspacePendingRequestType | null;
   hasSessionRuntimeError?: boolean;
-  ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-  ratchetDispatchRetryCount: number;
-  runScriptStatus: RunScriptStatus | null;
+  isSessionStarting: boolean;
+  ratchetEnabled: boolean;
+  hasMergeConflict: boolean;
+  dispatchStalled: boolean;
+  mode: WorkspaceMode;
+  autoIterationStatus: AutoIterationStatus | null;
   flowState: WorkspaceDerivedFlowState;
 }
 
 export interface WorkspaceDerivedStateFns {
-  computeKanbanColumn: (input: {
-    lifecycle: WorkspaceStatus;
-    sessionIsWorking: boolean;
-    flowIsWorking: boolean;
-    prState: PRState;
-    ratchetState: RatchetState;
-    pendingRequestType: WorkspacePendingRequestType | null;
-    hasSessionRuntimeError: boolean;
-    ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-    ratchetDispatchRetryCount: number;
-  }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
     prUrl: string | null;
@@ -84,6 +77,27 @@ export function assembleWorkspaceDerivedState(
 ): WorkspaceDerivedState {
   const isWorking = input.sessionIsWorking;
 
+  // The reason is computed first and the column read off it, so there is no
+  // path that reaches a column without going through a reason.
+  const statusReason = deriveWorkspaceStatusReason({
+    lifecycle: input.lifecycle,
+    hasHadSessions: input.hasHadSessions,
+    isWorking,
+    isSessionStarting: input.isSessionStarting,
+    pendingRequestType: input.pendingRequestType,
+    hasSessionRuntimeError: input.hasSessionRuntimeError,
+    flowPhase: input.flowState.phase,
+    ciObservation: input.flowState.ciObservation,
+    prState: input.prState,
+    prCiStatus: input.prCiStatus,
+    ratchetState: input.ratchetState,
+    ratchetEnabled: input.ratchetEnabled,
+    hasMergeConflict: input.hasMergeConflict,
+    dispatchStalled: input.dispatchStalled,
+    mode: input.mode,
+    autoIterationStatus: input.autoIterationStatus,
+  });
+
   return {
     isWorking,
     sidebarStatus: fns.deriveSidebarStatus({
@@ -93,32 +107,10 @@ export function assembleWorkspaceDerivedState(
       prCiStatus: input.prCiStatus,
       ratchetState: input.ratchetState,
     }),
-    kanbanColumn: fns.computeKanbanColumn({
-      lifecycle: input.lifecycle,
-      sessionIsWorking: input.sessionIsWorking,
-      flowIsWorking: input.flowState.isWorking,
-      prState: input.prState,
-      ratchetState: input.ratchetState,
-      pendingRequestType: input.pendingRequestType,
-      hasSessionRuntimeError: input.hasSessionRuntimeError ?? false,
-      ratchetDispatchOutcome: input.ratchetDispatchOutcome,
-      ratchetDispatchRetryCount: input.ratchetDispatchRetryCount,
-    }),
+    kanbanColumn: kanbanColumnForStatusReason(statusReason.code),
     flowPhase: input.flowState.phase,
     ciObservation: input.flowState.ciObservation,
     ratchetButtonAnimated: input.flowState.shouldAnimateRatchetButton,
-    statusReason: deriveWorkspaceStatusReason({
-      lifecycle: input.lifecycle,
-      hasHadSessions: input.hasHadSessions,
-      isWorking,
-      pendingRequestType: input.pendingRequestType,
-      hasSessionRuntimeError: input.hasSessionRuntimeError,
-      flowPhase: input.flowState.phase,
-      ciObservation: input.flowState.ciObservation,
-      prState: input.prState,
-      prCiStatus: input.prCiStatus,
-      ratchetState: input.ratchetState,
-      runScriptStatus: input.runScriptStatus,
-    }),
+    statusReason,
   };
 }

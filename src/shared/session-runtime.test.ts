@@ -3,6 +3,7 @@ import {
   deriveSessionUiStatusKind,
   getSessionRuntimeErrorMessage,
   getSessionSummaryErrorMessage,
+  hasStartingSessionSummary,
   hasWorkingSessionSummary,
   isSessionSummaryWorking,
   type SessionRuntimeLastExit,
@@ -163,6 +164,30 @@ describe('session runtime working helpers', () => {
         { activity: 'IDLE', runtimePhase: 'idle' },
         { activity: 'IDLE', runtimePhase: 'running' },
       ])
+    ).toBe(true);
+  });
+});
+
+describe('hasStartingSessionSummary', () => {
+  it('treats loading and starting phases as starting', () => {
+    expect(hasStartingSessionSummary([{ runtimePhase: 'starting' }])).toBe(true);
+    expect(hasStartingSessionSummary([{ runtimePhase: 'loading' }])).toBe(true);
+  });
+
+  it('does not treat a running, idle, stopping, or errored session as starting', () => {
+    expect(hasStartingSessionSummary([{ runtimePhase: 'running' }])).toBe(false);
+    expect(hasStartingSessionSummary([{ runtimePhase: 'idle' }])).toBe(false);
+    expect(hasStartingSessionSummary([{ runtimePhase: 'stopping' }])).toBe(false);
+    expect(hasStartingSessionSummary([{ runtimePhase: 'error' }])).toBe(false);
+  });
+
+  it('is false for a workspace with no sessions', () => {
+    expect(hasStartingSessionSummary([])).toBe(false);
+  });
+
+  it('is true when any session is starting', () => {
+    expect(
+      hasStartingSessionSummary([{ runtimePhase: 'idle' }, { runtimePhase: 'starting' }])
     ).toBe(true);
   });
 });

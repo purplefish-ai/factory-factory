@@ -63,6 +63,7 @@ describe('WorkspaceCreationService', () => {
     ratchetDispatchSnapshotKey: null,
     ratchetDispatchOutcome: null,
     ratchetDispatchRetryCount: 0,
+    ratchetDispatchStalled: false,
     hasHadSessions: false,
     initErrorMessage: null,
     initOutput: null,

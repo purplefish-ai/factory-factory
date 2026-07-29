@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { EventCoalescer } from './event-collector.orchestrator';
 
 describe('authoritative Ratchet projection integration', () => {
@@ -8,7 +8,7 @@ describe('authoritative Ratchet projection integration', () => {
     vi.useRealTimers();
   });
 
-  it('moves exhausted failure back to WORKING after direct CI becomes pending', () => {
+  it('moves a stalled auto-fix back to WORKING once the ratchet resumes', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(1000));
 
@@ -21,12 +21,7 @@ describe('authoritative Ratchet projection integration', () => {
         isWorking: false,
         shouldAnimateRatchetButton: false,
       }),
-      computeKanbanColumn: (input) =>
-        input.ratchetDispatchOutcome === 'DIED' &&
-        input.ratchetDispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries
-          ? 'WAITING'
-          : 'WORKING',
-      deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'FAILING' }),
+      deriveSidebarStatus: (input) => deriveWorkspaceSidebarStatus(input),
     });
     store.upsert(
       'ws-1',
@@ -35,6 +30,7 @@ describe('authoritative Ratchet projection integration', () => {
         name: 'Workspace',
         status: 'READY',
         createdAt: '2026-01-01T00:00:00.000Z',
+        ratchetEnabled: true,
       },
       'seed',
       999
@@ -43,22 +39,16 @@ describe('authoritative Ratchet projection integration', () => {
 
     coalescer.enqueue(
       'ws-1',
-      {
-        ratchetDispatchOutcome: 'DIED',
-        ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-      },
+      { ratchetDispatchStalled: true },
       'projection:ratchet_authoritative',
       { immediate: true }
     );
+    expect(store.getByWorkspaceId('ws-1')?.statusReason.code).toBe('RATCHET_STALLED');
     expect(store.getByWorkspaceId('ws-1')?.kanbanColumn).toBe('WAITING');
 
     coalescer.enqueue(
       'ws-1',
-      {
-        prCiStatus: 'PENDING',
-        ratchetDispatchOutcome: null,
-        ratchetDispatchRetryCount: 0,
-      },
+      { prCiStatus: 'PENDING', ratchetDispatchStalled: false },
       'projection:ratchet_authoritative',
       { immediate: true }
     );

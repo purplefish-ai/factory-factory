@@ -56,6 +56,7 @@ export type WorkspaceRatchetMinAggregateOutputType = {
   dispatchSnapshotKey: string | null
   dispatchOutcome: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount: number | null
+  dispatchStalled: boolean | null
 }
 
 export type WorkspaceRatchetMaxAggregateOutputType = {
@@ -66,6 +67,7 @@ export type WorkspaceRatchetMaxAggregateOutputType = {
   dispatchSnapshotKey: string | null
   dispatchOutcome: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount: number | null
+  dispatchStalled: boolean | null
 }
 
 export type WorkspaceRatchetCountAggregateOutputType = {
@@ -76,6 +78,7 @@ export type WorkspaceRatchetCountAggregateOutputType = {
   dispatchSnapshotKey: number
   dispatchOutcome: number
   dispatchRetryCount: number
+  dispatchStalled: number
   _all: number
 }
 
@@ -96,6 +99,7 @@ export type WorkspaceRatchetMinAggregateInputType = {
   dispatchSnapshotKey?: true
   dispatchOutcome?: true
   dispatchRetryCount?: true
+  dispatchStalled?: true
 }
 
 export type WorkspaceRatchetMaxAggregateInputType = {
@@ -106,6 +110,7 @@ export type WorkspaceRatchetMaxAggregateInputType = {
   dispatchSnapshotKey?: true
   dispatchOutcome?: true
   dispatchRetryCount?: true
+  dispatchStalled?: true
 }
 
 export type WorkspaceRatchetCountAggregateInputType = {
@@ -116,6 +121,7 @@ export type WorkspaceRatchetCountAggregateInputType = {
   dispatchSnapshotKey?: true
   dispatchOutcome?: true
   dispatchRetryCount?: true
+  dispatchStalled?: true
   _all?: true
 }
 
@@ -213,6 +219,7 @@ export type WorkspaceRatchetGroupByOutputType = {
   dispatchSnapshotKey: string | null
   dispatchOutcome: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount: number
+  dispatchStalled: boolean
   _count: WorkspaceRatchetCountAggregateOutputType | null
   _avg: WorkspaceRatchetAvgAggregateOutputType | null
   _sum: WorkspaceRatchetSumAggregateOutputType | null
@@ -246,6 +253,7 @@ export type WorkspaceRatchetWhereInput = {
   dispatchSnapshotKey?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
   dispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableFilter<"WorkspaceRatchet"> | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFilter<"WorkspaceRatchet"> | number
+  dispatchStalled?: Prisma.BoolFilter<"WorkspaceRatchet"> | boolean
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
 }
 
@@ -257,6 +265,7 @@ export type WorkspaceRatchetOrderByWithRelationInput = {
   dispatchSnapshotKey?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchOutcome?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchRetryCount?: Prisma.SortOrder
+  dispatchStalled?: Prisma.SortOrder
   workspace?: Prisma.WorkspaceOrderByWithRelationInput
 }
 
@@ -271,6 +280,7 @@ export type WorkspaceRatchetWhereUniqueInput = Prisma.AtLeast<{
   dispatchSnapshotKey?: Prisma.StringNullableFilter<"WorkspaceRatchet"> | string | null
   dispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableFilter<"WorkspaceRatchet"> | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFilter<"WorkspaceRatchet"> | number
+  dispatchStalled?: Prisma.BoolFilter<"WorkspaceRatchet"> | boolean
   workspace?: Prisma.XOR<Prisma.WorkspaceScalarRelationFilter, Prisma.WorkspaceWhereInput>
 }, "workspaceId">
 
@@ -282,6 +292,7 @@ export type WorkspaceRatchetOrderByWithAggregationInput = {
   dispatchSnapshotKey?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchOutcome?: Prisma.SortOrderInput | Prisma.SortOrder
   dispatchRetryCount?: Prisma.SortOrder
+  dispatchStalled?: Prisma.SortOrder
   _count?: Prisma.WorkspaceRatchetCountOrderByAggregateInput
   _avg?: Prisma.WorkspaceRatchetAvgOrderByAggregateInput
   _max?: Prisma.WorkspaceRatchetMaxOrderByAggregateInput
@@ -300,6 +311,7 @@ export type WorkspaceRatchetScalarWhereWithAggregatesInput = {
   dispatchSnapshotKey?: Prisma.StringNullableWithAggregatesFilter<"WorkspaceRatchet"> | string | null
   dispatchOutcome?: Prisma.EnumRatchetDispatchOutcomeNullableWithAggregatesFilter<"WorkspaceRatchet"> | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntWithAggregatesFilter<"WorkspaceRatchet"> | number
+  dispatchStalled?: Prisma.BoolWithAggregatesFilter<"WorkspaceRatchet"> | boolean
 }
 
 export type WorkspaceRatchetCreateInput = {
@@ -309,6 +321,7 @@ export type WorkspaceRatchetCreateInput = {
   dispatchSnapshotKey?: string | null
   dispatchOutcome?: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: number
+  dispatchStalled?: boolean
   workspace: Prisma.WorkspaceCreateNestedOneWithoutRatchetInput
 }
 
@@ -320,6 +333,7 @@ export type WorkspaceRatchetUncheckedCreateInput = {
   dispatchSnapshotKey?: string | null
   dispatchOutcome?: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: number
+  dispatchStalled?: boolean
 }
 
 export type WorkspaceRatchetUpdateInput = {
@@ -329,6 +343,7 @@ export type WorkspaceRatchetUpdateInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   workspace?: Prisma.WorkspaceUpdateOneRequiredWithoutRatchetNestedInput
 }
 
@@ -340,6 +355,7 @@ export type WorkspaceRatchetUncheckedUpdateInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
 }
 
 export type WorkspaceRatchetCreateManyInput = {
@@ -350,6 +366,7 @@ export type WorkspaceRatchetCreateManyInput = {
   dispatchSnapshotKey?: string | null
   dispatchOutcome?: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: number
+  dispatchStalled?: boolean
 }
 
 export type WorkspaceRatchetUpdateManyMutationInput = {
@@ -359,6 +376,7 @@ export type WorkspaceRatchetUpdateManyMutationInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
 }
 
 export type WorkspaceRatchetUncheckedUpdateManyInput = {
@@ -369,6 +387,7 @@ export type WorkspaceRatchetUncheckedUpdateManyInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
 }
 
 export type WorkspaceRatchetNullableScalarRelationFilter = {
@@ -384,6 +403,7 @@ export type WorkspaceRatchetCountOrderByAggregateInput = {
   dispatchSnapshotKey?: Prisma.SortOrder
   dispatchOutcome?: Prisma.SortOrder
   dispatchRetryCount?: Prisma.SortOrder
+  dispatchStalled?: Prisma.SortOrder
 }
 
 export type WorkspaceRatchetAvgOrderByAggregateInput = {
@@ -398,6 +418,7 @@ export type WorkspaceRatchetMaxOrderByAggregateInput = {
   dispatchSnapshotKey?: Prisma.SortOrder
   dispatchOutcome?: Prisma.SortOrder
   dispatchRetryCount?: Prisma.SortOrder
+  dispatchStalled?: Prisma.SortOrder
 }
 
 export type WorkspaceRatchetMinOrderByAggregateInput = {
@@ -408,6 +429,7 @@ export type WorkspaceRatchetMinOrderByAggregateInput = {
   dispatchSnapshotKey?: Prisma.SortOrder
   dispatchOutcome?: Prisma.SortOrder
   dispatchRetryCount?: Prisma.SortOrder
+  dispatchStalled?: Prisma.SortOrder
 }
 
 export type WorkspaceRatchetSumOrderByAggregateInput = {
@@ -457,6 +479,7 @@ export type WorkspaceRatchetCreateWithoutWorkspaceInput = {
   dispatchSnapshotKey?: string | null
   dispatchOutcome?: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: number
+  dispatchStalled?: boolean
 }
 
 export type WorkspaceRatchetUncheckedCreateWithoutWorkspaceInput = {
@@ -466,6 +489,7 @@ export type WorkspaceRatchetUncheckedCreateWithoutWorkspaceInput = {
   dispatchSnapshotKey?: string | null
   dispatchOutcome?: $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: number
+  dispatchStalled?: boolean
 }
 
 export type WorkspaceRatchetCreateOrConnectWithoutWorkspaceInput = {
@@ -491,6 +515,7 @@ export type WorkspaceRatchetUpdateWithoutWorkspaceInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
 }
 
 export type WorkspaceRatchetUncheckedUpdateWithoutWorkspaceInput = {
@@ -500,6 +525,7 @@ export type WorkspaceRatchetUncheckedUpdateWithoutWorkspaceInput = {
   dispatchSnapshotKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dispatchOutcome?: Prisma.NullableEnumRatchetDispatchOutcomeFieldUpdateOperationsInput | $Enums.RatchetDispatchOutcome | null
   dispatchRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
+  dispatchStalled?: Prisma.BoolFieldUpdateOperationsInput | boolean
 }
 
 
@@ -512,6 +538,7 @@ export type WorkspaceRatchetSelect<ExtArgs extends runtime.Types.Extensions.Inte
   dispatchSnapshotKey?: boolean
   dispatchOutcome?: boolean
   dispatchRetryCount?: boolean
+  dispatchStalled?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceRatchet"]>
 
@@ -523,6 +550,7 @@ export type WorkspaceRatchetSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
   dispatchSnapshotKey?: boolean
   dispatchOutcome?: boolean
   dispatchRetryCount?: boolean
+  dispatchStalled?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceRatchet"]>
 
@@ -534,6 +562,7 @@ export type WorkspaceRatchetSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
   dispatchSnapshotKey?: boolean
   dispatchOutcome?: boolean
   dispatchRetryCount?: boolean
+  dispatchStalled?: boolean
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["workspaceRatchet"]>
 
@@ -545,9 +574,10 @@ export type WorkspaceRatchetSelectScalar = {
   dispatchSnapshotKey?: boolean
   dispatchOutcome?: boolean
   dispatchRetryCount?: boolean
+  dispatchStalled?: boolean
 }
 
-export type WorkspaceRatchetOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "lastCheckedAt" | "activeSessionId" | "dispatchSnapshotKey" | "dispatchOutcome" | "dispatchRetryCount", ExtArgs["result"]["workspaceRatchet"]>
+export type WorkspaceRatchetOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"workspaceId" | "enabled" | "lastCheckedAt" | "activeSessionId" | "dispatchSnapshotKey" | "dispatchOutcome" | "dispatchRetryCount" | "dispatchStalled", ExtArgs["result"]["workspaceRatchet"]>
 export type WorkspaceRatchetInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
 }
@@ -571,6 +601,7 @@ export type $WorkspaceRatchetPayload<ExtArgs extends runtime.Types.Extensions.In
     dispatchSnapshotKey: string | null
     dispatchOutcome: $Enums.RatchetDispatchOutcome | null
     dispatchRetryCount: number
+    dispatchStalled: boolean
   }, ExtArgs["result"]["workspaceRatchet"]>
   composites: {}
 }
@@ -1002,6 +1033,7 @@ export interface WorkspaceRatchetFieldRefs {
   readonly dispatchSnapshotKey: Prisma.FieldRef<"WorkspaceRatchet", 'String'>
   readonly dispatchOutcome: Prisma.FieldRef<"WorkspaceRatchet", 'RatchetDispatchOutcome'>
   readonly dispatchRetryCount: Prisma.FieldRef<"WorkspaceRatchet", 'Int'>
+  readonly dispatchStalled: Prisma.FieldRef<"WorkspaceRatchet", 'Boolean'>
 }
     
 

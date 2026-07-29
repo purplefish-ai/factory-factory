@@ -1598,7 +1598,8 @@ export const WorkspaceRatchetScalarFieldEnum = {
   activeSessionId: 'activeSessionId',
   dispatchSnapshotKey: 'dispatchSnapshotKey',
   dispatchOutcome: 'dispatchOutcome',
-  dispatchRetryCount: 'dispatchRetryCount'
+  dispatchRetryCount: 'dispatchRetryCount',
+  dispatchStalled: 'dispatchStalled'
 } as const
 
 export type WorkspaceRatchetScalarFieldEnum = (typeof WorkspaceRatchetScalarFieldEnum)[keyof typeof WorkspaceRatchetScalarFieldEnum]

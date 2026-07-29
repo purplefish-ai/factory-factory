@@ -7,13 +7,13 @@ import type {
 } from '@/backend/services/workspace/service/bridges';
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
-import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import {
   CIStatus,
   KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -691,6 +691,10 @@ describe('WorkspaceQueryService', () => {
       prUpdatedAt: new Date('2026-01-01T00:10:00.000Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.REVIEW_PENDING,
+      ratchetDispatchStalled: false,
+      prHasMergeConflict: false,
+      mode: WorkspaceMode.STANDARD,
+      autoIterationStatus: null,
       runScriptStatus: RunScriptStatus.IDLE,
       hasHadSessions: true,
       githubIssueNumber: null,
@@ -729,7 +733,6 @@ describe('WorkspaceQueryService', () => {
           ...input,
           prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
         }),
-      computeKanbanColumn,
       deriveSidebarStatus: deriveWorkspaceSidebarStatus,
     });
     snapshotStore.upsert(
@@ -747,6 +750,10 @@ describe('WorkspaceQueryService', () => {
         prUpdatedAt: workspace.prUpdatedAt.toISOString(),
         ratchetEnabled: workspace.ratchetEnabled,
         ratchetState: workspace.ratchetState,
+        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
+        hasMergeConflict: workspace.prHasMergeConflict,
+        mode: workspace.mode,
+        autoIterationStatus: workspace.autoIterationStatus,
         runScriptStatus: workspace.runScriptStatus,
         hasHadSessions: workspace.hasHadSessions,
         isWorking: false,

@@ -3,7 +3,6 @@ import {
   // Worktree
   assertWorktreePathSafe,
   // State derivation
-  computeKanbanColumn,
   deriveWorkspaceFlowState,
   deriveWorkspaceFlowStateFromWorkspace,
   getWorkspaceInitPolicy,
@@ -45,10 +44,6 @@ describe('Workspace domain exports', () => {
 
   it('exports deriveWorkspaceFlowStateFromWorkspace as a function', () => {
     expect(typeof deriveWorkspaceFlowStateFromWorkspace).toBe('function');
-  });
-
-  it('exports computeKanbanColumn as a function', () => {
-    expect(typeof computeKanbanColumn).toBe('function');
   });
 
   it('exports getWorkspaceInitPolicy as a function', () => {

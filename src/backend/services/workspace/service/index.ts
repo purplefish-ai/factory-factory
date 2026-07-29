@@ -78,7 +78,6 @@ export {
   type WorkspaceInitPolicy,
   type WorkspaceInitPolicyInput,
 } from './state/init-policy';
-export { computeKanbanColumn, type KanbanStateInput } from './state/kanban-state';
 export {
   computePendingRequestType,
   type WorkspacePendingRequestType,

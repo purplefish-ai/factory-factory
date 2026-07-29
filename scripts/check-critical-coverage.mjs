@@ -50,7 +50,6 @@ const groups = [
     threshold: 85,
     files: [
       'src/backend/services/workspace/service/query/workspace-query.service.ts',
-      'src/backend/services/workspace/service/state/kanban-state.ts',
       'src/backend/services/session/service/session-domain.service.ts',
     ],
   },
@@ -78,7 +77,6 @@ const perFileThresholds = [
   { file: 'src/backend/services/run-script/service/run-script.service.ts', threshold: 50 },
   { file: 'src/backend/services/run-script/service/run-script-proxy.service.ts', threshold: 70 },
   { file: 'src/backend/services/workspace/service/query/workspace-query.service.ts', threshold: 85 },
-  { file: 'src/backend/services/workspace/service/state/kanban-state.ts', threshold: 80 },
   { file: 'src/backend/services/session/service/session-domain.service.ts', threshold: 90 },
   { file: 'src/backend/trpc/workspace/init.trpc.ts', threshold: 85 },
   { file: 'src/backend/trpc/workspace/ide.trpc.ts', threshold: 90 },

@@ -507,7 +507,6 @@ describe('websocket integration', () => {
         isWorking: false,
         shouldAnimateRatchetButton: false,
       }),
-      computeKanbanColumn: () => 'WORKING',
       deriveSidebarStatus: () => ({
         activityState: 'IDLE',
         ciState: 'NONE',

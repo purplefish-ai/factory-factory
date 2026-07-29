@@ -37,6 +37,7 @@ function ratchetRow(overrides: Partial<WorkspaceRatchetRow> = {}): WorkspaceRatc
     dispatchSnapshotKey: 'snapshot-1',
     dispatchOutcome: 'RUNNING' as const,
     dispatchRetryCount: 2,
+    dispatchStalled: false,
     ...overrides,
   };
 }
@@ -50,6 +51,7 @@ describe('flattenWorkspaceRatchet', () => {
       ratchetDispatchSnapshotKey: 'snapshot-1',
       ratchetDispatchOutcome: 'RUNNING',
       ratchetDispatchRetryCount: 2,
+      ratchetDispatchStalled: false,
     });
   });
 
@@ -66,6 +68,18 @@ describe('flattenWorkspaceRatchet', () => {
 
     expect(flattenWorkspaceRatchet(null).ratchetEnabled).toBe(true);
     expect(WORKSPACE_RATCHET_DEFAULTS.ratchetEnabled).toBe(true);
+  });
+});
+
+describe('flattenWorkspaceRatchet', () => {
+  it('defaults ratchetDispatchStalled to false when no ratchet row exists', () => {
+    expect(flattenWorkspaceRatchet(null)).toMatchObject({ ratchetDispatchStalled: false });
+  });
+
+  it('flattens dispatchStalled under the ratchet-prefixed read name', () => {
+    expect(flattenWorkspaceRatchet(ratchetRow({ dispatchStalled: true }))).toMatchObject({
+      ratchetDispatchStalled: true,
+    });
   });
 });
 
@@ -171,6 +185,8 @@ describe('workspaceRatchetAccessor', () => {
         ratchetState: 'CI_RUNNING',
         ratchetDispatchOutcome: 'RUNNING',
         ratchetDispatchRetryCount: 2,
+        ratchetDispatchStalled: false,
+        prHasMergeConflict: false,
       });
 
       expect(mockWorkspaceFindUnique).toHaveBeenCalledWith({
@@ -189,6 +205,10 @@ describe('workspaceRatchetAccessor', () => {
       await expect(workspaceRatchetAccessor.findSnapshotProjection('ws-1')).resolves.toMatchObject({
         ratchetEnabled: false,
         ratchetState: 'IDLE',
+        // The raw PR observation still surfaces even though the derived
+        // ratchet state is IDLE -- callers project it onto the snapshot's
+        // `pr` field-group independently of the `ratchet` field-group.
+        prHasMergeConflict: true,
       });
     });
 
@@ -218,8 +238,41 @@ describe('workspaceRatchetAccessor', () => {
           dispatchSnapshotKey: 'snapshot-1',
           dispatchOutcome: 'RUNNING',
           dispatchRetryCount: 2,
+          // A dispatch is the ratchet acting, so the write clears any stall
+          // conclusion in the same statement.
+          dispatchStalled: false,
         },
       });
+    });
+
+    it('pins the stall write to the dispatch the check evaluated', async () => {
+      // Guarded rather than an update by workspace id: a check runs concurrently
+      // with PR sync, so between its decision and this write the dispatch it
+      // reasoned about can be reset or disabled. `dispatchStalled: false` in the
+      // guard also makes the write report a transition exactly once.
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceRatchetAccessor.markDispatchStalled('ws-1', 'snapshot-1')
+      ).resolves.toBe(true);
+
+      expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
+        where: {
+          workspaceId: 'ws-1',
+          enabled: true,
+          dispatchSnapshotKey: 'snapshot-1',
+          dispatchStalled: false,
+        },
+        data: { dispatchStalled: true },
+      });
+    });
+
+    it('reports no transition when the stall guard matches nothing', async () => {
+      mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        workspaceRatchetAccessor.markDispatchStalled('ws-1', 'stale-snapshot')
+      ).resolves.toBe(false);
     });
 
     it('returns false when the dispatch write affects no rows', async () => {
@@ -340,6 +393,7 @@ describe('workspaceRatchetAccessor', () => {
           dispatchSnapshotKey: null,
           dispatchOutcome: null,
           dispatchRetryCount: 0,
+          dispatchStalled: false,
         },
       });
     });
@@ -397,7 +451,7 @@ describe('workspaceRatchetAccessor', () => {
 
       expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', ...guard },
-        data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+        data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
       });
     });
 

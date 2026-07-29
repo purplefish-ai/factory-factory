@@ -22,15 +22,19 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
+  AutoIterationStatus,
   CIStatus,
-  KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
-import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import {
+  findWorkspaceSessionRuntimeError,
+  hasStartingSessionSummary,
+} from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
@@ -58,6 +62,8 @@ export interface SnapshotUpdateInput {
   createdAt?: string;
   branchName?: string | null;
   hasHadSessions?: boolean;
+  mode?: WorkspaceMode;
+  autoIterationStatus?: AutoIterationStatus | null;
 
   // PR fields (group: 'pr')
   prUrl?: string | null;
@@ -65,6 +71,7 @@ export interface SnapshotUpdateInput {
   prState?: PRState;
   prCiStatus?: CIStatus;
   prUpdatedAt?: string | null;
+  hasMergeConflict?: boolean;
 
   // Session fields (group: 'session')
   isWorking?: boolean;
@@ -76,6 +83,7 @@ export interface SnapshotUpdateInput {
   ratchetState?: RatchetState;
   ratchetDispatchOutcome?: RatchetDispatchOutcome | null;
   ratchetDispatchRetryCount?: number;
+  ratchetDispatchStalled?: boolean;
 
   // Run-script fields (group: 'runScript')
   runScriptStatus?: RunScriptStatus;
@@ -110,17 +118,6 @@ export interface SnapshotDerivationFns {
     isWorking: boolean;
     shouldAnimateRatchetButton: boolean;
   };
-  computeKanbanColumn: (input: {
-    lifecycle: WorkspaceStatus;
-    sessionIsWorking: boolean;
-    flowIsWorking: boolean;
-    prState: PRState;
-    ratchetState: RatchetState;
-    pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
-    hasSessionRuntimeError: boolean;
-    ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-    ratchetDispatchRetryCount: number;
-  }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
     prUrl: string | null;
@@ -165,14 +162,24 @@ const WORKSPACE_FIELDS = [
   'createdAt',
   'branchName',
   'hasHadSessions',
+  'mode',
+  'autoIterationStatus',
 ] as const;
-const PR_FIELDS = ['prUrl', 'prNumber', 'prState', 'prCiStatus', 'prUpdatedAt'] as const;
+const PR_FIELDS = [
+  'prUrl',
+  'prNumber',
+  'prState',
+  'prCiStatus',
+  'prUpdatedAt',
+  'hasMergeConflict',
+] as const;
 const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
 const RATCHET_FIELDS = [
   'ratchetEnabled',
   'ratchetState',
   'ratchetDispatchOutcome',
   'ratchetDispatchRetryCount',
+  'ratchetDispatchStalled',
 ] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
@@ -373,12 +380,16 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       prState: 'NONE' as PRState,
       prCiStatus: 'UNKNOWN' as CIStatus,
       prUpdatedAt: null,
+      hasMergeConflict: false,
       ratchetEnabled: false,
       ratchetState: 'IDLE' as RatchetState,
       ratchetDispatchOutcome: null,
       ratchetDispatchRetryCount: 0,
+      ratchetDispatchStalled: false,
       runScriptStatus: 'IDLE' as RunScriptStatus,
       hasHadSessions: false,
+      mode: 'STANDARD' as WorkspaceMode,
+      autoIterationStatus: null,
       isWorking: false,
       pendingRequestType: null,
       sessionSummaries: [],
@@ -451,15 +462,15 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
-        ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
-        runScriptStatus: entry.runScriptStatus,
+        isSessionStarting: hasStartingSessionSummary(entry.sessionSummaries),
+        ratchetEnabled: entry.ratchetEnabled,
+        hasMergeConflict: entry.hasMergeConflict,
+        dispatchStalled: entry.ratchetDispatchStalled,
+        mode: entry.mode,
+        autoIterationStatus: entry.autoIterationStatus,
         flowState,
       },
-      {
-        computeKanbanColumn: this.derive.computeKanbanColumn,
-        deriveSidebarStatus: this.derive.deriveSidebarStatus,
-      }
+      { deriveSidebarStatus: this.derive.deriveSidebarStatus }
     );
 
     let changed = false;
@@ -569,8 +580,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       return { accepted: false, changed: false, emitted: false };
     }
 
-    // Accepted raw values can produce time-sensitive derived changes even when
-    // the raw values themselves are equal (for example, CI grace periods).
+    // Derived state is now a pure function of the entry's raw fields, so this
+    // recompute never disagrees with `mergeResult.rawChanged` in practice --
+    // there is no longer a time-sensitive input (e.g. the old CI grace
+    // period) that could change the derived output on its own. It still runs
+    // on every upsert because it writes the entry's derived fields as a side
+    // effect (not just this boolean); `derivedChanged` stays in the guard
+    // below as a defensive fallback rather than a load-bearing case.
     const derivedChanged = this.recomputeDerivedState(entry);
     if (!(isNewEntry || mergeResult.rawChanged || derivedChanged)) {
       logger.debug('Snapshot update accepted without value changes', { workspaceId, source });

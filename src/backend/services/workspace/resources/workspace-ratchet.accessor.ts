@@ -42,6 +42,7 @@ export interface WorkspaceRatchetFields {
   ratchetDispatchSnapshotKey: string | null;
   ratchetDispatchOutcome: RatchetDispatchOutcome | null;
   ratchetDispatchRetryCount: number;
+  ratchetDispatchStalled: boolean;
 }
 
 /**
@@ -61,6 +62,7 @@ export const WORKSPACE_RATCHET_DEFAULTS: WorkspaceRatchetFields = {
   ratchetDispatchSnapshotKey: null,
   ratchetDispatchOutcome: null,
   ratchetDispatchRetryCount: 0,
+  ratchetDispatchStalled: false,
 };
 
 /** The persisted row, as joined onto a workspace read. */
@@ -80,6 +82,7 @@ export function flattenWorkspaceRatchet(
     ratchetDispatchSnapshotKey: ratchet.dispatchSnapshotKey,
     ratchetDispatchOutcome: ratchet.dispatchOutcome,
     ratchetDispatchRetryCount: ratchet.dispatchRetryCount,
+    ratchetDispatchStalled: ratchet.dispatchStalled,
   };
 }
 
@@ -179,19 +182,26 @@ class WorkspaceRatchetAccessor {
   }
 
   /**
-   * The four ratchet fields the snapshot stream projects, plus the lifecycle
-   * status the caller checks before publishing them.
+   * The ratchet fields the snapshot stream projects, plus `prHasMergeConflict`
+   * (read off the joined PR row so the ratchet and PR field-groups both refresh
+   * from the same event) and the lifecycle status the caller checks before
+   * publishing them.
    *
    * Narrow on purpose: this runs on every ratchet event, and it used to read a
    * whole workspace row to use five of its columns.
    */
-  async findSnapshotProjection(
-    workspaceId: string
-  ): Promise<
+  async findSnapshotProjection(workspaceId: string): Promise<
     | (Pick<
         WorkspaceRatchetFields,
-        'ratchetEnabled' | 'ratchetDispatchOutcome' | 'ratchetDispatchRetryCount'
-      > & { ratchetState: RatchetState; status: WorkspaceStatus })
+        | 'ratchetEnabled'
+        | 'ratchetDispatchOutcome'
+        | 'ratchetDispatchRetryCount'
+        | 'ratchetDispatchStalled'
+      > & {
+        ratchetState: RatchetState;
+        status: WorkspaceStatus;
+        prHasMergeConflict: boolean;
+      })
     | null
   > {
     const row = await prisma.workspace.findUnique({
@@ -203,8 +213,12 @@ class WorkspaceRatchetAccessor {
     if (!row) {
       return null;
     }
-    const { ratchetEnabled, ratchetDispatchOutcome, ratchetDispatchRetryCount } =
-      flattenWorkspaceRatchet(row.ratchet);
+    const {
+      ratchetEnabled,
+      ratchetDispatchOutcome,
+      ratchetDispatchRetryCount,
+      ratchetDispatchStalled,
+    } = flattenWorkspaceRatchet(row.ratchet);
     const { prState, prCiStatus, prHasMergeConflict, prReviewState } = flattenWorkspacePR(row.pr);
     return {
       status: row.status,
@@ -218,6 +232,8 @@ class WorkspaceRatchetAccessor {
       }),
       ratchetDispatchOutcome,
       ratchetDispatchRetryCount,
+      ratchetDispatchStalled,
+      prHasMergeConflict,
     };
   }
 
@@ -266,6 +282,14 @@ class WorkspaceRatchetAccessor {
         dispatchSnapshotKey: dispatch.snapshotKey,
         dispatchOutcome: 'RUNNING',
         dispatchRetryCount: dispatch.retryCount,
+        // A dispatch is the ratchet acting, so it cannot still be stalled.
+        // `resetSettledDispatch` clears the flag when a PR observation changes
+        // the cached aggregate, but the dispatch snapshot key also hashes
+        // `statusCheckRollup` detail that `WorkspacePR` does not store — so a
+        // re-run that keeps CI at FAILURE changes the key, warrants a fresh
+        // dispatch, and never touches the aggregate. Clearing it here keeps the
+        // flag scoped to the dispatch it describes.
+        dispatchStalled: false,
       },
     });
     return result.count > 0;
@@ -317,6 +341,37 @@ class WorkspaceRatchetAccessor {
     return result.count > 0;
   }
 
+  /**
+   * Record that the ratchet has concluded it will not act again for the current
+   * PR state. Cleared by `resetSettledDispatch`, `disable`, and the next
+   * dispatch, which already own the rest of the dispatch record's lifecycle.
+   *
+   * A compare-and-swap, like every other write on this row, rather than an
+   * update by workspace id. A ratchet check runs concurrently with PR sync, so
+   * between the decision and this write the dispatch it reasoned about can be
+   * reset by a newer observation or cleared by a disable — and an unguarded
+   * write would resurrect a stall conclusion for a dispatch that no longer
+   * exists. Matching on `dispatchSnapshotKey` pins the write to the dispatch the
+   * check actually evaluated.
+   *
+   * Returns whether this call is what flipped the flag. `dispatchStalled: false`
+   * in the guard is what makes that true exactly once: the ratchet re-reaches
+   * this conclusion on every poll for as long as the PR sits unchanged, and only
+   * the first of those is a transition worth republishing.
+   */
+  async markDispatchStalled(workspaceId: string, snapshotKey: string): Promise<boolean> {
+    const result = await prisma.workspaceRatchet.updateMany({
+      where: {
+        workspaceId,
+        enabled: true,
+        dispatchSnapshotKey: snapshotKey,
+        dispatchStalled: false,
+      },
+      data: { dispatchStalled: true },
+    });
+    return result.count > 0;
+  }
+
   async enable(workspaceId: string): Promise<void> {
     await prisma.workspaceRatchet.updateMany({ where: { workspaceId }, data: { enabled: true } });
   }
@@ -335,6 +390,7 @@ class WorkspaceRatchetAccessor {
         dispatchSnapshotKey: null,
         dispatchOutcome: null,
         dispatchRetryCount: 0,
+        dispatchStalled: false,
       },
     });
   }
@@ -378,7 +434,7 @@ class WorkspaceRatchetAccessor {
   ): Promise<boolean> {
     const result = await transaction.workspaceRatchet.updateMany({
       where: { workspaceId, ...guard },
-      data: { dispatchOutcome: null, dispatchRetryCount: 0 },
+      data: { dispatchOutcome: null, dispatchRetryCount: 0, dispatchStalled: false },
     });
     return result.count > 0;
   }

@@ -358,6 +358,13 @@ model WorkspaceRatchet {
   dispatchOutcome     RatchetDispatchOutcome? // Outcome for the key above (null = never dispatched, or reset by a PR change)
   dispatchRetryCount  Int          @default(0) // DIED re-dispatches consumed for the current key
 
+  // The ratchet's own conclusion that it will not act again until the PR
+  // changes: either a settled dispatch achieved nothing for an unchanged
+  // snapshot key, or a DIED fixer exhausted its retries. Persisted because the
+  // snapshot key hashes statusCheckRollup detail `WorkspacePR` does not store,
+  // so no reader can re-derive this.
+  dispatchStalled     Boolean      @default(false)
+
   // The poll set is `enabled` workspaces, oldest check first. Dropping `state`
   // from the composite left `enabled` alone, which a boolean index cannot help
   // with at this cardinality, so only the ordering index remains.

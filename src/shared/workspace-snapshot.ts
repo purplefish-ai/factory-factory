@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  AutoIterationStatus,
   CIStatus,
   KanbanColumn,
   PRState,
@@ -9,6 +10,7 @@ import {
   SessionStatus,
   WORKSPACE_SIDEBAR_ACTIVITY_STATES,
   WORKSPACE_SIDEBAR_CI_STATES,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import {
@@ -91,12 +93,16 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   prState: z.nativeEnum(PRState),
   prCiStatus: z.nativeEnum(CIStatus),
   prUpdatedAt: z.string().nullable(),
+  hasMergeConflict: z.boolean(),
   ratchetEnabled: z.boolean(),
   ratchetState: z.nativeEnum(RatchetState),
   ratchetDispatchOutcome: RatchetDispatchOutcomeSchema.nullable(),
   ratchetDispatchRetryCount: z.number().int().nonnegative(),
+  ratchetDispatchStalled: z.boolean(),
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
+  mode: z.nativeEnum(WorkspaceMode),
+  autoIterationStatus: z.nativeEnum(AutoIterationStatus).nullable(),
   isWorking: z.boolean(),
   pendingRequestType: z.enum(WORKSPACE_PENDING_REQUEST_TYPES).nullable(),
   sessionSummaries: z.array(WorkspaceSessionSummarySchema),

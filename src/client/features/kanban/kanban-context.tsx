@@ -110,7 +110,10 @@ export function KanbanProvider({
     isLoading: isLoadingIssues,
     refetch: refetchIssues,
   } = useProjectIssues(projectId, issueProvider, {
-    workspaceIssueLinks: workspaces,
+    // Deliberately the unfiltered list: `workspaces` drops null-column
+    // workspaces for the board's benefit, and an archiving workspace still owns
+    // its issue until the archive completes.
+    workspaceIssueLinks: projectWorkspaces?.workspaces,
     optimisticWorkspaceIssueLinks: archivingWorkspaceIssueLinks,
   });
   const [showInlineForm, setShowInlineForm] = useState(false);

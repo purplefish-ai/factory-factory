@@ -32,6 +32,7 @@ vi.mock('@/hooks/use-websocket-transport', () => ({
 }));
 
 const mockSetData = vi.fn();
+const mockGetData = vi.fn();
 const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
 const mockWorkspaceGetInvalidate = vi.fn();
@@ -43,6 +44,7 @@ vi.mock('@/client/lib/trpc', () => ({
       workspace: {
         listForProject: {
           setData: mockSetData,
+          getData: mockGetData,
           invalidate: mockListInvalidate,
         },
         get: {
@@ -62,8 +64,17 @@ describe('useProjectSnapshotSync', () => {
   beforeEach(() => {
     capturedOptions = null;
     mockSetData.mockReset();
+    mockGetData.mockReset();
+    // Most tests exercise the default 'ws-1' entry from makeEntry() and don't
+    // care about the unknown-workspace invalidation this file also covers, so
+    // seed the cache with that id by default. Tests that specifically exercise
+    // an unknown workspace use a different id ('ws-new') that isn't seeded here.
+    mockGetData.mockReturnValue({ workspaces: [{ id: 'ws-1' }], reviewCount: 0 });
     mockWorkspaceGetSetData.mockReset();
-    mockListInvalidate.mockClear();
+    // Real tRPC `invalidate` returns a promise; the repair path chains .catch()
+    // onto it to release its guard when a refetch fails.
+    mockListInvalidate.mockReset();
+    mockListInvalidate.mockResolvedValue(undefined);
     mockWorkspaceGetInvalidate.mockClear();
     mockGlobalDispatchEvent.mockClear();
     resetPendingRatchetTogglesForTests();
@@ -440,7 +451,11 @@ describe('useProjectSnapshotSync', () => {
   }
 
   describe('cache invalidation strategy', () => {
-    it('snapshot_changed and snapshot_removed never invalidate caches', () => {
+    it('snapshot_changed and snapshot_removed do not invalidate caches for a known workspace', () => {
+      // Seed the list cache with the entry's workspace id so it is already
+      // known; a *known* workspace's deltas never invalidate. An *unknown*
+      // workspace is covered separately below.
+      mockGetData.mockReturnValue({ workspaces: [{ id: 'ws-1' }], reviewCount: 0 });
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
 
@@ -455,6 +470,38 @@ describe('useProjectSnapshotSync', () => {
       });
 
       expectNoInvalidations();
+    });
+
+    it('invalidates the project list once when snapshot_changed introduces an unknown workspace', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: makeEntry({ workspaceId: 'ws-new' }),
+      });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: makeEntry({ workspaceId: 'ws-new' }),
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+    });
+
+    it('invalidates when snapshot_full introduces a workspace the cache has never seen', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-new' })],
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
     });
 
     it('the initial snapshot_full baseline does not invalidate caches', () => {
@@ -535,6 +582,34 @@ describe('useProjectSnapshotSync', () => {
   // ===========================================================================
   // In-flight ratchet toggle overrides
   // ===========================================================================
+
+  describe('unknown-workspace repair failure', () => {
+    it('releases the guard so a later message can retry a failed repair', async () => {
+      // Marking before the refetch collapses a burst of messages into one
+      // request. If that request fails and the mark stayed, the workspace's
+      // issue-link fields would stay null forever and its issue would sit in
+      // Todo next to the board card.
+      mockListInvalidate.mockRejectedValueOnce(new Error('network'));
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: { ...makeEntry(), workspaceId: 'ws-new' },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: { ...makeEntry(), workspaceId: 'ws-new' },
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+    });
+  });
 
   describe('pending ratchet toggle override', () => {
     it('snapshot_changed entries are overridden while a toggle is in flight', () => {

@@ -18,7 +18,6 @@ export type WorkspaceDetail = RouterOutputs['workspace']['get'];
 function mutationOnlyFieldDefaults() {
   return {
     initErrorMessage: null,
-    mode: 'STANDARD',
     autoIterationStatus: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
@@ -38,6 +37,7 @@ function projectSnapshotToLiveFields(entry: WorkspaceSnapshotEntry) {
     projectId: entry.projectId,
     name: entry.name,
     status: entry.status,
+    mode: entry.mode,
     createdAt: new Date(entry.createdAt),
     branchName: entry.branchName,
     prUrl: entry.prUrl,
@@ -87,5 +87,6 @@ export function mergeProjectSnapshotIntoWorkspaceDetail(
     hasHadSessions: entry.hasHadSessions,
     ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
     ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
+    ratchetDispatchStalled: entry.ratchetDispatchStalled,
   };
 }

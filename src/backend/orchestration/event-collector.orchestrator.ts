@@ -164,6 +164,8 @@ async function projectAuthoritativeRatchetState(
         ratchetState: workspace.ratchetState,
         ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
         ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
+        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
+        hasMergeConflict: workspace.prHasMergeConflict,
       },
       'projection:ratchet_authoritative',
       { immediate: true }

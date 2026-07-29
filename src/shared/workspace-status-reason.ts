@@ -1,8 +1,9 @@
 import type {
+  AutoIterationStatus,
   CIStatus,
   PRState,
   RatchetState,
-  RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
@@ -36,10 +37,14 @@ export const WORKSPACE_STATUS_REASON_CODES = [
   'ARCHIVING',
   'ARCHIVED',
   'AGENT_WORKING',
-  'DEV_SERVER_RUNNING',
+  'STARTING_SESSION',
+  'AUTO_ITERATING',
   'WAITING_FOR_CI',
   'FIXING_CI_FAILURES',
   'FIXING_REVIEW_COMMENTS',
+  'FIXING_MERGE_CONFLICT',
+  'MERGE_CONFLICT',
+  'RATCHET_STALLED',
   'CHECKING_PR',
   'MERGED',
   'PR_CLOSED',
@@ -62,6 +67,7 @@ export interface WorkspaceStatusReasonInput {
   lifecycle: WorkspaceStatus;
   hasHadSessions: boolean;
   isWorking: boolean;
+  isSessionStarting: boolean;
   pendingRequestType: WorkspacePendingRequestType | null;
   hasSessionRuntimeError?: boolean;
   flowPhase: WorkspaceFlowPhase;
@@ -69,7 +75,11 @@ export interface WorkspaceStatusReasonInput {
   prState: PRState;
   prCiStatus: CIStatus;
   ratchetState: RatchetState;
-  runScriptStatus: RunScriptStatus | null;
+  ratchetEnabled: boolean;
+  hasMergeConflict: boolean;
+  dispatchStalled: boolean;
+  mode: WorkspaceMode;
+  autoIterationStatus: AutoIterationStatus | null;
 }
 
 type OptionalWorkspaceStatusReason = WorkspaceStatusReason | null;
@@ -87,9 +97,12 @@ export function deriveWorkspaceStatusReason(
   input: WorkspaceStatusReasonInput
 ): WorkspaceStatusReason {
   return (
+    deriveArchiveReason(input) ??
+    deriveTerminalPrReason(input) ??
     deriveBlockingReason(input) ??
     deriveLifecycleReason(input) ??
     deriveActiveReason(input) ??
+    deriveRatchetTroubleReason(input) ??
     derivePrFlowReason(input) ??
     deriveIdleReason(input)
   );
@@ -112,13 +125,14 @@ function deriveBlockingReason(input: WorkspaceStatusReasonInput): OptionalWorksp
   return null;
 }
 
-function deriveLifecycleReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
-  if (input.lifecycle === 'NEW' || input.lifecycle === 'PROVISIONING') {
-    return reason('SETTING_UP', 'Setting up workspace', 'working');
-  }
-  if (input.lifecycle === 'FAILED') {
-    return reason('SETUP_FAILED', 'Setup failed', 'danger', true);
-  }
+/**
+ * The two lifecycle states that take a workspace off the board entirely.
+ *
+ * Split out of `deriveLifecycleReason` so it can run first in the chain: a
+ * workspace being archived (or already archived) must not be reported as a
+ * merged/closed PR, a pending request, or any other reason below it.
+ */
+function deriveArchiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
   if (input.lifecycle === 'ARCHIVING') {
     return reason('ARCHIVING', 'Archiving', 'working');
   }
@@ -129,13 +143,85 @@ function deriveLifecycleReason(input: WorkspaceStatusReasonInput): OptionalWorks
   return null;
 }
 
+function deriveLifecycleReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (input.lifecycle === 'NEW' || input.lifecycle === 'PROVISIONING') {
+    return reason('SETTING_UP', 'Setting up workspace', 'working');
+  }
+  if (input.lifecycle === 'FAILED') {
+    return reason('SETUP_FAILED', 'Setup failed', 'danger', true);
+  }
+
+  return null;
+}
+
 function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
   if (input.isWorking) {
     return reason('AGENT_WORKING', 'Agent working', 'working');
   }
 
-  if (input.runScriptStatus === 'RUNNING' || input.runScriptStatus === 'STARTING') {
-    return reason('DEV_SERVER_RUNNING', 'Dev server running', 'working');
+  if (input.isSessionStarting) {
+    return reason('STARTING_SESSION', 'Starting session', 'working');
+  }
+
+  if (input.mode === 'AUTO_ITERATION' && input.autoIterationStatus === 'RUNNING') {
+    return reason('AUTO_ITERATING', 'Auto-iterating', 'working');
+  }
+
+  return null;
+}
+
+/**
+ * The two PR states the automation cannot make progress on by itself.
+ *
+ * Split out of `derivePrFlowReason` only to keep that function under the
+ * cognitive-complexity limit; it runs immediately before it, so the precedence
+ * is the same as if these were its first two branches.
+ */
+function deriveRatchetTroubleReason(
+  input: WorkspaceStatusReasonInput
+): OptionalWorkspaceStatusReason {
+  // Both branches are statements about a pull request, so neither may speak for
+  // a workspace that has none. `hasMergeConflict` and `dispatchStalled` are
+  // cached facts about the PR a workspace used to have; without this gate, a
+  // workspace whose PR went away while one of them was set would report
+  // "Merge conflict" or "Auto-fix stalled" instead of the idle reason it has
+  // earned. Terminal PRs are already handled ahead of this, so `NO_PR` is the
+  // only phase to exclude.
+  if (input.flowPhase === 'NO_PR') {
+    return null;
+  }
+
+  if (input.ratchetEnabled && input.dispatchStalled) {
+    return reason('RATCHET_STALLED', 'Auto-fix stalled', 'attention', true);
+  }
+
+  if (input.hasMergeConflict) {
+    return input.ratchetEnabled
+      ? reason('FIXING_MERGE_CONFLICT', 'Fixing merge conflict', 'working')
+      : reason('MERGE_CONFLICT', 'Merge conflict', 'attention', true);
+  }
+
+  return null;
+}
+
+/**
+ * The two PR states that are done for good: nothing else can happen to them.
+ *
+ * Split out of `derivePrFlowReason`, and run ahead of the whole rest of the
+ * chain, so a merged or closed PR is reported as such even when a pending
+ * request, a session error, or a FAILED lifecycle would otherwise win.
+ */
+function deriveTerminalPrReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (
+    input.flowPhase === 'MERGED' ||
+    input.prState === 'MERGED' ||
+    input.ratchetState === 'MERGED'
+  ) {
+    return reason('MERGED', 'Merged', 'success');
+  }
+
+  if (input.prState === 'CLOSED') {
+    return reason('PR_CLOSED', 'PR closed', 'neutral');
   }
 
   return null;
@@ -157,24 +243,12 @@ function derivePrFlowReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
     return reason('CHECKING_PR', 'Checking PR', 'working');
   }
 
-  if (
-    input.flowPhase === 'MERGED' ||
-    input.prState === 'MERGED' ||
-    input.ratchetState === 'MERGED'
-  ) {
-    return reason('MERGED', 'Merged', 'success');
-  }
-
-  if (input.prState === 'CLOSED') {
-    return reason('PR_CLOSED', 'PR closed', 'neutral');
-  }
-
   if (input.flowPhase === 'READY' && input.ciObservation === 'CHECKS_PASSED') {
-    return reason('READY_TO_MERGE', 'Ready to merge', 'success');
+    return reason('READY_TO_MERGE', 'Ready to merge', 'success', true);
   }
 
   if (input.flowPhase === 'READY') {
-    return reason('READY_FOR_REVIEW', 'Ready for review', 'neutral');
+    return reason('READY_FOR_REVIEW', 'Ready for review', 'neutral', true);
   }
 
   return null;

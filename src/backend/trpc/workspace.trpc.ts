@@ -10,13 +10,15 @@ import {
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import {
-  computeKanbanColumn,
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
 import { KanbanColumn } from '@/shared/core';
 import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
-import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import {
+  findWorkspaceSessionRuntimeError,
+  hasStartingSessionSummary,
+} from '@/shared/session-runtime';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { toTRPCError } from './application-error-mapper';
@@ -158,13 +160,15 @@ export const workspaceCoreRouter = router({
         sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
         pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-        runScriptStatus: workspace.runScriptStatus,
+        isSessionStarting: hasStartingSessionSummary(sessionSummaries),
+        ratchetEnabled: workspace.ratchetEnabled,
+        hasMergeConflict: workspace.prHasMergeConflict,
+        dispatchStalled: workspace.ratchetDispatchStalled,
+        mode: workspace.mode,
+        autoIterationStatus: workspace.autoIterationStatus,
         flowState,
       },
       {
-        computeKanbanColumn,
         deriveSidebarStatus: deriveWorkspaceSidebarStatus,
       }
     );

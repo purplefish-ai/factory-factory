@@ -57,6 +57,7 @@ const mockSessionBridge: RatchetSessionBridge = {
 const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   findFixerContext: vi.fn(),
   recordSessionEnd: vi.fn(),
+  markDispatchStalled: vi.fn(),
 };
 
 describe('FixerSessionService', () => {

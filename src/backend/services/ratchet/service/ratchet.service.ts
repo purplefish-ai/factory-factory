@@ -657,6 +657,11 @@ class RatchetService extends EventEmitter {
     }
 
     if (!context.hasStateChangedSinceLastDispatch) {
+      // A settled dispatch achieved nothing for this PR state, and this gate is
+      // only reachable after an actionable trigger was confirmed and the DIED
+      // and active-session paths returned. Nothing further will happen here
+      // until the PR changes, so record it rather than looking busy.
+      await this.recordDispatchStalled(context);
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'PR state unchanged since last ratchet dispatch' },
@@ -679,11 +684,34 @@ class RatchetService extends EventEmitter {
     return { type: 'TRIGGER_FIXER', retryCount: 0 };
   }
 
+  /**
+   * Persist the stall conclusion and publish it if this call is what flipped it.
+   *
+   * The write is pinned to the dispatch this check evaluated, so a concurrent PR
+   * observation or disable wins. The event matters because a stall is, by
+   * definition, nothing changing: the PR observation is identical to the cache
+   * and the derived ratchet state is identical to the last one, so neither of
+   * the two paths that normally refresh a snapshot fires. Without this emit the
+   * WORKING-to-WAITING transition would wait for the next reconciliation sweep.
+   */
+  private async recordDispatchStalled(context: RatchetDecisionContext): Promise<void> {
+    const marked = await this.workspace.markDispatchStalled(
+      context.workspace.id,
+      context.prStateInfo.snapshotKey
+    );
+    if (marked) {
+      this.emit(RATCHET_DISPATCH_CHANGED, {
+        workspaceId: context.workspace.id,
+      } satisfies RatchetDispatchChangedEvent);
+    }
+  }
+
   private async decideDiedFixerRetry(
     context: RatchetDecisionContext,
     signal: AbortSignal = new AbortController().signal
   ): Promise<RatchetDecision> {
     if (context.dispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries) {
+      await this.recordDispatchStalled(context);
       return {
         type: 'RETURN_ACTION',
         action: {

@@ -46,6 +46,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
+import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
@@ -157,7 +158,7 @@ function createOptimisticWorkingWorkspace(params: {
     lastActivityAt: null,
     isWorking: true,
     // A freshly created workspace is always NEW, which derives as WORKING.
-    kanbanColumn: 'WORKING',
+    kanbanColumn: kanbanColumnForStatusReason('SETTING_UP'),
     sidebarStatus: { activityState: 'WORKING', ciState: 'NONE' },
     ratchetButtonAnimated: false,
     flowPhase: 'NO_PR',
