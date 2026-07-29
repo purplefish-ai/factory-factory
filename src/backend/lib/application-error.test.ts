@@ -22,4 +22,16 @@ describe('ApplicationError', () => {
       cause,
     });
   });
+
+  it('retains a machine-readable error kind', () => {
+    const error = new ApplicationError('CONFLICT', 'Git index is locked', {
+      kind: 'GIT_INDEX_LOCKED',
+    });
+
+    expect(error).toMatchObject({
+      code: 'CONFLICT',
+      kind: 'GIT_INDEX_LOCKED',
+      message: 'Git index is locked',
+    });
+  });
 });

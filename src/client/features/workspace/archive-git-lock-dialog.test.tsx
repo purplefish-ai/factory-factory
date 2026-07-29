@@ -3,9 +3,9 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArchiveWorkspaceDialog } from './archive-workspace-dialog';
+import { ArchiveGitLockDialog } from './archive-git-lock-dialog';
 
-describe('ArchiveWorkspaceDialog', () => {
+describe('ArchiveGitLockDialog', () => {
   let container: HTMLDivElement;
   let root: Root;
   let originalActEnvironmentDescriptor: PropertyDescriptor | undefined;
@@ -42,26 +42,37 @@ describe('ArchiveWorkspaceDialog', () => {
     }
   });
 
-  it('always allows archive confirmation and does not expose a commit choice', () => {
-    const onConfirm = vi.fn();
+  it('offers a safe retry and an explicit remove-lock recovery action', () => {
+    const onOpenChange = vi.fn();
+    const onRetry = vi.fn();
+    const onRemoveLockAndArchive = vi.fn();
     void act(() => {
       root.render(
-        createElement(ArchiveWorkspaceDialog, {
+        createElement(ArchiveGitLockDialog, {
           open: true,
-          onOpenChange: vi.fn(),
-          onConfirm,
+          onOpenChange,
+          onRetry,
+          onRemoveLockAndArchive,
         })
       );
     });
 
-    const archiveButton = [...document.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Archive'
-    );
-    expect(archiveButton?.disabled).toBe(false);
-    expect(document.querySelector('[role="checkbox"]')).toBeNull();
-    expect(document.body.textContent).toContain('committed before the worktree is removed');
+    expect(document.body.textContent).toContain('Another Git operation may be running');
 
-    void act(() => archiveButton?.click());
-    expect(onConfirm).toHaveBeenCalledWith();
+    const retryButton = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry'
+    );
+    const removeButton = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Remove Lock and Archive'
+    );
+    expect(retryButton).toBeDefined();
+    expect(removeButton).toBeDefined();
+
+    void act(() => retryButton?.click());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onRetry).toHaveBeenCalledOnce();
+
+    void act(() => removeButton?.click());
+    expect(onRemoveLockAndArchive).toHaveBeenCalledOnce();
   });
 });
