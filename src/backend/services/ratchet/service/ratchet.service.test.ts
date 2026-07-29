@@ -1421,6 +1421,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'ws-observation',
+        prUrl: 'https://github.com/example/repo/pull/44',
         prState: 'CHANGES_REQUESTED',
         reviewState: 'CHANGES_REQUESTED',
         ciStatus: CIStatus.SUCCESS,
@@ -1501,7 +1502,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSessionBridge.stopSession).toHaveBeenNthCalledWith(1, 'ratchet-running');
     expect(mockSessionBridge.stopSession).toHaveBeenNthCalledWith(2, 'ratchet-idle');
     expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: 'ws-merged', prState: 'MERGED' })
+      expect.objectContaining({
+        workspaceId: 'ws-merged',
+        prUrl: 'https://github.com/example/repo/pull/45',
+        prState: 'MERGED',
+      })
     );
     expect(vi.mocked(mockSessionBridge.stopSession).mock.invocationCallOrder.at(-1)).toBeLessThan(
       vi.mocked(mockSnapshotBridge.recordPrObservation).mock.invocationCallOrder[0] ?? 0
@@ -1620,6 +1625,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSnapshotBridge.recordPrObservation).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'ws-conflict',
+        prUrl: 'https://github.com/example/repo/pull/43',
         ciStatus: CIStatus.SUCCESS,
         hasMergeConflict: true,
       })

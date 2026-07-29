@@ -395,6 +395,7 @@ describe('PRSnapshotService', () => {
       const refresh = prSnapshotService.refreshWorkspace('w-ordered');
       await vi.waitFor(() => expect(mockFetchAndComputePRState).toHaveBeenCalledTimes(1));
       const directObservation = prSnapshotService.recordPrObservation('w-ordered', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'FAILURE',
         prState: 'OPEN',
@@ -425,6 +426,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T00:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-1', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -434,6 +436,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-1', {
+        expectedPrUrl: 'https://github.com/org/repo/pull/1',
         expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -447,6 +450,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T01:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-2', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -457,6 +461,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-2', {
+        expectedPrUrl: 'https://github.com/org/repo/pull/1',
         expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -470,6 +475,7 @@ describe('PRSnapshotService', () => {
       const observedAt = new Date('2026-02-11T02:00:00Z');
 
       await prSnapshotService.recordPrObservation('w-ci-3', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -480,6 +486,7 @@ describe('PRSnapshotService', () => {
       });
 
       expect(mockApplyPrObservationWithDispatchReset).toHaveBeenCalledWith('w-ci-3', {
+        expectedPrUrl: 'https://github.com/org/repo/pull/1',
         expectedPrNumber: 1,
         prCiStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -505,6 +512,7 @@ describe('PRSnapshotService', () => {
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-exhausted', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'PENDING',
         prState: 'OPEN',
@@ -538,6 +546,7 @@ describe('PRSnapshotService', () => {
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-merged', {
+        prUrl: 'https://github.com/org/repo/pull/2',
         prNumber: 2,
         ciStatus: 'SUCCESS',
         prState: 'MERGED',
@@ -566,6 +575,7 @@ describe('PRSnapshotService', () => {
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-same-pr', {
+        prUrl: 'https://github.com/org/repo/pull/3',
         prNumber: 3,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',
@@ -585,6 +595,7 @@ describe('PRSnapshotService', () => {
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event) => events.push(event));
 
       await prSnapshotService.recordPrObservation('ws-stale-ci', {
+        prUrl: 'https://github.com/org/repo/pull/1',
         prNumber: 1,
         ciStatus: 'SUCCESS',
         prState: 'OPEN',

@@ -51,6 +51,7 @@ export interface GitHubPRSnapshotPersistenceInput extends GitHubSnapshotFields {
  */
 export interface GitHubPrObservationPersistenceInput {
   /** The PR the observation was fetched for. Guarded, not written. */
+  expectedPrUrl: string;
   expectedPrNumber: number;
   prCiStatus: CIStatus;
   prState: PRState;

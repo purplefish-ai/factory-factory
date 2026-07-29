@@ -442,6 +442,49 @@ describe('workspaceAccessor', () => {
 
       await expect(
         workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrUrl: 'https://github.com/org/repo/pull/42',
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'MERGED',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+      expect(mockPrUpdateMany).not.toHaveBeenCalled();
+      expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a stale observation after the PR URL changes while its number is unknown', async () => {
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/99', number: null })
+      );
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrUrl: 'https://github.com/org/repo/pull/42',
+          expectedPrNumber: 42,
+          prCiStatus: 'SUCCESS',
+          prState: 'MERGED',
+          prReviewState: null,
+          prHasMergeConflict: false,
+          prUpdatedAt,
+        })
+      ).resolves.toEqual({ applied: false, dispatchReset: false });
+
+      expect(mockPrUpdateMany).not.toHaveBeenCalled();
+      expect(mockRatchetUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a stale observation when a failed re-point leaves the old PR number cached', async () => {
+      mockPrFindUnique.mockResolvedValue(
+        currentColumns({ url: 'https://github.com/org/repo/pull/99', number: 42 })
+      );
+
+      await expect(
+        workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrUrl: 'https://github.com/org/repo/pull/42',
           expectedPrNumber: 42,
           prCiStatus: 'SUCCESS',
           prState: 'MERGED',
@@ -467,6 +510,7 @@ describe('workspaceAccessor', () => {
 
       await expect(
         workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrUrl: 'https://github.com/org/repo/pull/42',
           expectedPrNumber: 42,
           prCiStatus: 'SUCCESS',
           prState: 'OPEN',
@@ -486,6 +530,7 @@ describe('workspaceAccessor', () => {
 
       await expect(
         workspaceAccessor.applyPrObservationWithDispatchReset('ws-1', {
+          expectedPrUrl: 'https://github.com/org/repo/pull/42',
           expectedPrNumber: 42,
           prCiStatus: 'PENDING',
           prState: 'OPEN',

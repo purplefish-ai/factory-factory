@@ -156,6 +156,7 @@ export interface PrObservationPersistenceInput {
    * stamp it onto the new one, and a workspace deriving `MERGED` leaves the ratchet
    * poll set altogether.
    */
+  expectedPrUrl: string;
   expectedPrNumber: number;
   prCiStatus: CIStatus;
   prState: PRState;
@@ -168,6 +169,11 @@ export interface PrObservationPersistenceInput {
 export interface PrAggregatePersistenceResult {
   applied: boolean;
   dispatchReset: boolean;
+}
+
+interface PrObservationIdentityGuard {
+  prUrl: string;
+  prNumber: number;
 }
 
 type PrAggregatePersistenceInput = Partial<{
@@ -213,6 +219,19 @@ function prAggregateChanged(
   return compared.some(
     (field) => observation[field] !== undefined && current[field] !== observation[field]
   );
+}
+
+function prIdentityChanged(
+  current: PRAggregateGuard,
+  expected?: PrObservationIdentityGuard
+): boolean {
+  if (!expected) {
+    return false;
+  }
+  if (current.prNumber !== null && current.prNumber !== expected.prNumber) {
+    return true;
+  }
+  return current.prUrl !== expected.prUrl;
 }
 
 /**
@@ -801,8 +820,11 @@ class WorkspaceAccessor {
     workspaceId: string,
     observation: PrObservationPersistenceInput
   ): Promise<PrAggregatePersistenceResult> {
-    const { expectedPrNumber, ...fields } = observation;
-    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, fields, expectedPrNumber);
+    const { expectedPrUrl, expectedPrNumber, ...fields } = observation;
+    return this.applyPrAggregateUpdateWithDispatchReset(workspaceId, fields, {
+      prUrl: expectedPrUrl,
+      prNumber: expectedPrNumber,
+    });
   }
 
   /**
@@ -844,12 +866,8 @@ class WorkspaceAccessor {
   private async applyPrAggregateUpdateWithDispatchReset(
     workspaceId: string,
     observation: PrAggregatePersistenceInput,
-    /**
-     * When given, the PR number the observation was fetched for. A row now naming
-     * a different PR means the workspace was re-pointed mid-fetch, so this
-     * observation describes a PR that is no longer the workspace's.
-     */
-    expectedPrNumber?: number
+    /** The exact PR identity the observation was fetched from. */
+    expectedPr?: PrObservationIdentityGuard
   ): Promise<PrAggregatePersistenceResult> {
     const { branchName, ...prFields } = observation;
     return await prisma.$transaction(async (transaction) => {
@@ -857,14 +875,7 @@ class WorkspaceAccessor {
       if (!current) {
         return { applied: false, dispatchReset: false };
       }
-      // A null cached number is "not known yet" rather than a different PR:
-      // discovery attaches a url without a number, and the check's own number came
-      // from parsing that url. Only a populated mismatch is a re-point.
-      if (
-        expectedPrNumber !== undefined &&
-        current.prNumber !== null &&
-        current.prNumber !== expectedPrNumber
-      ) {
+      if (prIdentityChanged(current, expectedPr)) {
         return { applied: false, dispatchReset: false };
       }
       const dispatch = await workspaceRatchetAccessor.readDispatchGuard(transaction, workspaceId);

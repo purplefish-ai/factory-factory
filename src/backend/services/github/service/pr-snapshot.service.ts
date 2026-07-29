@@ -61,6 +61,7 @@ export interface PRUrlAttachedEvent {
 
 /** One ratchet check's observation of a PR: every input `deriveRatchetState` reads. */
 interface PrObservationInput {
+  prUrl: string;
   prNumber: number;
   ciStatus: SnapshotData['prCiStatus'];
   prState: SnapshotData['prState'];
@@ -128,6 +129,7 @@ class PRSnapshotService extends EventEmitter {
   async recordPrObservation(workspaceId: string, input: PrObservationInput): Promise<void> {
     await this.runWorkspaceOperation(workspaceId, async () => {
       const result = await this.workspace.applyPrObservationWithDispatchReset(workspaceId, {
+        expectedPrUrl: input.prUrl,
         expectedPrNumber: input.prNumber,
         prCiStatus: input.ciStatus,
         prState: input.prState,
