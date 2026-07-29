@@ -282,6 +282,51 @@ describe('KanbanCard', () => {
     container.remove();
   });
 
+  it('renders linked issue and pull request controls on one metadata row', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onCardClick = vi.fn();
+    const { container, root } = renderCard(
+      {
+        ...baseWorkspace,
+        githubIssueNumber: 1905,
+        githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+        branchName: 'feature/card-style',
+        prUrl: 'https://github.com/example/repo/pull/57',
+        prNumber: 57,
+        prState: 'DRAFT',
+      },
+      onCardClick
+    );
+    const row = container.querySelector('[data-testid="issue-pr-row"]');
+    const buttons = row?.querySelectorAll('button');
+
+    expect(row?.textContent).toContain('#1905');
+    expect(row?.textContent).toContain('#57');
+    expect(row?.textContent).toContain('PR');
+    expect(buttons).toHaveLength(2);
+    expect(row?.nextElementSibling?.textContent).toContain('feature/card-style');
+
+    buttons?.[0]?.click();
+    buttons?.[1]?.click();
+
+    expect(openSpy).toHaveBeenNthCalledWith(
+      1,
+      'https://github.com/example/repo/issues/1905',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(openSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://github.com/example/repo/pull/57',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(onCardClick).not.toHaveBeenCalled();
+
+    root.unmount();
+    container.remove();
+  });
+
   it('opens a linked Linear issue from card metadata', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     const { container, root } = renderCard({
