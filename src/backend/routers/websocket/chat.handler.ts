@@ -222,7 +222,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           !acpRuntimeManager.isSessionRunning(dbSessionId) &&
           chatConnectionRegistry.countViewers(dbSessionId) === 0
         ) {
-          sessionDomainService.clearSession(dbSessionId);
+          sessionDomainService.clearSession(dbSessionId, { preserveRejections: true });
         }
       };
 

@@ -29,9 +29,17 @@ export class SessionStoreRegistry {
     return store;
   }
 
-  clearSession(sessionId: string): void {
+  clearSession(sessionId: string, options?: { preserveRejections?: boolean }): void {
+    const rejectionsToPreserve = options?.preserveRejections
+      ? this.stores
+          .get(sessionId)
+          ?.recentRejections.filter((rejection) => rejection.expiresAt > Date.now())
+      : undefined;
     this.nextHistoryRetryAtBySession.delete(sessionId);
     this.stores.delete(sessionId);
+    if (rejectionsToPreserve?.length) {
+      this.getOrCreate(sessionId).recentRejections = rejectionsToPreserve;
+    }
   }
 
   clearAllSessions(): void {

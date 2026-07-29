@@ -201,6 +201,78 @@ describe('SessionDomainService', () => {
     );
   });
 
+  it('replays failed message recovery content after preserving session cleanup', async () => {
+    const attachment = {
+      id: 'attachment-after-crash',
+      name: 'crash-notes.txt',
+      type: 'text/plain',
+      size: 19,
+      data: 'recover attachment',
+      contentType: 'text' as const,
+    };
+    sessionDomainService.storeInitialMessage('s1', 'discard initial message');
+    sessionDomainService.enqueue('s1', {
+      id: 'queued-before-cleanup',
+      text: 'discard queued message',
+      timestamp: '2026-07-29T11:59:00.000Z',
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    sessionDomainService.failMessage(
+      's1',
+      {
+        id: 'failed-after-crash',
+        text: 'recover this draft',
+        timestamp: '2026-07-29T12:00:00.000Z',
+        attachments: [attachment],
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
+      },
+      'runtime crashed'
+    );
+
+    sessionDomainService.clearSession('s1', { preserveRejections: true });
+
+    expect(sessionDomainService.getQueueLength('s1')).toBe(0);
+    expect(sessionDomainService.consumeInitialMessage('s1')).toBeNull();
+
+    await sessionDomainService.subscribe({
+      sessionId: 's1',
+      sessionRuntime: {
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+        errorMessage: 'runtime crashed',
+        updatedAt: '2026-07-29T12:00:01.000Z',
+      },
+    });
+
+    expect(getLatestReplayBatch().replayEvents).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'message_state_changed',
+          id: 'failed-after-crash',
+          newState: 'FAILED',
+          errorMessage: 'runtime crashed',
+          userMessage: {
+            text: 'recover this draft',
+            timestamp: '2026-07-29T12:00:00.000Z',
+            attachments: [attachment],
+            sessionId: 's1',
+          },
+        },
+      ])
+    );
+  });
+
   it('markProcessExit clears queue but preserves transcript for reload', () => {
     const listener = vi.fn();
     sessionDomainService.on('pending_request_changed', listener);

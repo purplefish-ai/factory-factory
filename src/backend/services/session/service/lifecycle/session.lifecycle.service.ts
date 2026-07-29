@@ -872,7 +872,7 @@ export class SessionLifecycleService {
     ) {
       return;
     }
-    this.sessionDomainService.clearSession(sessionId);
+    this.sessionDomainService.clearSession(sessionId, { preserveRejections: true });
     logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 

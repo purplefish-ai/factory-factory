@@ -33,6 +33,53 @@ describe('SessionStoreRegistry history retry cooldowns', () => {
     expect(registry.canAttemptHistoryHydration('session-1')).toBe(true);
   });
 
+  it('preserves only unexpired rejections in a freshly reset store when requested', () => {
+    const registry = new SessionStoreRegistry();
+    const store = registry.getOrCreate('session-1');
+    const activeRejection = {
+      id: 'active-rejection',
+      errorMessage: 'Runtime crashed',
+      rejectedAt: '2026-02-24T12:00:00.000Z',
+      expiresAt: nowMs + 30_000,
+    };
+    store.initialized = true;
+    store.queue.push({
+      id: 'queued-message',
+      text: 'queued',
+      timestamp: '2026-02-24T12:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+    store.recentRejections = [
+      activeRejection,
+      {
+        id: 'expired-rejection',
+        errorMessage: 'Expired',
+        rejectedAt: '2026-02-24T11:58:00.000Z',
+        expiresAt: nowMs - 1,
+      },
+    ];
+    registry.setHistoryRetryAt('session-1', nowMs + 30_000);
+
+    registry.clearSession('session-1', { preserveRejections: true });
+
+    expect(registry.getOrCreate('session-1')).toMatchObject({
+      initialized: false,
+      queue: [],
+      recentRejections: [activeRejection],
+      runtime: {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+      },
+    });
+    expect(registry.canAttemptHistoryHydration('session-1')).toBe(true);
+  });
+
   it('removes cooldown entries when all sessions are cleared', () => {
     const registry = new SessionStoreRegistry();
     registry.setHistoryRetryAt('session-1', nowMs + 30_000);
