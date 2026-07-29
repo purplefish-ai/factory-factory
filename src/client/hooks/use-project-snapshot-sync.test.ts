@@ -71,7 +71,10 @@ describe('useProjectSnapshotSync', () => {
     // an unknown workspace use a different id ('ws-new') that isn't seeded here.
     mockGetData.mockReturnValue({ workspaces: [{ id: 'ws-1' }], reviewCount: 0 });
     mockWorkspaceGetSetData.mockReset();
-    mockListInvalidate.mockClear();
+    // Real tRPC `invalidate` returns a promise; the repair path chains .catch()
+    // onto it to release its guard when a refetch fails.
+    mockListInvalidate.mockReset();
+    mockListInvalidate.mockResolvedValue(undefined);
     mockWorkspaceGetInvalidate.mockClear();
     mockGlobalDispatchEvent.mockClear();
     resetPendingRatchetTogglesForTests();
@@ -579,6 +582,34 @@ describe('useProjectSnapshotSync', () => {
   // ===========================================================================
   // In-flight ratchet toggle overrides
   // ===========================================================================
+
+  describe('unknown-workspace repair failure', () => {
+    it('releases the guard so a later message can retry a failed repair', async () => {
+      // Marking before the refetch collapses a burst of messages into one
+      // request. If that request fails and the mark stayed, the workspace's
+      // issue-link fields would stay null forever and its issue would sit in
+      // Todo next to the board card.
+      mockListInvalidate.mockRejectedValueOnce(new Error('network'));
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: { ...makeEntry(), workspaceId: 'ws-new' },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry: { ...makeEntry(), workspaceId: 'ws-new' },
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+    });
+  });
 
   describe('pending ratchet toggle override', () => {
     it('snapshot_changed entries are overridden while a toggle is in flight', () => {

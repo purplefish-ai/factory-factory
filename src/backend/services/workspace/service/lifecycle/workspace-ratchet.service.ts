@@ -28,8 +28,8 @@ class WorkspaceRatchetService {
     return workspaceRatchetAccessor.recordSessionEnd(workspaceId, sessionId, outcome);
   }
 
-  markDispatchStalled(workspaceId: string) {
-    return workspaceRatchetAccessor.markDispatchStalled(workspaceId);
+  markDispatchStalled(workspaceId: string, snapshotKey: string) {
+    return workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey);
   }
 
   recordDispatchIfEnabled(

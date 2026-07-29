@@ -130,12 +130,27 @@ function invalidateForUnknownWorkspaces(
     (entry) =>
       !(alreadyInvalidated.has(entry.workspaceId) || knownWorkspaceIds.has(entry.workspaceId))
   );
-  if (introduced.length > 0) {
-    for (const entry of introduced) {
-      alreadyInvalidated.add(entry.workspaceId);
-    }
-    void utils.workspace.listForProject.invalidate({ projectId });
+  if (introduced.length === 0) {
+    return;
   }
+
+  // Marked before the refetch, not after: the guard exists to collapse a burst
+  // of messages that arrive while the request is still in flight, and marking
+  // on success would let every one of them start its own.
+  for (const entry of introduced) {
+    alreadyInvalidated.add(entry.workspaceId);
+  }
+
+  // Releasing the marks on failure is what keeps the guard from turning a
+  // transient error into permanent staleness. Without it, a refetch that fails
+  // leaves these workspaces marked as repaired forever, so their issue-link
+  // fields stay null and their issues sit in Todo alongside the board card
+  // until something else forces a refetch.
+  void utils.workspace.listForProject.invalidate({ projectId }).catch(() => {
+    for (const entry of introduced) {
+      alreadyInvalidated.delete(entry.workspaceId);
+    }
+  });
 }
 
 function applySnapshotFullMessage(

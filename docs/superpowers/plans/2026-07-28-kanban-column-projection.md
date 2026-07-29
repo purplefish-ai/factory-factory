@@ -37,7 +37,7 @@ The ratchet already decides it will take no further action until the PR changes,
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `WorkspaceRatchetFields.ratchetDispatchStalled: boolean` (flattened read name), `workspaceRatchetAccessor.markDispatchStalled(workspaceId: string): Promise<void>`. Task 3 puts this on the snapshot wire; Task 4 consumes it as `dispatchStalled` in `WorkspaceStatusReasonInput`.
+- Produces: `WorkspaceRatchetFields.ratchetDispatchStalled: boolean` (flattened read name), `workspaceRatchetAccessor.markDispatchStalled(workspaceId, snapshotKey): Promise<boolean>`, reached from the ratchet via `RatchetWorkspaceBridge`. Task 3 puts this on the snapshot wire; Task 4 consumes it as `dispatchStalled` in `WorkspaceStatusReasonInput`.
 
 - [ ] **Step 1: Add the column to the Prisma schema**
 
@@ -55,7 +55,7 @@ In `prisma/schema.prisma`, inside `model WorkspaceRatchet`, add after `dispatchR
 - [ ] **Step 2: Generate and apply the migration**
 
 Run: `pnpm db:migrate --name add_ratchet_dispatch_stalled`
-Expected: a new folder under `prisma/migrations/` containing `ALTER TABLE "WorkspaceRatchet" ADD COLUMN "dispatchStalled" BOOLEAN NOT NULL DEFAULT false;`, and "Your database is now in sync with your schema."
+Expected: a new folder under `prisma/migrations/`, and "Your database is now in sync with your schema." Prisma does not emit `ALTER TABLE ... ADD COLUMN` for SQLite here — it emits a `RedefineTables` block that creates `new_WorkspaceRatchet`, copies every existing column across with `INSERT ... SELECT`, drops the old table, renames, and recreates the `lastCheckedAt` index. That is expected and non-destructive; confirm the `INSERT ... SELECT` lists all seven pre-existing columns.
 
 Then run: `pnpm db:generate`
 Expected: "Generated Prisma Client".
@@ -197,7 +197,7 @@ In `src/backend/services/ratchet/service/ratchet.service.ts`, in `decideRatchetA
       // only reachable after an actionable trigger was confirmed and the DIED
       // and active-session paths returned. Nothing further will happen here
       // until the PR changes, so record it rather than looking busy.
-      await workspaceRatchetAccessor.markDispatchStalled(context.workspace.id);
+      await this.workspace.markDispatchStalled(context.workspace.id);
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'PR state unchanged since last ratchet dispatch' },
@@ -209,7 +209,7 @@ In `decideDiedFixerRetry`, change the exhausted-retries branch:
 
 ```ts
     if (context.dispatchRetryCount >= SERVICE_THRESHOLDS.ratchetDispatchMaxRetries) {
-      await workspaceRatchetAccessor.markDispatchStalled(context.workspace.id);
+      await this.workspace.markDispatchStalled(context.workspace.id);
       return {
         type: 'RETURN_ACTION',
         action: {
@@ -222,7 +222,7 @@ In `decideDiedFixerRetry`, change the exhausted-retries branch:
 
 `decideRatchetAction` is already `async`, and `decideDiedFixerRetry` is too (it awaits `hasActiveSession`).
 
-The ratchet capsule does **not** import `workspaceRatchetAccessor` — it reaches workspace state only through `RatchetWorkspaceBridge` (`src/backend/services/ratchet/service/bridges.ts:58`, which today exposes `findFixerContext` and `recordSessionEnd`). Adding a direct import would violate the capsule boundary and fail `pnpm check`. So:
+The snippets above already call through the bridge, which is mandatory: the ratchet capsule does **not** import `workspaceRatchetAccessor` — it reaches workspace state only through `RatchetWorkspaceBridge` (`src/backend/services/ratchet/service/bridges.ts:58`, which today exposes `findFixerContext` and `recordSessionEnd`). Adding a direct import would violate the capsule boundary and fail `pnpm check`. So:
 
 Add to `RatchetWorkspaceBridge`:
 

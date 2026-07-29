@@ -282,6 +282,14 @@ class WorkspaceRatchetAccessor {
         dispatchSnapshotKey: dispatch.snapshotKey,
         dispatchOutcome: 'RUNNING',
         dispatchRetryCount: dispatch.retryCount,
+        // A dispatch is the ratchet acting, so it cannot still be stalled.
+        // `resetSettledDispatch` clears the flag when a PR observation changes
+        // the cached aggregate, but the dispatch snapshot key also hashes
+        // `statusCheckRollup` detail that `WorkspacePR` does not store — so a
+        // re-run that keeps CI at FAILURE changes the key, warrants a fresh
+        // dispatch, and never touches the aggregate. Clearing it here keeps the
+        // flag scoped to the dispatch it describes.
+        dispatchStalled: false,
       },
     });
     return result.count > 0;
@@ -335,14 +343,33 @@ class WorkspaceRatchetAccessor {
 
   /**
    * Record that the ratchet has concluded it will not act again for the current
-   * PR state. Cleared by `resetSettledDispatch` and `disable`, which already own
-   * the rest of the dispatch record's lifecycle.
+   * PR state. Cleared by `resetSettledDispatch`, `disable`, and the next
+   * dispatch, which already own the rest of the dispatch record's lifecycle.
+   *
+   * A compare-and-swap, like every other write on this row, rather than an
+   * update by workspace id. A ratchet check runs concurrently with PR sync, so
+   * between the decision and this write the dispatch it reasoned about can be
+   * reset by a newer observation or cleared by a disable — and an unguarded
+   * write would resurrect a stall conclusion for a dispatch that no longer
+   * exists. Matching on `dispatchSnapshotKey` pins the write to the dispatch the
+   * check actually evaluated.
+   *
+   * Returns whether this call is what flipped the flag. `dispatchStalled: false`
+   * in the guard is what makes that true exactly once: the ratchet re-reaches
+   * this conclusion on every poll for as long as the PR sits unchanged, and only
+   * the first of those is a transition worth republishing.
    */
-  async markDispatchStalled(workspaceId: string): Promise<void> {
-    await prisma.workspaceRatchet.updateMany({
-      where: { workspaceId },
+  async markDispatchStalled(workspaceId: string, snapshotKey: string): Promise<boolean> {
+    const result = await prisma.workspaceRatchet.updateMany({
+      where: {
+        workspaceId,
+        enabled: true,
+        dispatchSnapshotKey: snapshotKey,
+        dispatchStalled: false,
+      },
       data: { dispatchStalled: true },
     });
+    return result.count > 0;
   }
 
   async enable(workspaceId: string): Promise<void> {

@@ -238,8 +238,41 @@ describe('workspaceRatchetAccessor', () => {
           dispatchSnapshotKey: 'snapshot-1',
           dispatchOutcome: 'RUNNING',
           dispatchRetryCount: 2,
+          // A dispatch is the ratchet acting, so the write clears any stall
+          // conclusion in the same statement.
+          dispatchStalled: false,
         },
       });
+    });
+
+    it('pins the stall write to the dispatch the check evaluated', async () => {
+      // Guarded rather than an update by workspace id: a check runs concurrently
+      // with PR sync, so between its decision and this write the dispatch it
+      // reasoned about can be reset or disabled. `dispatchStalled: false` in the
+      // guard also makes the write report a transition exactly once.
+      mockRatchetUpdateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        workspaceRatchetAccessor.markDispatchStalled('ws-1', 'snapshot-1')
+      ).resolves.toBe(true);
+
+      expect(mockRatchetUpdateMany).toHaveBeenCalledWith({
+        where: {
+          workspaceId: 'ws-1',
+          enabled: true,
+          dispatchSnapshotKey: 'snapshot-1',
+          dispatchStalled: false,
+        },
+        data: { dispatchStalled: true },
+      });
+    });
+
+    it('reports no transition when the stall guard matches nothing', async () => {
+      mockRatchetUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        workspaceRatchetAccessor.markDispatchStalled('ws-1', 'stale-snapshot')
+      ).resolves.toBe(false);
     });
 
     it('returns false when the dispatch write affects no rows', async () => {

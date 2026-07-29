@@ -180,6 +180,17 @@ function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
 function deriveRatchetTroubleReason(
   input: WorkspaceStatusReasonInput
 ): OptionalWorkspaceStatusReason {
+  // Both branches are statements about a pull request, so neither may speak for
+  // a workspace that has none. `hasMergeConflict` and `dispatchStalled` are
+  // cached facts about the PR a workspace used to have; without this gate, a
+  // workspace whose PR went away while one of them was set would report
+  // "Merge conflict" or "Auto-fix stalled" instead of the idle reason it has
+  // earned. Terminal PRs are already handled ahead of this, so `NO_PR` is the
+  // only phase to exclude.
+  if (input.flowPhase === 'NO_PR') {
+    return null;
+  }
+
   if (input.ratchetEnabled && input.dispatchStalled) {
     return reason('RATCHET_STALLED', 'Auto-fix stalled', 'attention', true);
   }

@@ -67,7 +67,7 @@ export interface RatchetWorkspaceBridge {
     sessionId: string,
     outcome: 'COMPLETED' | 'DIED'
   ): Promise<boolean>;
-  markDispatchStalled(workspaceId: string): Promise<void>;
+  markDispatchStalled(workspaceId: string, snapshotKey: string): Promise<boolean>;
 }
 
 // --- GitHub bridge ---

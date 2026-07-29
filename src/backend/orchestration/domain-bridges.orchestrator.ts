@@ -314,8 +314,8 @@ export function configureDomainBridges(services: BridgeServices): void {
     findFixerContext: (workspaceId: string) => workspaceDataService.findFixerContext(workspaceId),
     recordSessionEnd: (workspaceId: string, sessionId: string, outcome: 'COMPLETED' | 'DIED') =>
       workspaceRatchetService.recordSessionEnd(workspaceId, sessionId, outcome),
-    markDispatchStalled: (workspaceId: string) =>
-      workspaceRatchetService.markDispatchStalled(workspaceId),
+    markDispatchStalled: (workspaceId: string, snapshotKey: string) =>
+      workspaceRatchetService.markDispatchStalled(workspaceId, snapshotKey),
   };
 
   const ratchetGithubBridge: RatchetGitHubBridge = {

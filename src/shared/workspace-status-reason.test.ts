@@ -201,6 +201,29 @@ describe('deriveWorkspaceStatusReason', () => {
     ).toMatchObject({ code: 'MERGE_CONFLICT', tone: 'attention', needsUser: true });
   });
 
+  it('does not let stale PR facts speak for a workspace with no pull request', () => {
+    // hasMergeConflict and dispatchStalled are cached facts about a PR. A
+    // workspace whose PR went away while one was set must still report its idle
+    // reason, not "Merge conflict" or "Auto-fix stalled".
+    expect(
+      deriveWorkspaceStatusReason(
+        makeInput({ flowPhase: 'NO_PR', hasMergeConflict: true, prState: 'NONE' })
+      )
+    ).toMatchObject({ code: 'READY_FOR_NEXT_PROMPT' });
+
+    expect(
+      deriveWorkspaceStatusReason(
+        makeInput({
+          flowPhase: 'NO_PR',
+          ratchetEnabled: true,
+          dispatchStalled: true,
+          prState: 'NONE',
+          hasHadSessions: false,
+        })
+      )
+    ).toMatchObject({ code: 'NO_SESSION_STARTED' });
+  });
+
   it('reports a stalled auto-fix ahead of the fixing states', () => {
     expect(
       deriveWorkspaceStatusReason(

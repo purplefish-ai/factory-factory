@@ -91,7 +91,7 @@ const mockSessionBridge: RatchetSessionBridge = {
 const mockWorkspaceBridge: RatchetWorkspaceBridge = {
   findFixerContext: vi.fn(),
   recordSessionEnd: vi.fn(),
-  markDispatchStalled: vi.fn(),
+  markDispatchStalled: vi.fn().mockResolvedValue(true),
 };
 
 /**
@@ -672,7 +672,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     await ratchetService.checkWorkspaceById('ws-1');
 
-    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1');
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith(
+      'ws-1',
+      '2026-01-02T00:00:00Z'
+    );
   });
 
   it('marks the dispatch stalled when a DIED fixer exhausts its retries', async () => {
@@ -711,7 +714,99 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     await ratchetService.checkWorkspaceById('ws-1');
 
-    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1');
+    expect(mockWorkspaceBridge.markDispatchStalled).toHaveBeenCalledWith('ws-1', 'same-snapshot');
+  });
+
+  it('publishes a dispatch-changed event when the stall flag actually flips', async () => {
+    // A stall is by definition nothing changing: the PR observation matches the
+    // cache and the derived ratchet state is unchanged, so neither of the two
+    // paths that normally refresh a snapshot fires. Without this event the
+    // WORKING-to-WAITING move would wait for the next reconciliation sweep.
+    const workspace = {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/5',
+      prNumber: 5,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.FAILURE,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'stalled-key',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+      ratchetDispatchOutcome: 'COMPLETED',
+      ratchetDispatchRetryCount: 0,
+    };
+    vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(workspace as never);
+    vi.mocked(mockWorkspaceBridge.markDispatchStalled).mockResolvedValue(true);
+    vi.spyOn(
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: 'stalled-key',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 5,
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+
+    const events: RatchetDispatchChangedEvent[] = [];
+    ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+      events.push(event);
+    });
+
+    await ratchetService.checkWorkspaceById('ws-1');
+
+    expect(events).toEqual([{ workspaceId: 'ws-1' }]);
+  });
+
+  it('publishes nothing when the stall flag was already set', async () => {
+    // The ratchet re-reaches this conclusion on every poll for as long as the PR
+    // sits unchanged. Only the first is a transition worth republishing.
+    const workspace = {
+      id: 'ws-1',
+      prUrl: 'https://github.com/example/repo/pull/5',
+      prNumber: 5,
+      prState: 'OPEN',
+      prReviewState: null,
+      prHasMergeConflict: false,
+      prCiStatus: CIStatus.FAILURE,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: null,
+      ratchetDispatchSnapshotKey: 'stalled-key',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+      ratchetDispatchOutcome: 'COMPLETED',
+      ratchetDispatchRetryCount: 0,
+    };
+    vi.mocked(workspaceRatchetService.findCandidateById).mockResolvedValue(workspace as never);
+    vi.mocked(mockWorkspaceBridge.markDispatchStalled).mockResolvedValue(false);
+    vi.spyOn(
+      unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.FAILURE,
+      snapshotKey: 'stalled-key',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 5,
+    });
+    vi.mocked(mockSessionBridge.findSessionsByWorkspaceId).mockResolvedValue([] as never);
+
+    const events: RatchetDispatchChangedEvent[] = [];
+    ratchetService.on(RATCHET_DISPATCH_CHANGED, (event: RatchetDispatchChangedEvent) => {
+      events.push(event);
+    });
+
+    await ratchetService.checkWorkspaceById('ws-1');
+
+    expect(events).toEqual([]);
   });
 
   it('does not mark the dispatch stalled when the PR state has changed', async () => {
