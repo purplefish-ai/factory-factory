@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindMany = vi.fn();
 const mockUpdateMany = vi.fn();
+const mockUpdateManyAndReturn = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
     workspaceAutoIteration: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
+      updateManyAndReturn: (...args: unknown[]) => mockUpdateManyAndReturn(...args),
     },
   },
 }));
@@ -23,6 +25,10 @@ describe('workspaceAutoIterationAccessor', () => {
     vi.clearAllMocks();
     mockUpdateMany.mockReset();
     mockUpdateMany.mockResolvedValue({ count: 1 });
+    // The writes that publish a transition return the row they landed on, so
+    // the caller never reads the mode back in a second statement.
+    mockUpdateManyAndReturn.mockReset();
+    mockUpdateManyAndReturn.mockResolvedValue([{ mode: 'AUTO_ITERATION' }]);
   });
 
   describe('flattenWorkspaceAutoIteration', () => {
@@ -70,37 +76,54 @@ describe('workspaceAutoIterationAccessor', () => {
   describe('unconditional writes', () => {
     it('translates each setter to its column', async () => {
       await workspaceAutoIterationAccessor.setStatus('ws-1', 'RUNNING');
-      expect(mockUpdateMany).toHaveBeenCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { status: 'RUNNING' },
+        select: { mode: true },
       });
 
       await workspaceAutoIterationAccessor.setProgress('ws-1', { currentIteration: 3 });
-      expect(mockUpdateMany).toHaveBeenLastCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenLastCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { progress: { currentIteration: 3 } },
+        select: { mode: true },
       });
 
       await workspaceAutoIterationAccessor.setSession('ws-1', 'sess-2');
-      expect(mockUpdateMany).toHaveBeenLastCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenLastCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { sessionId: 'sess-2' },
+        select: { mode: true },
+      });
+    });
+
+    it('reports the mode from the statement that wrote the status', async () => {
+      // Not from a second read: the pair is published to the snapshot stream, so
+      // it has to describe a row that existed rather than one row's status
+      // beside another read's mode.
+      mockUpdateManyAndReturn.mockResolvedValue([{ mode: 'AUTO_ITERATION' }]);
+
+      await expect(workspaceAutoIterationAccessor.setStatus('ws-1', 'RUNNING')).resolves.toEqual({
+        mode: 'AUTO_ITERATION',
+        status: 'RUNNING',
       });
     });
 
     it('clears the session with an explicit null rather than dropping the key', async () => {
       await workspaceAutoIterationAccessor.setSession('ws-1', null);
 
-      expect(mockUpdateMany).toHaveBeenCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1' },
         data: { sessionId: null },
+        select: { mode: true },
       });
     });
 
     it('throws when no row matched, so a discarded write is not reported as success', async () => {
       // The pre-split path used `prisma.workspace.update`, which threw on a
-      // missing row. `updateMany` would not, so the count is checked here.
-      mockUpdateMany.mockResolvedValue({ count: 0 });
+      // missing row. The filter-based write does not, so the empty result is
+      // checked here.
+      mockUpdateManyAndReturn.mockResolvedValue([]);
 
       await expect(workspaceAutoIterationAccessor.setStatus('gone', 'FAILED')).rejects.toThrow(
         'WorkspaceAutoIteration row not found for workspace: gone'
@@ -110,22 +133,25 @@ describe('workspaceAutoIterationAccessor', () => {
 
   describe('finishIfSessionMatches', () => {
     it('guards on the session and clears it as it settles', async () => {
+      // Returns the mode alongside the outcome so the caller can announce the
+      // transition to the snapshot stream without a second read.
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'sess-1', 'COMPLETED')
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ settled: true, mode: 'AUTO_ITERATION' });
 
-      expect(mockUpdateMany).toHaveBeenCalledWith({
+      expect(mockUpdateManyAndReturn).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', sessionId: 'sess-1' },
         data: { status: 'COMPLETED', sessionId: null },
+        select: { mode: true },
       });
     });
 
-    it('reports false when the loop has already moved to another session', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 0 });
+    it('reports no settlement when the loop has already moved to another session', async () => {
+      mockUpdateManyAndReturn.mockResolvedValue([]);
 
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'stale', 'FAILED')
-      ).resolves.toBe(false);
+      ).resolves.toEqual({ settled: false, mode: null });
     });
   });
 

@@ -32,7 +32,11 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
-export { workspaceAutoIterationService } from './lifecycle/workspace-auto-iteration.service';
+export {
+  AUTO_ITERATION_STATUS_CHANGED,
+  type AutoIterationStatusChangedEvent,
+  workspaceAutoIterationService,
+} from './lifecycle/workspace-auto-iteration.service';
 export { workspacePrSnapshotService } from './lifecycle/workspace-pr-snapshot.service';
 export { workspaceRatchetService } from './lifecycle/workspace-ratchet.service';
 export { workspaceRelationshipsService } from './lifecycle/workspace-relationships.service';

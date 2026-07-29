@@ -41,6 +41,7 @@ import {
   type PRState,
   type RatchetState,
   type RunScriptStatus,
+  type WorkspaceMode,
   type WorkspaceStatus,
 } from '@/shared/core';
 
@@ -585,7 +586,10 @@ class WorkspaceAccessor {
     return workspaceRunScriptAccessor.writeCommands(id, commands);
   }
 
-  setAutoIterationStatus(id: string, status: AutoIterationStatus): Promise<void> {
+  setAutoIterationStatus(
+    id: string,
+    status: AutoIterationStatus
+  ): Promise<{ mode: WorkspaceMode; status: AutoIterationStatus }> {
     return workspaceAutoIterationAccessor.setStatus(id, status);
   }
 
@@ -601,7 +605,7 @@ class WorkspaceAccessor {
     id: string,
     sessionId: string,
     status: AutoIterationStatus
-  ): Promise<boolean> {
+  ): Promise<{ settled: boolean; mode: WorkspaceMode | null }> {
     return workspaceAutoIterationAccessor.finishIfSessionMatches(id, sessionId, status);
   }
 
