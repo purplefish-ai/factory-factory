@@ -348,9 +348,23 @@ describe('workspaceCoreRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+    expect(mockArchiveWorkspace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'w-created' }),
+      {},
+      expect.anything()
+    );
+
+    await expect(caller.archive({ id: 'w-created', removeGitIndexLock: true })).resolves.toEqual({
+      archived: true,
+    });
+    expect(mockArchiveWorkspace).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'w-created' }),
+      { removeGitIndexLock: true },
+      expect.anything()
+    );
   });
 
-  it('includes error codes for individual bulk archive failures', async () => {
+  it('includes error codes and application kinds for individual bulk archive failures', async () => {
     mockWorkspaceQueryService.findWorkspaceIdsInKanbanColumn.mockResolvedValue([
       'w-success',
       'w-blocked',
@@ -358,7 +372,9 @@ describe('workspaceCoreRouter', () => {
     ]);
     mockArchiveWorkspace
       .mockResolvedValueOnce({ archived: true })
-      .mockRejectedValueOnce(new ApplicationError('PRECONDITION_FAILED', 'Uncommitted changes'))
+      .mockRejectedValueOnce(
+        new ApplicationError('CONFLICT', 'Git is locked', { kind: 'GIT_INDEX_LOCKED' })
+      )
       .mockRejectedValueOnce(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
     const { caller } = createCaller();
 
@@ -366,7 +382,6 @@ describe('workspaceCoreRouter', () => {
       caller.bulkArchive({
         projectId: 'p1',
         kanbanColumn: 'WAITING',
-        commitUncommitted: false,
       })
     ).resolves.toEqual({
       results: [
@@ -374,14 +389,16 @@ describe('workspaceCoreRouter', () => {
         {
           id: 'w-blocked',
           success: false,
-          error: 'Uncommitted changes',
-          code: 'PRECONDITION_FAILED',
+          error: 'Git is locked',
+          code: 'CONFLICT',
+          applicationErrorKind: 'GIT_INDEX_LOCKED',
         },
         {
           id: 'w-missing',
           success: false,
           error: 'Workspace not found',
           code: 'NOT_FOUND',
+          applicationErrorKind: null,
         },
       ],
       total: 3,

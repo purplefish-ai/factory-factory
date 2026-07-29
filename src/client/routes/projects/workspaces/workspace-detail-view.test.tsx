@@ -140,8 +140,6 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
     archiveDialog: {
       open: true,
       setOpen: vi.fn(),
-      hasUncommitted: false,
-      isCheckingGitStatus: false,
       activeChildCount,
       onConfirm: vi.fn(),
     },

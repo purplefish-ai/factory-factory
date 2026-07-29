@@ -17,6 +17,10 @@ interface ProjectPaths {
   worktreeBasePath: string;
 }
 
+interface CommitIfNeededOptions {
+  removeGitIndexLock?: boolean;
+}
+
 class GitOpsService {
   private normalizeBranchName(branchName: string): string {
     if (branchName.startsWith('origin/')) {
@@ -59,16 +63,67 @@ class GitOpsService {
     return result.code === 0;
   }
 
+  private async resolveIndexLockPath(worktreePath: string): Promise<string> {
+    const gitDirResult = await gitCommand(['rev-parse', '--absolute-git-dir'], worktreePath);
+    const gitDir = gitDirResult.stdout.trim();
+    if (gitDirResult.code !== 0 || gitDir.length === 0) {
+      throw new ApplicationError('INTERNAL_ERROR', 'Failed to resolve Git index lock', {
+        cause: gitDirResult,
+      });
+    }
+    return path.join(path.resolve(worktreePath, gitDir), 'index.lock');
+  }
+
+  private async createGitOperationError(
+    worktreePath: string,
+    result: Awaited<ReturnType<typeof gitCommand>>,
+    fallbackMessage: string
+  ): Promise<ApplicationError> {
+    try {
+      const indexLockPath = await this.resolveIndexLockPath(worktreePath);
+      if (await pathExists(indexLockPath)) {
+        return new ApplicationError(
+          'CONFLICT',
+          'Git is locked. Another Git operation may be running, or an earlier operation may have stopped unexpectedly.',
+          {
+            cause: result,
+            kind: 'GIT_INDEX_LOCKED',
+          }
+        );
+      }
+    } catch {
+      // Classification is best-effort. Preserve the original Git failure when
+      // the worktree's Git metadata cannot be inspected safely.
+    }
+
+    return new ApplicationError('INTERNAL_ERROR', fallbackMessage, { cause: result });
+  }
+
+  private async removeGitIndexLock(worktreePath: string): Promise<void> {
+    const indexLockPath = await this.resolveIndexLockPath(worktreePath);
+    try {
+      await fs.rm(indexLockPath, { force: true });
+    } catch (error) {
+      throw new ApplicationError('INTERNAL_ERROR', 'Failed to remove Git index lock', {
+        cause: error,
+      });
+    }
+  }
+
   async commitIfNeeded(
     worktreePath: string,
     workspaceName: string,
-    commitUncommitted: boolean
+    options: CommitIfNeededOptions = {}
   ): Promise<void> {
     // Check if this is a valid git repo first - if not, skip commit
     // This can happen if the worktree was corrupted or the .git file was removed
     const isValid = await this.isValidGitRepo(worktreePath);
     if (!isValid) {
       return;
+    }
+
+    if (options.removeGitIndexLock) {
+      await this.removeGitIndexLock(worktreePath);
     }
 
     const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
@@ -82,17 +137,10 @@ class GitOpsService {
       return;
     }
 
-    if (!commitUncommitted) {
-      throw new ApplicationError(
-        'PRECONDITION_FAILED',
-        'Workspace has uncommitted changes. Enable commit-before-archive to proceed.'
-      );
-    }
-
     try {
       const addResult = await gitCommand(['add', '-A'], worktreePath);
       if (addResult.code !== 0) {
-        throw new ApplicationError('INTERNAL_ERROR', 'Git add failed', { cause: addResult });
+        throw await this.createGitOperationError(worktreePath, addResult, 'Git add failed');
       }
 
       const commitMessage = `Archive workspace ${workspaceName}`;
@@ -101,9 +149,7 @@ class GitOpsService {
         worktreePath
       );
       if (commitResult.code !== 0) {
-        throw new ApplicationError('INTERNAL_ERROR', 'Git commit failed', {
-          cause: commitResult,
-        });
+        throw await this.createGitOperationError(worktreePath, commitResult, 'Git commit failed');
       }
     } finally {
       workspaceGitStateService.invalidate(worktreePath);

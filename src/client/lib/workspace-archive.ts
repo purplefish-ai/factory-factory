@@ -9,6 +9,19 @@ interface ArchiveWorkspaceStateLike {
   } | null;
 }
 
+interface ArchiveErrorLike {
+  data?: {
+    applicationErrorKind?: string | null;
+  } | null;
+}
+
+export function isArchiveGitIndexLockedError(error: unknown): boolean {
+  if (!(typeof error === 'object' && error !== null && 'data' in error)) {
+    return false;
+  }
+  return (error as ArchiveErrorLike).data?.applicationErrorKind === 'GIT_INDEX_LOCKED';
+}
+
 /**
  * Treat completed PRs and DONE kanban workspaces as safe-to-archive without
  * showing commit-before-archive warnings.

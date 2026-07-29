@@ -66,10 +66,8 @@ interface SessionTabsProps {
 interface ArchiveDialogProps {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
-  hasUncommitted: boolean;
-  isCheckingGitStatus: boolean;
   activeChildCount: number;
-  onConfirm: (commitUncommitted: boolean) => void;
+  onConfirm: () => void;
 }
 
 export interface WorkspaceDetailViewProps {
@@ -237,8 +235,6 @@ export function WorkspaceDetailView({
       <ArchiveWorkspaceDialog
         open={archiveDialog.open}
         onOpenChange={archiveDialog.setOpen}
-        hasUncommitted={archiveDialog.hasUncommitted}
-        isCheckingGitStatus={archiveDialog.isCheckingGitStatus}
         activeChildCount={archiveDialog.activeChildCount}
         onConfirm={archiveDialog.onConfirm}
       />

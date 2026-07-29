@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
+import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import {
   removeWorkspaceFromProjectWorkspaceCache,
   restoreWorkspacesToProjectWorkspaceCache,
@@ -101,6 +102,7 @@ interface UseSessionManagementOptions {
   selectedModel: string;
   /** Provider selection for newly created sessions */
   selectedProvider: SessionProviderValue;
+  onArchiveGitIndexLocked: () => void;
 }
 
 export type { NewSessionProviderSelection };
@@ -135,7 +137,7 @@ export interface UseSessionManagementReturn {
     { id: string }
   >;
   deleteSession: MutationLike<{ id: string }>;
-  archiveWorkspace: MutationLike<{ id: string; commitUncommitted?: boolean }>;
+  archiveWorkspace: MutationLike<{ id: string; removeGitIndexLock?: true }>;
   openInIde: MutationLike<{ id: string }>;
   availableIdes: AvailableIde[];
   preferredIde: string;
@@ -154,6 +156,7 @@ export function useSessionManagement({
   setSelectedDbSessionId,
   selectedModel,
   selectedProvider,
+  onArchiveGitIndexLocked,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
@@ -219,16 +222,16 @@ export function useSessionManagement({
       }
     },
     onError: (error, _variables, context) => {
-      if (error.data?.code === 'PRECONDITION_FAILED') {
-        toast.error('Archiving blocked: enable commit before archiving to proceed.');
-      } else {
-        toast.error(error.message || 'Failed to archive workspace');
-      }
-
       if (context?.projectId && context.previousWorkspaces) {
         utils.workspace.listForProject.setData({ projectId: context.projectId }, (old) =>
           restoreWorkspacesToProjectWorkspaceCache(old, context.previousWorkspaces, [_variables.id])
         );
+      }
+
+      if (isArchiveGitIndexLockedError(error)) {
+        onArchiveGitIndexLocked();
+      } else {
+        toast.error(error.message || 'Failed to archive workspace');
       }
     },
     onSettled: (_data, _error, variables, context) => {

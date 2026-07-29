@@ -357,7 +357,19 @@ describe('workspaceChildrenRouter', () => {
     await expect(
       caller.archiveChild({ parentWorkspaceId: 'parent-1', childWorkspaceId: 'child-1' })
     ).resolves.toEqual({ archived: true });
-    expect(mockArchiveWorkspace).toHaveBeenCalledWith(child, { commitUncommitted: true }, services);
+    expect(mockArchiveWorkspace).toHaveBeenCalledWith(child, {}, services);
+    await expect(
+      caller.archiveChild({
+        parentWorkspaceId: 'parent-1',
+        childWorkspaceId: 'child-1',
+        removeGitIndexLock: true,
+      })
+    ).resolves.toEqual({ archived: true });
+    expect(mockArchiveWorkspace).toHaveBeenLastCalledWith(
+      child,
+      { removeGitIndexLock: true },
+      services
+    );
     await expect(caller.getPendingNotificationCount({ workspaceId: 'parent-1' })).resolves.toBe(3);
   });
 });

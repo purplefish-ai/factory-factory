@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWorkspaceDoneOrMerged } from './workspace-archive';
+import { isArchiveGitIndexLockedError, isWorkspaceDoneOrMerged } from './workspace-archive';
 
 describe('isWorkspaceDoneOrMerged', () => {
   it('returns true when PR state is merged', () => {
@@ -43,5 +43,21 @@ describe('isWorkspaceDoneOrMerged', () => {
         kanbanColumn: 'WAITING',
       })
     ).toBe(false);
+  });
+});
+
+describe('isArchiveGitIndexLockedError', () => {
+  it('recognizes only the machine-readable Git index-lock kind', () => {
+    expect(
+      isArchiveGitIndexLockedError({
+        data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+      })
+    ).toBe(true);
+    expect(
+      isArchiveGitIndexLockedError({
+        data: { code: 'CONFLICT', applicationErrorKind: null },
+      })
+    ).toBe(false);
+    expect(isArchiveGitIndexLockedError(new Error('Git is locked'))).toBe(false);
   });
 });

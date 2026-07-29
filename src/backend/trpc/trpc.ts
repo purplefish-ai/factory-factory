@@ -49,6 +49,16 @@ export const createContext =
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    const applicationError = error.cause instanceof ApplicationError ? error.cause : undefined;
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        applicationErrorKind: applicationError?.kind ?? null,
+      },
+    };
+  },
 });
 
 export const router = t.router;
