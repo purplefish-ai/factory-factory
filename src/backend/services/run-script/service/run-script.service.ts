@@ -33,6 +33,7 @@ export class RunScriptService {
   private readonly runOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
   private readonly postRunOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
 
+  private cleanupPromise: Promise<void> | null = null;
   private isShuttingDown = false;
   private shutdownHandlersRegistered = false;
 
@@ -893,29 +894,39 @@ export class RunScriptService {
   /**
    * Cleanup all running scripts (called on server shutdown)
    */
-  async cleanup() {
-    logger.info('Cleaning up all running scripts', {
-      count: this.runningProcesses.size,
+  cleanup(): Promise<void> {
+    if (this.cleanupPromise !== null) {
+      return this.cleanupPromise;
+    }
+
+    this.cleanupPromise = (async () => {
+      logger.info('Cleaning up all running scripts', {
+        count: this.runningProcesses.size,
+      });
+
+      // Stop all running scripts using the stopRunScript method
+      // This ensures cleanup scripts are run
+      const workspaceIds = Array.from(this.runningProcesses.keys());
+      await Promise.all(
+        workspaceIds.map(async (workspaceId) => {
+          try {
+            await this.stopRunScript(workspaceId);
+          } catch (error) {
+            logger.error('Failed to stop run script during cleanup', toError(error), {
+              workspaceId,
+            });
+          }
+        })
+      );
+
+      this.runningProcesses.clear();
+      this.postRunProcesses.clear();
+      await runScriptProxyService.cleanup();
+    })().finally(() => {
+      this.cleanupPromise = null;
     });
 
-    // Stop all running scripts using the stopRunScript method
-    // This ensures cleanup scripts are run
-    const workspaceIds = Array.from(this.runningProcesses.keys());
-    await Promise.all(
-      workspaceIds.map(async (workspaceId) => {
-        try {
-          await this.stopRunScript(workspaceId);
-        } catch (error) {
-          logger.error('Failed to stop run script during cleanup', toError(error), {
-            workspaceId,
-          });
-        }
-      })
-    );
-
-    this.runningProcesses.clear();
-    this.postRunProcesses.clear();
-    await runScriptProxyService.cleanup();
+    return this.cleanupPromise;
   }
 
   /**
