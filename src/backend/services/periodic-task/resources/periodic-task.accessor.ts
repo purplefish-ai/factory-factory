@@ -178,7 +178,7 @@ function resolveScheduledDayOfMonth(
   anchorDate: Date
 ): number | null {
   if (cadence !== 'MONTHLY') {
-    return null;
+    return existingDay ?? null;
   }
 
   return existingDay ?? getDayOfMonth(anchorDate, timezone);
@@ -367,7 +367,7 @@ export const periodicTaskAccessor = {
         ...(input.cadence !== undefined && { cadence: input.cadence }),
         ...(input.scheduledTime !== undefined && { scheduledTime: input.scheduledTime }),
         ...(input.timezone !== undefined && { timezone: input.timezone }),
-        scheduledDayOfMonth,
+        ...(cadence === 'MONTHLY' && { scheduledDayOfMonth }),
         nextRunAt: computeNextRunAt(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
       });
     }
@@ -383,15 +383,18 @@ export const periodicTaskAccessor = {
     const data: Record<string, unknown> = { isEnabled: enabled };
     if (enabled) {
       const task = await prisma.periodicTask.findUniqueOrThrow({ where: { id } });
+      const cadence = task.cadence as PeriodicTaskCadence;
       const scheduledDayOfMonth = resolveScheduledDayOfMonth(
-        task.cadence as PeriodicTaskCadence,
+        cadence,
         task.scheduledDayOfMonth,
         task.timezone,
         task.createdAt
       );
-      data.scheduledDayOfMonth = scheduledDayOfMonth;
+      if (cadence === 'MONTHLY') {
+        data.scheduledDayOfMonth = scheduledDayOfMonth;
+      }
       data.nextRunAt = computeNextRunAt(
-        task.cadence as PeriodicTaskCadence,
+        cadence,
         new Date(),
         task.scheduledTime,
         task.timezone,

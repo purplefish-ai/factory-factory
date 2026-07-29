@@ -4,6 +4,7 @@ const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(),
   periodicTask: {
     findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
   },
@@ -210,6 +211,102 @@ describe('periodicTaskAccessor.computeNextRunAt', () => {
     const nextRunAt = periodicTaskAccessor.computeNextRunAt('MONTHLY', from);
 
     expect(nextRunAt.getTime()).toBe(new Date(2026, 1, 28, 9, 5).getTime());
+  });
+});
+
+describe('periodicTaskAccessor.update', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-20T12:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockReset();
+    prismaMock.periodicTask.update.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('preserves a monthly anchor across non-monthly cadence changes', async () => {
+    const monthlyTask = {
+      cadence: 'MONTHLY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: 15,
+      createdAt: new Date('2026-01-15T09:00:00.000Z'),
+    };
+    prismaMock.periodicTask.findUniqueOrThrow
+      .mockResolvedValueOnce(monthlyTask)
+      .mockResolvedValueOnce({ ...monthlyTask, cadence: 'DAILY' });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.update('task-1', { cadence: 'DAILY' });
+
+    const dailyUpdate = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(dailyUpdate?.data).not.toHaveProperty('scheduledDayOfMonth');
+
+    vi.setSystemTime(new Date('2026-01-25T12:00:00.000Z'));
+    await periodicTaskAccessor.update('task-1', { cadence: 'MONTHLY' });
+
+    const monthlyUpdate = prismaMock.periodicTask.update.mock.calls[1]?.[0];
+    expect(monthlyUpdate?.data).toMatchObject({
+      cadence: 'MONTHLY',
+      scheduledDayOfMonth: 15,
+      nextRunAt: new Date('2026-02-15T09:00:00.000Z'),
+    });
+  });
+
+  it('uses the current local day when a task first becomes monthly', async () => {
+    vi.setSystemTime(new Date('2026-01-20T02:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'America/New_York',
+      scheduledDayOfMonth: null,
+      createdAt: new Date('2025-12-03T14:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.update('task-1', { cadence: 'MONTHLY' });
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).toMatchObject({
+      cadence: 'MONTHLY',
+      scheduledDayOfMonth: 19,
+      nextRunAt: new Date('2026-02-19T14:00:00.000Z'),
+    });
+  });
+});
+
+describe('periodicTaskAccessor.toggleEnabled', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-20T12:00:00.000Z'));
+    prismaMock.periodicTask.findUniqueOrThrow.mockReset();
+    prismaMock.periodicTask.update.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('preserves a dormant monthly anchor when enabling a non-monthly task', async () => {
+    prismaMock.periodicTask.findUniqueOrThrow.mockResolvedValue({
+      cadence: 'DAILY',
+      scheduledTime: '09:00',
+      timezone: 'UTC',
+      scheduledDayOfMonth: 15,
+      createdAt: new Date('2026-01-15T09:00:00.000Z'),
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.toggleEnabled('task-1', true);
+
+    const update = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    expect(update?.data).not.toHaveProperty('scheduledDayOfMonth');
+    expect(update?.data).toMatchObject({
+      isEnabled: true,
+      nextRunAt: new Date('2026-01-21T09:00:00.000Z'),
+    });
   });
 });
 
