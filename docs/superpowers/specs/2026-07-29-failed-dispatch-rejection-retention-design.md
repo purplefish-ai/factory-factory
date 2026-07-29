@@ -31,6 +31,8 @@ When preservation is requested, the registry will:
 2. Clear the history-retry cooldown and delete the existing session store.
 3. Recreate a fresh default store only when an unexpired rejection exists.
 4. Restore those rejection records into the fresh store.
+5. Schedule cleanup at the next rejection expiry, pruning payloads as they
+   expire and deleting the fresh store when it was never reactivated.
 
 This resets transcript, queue, pending requests, runtime, hydration metadata,
 and ordering while retaining only the bounded recovery records. The domain
@@ -42,14 +44,22 @@ Both inactivity-eviction call sites will request preservation:
 - WebSocket cleanup after the last disconnected in-flight handler settles.
 
 Explicit deletion and rollback callers will continue calling `clearSession`
-without the option and therefore remove all state.
+without the option and therefore remove all state. Transient ratchet session
+cleanup will perform that destructive clear immediately after its database
+delete succeeds, before the shared inactive cleanup runs.
 
 ## Error Handling and Boundaries
 
-No new asynchronous cleanup or timers are introduced. Expiration remains lazy,
-matching current behavior: recording a rejection removes expired entries and
-reconnect replay skips expired entries. The existing 100-record per-session cap
-is unchanged.
+The registry owns unref'ed expiry timers only for preserved rejection stores.
+Each timer is pinned to the exact store instance it was created for. At the next
+expiry it prunes expired records, schedules the next expiry when records remain,
+and deletes the store only if no caller reactivated that same store. A
+reactivated store keeps all newer queue/runtime state while the timer still
+removes expired attachment payloads. Full session clears and `clearAllSessions`
+cancel their timers.
+
+Reconnect replay retains its existing lazy expiration guard as a second
+boundary. The existing 100-record per-session cap is unchanged.
 
 Viewer and runtime-running guards remain unchanged. Connected viewers keep the
 full store, and a restarted runtime still prevents inactive eviction.
@@ -57,14 +67,17 @@ full store, and a restarted runtime still prevents inactive eviction.
 ## Testing
 
 - Registry tests prove preserving clear retains only unexpired rejections,
-  resets all unrelated state, and still removes history-retry cooldowns.
+  resets all unrelated state, removes history-retry cooldowns, releases an
+  untouched preservation-only store at expiry, and does not clear a reactivated
+  store.
 - Domain tests prove a failed draft survives preserving clear and is replayed
   with its text, attachments, session id, failure state, and error.
 - Lifecycle tests reproduce the crash interleaving by pausing repository work,
   recording a failed message during the pause, then completing exit cleanup and
-  reconnecting.
+  reconnecting. They also prove manual-stop and runtime-exit ratchet deletion
+  perform destructive clear after the database delete.
 - WebSocket tests prove immediate and deferred inactive disconnect cleanup use
   preserving clear.
-- Existing default-clear tests protect destructive deletion semantics.
+- A direct default-clear test protects destructive rejection deletion.
 
 This is backend-only and requires no UI screenshots.

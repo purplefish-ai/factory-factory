@@ -1500,6 +1500,7 @@ describe('SessionService', () => {
     const transcriptSpy = vi
       .spyOn(sessionDomainService, 'getTranscriptSnapshot')
       .mockReturnValue(transcript);
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
 
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
@@ -1537,9 +1538,17 @@ describe('SessionService', () => {
         messages: transcript,
       });
       expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
+      expect(clearSessionSpy).toHaveBeenCalledWith('session-1');
+      const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(
+        ([sessionId, options]) => sessionId === 'session-1' && options === undefined
+      );
+      expect(destructiveClearCallIndex).toBeGreaterThanOrEqual(0);
       expect(
         vi.mocked(closedSessionPersistenceService.persistClosedSession).mock.invocationCallOrder[0]
       ).toBeLessThan(vi.mocked(sessionRepository.deleteSession).mock.invocationCallOrder[0]!);
+      expect(vi.mocked(sessionRepository.deleteSession).mock.invocationCallOrder[0]).toBeLessThan(
+        clearSessionSpy.mock.invocationCallOrder[destructiveClearCallIndex]!
+      );
     } finally {
       transcriptSpy.mockRestore();
     }
@@ -1747,6 +1756,7 @@ describe('SessionService', () => {
 
     mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
 
     await sessionLifecycleService.startSession('session-1');
 
@@ -1765,6 +1775,14 @@ describe('SessionService', () => {
       'COMPLETED'
     );
     expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
+    expect(clearSessionSpy).toHaveBeenCalledWith('session-1');
+    const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(
+      ([sessionId, options]) => sessionId === 'session-1' && options === undefined
+    );
+    expect(destructiveClearCallIndex).toBeGreaterThanOrEqual(0);
+    expect(vi.mocked(sessionRepository.deleteSession).mock.invocationCallOrder[0]).toBeLessThan(
+      clearSessionSpy.mock.invocationCallOrder[destructiveClearCallIndex]!
+    );
   });
 
   it('does not delete ratchet session when closed-session persistence fails', async () => {

@@ -14,6 +14,8 @@
 - Preserve only entries with `expiresAt > Date.now()`.
 - Reset transcript, queue, pending requests, runtime, hydration state, ordering, initial messages, and history-retry cooldowns.
 - Preserve both `REJECTED` and `FAILED` record shapes without changing the 60-second TTL or 100-record cap.
+- Prune preserved payloads at their expiry and delete an untouched preservation-only store without deleting a reactivated store.
+- Destructively clear transient ratchet session state immediately after its database row is deleted.
 - Do not change viewer counting, runtime-running guards, client replay protocol, or UI behavior.
 
 ---
@@ -74,6 +76,12 @@ const rejectionsToPreserve = options?.preserveRejections
 
 Delete the cooldown and store as today. If the filtered array is non-empty,
 create a fresh store through `getOrCreate` and assign the filtered records.
+Track that exact store as preservation-only and schedule an unref'ed timer for
+the earliest expiry. The timer must filter expired records, reschedule for the
+next record, and delete the store only when the same store instance remains
+preservation-only. Any later `getOrCreate` marks it reactivated so the timer
+prunes payloads without deleting newer state. Default and all-session clears
+cancel timers.
 
 - [ ] **Step 4: Run the registry test to verify GREEN**
 
@@ -84,6 +92,17 @@ pnpm exec vitest run src/backend/services/session/service/store/session-store-re
 ```
 
 Expected: all registry tests pass.
+
+- [ ] **Step 4a: Verify expiry and destructive-clear boundaries**
+
+Add fake-timer tests proving:
+
+- default `clearSession(sessionId)` removes an unexpired rejection;
+- an untouched preservation-only store has no rejection after expiry;
+- a reactivated store keeps its new queue state while its expired rejection
+  payload is pruned.
+
+Run the registry test file and expect all cases to pass.
 
 - [ ] **Step 5: Write the failing domain replay test**
 
@@ -191,6 +210,11 @@ this.sessionDomainService.clearSession(sessionId, { preserveRejections: true });
 ```
 
 Update the existing manual-stop cleanup expectation to include the option.
+After a transient ratchet session's database row is successfully deleted in
+either manual-stop or runtime-exit cleanup, call the one-argument destructive
+`clearSession(sessionId)` before the shared inactivity cleanup. Tests must prove
+the destructive clear occurs after each database delete. If persistence or
+deletion fails, do not destructively clear because the session row remains.
 
 - [ ] **Step 4: Run lifecycle tests to verify GREEN**
 

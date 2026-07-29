@@ -8,6 +8,11 @@ const MAX_TRACKED_HISTORY_RETRY_SESSIONS = 1024;
 export class SessionStoreRegistry {
   private readonly stores = new Map<string, SessionStore>();
   private readonly nextHistoryRetryAtBySession = new Map<string, number>();
+  private readonly preservationOnlyStores = new Map<string, SessionStore>();
+  private readonly preservedRejectionCleanupTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   getOrCreate(sessionId: string): SessionStore {
     let store = this.stores.get(sessionId);
@@ -25,6 +30,8 @@ export class SessionStoreRegistry {
         nextOrder: 0,
       };
       this.stores.set(sessionId, store);
+    } else if (this.preservationOnlyStores.get(sessionId) === store) {
+      this.preservationOnlyStores.delete(sessionId);
     }
     return store;
   }
@@ -35,14 +42,24 @@ export class SessionStoreRegistry {
           .get(sessionId)
           ?.recentRejections.filter((rejection) => rejection.expiresAt > Date.now())
       : undefined;
+    this.cancelPreservedRejectionCleanup(sessionId);
+    this.preservationOnlyStores.delete(sessionId);
     this.nextHistoryRetryAtBySession.delete(sessionId);
     this.stores.delete(sessionId);
     if (rejectionsToPreserve?.length) {
-      this.getOrCreate(sessionId).recentRejections = rejectionsToPreserve;
+      const preservedStore = this.getOrCreate(sessionId);
+      preservedStore.recentRejections = rejectionsToPreserve;
+      this.preservationOnlyStores.set(sessionId, preservedStore);
+      this.schedulePreservedRejectionCleanup(sessionId, preservedStore);
     }
   }
 
   clearAllSessions(): void {
+    for (const timer of this.preservedRejectionCleanupTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.preservedRejectionCleanupTimers.clear();
+    this.preservationOnlyStores.clear();
     this.nextHistoryRetryAtBySession.clear();
     this.stores.clear();
   }
@@ -117,5 +134,45 @@ export class SessionStoreRegistry {
     if (sessionIdToEvict) {
       this.nextHistoryRetryAtBySession.delete(sessionIdToEvict);
     }
+  }
+
+  private cancelPreservedRejectionCleanup(sessionId: string): void {
+    const timer = this.preservedRejectionCleanupTimers.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.preservedRejectionCleanupTimers.delete(sessionId);
+    }
+  }
+
+  private schedulePreservedRejectionCleanup(sessionId: string, store: SessionStore): void {
+    const nextExpiration = Math.min(
+      ...store.recentRejections.map((rejection) => rejection.expiresAt)
+    );
+    const timer = setTimeout(
+      () => {
+        this.preservedRejectionCleanupTimers.delete(sessionId);
+        if (this.stores.get(sessionId) !== store) {
+          if (this.preservationOnlyStores.get(sessionId) === store) {
+            this.preservationOnlyStores.delete(sessionId);
+          }
+          return;
+        }
+
+        store.recentRejections = store.recentRejections.filter(
+          (rejection) => rejection.expiresAt > Date.now()
+        );
+        if (store.recentRejections.length > 0) {
+          this.schedulePreservedRejectionCleanup(sessionId, store);
+          return;
+        }
+        if (this.preservationOnlyStores.get(sessionId) === store) {
+          this.preservationOnlyStores.delete(sessionId);
+          this.stores.delete(sessionId);
+        }
+      },
+      Math.max(0, nextExpiration - Date.now())
+    );
+    timer.unref();
+    this.preservedRejectionCleanupTimers.set(sessionId, timer);
   }
 }
