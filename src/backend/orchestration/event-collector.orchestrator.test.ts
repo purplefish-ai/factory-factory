@@ -785,6 +785,55 @@ describe('configureEventCollector', () => {
     );
   });
 
+  it('a resolved merge conflict reaches the snapshot store on the live PR event, not only reconciliation', async () => {
+    // pr_snapshot_updated does not carry hasMergeConflict itself -- only the
+    // authoritative ratchet re-projection it triggers reads the fresh
+    // `prHasMergeConflict` off the DB row. Before this fix, the projection
+    // enqueue omitted both `hasMergeConflict` and `ratchetDispatchStalled`, so
+    // a rebase that cleared the conflict only reached the board on the
+    // 60-second snapshot reconciliation sweep.
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
+      status: 'READY',
+      ratchetEnabled: true,
+      ratchetState: 'CI_RUNNING',
+      ratchetDispatchOutcome: null,
+      ratchetDispatchRetryCount: 0,
+      ratchetDispatchStalled: false,
+      prHasMergeConflict: false,
+    } as never);
+    configureEventCollector();
+
+    const handler = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated')![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-conflict-resolved',
+      prNumber: 7,
+      prState: 'OPEN',
+      prCiStatus: 'SUCCESS',
+      prReviewState: null,
+    });
+
+    await vi.waitFor(() =>
+      expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+        'ws-conflict-resolved',
+        expect.objectContaining({ hasMergeConflict: false, ratchetDispatchStalled: false }),
+        'projection:ratchet_authoritative',
+        expect.any(Number)
+      )
+    );
+  });
+
   it('ratchet_dispatch_changed publishes authoritative ownership', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',

@@ -182,19 +182,26 @@ class WorkspaceRatchetAccessor {
   }
 
   /**
-   * The four ratchet fields the snapshot stream projects, plus the lifecycle
-   * status the caller checks before publishing them.
+   * The ratchet fields the snapshot stream projects, plus `prHasMergeConflict`
+   * (read off the joined PR row so the ratchet and PR field-groups both refresh
+   * from the same event) and the lifecycle status the caller checks before
+   * publishing them.
    *
    * Narrow on purpose: this runs on every ratchet event, and it used to read a
    * whole workspace row to use five of its columns.
    */
-  async findSnapshotProjection(
-    workspaceId: string
-  ): Promise<
+  async findSnapshotProjection(workspaceId: string): Promise<
     | (Pick<
         WorkspaceRatchetFields,
-        'ratchetEnabled' | 'ratchetDispatchOutcome' | 'ratchetDispatchRetryCount'
-      > & { ratchetState: RatchetState; status: WorkspaceStatus })
+        | 'ratchetEnabled'
+        | 'ratchetDispatchOutcome'
+        | 'ratchetDispatchRetryCount'
+        | 'ratchetDispatchStalled'
+      > & {
+        ratchetState: RatchetState;
+        status: WorkspaceStatus;
+        prHasMergeConflict: boolean;
+      })
     | null
   > {
     const row = await prisma.workspace.findUnique({
@@ -206,8 +213,12 @@ class WorkspaceRatchetAccessor {
     if (!row) {
       return null;
     }
-    const { ratchetEnabled, ratchetDispatchOutcome, ratchetDispatchRetryCount } =
-      flattenWorkspaceRatchet(row.ratchet);
+    const {
+      ratchetEnabled,
+      ratchetDispatchOutcome,
+      ratchetDispatchRetryCount,
+      ratchetDispatchStalled,
+    } = flattenWorkspaceRatchet(row.ratchet);
     const { prState, prCiStatus, prHasMergeConflict, prReviewState } = flattenWorkspacePR(row.pr);
     return {
       status: row.status,
@@ -221,6 +232,8 @@ class WorkspaceRatchetAccessor {
       }),
       ratchetDispatchOutcome,
       ratchetDispatchRetryCount,
+      ratchetDispatchStalled,
+      prHasMergeConflict,
     };
   }
 

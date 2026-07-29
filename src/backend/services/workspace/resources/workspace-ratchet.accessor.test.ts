@@ -185,6 +185,8 @@ describe('workspaceRatchetAccessor', () => {
         ratchetState: 'CI_RUNNING',
         ratchetDispatchOutcome: 'RUNNING',
         ratchetDispatchRetryCount: 2,
+        ratchetDispatchStalled: false,
+        prHasMergeConflict: false,
       });
 
       expect(mockWorkspaceFindUnique).toHaveBeenCalledWith({
@@ -203,6 +205,10 @@ describe('workspaceRatchetAccessor', () => {
       await expect(workspaceRatchetAccessor.findSnapshotProjection('ws-1')).resolves.toMatchObject({
         ratchetEnabled: false,
         ratchetState: 'IDLE',
+        // The raw PR observation still surfaces even though the derived
+        // ratchet state is IDLE -- callers project it onto the snapshot's
+        // `pr` field-group independently of the `ratchet` field-group.
+        prHasMergeConflict: true,
       });
     });
 
