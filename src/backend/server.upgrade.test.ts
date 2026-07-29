@@ -115,6 +115,9 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     runScriptStateMachine: {
       recoverStaleStates: vi.fn(async () => undefined),
     },
+    runScriptService: {
+      cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    },
     acpTraceLogger: {
       cleanup: vi.fn(),
       cleanupOldLogs: vi.fn(),
@@ -748,6 +751,30 @@ describe('server websocket upgrade routing', () => {
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
     expect(transportDisposers.chat).toHaveBeenCalledWith(harness.application);
     expect(transportDisposers.snapshots).toHaveBeenCalledWith(harness.application);
+  });
+
+  it('waits for run-script cleanup before disconnecting the database', async () => {
+    const harness = createTestHarness();
+    let finishRunScriptCleanup!: () => void;
+    const runScriptCleanupCanFinish = new Promise<void>((resolve) => {
+      finishRunScriptCleanup = resolve;
+    });
+    vi.mocked(harness.services.runScriptService.cleanup).mockReturnValueOnce(
+      runScriptCleanupCanFinish
+    );
+    const server = createTestServer(harness.application);
+
+    const stopPromise = server.stop();
+
+    await vi.waitFor(() => {
+      expect(harness.services.runScriptService.cleanup).toHaveBeenCalledOnce();
+    });
+    expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
+
+    finishRunScriptCleanup();
+    await stopPromise;
+
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
   });
 
   it('closes active WebSocket clients before completing server cleanup', async () => {

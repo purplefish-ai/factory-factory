@@ -2234,6 +2234,39 @@ describe('RunScriptService.cleanup + shutdown handlers', () => {
     expect(mockCleanupTunnels).toHaveBeenCalledTimes(1);
   });
 
+  it('shares in-flight cleanup work between concurrent callers', async () => {
+    const service = new RunScriptService() as unknown as {
+      runningProcesses: Map<string, FakeChildProcess>;
+      stopRunScript: (workspaceId: string) => Promise<{ success: boolean }>;
+      cleanup: () => Promise<void>;
+    };
+    service.runningProcesses.set('ws-1', new FakeChildProcess(1));
+    let finishStop!: () => void;
+    const stopCanFinish = new Promise<void>((resolve) => {
+      finishStop = resolve;
+    });
+    const stopRunScriptSpy = vi.spyOn(service, 'stopRunScript').mockImplementation(async () => {
+      await stopCanFinish;
+      return { success: true };
+    });
+    mockCleanupTunnels.mockResolvedValue(undefined);
+
+    const firstCleanup = service.cleanup();
+    const concurrentCleanup = service.cleanup();
+
+    expect(stopRunScriptSpy).toHaveBeenCalledTimes(1);
+
+    finishStop();
+    await Promise.all([firstCleanup, concurrentCleanup]);
+    expect(mockCleanupTunnels).toHaveBeenCalledTimes(1);
+
+    service.runningProcesses.set('ws-2', new FakeChildProcess(2));
+    await service.cleanup();
+
+    expect(stopRunScriptSpy).toHaveBeenCalledTimes(2);
+    expect(mockCleanupTunnels).toHaveBeenCalledTimes(2);
+  });
+
   it('registers shutdown handlers once and runs cleanup hooks', async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const processOnSpy = vi.spyOn(process, 'on').mockImplementation(((

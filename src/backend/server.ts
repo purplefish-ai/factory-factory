@@ -64,6 +64,7 @@ export function createServer(application: Application, requestedPort?: number): 
     ratchetService,
     rateLimiter,
     reconciliationService,
+    runScriptService,
     runScriptStateMachine,
     schedulerService,
     sessionFileLogger,
@@ -443,6 +444,7 @@ export function createServer(application: Application, requestedPort?: number): 
       await sessionLifecycleService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
 
       terminalService.cleanup();
+      await runScriptService.cleanup();
       sessionFileLogger.cleanup();
       acpTraceLogger.cleanup();
       await rateLimiter.stop();
