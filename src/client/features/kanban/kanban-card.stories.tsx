@@ -103,6 +103,30 @@ export const LinearIssue: Story = {
   },
 };
 
+export const IssueAndPRWithCIRunning: Story = {
+  args: {
+    workspace: {
+      ...baseWorkspace,
+      name: 'Tighten Kanban card styling',
+      githubIssueNumber: 1905,
+      githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+      prUrl: 'https://github.com/example/repo/pull/57',
+      prNumber: 57,
+      prState: 'DRAFT',
+      prCiStatus: 'PENDING',
+      flowPhase: 'CI_WAIT',
+      ciObservation: 'CHECKS_PENDING',
+      statusReason: {
+        code: 'WAITING_FOR_CI',
+        label: 'Waiting for CI',
+        tone: 'waiting',
+        needsUser: false,
+      },
+    },
+    projectSlug: 'my-project',
+  },
+};
+
 export const DraftPR: Story = {
   args: {
     workspace: {

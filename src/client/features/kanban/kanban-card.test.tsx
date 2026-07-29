@@ -24,16 +24,8 @@ vi.mock('react-router', () => ({
     createElement('a', { href: to }, children),
 }));
 
-vi.mock('@/client/components/ci-status-chip', () => ({
-  CiStatusChip: () => createElement('span', null, 'CI'),
-}));
-
 vi.mock('@/client/components/pr-state-badge', () => ({
   PrStateBadge: () => createElement('span', null, 'PR'),
-}));
-
-vi.mock('@/client/components/setup-status-chip', () => ({
-  SetupStatusChip: () => createElement('span', null, 'Setup'),
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -82,6 +74,12 @@ const baseWorkspace = {
   mode: 'STANDARD',
   sessionSummaries: [],
   pendingRequestType: null,
+  statusReason: {
+    code: 'READY_FOR_NEXT_PROMPT',
+    label: 'Ready for next prompt',
+    tone: 'neutral',
+    needsUser: true,
+  },
 } as unknown as WorkspaceWithKanban;
 
 function renderCard(
@@ -122,25 +120,18 @@ afterEach(() => {
 });
 
 describe('KanbanCard', () => {
-  it('does not render default idle status reasons as card metadata', () => {
-    const { container, root } = renderCard({
-      ...baseWorkspace,
-      statusReason: {
-        code: 'NO_SESSION_STARTED',
-        label: 'No session started',
-        tone: 'neutral',
-        needsUser: true,
-      },
-    });
+  it('renders one canonical status chip for an idle workspace', () => {
+    const { container, root } = renderCard(baseWorkspace);
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
 
-    expect(container.textContent).not.toContain('No session started');
-    expect(container.querySelector('[data-testid="card-content"]')).toBeNull();
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Ready for next prompt');
 
     root.unmount();
     container.remove();
   });
 
-  it('does not duplicate setup status reason with the setup chip', () => {
+  it('uses the canonical status chip for setup', () => {
     const { container, root } = renderCard({
       ...baseWorkspace,
       status: 'PROVISIONING',
@@ -151,15 +142,41 @@ describe('KanbanCard', () => {
         needsUser: false,
       },
     });
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
 
-    expect(container.textContent).toContain('Setup');
-    expect(container.textContent).not.toContain('Setting up workspace');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Setting up workspace');
 
     root.unmount();
     container.remove();
   });
 
-  it('does not duplicate session status reason with the session error message', () => {
+  it('renders CI Running once instead of separate status-reason and CI rows', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      prUrl: 'https://github.com/example/repo/pull/42',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      statusReason: {
+        code: 'WAITING_FOR_CI',
+        label: 'Waiting for CI',
+        tone: 'waiting',
+        needsUser: false,
+      },
+    });
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
+
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('CI Running');
+    expect(container.textContent).not.toContain('Waiting for CI');
+    expect(container.textContent).not.toMatch(/\bCI\b(?! Running)/);
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('renders the canonical session-error chip with its detailed message', () => {
     const { container, root } = renderCard({
       ...baseWorkspace,
       statusReason: {
@@ -184,15 +201,37 @@ describe('KanbanCard', () => {
         },
       ],
     });
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
 
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Session error');
     expect(container.textContent).toContain('Session crashed');
-    expect(container.textContent).not.toContain('Session error');
 
     root.unmount();
     container.remove();
   });
 
-  it('renders actionable status reasons', () => {
+  it('renders an agent-working reason as the canonical chip', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      isWorking: true,
+      statusReason: {
+        code: 'AGENT_WORKING',
+        label: 'Agent working',
+        tone: 'working',
+        needsUser: false,
+      },
+    });
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
+
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Agent working');
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('renders an actionable reason as the canonical chip', () => {
     const { container, root } = renderCard({
       ...baseWorkspace,
       statusReason: {
@@ -202,9 +241,10 @@ describe('KanbanCard', () => {
         needsUser: true,
       },
     });
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
 
-    expect(container.textContent).toContain('Needs permission');
-    expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Needs permission');
 
     root.unmount();
     container.remove();
@@ -237,6 +277,51 @@ describe('KanbanCard', () => {
       '_blank',
       'noopener,noreferrer'
     );
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('renders linked issue and pull request controls on one metadata row', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const onCardClick = vi.fn();
+    const { container, root } = renderCard(
+      {
+        ...baseWorkspace,
+        githubIssueNumber: 1905,
+        githubIssueUrl: 'https://github.com/example/repo/issues/1905',
+        branchName: 'feature/card-style',
+        prUrl: 'https://github.com/example/repo/pull/57',
+        prNumber: 57,
+        prState: 'DRAFT',
+      },
+      onCardClick
+    );
+    const row = container.querySelector('[data-testid="issue-pr-row"]');
+    const buttons = row?.querySelectorAll('button');
+
+    expect(row?.textContent).toContain('#1905');
+    expect(row?.textContent).toContain('#57');
+    expect(row?.textContent).toContain('PR');
+    expect(buttons).toHaveLength(2);
+    expect(row?.nextElementSibling?.textContent).toContain('feature/card-style');
+
+    buttons?.[0]?.click();
+    buttons?.[1]?.click();
+
+    expect(openSpy).toHaveBeenNthCalledWith(
+      1,
+      'https://github.com/example/repo/issues/1905',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(openSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://github.com/example/repo/pull/57',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(onCardClick).not.toHaveBeenCalled();
 
     root.unmount();
     container.remove();
@@ -301,7 +386,7 @@ describe('KanbanCard', () => {
     });
 
     expect(container.textContent).not.toContain('ENG-42');
-    expect(container.querySelector('[data-testid="card-content"]')).toBeNull();
+    expect(container.querySelector('[data-testid="card-content"]')).not.toBeNull();
 
     root.unmount();
     container.remove();

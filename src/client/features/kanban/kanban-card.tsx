@@ -12,9 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { CiStatusChip } from '@/client/components/ci-status-chip';
 import { PrStateBadge } from '@/client/components/pr-state-badge';
-import { SetupStatusChip } from '@/client/components/setup-status-chip';
 import {
   ArchiveWorkspaceDialog,
   RatchetToggleButton,
@@ -23,14 +21,13 @@ import {
 import type { ProjectWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
-import { shouldShowWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { PRState, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
+import type { WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { KanbanStatusChip } from './kanban-card-status-chip';
 
 /**
  * A card renders one row of the shared project workspace list, so its props
@@ -64,35 +61,6 @@ function CardStatusIndicator({
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-function PullRequestRow({
-  workspace,
-  showPR,
-}: {
-  workspace: WorkspaceWithKanban;
-  showPR: boolean;
-}) {
-  if (!showPR) {
-    return null;
-  }
-
-  return (
-    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-        }}
-        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-      >
-        <GitPullRequestIcon className="h-3 w-3 shrink-0" />
-        <span>#{workspace.prNumber}</span>
-      </button>
-    </div>
-  );
-}
-
 type IssueLink = {
   label: string;
   url: string;
@@ -114,25 +82,55 @@ function deriveIssueLink(workspace: WorkspaceWithKanban): IssueLink | null {
   return null;
 }
 
-function IssueRow({ issue }: { issue: IssueLink | null }) {
-  if (!issue) {
+function IssueAndPullRequestRow({
+  workspace,
+  issue,
+  showPR,
+}: {
+  workspace: WorkspaceWithKanban;
+  issue: IssueLink | null;
+  showPR: boolean;
+}) {
+  if (!(issue || showPR)) {
     return null;
   }
 
   return (
-    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          window.open(issue.url, '_blank', 'noopener,noreferrer');
-        }}
-        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-      >
-        <DotOutlineIcon className="h-3 w-3 shrink-0" />
-        <span>{issue.label}</span>
-      </button>
+    <div
+      data-testid="issue-pr-row"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground min-w-0"
+    >
+      {issue && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            window.open(issue.url, '_blank', 'noopener,noreferrer');
+          }}
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+        >
+          <DotOutlineIcon className="h-3 w-3 shrink-0" />
+          <span>{issue.label}</span>
+        </button>
+      )}
+      {showPR && (
+        <div className="inline-flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+            }}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <GitPullRequestIcon className="h-3 w-3 shrink-0" />
+            <span>#{workspace.prNumber}</span>
+          </button>
+          <PrStateBadge prState={workspace.prState} size="sm" />
+        </div>
+      )}
     </div>
   );
 }
@@ -146,15 +144,6 @@ function BranchRow({ branchName }: { branchName: string | null }) {
     <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
       <GitBranchIcon className="h-3 w-3 shrink-0" />
       <span className="font-mono truncate">{branchName}</span>
-    </div>
-  );
-}
-
-function CiRow({ ciState, prState }: { ciState: WorkspaceSidebarCiState; prState: PRState }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <CiStatusChip ciState={ciState} prState={prState} size="sm" />
-      <PrStateBadge prState={prState} size="sm" />
     </div>
   );
 }
@@ -332,24 +321,10 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const issue = deriveIssueLink(workspace);
   const isArchived = workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
-  const sidebarStatus = deriveWorkspaceSidebarStatus({
-    isWorking: workspace.isWorking,
-    prUrl: workspace.prUrl ?? null,
-    prState: workspace.prState ?? null,
-    prCiStatus: workspace.prCiStatus ?? null,
-    ratchetState: workspace.ratchetState ?? null,
-  });
   const sessionRuntimeError = findWorkspaceSessionRuntimeError(workspace.sessionSummaries)?.message;
-  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
-  const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showStatusReason =
-    shouldShowWorkspaceStatusReason(workspace.statusReason) &&
-    !(workspace.statusReason.code === 'SESSION_ERROR' && sessionRuntimeError);
   const hasMetadata =
-    showSetup ||
-    showStatusReason ||
-    showCi ||
+    Boolean(workspace.statusReason) ||
     showBranch ||
     showPR ||
     !!issue ||
@@ -361,12 +336,8 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     issue,
     isArchived,
     ratchetEnabled,
-    sidebarStatus,
     sessionRuntimeError: sessionRuntimeError ?? null,
-    showSetup,
-    showCi,
     showBranch,
-    showStatusReason,
     hasMetadata,
   };
 }
@@ -414,12 +385,8 @@ export function KanbanCard({
     issue,
     isArchived,
     ratchetEnabled,
-    sidebarStatus,
     sessionRuntimeError,
-    showSetup,
-    showCi,
     showBranch,
-    showStatusReason,
     hasMetadata,
   } = deriveCardState(workspace);
 
@@ -516,30 +483,11 @@ export function KanbanCard({
         </CardHeader>
         {hasMetadata && (
           <CardContent className="space-y-1">
-            {showSetup && (
-              <div className="flex items-center">
-                <SetupStatusChip status={workspace.status} />
-              </div>
-            )}
-            {showStatusReason && workspace.statusReason && (
-              <div className="flex items-center text-[11px] font-medium text-muted-foreground">
-                <span className="truncate">{workspace.statusReason.label}</span>
-              </div>
-            )}
-            {showCi && (
-              <div className="flex items-center">
-                <CiRow ciState={sidebarStatus.ciState} prState={workspace.prState} />
-              </div>
-            )}
+            {workspace.statusReason && <KanbanStatusChip statusReason={workspace.statusReason} />}
+            <IssueAndPullRequestRow workspace={workspace} issue={issue} showPR={showPR} />
             {showBranch && (
               <div className="flex items-center">
                 <BranchRow branchName={workspace.branchName} />
-              </div>
-            )}
-            <IssueRow issue={issue} />
-            {showPR && (
-              <div className="flex items-center">
-                <PullRequestRow workspace={workspace} showPR={showPR} />
               </div>
             )}
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
