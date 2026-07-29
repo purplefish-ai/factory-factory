@@ -19,7 +19,6 @@ const ALLOWED_PURE_BACKEND_IMPORTS = new Map<string, ReadonlySet<string>>([
   [
     'src/backend/services/workspace',
     new Set([
-      'computeKanbanColumn',
       'computePendingRequestType',
       'deriveWorkspaceFlowStateFromWorkspace',
       'getWorkspaceInitPolicy',

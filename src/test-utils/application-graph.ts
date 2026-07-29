@@ -1,13 +1,11 @@
 import { type Mock, vi } from 'vitest';
 
 const hoistedApplicationGraphMocks = vi.hoisted(() => ({
-  computeKanbanColumn: vi.fn(),
   computePendingRequestType: vi.fn(),
   deriveWorkspaceFlowStateFromWorkspace: vi.fn(),
 }));
 
 export interface ApplicationGraphMocks {
-  computeKanbanColumn: Mock<(...args: unknown[]) => unknown>;
   computePendingRequestType: Mock<(...args: unknown[]) => unknown>;
   deriveWorkspaceFlowStateFromWorkspace: Mock<(...args: unknown[]) => unknown>;
 }
@@ -133,7 +131,6 @@ vi.mock('@/backend/services/terminal', () => ({
   terminalSessionService: {},
 }));
 vi.mock('@/backend/services/workspace', () => ({
-  computeKanbanColumn: (...args: unknown[]) => applicationGraphMocks.computeKanbanColumn(...args),
   computePendingRequestType: (...args: unknown[]) =>
     applicationGraphMocks.computePendingRequestType(...args),
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>

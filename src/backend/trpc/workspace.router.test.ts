@@ -32,7 +32,6 @@ const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
 const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
-const mockComputeKanbanColumn = applicationGraphMocks.computeKanbanColumn;
 const mockComputePendingRequestType = applicationGraphMocks.computePendingRequestType;
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
@@ -246,7 +245,6 @@ describe('workspaceCoreRouter', () => {
     mockBuildSessionSummaries.mockReturnValue([{ id: 's1', status: 'IDLE' }]);
     mockHasWorkingSessionSummary.mockReturnValue(false);
     mockDeriveWorkspaceSidebarStatus.mockReturnValue({ activityState: 'IDLE', ciState: 'NONE' });
-    mockComputeKanbanColumn.mockReturnValue('WAITING');
     mockComputePendingRequestType.mockReturnValue(null);
     mockCreateAgentSession.mockResolvedValue({ id: 'session-1' });
     mockCleanupWorkspaceRuntimeResources.mockImplementation(

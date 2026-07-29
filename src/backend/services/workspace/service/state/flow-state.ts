@@ -1,8 +1,6 @@
 import { CIStatus, PRState, RatchetState } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 
-const CI_UNKNOWN_GRACE_MS = 90_000;
-
 export type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 
 export interface WorkspaceFlowStateInput {
@@ -57,16 +55,13 @@ function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): Workspace
     return 'CHECKS_PASSED';
   }
   if (input.prCiStatus === CIStatus.UNKNOWN) {
-    if (!input.prUpdatedAt) {
-      return 'NOT_FETCHED';
-    }
-
-    const unknownAgeMs = Date.now() - input.prUpdatedAt.getTime();
-    if (unknownAgeMs < CI_UNKNOWN_GRACE_MS) {
-      return 'CHECKS_PENDING';
-    }
-
-    return 'NO_CHECKS';
+    // `UNKNOWN` means we have not read checks for this PR yet. It used to be
+    // split from "no checks configured" by a 90s wall clock, which made derived
+    // state a function of the current time: the same stored row produced
+    // different columns on different reconciliation passes. The PR sync poll
+    // resolves this to a real status, so reading it as not-yet-fetched is both
+    // honest and self-correcting.
+    return 'NOT_FETCHED';
   }
   return 'CHECKS_UNKNOWN';
 }

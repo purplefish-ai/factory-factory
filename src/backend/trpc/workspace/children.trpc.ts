@@ -6,12 +6,14 @@ import {
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import {
-  computeKanbanColumn,
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
 import { publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
-import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import {
+  findWorkspaceSessionRuntimeError,
+  hasStartingSessionSummary,
+} from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export const workspaceChildrenRouter = router({
@@ -62,12 +64,15 @@ export const workspaceChildrenRouter = router({
               pendingRequests
             ),
             hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-            ratchetDispatchOutcome: child.ratchetDispatchOutcome,
-            ratchetDispatchRetryCount: child.ratchetDispatchRetryCount,
-            runScriptStatus: child.runScriptStatus,
+            isSessionStarting: hasStartingSessionSummary(sessionSummaries),
+            ratchetEnabled: child.ratchetEnabled,
+            hasMergeConflict: child.prHasMergeConflict,
+            dispatchStalled: child.ratchetDispatchStalled,
+            mode: child.mode,
+            autoIterationStatus: child.autoIterationStatus,
             flowState: deriveWorkspaceFlowStateFromWorkspace(child),
           },
-          { computeKanbanColumn, deriveSidebarStatus: deriveWorkspaceSidebarStatus }
+          { deriveSidebarStatus: deriveWorkspaceSidebarStatus }
         );
 
         return {

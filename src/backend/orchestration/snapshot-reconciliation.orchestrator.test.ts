@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services/workspace';
-import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
+import { deriveWorkspaceFlowState } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
@@ -85,6 +85,10 @@ function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<st
     ratchetState: 'IDLE',
     ratchetDispatchOutcome: 'DIED',
     ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+    ratchetDispatchStalled: true,
+    prHasMergeConflict: false,
+    mode: 'STANDARD',
+    autoIterationStatus: null,
     runScriptStatus: 'IDLE',
     agentSessions: [
       {
@@ -418,7 +422,6 @@ describe('SnapshotReconciliationService', () => {
             ...input,
             prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
           }),
-        computeKanbanColumn,
         deriveSidebarStatus: deriveWorkspaceSidebarStatus,
       });
       snapshotStore.upsert('ws-1', fields, 'reconciliation', 100);
@@ -426,6 +429,8 @@ describe('SnapshotReconciliationService', () => {
       expect(snapshot).toMatchObject({
         ratchetDispatchOutcome: 'DIED',
         ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+        ratchetDispatchStalled: true,
+        statusReason: expect.objectContaining({ code: 'RATCHET_STALLED' }),
         kanbanColumn: 'WAITING',
       });
 

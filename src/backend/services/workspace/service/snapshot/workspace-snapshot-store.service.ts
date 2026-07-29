@@ -24,7 +24,6 @@ import { createLogger } from '@/backend/services/logger.service';
 import type {
   AutoIterationStatus,
   CIStatus,
-  KanbanColumn,
   PRState,
   RatchetState,
   RunScriptStatus,
@@ -32,7 +31,10 @@ import type {
   WorkspaceStatus,
 } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
-import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
+import {
+  findWorkspaceSessionRuntimeError,
+  hasStartingSessionSummary,
+} from '@/shared/session-runtime';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
@@ -116,17 +118,6 @@ export interface SnapshotDerivationFns {
     isWorking: boolean;
     shouldAnimateRatchetButton: boolean;
   };
-  computeKanbanColumn: (input: {
-    lifecycle: WorkspaceStatus;
-    sessionIsWorking: boolean;
-    flowIsWorking: boolean;
-    prState: PRState;
-    ratchetState: RatchetState;
-    pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
-    hasSessionRuntimeError: boolean;
-    ratchetDispatchOutcome: RatchetDispatchOutcome | null;
-    ratchetDispatchRetryCount: number;
-  }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
     prUrl: string | null;
@@ -471,15 +462,15 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         sessionIsWorking,
         pendingRequestType: entry.pendingRequestType,
         hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(entry.sessionSummaries)),
-        ratchetDispatchOutcome: entry.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: entry.ratchetDispatchRetryCount,
-        runScriptStatus: entry.runScriptStatus,
+        isSessionStarting: hasStartingSessionSummary(entry.sessionSummaries),
+        ratchetEnabled: entry.ratchetEnabled,
+        hasMergeConflict: entry.hasMergeConflict,
+        dispatchStalled: entry.ratchetDispatchStalled,
+        mode: entry.mode,
+        autoIterationStatus: entry.autoIterationStatus,
         flowState,
       },
-      {
-        computeKanbanColumn: this.derive.computeKanbanColumn,
-        deriveSidebarStatus: this.derive.deriveSidebarStatus,
-      }
+      { deriveSidebarStatus: this.derive.deriveSidebarStatus }
     );
 
     let changed = false;

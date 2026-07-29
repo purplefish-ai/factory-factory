@@ -3,7 +3,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { serviceNames } from '@/backend/services/registry';
-import { computeKanbanColumn, deriveWorkspaceFlowState } from '@/backend/services/workspace';
+import { deriveWorkspaceFlowState } from '@/backend/services/workspace';
 
 // Mock logger (standard pattern)
 vi.mock('@/backend/services/logger.service', () => ({
@@ -15,7 +15,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { deriveWorkspaceSidebarStatus, KanbanColumn } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { WorkspaceSnapshotEntrySchema } from '@/shared/workspace-snapshot';
 import {
   SNAPSHOT_CHANGED,
@@ -106,7 +106,6 @@ describe('WorkspaceSnapshotStore', () => {
         isWorking: false,
         shouldAnimateRatchetButton: false,
       }),
-      computeKanbanColumn: (_input) => KanbanColumn.WORKING,
       deriveSidebarStatus: (_input) => ({
         activityState: 'IDLE' as const,
         ciState: 'NONE' as const,
@@ -389,7 +388,6 @@ describe('WorkspaceSnapshotStore', () => {
           isWorking: false,
           shouldAnimateRatchetButton: false,
         }),
-        computeKanbanColumn: (_input) => KanbanColumn.WORKING,
         deriveSidebarStatus: (_input) => ({
           activityState: 'IDLE' as const,
           ciState: 'NONE' as const,
@@ -648,7 +646,11 @@ describe('WorkspaceSnapshotStore', () => {
     beforeEach(() => {
       store.configure({
         deriveFlowState: (input) => ({
-          phase: input.prUrl ? ('CI_WAIT' as const) : ('NO_PR' as const),
+          phase: input.prUrl
+            ? input.prCiStatus === 'PENDING'
+              ? ('CI_WAIT' as const)
+              : ('READY' as const)
+            : ('NO_PR' as const),
           ciObservation:
             input.prCiStatus === 'SUCCESS'
               ? ('CHECKS_PASSED' as const)
@@ -657,15 +659,6 @@ describe('WorkspaceSnapshotStore', () => {
           isWorking: input.prUrl !== null && input.prCiStatus === 'PENDING',
           shouldAnimateRatchetButton: input.ratchetEnabled && input.prCiStatus === 'PENDING',
         }),
-        computeKanbanColumn: (input) => {
-          if (input.sessionIsWorking || input.flowIsWorking) {
-            return KanbanColumn.WORKING;
-          }
-          if (input.prState === 'MERGED') {
-            return KanbanColumn.DONE;
-          }
-          return KanbanColumn.WAITING;
-        },
         deriveSidebarStatus: (input) => ({
           activityState: input.isWorking ? ('WORKING' as const) : ('IDLE' as const),
           ciState: input.prUrl ? ('RUNNING' as const) : ('NONE' as const),
@@ -740,14 +733,13 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.kanbanColumn).toBe('WAITING');
     });
 
-    it('moves exhausted Ratchet dispatches to waiting without reporting live agent work', () => {
+    it('moves a stalled Ratchet dispatch to waiting without reporting live agent work', () => {
       store.configure({
         deriveFlowState: (input) =>
           deriveWorkspaceFlowState({
             ...input,
             prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
           }),
-        computeKanbanColumn,
         deriveSidebarStatus: deriveWorkspaceSidebarStatus,
       });
       store.upsert(
@@ -770,6 +762,7 @@ describe('WorkspaceSnapshotStore', () => {
           ratchetState: 'CI_FAILED',
           ratchetDispatchOutcome: 'DIED',
           ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
+          ratchetDispatchStalled: true,
         },
       ];
       const columns: Array<string | null> = [];
@@ -851,7 +844,6 @@ describe('WorkspaceSnapshotStore', () => {
           isWorking: false,
           shouldAnimateRatchetButton: false,
         }),
-        computeKanbanColumn: () => KanbanColumn.WAITING,
         deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'NONE' }),
       });
       store.upsert('ws-1', makeUpdate(), 'seed', 100);
@@ -919,7 +911,6 @@ describe('WorkspaceSnapshotStore', () => {
           isWorking: false,
           shouldAnimateRatchetButton: false,
         }),
-        computeKanbanColumn: (_input) => KanbanColumn.WORKING,
         deriveSidebarStatus: (_input) => ({
           activityState: 'IDLE' as const,
           ciState: 'NONE' as const,

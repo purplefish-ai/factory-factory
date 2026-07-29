@@ -1,8 +1,9 @@
 import type {
+  AutoIterationStatus,
   CIStatus,
   PRState,
   RatchetState,
-  RunScriptStatus,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
@@ -36,10 +37,14 @@ export const WORKSPACE_STATUS_REASON_CODES = [
   'ARCHIVING',
   'ARCHIVED',
   'AGENT_WORKING',
-  'DEV_SERVER_RUNNING',
+  'STARTING_SESSION',
+  'AUTO_ITERATING',
   'WAITING_FOR_CI',
   'FIXING_CI_FAILURES',
   'FIXING_REVIEW_COMMENTS',
+  'FIXING_MERGE_CONFLICT',
+  'MERGE_CONFLICT',
+  'RATCHET_STALLED',
   'CHECKING_PR',
   'MERGED',
   'PR_CLOSED',
@@ -62,6 +67,7 @@ export interface WorkspaceStatusReasonInput {
   lifecycle: WorkspaceStatus;
   hasHadSessions: boolean;
   isWorking: boolean;
+  isSessionStarting: boolean;
   pendingRequestType: WorkspacePendingRequestType | null;
   hasSessionRuntimeError?: boolean;
   flowPhase: WorkspaceFlowPhase;
@@ -69,7 +75,11 @@ export interface WorkspaceStatusReasonInput {
   prState: PRState;
   prCiStatus: CIStatus;
   ratchetState: RatchetState;
-  runScriptStatus: RunScriptStatus | null;
+  ratchetEnabled: boolean;
+  hasMergeConflict: boolean;
+  dispatchStalled: boolean;
+  mode: WorkspaceMode;
+  autoIterationStatus: AutoIterationStatus | null;
 }
 
 type OptionalWorkspaceStatusReason = WorkspaceStatusReason | null;
@@ -90,6 +100,7 @@ export function deriveWorkspaceStatusReason(
     deriveBlockingReason(input) ??
     deriveLifecycleReason(input) ??
     deriveActiveReason(input) ??
+    deriveRatchetTroubleReason(input) ??
     derivePrFlowReason(input) ??
     deriveIdleReason(input)
   );
@@ -134,8 +145,35 @@ function deriveActiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
     return reason('AGENT_WORKING', 'Agent working', 'working');
   }
 
-  if (input.runScriptStatus === 'RUNNING' || input.runScriptStatus === 'STARTING') {
-    return reason('DEV_SERVER_RUNNING', 'Dev server running', 'working');
+  if (input.isSessionStarting) {
+    return reason('STARTING_SESSION', 'Starting session', 'working');
+  }
+
+  if (input.mode === 'AUTO_ITERATION' && input.autoIterationStatus === 'RUNNING') {
+    return reason('AUTO_ITERATING', 'Auto-iterating', 'working');
+  }
+
+  return null;
+}
+
+/**
+ * The two PR states the automation cannot make progress on by itself.
+ *
+ * Split out of `derivePrFlowReason` only to keep that function under the
+ * cognitive-complexity limit; it runs immediately before it, so the precedence
+ * is the same as if these were its first two branches.
+ */
+function deriveRatchetTroubleReason(
+  input: WorkspaceStatusReasonInput
+): OptionalWorkspaceStatusReason {
+  if (input.ratchetEnabled && input.dispatchStalled) {
+    return reason('RATCHET_STALLED', 'Auto-fix stalled', 'attention', true);
+  }
+
+  if (input.hasMergeConflict) {
+    return input.ratchetEnabled
+      ? reason('FIXING_MERGE_CONFLICT', 'Fixing merge conflict', 'working')
+      : reason('MERGE_CONFLICT', 'Merge conflict', 'attention', true);
   }
 
   return null;
@@ -170,11 +208,11 @@ function derivePrFlowReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
   }
 
   if (input.flowPhase === 'READY' && input.ciObservation === 'CHECKS_PASSED') {
-    return reason('READY_TO_MERGE', 'Ready to merge', 'success');
+    return reason('READY_TO_MERGE', 'Ready to merge', 'success', true);
   }
 
   if (input.flowPhase === 'READY') {
-    return reason('READY_FOR_REVIEW', 'Ready for review', 'neutral');
+    return reason('READY_FOR_REVIEW', 'Ready for review', 'neutral', true);
   }
 
   return null;

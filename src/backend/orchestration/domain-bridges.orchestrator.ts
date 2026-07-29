@@ -43,7 +43,6 @@ import type {
 } from '@/backend/services/session';
 import type { terminalSessionService } from '@/backend/services/terminal';
 import {
-  computeKanbanColumn,
   deriveWorkspaceFlowState,
   type getWorkspaceInitPolicy,
   type WorkspaceCreationService,
@@ -696,7 +695,6 @@ export function configureDomainBridges(services: BridgeServices): void {
         ...input,
         prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
       }),
-    computeKanbanColumn: (input) => computeKanbanColumn(input),
     deriveSidebarStatus: (input) => deriveWorkspaceSidebarStatus(input),
   });
 }

@@ -11,13 +11,13 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceQuerySessionBridge,
 } from '@/backend/services/workspace/service/bridges';
-import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
 import { type KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import {
   findWorkspaceSessionRuntimeError,
+  hasStartingSessionSummary,
   hasWorkingSessionSummary,
 } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -195,13 +195,15 @@ class WorkspaceQueryService {
             sessionIsWorking: runtimeState.isSessionWorking,
             pendingRequestType,
             hasSessionRuntimeError: Boolean(findWorkspaceSessionRuntimeError(sessionSummaries)),
-            ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-            ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-            runScriptStatus: workspace.runScriptStatus,
+            isSessionStarting: hasStartingSessionSummary(sessionSummaries),
+            ratchetEnabled: workspace.ratchetEnabled,
+            hasMergeConflict: workspace.prHasMergeConflict,
+            dispatchStalled: workspace.ratchetDispatchStalled,
+            mode: workspace.mode,
+            autoIterationStatus: workspace.autoIterationStatus,
             flowState: runtimeState.flowState,
           },
           {
-            computeKanbanColumn,
             deriveSidebarStatus: deriveWorkspaceSidebarStatus,
           }
         );
