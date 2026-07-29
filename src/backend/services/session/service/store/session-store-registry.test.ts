@@ -116,6 +116,27 @@ describe('SessionStoreRegistry history retry cooldowns', () => {
     expect(registry.getOrCreate('session-1').recentRejections).toEqual([]);
   });
 
+  it('releases a preservation-only store after passive reads', async () => {
+    const registry = new SessionStoreRegistry();
+    registry.getOrCreate('session-1').recentRejections = [
+      {
+        id: 'active-rejection',
+        errorMessage: 'Runtime crashed',
+        rejectedAt: '2026-02-24T12:00:00.000Z',
+        expiresAt: nowMs + 30_000,
+      },
+    ];
+    registry.clearSession('session-1', { preserveRejections: true });
+
+    const preservedStore = registry.getOrCreate('session-1');
+    expect(registry.getQueueLength('session-1')).toBe(0);
+
+    nowMs += 30_000;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(registry.getOrCreate('session-1')).not.toBe(preservedStore);
+  });
+
   it('prunes expired rejections without clearing a reactivated store', async () => {
     const registry = new SessionStoreRegistry();
     registry.getOrCreate('session-1').recentRejections = [
@@ -128,7 +149,7 @@ describe('SessionStoreRegistry history retry cooldowns', () => {
     ];
     registry.clearSession('session-1', { preserveRejections: true });
 
-    const reactivatedStore = registry.getOrCreate('session-1');
+    const reactivatedStore = registry.getOrCreateActive('session-1');
     reactivatedStore.queue.push({
       id: 'new-queued-message',
       text: 'new work',

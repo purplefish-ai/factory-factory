@@ -80,7 +80,7 @@ export class SessionDomainService extends EventEmitter {
       errorMessage?: SessionRuntimeState['errorMessage'];
     }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     this.runtimeMachine.markRuntime(store, updates);
   }
 
@@ -90,7 +90,7 @@ export class SessionDomainService extends EventEmitter {
     loadRequestId?: string;
   }): void {
     const { sessionId, sessionRuntime, loadRequestId } = options;
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     if (!store.initialized) {
       store.initialized = true;
     }
@@ -194,7 +194,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   setRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeState, emitDelta = true): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     this.runtimeMachine.markRuntime(
       store,
       {
@@ -214,7 +214,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const result = enqueueMessage(store, message);
     if ('error' in result) {
       return result;
@@ -224,7 +224,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   removeQueuedMessage(sessionId: string, messageId: string): boolean {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const removed = removeQueuedMessage(store, messageId);
     if (!removed) {
       return false;
@@ -239,7 +239,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   dequeueNext(sessionId: string, options?: { emitSnapshot?: boolean }): QueuedMessage | undefined {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const next = dequeueNext(store);
     if (next && options?.emitSnapshot !== false) {
       this.publisher.forwardSnapshot(store, { reason: 'dequeue' });
@@ -248,7 +248,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   requeueFront(sessionId: string, message: QueuedMessage): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     requeueFront(store, message);
     this.publisher.forwardSnapshot(store, { reason: 'requeue' });
   }
@@ -258,7 +258,7 @@ export class SessionDomainService extends EventEmitter {
     message: QueuedMessage,
     options?: { emitSnapshot?: boolean }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
     this.commitSentUserMessageWithOrder(store, message, order, options);
@@ -270,7 +270,7 @@ export class SessionDomainService extends EventEmitter {
     order: number,
     options?: { emitSnapshot?: boolean }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     this.commitSentUserMessageWithOrder(store, message, order, options);
   }
 
@@ -292,7 +292,7 @@ export class SessionDomainService extends EventEmitter {
     messageId: string,
     options?: { emitSnapshot?: boolean }
   ): boolean {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const removed = removeTranscriptMessageById(store, messageId);
     if (!removed) {
       return false;
@@ -306,7 +306,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage): number {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     return appendClaudeEvent(store, claudeMessage, {
       nowIso: this.nowIso,
       onParityTrace: (data) => {
@@ -320,7 +320,7 @@ export class SessionDomainService extends EventEmitter {
    * Creates or replaces the transcript entry at the given order.
    */
   upsertClaudeEvent(sessionId: string, claudeMessage: AgentMessage, order: number): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     upsertTranscriptMessage(store, {
       id: `${store.sessionId}-${order}`,
       source: 'agent',
@@ -331,14 +331,14 @@ export class SessionDomainService extends EventEmitter {
   }
 
   allocateOrder(sessionId: string): number {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const order = store.nextOrder;
     store.nextOrder += 1;
     return order;
   }
 
   setPendingInteractiveRequest(sessionId: string, request: PendingInteractiveRequest): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     setPendingInteractiveRequest(store, request);
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_set' });
     this.emit('pending_request_changed', {
@@ -354,7 +354,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   clearPendingInteractiveRequest(sessionId: string): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
     if (!pendingRequest) {
       return;
@@ -372,7 +372,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     if (!clearPendingInteractiveRequestIfMatches(store, requestId)) {
       return;
     }
@@ -381,7 +381,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   markProcessExit(sessionId: string, code: number | null): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
     handleProcessExit({
       store,
@@ -405,7 +405,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     const pendingRequest = store.pendingInteractiveRequest;
     const hadQueuedWork = clearQueuedWork(store);
 
@@ -432,7 +432,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   markStopping(sessionId: string): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     this.transitionRuntime(sessionId, {
       phase: 'stopping',
       processState: store.runtime.processState,
@@ -457,7 +457,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   markError(sessionId: string, errorMessage?: string): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     this.transitionRuntime(sessionId, {
       phase: 'error',
       processState: store.runtime.processState,
@@ -480,7 +480,7 @@ export class SessionDomainService extends EventEmitter {
     text: string,
     options?: { messageId?: string }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     injectCommittedUserMessage(store, text, {
       messageId: options?.messageId,
       nowIso: this.nowIso,
@@ -543,7 +543,7 @@ export class SessionDomainService extends EventEmitter {
     source: 'jsonl' | 'acp_fallback' | 'none',
     options?: { hydratedAt?: string }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     store.historyHydrated = true;
     store.historyHydrationSource = source;
     store.historyHydratedAt = options?.hydratedAt ?? this.nowIso();
@@ -554,7 +554,7 @@ export class SessionDomainService extends EventEmitter {
     transcript: ChatMessage[],
     options?: { historySource?: 'jsonl' | 'acp_fallback' | 'none' }
   ): void {
-    const store = this.registry.getOrCreate(sessionId);
+    const store = this.registry.getOrCreateActive(sessionId);
     store.transcript = [...transcript].sort(messageSort);
     rebuildTranscriptIndex(store);
     setNextOrderFromTranscript(store);

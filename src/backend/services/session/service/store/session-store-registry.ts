@@ -30,7 +30,13 @@ export class SessionStoreRegistry {
         nextOrder: 0,
       };
       this.stores.set(sessionId, store);
-    } else if (this.preservationOnlyStores.get(sessionId) === store) {
+    }
+    return store;
+  }
+
+  getOrCreateActive(sessionId: string): SessionStore {
+    const store = this.getOrCreate(sessionId);
+    if (this.preservationOnlyStores.get(sessionId) === store) {
       this.preservationOnlyStores.delete(sessionId);
     }
     return store;
