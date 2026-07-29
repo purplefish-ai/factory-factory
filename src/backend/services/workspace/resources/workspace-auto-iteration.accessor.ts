@@ -84,8 +84,34 @@ class WorkspaceAutoIterationAccessor {
     }
   }
 
-  setStatus(workspaceId: string, status: AutoIterationStatus): Promise<void> {
-    return this.write(workspaceId, { status });
+  /**
+   * Set the loop's status and report the row it landed on.
+   *
+   * Returns `mode` alongside the status because the caller publishes both to the
+   * snapshot stream, and the stream's own copy of `mode` is otherwise only
+   * seeded by the reconciliation sweep — so a loop that reaches a gap between
+   * iterations inside that window would be derived against a `STANDARD` it never
+   * had. Reading it back from the written row costs one narrow query on a
+   * transition that happens a handful of times per iteration.
+   */
+  async setStatus(
+    workspaceId: string,
+    status: AutoIterationStatus
+  ): Promise<{ mode: WorkspaceMode; status: AutoIterationStatus }> {
+    await this.write(workspaceId, { status });
+    return { mode: await this.readMode(workspaceId), status };
+  }
+
+  /**
+   * `mode` for a row this accessor has just written, so callers never infer it
+   * from the fact that an auto-iteration code path is running.
+   */
+  private async readMode(workspaceId: string): Promise<WorkspaceMode> {
+    const row = await prisma.workspaceAutoIteration.findUnique({
+      where: { workspaceId },
+      select: { mode: true },
+    });
+    return row?.mode ?? WORKSPACE_AUTO_ITERATION_DEFAULTS.mode;
   }
 
   setProgress(workspaceId: string, progress: Prisma.InputJsonValue): Promise<void> {
@@ -105,12 +131,17 @@ class WorkspaceAutoIterationAccessor {
     workspaceId: string,
     sessionId: string,
     status: AutoIterationStatus
-  ): Promise<boolean> {
+  ): Promise<{ settled: boolean; mode: WorkspaceMode | null }> {
     const result = await prisma.workspaceAutoIteration.updateMany({
       where: { workspaceId, sessionId },
       data: { status, sessionId: null },
     });
-    return result.count === 1;
+    if (result.count !== 1) {
+      return { settled: false, mode: null };
+    }
+    // Only read the mode on the branch that actually settled: a compare-and-swap
+    // that matched nothing has no transition to publish.
+    return { settled: true, mode: await this.readMode(workspaceId) };
   }
 
   async clearSessionIfMatches(workspaceId: string, sessionId: string): Promise<boolean> {

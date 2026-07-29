@@ -54,10 +54,13 @@ import type {
 import type { terminalService } from '@/backend/services/terminal';
 import type { SnapshotUpdateInput } from '@/backend/services/workspace';
 import {
+  AUTO_ITERATION_STATUS_CHANGED,
+  type AutoIterationStatusChangedEvent,
   type computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   type workspaceActivityService,
+  type workspaceAutoIterationService,
   type workspaceDataService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
@@ -131,6 +134,7 @@ export type EventCollectorDependencies = {
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   runScriptStateMachine: typeof runScriptStateMachine;
+  workspaceAutoIterationService: typeof workspaceAutoIterationService;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
   sessionLifecycleService: typeof sessionLifecycleService;
@@ -833,6 +837,29 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   dependencies.runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, runScriptStatusChangedHandler);
   state.teardownListeners.push(() =>
     dependencies.runScriptStateMachine.off(RUN_SCRIPT_STATUS_CHANGED, runScriptStatusChangedHandler)
+  );
+
+  // 7. Auto-iteration status changes
+  //
+  // `mode` rides along because the snapshot store's copy is otherwise seeded
+  // only by reconciliation, and the status reason needs both to report
+  // AUTO_ITERATING.
+  const autoIterationStatusChangedHandler = (event: AutoIterationStatusChangedEvent) => {
+    coalescer.enqueue(
+      event.workspaceId,
+      { mode: event.mode, autoIterationStatus: event.status },
+      'event:auto_iteration_status_changed'
+    );
+  };
+  dependencies.workspaceAutoIterationService.on(
+    AUTO_ITERATION_STATUS_CHANGED,
+    autoIterationStatusChangedHandler
+  );
+  state.teardownListeners.push(() =>
+    dependencies.workspaceAutoIterationService.off(
+      AUTO_ITERATION_STATUS_CHANGED,
+      autoIterationStatusChangedHandler
+    )
   );
 
   // 6. Workspace activity (active)

@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
-import { workspaceAutoIterationService } from './workspace-auto-iteration.service';
+import {
+  AUTO_ITERATION_STATUS_CHANGED,
+  type AutoIterationStatusChangedEvent,
+  workspaceAutoIterationService,
+} from './workspace-auto-iteration.service';
 import { workspaceRatchetService } from './workspace-ratchet.service';
 import { workspaceRunScriptService } from './workspace-run-script.service';
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findAutoIterationExecutionContext: vi.fn(),
+    setAutoIterationStatus: vi.fn(),
     findRunScriptExecutionState: vi.fn(),
     findRunScriptExecutionStateOrThrow: vi.fn(),
     finishAutoIterationIfSessionMatches: vi.fn(),
@@ -27,8 +32,66 @@ vi.mock('@/backend/services/workspace/resources/workspace-ratchet.accessor', () 
 describe('workspace state capabilities', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('announces a status change so the live snapshot stream does not wait for reconciliation', async () => {
+    // `mode` and `autoIterationStatus` are derivation inputs on the snapshot
+    // wire. Without this event the store learned about a transition only from
+    // the reconciliation sweep, so a running loop could read as waiting between
+    // iterations for up to one sweep interval.
+    vi.mocked(workspaceAccessor.setAutoIterationStatus).mockResolvedValue({
+      mode: 'AUTO_ITERATION',
+      status: 'RUNNING',
+    });
+    const events: AutoIterationStatusChangedEvent[] = [];
+    workspaceAutoIterationService.on(
+      AUTO_ITERATION_STATUS_CHANGED,
+      (event: AutoIterationStatusChangedEvent) => events.push(event)
+    );
+
+    await workspaceAutoIterationService.setStatus('ws-1', 'RUNNING');
+
+    expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'RUNNING' }]);
+    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
+  });
+
+  it('announces the settled status when a matching session finishes the loop', async () => {
+    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
+      settled: true,
+      mode: 'AUTO_ITERATION',
+    });
+    const events: AutoIterationStatusChangedEvent[] = [];
+    workspaceAutoIterationService.on(
+      AUTO_ITERATION_STATUS_CHANGED,
+      (event: AutoIterationStatusChangedEvent) => events.push(event)
+    );
+
+    await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'session-1', 'COMPLETED');
+
+    expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'COMPLETED' }]);
+    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
+  });
+
+  it('announces nothing when the compare-and-swap settles no loop', async () => {
+    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
+      settled: false,
+      mode: null,
+    });
+    const events: AutoIterationStatusChangedEvent[] = [];
+    workspaceAutoIterationService.on(
+      AUTO_ITERATION_STATUS_CHANGED,
+      (event: AutoIterationStatusChangedEvent) => events.push(event)
+    );
+
+    await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'stale-session', 'FAILED');
+
+    expect(events).toEqual([]);
+    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
+  });
+
   it('finishes auto-iteration only when the active session still matches', async () => {
-    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue(true);
+    vi.mocked(workspaceAccessor.finishAutoIterationIfSessionMatches).mockResolvedValue({
+      settled: true,
+      mode: 'AUTO_ITERATION',
+    });
 
     await expect(
       workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'session-1', 'COMPLETED')

@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindMany = vi.fn();
+const mockFindUnique = vi.fn();
 const mockUpdateMany = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
     workspaceAutoIteration: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
+      findUnique: (...args: unknown[]) => mockFindUnique(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
   },
@@ -23,6 +25,10 @@ describe('workspaceAutoIterationAccessor', () => {
     vi.clearAllMocks();
     mockUpdateMany.mockReset();
     mockUpdateMany.mockResolvedValue({ count: 1 });
+    // Status writes read the row's mode back so the caller can publish both to
+    // the snapshot stream.
+    mockFindUnique.mockReset();
+    mockFindUnique.mockResolvedValue({ mode: 'AUTO_ITERATION' });
   });
 
   describe('flattenWorkspaceAutoIteration', () => {
@@ -110,9 +116,11 @@ describe('workspaceAutoIterationAccessor', () => {
 
   describe('finishIfSessionMatches', () => {
     it('guards on the session and clears it as it settles', async () => {
+      // Returns the mode alongside the outcome so the caller can announce the
+      // transition to the snapshot stream without a second read.
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'sess-1', 'COMPLETED')
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ settled: true, mode: 'AUTO_ITERATION' });
 
       expect(mockUpdateMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1', sessionId: 'sess-1' },
@@ -120,12 +128,14 @@ describe('workspaceAutoIterationAccessor', () => {
       });
     });
 
-    it('reports false when the loop has already moved to another session', async () => {
+    it('reports no settlement when the loop has already moved to another session', async () => {
       mockUpdateMany.mockResolvedValue({ count: 0 });
 
       await expect(
         workspaceAutoIterationAccessor.finishIfSessionMatches('ws-1', 'stale', 'FAILED')
-      ).resolves.toBe(false);
+      ).resolves.toEqual({ settled: false, mode: null });
+      // No transition to announce, so the mode read is skipped entirely.
+      expect(mockFindUnique).not.toHaveBeenCalled();
     });
   });
 
