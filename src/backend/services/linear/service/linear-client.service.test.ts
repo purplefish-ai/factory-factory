@@ -132,7 +132,7 @@ describe('LinearClientService', () => {
             url: 'https://linear.app/example/issue/ENG-1',
             createdAt: new Date('2024-01-01T00:00:00.000Z'),
             state: Promise.resolve({ name: 'Todo' }),
-            assignee: Promise.resolve({ displayName: 'Alice', name: 'Alice A.' }),
+            creator: Promise.resolve({ displayName: 'Alice', name: 'Alice A.' }),
           },
           {
             id: 'issue-2',
@@ -142,7 +142,7 @@ describe('LinearClientService', () => {
             url: 'https://linear.app/example/issue/ENG-2',
             createdAt: new Date('2024-01-02T00:00:00.000Z'),
             state: Promise.resolve(null),
-            assignee: Promise.resolve({ displayName: null, name: 'Bob' }),
+            creator: Promise.resolve({ displayName: null, name: 'Bob' }),
           },
         ],
       });
@@ -168,7 +168,7 @@ describe('LinearClientService', () => {
           url: 'https://linear.app/example/issue/ENG-1',
           state: 'Todo',
           createdAt: '2024-01-01T00:00:00.000Z',
-          assigneeName: 'Alice',
+          creatorName: 'Alice',
         },
         {
           id: 'issue-2',
@@ -178,7 +178,7 @@ describe('LinearClientService', () => {
           url: 'https://linear.app/example/issue/ENG-2',
           state: 'Unknown',
           createdAt: '2024-01-02T00:00:00.000Z',
-          assigneeName: 'Bob',
+          creatorName: 'Bob',
         },
       ]);
     });
@@ -197,7 +197,7 @@ describe('LinearClientService', () => {
               url: 'https://linear.app/example/issue/ENG-50',
               createdAt: new Date('2024-02-01T00:00:00.000Z'),
               state: Promise.resolve({ name: 'Todo' }),
-              assignee: Promise.resolve(null),
+              creator: Promise.resolve(null),
             },
           ],
         })
@@ -212,7 +212,7 @@ describe('LinearClientService', () => {
               url: 'https://linear.app/example/issue/ENG-51',
               createdAt: new Date('2024-02-02T00:00:00.000Z'),
               state: Promise.resolve({ name: 'Todo' }),
-              assignee: Promise.resolve({ displayName: 'Casey', name: 'Casey C.' }),
+              creator: Promise.resolve({ displayName: 'Casey', name: 'Casey C.' }),
             },
           ],
         });
@@ -246,7 +246,7 @@ describe('LinearClientService', () => {
           url: 'https://linear.app/example/issue/ENG-50',
           state: 'Todo',
           createdAt: '2024-02-01T00:00:00.000Z',
-          assigneeName: null,
+          creatorName: null,
         },
         {
           id: 'issue-51',
@@ -256,7 +256,7 @@ describe('LinearClientService', () => {
           url: 'https://linear.app/example/issue/ENG-51',
           state: 'Todo',
           createdAt: '2024-02-02T00:00:00.000Z',
-          assigneeName: 'Casey',
+          creatorName: 'Casey',
         },
       ]);
     });
@@ -272,7 +272,7 @@ describe('LinearClientService', () => {
         url: 'https://linear.app/example/issue/ENG-1',
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         state: Promise.resolve({ name: 'In Progress' }),
-        assignee: Promise.resolve({ displayName: null, name: 'Alice' }),
+        creator: Promise.resolve({ displayName: null, name: 'Alice' }),
       };
       const getIssue = vi.fn().mockResolvedValue(issue);
       setMockClient({ issue: getIssue });
@@ -288,7 +288,7 @@ describe('LinearClientService', () => {
         url: 'https://linear.app/example/issue/ENG-1',
         state: 'In Progress',
         createdAt: '2024-01-01T00:00:00.000Z',
-        assigneeName: 'Alice',
+        creatorName: 'Alice',
       });
     });
 

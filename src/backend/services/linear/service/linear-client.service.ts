@@ -25,7 +25,7 @@ export interface LinearIssue {
   url: string;
   state: string; // Workflow state name, e.g. "Todo"
   createdAt: string;
-  assigneeName: string | null;
+  creatorName: string | null;
 }
 
 /** Normalized Linear workflow state for state transitions. */
@@ -110,7 +110,7 @@ class LinearClientService {
       linearIssues.push(
         ...(await Promise.all(
           issues.nodes.map(async (issue) => {
-            const [state, assignee] = await Promise.all([issue.state, issue.assignee]);
+            const [state, creator] = await Promise.all([issue.state, issue.creator]);
             return {
               id: issue.id,
               identifier: issue.identifier,
@@ -119,7 +119,7 @@ class LinearClientService {
               url: issue.url,
               state: state?.name ?? 'Unknown',
               createdAt: issue.createdAt.toISOString(),
-              assigneeName: assignee?.displayName ?? assignee?.name ?? null,
+              creatorName: creator?.displayName ?? creator?.name ?? null,
             };
           })
         ))
@@ -142,7 +142,7 @@ class LinearClientService {
       const client = this.createClient(apiKey);
       const issue = await client.issue(issueId);
       const state = await issue.state;
-      const assignee = await issue.assignee;
+      const creator = await issue.creator;
       return {
         id: issue.id,
         identifier: issue.identifier,
@@ -151,7 +151,7 @@ class LinearClientService {
         url: issue.url,
         state: state?.name ?? 'Unknown',
         createdAt: issue.createdAt.toISOString(),
-        assigneeName: assignee?.displayName ?? assignee?.name ?? null,
+        creatorName: creator?.displayName ?? creator?.name ?? null,
       };
     } catch (error) {
       logger.warn('Failed to fetch Linear issue', {

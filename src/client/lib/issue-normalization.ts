@@ -6,6 +6,7 @@ export interface NormalizedIssue {
   body: string;
   url: string;
   createdAt: string;
+  /** The user who opened the issue, not the assignee. */
   author: string;
   provider: 'github' | 'linear';
   githubIssueNumber?: number;
@@ -33,7 +34,7 @@ export interface LinearIssueRaw {
   url: string;
   state: string;
   createdAt: string;
-  assigneeName: string | null;
+  creatorName: string | null;
 }
 
 export function normalizeGitHubIssue(issue: GitHubIssueRaw): NormalizedIssue {
@@ -58,7 +59,7 @@ export function normalizeLinearIssue(issue: LinearIssueRaw): NormalizedIssue {
     body: issue.description,
     url: issue.url,
     createdAt: issue.createdAt,
-    author: issue.assigneeName ?? 'Unassigned',
+    author: issue.creatorName ?? 'Unknown',
     provider: 'linear',
     linearIssueId: issue.id,
     linearIssueIdentifier: issue.identifier,

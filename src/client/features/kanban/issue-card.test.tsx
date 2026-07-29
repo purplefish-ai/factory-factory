@@ -92,6 +92,12 @@ vi.mock('@/components/ui/card', () => ({
     createElement('div', props, children),
 }));
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  TooltipContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  TooltipTrigger: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+}));
+
 vi.mock('@/components/ui/select', () => ({
   Select: ({ children }: { children: ReactNode }) => createElement('div', null, children),
   SelectContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
