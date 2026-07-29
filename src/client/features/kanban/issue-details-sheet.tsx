@@ -12,6 +12,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
 interface IssueDetailsSheetProps {
@@ -98,10 +99,17 @@ function IssueDetailsContent({
                   <span>{issue.displayId}</span>
                 </span>
                 <span>•</span>
-                <span className="inline-flex items-center gap-1">
-                  <UserIcon className="h-3 w-3" />
-                  {issue.author}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1">
+                      <UserIcon className="h-3 w-3" />
+                      {issue.author}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Opened by {issue.author} on {new Date(issue.createdAt).toLocaleDateString()}
+                  </TooltipContent>
+                </Tooltip>
                 <span>•</span>
                 <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
               </SheetDescription>

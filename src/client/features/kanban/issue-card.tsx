@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
 interface IssueCardProps {
@@ -42,10 +43,17 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
                 <DotOutlineIcon className="h-3 w-3 text-green-500" />
                 <span>{issue.displayId}</span>
               </span>
-              <span className="inline-flex items-center gap-1 truncate">
-                <UserIcon className="h-3 w-3 shrink-0" />
-                {issue.author}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 truncate">
+                    <UserIcon className="h-3 w-3 shrink-0" />
+                    {issue.author}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Opened by {issue.author} on {new Date(issue.createdAt).toLocaleDateString()}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <Button
               size="sm"
