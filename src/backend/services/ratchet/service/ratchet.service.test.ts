@@ -3716,6 +3716,38 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       await pendingStop;
     });
 
+    it('stops completed session even when abort fires after settlement', async () => {
+      const controller = new AbortController();
+      const timeoutError = new Error('Workspace check timed out');
+      vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
+        id: 'completed-session',
+        provider: 'CLAUDE',
+        status: SessionStatus.RUNNING,
+      } as never);
+      vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+      vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+      vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
+      vi.mocked(mockWorkspaceBridge.recordSessionEnd).mockImplementation(() => {
+        controller.abort(timeoutError);
+        return Promise.resolve(true);
+      });
+
+      const check = unsafeCoerce<{
+        checkActiveFixerSession: (w: unknown, signal: AbortSignal) => Promise<unknown>;
+      }>(ratchetService).checkActiveFixerSession(
+        {
+          id: 'ws-completed-aborted-after-settlement',
+          ratchetActiveSessionId: 'completed-session',
+          defaultSessionProvider: 'CLAUDE',
+          ratchetSessionProvider: 'CLAUDE',
+        },
+        controller.signal
+      );
+
+      await expect(check).rejects.toBe(timeoutError);
+      expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('completed-session');
+    });
+
     it('returns the active fixer when the session is working', async () => {
       vi.mocked(mockSessionBridge.findSessionById).mockResolvedValue({
         id: 'working-session',

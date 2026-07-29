@@ -164,12 +164,21 @@ export async function checkActiveFixerSession(params: {
   // Ratchet session has completed its current unit of work: settle first so
   // the stop's exit hook no-ops, then close it to avoid lingering idle agents.
   if (!sessionBridge.isSessionWorking(session.id)) {
-    const result = await settle('COMPLETED', 'session finished its unit of work');
-    await stopCompletedRatchetSession({
-      workspaceId: workspace.id,
-      sessionId: session.id,
-      sessionBridge,
-    });
+    const stopCompletedSession = () =>
+      stopCompletedRatchetSession({
+        workspaceId: workspace.id,
+        sessionId: session.id,
+        sessionBridge,
+      });
+    let result: ActiveFixerCheckResult;
+    try {
+      result = await settle('COMPLETED', 'session finished its unit of work');
+    } catch (error) {
+      // Preserve prompt cancellation while still starting best-effort cleanup.
+      void stopCompletedSession();
+      throw error;
+    }
+    await stopCompletedSession();
     return result;
   }
 
