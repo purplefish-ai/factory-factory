@@ -250,7 +250,7 @@ describe('deriveWorkspaceStatusReason', () => {
 
     expect(
       deriveWorkspaceStatusReason(
-        makeInput({ flowPhase: 'READY', ciObservation: 'NO_CHECKS', prState: 'OPEN' })
+        makeInput({ flowPhase: 'READY', ciObservation: 'CHECKS_FAILED', prState: 'OPEN' })
       )
     ).toMatchObject({ code: 'READY_FOR_REVIEW', needsUser: true });
   });

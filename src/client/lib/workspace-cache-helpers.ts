@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
+import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 
 /**
  * A newly created workspace, as the create endpoint returns it. Typed from the
@@ -28,7 +29,7 @@ export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) 
       ciState: 'NONE' as const,
     },
     // A freshly created workspace is always NEW, which the server derives as WORKING.
-    kanbanColumn: 'WORKING' as const,
+    kanbanColumn: kanbanColumnForStatusReason('SETTING_UP'),
     ratchetButtonAnimated: false,
     flowPhase: 'NO_PR' as const,
     ciObservation: 'NOT_FETCHED' as const,

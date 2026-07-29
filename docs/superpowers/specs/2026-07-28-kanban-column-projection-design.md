@@ -88,7 +88,7 @@ Two codes replace that, inserted into `derivePrFlowReason` ahead of the `READY` 
 - `FIXING_MERGE_CONFLICT` — ratchet enabled and conflicted. Detected via `ratchetState === MERGE_CONFLICT`, which already implies both conditions. WORKING, `needsUser: false`.
 - `MERGE_CONFLICT` — ratchet disabled and conflicted. Detected via `hasMergeConflict && !ratchetEnabled`, so `WorkspaceStatusReasonInput` gains `hasMergeConflict`. WAITING, `needsUser: true`.
 
-One asymmetry is left alone deliberately. `deriveRatchetState` ranks `CI_FAILED` above `MERGE_CONFLICT`, while the ratchet's dispatcher ranks conflict above CI. A conflicted PR with failing CI therefore reports `FIXING_CI_FAILURES` while the fixer is in fact working the conflict. Both are WORKING and both are honest about the agent being engaged, so reconciling the two orderings is left out of this change.
+The asymmetry this section originally planned to leave alone does not survive in the shipped code. `deriveRatchetState` still ranks `CI_FAILED` above `MERGE_CONFLICT` for the persisted `RatchetState` column, but the status-reason projection does not read `RatchetState` for this case: `deriveRatchetTroubleReason` checks `hasMergeConflict` directly and runs ahead of `derivePrFlowReason`'s CI branches, so a conflicted PR with failing CI reports `FIXING_MERGE_CONFLICT` (or `MERGE_CONFLICT` with the ratchet off) regardless of CI status — matching what the fixer is actually doing, with no reconciliation left to do.
 
 ### `RATCHET_STALLED`
 

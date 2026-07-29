@@ -580,8 +580,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       return { accepted: false, changed: false, emitted: false };
     }
 
-    // Accepted raw values can produce time-sensitive derived changes even when
-    // the raw values themselves are equal (for example, CI grace periods).
+    // Derived state is now a pure function of the entry's raw fields, so this
+    // recompute never disagrees with `mergeResult.rawChanged` in practice --
+    // there is no longer a time-sensitive input (e.g. the old CI grace
+    // period) that could change the derived output on its own. It still runs
+    // on every upsert because it writes the entry's derived fields as a side
+    // effect (not just this boolean); `derivedChanged` stays in the guard
+    // below as a defensive fallback rather than a load-bearing case.
     const derivedChanged = this.recomputeDerivedState(entry);
     if (!(isNewEntry || mergeResult.rawChanged || derivedChanged)) {
       logger.debug('Snapshot update accepted without value changes', { workspaceId, source });
