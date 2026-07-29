@@ -47,7 +47,7 @@ describe('deriveWorkspaceStatusReason', () => {
     ).toMatchObject({ code: 'NEEDS_ANSWER', needsUser: true });
   });
 
-  it('reports a session runtime error ahead of everything but a pending request', () => {
+  it('reports a session runtime error ahead of a pending PR flow state', () => {
     expect(
       deriveWorkspaceStatusReason(
         makeInput({ hasSessionRuntimeError: true, isWorking: true, flowPhase: 'CI_WAIT' })
@@ -213,6 +213,32 @@ describe('deriveWorkspaceStatusReason', () => {
         })
       )
     ).toMatchObject({ code: 'RATCHET_STALLED', tone: 'attention', needsUser: true });
+  });
+
+  it('lets a merged PR outrank a pending permission request', () => {
+    expect(
+      deriveWorkspaceStatusReason(
+        makeInput({ prState: 'MERGED', pendingRequestType: 'permission_request' })
+      )
+    ).toMatchObject({ code: 'MERGED' });
+  });
+
+  it('lets a merged PR outrank a FAILED lifecycle', () => {
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ prState: 'MERGED', lifecycle: 'FAILED' }))
+    ).toMatchObject({ code: 'MERGED' });
+  });
+
+  it('lets a merged PR outrank a session runtime error', () => {
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ prState: 'MERGED', hasSessionRuntimeError: true }))
+    ).toMatchObject({ code: 'MERGED' });
+  });
+
+  it('lets archiving outrank a merged PR', () => {
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ lifecycle: 'ARCHIVING', prState: 'MERGED' }))
+    ).toMatchObject({ code: 'ARCHIVING' });
   });
 
   it('marks a reviewable pull request as needing the user', () => {

@@ -97,6 +97,8 @@ export function deriveWorkspaceStatusReason(
   input: WorkspaceStatusReasonInput
 ): WorkspaceStatusReason {
   return (
+    deriveArchiveReason(input) ??
+    deriveTerminalPrReason(input) ??
     deriveBlockingReason(input) ??
     deriveLifecycleReason(input) ??
     deriveActiveReason(input) ??
@@ -123,18 +125,30 @@ function deriveBlockingReason(input: WorkspaceStatusReasonInput): OptionalWorksp
   return null;
 }
 
+/**
+ * The two lifecycle states that take a workspace off the board entirely.
+ *
+ * Split out of `deriveLifecycleReason` so it can run first in the chain: a
+ * workspace being archived (or already archived) must not be reported as a
+ * merged/closed PR, a pending request, or any other reason below it.
+ */
+function deriveArchiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (input.lifecycle === 'ARCHIVING') {
+    return reason('ARCHIVING', 'Archiving', 'working');
+  }
+  if (input.lifecycle === 'ARCHIVED') {
+    return reason('ARCHIVED', 'Archived', 'neutral');
+  }
+
+  return null;
+}
+
 function deriveLifecycleReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
   if (input.lifecycle === 'NEW' || input.lifecycle === 'PROVISIONING') {
     return reason('SETTING_UP', 'Setting up workspace', 'working');
   }
   if (input.lifecycle === 'FAILED') {
     return reason('SETUP_FAILED', 'Setup failed', 'danger', true);
-  }
-  if (input.lifecycle === 'ARCHIVING') {
-    return reason('ARCHIVING', 'Archiving', 'working');
-  }
-  if (input.lifecycle === 'ARCHIVED') {
-    return reason('ARCHIVED', 'Archived', 'neutral');
   }
 
   return null;
@@ -179,6 +193,29 @@ function deriveRatchetTroubleReason(
   return null;
 }
 
+/**
+ * The two PR states that are done for good: nothing else can happen to them.
+ *
+ * Split out of `derivePrFlowReason`, and run ahead of the whole rest of the
+ * chain, so a merged or closed PR is reported as such even when a pending
+ * request, a session error, or a FAILED lifecycle would otherwise win.
+ */
+function deriveTerminalPrReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (
+    input.flowPhase === 'MERGED' ||
+    input.prState === 'MERGED' ||
+    input.ratchetState === 'MERGED'
+  ) {
+    return reason('MERGED', 'Merged', 'success');
+  }
+
+  if (input.prState === 'CLOSED') {
+    return reason('PR_CLOSED', 'PR closed', 'neutral');
+  }
+
+  return null;
+}
+
 function derivePrFlowReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
   if (input.flowPhase === 'CI_WAIT') {
     return reason('WAITING_FOR_CI', 'Waiting for CI', 'waiting');
@@ -193,18 +230,6 @@ function derivePrFlowReason(input: WorkspaceStatusReasonInput): OptionalWorkspac
 
   if (input.flowPhase === 'RATCHET_VERIFY') {
     return reason('CHECKING_PR', 'Checking PR', 'working');
-  }
-
-  if (
-    input.flowPhase === 'MERGED' ||
-    input.prState === 'MERGED' ||
-    input.ratchetState === 'MERGED'
-  ) {
-    return reason('MERGED', 'Merged', 'success');
-  }
-
-  if (input.prState === 'CLOSED') {
-    return reason('PR_CLOSED', 'PR closed', 'neutral');
   }
 
   if (input.flowPhase === 'READY' && input.ciObservation === 'CHECKS_PASSED') {
