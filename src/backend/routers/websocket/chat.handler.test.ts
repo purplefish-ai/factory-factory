@@ -395,7 +395,9 @@ describe('createChatUpgradeHandler', () => {
 
     ws.emit('close');
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
+      preserveRejections: true,
+    });
   });
 
   it('does not clear in-memory state when the disconnected session is still running', () => {
@@ -478,7 +480,9 @@ describe('createChatUpgradeHandler', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
+      preserveRejections: true,
+    });
   });
 
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {

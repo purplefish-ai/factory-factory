@@ -525,6 +525,7 @@ export class SessionLifecycleService {
           if (session.workflow === 'ratchet') {
             await this.persistRatchetTranscript(sid, session);
             await this.repository.deleteSession(sid);
+            this.sessionDomainService.clearSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
           }
           if (session.workflow === 'auto-iteration' && this.autoIterationExitBridge) {
@@ -819,6 +820,7 @@ export class SessionLifecycleService {
     try {
       await this.persistRatchetTranscript(sessionId, session);
       await this.repository.deleteSession(sessionId);
+      this.sessionDomainService.clearSession(sessionId);
       logger.debug('Deleted transient ratchet session after stop', { sessionId });
     } catch (error) {
       logger.warn('Failed persisting or deleting transient ratchet session during stop', {
@@ -872,7 +874,7 @@ export class SessionLifecycleService {
     ) {
       return;
     }
-    this.sessionDomainService.clearSession(sessionId);
+    this.sessionDomainService.clearSession(sessionId, { preserveRejections: true });
     logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 
