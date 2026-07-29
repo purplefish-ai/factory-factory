@@ -108,14 +108,51 @@ function upsertProjectWorkspace(
   return next;
 }
 
+/**
+ * A snapshot entry carries only live fields. Mutation-sourced fields —
+ * including `githubIssueNumber` and `linearIssueId`, which the Todo column
+ * matches issues against — fall back to nulls for a workspace no fetch has
+ * returned yet, so the workspace lands on the board while its issue is still
+ * in Todo. Invalidating once at the point of introduction repairs every such
+ * field rather than the two that happen to hurt. `alreadyInvalidated` caps it
+ * at one invalidation per previously-unseen workspace id, so a burst of
+ * snapshot messages for the same new workspace doesn't trigger a refetch
+ * storm.
+ */
+function invalidateForUnknownWorkspaces(
+  utils: TrpcUtils,
+  projectId: string,
+  entriesToCheck: WorkspaceSnapshotEntry[],
+  knownWorkspaceIds: Set<string>,
+  alreadyInvalidated: Set<string>
+): void {
+  const introduced = entriesToCheck.filter(
+    (entry) =>
+      !(alreadyInvalidated.has(entry.workspaceId) || knownWorkspaceIds.has(entry.workspaceId))
+  );
+  if (introduced.length > 0) {
+    for (const entry of introduced) {
+      alreadyInvalidated.add(entry.workspaceId);
+    }
+    void utils.workspace.listForProject.invalidate({ projectId });
+  }
+}
+
 function applySnapshotFullMessage(
   utils: TrpcUtils,
   message: SnapshotFullMessage,
-  pendingRequests: Map<string, PendingRequestType>
+  pendingRequests: Map<string, PendingRequestType>,
+  alreadyInvalidated: Set<string>
 ): void {
   const entries = message.entries.map(overridePendingRatchetToggle);
 
   seedPendingRequests(pendingRequests, entries);
+
+  const knownWorkspaceIds = new Set(
+    (
+      utils.workspace.listForProject.getData({ projectId: message.projectId })?.workspaces ?? []
+    ).map((w) => w.id)
+  );
 
   utils.workspace.listForProject.setData({ projectId: message.projectId }, (prev) => {
     const existingById = new Map(prev?.workspaces.map((workspace) => [workspace.id, workspace]));
@@ -126,6 +163,14 @@ function applySnapshotFullMessage(
       reviewCount: message.reviewCount ?? prev?.reviewCount ?? 0,
     };
   });
+
+  invalidateForUnknownWorkspaces(
+    utils,
+    message.projectId,
+    entries,
+    knownWorkspaceIds,
+    alreadyInvalidated
+  );
 
   for (const entry of entries) {
     utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
@@ -138,11 +183,16 @@ function applySnapshotChangedMessage(
   utils: TrpcUtils,
   projectId: string,
   message: SnapshotChangedMessage,
-  pendingRequests: Map<string, PendingRequestType>
+  pendingRequests: Map<string, PendingRequestType>,
+  alreadyInvalidated: Set<string>
 ): void {
   const entry = overridePendingRatchetToggle(message.entry);
 
   maybeTriggerPendingRequestAttention(pendingRequests, entry);
+
+  const knownWorkspaceIds = new Set(
+    (utils.workspace.listForProject.getData({ projectId })?.workspaces ?? []).map((w) => w.id)
+  );
 
   utils.workspace.listForProject.setData({ projectId }, (prev) => {
     if (!prev) {
@@ -157,6 +207,8 @@ function applySnapshotChangedMessage(
       reviewCount: message.reviewCount ?? prev.reviewCount,
     };
   });
+
+  invalidateForUnknownWorkspaces(utils, projectId, [entry], knownWorkspaceIds, alreadyInvalidated);
 
   utils.workspace.get.setData({ id: entry.workspaceId }, (prev) =>
     mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
@@ -206,6 +258,10 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
   // staleTime: Infinity workspace caches. Keyed per project because the hook
   // survives project switches.
   const baselineProjectsRef = useRef<Set<string>>(new Set());
+  // Caps the unknown-workspace invalidation (see invalidateForUnknownWorkspaces)
+  // at one refetch per workspace id, so a burst of snapshot messages for the
+  // same newly-introduced workspace doesn't trigger a refetch storm.
+  const invalidatedForUnknownWorkspaceRef = useRef<Set<string>>(new Set());
 
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
@@ -213,7 +269,12 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     (message: SnapshotServerMessage) => {
       switch (message.type) {
         case 'snapshot_full': {
-          applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
+          applySnapshotFullMessage(
+            utils,
+            message,
+            previousPendingRequestsRef.current,
+            invalidatedForUnknownWorkspaceRef.current
+          );
           if (baselineProjectsRef.current.has(message.projectId)) {
             healWorkspaceCachesAfterReconnect(utils, message.projectId);
           } else {
@@ -230,7 +291,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             utils,
             projectId,
             message,
-            previousPendingRequestsRef.current
+            previousPendingRequestsRef.current,
+            invalidatedForUnknownWorkspaceRef.current
           );
           break;
         }

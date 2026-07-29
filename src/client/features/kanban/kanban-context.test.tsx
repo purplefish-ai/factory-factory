@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
 import { KanbanProvider, useKanban } from './kanban-context';
 
 interface ArchiveError {
@@ -14,8 +15,8 @@ interface ArchiveError {
 interface WorkspaceListItem {
   id: string;
   kanbanColumn: 'WORKING' | 'WAITING' | null;
-  githubIssueNumber: null;
-  linearIssueId: null;
+  githubIssueNumber: number | null;
+  linearIssueId: string | null;
 }
 
 interface ProjectWorkspaceCache {
@@ -47,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
+  githubIssues: [] as GitHubIssueRaw[],
 }));
 
 vi.mock('sonner', () => ({
@@ -100,7 +102,7 @@ vi.mock('@/client/lib/trpc', () => ({
     github: {
       listIssuesForProject: {
         useQuery: () => ({
-          data: { issues: [] },
+          data: { issues: mocks.githubIssues },
           isLoading: false,
           refetch: mocks.refetchGitHubIssuesMock,
         }),
@@ -191,6 +193,7 @@ beforeEach(() => {
   mocks.bulkArchiveError = undefined;
   mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
+  mocks.githubIssues = [];
   mocks.workspaceListState = {
     workspaces: [
       {
@@ -352,5 +355,37 @@ describe('KanbanProvider archive failure handling', () => {
     ]);
     expectVisibleWorkspaceIds(['workspace-2']);
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps an archiving workspace suppressing its issue', () => {
+    // A workspace mid-archive derives a null column, so the board filters it out
+    // of `workspaces`. Its issue link must still suppress the Todo card, or the
+    // issue reappears for as long as the archive takes.
+    mocks.githubIssues = [
+      {
+        number: 42,
+        title: 'Fix the thing',
+        body: '',
+        url: 'https://github.com/example/repo/issues/42',
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'octocat' },
+      },
+    ];
+    mocks.workspaceListState = {
+      workspaces: [
+        {
+          id: 'workspace-archiving',
+          kanbanColumn: null,
+          githubIssueNumber: 42,
+          linearIssueId: null,
+        },
+      ],
+      reviewCount: 0,
+    };
+
+    const context = renderProvider();
+
+    expect(context.issues).toEqual([]);
   });
 });
