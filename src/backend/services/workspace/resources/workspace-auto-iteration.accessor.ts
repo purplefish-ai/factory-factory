@@ -67,21 +67,30 @@ export function flattenWorkspaceAutoIteration(
 
 class WorkspaceAutoIterationAccessor {
   /**
-   * Write to a row that must exist. `updateMany` rather than `update` so a
-   * missing row surfaces as a count of zero we can name, instead of a Prisma
-   * error naming a table the caller does not know about.
+   * Write to a row that must exist, and report the row as the statement wrote
+   * it.
+   *
+   * `updateManyAndReturn` rather than `update` so a missing row surfaces as an
+   * empty result we can name, instead of a Prisma error naming a table the
+   * caller does not know about. Rather than `updateMany` because the caller
+   * publishes the written row to the snapshot stream: a second read to recover
+   * the columns `updateMany` does not return could observe a row that has since
+   * been written again or deleted, so the payload would describe no state the
+   * row was ever in.
    */
   private async write(
     workspaceId: string,
     data: Prisma.WorkspaceAutoIterationUpdateManyMutationInput
-  ): Promise<void> {
-    const result = await prisma.workspaceAutoIteration.updateMany({
+  ): Promise<{ mode: WorkspaceMode }> {
+    const [written] = await prisma.workspaceAutoIteration.updateManyAndReturn({
       where: { workspaceId },
       data,
+      select: { mode: true },
     });
-    if (result.count === 0) {
+    if (!written) {
       throw new Error(`WorkspaceAutoIteration row not found for workspace: ${workspaceId}`);
     }
+    return written;
   }
 
   /**
@@ -91,35 +100,22 @@ class WorkspaceAutoIterationAccessor {
    * snapshot stream, and the stream's own copy of `mode` is otherwise only
    * seeded by the reconciliation sweep — so a loop that reaches a gap between
    * iterations inside that window would be derived against a `STANDARD` it never
-   * had. Reading it back from the written row costs one narrow query on a
-   * transition that happens a handful of times per iteration.
+   * had. It comes from the write itself, so the pair is a row that existed.
    */
   async setStatus(
     workspaceId: string,
     status: AutoIterationStatus
   ): Promise<{ mode: WorkspaceMode; status: AutoIterationStatus }> {
-    await this.write(workspaceId, { status });
-    return { mode: await this.readMode(workspaceId), status };
+    const written = await this.write(workspaceId, { status });
+    return { mode: written.mode, status };
   }
 
-  /**
-   * `mode` for a row this accessor has just written, so callers never infer it
-   * from the fact that an auto-iteration code path is running.
-   */
-  private async readMode(workspaceId: string): Promise<WorkspaceMode> {
-    const row = await prisma.workspaceAutoIteration.findUnique({
-      where: { workspaceId },
-      select: { mode: true },
-    });
-    return row?.mode ?? WORKSPACE_AUTO_ITERATION_DEFAULTS.mode;
+  async setProgress(workspaceId: string, progress: Prisma.InputJsonValue): Promise<void> {
+    await this.write(workspaceId, { progress });
   }
 
-  setProgress(workspaceId: string, progress: Prisma.InputJsonValue): Promise<void> {
-    return this.write(workspaceId, { progress });
-  }
-
-  setSession(workspaceId: string, sessionId: string | null): Promise<void> {
-    return this.write(workspaceId, { sessionId });
+  async setSession(workspaceId: string, sessionId: string | null): Promise<void> {
+    await this.write(workspaceId, { sessionId });
   }
 
   /**
@@ -132,16 +128,19 @@ class WorkspaceAutoIterationAccessor {
     sessionId: string,
     status: AutoIterationStatus
   ): Promise<{ settled: boolean; mode: WorkspaceMode | null }> {
-    const result = await prisma.workspaceAutoIteration.updateMany({
+    // The mode comes back from the compare-and-swap itself, so the announced
+    // transition is the row this statement settled rather than whatever a later
+    // read would have found. A swap that matched nothing returns no row, and has
+    // no transition to publish.
+    const [settled] = await prisma.workspaceAutoIteration.updateManyAndReturn({
       where: { workspaceId, sessionId },
       data: { status, sessionId: null },
+      select: { mode: true },
     });
-    if (result.count !== 1) {
+    if (!settled) {
       return { settled: false, mode: null };
     }
-    // Only read the mode on the branch that actually settled: a compare-and-swap
-    // that matched nothing has no transition to publish.
-    return { settled: true, mode: await this.readMode(workspaceId) };
+    return { settled: true, mode: settled.mode };
   }
 
   async clearSessionIfMatches(workspaceId: string, sessionId: string): Promise<boolean> {

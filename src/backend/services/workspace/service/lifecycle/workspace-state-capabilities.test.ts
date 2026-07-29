@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { workspaceRatchetAccessor } from '@/backend/services/workspace/resources/workspace-ratchet.accessor';
 import {
@@ -32,6 +32,10 @@ vi.mock('@/backend/services/workspace/resources/workspace-ratchet.accessor', () 
 describe('workspace state capabilities', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  // The service is a module singleton, so a listener a failing test never got to
+  // remove would keep pushing into that test's array for the rest of the file.
+  afterEach(() => workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED));
+
   it('announces a status change so the live snapshot stream does not wait for reconciliation', async () => {
     // `mode` and `autoIterationStatus` are derivation inputs on the snapshot
     // wire. Without this event the store learned about a transition only from
@@ -50,7 +54,6 @@ describe('workspace state capabilities', () => {
     await workspaceAutoIterationService.setStatus('ws-1', 'RUNNING');
 
     expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'RUNNING' }]);
-    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
   });
 
   it('announces the settled status when a matching session finishes the loop', async () => {
@@ -67,7 +70,6 @@ describe('workspace state capabilities', () => {
     await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'session-1', 'COMPLETED');
 
     expect(events).toEqual([{ workspaceId: 'ws-1', mode: 'AUTO_ITERATION', status: 'COMPLETED' }]);
-    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
   });
 
   it('announces nothing when the compare-and-swap settles no loop', async () => {
@@ -84,7 +86,6 @@ describe('workspace state capabilities', () => {
     await workspaceAutoIterationService.finishSessionIfMatching('ws-1', 'stale-session', 'FAILED');
 
     expect(events).toEqual([]);
-    workspaceAutoIterationService.removeAllListeners(AUTO_ITERATION_STATUS_CHANGED);
   });
 
   it('finishes auto-iteration only when the active session still matches', async () => {

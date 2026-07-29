@@ -579,6 +579,12 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
+    // workspaceAutoIterationService: 1 listener (AUTO_ITERATION_STATUS_CHANGED)
+    expect(workspaceAutoIterationService.on).toHaveBeenCalledWith(
+      'auto_iteration_status_changed',
+      expect.any(Function)
+    );
+
     // workspaceActivityService: 3 listeners (workspace_active, workspace_idle, session_activity_changed)
     expect(workspaceActivityService.on).toHaveBeenCalledWith(
       'workspace_active',
