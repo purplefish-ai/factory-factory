@@ -75,8 +75,8 @@ type WorkspaceWithProject = Exclude<
   null | undefined
 >;
 
-interface WorktreeCleanupOptions {
-  commitUncommitted: boolean;
+interface WorktreeArchiveOptions {
+  removeGitIndexLock?: boolean;
 }
 
 function getProjectOrThrow(workspace: WorkspaceWithProject) {
@@ -121,7 +121,7 @@ class WorktreeLifecycleService {
 
   async cleanupWorkspaceWorktree(
     workspace: WorkspaceWithProject,
-    options: WorktreeCleanupOptions
+    options: WorktreeArchiveOptions
   ): Promise<void> {
     const worktreePath = workspace.worktreePath;
     if (!worktreePath) {
@@ -137,7 +137,13 @@ class WorktreeLifecycleService {
       return;
     }
 
-    await gitOpsService.commitIfNeeded(worktreePath, workspace.name, options.commitUncommitted);
+    if (options.removeGitIndexLock) {
+      await gitOpsService.commitIfNeeded(worktreePath, workspace.name, {
+        removeGitIndexLock: true,
+      });
+    } else {
+      await gitOpsService.commitIfNeeded(worktreePath, workspace.name);
+    }
     await gitOpsService.removeWorktree(worktreePath, project);
   }
 }

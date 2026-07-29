@@ -5,6 +5,7 @@ import { useToggleRatcheting } from '@/client/hooks/use-toggle-ratcheting';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import type { WorkspaceIssueLink } from '@/client/lib/project-issue-visibility';
 import { trpc } from '@/client/lib/trpc';
+import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import {
   removeWorkspaceFromProjectWorkspaceCache,
   removeWorkspacesFromProjectWorkspaceCache,
@@ -28,8 +29,11 @@ interface KanbanContextValue {
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
-  archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
-  bulkArchiveColumn: (kanbanColumn: string, commitUncommitted: boolean) => Promise<void>;
+  archiveWorkspace: (workspaceId: string, removeGitIndexLock?: boolean) => Promise<void>;
+  bulkArchiveColumn: (kanbanColumn: string) => Promise<void>;
+  archiveGitLockWorkspaceIds: string[];
+  dismissArchiveGitLock: () => void;
+  retryGitLockedArchives: (removeGitIndexLock: boolean) => Promise<void>;
   isBulkArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
@@ -93,23 +97,11 @@ export function KanbanProvider({
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
   });
-  const handleArchiveError = (error: {
-    data?: { code?: string | null } | null;
-    message?: string;
-  }) => {
-    if (error.data?.code === 'PRECONDITION_FAILED') {
-      toast.error('Archiving blocked: enable commit before archiving to proceed.');
-    } else {
-      toast.error(error.message || 'Failed to archive workspace');
-    }
-  };
-
-  const archiveMutation = trpc.workspace.archive.useMutation({ onError: handleArchiveError });
-  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation({
-    onError: handleArchiveError,
-  });
+  const archiveMutation = trpc.workspace.archive.useMutation();
+  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
+  const [archiveGitLockWorkspaceIds, setArchiveGitLockWorkspaceIds] = useState<string[]>([]);
   const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
     Map<string, WorkspaceIssueLink>
   >(new Map());
@@ -128,6 +120,21 @@ export function KanbanProvider({
     []
   );
   const closeQuickChat = useCallback(() => setQuickChatWorkspaceId(null), []);
+
+  const handleArchiveError = (error: unknown, workspaceIds: string[]) => {
+    if (isArchiveGitIndexLockedError(error)) {
+      setArchiveGitLockWorkspaceIds((current) => [...new Set([...current, ...workspaceIds])]);
+      return;
+    }
+    const message =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof error.message === 'string'
+        ? error.message
+        : 'Failed to archive workspace';
+    toast.error(message);
+  };
 
   const syncAndRefetch = () => {
     syncMutation.mutate({ projectId });
@@ -154,7 +161,7 @@ export function KanbanProvider({
     await Promise.all([refetchWorkspaces(), utils.workspace.get.invalidate({ id: workspaceId })]);
   };
 
-  const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
+  const archiveWorkspace = async (workspaceId: string, removeGitIndexLock = false) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
 
     await utils.workspace.listForProject.cancel({ projectId });
@@ -180,13 +187,14 @@ export function KanbanProvider({
     });
     try {
       try {
-        await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
-      } catch {
+        await archiveMutation.mutateAsync(
+          removeGitIndexLock ? { id: workspaceId, removeGitIndexLock: true } : { id: workspaceId }
+        );
+      } catch (error) {
         utils.workspace.listForProject.setData({ projectId }, (old) =>
           restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, [workspaceId])
         );
-        // Error feedback is surfaced by the mutation's onError toast;
-        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        handleArchiveError(error, [workspaceId]);
         return;
       }
 
@@ -214,7 +222,7 @@ export function KanbanProvider({
     }
   };
 
-  const bulkArchiveColumn = async (kanbanColumn: string, commitUncommitted: boolean) => {
+  const bulkArchiveColumn = async (kanbanColumn: string) => {
     const workspacesToArchive = (workspaces ?? []).filter(
       (workspace) => workspace.kanbanColumn === kanbanColumn
     );
@@ -252,27 +260,31 @@ export function KanbanProvider({
         const result = await bulkArchiveMutation.mutateAsync({
           projectId,
           kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-          commitUncommitted,
         });
         const failedResults = result.results.filter((item) => !item.success);
         const failedWorkspaceIds = failedResults.map((item) => item.id);
         for (const failedResult of failedResults) {
-          handleArchiveError({
-            data: { code: failedResult.code },
-            message: failedResult.error,
-          });
+          handleArchiveError(
+            {
+              data: {
+                code: failedResult.code,
+                applicationErrorKind: failedResult.applicationErrorKind,
+              },
+              message: failedResult.error,
+            },
+            [failedResult.id]
+          );
         }
         if (failedWorkspaceIds.length > 0) {
           utils.workspace.listForProject.setData({ projectId }, (old) =>
             restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, failedWorkspaceIds)
           );
         }
-      } catch {
+      } catch (error) {
         utils.workspace.listForProject.setData({ projectId }, (old) =>
           restoreWorkspacesToProjectWorkspaceCache(old, previousWorkspaces, workspaceIdsToArchive)
         );
-        // Error feedback is surfaced by the mutation's onError toast;
-        // callers fire-and-forget, so don't propagate an unhandled rejection.
+        handleArchiveError(error, workspaceIdsToArchive);
         return;
       }
 
@@ -295,6 +307,16 @@ export function KanbanProvider({
         }
         return next;
       });
+    }
+  };
+
+  const dismissArchiveGitLock = () => setArchiveGitLockWorkspaceIds([]);
+
+  const retryGitLockedArchives = async (removeGitIndexLock: boolean) => {
+    const workspaceIds = archiveGitLockWorkspaceIds;
+    setArchiveGitLockWorkspaceIds([]);
+    for (const workspaceId of workspaceIds) {
+      await archiveWorkspace(workspaceId, removeGitIndexLock);
     }
   };
 
@@ -327,6 +349,9 @@ export function KanbanProvider({
         renameWorkspace,
         archiveWorkspace,
         bulkArchiveColumn,
+        archiveGitLockWorkspaceIds,
+        dismissArchiveGitLock,
+        retryGitLockedArchives,
         isBulkArchiving: bulkArchiveMutation.isPending,
         showInlineForm,
         setShowInlineForm,

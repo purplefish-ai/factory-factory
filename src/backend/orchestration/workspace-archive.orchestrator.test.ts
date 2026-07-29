@@ -62,7 +62,7 @@ function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): Workspace
   });
 }
 
-const defaultOptions = { commitUncommitted: false };
+const defaultOptions = {};
 
 const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
   cleanupWorkspaceScopedCaches: mockCleanupWorkspaceScopedCaches,
@@ -201,12 +201,12 @@ describe('archiveWorkspace', () => {
       expect(result).toBe(archivedWs);
     });
 
-    it('passes commitUncommitted option to worktree cleanup', async () => {
+    it('passes an explicit Git index-lock recovery action to worktree cleanup', async () => {
       const workspace = makeWorkspace();
-      await archiveWorkspace(workspace, { commitUncommitted: true });
+      await archiveWorkspace(workspace, { removeGitIndexLock: true });
 
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {
-        commitUncommitted: true,
+        removeGitIndexLock: true,
       });
     });
   });
@@ -570,9 +570,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
     expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
     expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
-    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {
-      commitUncommitted: true,
-    });
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});
     expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
   });

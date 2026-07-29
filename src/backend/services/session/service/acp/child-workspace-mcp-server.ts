@@ -97,6 +97,11 @@ const ARCHIVE_CHILD_TOOL = {
     type: 'object',
     properties: {
       childWorkspaceId: { type: 'string', description: 'ID of the child workspace to archive' },
+      removeGitIndexLock: {
+        type: 'boolean',
+        description:
+          'Remove the child worktree Git index lock before retrying archive. Set true only after explicit user confirmation in response to a Git lock error.',
+      },
     },
     required: ['childWorkspaceId'],
   },
@@ -272,6 +277,7 @@ async function handleArchiveChildTool(
   const { error } = await callTrpcMutation(apiBase, 'workspace.archiveChild', {
     parentWorkspaceId: workspaceId,
     childWorkspaceId: args.childWorkspaceId,
+    ...(args.removeGitIndexLock === true ? { removeGitIndexLock: true } : {}),
   });
   if (error) {
     send({

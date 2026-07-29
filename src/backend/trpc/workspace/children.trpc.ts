@@ -200,7 +200,7 @@ export const workspaceChildrenRouter = router({
       z.object({
         parentWorkspaceId: z.string(),
         childWorkspaceId: z.string(),
-        commitUncommitted: z.boolean().optional(),
+        removeGitIndexLock: z.literal(true).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -220,7 +220,7 @@ export const workspaceChildrenRouter = router({
       }
       return archiveWorkspace(
         child,
-        { commitUncommitted: input.commitUncommitted ?? true },
+        input.removeGitIndexLock ? { removeGitIndexLock: true } : {},
         ctx.appContext.services
       );
     }),

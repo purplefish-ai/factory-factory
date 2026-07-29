@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useChatWebSocket } from '@/client/features/chat';
-import { usePersistentScroll, useWorkspacePanel } from '@/client/features/workspace';
+import {
+  ArchiveGitLockDialog,
+  usePersistentScroll,
+  useWorkspacePanel,
+} from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
@@ -22,7 +26,6 @@ import {
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import {
   buildSessionSummariesById,
-  getArchiveGitStatusQueryOptions,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
 } from './workspace-detail-container.utils';
@@ -74,6 +77,7 @@ export function WorkspaceDetailContainer() {
     sessionIds
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
   const effectiveDefaultProvider = resolveEffectiveSessionProvider(
     workspace?.defaultSessionProvider,
@@ -85,11 +89,6 @@ export function WorkspaceDetailContainer() {
     setSelectedProvider(effectiveDefaultProvider);
   }, [effectiveDefaultProvider]);
 
-  const { data: gitStatus, isFetching: isGitStatusFetching } = trpc.workspace.getGitStatus.useQuery(
-    { workspaceId },
-    getArchiveGitStatusQueryOptions(archiveDialogOpen, workspace?.worktreePath)
-  );
-  const hasUncommitted = gitStatus?.hasUncommitted === true;
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
   const { data: childWorkspaces } = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: workspaceId },
@@ -192,19 +191,21 @@ export function WorkspaceDetailContainer() {
     setSelectedDbSessionId,
     selectedModel: chatSettings.selectedModel,
     selectedProvider,
+    onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
   });
 
   const handleArchive = useCallback(
-    (commitUncommitted: boolean) => {
-      archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
+    (removeGitIndexLock = false) => {
+      archiveWorkspace.mutate(
+        removeGitIndexLock ? { id: workspaceId, removeGitIndexLock: true } : { id: workspaceId }
+      );
     },
     [archiveWorkspace, workspaceId]
   );
   const handleArchiveRequest = useCallback(() => {
     // If workspace is done/merged, skip confirmation and archive immediately.
-    // Default commitUncommitted to true so we never lose work if git status hasn't loaded yet.
     if (isDoneOrMergedWorkspace) {
-      handleArchive(true);
+      handleArchive();
       return;
     }
 
@@ -384,11 +385,16 @@ export function WorkspaceDetailContainer() {
         archiveDialog={{
           open: archiveDialogOpen,
           setOpen: setArchiveDialogOpen,
-          hasUncommitted: hasUncommitted && !isDoneOrMergedWorkspace,
-          isCheckingGitStatus: isGitStatusFetching && !isDoneOrMergedWorkspace,
           activeChildCount,
-          onConfirm: handleArchive,
+          onConfirm: () => handleArchive(),
         }}
+      />
+      <ArchiveGitLockDialog
+        open={archiveGitLockDialogOpen}
+        onOpenChange={setArchiveGitLockDialogOpen}
+        onRetry={() => handleArchive()}
+        onRemoveLockAndArchive={() => handleArchive(true)}
+        isPending={archiveWorkspace.isPending}
       />
     </>
   );

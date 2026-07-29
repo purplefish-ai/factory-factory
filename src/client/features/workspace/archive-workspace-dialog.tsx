@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,23 +9,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 
-const defaultDescription = 'Archiving will remove the workspace worktree from disk.';
-const defaultWarning =
-  'Warning: This workspace has uncommitted changes and they will be committed before archiving.';
-const defaultLabel = 'Commit uncommitted changes before archiving';
+const defaultDescription =
+  'Any uncommitted changes will be committed before the worktree is removed.';
 
 export type ArchiveWorkspaceDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  hasUncommitted: boolean;
-  isCheckingGitStatus?: boolean;
-  showCommitOption?: boolean;
-  onConfirm: (commitUncommitted: boolean) => void;
+  onConfirm: () => void;
   description?: string;
-  warningText?: string;
-  checkboxLabel?: string;
   /** Number of active (non-archived) child workspaces */
   activeChildCount?: number;
 };
@@ -35,23 +25,10 @@ export type ArchiveWorkspaceDialogProps = {
 export function ArchiveWorkspaceDialog({
   open,
   onOpenChange,
-  hasUncommitted,
-  isCheckingGitStatus = false,
-  showCommitOption = true,
   onConfirm,
   description = defaultDescription,
-  warningText = defaultWarning,
-  checkboxLabel = defaultLabel,
   activeChildCount = 0,
 }: ArchiveWorkspaceDialogProps) {
-  const [commitChangesChecked, setCommitChangesChecked] = useState(true);
-
-  useEffect(() => {
-    if (open) {
-      setCommitChangesChecked(true);
-    }
-  }, [open]);
-
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent
@@ -70,20 +47,6 @@ export function ArchiveWorkspaceDialog({
               {activeChildCount !== 1 ? 's' : ''}. Archiving will not automatically archive them.
             </div>
           )}
-          {hasUncommitted && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {warningText}
-            </div>
-          )}
-          {showCommitOption && (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={commitChangesChecked}
-                onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
-              />
-              {checkboxLabel}
-            </label>
-          )}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel
@@ -99,15 +62,12 @@ export function ArchiveWorkspaceDialog({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onConfirm(showCommitOption ? commitChangesChecked : true);
+              onConfirm();
               onOpenChange(false);
             }}
-            disabled={
-              isCheckingGitStatus || (showCommitOption && hasUncommitted && !commitChangesChecked)
-            }
             className={buttonVariants({ variant: 'destructive' })}
           >
-            {isCheckingGitStatus ? 'Checking changes…' : 'Archive'}
+            Archive
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

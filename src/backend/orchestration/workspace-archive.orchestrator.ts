@@ -10,8 +10,8 @@ import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');
 
-interface WorktreeCleanupOptions {
-  commitUncommitted: boolean;
+interface ArchiveWorkspaceOptions {
+  removeGitIndexLock?: boolean;
 }
 
 export type ArchiveWorkspaceDependencies = {
@@ -130,7 +130,7 @@ async function handleGitHubIssueOnArchive(
 
 async function completeArchive(
   workspace: WorkspaceWithProject,
-  options: WorktreeCleanupOptions,
+  options: ArchiveWorkspaceOptions,
   services: ArchiveWorkspaceDependencies
 ) {
   await cleanupWorkspaceRuntimeResources(workspace.id, services, 'archive');
@@ -175,7 +175,7 @@ async function completeArchive(
  */
 export async function archiveWorkspace(
   workspace: WorkspaceWithProject,
-  options: WorktreeCleanupOptions,
+  options: ArchiveWorkspaceOptions,
   services: ArchiveWorkspaceDependencies
 ) {
   if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
@@ -212,7 +212,7 @@ export async function archiveWorkspace(
  */
 export async function recoverStaleArchivingWorkspaces(
   services: ArchiveWorkspaceDependencies,
-  options: WorktreeCleanupOptions = { commitUncommitted: true }
+  options: ArchiveWorkspaceOptions = {}
 ): Promise<ArchiveRecoveryResult> {
   const staleWorkspaces = await workspaceMaintenanceService.findStaleArchiving();
   const result: ArchiveRecoveryResult = { archived: [], failed: [] };

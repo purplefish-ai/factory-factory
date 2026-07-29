@@ -44,7 +44,7 @@ interface KanbanCardProps {
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   isTogglePending?: boolean;
-  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  onArchive?: (workspaceId: string) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
@@ -164,7 +164,7 @@ function CardArchiveButton({
   onArchive,
 }: {
   workspace: WorkspaceWithKanban;
-  onArchive: (workspaceId: string, commitUncommitted: boolean) => void;
+  onArchive: (workspaceId: string) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const requiresConfirmation = !isWorkspaceDoneOrMerged(workspace);
@@ -179,7 +179,7 @@ function CardArchiveButton({
     e.preventDefault();
     e.stopPropagation();
     if (!requiresConfirmation) {
-      onArchive(workspace.id, true);
+      onArchive(workspace.id);
       return;
     }
     setDialogOpen(true);
@@ -207,8 +207,7 @@ function CardArchiveButton({
         <ArchiveWorkspaceDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          hasUncommitted={false}
-          onConfirm={(commitUncommitted) => onArchive(workspace.id, commitUncommitted)}
+          onConfirm={() => onArchive(workspace.id)}
           activeChildCount={activeChildCount}
         />
       )}
@@ -233,7 +232,7 @@ function CardTitleIcons({
   isArchived: boolean;
   sessionRuntimeError: string | null;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
-  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  onArchive?: (workspaceId: string) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
   onStartEdit?: () => void;
 }) {

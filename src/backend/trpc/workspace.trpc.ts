@@ -39,6 +39,16 @@ function normalizeBulkArchiveError(error: unknown): TRPCError | undefined {
   return error instanceof TRPCError ? error : undefined;
 }
 
+function getApplicationErrorKind(error: unknown) {
+  if (error instanceof ApplicationError) {
+    return error.kind ?? null;
+  }
+  if (error instanceof TRPCError && error.cause instanceof ApplicationError) {
+    return error.cause.kind ?? null;
+  }
+  return null;
+}
+
 // Zod schema for workspace creation source discriminated union
 const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
   z
@@ -357,15 +367,13 @@ export const workspaceCoreRouter = router({
 
   // Archive a workspace
   archive: publicProcedure
-    .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
+    .input(z.object({ id: z.string(), removeGitIndexLock: z.literal(true).optional() }))
     .mutation(async ({ ctx, input }) => {
       const { archiveWorkspace, workspaceDataService } = ctx.appContext.services;
       const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, input.id);
       return archiveWorkspace(
         workspace,
-        {
-          commitUncommitted: input.commitUncommitted ?? true,
-        },
+        input.removeGitIndexLock ? { removeGitIndexLock: true } : {},
         ctx.appContext.services
       );
     }),
@@ -376,14 +384,13 @@ export const workspaceCoreRouter = router({
       z.object({
         projectId: z.string(),
         kanbanColumn: z.nativeEnum(KanbanColumn),
-        commitUncommitted: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       const { archiveWorkspace, workspaceDataService, workspaceQueryService } =
         ctx.appContext.services;
-      const { projectId, kanbanColumn, commitUncommitted = true } = input;
+      const { projectId, kanbanColumn } = input;
 
       // Get all workspaces in the specified kanban column
       const workspaceIds = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
@@ -402,7 +409,7 @@ export const workspaceCoreRouter = router({
       for (const workspaceId of workspaceIds) {
         try {
           const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, workspaceId);
-          await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
+          await archiveWorkspace(workspace, {}, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
           const mappedError = normalizeBulkArchiveError(error);
@@ -415,6 +422,7 @@ export const workspaceCoreRouter = router({
             success: false,
             error: error instanceof Error ? error.message : String(error),
             code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
+            applicationErrorKind: getApplicationErrorKind(error),
           });
         }
       }
