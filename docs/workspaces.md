@@ -23,12 +23,17 @@ Goals:
 - `flowPhase`: derived PR/Ratchet phase (`NO_PR`, `CI_WAIT`, `RATCHET_VERIFY`,
   `RATCHET_FIXING`, `READY`, `MERGED`).
 - `ciObservation`: interpretation of the cached CI snapshot:
-  - `NOT_FETCHED`: the PR exists but has no fetched snapshot;
-  - `NO_CHECKS`: an old enough snapshot reports no checks;
-  - `CHECKS_PENDING`, `CHECKS_FAILED`, `CHECKS_PASSED`, or `CHECKS_UNKNOWN`.
+  - `NOT_FETCHED`: `prCiStatus` is `UNKNOWN` — checks have not been read for this PR yet;
+  - `CHECKS_PENDING`, `CHECKS_FAILED`, `CHECKS_PASSED` for `prCiStatus` `PENDING`/`FAILURE`/`SUCCESS`,
+    or `CHECKS_UNKNOWN` for any other value;
+  - `NO_CHECKS` is a member of the type but is not currently produced by the derivation — it used
+    to mean "an old enough snapshot reports no checks", gated by a wall-clock grace period that
+    distinguished it from `NOT_FETCHED`. That grace period was removed, so `UNKNOWN` now always
+    reads as `NOT_FETCHED`.
 - `isWorking`: live agent-session activity only. PR/CI/Ratchet progress does not set this
-  field; that background ownership is represented by `flowPhase` and `flowIsWorking` when
-  deriving the Kanban column.
+  field; that background ownership is represented by `flowPhase`, `ciObservation`,
+  `hasMergeConflict`, and `dispatchStalled` when deriving `statusReason` (and, through it, the
+  Kanban column).
 - `statusReason`: derived user-facing reason such as `Needs permission`, `Waiting for CI`,
   `No session started`, or `Fixing review comments`.
 
@@ -38,9 +43,14 @@ PR/Ratchet flow is derived in:
 
 - `src/backend/services/workspace/service/state/flow-state.ts`
 
-Next-action ownership and the Kanban column are derived in:
+The user-facing `statusReason` (next-action ownership) is derived in:
 
-- `src/backend/services/workspace/service/state/kanban-state.ts`
+- `src/shared/workspace-status-reason.ts`
+
+The Kanban column is a pure projection of `statusReason.code`, not an independent
+derivation, in:
+
+- `src/shared/kanban-column-projection.ts`
 
 The derived outputs are assembled and projected by:
 
@@ -83,45 +93,60 @@ the next two-minute monitor cycle.
 
 ## Kanban as Next-Action Ownership
 
-`computeKanbanColumn(...)` accepts:
+The column is no longer derived independently from the label. `deriveWorkspaceStatusReason`
+(`src/shared/workspace-status-reason.ts`) computes a single `WorkspaceStatusReason` — the `code`
+the label renders — and `kanbanColumnForStatusReason` (`src/shared/kanban-column-projection.ts`)
+looks the column up from that same `code` through `KANBAN_COLUMN_BY_STATUS_REASON_CODE`, a total
+`Record<WorkspaceStatusReasonCode, KanbanColumn | null>`. Because the map is total, a new reason
+code with no column mapping is a compile error rather than a silent `WAITING`.
 
-- `lifecycle`;
-- `sessionIsWorking`;
-- `flowIsWorking`;
-- `prState`;
-- `ratchetState`;
-- `pendingRequestType`;
-- `hasSessionRuntimeError`;
-- `ratchetDispatchOutcome`;
-- `ratchetDispatchRetryCount`.
+`deriveWorkspaceStatusReason` accepts:
 
-`hasHadSessions` is not a Kanban input. A `READY` workspace with no live owner falls through to
-`WAITING`, whether or not it had an earlier session.
+- `lifecycle`, `hasHadSessions`;
+- `isWorking`, `isSessionStarting`;
+- `pendingRequestType`, `hasSessionRuntimeError`;
+- `flowPhase`, `ciObservation`, `prState`, `prCiStatus`, `ratchetState`;
+- `ratchetEnabled`, `hasMergeConflict`, `dispatchStalled`;
+- `mode`, `autoIterationStatus`.
 
-The rules are evaluated in this order:
+`runScriptStatus` is not an input — the dev server has no status-reason code — and
+`ratchetDispatchOutcome`/`ratchetDispatchRetryCount` are not read directly; `dispatchStalled`
+subsumes the retry-exhaustion check below.
 
-| Priority | Condition | Column | Next-action owner |
-| --- | --- | --- | --- |
-| 1 | Lifecycle is `ARCHIVING` or `ARCHIVED` | `null` | Hidden from the active board |
-| 2 | PR is merged/closed, or Ratchet observed `MERGED` | `DONE` | Terminal |
-| 3a | Lifecycle failed, a request awaits input, or a session has a runtime error | `WAITING` | Human |
-| 3b | A `DIED` Ratchet dispatch reached the configured retry limit | `WAITING` | Human |
-| 4 | Lifecycle is `NEW`/`PROVISIONING`, a session is live, or PR/Ratchet flow is active | `WORKING` | Setup, agent, CI, or Ratchet automation |
-| 5 | Any remaining nonterminal workspace | `WAITING` | Human |
+The reason is the first non-null result of these functions, tried in order:
 
-The exhausted-retry rule deliberately overrides an otherwise active Ratchet flow. The limit is
-`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries` (currently 3). A `COMPLETED` dispatch outcome by
-itself does not force `WAITING`. After a fixer exits cleanly, Ratchet continues monitoring PR and
-CI state but suppresses another fixer dispatch while the dispatch snapshot is unchanged. A later
-PR identity, state, CI-status, or review-decision aggregate change clears settled dispatch
-ownership immediately, returning an exhausted workspace to normal automation ownership before
-the next Ratchet poll. Identical periodic refreshes do not clear exhaustion. The dispatch
-snapshot key itself stays intact, so Ratchet still decides whether the changed aggregate actually
-warrants another fixer.
+| Order | Function | Produces |
+| --- | --- | --- |
+| 1 | `deriveArchiveReason` | `ARCHIVING`/`ARCHIVED` (column `null`, off the board) |
+| 2 | `deriveTerminalPrReason` | `MERGED` (`DONE`) or `PR_CLOSED` (`DONE`) |
+| 3 | `deriveBlockingReason` | `NEEDS_PERMISSION`/`NEEDS_PLAN_APPROVAL`/`NEEDS_ANSWER`/`SESSION_ERROR` (`WAITING`) |
+| 4 | `deriveLifecycleReason` | `SETTING_UP` (`WORKING`) or `SETUP_FAILED` (`WAITING`) |
+| 5 | `deriveActiveReason` | `AGENT_WORKING`/`STARTING_SESSION`/`AUTO_ITERATING` (`WORKING`) |
+| 6 | `deriveRatchetTroubleReason` | `RATCHET_STALLED`/`FIXING_MERGE_CONFLICT`/`MERGE_CONFLICT` |
+| 7 | `derivePrFlowReason` | `WAITING_FOR_CI`/`FIXING_CI_FAILURES`/`FIXING_REVIEW_COMMENTS`/`CHECKING_PR` (`WORKING`), or `READY_TO_MERGE`/`READY_FOR_REVIEW` (`WAITING`) |
+| 8 | `deriveIdleReason` | `NO_SESSION_STARTED`/`READY_FOR_NEXT_PROMPT` (`WAITING`, exhaustive fallback) |
+
+Terminal PR state (2) deliberately outranks a pending request or session error (3): a merged or
+closed PR is reported as such even when a permission request or runtime error would otherwise win.
+That precedence is preserved from the derivation this one replaced. Archive state (1) outranks
+everything, including a terminal PR — an archiving workspace with a merged PR still reads as
+`ARCHIVING`, not `MERGED`.
+
+`deriveRatchetTroubleReason` (6) is where the old per-read exhausted-retry rule now lives, as
+persisted state rather than a recomputation: `dispatchStalled` on the `WorkspaceRatchet` row is set
+when a settled dispatch achieved nothing for an unchanged snapshot key, or when a `DIED` fixer
+exhausts its retries (`SERVICE_THRESHOLDS.ratchetDispatchMaxRetries`, currently 3), and cleared by
+`resetSettledDispatch` (a PR aggregate change) or `disable`. While it is set, Ratchet-enabled
+workspaces report `RATCHET_STALLED` (`WAITING`) instead of whatever the CI/review flow would
+otherwise select. A live merge conflict reports through the same function ahead of the flow check:
+`FIXING_MERGE_CONFLICT` (`WORKING`) while Ratchet is enabled and working it, `MERGE_CONFLICT`
+(`WAITING`) when Ratchet cannot act on its own.
 
 Archiving and archived workspaces derive a `null` column, which keeps them off the active board.
-The column is never persisted: `computeKanbanColumn` runs on every read, so the board, the
-sidebar, the snapshot stream, and the child-workspace panel cannot disagree about it.
+The column is never persisted: `kanbanColumnForStatusReason` runs on every read against the same
+`statusReason` the label uses, so the board, the sidebar, the snapshot stream, and the
+child-workspace panel cannot disagree about it — the label and the column used to be derived
+independently and could.
 
 There is also one project-scoped read behind it. `workspace.listForProject` returns every live
 workspace in a project with its derived state, and the board and the sidebar select what they
@@ -253,9 +278,11 @@ required at `schemaVersion: 4` with no migration path.
 
 ## Cached and Live State Propagation
 
-Persisted snapshot entries include `ratchetDispatchOutcome` and
-`ratchetDispatchRetryCount`, so reconciliation and snapshot-derived Kanban state apply the same
-exhausted-retry rule as full workspace queries.
+Persisted snapshot entries include `ratchetDispatchStalled`, so reconciliation and
+snapshot-derived Kanban state read the same exhausted-dispatch conclusion as full workspace
+queries rather than recomputing it. `ratchetDispatchOutcome` and `ratchetDispatchRetryCount` are
+also on the snapshot entry, but only for the detail view's dispatch history — the column
+projection reads `dispatchStalled` directly and does not derive exhaustion from them.
 
 Ratchet dispatch changes publish `ratchet_dispatch_changed` as an invalidation after successful
 dispatch-record mutations. PR resets and Ratchet toggles use the same invalidation model. The
@@ -286,14 +313,21 @@ interceptors and other utility animation triggers are not part of the current mo
 
 ## Invariants
 
-1. Archive state is handled before every visible Kanban column.
+1. Archive state is handled before every visible Kanban column, including a terminal PR: an
+   archiving workspace with a merged PR still reads as `ARCHIVING`, not `MERGED`.
 2. Terminal PR state wins over human-attention and automation-owned states.
-3. Human-attention state and exhausted Ratchet retries win over active session or flow state.
+3. Human-attention state (a pending request or a session runtime error) wins over active session,
+   Ratchet-stalled, and flow state. Ratchet-stalled/merge-conflict state is checked after active
+   session and auto-iteration ownership but before PR/CI flow state, so a live session still reads
+   as `AGENT_WORKING` even while `dispatchStalled` is set.
 4. `isWorking` reports session activity only; Kanban `WORKING` may instead be owned by setup,
    CI, or Ratchet automation.
-5. `CIStatus.UNKNOWN` is interpreted through `ciObservation`, including the grace period before
-   it becomes `NO_CHECKS`.
+5. `CIStatus.UNKNOWN` maps directly to the `NOT_FETCHED` `ciObservation`. The wall-clock grace
+   period that used to precede `NO_CHECKS` was removed.
 6. Enabling Ratchet triggers an immediate background evaluation.
+7. The Kanban column is a total-map lookup on `statusReason.code`
+   (`KANBAN_COLUMN_BY_STATUS_REASON_CODE`); it cannot diverge from the label because both come
+   from the same `statusReason`, and an unmapped reason code is a compile error.
 
 ## Testing Coverage
 
@@ -301,8 +335,10 @@ Key tests are located at:
 
 - PR/Ratchet flow derivation:
   `src/backend/services/workspace/service/state/flow-state.test.ts`;
-- next-action ownership and cache behavior:
-  `src/backend/services/workspace/service/state/kanban-state.test.ts`;
+- next-action ownership (`statusReason`):
+  `src/shared/workspace-status-reason.test.ts`;
+- the Kanban column projection, including a check that every status-reason code resolves:
+  `src/shared/kanban-column-projection.test.ts`;
 - lifecycle transitions and lifecycle-driven cache updates:
   `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`;
 - query projections:
