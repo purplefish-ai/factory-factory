@@ -5,6 +5,29 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-07-29
+
+### Added
+
+- Show linked GitHub and Linear issues on Kanban task cards (#2055)
+
+### Changed
+
+- Serve Kanban Git statistics from the workspace cache and project columns from the shared status reason (#2053, #2063)
+- Commit workspace changes before archiving and enforce foreign-key index coverage (#2051, #2059)
+- Update the bundled Codex CLI schemas to 0.145.0 (#2064)
+
+### Fixed
+
+- Preserve macOS screenshot media types when pasting images into task and chat inputs (#2042, #2052)
+- Correct dark-mode status banner colors and center modal animations (#2054, #2058)
+- Stop Ratchet sessions after pull requests merge and prevent ACP dispatch errors from retrying indefinitely (#2056, #2057)
+- Publish auto-iteration status changes immediately to the workspace snapshot stream (#2065)
+
+### Documentation
+
+- Correct the project structure documented in the contributor guide (#2041)
+
 ## [0.4.2] - 2026-07-27
 
 ### Changed
