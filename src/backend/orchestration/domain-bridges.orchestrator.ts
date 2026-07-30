@@ -57,12 +57,14 @@ import {
   type workspaceRunScriptService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
-  type worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import type { reconciliationService } from './reconciliation.service';
-import type { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+import type {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from './workspace-init.orchestrator';
 
 type SessionDataService = typeof sessionDataService;
 type SessionDomainService = typeof sessionDomainService;
@@ -86,6 +88,7 @@ export type BridgeServices = {
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
+  recoverStaleProvisioningWorkspace: typeof recoverStaleProvisioningWorkspace;
   reconciliationService: typeof reconciliationService;
   acpRuntimeManager: typeof acpRuntimeManager;
   sessionDataService: typeof sessionDataService;
@@ -106,7 +109,6 @@ export type BridgeServices = {
   workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
-  worktreeLifecycleService: typeof worktreeLifecycleService;
 };
 
 async function stopSessionBestEffort(
@@ -274,6 +276,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     prFetchCoordinator,
     prSnapshotService,
     ratchetService,
+    recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionDataService,
     sessionDomainService,
@@ -293,7 +296,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
-    worktreeLifecycleService,
   } = services;
   const logger = createLogger('domain-bridges');
 
@@ -380,13 +382,10 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
   reconciliationService.configure({
     workspace: {
-      cleanupUnregisteredProvisioningWorktree: (id) =>
-        worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree(id),
-      markFailed: async (id, reason) => {
-        await workspaceStateMachine.markFailed(id, reason);
-      },
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
       findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+      recoverStaleProvisioningWorkspace: (id, reason) =>
+        recoverStaleProvisioningWorkspace(id, reason),
     },
     terminal: {
       recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),

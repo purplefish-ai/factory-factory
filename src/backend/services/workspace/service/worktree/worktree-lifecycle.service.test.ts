@@ -207,7 +207,9 @@ describe('worktreeLifecycleService cleanup', () => {
     const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
 
     try {
-      await worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree('workspace-1');
+      await expect(
+        worktreeLifecycleService.prepareStaleProvisioningRecovery('workspace-1')
+      ).resolves.toBe(true);
 
       expect(removeSpy).toHaveBeenCalledWith(worktreePath, project);
     } finally {
@@ -218,6 +220,7 @@ describe('worktreeLifecycleService cleanup', () => {
   it.each([
     {
       name: 'the worktree path has been persisted',
+      shouldRecover: true,
       workspace: {
         status: 'PROVISIONING',
         worktreePath: '/tmp/worktrees/workspace-workspace-1',
@@ -225,12 +228,13 @@ describe('worktreeLifecycleService cleanup', () => {
     },
     {
       name: 'the workspace is no longer provisioning',
+      shouldRecover: false,
       workspace: {
         status: 'FAILED',
         worktreePath: null,
       },
     },
-  ])('does not remove a worktree when $name', async ({ workspace }) => {
+  ])('does not remove a worktree when $name', async ({ shouldRecover, workspace }) => {
     vi.spyOn(workspaceAccessor, 'findByIdWithProject').mockResolvedValue(
       unsafeCoerce({
         id: 'workspace-1',
@@ -243,7 +247,9 @@ describe('worktreeLifecycleService cleanup', () => {
     );
     const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
 
-    await worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree('workspace-1');
+    await expect(
+      worktreeLifecycleService.prepareStaleProvisioningRecovery('workspace-1')
+    ).resolves.toBe(shouldRecover);
 
     expect(removeSpy).not.toHaveBeenCalled();
   });

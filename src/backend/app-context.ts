@@ -28,6 +28,7 @@ import {
 } from './orchestration/workspace-children.orchestrator';
 import {
   initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from './orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
@@ -232,6 +233,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     prSnapshotService,
     ratchetService,
     rateLimiter,
+    recoverStaleProvisioningWorkspace,
     runScriptConfigPersistenceService,
     reconciliationService,
     runScriptService: defaultRunScriptService,

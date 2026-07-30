@@ -74,9 +74,6 @@ vi.mock('@/backend/services/workspace', () => ({
     on: vi.fn(),
   },
   workspaceStateMachine: { markFailed: vi.fn(), markReady: vi.fn() },
-  worktreeLifecycleService: {
-    cleanupUnregisteredProvisioningWorktree: vi.fn(),
-  },
   getWorkspaceInitPolicy: vi.fn(),
 }));
 
@@ -150,6 +147,7 @@ vi.mock('@/backend/services/terminal', () => ({
 
 vi.mock('./workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
+  recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
 // --- Import mocked modules to get references ---
@@ -182,11 +180,13 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
-  worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { reconciliationService } from './reconciliation.service';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+import {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from './workspace-init.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
@@ -220,6 +220,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     prFetchCoordinator,
     prSnapshotService,
     ratchetService,
+    recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionDataService,
     sessionDomainService,
@@ -240,7 +241,6 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
-    worktreeLifecycleService,
     initializeWorkspaceWorktree,
     ...overrides,
   };
@@ -442,22 +442,12 @@ describe('configureDomainBridges', () => {
   });
 
   describe('reconciliation bridge delegation', () => {
-    it('workspace bridge cleanup delegates to worktreeLifecycleService', async () => {
+    it('workspace bridge recovery delegates to recoverStaleProvisioningWorkspace', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(reconciliationService.configure);
 
-      await bridge.workspace.cleanupUnregisteredProvisioningWorktree('ws1');
-      expect(worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree).toHaveBeenCalledWith(
-        'ws1'
-      );
-    });
-
-    it('workspace bridge markFailed delegates to workspaceStateMachine', async () => {
-      configureDomainBridges(createBridgeServices());
-      const bridge = getBridge(reconciliationService.configure);
-
-      await bridge.workspace.markFailed('ws1', 'broken');
-      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith('ws1', 'broken');
+      await bridge.workspace.recoverStaleProvisioningWorkspace('ws1', 'timed out');
+      expect(recoverStaleProvisioningWorkspace).toHaveBeenCalledWith('ws1', 'timed out');
     });
 
     it('workspace bridge initializeWorktree delegates to initializeWorkspaceWorktree', async () => {
