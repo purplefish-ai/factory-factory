@@ -19,7 +19,7 @@ const PROVIDER_INFO = {
   },
 } as const;
 
-function getWarning(
+export function getWarning(
   provider: SessionProviderValue,
   health: {
     claude: {
