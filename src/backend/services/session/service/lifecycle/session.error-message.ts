@@ -2,7 +2,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 4000;
 const MAX_PUBLIC_PROVIDER_ERROR_MESSAGE_LENGTH = 240;
 const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
 const SENSITIVE_PROVIDER_ERROR_PATTERN =
-  /\b(?:(?:api|access|secret|bearer|client)[-_ ]?)?(?:token|key|secret)\b|\bauthorization\b|\bcredentials?\b/i;
+  /\b(?:(?:api|access|secret|bearer|client)[-_ ]?)?(?:token|key|secret)\b|\b(?:authorization|credentials?|password|cookie|bearer)\b/i;
 
 function truncate(value: string): string {
   if (value.length <= MAX_ERROR_MESSAGE_LENGTH) {
@@ -64,6 +64,10 @@ export function toErrorMessage(error: unknown): string {
 export function toPublicProviderErrorMessage(error: unknown): string {
   const message = toErrorMessage(error).replace(/\s+/g, ' ').trim();
   if (SENSITIVE_PROVIDER_ERROR_PATTERN.test(message)) {
+    return GENERIC_PROVIDER_ERROR_MESSAGE;
+  }
+
+  if (message.length === 0) {
     return GENERIC_PROVIDER_ERROR_MESSAGE;
   }
 

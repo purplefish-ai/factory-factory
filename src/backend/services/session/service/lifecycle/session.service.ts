@@ -203,17 +203,13 @@ export class SessionService {
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       promptCompleted = true;
-      this.completePromptTurnIfCurrent(
+      await this.completeSuccessfulPromptTurn({
         sessionId,
+        workspaceId,
+        attemptKey,
         stopGeneration,
-        `stop_reason:${result.stopReason}`,
-        {
-          phase: 'idle',
-          processState: 'alive',
-          activity: 'IDLE',
-          updatedAt: new Date().toISOString(),
-        }
-      );
+        stopReason: result.stopReason,
+      });
       return result.stopReason;
     } catch (error) {
       promptError = error;
@@ -245,6 +241,31 @@ export class SessionService {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
+  }
+
+  private async completeSuccessfulPromptTurn({
+    sessionId,
+    workspaceId,
+    attemptKey,
+    stopGeneration,
+    stopReason,
+  }: {
+    sessionId: string;
+    workspaceId: string | undefined;
+    attemptKey: string;
+    stopGeneration: number;
+    stopReason: string;
+  }): Promise<void> {
+    const providerError = this.acpEventProcessor.consumePromptProviderError(sessionId, attemptKey);
+    if (providerError && this.shouldRecordCompletedPromptProviderError(sessionId, stopGeneration)) {
+      await this.recordPromptFailure({ sessionId, workspaceId, attemptKey, error: providerError });
+    }
+    this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   private async recordPromptFailure({
@@ -293,6 +314,15 @@ export class SessionService {
       return false;
     }
     return this.getStopGeneration(sessionId) === stopGeneration;
+  }
+
+  private shouldRecordCompletedPromptProviderError(
+    sessionId: string,
+    stopGeneration: number
+  ): boolean {
+    return (
+      !this.isSessionStopping(sessionId) && this.getStopGeneration(sessionId) === stopGeneration
+    );
   }
 
   private completePromptTurnIfCurrent(

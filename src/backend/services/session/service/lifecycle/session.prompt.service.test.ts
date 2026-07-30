@@ -17,6 +17,7 @@ function createPromptService() {
     getWorkspaceId: vi.fn().mockReturnValue('workspace-1'),
     getProvider: vi.fn().mockReturnValue('CODEX'),
     beginPromptTurn: vi.fn().mockReturnValue('attempt-key'),
+    consumePromptProviderError: vi.fn(),
     finishPromptTurn: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),
   };
@@ -56,6 +57,64 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+function createLifecyclePromptHarness() {
+  const runtimeManager = {
+    getClient: vi.fn().mockReturnValue({ supportsImages: () => true }),
+    isSessionWorking: vi.fn().mockReturnValue(true),
+    sendPrompt: vi.fn(),
+  };
+  const sessionDomainService = new SessionDomainService();
+  const lifecycleEvents = new Map<string, Record<string, unknown>>();
+  const lifecycleStore = {
+    upsert: vi.fn((input: { dedupeKey: string }) => {
+      const existing = lifecycleEvents.get(input.dedupeKey);
+      if (existing) {
+        return existing;
+      }
+      const event = { ...input, id: 'event-1' };
+      lifecycleEvents.set(input.dedupeKey, event);
+      return event;
+    }),
+  };
+  const lifecycleEventService = new SessionLifecycleEventService({
+    store: lifecycleStore as never,
+    sessionDomainService,
+  });
+  const acpEventProcessor = new AcpEventProcessor({
+    runtimeManager: runtimeManager as never,
+    sessionDomainService,
+    sessionPermissionService: {
+      createPermissionBridge: vi.fn(),
+      handlePermissionRequest: vi.fn(),
+    } as never,
+    sessionConfigService: { applyConfigOptionsUpdateDelta: vi.fn() } as never,
+    onToolCallTimeout: vi.fn(),
+  });
+  acpEventProcessor.registerSessionContext('session-1', {
+    workspaceId: 'workspace-1',
+    workingDir: '/workspace',
+    provider: 'CODEX',
+  });
+  const service = new SessionService({
+    runtimeManager: runtimeManager as never,
+    sessionDomainService,
+    acpEventProcessor,
+    promptTurnCompletionService: { schedule: vi.fn() } as never,
+    lifecycleEventService,
+    getStopGeneration: () => 0,
+    isSessionStopping: () => false,
+  });
+
+  return {
+    service,
+    runtimeManager,
+    sessionDomainService,
+    lifecycleEvents,
+    lifecycleStore,
+    acpEventProcessor,
+  };
 }
 
 describe('SessionService prompt coordination', () => {
@@ -182,54 +241,15 @@ describe('SessionService prompt coordination', () => {
     expect(lifecycleEventService.record).not.toHaveBeenCalled();
   });
 
-  it('keeps one lifecycle transcript message when ACP reports an error before rejection', async () => {
-    const runtimeManager = {
-      getClient: vi.fn().mockReturnValue({ supportsImages: () => true }),
-      isSessionWorking: vi.fn().mockReturnValue(true),
-      sendPrompt: vi.fn(),
-    };
-    const sessionDomainService = new SessionDomainService();
-    const lifecycleEvents = new Map<string, Record<string, unknown>>();
-    const lifecycleStore = {
-      upsert: vi.fn((input: { dedupeKey: string }) => {
-        const existing = lifecycleEvents.get(input.dedupeKey);
-        if (existing) {
-          return existing;
-        }
-        const event = { ...input, id: 'event-1' };
-        lifecycleEvents.set(input.dedupeKey, event);
-        return event;
-      }),
-    };
-    const lifecycleEventService = new SessionLifecycleEventService({
-      store: lifecycleStore as never,
+  it('records the prompt timeout when ACP emits an error before rejection', async () => {
+    const {
+      service,
+      runtimeManager,
       sessionDomainService,
-    });
-    const acpEventProcessor = new AcpEventProcessor({
-      runtimeManager: runtimeManager as never,
-      sessionDomainService,
-      sessionPermissionService: {
-        createPermissionBridge: vi.fn(),
-        handlePermissionRequest: vi.fn(),
-      } as never,
-      sessionConfigService: { applyConfigOptionsUpdateDelta: vi.fn() } as never,
-      onToolCallTimeout: vi.fn(),
-      lifecycleEventService,
-    });
-    acpEventProcessor.registerSessionContext('session-1', {
-      workspaceId: 'workspace-1',
-      workingDir: '/workspace',
-      provider: 'CODEX',
-    });
-    const service = new SessionService({
-      runtimeManager: runtimeManager as never,
-      sessionDomainService,
+      lifecycleEvents,
+      lifecycleStore,
       acpEventProcessor,
-      promptTurnCompletionService: { schedule: vi.fn() } as never,
-      lifecycleEventService,
-      getStopGeneration: () => 0,
-      isSessionStopping: () => false,
-    });
+    } = createLifecyclePromptHarness();
     const prompt = createDeferred<{ stopReason: string }>();
     runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
 
@@ -239,9 +259,9 @@ describe('SessionService prompt coordination', () => {
       type: 'agent_message',
       data: { type: 'error', error: 'HTTP 529: Overloaded' },
     });
-    prompt.reject(new Error('HTTP 529: Overloaded'));
+    prompt.reject(new PromptTimeoutError('session-1', 14_400_000));
 
-    await expect(pending).rejects.toThrow('HTTP 529: Overloaded');
+    await expect(pending).rejects.toThrow(PromptTimeoutError);
     await vi.waitFor(() => {
       expect(
         sessionDomainService
@@ -249,10 +269,65 @@ describe('SessionService prompt coordination', () => {
           .filter((entry) => entry.message?.type === 'session_lifecycle')
       ).toHaveLength(1);
     });
-    expect(lifecycleStore.upsert).toHaveBeenCalledTimes(2);
-    expect(lifecycleStore.upsert.mock.calls[0]?.[0].dedupeKey).toBe(
-      lifecycleStore.upsert.mock.calls[1]?.[0].dedupeKey
-    );
+    expect(lifecycleEvents).toHaveLength(1);
+    expect(lifecycleStore.upsert).toHaveBeenCalledOnce();
+    expect([...lifecycleEvents.values()][0]).toMatchObject({
+      reason: 'PROMPT_TIMEOUT',
+      message: 'Turn stopped: reached the 4-hour limit.',
+    });
+  });
+
+  it('does not record an ACP busy-turn error before the matching rejection', async () => {
+    const { service, runtimeManager, lifecycleEvents, lifecycleStore, acpEventProcessor } =
+      createLifecyclePromptHarness();
+    const prompt = createDeferred<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
+
+    const pending = service.sendSessionMessage('session-1', 'continue');
+    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce());
+    acpEventProcessor.handleAcpDelta('session-1', {
+      type: 'agent_message',
+      data: { type: 'error', error: 'A turn is already in progress for this session' },
+    });
+    prompt.reject(new Error('A turn is already in progress for this session'));
+
+    await expect(pending).rejects.toThrow('A turn is already in progress for this session');
+    expect(lifecycleEvents).toHaveLength(0);
+    expect(lifecycleStore.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'password=hunter2',
+    'cookie=session%3Dprivate',
+    'Bearer private-token',
+  ])('does not retain secret-bearing ACP error details in the transcript or lifecycle event: %s', async (error) => {
+    const { service, runtimeManager, sessionDomainService, lifecycleEvents, acpEventProcessor } =
+      createLifecyclePromptHarness();
+    const prompt = createDeferred<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
+
+    const pending = service.sendSessionMessage('session-1', 'continue');
+    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce());
+    acpEventProcessor.handleAcpDelta('session-1', {
+      type: 'agent_message',
+      data: { type: 'error', error },
+    });
+    prompt.resolve({ stopReason: 'end_turn' });
+
+    await expect(pending).resolves.toBeUndefined();
+    const transcript = sessionDomainService.getTranscriptSnapshot('session-1');
+    const lifecycleEvent = [...lifecycleEvents.values()][0];
+    const persisted = JSON.stringify({ transcript, lifecycleEvent });
+    expect(persisted).not.toContain(error);
+    expect(lifecycleEvent).toMatchObject({
+      message: 'Turn stopped: the provider returned an error.',
+    });
+    expect(
+      transcript
+        .flatMap((entry) => [entry.message?.error, entry.message?.lifecycle?.message])
+        .filter((message): message is string => typeof message === 'string')
+        .every((message) => message.length <= 240)
+    ).toBe(true);
   });
 
   it('serializes concurrent ACP prompts for the same session', async () => {

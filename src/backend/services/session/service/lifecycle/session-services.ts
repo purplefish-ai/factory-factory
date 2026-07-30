@@ -64,8 +64,6 @@ export const acpEventProcessor = new AcpEventProcessor({
   sessionPermissionService,
   sessionConfigService,
   onToolCallTimeout: cancelTimedOutToolPrompt,
-  lifecycleEventService: sessionLifecycleEventService,
-  isSessionStopping: (sessionId): boolean => sessionLifecycleService.isSessionStopping(sessionId),
 });
 
 export type SessionPromptService = Pick<

@@ -126,27 +126,25 @@ describe('AcpEventProcessor assistant text streaming', () => {
     expect(secondAttemptKey).not.toBe(firstAttemptKey);
   });
 
-  it('does not record an ACP provider error after an explicit stop begins', () => {
-    const lifecycleEventService = { record: vi.fn().mockResolvedValue(undefined) };
-    const processor = new AcpEventProcessor(
-      makeDeps({
-        lifecycleEventService: lifecycleEventService as never,
-        isSessionStopping: vi.fn().mockReturnValue(true),
-      })
-    );
-    processor.registerSessionContext('sid', {
-      workspaceId: 'workspace-1',
-      workingDir: '/workspace',
-      provider: 'CODEX',
-    });
-    processor.beginPromptTurn('sid');
+  it.each([
+    'password=hunter2',
+    'cookie=session%3Dprivate',
+    'Bearer private-token',
+  ])('redacts raw provider errors from the persisted and emitted ACP transcript: %s', (error) => {
+    const sessionDomainService = new SessionDomainService();
+    const emitDelta = vi.spyOn(sessionDomainService, 'emitDelta');
+    const processor = new AcpEventProcessor(makeDeps({ sessionDomainService }));
 
     processor.handleAcpDelta('sid', {
       type: 'agent_message',
-      data: { type: 'error', error: 'Prompt cancelled' },
+      data: { type: 'error', error },
     });
 
-    expect(lifecycleEventService.record).not.toHaveBeenCalled();
+    const transcript = sessionDomainService.getTranscriptSnapshot('sid');
+    const emitted = emitDelta.mock.calls[0]?.[1];
+    expect(JSON.stringify({ transcript, emitted })).not.toContain(error);
+    expect(transcript[0]?.message?.error).toBe('The provider returned an error.');
+    expect(transcript[0]?.message?.error?.length).toBeLessThanOrEqual(240);
   });
 
   it('coalesces many chunks within the bounded flush interval and transmits text once', () => {

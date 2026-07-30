@@ -19,11 +19,9 @@ import {
   scanClaudeWorkspaceCommandNames,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
-import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionConfigService } from './session.config.service';
-import { toProviderFailureChatMessage } from './session.error-message';
+import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
-import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const logger = createLogger('session');
 
@@ -47,14 +45,17 @@ type AcpTextStreamState = {
   flushTimer?: ReturnType<typeof setTimeout>;
 };
 
+type PendingPromptProviderError = {
+  attemptKey: string;
+  message: string;
+};
+
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   sessionPermissionService: SessionPermissionService;
   sessionConfigService: SessionConfigService;
   onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
-  lifecycleEventService?: Pick<SessionLifecycleEventService, 'record'>;
-  isSessionStopping?: (sessionId: string) => boolean;
   toolCallTimeoutMs?: number;
   textFlushIntervalMs?: number;
 };
@@ -72,8 +73,6 @@ export class AcpEventProcessor {
   ) => void;
   private readonly toolCallTimeoutMs: number;
   private readonly textFlushIntervalMs: number;
-  private readonly lifecycleEventService: Pick<SessionLifecycleEventService, 'record'> | undefined;
-  private readonly isSessionStopping: (sessionId: string) => boolean;
   /** Per-session, per-tool-call timers. Cleared on completion or session teardown. */
   private readonly toolCallTimers = new Map<string, Map<string, ReturnType<typeof setTimeout>>>();
 
@@ -94,6 +93,8 @@ export class AcpEventProcessor {
   private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
+  /** ACP errors observed during a prompt, awaiting terminal prompt classification. */
+  private readonly pendingPromptProviderErrors = new Map<string, PendingPromptProviderError>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -101,8 +102,6 @@ export class AcpEventProcessor {
     this.sessionPermissionService = options.sessionPermissionService;
     this.sessionConfigService = options.sessionConfigService;
     this.onToolCallTimeout = options.onToolCallTimeout;
-    this.lifecycleEventService = options.lifecycleEventService;
-    this.isSessionStopping = options.isSessionStopping ?? (() => false);
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
     this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
   }
@@ -198,6 +197,7 @@ export class AcpEventProcessor {
     this.clearReplaySuppression(sessionId);
     this.clearSessionContext(sessionId);
     this.activePromptAttemptKeys.delete(sessionId);
+    this.pendingPromptProviderErrors.delete(sessionId);
   }
 
   beginPromptTurn(sessionId: string): string {
@@ -205,12 +205,14 @@ export class AcpEventProcessor {
     this.pendingAcpToolCalls.set(sessionId, new Map());
     const attemptKey = randomUUID();
     this.activePromptAttemptKeys.set(sessionId, attemptKey);
+    this.pendingPromptProviderErrors.delete(sessionId);
     return attemptKey;
   }
 
   finishPromptTurn(sessionId: string): void {
     this.finishAcpTextBlock(sessionId);
     this.activePromptAttemptKeys.delete(sessionId);
+    this.pendingPromptProviderErrors.delete(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {
@@ -223,6 +225,15 @@ export class AcpEventProcessor {
 
   getProvider(sessionId: string): 'CLAUDE' | 'CODEX' | undefined {
     return this.sessionToProvider.get(sessionId);
+  }
+
+  consumePromptProviderError(sessionId: string, attemptKey: string): string | undefined {
+    const pending = this.pendingPromptProviderErrors.get(sessionId);
+    if (!pending || pending.attemptKey !== attemptKey) {
+      return undefined;
+    }
+    this.pendingPromptProviderErrors.delete(sessionId);
+    return pending.message;
   }
 
   /**
@@ -265,23 +276,20 @@ export class AcpEventProcessor {
     }
 
     const data = (delta as { data: AgentMessage }).data;
-
-    if (data.type === 'error') {
-      this.recordActivePromptProviderFailure(sid, data.error);
-    }
+    const safeData = data.type === 'error' ? this.handlePromptProviderError(sid, data) : data;
 
     // Text chunks: accumulate into single message, reuse same order
     // so the frontend upserts rather than inserting a new bubble per chunk.
-    if (data.type === 'assistant') {
-      this.accumulateAcpText(sid, data);
+    if (safeData.type === 'assistant') {
+      this.accumulateAcpText(sid, safeData);
       return;
     }
 
     // Non-text agent_message (thinking, tool_use, result): close the text block first.
     this.finishAcpTextBlock(sid);
     // Persist to transcript + allocate order in one step
-    const order = this.sessionDomainService.appendClaudeEvent(sid, data);
-    this.sessionDomainService.emitDelta(sid, { ...delta, order });
+    const order = this.sessionDomainService.appendClaudeEvent(sid, safeData);
+    this.sessionDomainService.emitDelta(sid, { ...delta, data: safeData, order });
   }
 
   finalizeOrphanedToolCalls(sid: string, reason: string): void {
@@ -787,34 +795,15 @@ export class AcpEventProcessor {
     this.suppressAcpReplayForSession.delete(sessionId);
   }
 
-  private recordActivePromptProviderFailure(sessionId: string, error: unknown): void {
-    if (this.isSessionStopping(sessionId)) {
-      return;
-    }
-    const workspaceId = this.getWorkspaceId(sessionId);
+  private handlePromptProviderError(sessionId: string, data: AgentMessage): AgentMessage {
+    const message = toPublicProviderErrorMessage(
+      data.error ?? new Error('The provider returned an error.')
+    );
     const attemptKey = this.getActivePromptAttemptKey(sessionId);
-    if (!(this.lifecycleEventService && workspaceId && attemptKey)) {
-      return;
+    if (attemptKey) {
+      this.pendingPromptProviderErrors.set(sessionId, { attemptKey, message });
     }
-
-    void this.lifecycleEventService
-      .record({
-        workspaceId,
-        sessionId,
-        kind: SessionLifecycleEventKind.TURN_INTERRUPTED,
-        reason: SessionLifecycleEventReason.PROVIDER_ERROR,
-        message: toProviderFailureChatMessage(
-          this.getProvider(sessionId),
-          error ?? new Error('The provider returned an error.')
-        ),
-        dedupeKey: `turn:${attemptKey}:stop`,
-      })
-      .catch((recordError: unknown) => {
-        logger.warn('Failed recording ACP provider failure lifecycle event', {
-          sessionId,
-          error: toProviderFailureChatMessage(undefined, recordError),
-        });
-      });
+    return { type: 'error', error: message };
   }
 
   private startToolCallTimer(sid: string, toolUseId: string, toolName: string): void {
