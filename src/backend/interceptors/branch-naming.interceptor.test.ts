@@ -913,6 +913,46 @@ describe('PR completion handling', () => {
     );
   });
 
+  it('keeps a generated branch prefix that matches the remote name', async () => {
+    const interceptor = createBranchNamingInterceptor();
+    mocks.findProjectById.mockResolvedValue({
+      id: 'project-1',
+      githubOwner: 'origin',
+    });
+    const event = createEvent({
+      toolUseId: 'matching-prefix-cleanup',
+      input: { command: 'gh pr create --fill' },
+    });
+    mocks.gitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: 'origin/origin/fix-authentication-bug\n',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
+
+    await interceptor.onToolStart!(event, context);
+    await interceptor.onToolComplete!(
+      { ...event, output: { content: 'created', isError: false } },
+      context
+    );
+
+    expect(mocks.gitCommand).toHaveBeenNthCalledWith(
+      5,
+      ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/origin/fix-authentication-bug'],
+      '/tmp/workspace'
+    );
+    expect(mocks.gitCommand).toHaveBeenNthCalledWith(
+      6,
+      ['push', 'origin', '--delete', 'owner/automatic-1'],
+      '/tmp/workspace'
+    );
+  });
+
   it.each([
     {
       reason: 'HEAD cannot be resolved',
