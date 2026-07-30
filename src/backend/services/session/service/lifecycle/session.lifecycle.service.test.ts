@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
@@ -864,6 +865,7 @@ function createStartableLifecycleService(options?: {
     tryDispatchNextMessage,
     sessionConfigService,
     runtimeManager,
+    sessionDomainService,
   };
 }
 
@@ -1069,6 +1071,20 @@ describe('SessionLifecycleService startSession pending workspace notifications',
 
     await service.stopSession('session-1');
 
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
+  it('releases the stop generation when viewers retain inactive session state', async () => {
+    const { service, sessionDomainService } = createStartableLifecycleService();
+    sessionEventBus.registerViewerCountProvider((sessionId) => (sessionId === 'session-1' ? 1 : 0));
+
+    try {
+      await service.stopSession('session-1');
+    } finally {
+      sessionEventBus.registerViewerCountProvider(null);
+    }
+
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
     expect(getStopGenerations(service).has('session-1')).toBe(false);
   });
 
