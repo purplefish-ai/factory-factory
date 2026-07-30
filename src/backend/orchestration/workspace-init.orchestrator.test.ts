@@ -3,6 +3,12 @@ import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockWorkspaceUpdate = vi.hoisted(() => vi.fn());
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
 
 // --- Module mocks (before imports) ---
 
@@ -92,12 +98,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => mockLogger,
 }));
 
 vi.mock('@/shared/acp-protocol', () => ({
@@ -122,6 +123,7 @@ import {
 } from '@/backend/services/session';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 import {
+  assertWorktreePathSafe,
   gitOpsService,
   workspaceDataService,
   workspaceRelationshipsService,
@@ -1545,6 +1547,87 @@ describe('initializeWorkspaceWorktree', () => {
         '/worktrees/workspace-ws-1',
         workspace.project
       );
+    });
+
+    it('does not remove a retry worktree while the workspace is provisioning', async () => {
+      setupHappyPath();
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
+        unsafeCoerce({
+          id: WORKSPACE_ID,
+          status: 'PROVISIONING',
+          worktreePath: null,
+        })
+      );
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(gitOpsService.removeWorktree).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Skipping unregistered worktree cleanup while workspace is provisioning',
+        {
+          workspaceId: WORKSPACE_ID,
+          worktreePath: '/worktrees/workspace-ws-1',
+        }
+      );
+    });
+
+    it('finishes stale cleanup before a retry can recreate the worktree', async () => {
+      const workspace = setupHappyPath();
+      const cleanupSafetyCheck = createDeferredPromise<void>();
+      const sideEffects: string[] = [];
+      let status: 'FAILED' | 'PROVISIONING' = 'PROVISIONING';
+
+      vi.mocked(workspaceStateMachine.startProvisioning).mockImplementation(() => {
+        status = 'PROVISIONING';
+        return Promise.resolve(unsafeCoerce(workspace));
+      });
+      vi.mocked(workspaceStateMachine.markFailed).mockImplementation(() => {
+        status = 'FAILED';
+        return Promise.resolve(unsafeCoerce(workspace));
+      });
+      vi.mocked(workspaceDataService.findById).mockImplementation(() =>
+        Promise.resolve(
+          unsafeCoerce({
+            id: WORKSPACE_ID,
+            status,
+            worktreePath: null,
+          })
+        )
+      );
+      vi.mocked(mockWorkspaceUpdate)
+        .mockRejectedValueOnce(new Error('db update error'))
+        .mockResolvedValueOnce(workspace as never);
+      vi.mocked(gitOpsService.createWorktree).mockImplementation(() => {
+        sideEffects.push('create');
+        return Promise.resolve({
+          worktreePath: '/worktrees/workspace-ws-1',
+          branchName: 'user/test-workspace',
+        });
+      });
+      vi.mocked(gitOpsService.removeWorktree).mockImplementation(() => {
+        sideEffects.push('remove');
+        return Promise.resolve();
+      });
+      vi.mocked(assertWorktreePathSafe).mockImplementationOnce(() => cleanupSafetyCheck.promise);
+
+      const failedInitialization = initializeWorkspaceWorktree(WORKSPACE_ID);
+      await vi.waitFor(() => {
+        expect(sideEffects).toEqual(['create']);
+      });
+      await vi.waitFor(() => {
+        expect(workspaceStateMachine.markFailed).toHaveBeenCalledTimes(1);
+      });
+
+      const retryInitialization = initializeWorkspaceWorktree(WORKSPACE_ID);
+      for (let index = 0; index < 10; index += 1) {
+        await Promise.resolve();
+      }
+
+      cleanupSafetyCheck.resolve();
+      await Promise.all([failedInitialization, retryInitialization]);
+
+      expect(sideEffects).toEqual(['create', 'remove', 'create']);
     });
 
     it('does not remove worktree when failure occurs after persistence succeeds', async () => {
