@@ -13,13 +13,26 @@ export interface ProviderCliHealthStatus {
 }
 
 function getProviderLabel(provider: SessionProvider): string {
-  return provider === 'CODEX' ? 'Codex' : 'Claude';
+  switch (provider) {
+    case 'CODEX':
+      return 'Codex';
+    case 'OPENHANDS':
+      return 'OpenHands';
+    default:
+      return 'Claude';
+  }
 }
 
 export function getProviderBlockingIssue(
   provider: SessionProvider,
   health: ProviderCliHealthStatus
 ): string | null {
+  // OpenHands is spawned as a server-side ACP process (`openhands acp`) with no
+  // local CLI to install or authenticate, so it is never blocked on CLI health.
+  if (provider === 'OPENHANDS') {
+    return null;
+  }
+
   if (provider === 'CLAUDE') {
     if (!health.claude.isInstalled) {
       return health.claude.error ?? 'Claude CLI is not installed.';

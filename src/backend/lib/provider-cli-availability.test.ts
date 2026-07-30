@@ -48,4 +48,16 @@ describe('provider-cli-availability', () => {
       'Codex provider is unavailable'
     );
   });
+
+  it('never blocks OPENHANDS regardless of CLI health', () => {
+    const health = {
+      claude: { isInstalled: false },
+      codex: { isInstalled: false, isAuthenticated: false },
+      github: { isInstalled: false, isAuthenticated: false },
+      allHealthy: false,
+    };
+
+    expect(getProviderBlockingIssue('OPENHANDS', health)).toBeNull();
+    expect(getProviderUnavailableMessage('OPENHANDS', health)).toBeNull();
+  });
 });
