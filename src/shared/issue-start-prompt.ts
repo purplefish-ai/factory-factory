@@ -209,12 +209,17 @@ If your changes affect the UI:
    ${FACTORY_SIGNATURE}
    \`\`\`
 
-4. **Create the PR:**
+4. **Choose the PR title:**
+   - Check repository instructions and contributor documentation for a PR title convention.
+   - If a convention is specified, follow it.
+   - Otherwise, use \`Fix ${params.closeReference}: [concise description]\` as the PR title.
+
+5. **Create the PR:**
    \`\`\`bash
-   gh pr create --title "Fix ${params.closeReference}: [concise description]" --body-file /tmp/pr-body.md
+   gh pr create --title "<selected PR title>" --body-file /tmp/pr-body.md
    \`\`\`
 
-4. **Verify PR created successfully:**
+6. **Verify PR created successfully:**
    \`\`\`bash
    gh pr view --web
    \`\`\`
