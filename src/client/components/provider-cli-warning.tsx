@@ -2,6 +2,7 @@ import { ArrowSquareOutIcon, ArrowsClockwiseIcon, WarningIcon } from '@phosphor-
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 const PROVIDER_INFO = {
   CLAUDE: {
@@ -12,10 +13,14 @@ const PROVIDER_INFO = {
     label: 'Codex',
     installUrl: 'https://developers.openai.com/codex/app-server/',
   },
+  OPENHANDS: {
+    label: 'OpenHands',
+    installUrl: 'https://docs.openhands.dev/',
+  },
 } as const;
 
 function getWarning(
-  provider: 'CLAUDE' | 'CODEX',
+  provider: SessionProviderValue,
   health: {
     claude: {
       isInstalled: boolean;
@@ -64,6 +69,10 @@ function getWarning(
   }
 
   // Codex
+  if (provider === 'OPENHANDS') {
+    return null;
+  }
+
   if (!health.codex.isInstalled) {
     return {
       title: `${info.label} CLI is not installed`,
@@ -97,8 +106,9 @@ function getWarning(
  * is not installed or not authenticated.
  * Shares the checkCLIHealth query cache with CLIHealthBanner.
  */
-export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' }) {
+export function ProviderCliWarning({ provider }: { provider: SessionProviderValue }) {
   const utils = trpc.useUtils();
+  const upgradeableProvider = provider === 'CLAUDE' || provider === 'CODEX' ? provider : null;
   const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
     onSuccess: (result) => {
       toast.success(result.message);
@@ -150,12 +160,12 @@ export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' 
           )}
         </p>
       </div>
-      {warning.canUpgrade && (
+      {warning.canUpgrade && upgradeableProvider && (
         <Button
           variant="outline"
           size="sm"
           className="h-7 border-amber-500/60 px-2 text-xs text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
-          onClick={() => upgradeProviderCli.mutate({ provider })}
+          onClick={() => upgradeProviderCli.mutate({ provider: upgradeableProvider })}
           disabled={isRefetching || upgradeProviderCli.isPending}
         >
           {upgradeProviderCli.isPending ? 'Upgrading...' : 'Upgrade'}

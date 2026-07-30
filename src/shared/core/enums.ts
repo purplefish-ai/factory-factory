@@ -40,6 +40,7 @@ export type SessionLifecycleEventReason =
 export const SessionProvider = {
   CLAUDE: 'CLAUDE',
   CODEX: 'CODEX',
+  OPENHANDS: 'OPENHANDS',
 } as const;
 export type SessionProvider = (typeof SessionProvider)[keyof typeof SessionProvider];
 
@@ -55,6 +56,7 @@ export const WorkspaceProviderSelection = {
   WORKSPACE_DEFAULT: 'WORKSPACE_DEFAULT',
   CLAUDE: 'CLAUDE',
   CODEX: 'CODEX',
+  OPENHANDS: 'OPENHANDS',
 } as const;
 export type WorkspaceProviderSelection =
   (typeof WorkspaceProviderSelection)[keyof typeof WorkspaceProviderSelection];

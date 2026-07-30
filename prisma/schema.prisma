@@ -48,6 +48,7 @@ enum SessionLifecycleEventReason {
 enum SessionProvider {
   CLAUDE
   CODEX
+  OPENHANDS
 }
 
 enum SessionPermissionPreset {
@@ -65,6 +66,7 @@ enum WorkspaceProviderSelection {
   WORKSPACE_DEFAULT
   CLAUDE
   CODEX
+  OPENHANDS
 }
 
 enum PRState {

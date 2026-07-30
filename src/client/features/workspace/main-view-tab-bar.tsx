@@ -37,7 +37,7 @@ interface Session {
   name: string | null;
   workflow?: string | null;
   status: DbSessionStatus;
-  provider?: 'CLAUDE' | 'CODEX';
+  provider?: SessionProviderValue;
 }
 
 // =============================================================================

@@ -5,6 +5,7 @@ import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types
 import { createLogger } from '@/backend/services/logger.service';
 import {
   AcpEventTranslator,
+  type AcpProvider,
   type AcpRuntimeEvent,
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
@@ -85,7 +86,7 @@ export class AcpEventProcessor {
   /** Maps sessionId → workingDir for interceptor context */
   readonly sessionToWorkingDir = new Map<string, string>();
   /** Maps sessionId → provider for slash command caching */
-  private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
+  private readonly sessionToProvider = new Map<string, AcpProvider>();
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
 
@@ -150,7 +151,7 @@ export class AcpEventProcessor {
 
   registerSessionContext(
     sessionId: string,
-    context: { workspaceId: string; workingDir: string; provider: 'CLAUDE' | 'CODEX' }
+    context: { workspaceId: string; workingDir: string; provider: AcpProvider }
   ): void {
     this.sessionToWorkspace.set(sessionId, context.workspaceId);
     this.sessionToWorkingDir.set(sessionId, context.workingDir);
@@ -368,7 +369,7 @@ export class AcpEventProcessor {
 
   private getCacheableSlashCommands(
     sessionId: string,
-    provider: 'CLAUDE' | 'CODEX',
+    provider: AcpProvider,
     commands: CommandInfo[]
   ): CommandInfo[] {
     if (provider !== 'CLAUDE') {
