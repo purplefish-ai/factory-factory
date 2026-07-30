@@ -137,4 +137,23 @@ describe('sessionProviderResolverService', () => {
       model: 'gpt-5.3-codex',
     });
   });
+
+  it('resolves the env sentinel for OPENHANDS instead of leaking the configured Codex model', async () => {
+    // OpenHands reads its model from the LLM_MODEL env var at spawn time, so the
+    // stored label must not fall through to the Codex default model.
+    vi.mocked(userSettingsService.get).mockResolvedValue({
+      defaultCodexModel: 'gpt-5.3-codex',
+      defaultClaudeModel: 'sonnet',
+    } as never);
+
+    await expect(
+      sessionProviderResolverService.resolveSessionDefaults({
+        workspaceId: 'ws-1',
+        explicitProvider: 'OPENHANDS',
+      })
+    ).resolves.toEqual({
+      provider: 'OPENHANDS',
+      model: 'env',
+    });
+  });
 });
