@@ -55,22 +55,41 @@ describe('SessionLifecycleEventService', () => {
   });
 
   it('persists before publishing and publishes a duplicate only once', async () => {
-    const calls: string[] = [];
-    store.upsert.mockImplementation(() => {
-      calls.push('persist');
-      return Promise.resolve(eventRecord);
-    });
-    vi.spyOn(domain, 'upsertLifecycleMessage').mockImplementation(() => {
-      calls.push('upsert');
-      return calls.filter((call) => call === 'upsert').length === 1;
-    });
-    vi.spyOn(domain, 'emitDelta').mockImplementation(() => calls.push('emit'));
+    const providerMessage = {
+      id: 'provider-at-noon',
+      source: 'agent' as const,
+      timestamp: '2026-07-30T12:00:00.000Z',
+      order: 0,
+      message: {
+        type: 'assistant' as const,
+        message: { role: 'assistant' as const, content: 'Provider message' },
+      },
+    };
+    domain.replaceTranscript('session-1', [providerMessage]);
+    const upsertLifecycleMessage = vi.spyOn(domain, 'upsertLifecycleMessage');
+    const emitDelta = vi.spyOn(domain, 'emitDelta').mockImplementation(() => undefined);
 
     await service.record(input);
     await service.record(input);
 
-    expect(calls.slice(0, 3)).toEqual(['persist', 'upsert', 'emit']);
-    expect(calls.filter((call) => call === 'emit')).toHaveLength(1);
+    expect(store.upsert.mock.invocationCallOrder[0]).toBeLessThan(
+      upsertLifecycleMessage.mock.invocationCallOrder[0]!
+    );
+    expect(upsertLifecycleMessage).toHaveBeenCalledTimes(2);
+    expect(emitDelta).toHaveBeenCalledTimes(1);
+    expect(emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'agent_message',
+      data: expect.objectContaining({ type: 'session_lifecycle' }),
+      messageId: 'session-lifecycle:event-1',
+      order: 1,
+    });
+    expect(domain.getTranscriptSnapshot('session-1').map((message) => message.id)).toEqual([
+      'provider-at-noon',
+      'session-lifecycle:event-1',
+    ]);
+    expect(domain.getTranscriptSnapshot('session-1').map((message) => message.order)).toEqual([
+      0, 1,
+    ]);
   });
 
   it('emits a best-effort transient lifecycle message when persistence fails', async () => {
@@ -96,6 +115,27 @@ describe('SessionLifecycleEventService', () => {
     );
   });
 
+  it('replaces a transient lifecycle message after persistence recovers', async () => {
+    store.upsert
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValueOnce(eventRecord);
+    const emitDelta = vi.spyOn(domain, 'emitDelta').mockImplementation(() => undefined);
+
+    await service.record(input);
+    await service.record(input);
+
+    expect(domain.getTranscriptSnapshot('session-1').map((message) => message.id)).toEqual([
+      'session-lifecycle:event-1',
+    ]);
+    expect(emitDelta.mock.calls.map(([, event]) => event)).toEqual([
+      expect.objectContaining({
+        messageId: 'session-lifecycle:transient:session-1:prompt-timeout',
+        order: 0,
+      }),
+      expect.objectContaining({ messageId: 'session-lifecycle:event-1', order: 0 }),
+    ]);
+  });
+
   it('rehydrates lifecycle events after the in-memory store is cleared', async () => {
     store.findBySessionId.mockResolvedValue([eventRecord]);
     domain.clearSession('session-1');
@@ -104,6 +144,20 @@ describe('SessionLifecycleEventService', () => {
 
     expect(domain.getTranscriptSnapshot('session-1').map((message) => message.id)).toContain(
       'session-lifecycle:event-1'
+    );
+  });
+
+  it('logs and leaves the transcript unchanged when lifecycle hydration fails', async () => {
+    store.findBySessionId.mockRejectedValue(new Error('database unavailable'));
+    const replaceTranscript = vi.spyOn(domain, 'replaceTranscript');
+
+    await service.hydrate('session-1');
+
+    expect(replaceTranscript).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledWith(
+      'Failed hydrating session lifecycle events',
+      expect.any(Error),
+      { sessionId: 'session-1' }
     );
   });
 });

@@ -67,6 +67,45 @@ describe('SessionDomainService', () => {
     expect(sessionDomainService.getTranscriptSnapshot('s1')).toEqual([lifecycleMessage]);
   });
 
+  it('chronologically reorders a lifecycle message that collides with provider order', () => {
+    const providerMessage = {
+      id: 'provider-at-noon',
+      source: 'agent' as const,
+      timestamp: '2026-07-30T12:00:00.000Z',
+      order: 0,
+      message: {
+        type: 'assistant' as const,
+        message: { role: 'assistant' as const, content: 'Provider message' },
+      },
+    };
+    const lifecycleMessage = {
+      id: 'session-lifecycle:event-at-eleven',
+      source: 'agent' as const,
+      timestamp: '2026-07-30T11:00:00.000Z',
+      order: 0,
+      message: {
+        type: 'session_lifecycle' as const,
+        lifecycle: {
+          eventId: 'event-at-eleven',
+          kind: 'TURN_INTERRUPTED' as const,
+          reason: 'PROMPT_TIMEOUT' as const,
+          message: 'Turn stopped before noon.',
+          timestamp: '2026-07-30T11:00:00.000Z',
+        },
+      },
+    };
+    sessionDomainService.replaceTranscript('s1', [providerMessage]);
+
+    expect(sessionDomainService.upsertLifecycleMessage('s1', lifecycleMessage)).toBe(true);
+    expect(sessionDomainService.getTranscriptSnapshot('s1').map((message) => message.id)).toEqual([
+      'session-lifecycle:event-at-eleven',
+      'provider-at-noon',
+    ]);
+    expect(
+      sessionDomainService.getTranscriptSnapshot('s1').map((message) => message.order)
+    ).toEqual([0, 1]);
+  });
+
   it('subscribes and emits replay plus runtime delta', async () => {
     await sessionDomainService.subscribe({
       sessionId: 's1',

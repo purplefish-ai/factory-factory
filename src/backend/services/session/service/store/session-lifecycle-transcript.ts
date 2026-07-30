@@ -26,9 +26,17 @@ export function mergeLifecycleTranscript(
   transcript: ChatMessage[],
   events: SessionLifecycleEventRecord[]
 ): ChatMessage[] {
+  return mergeLifecycleMessage(transcript, events.map(toLifecycleChatMessage));
+}
+
+export function mergeLifecycleMessage(
+  transcript: ChatMessage[],
+  lifecycleMessages: ChatMessage | ChatMessage[]
+): ChatMessage[] {
   const byId = new Map(transcript.map((message) => [message.id, message]));
-  for (const event of events) {
-    const lifecycleMessage = toLifecycleChatMessage(event);
+  for (const lifecycleMessage of Array.isArray(lifecycleMessages)
+    ? lifecycleMessages
+    : [lifecycleMessages]) {
     byId.set(lifecycleMessage.id, lifecycleMessage);
   }
   return [...byId.values()]

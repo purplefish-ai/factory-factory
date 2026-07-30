@@ -25,7 +25,11 @@ export interface RecordLifecycleEventInput {
 
 type SessionLifecycleEventDomain = Pick<
   SessionDomainService,
-  'emitDelta' | 'getTranscriptSnapshot' | 'replaceTranscript' | 'upsertLifecycleMessage'
+  | 'emitDelta'
+  | 'getTranscriptSnapshot'
+  | 'removeTranscriptMessageById'
+  | 'replaceTranscript'
+  | 'upsertLifecycleMessage'
 >;
 
 export class SessionLifecycleEventService {
@@ -40,6 +44,11 @@ export class SessionLifecycleEventService {
     const createdAt = input.createdAt ?? new Date();
     try {
       const event = await this.dependencies.store.upsert({ ...input, createdAt });
+      this.dependencies.sessionDomainService.removeTranscriptMessageById(
+        input.sessionId,
+        transientLifecycleMessageId(input),
+        { emitSnapshot: false }
+      );
       this.publish(input.sessionId, toLifecycleChatMessage(event));
       return event;
     } catch (error) {
@@ -70,16 +79,20 @@ export class SessionLifecycleEventService {
   }
 
   private publish(sessionId: string, message: ChatMessage): void {
-    const agentMessage = message.message;
-    if (!agentMessage) {
+    if (!this.dependencies.sessionDomainService.upsertLifecycleMessage(sessionId, message)) {
       return;
     }
-    if (!this.dependencies.sessionDomainService.upsertLifecycleMessage(sessionId, message)) {
+    const lifecycleMessage = this.dependencies.sessionDomainService
+      .getTranscriptSnapshot(sessionId)
+      .find((entry) => entry.id === message.id);
+    if (!lifecycleMessage?.message) {
       return;
     }
     this.dependencies.sessionDomainService.emitDelta(sessionId, {
       type: 'agent_message',
-      data: agentMessage,
+      data: lifecycleMessage.message,
+      messageId: lifecycleMessage.id,
+      order: lifecycleMessage.order,
     });
   }
 }
@@ -90,9 +103,17 @@ function toTransientEvent(
 ): SessionLifecycleEventRecord {
   return {
     ...input,
-    id: `transient:${input.sessionId}:${input.dedupeKey}`,
+    id: transientLifecycleEventId(input),
     createdAt,
   };
+}
+
+function transientLifecycleEventId(input: RecordLifecycleEventInput): string {
+  return `transient:${input.sessionId}:${input.dedupeKey}`;
+}
+
+function transientLifecycleMessageId(input: RecordLifecycleEventInput): string {
+  return `session-lifecycle:${transientLifecycleEventId(input)}`;
 }
 
 function toError(error: unknown): Error {

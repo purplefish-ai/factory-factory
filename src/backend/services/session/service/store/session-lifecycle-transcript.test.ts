@@ -26,7 +26,7 @@ const existingLifecycleMessage: ChatMessage = {
   id: 'session-lifecycle:event-1',
   source: 'agent',
   timestamp: '2026-07-30T12:22:23.353Z',
-  order: 1,
+  order: 0,
   message: {
     type: 'session_lifecycle',
     timestamp: '2026-07-30T12:22:23.353Z',
