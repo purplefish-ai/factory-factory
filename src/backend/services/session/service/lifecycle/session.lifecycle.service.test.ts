@@ -883,6 +883,30 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(getStopGenerations(service).has('missing-session')).toBe(false);
   });
 
+  it('does not create a client when stop completes during the initial session lookup', async () => {
+    const { service, session, repository, runtimeManager } = createStartableLifecycleService();
+    let resolveSession!: (value: typeof session) => void;
+    repository.getSessionById.mockReturnValueOnce(
+      new Promise<typeof session>((resolve) => {
+        resolveSession = resolve;
+      })
+    );
+
+    const startResult = service.startSession('session-1').catch((error) => error);
+    await vi.waitFor(() => {
+      expect(repository.getSessionById).toHaveBeenCalledWith('session-1');
+    });
+
+    await service.stopSession('session-1');
+    resolveSession(session);
+
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
   it('releases the stop generation when startup fails before creating a runtime', async () => {
     const { service, runtimeManager } = createStartableLifecycleService();
     runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
@@ -890,6 +914,63 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
 
     expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
+  it('does not retain a stop generation when client lookup cannot find the session', async () => {
+    const { service, repository } = createStartableLifecycleService();
+    repository.getSessionById.mockResolvedValueOnce(null);
+
+    await expect(service.getOrCreateSessionClient('missing-session')).rejects.toThrow(
+      'Session not found: missing-session'
+    );
+
+    expect(getStopGenerations(service).has('missing-session')).toBe(false);
+  });
+
+  it('releases the stop generation when record-based client creation fails', async () => {
+    const { service, session, runtimeManager } = createStartableLifecycleService();
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
+
+    await expect(service.getOrCreateSessionClientFromRecord(session as never)).rejects.toThrow(
+      'spawn failed'
+    );
+
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
+  it('does not release a stop generation still owned by a concurrent startup', async () => {
+    type UserSettings = Awaited<ReturnType<typeof userSettingsService.get>>;
+    let resolveFirstSettings!: (settings: UserSettings) => void;
+    const firstSettings = new Promise<UserSettings>((resolve) => {
+      resolveFirstSettings = resolve;
+    });
+    vi.mocked(userSettingsService.get)
+      .mockReturnValueOnce(firstSettings)
+      .mockResolvedValueOnce(
+        unsafeCoerce<UserSettings>({
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
+        })
+      );
+    const { service, runtimeManager } = createStartableLifecycleService();
+
+    const firstStart = service.startSession('session-1');
+    await vi.waitFor(() => {
+      expect(userSettingsService.get).toHaveBeenCalledTimes(1);
+    });
+
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('second spawn failed'));
+    await expect(service.startSession('session-1')).rejects.toThrow('second spawn failed');
+
+    resolveFirstSettings(
+      unsafeCoerce<UserSettings>({
+        defaultWorkspacePermissions: 'STRICT',
+        ratchetPermissions: 'YOLO',
+      })
+    );
+
+    await expect(firstStart).resolves.toBeUndefined();
+    expect(getStopGenerations(service).has('session-1')).toBe(true);
   });
 
   it('dispatches queued notifications after startup presets and skips the default continue prompt', async () => {
@@ -928,6 +1009,28 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(dispatchOrder).toBeDefined();
     expect(sendOrder).toBeDefined();
     expect(dispatchOrder!).toBeLessThan(sendOrder!);
+  });
+
+  it('does not complete startup when stop finishes during the initial prompt', async () => {
+    let resolvePrompt!: (value: undefined) => void;
+    const pendingPrompt = new Promise<undefined>((resolve) => {
+      resolvePrompt = resolve;
+    });
+    const { service, sendSessionMessage } = createStartableLifecycleService();
+    sendSessionMessage.mockReturnValueOnce(pendingPrompt);
+
+    const startResult = service.startSession('session-1').catch((error) => error);
+    await vi.waitFor(() => {
+      expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Continue with the task.');
+    });
+
+    await service.stopSession('session-1');
+    resolvePrompt(undefined);
+
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
   });
 
   it('does not create a client after stop completes during permission resolution', async () => {
