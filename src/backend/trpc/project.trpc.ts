@@ -281,7 +281,7 @@ export const projectRouter = router({
   create: trustedLocalProcedure
     .input(
       z.object({
-        repoPath: z.string().min(1, 'Repository path is required'),
+        repoPath: z.string().trim().min(1, 'Repository path is required'),
         // Startup script configuration (optional at creation time)
         startupScriptCommand: z.string().optional(),
         startupScriptPath: z.string().optional(),

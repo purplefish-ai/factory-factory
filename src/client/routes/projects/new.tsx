@@ -83,7 +83,7 @@ export default function NewProjectPage() {
   // Debounce repo path changes for API calls
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedRepoPath(repoPath);
+      setDebouncedRepoPath(repoPath.trim());
     }, 500);
     return () => clearTimeout(timer);
   }, [repoPath]);
@@ -136,13 +136,14 @@ export default function NewProjectPage() {
   const handleLocalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!repoPath.trim()) {
+    const trimmedRepoPath = repoPath.trim();
+    if (!trimmedRepoPath) {
       setError('Repository path is required');
       return;
     }
     const trimmedScript = startupScript.trim();
     createProject.mutate({
-      repoPath,
+      repoPath: trimmedRepoPath,
       startupScriptCommand: scriptType === 'command' && trimmedScript ? trimmedScript : undefined,
       startupScriptPath: scriptType === 'path' && trimmedScript ? trimmedScript : undefined,
     });
