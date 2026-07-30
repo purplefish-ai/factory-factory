@@ -603,6 +603,10 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
   }
 
   const totalQuestions = question.questions.length;
+  if (totalQuestions === 0) {
+    return null;
+  }
+
   const requestId = currentRequestId ?? 'unknown';
 
   if (totalQuestions === 1) {
