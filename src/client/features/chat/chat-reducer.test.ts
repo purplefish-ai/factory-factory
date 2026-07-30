@@ -399,6 +399,50 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('SESSION_RUNTIME_UPDATED action', () => {
+    it('keeps lifecycle history through runtime updates and reconnect replay', () => {
+      const lifecycle = {
+        type: 'session_lifecycle',
+        lifecycle: {
+          eventId: 'event-1',
+          kind: 'TURN_INTERRUPTED',
+          reason: 'PROMPT_TIMEOUT',
+          message: 'Turn stopped: reached the 4-hour limit.',
+          timestamp: '2026-07-30T12:22:23.353Z',
+        },
+      } satisfies AgentMessage;
+      const live = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: lifecycle, messageId: 'session-lifecycle:event-1', order: 3 },
+      });
+      const idle = chatReducer(live, {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-07-30T12:22:24.000Z',
+          },
+        },
+      });
+      const replayed = chatReducer(initialState, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'agent_message',
+              data: lifecycle,
+              messageId: 'session-lifecycle:event-1',
+              order: 3,
+            },
+          ],
+        },
+      });
+
+      expect(idle.messages.map((message) => message.id)).toContain('session-lifecycle:event-1');
+      expect(replayed.messages.map((message) => message.id)).toContain('session-lifecycle:event-1');
+    });
+
     it('clears transient UI state when runtime indicates process stopped', () => {
       const state: ChatState = {
         ...initialState,

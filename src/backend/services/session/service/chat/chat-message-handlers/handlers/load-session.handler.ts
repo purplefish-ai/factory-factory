@@ -12,6 +12,7 @@ import { codexSessionHistoryLoaderService } from '@/backend/services/session/ser
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import {
   sessionConfigService,
+  sessionLifecycleEventService,
   sessionLifecycleService,
 } from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -73,6 +74,7 @@ export function createLoadSessionHandler(
     }
 
     await hydrateProviderHistoryIfNeeded(sessionId, dbSession);
+    await sessionLifecycleEventService.hydrate(sessionId);
 
     const sessionRuntime = sessionLifecycleService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({

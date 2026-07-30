@@ -239,6 +239,7 @@ export const sessionRouter = router({
       await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
+      await sessionLifecycleService.persistClosedSession(input.id);
       // Clear any in-memory session store state
       sessionDomainService.clearSession(input.id);
       return sessionDataService.deleteAgentSession(input.id);

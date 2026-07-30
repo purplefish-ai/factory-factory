@@ -92,6 +92,7 @@ export const sessionLifecycleService: SessionLifecycleService = new SessionLifec
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   retryService: sessionRetryService,
+  lifecycleEventService: sessionLifecycleEventService,
   sendSessionMessage: (sessionId, content): Promise<void> =>
     sessionService.sendSessionMessage(sessionId, content),
   onBeforeStopSession: (sessionId) => {

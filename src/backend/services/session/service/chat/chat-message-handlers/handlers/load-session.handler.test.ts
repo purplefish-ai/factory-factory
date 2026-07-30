@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   loadClaudeSessionHistory: vi.fn(),
   loadCodexSessionHistory: vi.fn(),
+  hydrateLifecycleEvents: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptionsWithFallback: vi.fn(),
@@ -47,6 +48,9 @@ vi.mock('@/backend/services/session/service/data/codex-session-history-loader.se
 vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
   sessionLifecycleService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
+  },
+  sessionLifecycleEventService: {
+    hydrate: mocks.hydrateLifecycleEvents,
   },
   sessionConfigService: {
     getChatBarCapabilities: mocks.getChatBarCapabilities,
@@ -228,6 +232,40 @@ describe('createLoadSessionHandler', () => {
         loadRequestId: 'load-1',
       })
     );
+  });
+
+  it('hydrates lifecycle events after provider history and before replay', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+
+    await handler({
+      ws: { send: vi.fn() } as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    const hydrateProviderHistoryInvocation =
+      mocks.loadClaudeSessionHistory.mock.invocationCallOrder[0];
+    const hydrateLifecycleEventsInvocation =
+      mocks.hydrateLifecycleEvents.mock.invocationCallOrder[0];
+    const subscribeInvocation = mocks.subscribe.mock.invocationCallOrder[0];
+
+    expect(hydrateProviderHistoryInvocation).toBeLessThan(hydrateLifecycleEventsInvocation!);
+    expect(hydrateLifecycleEventsInvocation).toBeLessThan(subscribeInvocation!);
+    expect(mocks.hydrateLifecycleEvents).toHaveBeenCalledWith('session-1');
   });
 
   it('does not replace transcript when messages arrive while history load is in flight', async () => {

@@ -44,6 +44,7 @@ import type { SessionPromptBuilder } from './session.prompt-builder';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
+import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { maybeDiscoverPROnSessionEnd as maybeDiscoverPROnSessionEndHelper } from './session-pr-discovery.service';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
@@ -93,6 +94,7 @@ export type SessionLifecycleServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   retryService: SessionRetryService;
+  lifecycleEventService: SessionLifecycleEventService;
   sendSessionMessage: SendSessionMessage;
   onBeforeStopSession?: (sessionId: string) => void;
   onSessionExit?: (sessionId: string) => void;
@@ -108,6 +110,7 @@ export class SessionLifecycleService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
+  private readonly lifecycleEventService: SessionLifecycleEventService;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
@@ -128,6 +131,7 @@ export class SessionLifecycleService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.retryService = options.retryService;
+    this.lifecycleEventService = options.lifecycleEventService;
     this.sendSessionMessage = options.sendSessionMessage;
     this.onBeforeStopSession = options.onBeforeStopSession;
     this.onSessionExit = options.onSessionExit;
@@ -523,7 +527,7 @@ export class SessionLifecycleService {
           await this.recordRatchetSessionEndOnExit(session.workspaceId, sid, exitCode);
           void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
           if (session.workflow === 'ratchet') {
-            await this.persistRatchetTranscript(sid, session);
+            await this.persistRatchetTranscript(sid);
             await this.repository.deleteSession(sid);
             this.sessionDomainService.clearSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
@@ -818,7 +822,7 @@ export class SessionLifecycleService {
     }
 
     try {
-      await this.persistRatchetTranscript(sessionId, session);
+      await this.persistRatchetTranscript(sessionId);
       await this.repository.deleteSession(sessionId);
       this.sessionDomainService.clearSession(sessionId);
       logger.debug('Deleted transient ratchet session after stop', { sessionId });
@@ -878,19 +882,19 @@ export class SessionLifecycleService {
     logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 
-  private async persistRatchetTranscript(
-    sessionId: string,
-    session: AgentSessionRecord
-  ): Promise<void> {
-    if (!this.workspaceBridge) {
-      logger.warn('Cannot persist ratchet transcript: no workspace bridge', { sessionId });
+  async persistClosedSession(sessionId: string): Promise<void> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      logger.warn('Cannot persist closed session: session not found', { sessionId });
       return;
     }
+
+    await this.lifecycleEventService.hydrate(sessionId);
 
     const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
     const workspace = await workspaceDataService.findById(session.workspaceId);
     if (!workspace?.worktreePath) {
-      logger.warn('Cannot persist ratchet transcript: no worktree path', {
+      logger.warn('Cannot persist closed session: no worktree path', {
         sessionId,
         workspaceId: session.workspaceId,
       });
@@ -908,6 +912,10 @@ export class SessionLifecycleService {
       startedAt: session.createdAt,
       messages: transcript,
     });
+  }
+
+  private async persistRatchetTranscript(sessionId: string): Promise<void> {
+    await this.persistClosedSession(sessionId);
   }
 
   private async getOrCreateAcpSessionClient(
