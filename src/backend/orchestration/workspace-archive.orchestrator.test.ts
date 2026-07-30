@@ -214,6 +214,17 @@ describe('archiveWorkspace', () => {
   });
 
   describe('process cleanup errors (fail closed)', () => {
+    it.each([
+      ['archive', 'WORKSPACE_ARCHIVED'],
+      ['delete', 'SYSTEM_STOP'],
+    ] as const)('uses %s stop reason for shared runtime cleanup', async (operation, reason) => {
+      await cleanupWorkspaceRuntimeResources('ws-1', services, operation);
+
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+        reason,
+      });
+    });
+
     it('uses operation-specific wording when shared runtime cleanup fails', async () => {
       vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
         unsafeCoerce({ success: false, error: 'stop failed' })

@@ -56,10 +56,11 @@ export async function cleanupWorkspaceRuntimeResources(
   operation: 'archive' | 'delete'
 ): Promise<void> {
   const { runScriptService, sessionLifecycleService, terminalService } = services;
+  const sessionStopReason = operation === 'archive' ? 'WORKSPACE_ARCHIVED' : 'SYSTEM_STOP';
 
   const cleanupResults = await Promise.allSettled([
     sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
-      reason: 'WORKSPACE_ARCHIVED',
+      reason: sessionStopReason,
     }),
     (async () => {
       const result = await runScriptService.stopRunScript(workspaceId);
