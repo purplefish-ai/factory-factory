@@ -142,6 +142,19 @@ describe('port.service', () => {
   });
 
   describe('findAvailablePort', () => {
+    it.each([
+      0, -1, 65_536, 1.5,
+    ])('should reject invalid start port %s before probing', async (startPort) => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+
+      await expect(findAvailablePort(startPort)).rejects.toThrow(
+        `Invalid start port ${startPort}: expected an integer between 1 and 65535`
+      );
+
+      expect(mockExec).not.toHaveBeenCalled();
+    });
+
     it('should return the start port if it is available', async () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 

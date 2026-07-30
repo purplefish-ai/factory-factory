@@ -24,6 +24,18 @@ describe('findAvailablePort', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
+  it.each([
+    0, -1, 65_536, 1.5,
+  ])('rejects invalid start port %s before probing', async (startPort) => {
+    mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+
+    await expect(findAvailablePort(startPort)).rejects.toThrow(
+      `Invalid start port ${startPort}: expected an integer between 1 and 65535`
+    );
+
+    expect(mockExec).not.toHaveBeenCalled();
+  });
+
   it('does not probe ports above the valid TCP range', async () => {
     mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
 
