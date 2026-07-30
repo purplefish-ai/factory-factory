@@ -14,6 +14,10 @@ import NewProjectPage from './new';
 const navigateMock = vi.fn();
 const useAppHeaderMock = vi.fn();
 const selectProjectSlugMock = vi.fn();
+const { createMutateMock, checkFactoryConfigUseQueryMock } = vi.hoisted(() => ({
+  createMutateMock: vi.fn(),
+  checkFactoryConfigUseQueryMock: vi.fn(),
+}));
 const projects = [
   { id: 'project-1', slug: 'alpha', name: 'Alpha' },
   { id: 'project-2', slug: 'beta', name: 'Beta' },
@@ -70,8 +74,28 @@ vi.mock('@/client/features/project/onboarding-cli-health', () => ({
 }));
 
 vi.mock('@/client/features/project/project-repo-form', () => ({
-  ProjectRepoForm: ({ footerActions }: { footerActions?: ReactNode }) =>
-    createElement('div', null, 'Project Repo Form', footerActions),
+  ProjectRepoForm: ({
+    footerActions,
+    onSubmit,
+    repoPath,
+    setRepoPath,
+  }: {
+    footerActions?: ReactNode;
+    onSubmit: (event: React.FormEvent) => void;
+    repoPath: string;
+    setRepoPath: (repoPath: string) => void;
+  }) =>
+    createElement(
+      'form',
+      { onSubmit },
+      createElement('input', {
+        'aria-label': 'Repository path',
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) => setRepoPath(event.target.value),
+        value: repoPath,
+      }),
+      createElement('button', { type: 'submit' }, 'Add local repository'),
+      footerActions
+    ),
 }));
 
 vi.mock('@/client/features/project/setup-terminal-modal', () => ({
@@ -106,9 +130,14 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     project: {
       list: { useQuery: () => ({ data: projects }) },
-      checkFactoryConfig: { useQuery: () => ({ data: { exists: false } }) },
+      checkFactoryConfig: {
+        useQuery: (...args: unknown[]) => {
+          checkFactoryConfigUseQueryMock(...args);
+          return { data: { exists: false } };
+        },
+      },
       checkGithubAuth: { useQuery: () => ({ data: null, isLoading: false, refetch: vi.fn() }) },
-      create: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      create: { useMutation: () => ({ mutate: createMutateMock, isPending: false }) },
       createFromGithub: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
@@ -178,6 +207,8 @@ beforeEach(() => {
   navigateMock.mockClear();
   useAppHeaderMock.mockClear();
   selectProjectSlugMock.mockClear();
+  createMutateMock.mockClear();
+  checkFactoryConfigUseQueryMock.mockClear();
 });
 
 afterEach(() => {
@@ -210,5 +241,48 @@ describe('NewProjectPage navigation', () => {
     );
 
     root.unmount();
+  });
+});
+
+describe('NewProjectPage local path submission', () => {
+  it('submits a trimmed repository path', () => {
+    const { container, root } = renderPage();
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Repository path"]');
+    const form = input?.closest('form');
+
+    flushSync(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '  /repos/example  ');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    flushSync(() => {
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(createMutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ repoPath: '/repos/example' })
+    );
+    root.unmount();
+  });
+
+  it('queries factory config with a trimmed repository path after debouncing', () => {
+    vi.useFakeTimers();
+    const { container, root } = renderPage();
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Repository path"]');
+
+    flushSync(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, '  /repos/example  ');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    flushSync(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(checkFactoryConfigUseQueryMock.mock.calls.at(-1)?.[0]).toEqual({
+      repoPath: '/repos/example',
+    });
+    root.unmount();
+    vi.useRealTimers();
   });
 });
