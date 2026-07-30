@@ -1,7 +1,13 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
-export type SessionProvider = 'CLAUDE' | 'CODEX';
+export type SessionProvider = 'CLAUDE' | 'CODEX' | 'OPENHANDS';
+
+export const SESSION_PROVIDERS: readonly SessionProvider[] = ['CLAUDE', 'CODEX', 'OPENHANDS'];
+
+export function isSessionProvider(value: unknown): value is SessionProvider {
+  return typeof value === 'string' && (SESSION_PROVIDERS as readonly string[]).includes(value);
+}
 
 export type CodexModelCatalogEntry = {
   id: string;
