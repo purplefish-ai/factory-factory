@@ -10,7 +10,7 @@ export function createStopHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<StopMessage> {
   return async ({ sessionId }) => {
-    await sessionLifecycleService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId, { reason: 'USER_STOP' });
     // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
     // to avoid race conditions where a new client is created before the old one exits
     chatEventForwarderService.clearPendingRequest(sessionId);

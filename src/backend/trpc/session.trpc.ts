@@ -216,6 +216,7 @@ export const sessionRouter = router({
       const { sessionDataService, sessionLifecycleService } = ctx.appContext.services;
       await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
+        reason: 'USER_STOP',
       });
       return sessionDataService.findAgentSessionById(input.id);
     }),
@@ -238,6 +239,7 @@ export const sessionRouter = router({
       // Stop process first to prevent orphaned session processes
       await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
+        reason: 'SESSION_CLOSED',
       });
       await sessionLifecycleService.persistClosedSession(input.id);
       // Clear any in-memory session store state

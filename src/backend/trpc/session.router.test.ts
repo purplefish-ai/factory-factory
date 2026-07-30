@@ -343,8 +343,13 @@ describe('sessionRouter', () => {
     });
     expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1', {
       cleanupTransientRatchetSession: false,
+      reason: 'USER_STOP',
     });
     expect(sessionLifecycleService.persistClosedSession).toHaveBeenCalledWith('s1');
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1', {
+      cleanupTransientRatchetSession: false,
+      reason: 'SESSION_CLOSED',
+    });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s1');
     expect(sessionLifecycleService.stopSession.mock.invocationCallOrder[1]).toBeLessThan(
       sessionLifecycleService.persistClosedSession.mock.invocationCallOrder[0]!

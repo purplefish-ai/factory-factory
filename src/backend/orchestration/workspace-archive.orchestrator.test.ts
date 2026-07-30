@@ -162,7 +162,9 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+        reason: 'WORKSPACE_ARCHIVED',
+      });
       expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
       expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(
@@ -567,7 +569,9 @@ describe('recoverStaleArchivingWorkspaces', () => {
 
     expect(result).toEqual({ archived: ['ws-1'], failed: [] });
     expect(workspaceStateMachine.startArchivingWithSourceStatus).not.toHaveBeenCalled();
-    expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+    expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+      reason: 'WORKSPACE_ARCHIVED',
+    });
     expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
     expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
     expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});

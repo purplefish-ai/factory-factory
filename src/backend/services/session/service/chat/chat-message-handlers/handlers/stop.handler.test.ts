@@ -42,7 +42,7 @@ describe('createStopHandler', () => {
       message: { type: 'stop' } as never,
     });
 
-    expect(mocks.stopSession).toHaveBeenCalledWith('session-1');
+    expect(mocks.stopSession).toHaveBeenCalledWith('session-1', { reason: 'USER_STOP' });
     expect(mocks.clearPendingRequest).toHaveBeenCalledWith('session-1');
     expect(mocks.resetDispatchState).toHaveBeenCalledWith('session-1');
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');

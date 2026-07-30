@@ -122,10 +122,75 @@ function createStoppableLifecycleService() {
     sendSessionMessage: vi.fn(async () => undefined),
     lifecycleEventService: { hydrate: vi.fn(async () => undefined) } as never,
   });
-  const stopSession = vi.fn((_sessionId: string): Promise<void> => Promise.resolve());
+  const stopSession = vi.fn(
+    (_sessionId: string, _options?: unknown): Promise<void> => Promise.resolve()
+  );
   (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
 
   return { service, repository, runtimeManager, stopSession };
+}
+
+function createStopReasonLifecycleService() {
+  const session = {
+    id: 'session-1',
+    workspaceId: 'workspace-1',
+    workflow: 'code',
+    providerProcessPid: 4242,
+  };
+  const repository = {
+    getSessionById: vi.fn(async () => session),
+    updateSessionIfStatus: vi.fn(async () => session),
+    updateSession: vi.fn(async () => session),
+  };
+  const runtimeManager = {
+    isStopInProgress: vi.fn(() => false),
+    isSessionRunning: vi.fn(() => false),
+    isSessionWorking: vi.fn(() => false),
+    getClient: vi.fn(() => undefined),
+    stopClient: vi.fn(async () => undefined),
+  };
+  const lifecycleEventService = { record: vi.fn(async () => null), hydrate: vi.fn() };
+  const service = new SessionLifecycleService(
+    unsafeCoerce({
+      repository,
+      promptBuilder: {},
+      runtimeManager,
+      sessionDomainService: {
+        clearQueuedWork: vi.fn(),
+        getRuntimeSnapshot: vi.fn(() => ({
+          phase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-07-30T00:00:00.000Z',
+        })),
+        setRuntimeSnapshot: vi.fn(),
+        markProcessExit: vi.fn(),
+        clearSession: vi.fn(),
+      },
+      sessionPermissionService: { cancelPendingRequests: vi.fn() },
+      sessionConfigService: {},
+      acpEventProcessor: {
+        createRuntimeEventHandler: vi.fn(() => ({})),
+        clearStreamingState: vi.fn(),
+        clearReplaySuppression: vi.fn(),
+        clearSessionContext: vi.fn(),
+        clearSessionState: vi.fn(),
+        finalizeOrphanedToolCalls: vi.fn(),
+      },
+      promptTurnCompletionService: { clearSession: vi.fn() },
+      retryService: { run: vi.fn(async (operation: () => Promise<unknown>) => await operation()) },
+      lifecycleEventService,
+      sendSessionMessage: vi.fn(),
+    })
+  );
+  const handlers = (
+    service as unknown as {
+      setupAcpEventHandler(sessionId: string): {
+        onExit?: (sessionId: string, exitCode: number | null) => Promise<void>;
+      };
+    }
+  ).setupAcpEventHandler('session-1');
+  return { service, lifecycleEventService, runtimeManager, runtimeHandlers: handlers };
 }
 
 describe('SessionLifecycleService stopWorkspaceSessions', () => {
@@ -141,8 +206,8 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
     expect(repository.getSessionsByWorkspaceId).toHaveBeenCalledWith('workspace-1');
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-runtime-only');
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-idle');
-    expect(stopSession).toHaveBeenCalledWith('session-running');
-    expect(stopSession).toHaveBeenCalledWith('session-runtime-only');
+    expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
+    expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
     expect(stopSession).not.toHaveBeenCalledWith('session-idle');
   });
 
@@ -158,8 +223,66 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
     await expect(service.stopWorkspaceSessions('workspace-1')).rejects.toThrow(
       'Failed to stop 1 workspace session'
     );
-    expect(stopSession).toHaveBeenCalledWith('session-running');
-    expect(stopSession).toHaveBeenCalledWith('session-runtime-only');
+    expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
+    expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
+  });
+});
+
+describe('SessionLifecycleService stop causes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    ['USER_STOP', 'Session stopped by you.'],
+    ['SESSION_CLOSED', 'Session closed by you.'],
+    ['WORKSPACE_ARCHIVED', 'Session stopped because the workspace was archived.'],
+    ['SYSTEM_STOP', 'Session stopped by the system.'],
+  ] as const)('records %s before stopping the runtime', async (reason, message) => {
+    const { service, lifecycleEventService, runtimeManager } = createStopReasonLifecycleService();
+
+    await service.stopSession('session-1', { reason });
+
+    expect(lifecycleEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'workspace-1',
+        sessionId: 'session-1',
+        kind: 'SESSION_STOPPED',
+        reason,
+        message,
+        dedupeKey: expect.stringMatching(/^session-stop:\d+$/),
+      })
+    );
+    expect(lifecycleEventService.record.mock.invocationCallOrder[0]).toBeLessThan(
+      runtimeManager.stopClient.mock.invocationCallOrder[0]!
+    );
+  });
+
+  it('records an unexpected process exit once with its exit code', async () => {
+    const { lifecycleEventService, runtimeHandlers } = createStopReasonLifecycleService();
+
+    await runtimeHandlers.onExit?.('session-1', 1);
+
+    expect(lifecycleEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'SESSION_STOPPED',
+        reason: 'UNEXPECTED_EXIT',
+        message: 'Session stopped: agent process exited unexpectedly (code 1).',
+        dedupeKey: 'process-exit:4242:1',
+      })
+    );
+  });
+
+  it('does not label a deliberate stop as an unexpected exit', async () => {
+    const { lifecycleEventService, runtimeManager, runtimeHandlers } =
+      createStopReasonLifecycleService();
+    runtimeManager.isStopInProgress.mockReturnValue(true);
+
+    await runtimeHandlers.onExit?.('session-1', 0);
+
+    expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'UNEXPECTED_EXIT' })
+    );
   });
 });
 
@@ -918,7 +1041,7 @@ function createStartableLifecycleService(options?: {
       run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
     } as never,
     sendSessionMessage,
-    lifecycleEventService: { hydrate: vi.fn(async () => undefined) } as never,
+    lifecycleEventService: { hydrate: vi.fn(async () => undefined), record: vi.fn() } as never,
   });
   service.configure({
     workspace: {

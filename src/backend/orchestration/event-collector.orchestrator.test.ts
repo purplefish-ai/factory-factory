@@ -639,7 +639,9 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.remove).toHaveBeenCalledWith('ws-archived');
     expect(workspaceActivityService.clearWorkspace).toHaveBeenCalledWith('ws-archived');
     expect(prFetchCoordinator.removeWorkspace).toHaveBeenCalledWith('ws-archived');
-    expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
+    expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived', {
+      reason: 'WORKSPACE_ARCHIVED',
+    });
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-archived');
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });

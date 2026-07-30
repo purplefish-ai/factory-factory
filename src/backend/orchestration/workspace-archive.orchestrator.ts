@@ -29,7 +29,10 @@ export type ArchiveWorkspaceDependencies = {
     evictWorkspaceBuffers(workspaceId: string): void;
   };
   sessionLifecycleService: {
-    stopWorkspaceSessions(workspaceId: string): Promise<void>;
+    stopWorkspaceSessions(
+      workspaceId: string,
+      options?: { reason?: 'WORKSPACE_ARCHIVED' | 'SYSTEM_STOP' | 'USER_STOP' | 'SESSION_CLOSED' }
+    ): Promise<void>;
   };
   terminalService: {
     destroyWorkspaceTerminals(workspaceId: string): void;
@@ -55,7 +58,9 @@ export async function cleanupWorkspaceRuntimeResources(
   const { runScriptService, sessionLifecycleService, terminalService } = services;
 
   const cleanupResults = await Promise.allSettled([
-    sessionLifecycleService.stopWorkspaceSessions(workspaceId),
+    sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
+      reason: 'WORKSPACE_ARCHIVED',
+    }),
     (async () => {
       const result = await runScriptService.stopRunScript(workspaceId);
       if (!result.success) {
