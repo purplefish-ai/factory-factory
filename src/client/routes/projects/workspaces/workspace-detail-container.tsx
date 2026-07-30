@@ -21,6 +21,7 @@ import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
   useSelectedSessionId,
+  useWorkspaceHasChanges,
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
 import type { ChatContentProps } from './workspace-detail-chat-content';
@@ -55,11 +56,6 @@ export function WorkspaceDetailContainer() {
   const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState, openTab } =
     useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
-
-  const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
-    { workspaceId },
-    { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
-  );
 
   const { workspaceInitStatus, isScriptFailed, setupWarningDismissed, dismissSetupWarning } =
     useWorkspaceInitStatus(workspaceId, workspace, utils);
@@ -170,6 +166,7 @@ export function WorkspaceDetailContainer() {
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
+  const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
   const {
     createSession,
