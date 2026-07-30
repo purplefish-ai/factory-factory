@@ -13,6 +13,27 @@ afterEach(() => {
 });
 
 describe('QuestionPrompt', () => {
+  it('renders nothing when the questions array is empty', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+
+    const question: UserQuestionRequest = {
+      requestId: 'question-empty',
+      timestamp: '2026-04-28T00:00:00.000Z',
+      questions: [],
+    };
+
+    flushSync(() => {
+      root.render(createElement(QuestionPrompt, { question, onAnswer }));
+    });
+
+    expect(container.innerHTML).toBe('');
+
+    root.unmount();
+  });
+
   it('uses compact mobile card padding and wrapping text styles', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
