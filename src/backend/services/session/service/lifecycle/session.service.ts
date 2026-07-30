@@ -238,10 +238,8 @@ export class SessionService {
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       promptCompleted = true;
-      await this.completeSuccessfulPromptTurn({
+      this.completeSuccessfulPromptTurn({
         sessionId,
-        workspaceId,
-        attemptKey,
         stopGeneration,
         stopReason: result.stopReason,
       });
@@ -284,29 +282,15 @@ export class SessionService {
     }
   }
 
-  private async completeSuccessfulPromptTurn({
+  private completeSuccessfulPromptTurn({
     sessionId,
-    workspaceId,
-    attemptKey,
     stopGeneration,
     stopReason,
   }: {
     sessionId: string;
-    workspaceId: string | undefined;
-    attemptKey: string;
     stopGeneration: number;
     stopReason: string;
-  }): Promise<void> {
-    const providerError = this.acpEventProcessor.consumePromptProviderError(sessionId, attemptKey);
-    if (providerError && this.shouldRecordCompletedPromptProviderError(sessionId, stopGeneration)) {
-      await this.recordPromptFailure({
-        sessionId,
-        workspaceId,
-        attemptKey,
-        error: providerError,
-        timeoutKind: 'configured',
-      });
-    }
+  }): void {
     this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
       phase: 'idle',
       processState: 'alive',
@@ -363,15 +347,6 @@ export class SessionService {
       return false;
     }
     return this.getStopGeneration(sessionId) === stopGeneration;
-  }
-
-  private shouldRecordCompletedPromptProviderError(
-    sessionId: string,
-    stopGeneration: number
-  ): boolean {
-    return (
-      !this.isSessionStopping(sessionId) && this.getStopGeneration(sessionId) === stopGeneration
-    );
   }
 
   private completePromptTurnIfCurrent(

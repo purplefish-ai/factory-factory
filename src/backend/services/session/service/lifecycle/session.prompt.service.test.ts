@@ -17,7 +17,6 @@ function createPromptService() {
     getWorkspaceId: vi.fn().mockReturnValue('workspace-1'),
     getProvider: vi.fn().mockReturnValue('CODEX'),
     beginPromptTurn: vi.fn().mockReturnValue('attempt-key'),
-    consumePromptProviderError: vi.fn(),
     finishPromptTurn: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),
   };
@@ -327,7 +326,7 @@ describe('SessionService prompt coordination', () => {
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature',
     'https://martin:supersecret@example.com/api',
     '/Users/martin/private/prompt.txt: failed on customer@example.com',
-  ])('does not retain secret-bearing ACP error details in the transcript or lifecycle event: %s', async (error) => {
+  ])('sanitizes ACP error details without interrupting a successful turn: %s', async (error) => {
     const { service, runtimeManager, sessionDomainService, lifecycleEvents, acpEventProcessor } =
       createLifecyclePromptHarness();
     const prompt = createDeferred<{ stopReason: string }>();
@@ -343,12 +342,22 @@ describe('SessionService prompt coordination', () => {
 
     await expect(pending).resolves.toBeUndefined();
     const transcript = sessionDomainService.getTranscriptSnapshot('session-1');
-    const lifecycleEvent = [...lifecycleEvents.values()][0];
-    const persisted = JSON.stringify({ transcript, lifecycleEvent });
-    expect(persisted).not.toContain(error);
-    expect(lifecycleEvent).toMatchObject({
-      message: 'Turn stopped: the provider returned an error.',
+    const persisted = JSON.stringify({
+      transcript,
+      lifecycleEvents: [...lifecycleEvents.values()],
     });
+    expect(persisted).not.toContain(error);
+    expect(lifecycleEvents).toHaveLength(0);
+    expect(transcript).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.objectContaining({
+            type: 'error',
+            error: 'The provider returned an error.',
+          }),
+        }),
+      ])
+    );
     expect(
       transcript
         .flatMap((entry) => [entry.message?.error, entry.message?.lifecycle?.message])

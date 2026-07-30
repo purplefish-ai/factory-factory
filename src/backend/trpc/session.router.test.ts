@@ -247,6 +247,7 @@ describe('sessionRouter', () => {
 
     expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s-orphan', {
       cleanupTransientRatchetSession: false,
+      recordLifecycleEvent: false,
     });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s-orphan');
     expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s-orphan');

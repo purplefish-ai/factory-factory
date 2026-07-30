@@ -365,6 +365,15 @@ describe('SessionLifecycleService stop causes', () => {
       expect.objectContaining({ reason: 'UNEXPECTED_EXIT' })
     );
   });
+
+  it('can clean up a failed startup without recording a stop event', async () => {
+    const { service, lifecycleEventService, runtimeManager } = createStopReasonLifecycleService();
+
+    await service.stopSession('session-1', { recordLifecycleEvent: false });
+
+    expect(lifecycleEventService.record).not.toHaveBeenCalled();
+    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+  });
 });
 
 describe('SessionLifecycleService closed transcript persistence', () => {

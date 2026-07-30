@@ -92,6 +92,7 @@ export type SessionStopReason =
 
 export type StopSessionOptions = {
   cleanupTransientRatchetSession?: boolean;
+  recordLifecycleEvent?: boolean;
   reason?: SessionStopReason;
 };
 
@@ -283,7 +284,7 @@ export class SessionLifecycleService {
       return;
     }
 
-    if (workspaceId) {
+    if (workspaceId && options?.recordLifecycleEvent !== false) {
       await this.lifecycleEventService.record({
         workspaceId,
         sessionId,

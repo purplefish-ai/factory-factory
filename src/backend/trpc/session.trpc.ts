@@ -164,6 +164,7 @@ export const sessionRouter = router({
         try {
           await sessionLifecycleService.stopSession(session.id, {
             cleanupTransientRatchetSession: false,
+            recordLifecycleEvent: false,
           });
         } catch {
           // Best-effort runtime cleanup; preserve the startup error.
