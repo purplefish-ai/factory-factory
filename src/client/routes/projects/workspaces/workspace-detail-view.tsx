@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
 import {
   ArchiveWorkspaceDialog,
@@ -23,6 +23,9 @@ import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 import { getVisibleInitBanner } from './workspace-detail-container.utils';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
+
+const TAKE_SCREENSHOTS_PROMPT =
+  'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.';
 
 interface WorkspaceStateProps {
   workspaceLoading: boolean;
@@ -122,6 +125,18 @@ export function WorkspaceDetailView({
   archiveDialog,
 }: WorkspaceDetailViewProps) {
   const isMobile = useIsMobile();
+  const [isTakingScreenshots, setIsTakingScreenshots] = useState(false);
+
+  const handleTakeScreenshots = useCallback(async () => {
+    setIsTakingScreenshots(true);
+    try {
+      await header.handleQuickAction('Take Screenshots', TAKE_SCREENSHOTS_PROMPT);
+    } catch {
+      // The session mutation reports the error to the user.
+    } finally {
+      setIsTakingScreenshots(false);
+    }
+  }, [header.handleQuickAction]);
 
   if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
@@ -166,12 +181,8 @@ export function WorkspaceDetailView({
     <RightPanel
       workspaceId={workspaceState.workspaceId}
       messages={chat.messages}
-      onTakeScreenshots={() =>
-        header.handleQuickAction(
-          'Take Screenshots',
-          'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.'
-        )
-      }
+      isTakingScreenshots={isTakingScreenshots}
+      onTakeScreenshots={handleTakeScreenshots}
     />
   );
 
