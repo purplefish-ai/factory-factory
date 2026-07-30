@@ -5,6 +5,29 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-07-30
+
+### Added
+
+- Persist structured session stop reasons in chat transcripts and extend normal agent turns to a four-hour timeout (#2124)
+
+### Changed
+
+- Follow repository title conventions when creating pull requests from issues (#2112)
+
+### Fixed
+
+- Preserve manual workspace provider selections, plan-mode approvals and first-message settings, dismissed slash palettes, and empty agent question prompts (#2101, #2102, #2104, #2109, #2111)
+- Release inactive session lifecycle state, clear stale Quick Chat sessions, and cover cleanup while sessions are being viewed (#2105, #2107, #2114)
+- Prevent approval state from leaking across pull requests and refresh the Create PR action after sessions finish (#2106, #2108)
+- Protect retry worktrees from stale cleanup and recover orphaned worktrees left by interrupted provisioning (#2103, #2123)
+- Validate VP8 partition bounds, recover failed screenshot loading, and guard Linear screenshot URLs when GitHub metadata is unavailable (#2110, #2113, #2117)
+- Preserve valid local branches that share a remote name and resolve Windows workspace file links (#2115, #2116)
+- Reject invalid starting ports and trim repository paths during project creation (#2119, #2122)
+- Keep monthly periodic tasks aligned to their configured timezone near month boundaries (#2120)
+- Keep project archive failures visible and available for retry (#2121)
+- Deduplicate Git-reported and inferred folders in the Changes panel (#2118)
+
 ## [0.4.4] - 2026-07-29
 
 ### Changed
