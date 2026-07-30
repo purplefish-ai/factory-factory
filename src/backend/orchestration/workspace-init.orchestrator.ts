@@ -170,6 +170,14 @@ async function cleanupUnregisteredWorktreeAfterInitFailure(
       return;
     }
 
+    if (workspace?.status === 'PROVISIONING') {
+      logger.info('Skipping unregistered worktree cleanup while workspace is provisioning', {
+        workspaceId,
+        worktreePath: worktreeInfo.worktreePath,
+      });
+      return;
+    }
+
     await assertWorktreePathSafe(worktreeInfo.worktreePath, project.worktreeBasePath);
     await gitOpsService.removeWorktree(worktreeInfo.worktreePath, project);
     logger.info('Removed unregistered worktree after init failure', {

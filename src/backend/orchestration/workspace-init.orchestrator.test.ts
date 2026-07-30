@@ -1547,6 +1547,22 @@ describe('initializeWorkspaceWorktree', () => {
       );
     });
 
+    it('does not remove a retry worktree while the workspace is provisioning', async () => {
+      setupHappyPath();
+      vi.mocked(mockWorkspaceUpdate).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceDataService.findById).mockResolvedValue(
+        unsafeCoerce({
+          id: WORKSPACE_ID,
+          status: 'PROVISIONING',
+          worktreePath: null,
+        })
+      );
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(gitOpsService.removeWorktree).not.toHaveBeenCalled();
+    });
+
     it('does not remove worktree when failure occurs after persistence succeeds', async () => {
       setupHappyPath();
       vi.mocked(workspaceStateMachine.markReady).mockRejectedValue(new Error('ready failed'));
