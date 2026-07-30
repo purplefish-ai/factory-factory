@@ -336,6 +336,35 @@ describe('projectRouter', () => {
     );
   });
 
+  it('trims a repository path before validating and creating a project', async () => {
+    mockProjectManagementService.validateRepoPath.mockResolvedValue({ valid: true });
+    mockProjectManagementService.create.mockResolvedValue({ id: 'created' });
+
+    await expect(createCaller().create({ repoPath: '  /good/path  ' })).resolves.toEqual({
+      id: 'created',
+    });
+
+    expect(mockProjectManagementService.validateRepoPath).toHaveBeenCalledWith('/good/path');
+    expect(mockProjectManagementService.create).toHaveBeenCalledWith(
+      {
+        repoPath: '/good/path',
+        startupScriptCommand: undefined,
+        startupScriptPath: undefined,
+        startupScriptTimeout: undefined,
+      },
+      { worktreeBaseDir: '/tmp/worktrees' }
+    );
+  });
+
+  it('rejects a whitespace-only repository path before validating or creating a project', async () => {
+    await expect(createCaller().create({ repoPath: '   ' })).rejects.toThrow(
+      'Repository path is required'
+    );
+
+    expect(mockProjectManagementService.validateRepoPath).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.create).not.toHaveBeenCalled();
+  });
+
   it('rejects privileged project mutations from untrusted requests', async () => {
     const caller = createCaller({
       remoteAddress: '203.0.113.10',
