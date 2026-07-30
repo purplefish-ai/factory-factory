@@ -212,6 +212,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = '';
   localStorage.clear();
 });
@@ -283,6 +284,5 @@ describe('NewProjectPage local path submission', () => {
       repoPath: '/repos/example',
     });
     root.unmount();
-    vi.useRealTimers();
   });
 });
