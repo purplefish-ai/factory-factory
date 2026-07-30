@@ -57,6 +57,7 @@ import {
   type workspaceRunScriptService,
   type workspaceSnapshotStore,
   type workspaceStateMachine,
+  type worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { AutoIterationStatus, SessionStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -105,6 +106,7 @@ export type BridgeServices = {
   workspaceRunScriptService: typeof workspaceRunScriptService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
+  worktreeLifecycleService: typeof worktreeLifecycleService;
 };
 
 async function stopSessionBestEffort(
@@ -291,6 +293,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    worktreeLifecycleService,
   } = services;
   const logger = createLogger('domain-bridges');
 
@@ -377,6 +380,8 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
   reconciliationService.configure({
     workspace: {
+      cleanupUnregisteredProvisioningWorktree: (id) =>
+        worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree(id),
       markFailed: async (id, reason) => {
         await workspaceStateMachine.markFailed(id, reason);
       },

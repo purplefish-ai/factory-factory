@@ -9,6 +9,7 @@ const logger = createLogger('reconciliation');
 /** Workspace capabilities needed for reconciliation, injected at startup. */
 export interface ReconciliationWorkspaceBridge {
   markFailed(workspaceId: string, reason: string): Promise<void>;
+  cleanupUnregisteredProvisioningWorktree(workspaceId: string): Promise<void>;
   initializeWorktree(
     workspaceId: string,
     options?: { branchName?: string; useExistingBranch?: boolean }
@@ -164,8 +165,9 @@ class ReconciliationService {
           continue;
         }
 
-        // Stale provisioning - mark as failed so user can retry
+        // Remove any crash-left worktree before exposing FAILED for a user retry.
         try {
+          await this.workspace.cleanupUnregisteredProvisioningWorktree(workspace.id);
           await this.workspace.markFailed(
             workspace.id,
             'Provisioning timed out. This may indicate a server restart during initialization. Please retry.'
@@ -175,7 +177,7 @@ class ReconciliationService {
             initStartedAt: workspace.initStartedAt,
           });
         } catch (error) {
-          logger.error('Failed to mark stale workspace as failed', toError(error), {
+          logger.error('Failed to recover stale provisioning workspace', toError(error), {
             workspaceId: workspace.id,
           });
         }

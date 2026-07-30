@@ -74,6 +74,9 @@ vi.mock('@/backend/services/workspace', () => ({
     on: vi.fn(),
   },
   workspaceStateMachine: { markFailed: vi.fn(), markReady: vi.fn() },
+  worktreeLifecycleService: {
+    cleanupUnregisteredProvisioningWorktree: vi.fn(),
+  },
   getWorkspaceInitPolicy: vi.fn(),
 }));
 
@@ -179,6 +182,7 @@ import {
   workspaceRunScriptService,
   workspaceSnapshotStore,
   workspaceStateMachine,
+  worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { reconciliationService } from './reconciliation.service';
@@ -236,6 +240,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     workspaceRunScriptService,
     workspaceSnapshotStore,
     workspaceStateMachine,
+    worktreeLifecycleService,
     initializeWorkspaceWorktree,
     ...overrides,
   };
@@ -437,6 +442,16 @@ describe('configureDomainBridges', () => {
   });
 
   describe('reconciliation bridge delegation', () => {
+    it('workspace bridge cleanup delegates to worktreeLifecycleService', async () => {
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(reconciliationService.configure);
+
+      await bridge.workspace.cleanupUnregisteredProvisioningWorktree('ws1');
+      expect(worktreeLifecycleService.cleanupUnregisteredProvisioningWorktree).toHaveBeenCalledWith(
+        'ws1'
+      );
+    });
+
     it('workspace bridge markFailed delegates to workspaceStateMachine', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(reconciliationService.configure);

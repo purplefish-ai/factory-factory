@@ -31,6 +31,7 @@ vi.mock('@/backend/services/terminal', () => ({
 }));
 
 const mockInitializeWorktree = vi.fn();
+const mockCleanupUnregisteredProvisioningWorktree = vi.fn();
 
 import { terminalSessionService } from '@/backend/services/terminal';
 // Import after mocks are set up
@@ -41,8 +42,11 @@ describe('ReconciliationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    mockCleanupUnregisteredProvisioningWorktree.mockReset().mockResolvedValue(undefined);
     reconciliationService.configure({
       workspace: {
+        cleanupUnregisteredProvisioningWorktree: (workspaceId: string) =>
+          mockCleanupUnregisteredProvisioningWorktree(workspaceId),
         markFailed: async (workspaceId: string, reason: string) => {
           const current = await mockFindUnique({ where: { id: workspaceId } });
           if (!current) {
@@ -104,11 +108,22 @@ describe('ReconciliationService', () => {
       mockFindMany.mockResolvedValue([staleWorkspace]);
       mockFindUnique.mockResolvedValue(staleWorkspace);
       mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
+      const recoverySteps: string[] = [];
+      mockCleanupUnregisteredProvisioningWorktree.mockImplementation(() => {
+        recoverySteps.push('cleanup');
+        return Promise.resolve();
+      });
+      mockUpdate.mockImplementation(() => {
+        recoverySteps.push('mark-failed');
+        return Promise.resolve({ ...staleWorkspace, status: 'FAILED' });
+      });
 
       await reconciliationService.reconcile();
 
       // Should NOT call initializeWorktree for stale PROVISIONING
       expect(mockInitializeWorktree).not.toHaveBeenCalled();
+      expect(mockCleanupUnregisteredProvisioningWorktree).toHaveBeenCalledWith('ws-2');
+      expect(recoverySteps).toEqual(['cleanup', 'mark-failed']);
 
       // Should transition to FAILED via state machine
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -138,6 +153,7 @@ describe('ReconciliationService', () => {
       expect(killSpy).toHaveBeenCalledWith(12_345, 0);
       expect(mockInitializeWorktree).not.toHaveBeenCalled();
       expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockCleanupUnregisteredProvisioningWorktree).not.toHaveBeenCalled();
     });
 
     it('should fail stale PROVISIONING workspaces when init script PID is not running', async () => {
@@ -167,6 +183,27 @@ describe('ReconciliationService', () => {
           status: 'FAILED',
         }),
       });
+    });
+
+    it('leaves stale PROVISIONING workspaces unchanged when orphan cleanup fails', async () => {
+      const staleWorkspace = {
+        id: 'ws-cleanup-failed',
+        status: 'PROVISIONING',
+        branchName: 'feature/stale',
+        initStartedAt: new Date('2024-01-15T11:40:00Z'),
+        initScriptPid: null,
+        project: { id: 'proj-1' },
+      };
+
+      mockFindMany.mockResolvedValue([staleWorkspace]);
+      mockCleanupUnregisteredProvisioningWorktree.mockRejectedValue(
+        new Error('worktree removal failed')
+      );
+
+      await expect(reconciliationService.reconcile()).resolves.not.toThrow();
+
+      expect(mockCleanupUnregisteredProvisioningWorktree).toHaveBeenCalledWith('ws-cleanup-failed');
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('should handle mixed NEW and stale PROVISIONING workspaces', async () => {

@@ -119,6 +119,18 @@ class WorktreeLifecycleService {
     return Promise.resolve();
   }
 
+  async cleanupUnregisteredProvisioningWorktree(workspaceId: string): Promise<void> {
+    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    if (!workspace || workspace.status !== 'PROVISIONING' || workspace.worktreePath) {
+      return;
+    }
+
+    const project = getProjectOrThrow(workspace);
+    const worktreePath = path.join(project.worktreeBasePath, `workspace-${workspaceId}`);
+    await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
+    await gitOpsService.removeWorktree(worktreePath, project);
+  }
+
   async cleanupWorkspaceWorktree(
     workspace: WorkspaceWithProject,
     options: WorktreeArchiveOptions
