@@ -45,6 +45,23 @@ function createImageAttachment(overrides: Partial<MessageAttachment> = {}): Mess
   };
 }
 
+function createVp8WebpBase64(firstPartitionLength: number, partitionLength: number): string {
+  const vp8Data = Buffer.alloc(10 + partitionLength);
+  vp8Data.writeUIntLE((firstPartitionLength << 5) | 0x10, 0, 3);
+  Buffer.from([0x9d, 0x01, 0x2a]).copy(vp8Data, 3);
+  vp8Data.writeUInt16LE(1, 6);
+  vp8Data.writeUInt16LE(1, 8);
+
+  const webp = Buffer.alloc(20 + vp8Data.length);
+  webp.write('RIFF', 0, 'ascii');
+  webp.writeUInt32LE(webp.length - 8, 4);
+  webp.write('WEBP', 8, 'ascii');
+  webp.write('VP8 ', 12, 'ascii');
+  webp.writeUInt32LE(vp8Data.length, 16);
+  vp8Data.copy(webp, 20);
+  return webp.toString('base64');
+}
+
 function createOversizedPngBase64(): string {
   const bytes = Buffer.alloc(MAX_IMAGE_SIZE + 1);
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
@@ -208,6 +225,14 @@ describe('validateAttachment', () => {
   it('should reject a PNG whose image data fails its checksum', () => {
     const attachment = createImageAttachment({
       data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+c9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    });
+
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
+  });
+
+  it('should reject a VP8 first partition that exceeds the bytes after its keyframe header', () => {
+    const attachment = createImageAttachment({
+      data: createVp8WebpBase64(14, 10),
     });
 
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
