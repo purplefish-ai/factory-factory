@@ -111,7 +111,8 @@ interface RightPanelProps {
   workspaceId: string;
   className?: string;
   messages?: ChatMessage[];
-  onTakeScreenshots?: () => void;
+  isTakingScreenshots?: boolean;
+  onTakeScreenshots?: () => Promise<void>;
 }
 
 interface TopPanelAreaProps {
@@ -119,7 +120,8 @@ interface TopPanelAreaProps {
   messages: ChatMessage[];
   activeTopTab: TopPanelTab;
   onTopTabChange: (tab: TopPanelTab) => void;
-  onTakeScreenshots: () => void;
+  isTakingScreenshots: boolean;
+  onTakeScreenshots?: () => void;
   isAutoIteration: boolean;
   periodicTaskId: string | null;
   isParentWorkspace: boolean;
@@ -130,6 +132,7 @@ function TopPanelArea({
   messages,
   activeTopTab,
   onTopTabChange,
+  isTakingScreenshots,
   onTakeScreenshots,
   isAutoIteration,
   periodicTaskId,
@@ -224,7 +227,11 @@ function TopPanelArea({
         {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
         {showTasks && <TodoPanelContainer messages={messages} />}
         {showScreenshots && (
-          <ScreenshotsPanel workspaceId={workspaceId} onTakeScreenshots={onTakeScreenshots} />
+          <ScreenshotsPanel
+            workspaceId={workspaceId}
+            isTakingScreenshots={isTakingScreenshots}
+            onTakeScreenshots={onTakeScreenshots}
+          />
         )}
         {showAutoIteration && <AutoIterationPanel workspaceId={workspaceId} />}
         {showPeriodicTask && periodicTaskId && (
@@ -240,6 +247,7 @@ export function RightPanel({
   workspaceId,
   className,
   messages = [],
+  isTakingScreenshots = false,
   onTakeScreenshots,
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
@@ -325,7 +333,7 @@ export function RightPanel({
 
   const handleTakeScreenshots = useCallback(() => {
     handleTopTabChange('screenshots');
-    onTakeScreenshots?.();
+    void onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
   // Auto-select the auto-iteration or periodic-task tab on first load,
@@ -426,7 +434,8 @@ export function RightPanel({
           messages={messages}
           activeTopTab={activeTopTab}
           onTopTabChange={handleTopTabChange}
-          onTakeScreenshots={handleTakeScreenshots}
+          isTakingScreenshots={isTakingScreenshots}
+          onTakeScreenshots={onTakeScreenshots ? handleTakeScreenshots : undefined}
           isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
           isParentWorkspace={isParentWorkspace}

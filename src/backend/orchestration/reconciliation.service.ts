@@ -6,22 +6,22 @@ import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('reconciliation');
 
+interface WorkspaceNeedingWorktree {
+  id: string;
+  status: string;
+  branchName: string | null;
+  initStartedAt: Date | null;
+  initScriptPid: number | null;
+}
+
 /** Workspace capabilities needed for reconciliation, injected at startup. */
 export interface ReconciliationWorkspaceBridge {
-  markFailed(workspaceId: string, reason: string): Promise<void>;
+  recoverStaleProvisioningWorkspace(workspaceId: string, reason: string): Promise<boolean>;
   initializeWorktree(
     workspaceId: string,
     options?: { branchName?: string; useExistingBranch?: boolean }
   ): Promise<void>;
-  findNeedingWorktree(): Promise<
-    Array<{
-      id: string;
-      status: string;
-      branchName: string | null;
-      initStartedAt: Date | null;
-      initScriptPid: number | null;
-    }>
-  >;
+  findNeedingWorktree(): Promise<WorkspaceNeedingWorktree[]>;
 }
 
 export interface ReconciliationTerminalBridge {
@@ -155,45 +155,55 @@ class ReconciliationService {
 
     for (const workspace of workspacesNeedingWorktree) {
       if (workspace.status === 'PROVISIONING') {
-        if (workspace.initScriptPid && isProcessRunning(workspace.initScriptPid)) {
-          logger.info('Skipping stale provisioning workspace with running init script', {
-            workspaceId: workspace.id,
-            initStartedAt: workspace.initStartedAt,
-            initScriptPid: workspace.initScriptPid,
-          });
-          continue;
-        }
-
-        // Stale provisioning - mark as failed so user can retry
-        try {
-          await this.workspace.markFailed(
-            workspace.id,
-            'Provisioning timed out. This may indicate a server restart during initialization. Please retry.'
-          );
-          logger.warn('Marked stale provisioning workspace as failed', {
-            workspaceId: workspace.id,
-            initStartedAt: workspace.initStartedAt,
-          });
-        } catch (error) {
-          logger.error('Failed to mark stale workspace as failed', toError(error), {
-            workspaceId: workspace.id,
-          });
-        }
+        await this.recoverStaleProvisioningWorkspace(workspace);
       } else {
-        // NEW workspace - initialize normally
-        try {
-          await this.workspace.initializeWorktree(workspace.id, {
-            branchName: workspace.branchName ?? undefined,
-          });
-          logger.info('Initialized workspace via reconciliation', {
-            workspaceId: workspace.id,
-          });
-        } catch (error) {
-          logger.error('Failed to initialize workspace', toError(error), {
-            workspaceId: workspace.id,
-          });
-        }
+        await this.initializeNewWorkspace(workspace);
       }
+    }
+  }
+
+  private async recoverStaleProvisioningWorkspace(
+    workspace: WorkspaceNeedingWorktree
+  ): Promise<void> {
+    if (workspace.initScriptPid && isProcessRunning(workspace.initScriptPid)) {
+      logger.info('Skipping stale provisioning workspace with running init script', {
+        workspaceId: workspace.id,
+        initStartedAt: workspace.initStartedAt,
+        initScriptPid: workspace.initScriptPid,
+      });
+      return;
+    }
+
+    try {
+      const recovered = await this.workspace.recoverStaleProvisioningWorkspace(
+        workspace.id,
+        'Provisioning timed out. This may indicate a server restart during initialization. Please retry.'
+      );
+      if (recovered) {
+        logger.warn('Marked stale provisioning workspace as failed', {
+          workspaceId: workspace.id,
+          initStartedAt: workspace.initStartedAt,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to recover stale provisioning workspace', toError(error), {
+        workspaceId: workspace.id,
+      });
+    }
+  }
+
+  private async initializeNewWorkspace(workspace: WorkspaceNeedingWorktree): Promise<void> {
+    try {
+      await this.workspace.initializeWorktree(workspace.id, {
+        branchName: workspace.branchName ?? undefined,
+      });
+      logger.info('Initialized workspace via reconciliation', {
+        workspaceId: workspace.id,
+      });
+    } catch (error) {
+      logger.error('Failed to initialize workspace', toError(error), {
+        workspaceId: workspace.id,
+      });
     }
   }
 

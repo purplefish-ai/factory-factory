@@ -421,7 +421,7 @@ function isValidVp8Chunk(bytes: Buffer, dataStart: number, dataLength: number): 
     bytes.readUInt8(dataStart + 3) === 0x9d &&
     bytes.readUInt8(dataStart + 4) === 0x01 &&
     bytes.readUInt8(dataStart + 5) === 0x2a &&
-    firstPartitionLength <= dataLength - 3 &&
+    firstPartitionLength <= dataLength - 10 &&
     width > 0 &&
     height > 0
   );

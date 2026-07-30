@@ -24,11 +24,14 @@ function appendNormalizedSegment(
   segments.push(segment);
 }
 
-function normalizePathForComparison(pathname: string): string {
-  const hasLeadingSlash = pathname.startsWith('/');
+function normalizePathForComparison(pathname: string, usesWindowsPathSemantics: boolean): string {
+  const normalizedInput = usesWindowsPathSemantics ? pathname.replace(/\\/g, '/') : pathname;
+  const hasLeadingSlash =
+    normalizedInput.startsWith('/') ||
+    (usesWindowsPathSemantics && /^[A-Za-z]:\//.test(normalizedInput));
   const segments: string[] = [];
 
-  for (const segment of pathname.split('/')) {
+  for (const segment of normalizedInput.split('/')) {
     appendNormalizedSegment(segments, segment, hasLeadingSlash);
   }
 
@@ -79,9 +82,19 @@ export function resolveWorkspaceFileLink(
     return null;
   }
 
-  const filePath = normalizePathForComparison(stripLineSuffix(pathname));
-  const workspaceRoot = normalizePathForComparison(worktreePath);
-  if (!(filePath === workspaceRoot || filePath.startsWith(`${workspaceRoot}/`))) {
+  const usesWindowsPathSemantics = /^[A-Za-z]:[\\/]/.test(worktreePath);
+  const filePath = normalizePathForComparison(stripLineSuffix(pathname), usesWindowsPathSemantics);
+  const workspaceRoot = normalizePathForComparison(worktreePath, usesWindowsPathSemantics);
+  const comparableFilePath = usesWindowsPathSemantics ? filePath.toLowerCase() : filePath;
+  const comparableWorkspaceRoot = usesWindowsPathSemantics
+    ? workspaceRoot.toLowerCase()
+    : workspaceRoot;
+  if (
+    !(
+      comparableFilePath === comparableWorkspaceRoot ||
+      comparableFilePath.startsWith(`${comparableWorkspaceRoot}/`)
+    )
+  ) {
     return null;
   }
 

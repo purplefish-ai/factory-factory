@@ -179,11 +179,6 @@ function parseRemoteName(upstreamRef: string): string | undefined {
 }
 
 function normalizeRemoteBranchName(branchName: string, remoteName: string): string {
-  const remotePrefix = `${remoteName}/`;
-  if (branchName.startsWith(remotePrefix)) {
-    return branchName.slice(remotePrefix.length);
-  }
-
   const fullRefPrefix = `refs/remotes/${remoteName}/`;
   if (branchName.startsWith(fullRefPrefix)) {
     return branchName.slice(fullRefPrefix.length);

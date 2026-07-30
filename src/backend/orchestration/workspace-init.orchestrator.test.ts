@@ -75,6 +75,7 @@ vi.mock('@/backend/services/workspace', () => ({
     markReadyWithWarning: vi.fn(),
   },
   worktreeLifecycleService: {
+    prepareStaleProvisioningRecovery: vi.fn(),
     getInitMode: vi.fn(),
     clearInitMode: vi.fn(),
   },
@@ -133,6 +134,7 @@ import {
 import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
 
 // --- Test Helpers ---
@@ -227,6 +229,82 @@ describe('initializeWorkspaceWorktree', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearWorkspaceInitOrchestratorStateForTests();
+  });
+
+  describe('stale provisioning recovery', () => {
+    it('does not mark failed when the workspace no longer qualifies for recovery', async () => {
+      vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockResolvedValue(false);
+
+      await expect(
+        recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out')
+      ).resolves.toBe(false);
+
+      expect(workspaceStateMachine.markFailed).not.toHaveBeenCalled();
+    });
+
+    it('does not mark failed when orphan preparation fails', async () => {
+      vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockRejectedValue(
+        new Error('worktree removal failed')
+      );
+
+      await expect(
+        recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out')
+      ).rejects.toThrow('worktree removal failed');
+
+      expect(workspaceStateMachine.markFailed).not.toHaveBeenCalled();
+    });
+
+    it('skips stale recovery while initialization is active', async () => {
+      setupHappyPath();
+      const factoryConfig = createDeferredPromise<null>();
+      vi.mocked(FactoryConfigService.readConfig).mockReturnValue(factoryConfig.promise);
+
+      const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
+      await vi.waitFor(() => {
+        expect(gitOpsService.createWorktree).toHaveBeenCalledTimes(1);
+      });
+
+      const recovery = recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out');
+      await expect(recovery).resolves.toBe(false);
+      expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).not.toHaveBeenCalled();
+
+      factoryConfig.resolve(null);
+      await initialization;
+
+      expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.markFailed).not.toHaveBeenCalled();
+    });
+
+    it('finishes stale cleanup and failure transition before a retry can start', async () => {
+      setupHappyPath();
+      const cleanup = createDeferredPromise<boolean>();
+      vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockReturnValue(
+        cleanup.promise
+      );
+
+      const recovery = recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out');
+      await vi.waitFor(() => {
+        expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).toHaveBeenCalledWith(
+          WORKSPACE_ID
+        );
+      });
+
+      const retry = initializeWorkspaceWorktree(WORKSPACE_ID);
+      await Promise.resolve();
+
+      expect(workspaceStateMachine.startProvisioning).not.toHaveBeenCalled();
+
+      cleanup.resolve(true);
+      await Promise.all([recovery, retry]);
+
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'Provisioning timed out'
+      );
+      expect(vi.mocked(workspaceStateMachine.markFailed).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(workspaceStateMachine.startProvisioning).mock.invocationCallOrder[0]!
+      );
+    });
   });
 
   describe('provisioning gate', () => {

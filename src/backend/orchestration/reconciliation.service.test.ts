@@ -2,15 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock Prisma
 const mockFindMany = vi.fn();
-const mockFindUnique = vi.fn();
-const mockUpdate = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
-      findUnique: (...args: unknown[]) => mockFindUnique(...args),
-      update: (...args: unknown[]) => mockUpdate(...args),
     },
   },
 }));
@@ -31,6 +27,7 @@ vi.mock('@/backend/services/terminal', () => ({
 }));
 
 const mockInitializeWorktree = vi.fn();
+const mockRecoverStaleProvisioningWorkspace = vi.fn();
 
 import { terminalSessionService } from '@/backend/services/terminal';
 // Import after mocks are set up
@@ -41,20 +38,13 @@ describe('ReconciliationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    mockRecoverStaleProvisioningWorkspace.mockReset().mockResolvedValue(true);
     reconciliationService.configure({
       workspace: {
-        markFailed: async (workspaceId: string, reason: string) => {
-          const current = await mockFindUnique({ where: { id: workspaceId } });
-          if (!current) {
-            throw new Error('Not found');
-          }
-          await mockUpdate({
-            where: { id: workspaceId },
-            data: { status: 'FAILED', initErrorMessage: reason },
-          });
-        },
         initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
         findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+        recoverStaleProvisioningWorkspace: (workspaceId: string, reason: string) =>
+          mockRecoverStaleProvisioningWorkspace(workspaceId, reason),
       },
       terminal: {
         recoverOrphanedSessions: () => terminalSessionService.recoverOrphanedSessions(),
@@ -87,7 +77,7 @@ describe('ReconciliationService', () => {
       });
     });
 
-    it('should mark stale PROVISIONING workspaces as FAILED', async () => {
+    it('should recover stale PROVISIONING workspaces', async () => {
       const now = new Date('2024-01-15T12:00:00Z');
       vi.setSystemTime(now);
 
@@ -102,22 +92,14 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([staleWorkspace]);
-      mockFindUnique.mockResolvedValue(staleWorkspace);
-      mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
-
       await reconciliationService.reconcile();
 
       // Should NOT call initializeWorktree for stale PROVISIONING
       expect(mockInitializeWorktree).not.toHaveBeenCalled();
-
-      // Should transition to FAILED via state machine
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-2' },
-        data: expect.objectContaining({
-          status: 'FAILED',
-          initErrorMessage: expect.stringContaining('timed out'),
-        }),
-      });
+      expect(mockRecoverStaleProvisioningWorkspace).toHaveBeenCalledWith(
+        'ws-2',
+        expect.stringContaining('timed out')
+      );
     });
 
     it('should not fail stale PROVISIONING workspaces while init script PID is running', async () => {
@@ -137,7 +119,7 @@ describe('ReconciliationService', () => {
 
       expect(killSpy).toHaveBeenCalledWith(12_345, 0);
       expect(mockInitializeWorktree).not.toHaveBeenCalled();
-      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockRecoverStaleProvisioningWorkspace).not.toHaveBeenCalled();
     });
 
     it('should fail stale PROVISIONING workspaces when init script PID is not running', async () => {
@@ -151,8 +133,6 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([staleWorkspace]);
-      mockFindUnique.mockResolvedValue(staleWorkspace);
-      mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
       vi.spyOn(process, 'kill').mockImplementation(() => {
         const error = new Error('No such process') as NodeJS.ErrnoException;
         error.code = 'ESRCH';
@@ -161,12 +141,10 @@ describe('ReconciliationService', () => {
 
       await reconciliationService.reconcile();
 
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-dead' },
-        data: expect.objectContaining({
-          status: 'FAILED',
-        }),
-      });
+      expect(mockRecoverStaleProvisioningWorkspace).toHaveBeenCalledWith(
+        'ws-dead',
+        expect.stringContaining('timed out')
+      );
     });
 
     it('should handle mixed NEW and stale PROVISIONING workspaces', async () => {
@@ -190,8 +168,6 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([newWorkspace, staleWorkspace]);
-      mockFindUnique.mockResolvedValue(staleWorkspace);
-      mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
       mockInitializeWorktree.mockResolvedValue(undefined);
 
       await reconciliationService.reconcile();
@@ -201,13 +177,10 @@ describe('ReconciliationService', () => {
         branchName: 'feature/new',
       });
 
-      // Stale PROVISIONING should be marked as FAILED
-      expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: 'ws-2' },
-        data: expect.objectContaining({
-          status: 'FAILED',
-        }),
-      });
+      expect(mockRecoverStaleProvisioningWorkspace).toHaveBeenCalledWith(
+        'ws-2',
+        expect.stringContaining('timed out')
+      );
     });
 
     it('should handle errors gracefully when initializing NEW workspaces', async () => {
@@ -239,7 +212,7 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([staleWorkspace]);
-      mockFindUnique.mockRejectedValue(new Error('Database error'));
+      mockRecoverStaleProvisioningWorkspace.mockRejectedValue(new Error('Database error'));
 
       // Should not throw
       await expect(reconciliationService.reconcile()).resolves.not.toThrow();

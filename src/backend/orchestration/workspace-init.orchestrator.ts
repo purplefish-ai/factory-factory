@@ -57,7 +57,7 @@ type WorkspaceInitializationOptions = {
 };
 
 const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
-const workspaceInitializationTails = new Map<string, Promise<void>>();
+const workspaceInitializationTails = new Map<string, Promise<unknown>>();
 
 function getCachedGitHubUsername(): Promise<string | null> {
   return gitHubUsernameCache.getCachedUsername();
@@ -835,14 +835,12 @@ async function runWorkspaceInitialization(
   }
 }
 
-export function initializeWorkspaceWorktree(
+function enqueueWorkspaceInitializationTask<T>(
   workspaceId: string,
-  options?: WorkspaceInitializationOptions
-): Promise<void> {
+  task: () => Promise<T>
+): Promise<T> {
   const previousInitialization = workspaceInitializationTails.get(workspaceId) ?? Promise.resolve();
-  const initialization = previousInitialization
-    .catch(() => undefined)
-    .then(() => runWorkspaceInitialization(workspaceId, options));
+  const initialization = previousInitialization.catch(() => undefined).then(task);
 
   workspaceInitializationTails.set(workspaceId, initialization);
 
@@ -851,4 +849,34 @@ export function initializeWorkspaceWorktree(
       workspaceInitializationTails.delete(workspaceId);
     }
   });
+}
+
+export function recoverStaleProvisioningWorkspace(
+  workspaceId: string,
+  reason: string
+): Promise<boolean> {
+  // A live initializer owns the path until it settles; the next poll can re-check it.
+  if (workspaceInitializationTails.has(workspaceId)) {
+    return Promise.resolve(false);
+  }
+
+  return enqueueWorkspaceInitializationTask(workspaceId, async () => {
+    const shouldRecover =
+      await worktreeLifecycleService.prepareStaleProvisioningRecovery(workspaceId);
+    if (!shouldRecover) {
+      return false;
+    }
+
+    await workspaceStateMachine.markFailed(workspaceId, reason);
+    return true;
+  });
+}
+
+export function initializeWorkspaceWorktree(
+  workspaceId: string,
+  options?: WorkspaceInitializationOptions
+): Promise<void> {
+  return enqueueWorkspaceInitializationTask(workspaceId, () =>
+    runWorkspaceInitialization(workspaceId, options)
+  );
 }

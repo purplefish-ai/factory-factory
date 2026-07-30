@@ -245,21 +245,21 @@ export interface ChangeTreeNode {
  */
 export function buildChangeTree(entries: ChangeListEntry[]): ChangeTreeNode[] {
   const root: ChangeTreeNode[] = [];
-  // Maps a directory path to its children array (for virtual dirs only)
-  const dirChildrenMap = new Map<string, ChangeTreeNode[]>();
+  const directoryNodeMap = new Map<string, ChangeTreeNode>();
 
-  function ensureVirtualDirChain(dirPath: string): ChangeTreeNode[] {
-    const existing = dirChildrenMap.get(dirPath);
+  function ensureDirectoryNode(dirPath: string): ChangeTreeNode {
+    const existing = directoryNodeMap.get(dirPath);
     if (existing) {
       return existing;
     }
     const lastSlash = dirPath.lastIndexOf('/');
-    const parentList = lastSlash === -1 ? root : ensureVirtualDirChain(dirPath.slice(0, lastSlash));
+    const parentList =
+      lastSlash === -1 ? root : ensureDirectoryNode(dirPath.slice(0, lastSlash)).children;
     const name = lastSlash === -1 ? dirPath : dirPath.slice(lastSlash + 1);
     const node: ChangeTreeNode = { name, path: dirPath, type: 'directory', children: [] };
-    dirChildrenMap.set(dirPath, node.children);
+    directoryNodeMap.set(dirPath, node);
     parentList.push(node);
-    return node.children;
+    return node;
   }
 
   for (const entry of entries) {
@@ -267,15 +267,21 @@ export function buildChangeTree(entries: ChangeListEntry[]): ChangeTreeNode[] {
     // Git reports untracked directories with a trailing slash (e.g. "newfolder/")
     const isGitDir = path.endsWith('/');
     const normalPath = isGitDir ? path.slice(0, -1) : path;
+
+    if (isGitDir) {
+      ensureDirectoryNode(normalPath).entry = entry;
+      continue;
+    }
+
     const lastSlash = normalPath.lastIndexOf('/');
     const name = lastSlash === -1 ? normalPath : normalPath.slice(lastSlash + 1);
     const parentList =
-      lastSlash === -1 ? root : ensureVirtualDirChain(normalPath.slice(0, lastSlash));
+      lastSlash === -1 ? root : ensureDirectoryNode(normalPath.slice(0, lastSlash)).children;
 
     parentList.push({
       name,
       path: normalPath,
-      type: isGitDir ? 'directory' : 'file',
+      type: 'file',
       entry,
       children: [],
     });
@@ -531,9 +537,10 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
     );
   }
 
-  // Git-reported untracked directory: delegate to self-contained component that fetches children
+  // Git-reported directories without inferred children fetch their contents on demand.
+  // When inferred children exist, the flattened tree is the single source of child rows.
   const isGitReported = !!node.entry;
-  if (isGitReported && workspaceId) {
+  if (isGitReported && node.children.length === 0 && workspaceId) {
     return (
       <GitReportedDirRow
         node={node}
@@ -555,15 +562,22 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
       style={{ paddingLeft: `${depth * 12 + 4}px` }}
-      title={node.path}
+      title={isGitReported ? `Untracked: ${node.path}` : node.path}
     >
       {isExpanded ? (
         <CaretDownIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       ) : (
         <CaretRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       )}
-      <FolderIcon className="h-4 w-4 shrink-0 text-brand" />
+      <FolderIcon
+        className={cn('h-4 w-4 shrink-0', isGitReported ? 'text-muted-foreground' : 'text-brand')}
+      />
       <span className="flex-1 truncate font-medium">{node.name}</span>
+      {node.entry && (
+        <span className="text-xs font-mono uppercase text-muted-foreground">
+          {node.entry.statusCode ?? '?'}
+        </span>
+      )}
     </button>
   );
 });

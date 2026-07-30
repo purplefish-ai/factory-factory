@@ -58,6 +58,7 @@ vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', 
 }));
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
+  recoverStaleProvisioningWorkspace: vi.fn(),
   retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
 }));
 vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
@@ -190,6 +191,7 @@ import {
 } from '@/backend/orchestration/workspace-children.orchestrator';
 import {
   initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
 } from '@/backend/orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
@@ -376,6 +378,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     rateLimiter,
     ratchetService,
     reconciliationService,
+    recoverStaleProvisioningWorkspace,
     retryQueuedDispatchAfterWorkspaceReady,
     runScriptConfigPersistenceService,
     runScriptService: createRunScriptService({ registerShutdownHandlers: false }),

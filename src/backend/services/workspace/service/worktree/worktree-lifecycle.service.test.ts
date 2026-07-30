@@ -186,6 +186,73 @@ describe('worktreeLifecycleService cleanup', () => {
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it('removes the deterministic worktree left by interrupted provisioning', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-cleanup-'));
+    const worktreeBasePath = path.join(tempRoot, 'worktrees');
+    const worktreePath = path.join(worktreeBasePath, 'workspace-workspace-1');
+    const project = {
+      repoPath: path.join(tempRoot, 'repo'),
+      worktreeBasePath,
+    };
+    await mkdir(worktreePath, { recursive: true });
+    vi.spyOn(workspaceAccessor, 'findByIdWithProject').mockResolvedValue(
+      unsafeCoerce({
+        id: 'workspace-1',
+        status: 'PROVISIONING',
+        worktreePath: null,
+        project,
+      })
+    );
+    const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+
+    try {
+      await expect(
+        worktreeLifecycleService.prepareStaleProvisioningRecovery('workspace-1')
+      ).resolves.toBe(true);
+
+      expect(removeSpy).toHaveBeenCalledWith(worktreePath, project);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    {
+      name: 'the worktree path has been persisted',
+      shouldRecover: true,
+      workspace: {
+        status: 'PROVISIONING',
+        worktreePath: '/tmp/worktrees/workspace-workspace-1',
+      },
+    },
+    {
+      name: 'the workspace is no longer provisioning',
+      shouldRecover: false,
+      workspace: {
+        status: 'FAILED',
+        worktreePath: null,
+      },
+    },
+  ])('does not remove a worktree when $name', async ({ shouldRecover, workspace }) => {
+    vi.spyOn(workspaceAccessor, 'findByIdWithProject').mockResolvedValue(
+      unsafeCoerce({
+        id: 'workspace-1',
+        ...workspace,
+        project: {
+          repoPath: '/tmp/repo',
+          worktreeBasePath: '/tmp/worktrees',
+        },
+      })
+    );
+    const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+
+    await expect(
+      worktreeLifecycleService.prepareStaleProvisioningRecovery('workspace-1')
+    ).resolves.toBe(shouldRecover);
+
+    expect(removeSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('worktreeLifecycleService init mode', () => {

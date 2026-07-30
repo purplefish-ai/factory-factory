@@ -35,6 +35,7 @@ function createPromptService() {
     promptTurnCompletionService: promptTurnCompletionService as never,
     lifecycleEventService: lifecycleEventService as never,
     getStopGeneration: () => 0,
+    isStopGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
     isSessionStopping,
   });
 
@@ -104,6 +105,7 @@ function createLifecyclePromptHarness() {
     promptTurnCompletionService: { schedule: vi.fn() } as never,
     lifecycleEventService,
     getStopGeneration: () => 0,
+    isStopGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
     isSessionStopping: () => false,
   });
 

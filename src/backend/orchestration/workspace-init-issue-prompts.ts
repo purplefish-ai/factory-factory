@@ -100,7 +100,10 @@ export async function buildInitialPromptFromLinearIssue(
       url: issue.url,
       commitReference: issue.identifier,
       closeReference: issue.identifier,
-      rawScreenshotBaseUrl: `https://raw.githubusercontent.com/${project.githubOwner}/${project.githubRepo}/`,
+      rawScreenshotBaseUrl:
+        project.githubOwner && project.githubRepo
+          ? `https://raw.githubusercontent.com/${project.githubOwner}/${project.githubRepo}/`
+          : '',
     });
   } catch (error) {
     logger.warn('Error building initial prompt from Linear issue', {

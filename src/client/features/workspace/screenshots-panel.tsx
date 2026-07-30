@@ -1,5 +1,5 @@
 import { CameraIcon, SpinnerGapIcon, XIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,6 +12,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 
 interface ScreenshotsPanelProps {
   workspaceId: string;
+  isTakingScreenshots: boolean;
   onTakeScreenshots?: () => void;
 }
 
@@ -19,11 +20,13 @@ interface ScreenshotsPanelProps {
 // Main Component
 // =============================================================================
 
-export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: ScreenshotsPanelProps) {
+export function ScreenshotsPanel({
+  workspaceId,
+  isTakingScreenshots,
+  onTakeScreenshots,
+}: ScreenshotsPanelProps) {
   const { openTab } = useWorkspacePanel();
   const utils = trpc.useUtils();
-  const [isTaking, setIsTaking] = useState(false);
-  const prevCountRef = useRef(0);
 
   const deleteMutation = trpc.workspace.deleteScreenshot.useMutation({
     onSuccess: () => {
@@ -33,21 +36,15 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
 
   const { data, isLoading } = trpc.workspace.listScreenshots.useQuery(
     { workspaceId },
-    { refetchInterval: isTaking ? 3000 : 10_000, staleTime: isTaking ? 1000 : 5000 }
+    {
+      refetchInterval: isTakingScreenshots ? 3000 : 10_000,
+      staleTime: isTakingScreenshots ? 1000 : 5000,
+    }
   );
 
   const screenshots = data?.screenshots ?? [];
 
-  // Clear isTaking when new screenshots appear
-  useEffect(() => {
-    if (isTaking && screenshots.length > prevCountRef.current) {
-      setIsTaking(false);
-    }
-    prevCountRef.current = screenshots.length;
-  }, [screenshots.length, isTaking]);
-
   const handleTakeScreenshots = useCallback(() => {
-    setIsTaking(true);
     onTakeScreenshots?.();
   }, [onTakeScreenshots]);
 
@@ -64,7 +61,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
       <div className="flex flex-col items-center justify-center h-full text-center p-4 gap-3">
         <CameraIcon className="h-8 w-8 text-muted-foreground" />
         <div>
-          {isTaking ? (
+          {isTakingScreenshots ? (
             <>
               <p className="text-sm font-medium text-muted-foreground">Taking Screenshots...</p>
               <p className="text-xs text-muted-foreground/70 mt-1">
@@ -80,7 +77,7 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
             </>
           )}
         </div>
-        {isTaking ? (
+        {isTakingScreenshots ? (
           <SpinnerGapIcon className="h-5 w-5 animate-spin text-muted-foreground" />
         ) : (
           onTakeScreenshots && (
