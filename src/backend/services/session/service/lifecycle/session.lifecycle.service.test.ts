@@ -88,6 +88,14 @@ async function deliverPendingChildNotifications(
   ).deliverPendingChildNotifications(sessionId, workspaceId);
 }
 
+function getStopGenerations(service: SessionLifecycleService): Map<string, number> {
+  return (
+    service as unknown as {
+      stopGenerations: Map<string, number>;
+    }
+  ).stopGenerations;
+}
+
 function createStoppableLifecycleService() {
   const repository = {
     getSessionsByWorkspaceId: vi.fn(async () => [
@@ -256,11 +264,7 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       );
     });
 
-    (
-      service as unknown as {
-        stopGenerations: Map<string, number>;
-      }
-    ).stopGenerations.set('session-1', 1);
+    getStopGenerations(service).set('session-1', service.getStopGeneration('session-1') + 1);
     resolvePending([
       {
         id: 'notif-parent',
@@ -918,6 +922,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     });
 
     await service.stopSession('session-1');
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
     resolveSettings(
       unsafeCoerce<UserSettings>({
         defaultWorkspacePermissions: 'STRICT',
@@ -930,6 +935,15 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     );
     expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
     expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
+  it('releases the stop generation after a session stops', async () => {
+    const { service } = createStartableLifecycleService();
+
+    await service.stopSession('session-1');
+
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
   });
 
   it('waits for a registered client creation and stops the resulting runtime', async () => {

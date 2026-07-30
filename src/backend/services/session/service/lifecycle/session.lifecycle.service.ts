@@ -112,6 +112,7 @@ export class SessionLifecycleService {
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly stoppingSessions = new Set<string>();
+  private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
   private readonly clientCreationOperations = new Map<string, Set<Promise<AcpProcessHandle>>>();
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
@@ -217,12 +218,13 @@ export class SessionLifecycleService {
       return;
     }
 
-    this.stopGenerations.set(sessionId, this.getStopGeneration(sessionId) + 1);
+    this.advanceStopGeneration(sessionId);
     this.stoppingSessions.add(sessionId);
     try {
       await this.stopSessionWithBarrier(sessionId, options);
     } finally {
       this.stoppingSessions.delete(sessionId);
+      this.stopGenerations.delete(sessionId);
     }
   }
 
@@ -434,11 +436,24 @@ export class SessionLifecycleService {
   }
 
   getStopGeneration(sessionId: string): number {
-    return this.stopGenerations.get(sessionId) ?? 0;
+    return this.stopGenerations.get(sessionId) ?? this.advanceStopGeneration(sessionId);
+  }
+
+  isStopGenerationCurrent(sessionId: string, stopGeneration: number): boolean {
+    return this.stopGenerations.get(sessionId) === stopGeneration;
+  }
+
+  private advanceStopGeneration(sessionId: string): number {
+    this.stopGenerationCounter += 1;
+    this.stopGenerations.set(sessionId, this.stopGenerationCounter);
+    return this.stopGenerationCounter;
   }
 
   private assertStartupAllowed(sessionId: string, stopGeneration: number): void {
-    if (this.isSessionStopping(sessionId) || this.getStopGeneration(sessionId) !== stopGeneration) {
+    if (
+      this.isSessionStopping(sessionId) ||
+      !this.isStopGenerationCurrent(sessionId, stopGeneration)
+    ) {
       throw new Error('Session is currently being stopped');
     }
   }
@@ -544,6 +559,7 @@ export class SessionLifecycleService {
           try {
             this.clearSessionStoreIfInactive(sid, 'runtime_exit');
           } finally {
+            this.stopGenerations.delete(sid);
             acpTraceLogger.closeSession(sid);
           }
         }

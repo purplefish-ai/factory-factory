@@ -28,6 +28,7 @@ const {
     getSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
     getStopGeneration: vi.fn(),
+    isStopGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     setSessionModel: vi.fn(),
@@ -110,6 +111,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getStopGeneration.mockReturnValue(0);
+    mockSessionService.isStopGenerationCurrent.mockReturnValue(true);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -231,6 +233,9 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     });
     let stopGeneration = 0;
     mockSessionService.getStopGeneration.mockImplementation(() => stopGeneration);
+    mockSessionService.isStopGenerationCurrent.mockImplementation(
+      (_sessionId: string, generation: number) => generation === stopGeneration
+    );
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
 

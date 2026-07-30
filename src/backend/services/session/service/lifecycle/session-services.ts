@@ -71,6 +71,8 @@ const sessionPromptCoordinator = new SessionService({
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   getStopGeneration: (sessionId): number => sessionLifecycleService.getStopGeneration(sessionId),
+  isStopGenerationCurrent: (sessionId, stopGeneration): boolean =>
+    sessionLifecycleService.isStopGenerationCurrent(sessionId, stopGeneration),
   isSessionStopping: (sessionId): boolean => sessionLifecycleService.isSessionStopping(sessionId),
 });
 
