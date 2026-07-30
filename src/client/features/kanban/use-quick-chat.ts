@@ -22,6 +22,10 @@ export function useQuickChat(workspaceId: string | null) {
       setSelectedSessionId(null);
       return;
     }
+    if (sessions?.length === 0) {
+      setSelectedSessionId(null);
+      return;
+    }
     if (sessions && sessions.length > 0) {
       // Keep current selection if it's still valid
       const currentValid = sessions.some((s) => s.id === selectedSessionId);
