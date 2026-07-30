@@ -158,7 +158,8 @@ describe('SessionService prompt coordination', () => {
         { type: 'text', text: 'tool output' },
         { type: 'text', text: '{"ok":true}' },
       ],
-      14_400_000
+      14_400_000,
+      { timeoutKind: 'standard_user_turn' }
     );
   });
 
@@ -176,7 +177,8 @@ describe('SessionService prompt coordination', () => {
     expect(sendAcpMessageSpy).toHaveBeenCalledWith(
       'session-1',
       [{ type: 'text', text: '[Image: not supported by this provider]' }],
-      14_400_000
+      14_400_000,
+      { timeoutKind: 'standard_user_turn' }
     );
   });
 
@@ -210,6 +212,24 @@ describe('SessionService prompt coordination', () => {
         reason: 'PROMPT_TIMEOUT',
         message: 'Turn stopped: reached the 4-hour limit.',
         dedupeKey: expect.stringMatching(/^turn:.+:stop$/),
+      })
+    );
+  });
+
+  it('records the configured auto-iteration timeout instead of the four-hour copy', async () => {
+    const { service, runtimeManager, lifecycleEventService } = createPromptService();
+    runtimeManager.sendPrompt.mockRejectedValue(new PromptTimeoutError('session-1', 300_000));
+
+    await expect(
+      service.sendAcpMessage('session-1', [{ type: 'text', text: 'iterate' }], 300_000, {
+        timeoutKind: 'configured',
+      })
+    ).rejects.toThrow(PromptTimeoutError);
+
+    expect(lifecycleEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'PROMPT_TIMEOUT',
+        message: 'Turn stopped: reached the configured 5-minute limit.',
       })
     );
   });
@@ -300,6 +320,11 @@ describe('SessionService prompt coordination', () => {
     'password=hunter2',
     'cookie=session%3Dprivate',
     'Bearer private-token',
+    'ghp_1234567890abcdefghijklmnopqrstuvwxyz',
+    'sk-proj-1234567890abcdefghijklmnopqrstuvwxyz',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature',
+    'https://martin:supersecret@example.com/api',
+    '/Users/martin/private/prompt.txt: failed on customer@example.com',
   ])('does not retain secret-bearing ACP error details in the transcript or lifecycle event: %s', async (error) => {
     const { service, runtimeManager, sessionDomainService, lifecycleEvents, acpEventProcessor } =
       createLifecyclePromptHarness();

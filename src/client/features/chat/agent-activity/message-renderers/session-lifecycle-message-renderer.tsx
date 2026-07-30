@@ -32,7 +32,7 @@ export function SessionLifecycleMessageRenderer({
         className
       )}
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="break-words">{message.lifecycle.message}</p>
         <time className="mt-0.5 block text-xs opacity-80" dateTime={message.lifecycle.timestamp}>

@@ -38,6 +38,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
       getClient: vi.fn().mockReturnValue(undefined),
       getOrCreateClient: vi.fn(),
       stopClient: vi.fn(),
+      beginShutdown: vi.fn().mockReturnValue([]),
       stopAllClients: vi.fn(),
       sendPrompt: vi.fn(),
       cancelPrompt: vi.fn(),

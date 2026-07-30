@@ -25,7 +25,7 @@ export interface RecordLifecycleEventInput {
 
 type SessionLifecycleEventDomain = Pick<
   SessionDomainService,
-  | 'emitDelta'
+  | 'emitSessionSnapshot'
   | 'getTranscriptSnapshot'
   | 'removeTranscriptMessageById'
   | 'replaceTranscript'
@@ -71,6 +71,9 @@ export class SessionLifecycleEventService {
       logger.error('Failed hydrating session lifecycle events', toError(error), { sessionId });
       return;
     }
+    if (events.length === 0) {
+      return;
+    }
 
     const transcript = this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId);
     this.dependencies.sessionDomainService.replaceTranscript(
@@ -79,35 +82,15 @@ export class SessionLifecycleEventService {
     );
   }
 
-  private publish(sessionId: string, message: ChatMessage): void {
-    const previousOrderById = new Map(
-      this.dependencies.sessionDomainService
-        .getTranscriptSnapshot(sessionId)
-        .map((entry) => [entry.id, entry.order])
+  private publish(sessionId: string, message: ChatMessage, forceSnapshot = false): void {
+    const inserted = this.dependencies.sessionDomainService.upsertLifecycleMessage(
+      sessionId,
+      message
     );
-    if (!this.dependencies.sessionDomainService.upsertLifecycleMessage(sessionId, message)) {
+    if (!(inserted || forceSnapshot)) {
       return;
     }
-    const changedMessages = this.dependencies.sessionDomainService
-      .getTranscriptSnapshot(sessionId)
-      .filter(
-        (entry) =>
-          entry.source === 'agent' &&
-          entry.message !== undefined &&
-          previousOrderById.get(entry.id) !== entry.order
-      );
-    for (const changedMessage of changedMessages) {
-      const agentMessage = changedMessage.message;
-      if (!agentMessage) {
-        continue;
-      }
-      this.dependencies.sessionDomainService.emitDelta(sessionId, {
-        type: 'agent_message',
-        data: agentMessage,
-        messageId: changedMessage.id,
-        order: changedMessage.order,
-      });
-    }
+    this.dependencies.sessionDomainService.emitSessionSnapshot(sessionId);
   }
 
   private publishBestEffort(
@@ -116,14 +99,14 @@ export class SessionLifecycleEventService {
     durable: boolean
   ): void {
     try {
-      if (durable) {
+      const removedTransient =
+        durable &&
         this.dependencies.sessionDomainService.removeTranscriptMessageById(
           input.sessionId,
           transientLifecycleMessageId(input),
           { emitSnapshot: false }
         );
-      }
-      this.publish(input.sessionId, message);
+      this.publish(input.sessionId, message, removedTransient);
     } catch (error) {
       logger.error('Failed publishing session lifecycle event', toError(error), {
         ...lifecycleEventLogContext(input),

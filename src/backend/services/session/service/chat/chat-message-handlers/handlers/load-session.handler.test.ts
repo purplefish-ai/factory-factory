@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatMessage } from '@/shared/acp-protocol';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -389,6 +390,106 @@ describe('createLoadSessionHandler', () => {
 
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'CLAUDE',
+    'CODEX',
+  ] as const)('retries full %s history hydration when the failed attempt left lifecycle-only rows', async (provider) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-14T00:00:00.000Z'));
+    try {
+      const sessionId = `session-${provider.toLowerCase()}-lifecycle-retry`;
+      const providerSessionId = `provider-${provider.toLowerCase()}-lifecycle-retry`;
+      const lifecycleMessage: ChatMessage = {
+        id: 'session-lifecycle:event-1',
+        source: 'agent',
+        timestamp: '2026-02-14T00:00:05.000Z',
+        order: 0,
+        message: {
+          type: 'session_lifecycle',
+          lifecycle: {
+            eventId: 'event-1',
+            kind: 'TURN_INTERRUPTED',
+            reason: 'PROVIDER_ERROR',
+            message: 'Turn stopped: the provider returned an error.',
+            timestamp: '2026-02-14T00:00:05.000Z',
+          },
+        },
+      };
+      let transcript: ChatMessage[] = [];
+      mocks.getTranscriptSnapshot.mockImplementation(() => transcript);
+      mocks.hydrateLifecycleEvents.mockImplementation(() => {
+        if (transcript.length === 0) {
+          transcript = [lifecycleMessage];
+        }
+        return Promise.resolve();
+      });
+      mocks.replaceTranscript.mockImplementation(
+        (_loadedSessionId: string, nextTranscript: ChatMessage[]) => {
+          transcript = nextTranscript;
+        }
+      );
+      mocks.findById.mockResolvedValue({
+        provider,
+        status: 'IDLE',
+        model: provider === 'CLAUDE' ? 'claude-sonnet-4-5' : 'gpt-5.3-codex',
+        providerSessionId,
+        workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      });
+      mocks.isHistoryHydrated.mockReturnValue(false);
+      const loader =
+        provider === 'CLAUDE' ? mocks.loadClaudeSessionHistory : mocks.loadCodexSessionHistory;
+      loader
+        .mockResolvedValueOnce({
+          status: 'error',
+          reason: 'read_failed',
+          filePath: `/tmp/${providerSessionId}.jsonl`,
+        })
+        .mockResolvedValueOnce({
+          status: 'loaded',
+          filePath: `/tmp/${providerSessionId}.jsonl`,
+          history: [
+            {
+              type: 'user',
+              content: 'Recovered provider history',
+              timestamp: '2026-02-14T00:00:00.000Z',
+            },
+          ],
+        });
+
+      const handler = createLoadSessionHandler({
+        getClientCreator: () => null,
+        tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+        setManualDispatchResume: vi.fn(),
+      });
+      const context = {
+        ws: { send: vi.fn() } as never,
+        sessionId,
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      };
+
+      await handler(context);
+      vi.advanceTimersByTime(30_001);
+      await handler(context);
+
+      expect(loader).toHaveBeenCalledTimes(2);
+      expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+        sessionId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'user',
+            text: 'Recovered provider history',
+          }),
+          expect.objectContaining({ id: 'session-lifecycle:event-1' }),
+        ]),
+        { historySource: 'jsonl' }
+      );
+      expect(mocks.markHistoryHydrated).not.toHaveBeenCalledWith(sessionId, 'none');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throttles repeated Claude history reads after read failures', async () => {

@@ -1,5 +1,6 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionStopReason } from '@/backend/services/session';
 import {
   workspaceMaintenanceService,
   workspaceStateMachine,
@@ -31,7 +32,7 @@ export type ArchiveWorkspaceDependencies = {
   sessionLifecycleService: {
     stopWorkspaceSessions(
       workspaceId: string,
-      options?: { reason?: 'WORKSPACE_ARCHIVED' | 'SYSTEM_STOP' | 'USER_STOP' | 'SESSION_CLOSED' }
+      options?: { reason?: SessionStopReason }
     ): Promise<void>;
   };
   terminalService: {

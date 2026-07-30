@@ -81,4 +81,69 @@ describe('session lifecycle transcript', () => {
     ]);
     expect(merged.map((message) => message.order)).toEqual([0, 1, 2]);
   });
+
+  it('fast-paths an empty lifecycle event set without reordering provider history', () => {
+    const transcript = Array.from({ length: 12 }, (_, index) => ({
+      ...providerMessageAtNoon,
+      id: `provider-${index}`,
+      order: index,
+    }));
+
+    const merged = mergeLifecycleTranscript(transcript, []);
+
+    expect(merged).toBe(transcript);
+    expect(merged.map((message) => message.id)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `provider-${index}`)
+    );
+  });
+
+  it('preserves 10+ tied provider blocks even when their ids sort in another order', () => {
+    const transcript = Array.from({ length: 12 }, (_, index) => ({
+      ...providerMessageAtNoon,
+      id: `provider-${index}`,
+      order: index,
+    }));
+    const tiedLifecycleEvent = {
+      ...eventRecord,
+      createdAt: new Date(providerMessageAtNoon.timestamp),
+    };
+
+    const merged = mergeLifecycleTranscript(transcript, [tiedLifecycleEvent]);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      ...Array.from({ length: 12 }, (_, index) => `provider-${index}`),
+      'session-lifecycle:event-1',
+    ]);
+  });
+
+  it('compares parsed instants and preserves provider order for offset-equivalent timestamps', () => {
+    const transcript: ChatMessage[] = [
+      {
+        ...providerMessageAtNoon,
+        id: 'provider-z',
+        timestamp: '2026-07-30T08:00:00.000-04:00',
+        order: 0,
+      },
+      {
+        ...providerMessageAtNoon,
+        id: 'provider-a',
+        timestamp: '2026-07-30T12:00:00.000Z',
+        order: 1,
+      },
+    ];
+
+    const merged = mergeLifecycleTranscript(transcript, [
+      {
+        ...eventRecord,
+        createdAt: new Date('2026-07-30T12:00:00.000Z'),
+      },
+    ]);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'provider-z',
+      'provider-a',
+      'session-lifecycle:event-1',
+    ]);
+    expect(merged.map((message) => message.order)).toEqual([0, 1, 2]);
+  });
 });

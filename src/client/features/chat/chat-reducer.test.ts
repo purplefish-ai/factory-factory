@@ -1536,6 +1536,105 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('SESSION_SNAPSHOT action', () => {
+    it('authoritatively reconciles mixed rows and transient-to-durable lifecycle recovery', () => {
+      const transientId = 'session-lifecycle:transient:session-1:stop-1';
+      const state = createInitialChatState({
+        messages: [
+          {
+            id: 'user-1',
+            source: 'user',
+            text: 'Question',
+            timestamp: '2026-07-30T12:00:00.000Z',
+            order: 0,
+          },
+          {
+            id: transientId,
+            source: 'agent',
+            timestamp: '2026-07-30T12:30:00.000Z',
+            order: 1,
+            message: {
+              type: 'session_lifecycle',
+              lifecycle: {
+                eventId: 'transient:session-1:stop-1',
+                kind: 'SESSION_STOPPED',
+                reason: 'SYSTEM_STOP',
+                message: 'Session stopped by the system.',
+                timestamp: '2026-07-30T12:30:00.000Z',
+              },
+            },
+          },
+          {
+            id: 'agent-1',
+            source: 'agent',
+            timestamp: '2026-07-30T13:00:00.000Z',
+            order: 2,
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: 'Answer' },
+            },
+          },
+        ],
+      });
+      const durableId = 'session-lifecycle:event-1';
+
+      const reconciled = chatReducer(state, {
+        type: 'SESSION_SNAPSHOT',
+        payload: {
+          messages: [
+            {
+              id: durableId,
+              source: 'agent',
+              timestamp: '2026-07-30T11:00:00.000Z',
+              order: 0,
+              message: {
+                type: 'session_lifecycle',
+                lifecycle: {
+                  eventId: 'event-1',
+                  kind: 'SESSION_STOPPED',
+                  reason: 'SYSTEM_STOP',
+                  message: 'Session stopped by the system.',
+                  timestamp: '2026-07-30T11:00:00.000Z',
+                },
+              },
+            },
+            {
+              id: 'user-1',
+              source: 'user',
+              text: 'Question',
+              timestamp: '2026-07-30T12:00:00.000Z',
+              order: 1,
+            },
+            {
+              id: 'agent-1',
+              source: 'agent',
+              timestamp: '2026-07-30T13:00:00.000Z',
+              order: 2,
+              message: {
+                type: 'assistant',
+                message: { role: 'assistant', content: 'Answer' },
+              },
+            },
+          ],
+          queuedMessages: [],
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            updatedAt: '2026-07-30T13:00:01.000Z',
+          },
+        },
+      });
+
+      expect(reconciled.messages.map((message) => message.id)).toEqual([
+        durableId,
+        'user-1',
+        'agent-1',
+      ]);
+      expect(reconciled.messages.some((message) => message.id === transientId)).toBe(false);
+      expect(reconciled.agentMessageOrderToIndex.get(0)).toBe(0);
+      expect(reconciled.agentMessageOrderToIndex.get(2)).toBe(2);
+    });
+
     it('should preserve lastRejectedMessage for recovery', () => {
       let state: ChatState = {
         ...initialState,

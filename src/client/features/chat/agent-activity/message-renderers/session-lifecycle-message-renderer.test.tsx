@@ -55,4 +55,22 @@ describe('SessionLifecycleMessageRenderer', () => {
     ).toBe(severity);
     root.unmount();
   });
+
+  it('marks the severity icon as decorative', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(SessionLifecycleMessageRenderer, {
+          message: lifecycleMessage('SYSTEM_STOP', 'Session stopped by the system.'),
+        })
+      );
+    });
+
+    const row = container.querySelector('[data-testid="session-lifecycle-message"]');
+    expect(row?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    root.unmount();
+  });
 });

@@ -15,6 +15,30 @@ import type { SessionLifecycleEventService } from './session-lifecycle-event.ser
 const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
+type PromptTimeoutKind = 'standard_user_turn' | 'configured';
+type SendAcpMessageOptions = { timeoutKind?: PromptTimeoutKind };
+
+function formatTimeoutDuration(timeoutMs: number): string {
+  const units = [
+    { milliseconds: 60 * 60 * 1000, label: 'hour' },
+    { milliseconds: 60 * 1000, label: 'minute' },
+    { milliseconds: 1000, label: 'second' },
+  ];
+  for (const unit of units) {
+    if (timeoutMs >= unit.milliseconds && timeoutMs % unit.milliseconds === 0) {
+      const value = timeoutMs / unit.milliseconds;
+      return `${value}-${unit.label}`;
+    }
+  }
+  return `${timeoutMs}-millisecond`;
+}
+
+function timeoutMessage(timeoutMs: number, timeoutKind: PromptTimeoutKind): string {
+  if (timeoutKind === 'standard_user_turn' && timeoutMs === DEFAULT_USER_PROMPT_TIMEOUT_MS) {
+    return 'Turn stopped: reached the 4-hour limit.';
+  }
+  return `Turn stopped: reached the configured ${formatTimeoutDuration(timeoutMs)} limit.`;
+}
 
 export type SessionServiceDependencies = {
   runtimeManager: AcpRuntimeManager;
@@ -62,7 +86,9 @@ export class SessionService {
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS)
+      return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS, {
+        timeoutKind: 'standard_user_turn',
+      })
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
@@ -129,9 +155,14 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  sendAcpMessage(sessionId: string, prompt: ContentBlock[], timeoutMs?: number): Promise<string> {
+  sendAcpMessage(
+    sessionId: string,
+    prompt: ContentBlock[],
+    timeoutMs?: number,
+    options?: SendAcpMessageOptions
+  ): Promise<string> {
     return this.withSerializedAcpPrompt(sessionId, () =>
-      this.executeAcpMessage(sessionId, prompt, timeoutMs)
+      this.executeAcpMessage(sessionId, prompt, timeoutMs, options?.timeoutKind ?? 'configured')
     );
   }
 
@@ -178,7 +209,8 @@ export class SessionService {
   private async executeAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
-    timeoutMs?: number
+    timeoutMs: number | undefined,
+    timeoutKind: PromptTimeoutKind
   ): Promise<string> {
     const stopGeneration = this.getStopGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
@@ -215,7 +247,13 @@ export class SessionService {
       promptError = error;
       promptErrorSet = true;
       if (this.shouldRecordPromptFailure(sessionId, stopGeneration, error)) {
-        await this.recordPromptFailure({ sessionId, workspaceId, attemptKey, error });
+        await this.recordPromptFailure({
+          sessionId,
+          workspaceId,
+          attemptKey,
+          error,
+          timeoutKind,
+        });
       }
       this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', {
         phase: 'error',
@@ -258,7 +296,13 @@ export class SessionService {
   }): Promise<void> {
     const providerError = this.acpEventProcessor.consumePromptProviderError(sessionId, attemptKey);
     if (providerError && this.shouldRecordCompletedPromptProviderError(sessionId, stopGeneration)) {
-      await this.recordPromptFailure({ sessionId, workspaceId, attemptKey, error: providerError });
+      await this.recordPromptFailure({
+        sessionId,
+        workspaceId,
+        attemptKey,
+        error: providerError,
+        timeoutKind: 'configured',
+      });
     }
     this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
       phase: 'idle',
@@ -273,11 +317,13 @@ export class SessionService {
     workspaceId,
     attemptKey,
     error,
+    timeoutKind,
   }: {
     sessionId: string;
     workspaceId: string | undefined;
     attemptKey: string;
     error: unknown;
+    timeoutKind: PromptTimeoutKind;
   }): Promise<void> {
     const reason =
       error instanceof PromptTimeoutError
@@ -299,7 +345,7 @@ export class SessionService {
       reason,
       message:
         error instanceof PromptTimeoutError
-          ? 'Turn stopped: reached the 4-hour limit.'
+          ? timeoutMessage(error.timeoutMs, timeoutKind)
           : toProviderFailureChatMessage(this.acpEventProcessor.getProvider(sessionId), error),
       dedupeKey: `turn:${attemptKey}:stop`,
     });

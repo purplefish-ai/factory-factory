@@ -531,7 +531,9 @@ export function configureDomainBridges(services: BridgeServices): void {
       return session.id;
     },
     async sendPrompt(sessionId, prompt, timeoutMs) {
-      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }], timeoutMs);
+      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }], timeoutMs, {
+        timeoutKind: 'configured',
+      });
     },
     async waitForIdle(_sessionId) {
       // sendAcpMessage already blocks until the turn completes

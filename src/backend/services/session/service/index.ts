@@ -26,7 +26,10 @@ export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
 export { SessionConfigService } from './lifecycle/session.config.service';
-export { SessionLifecycleService } from './lifecycle/session.lifecycle.service';
+export {
+  SessionLifecycleService,
+  type SessionStopReason,
+} from './lifecycle/session.lifecycle.service';
 export { SessionPermissionService } from './lifecycle/session.permission.service';
 export {
   buildChildWorkspaceContext,

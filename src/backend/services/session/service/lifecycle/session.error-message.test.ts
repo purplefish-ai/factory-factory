@@ -42,9 +42,21 @@ describe('toErrorMessage', () => {
 describe('provider failure messages', () => {
   it.each([
     ['  HTTP 529:   Overloaded  ', 'HTTP 529 (Overloaded)'],
+    ['HTTP 500 opaque upstream detail', 'HTTP 500'],
     ['request failed: secret-token=abc', 'The provider returned an error.'],
     ['request failed: api_key=abc', 'The provider returned an error.'],
-    [`HTTP 500 ${'x'.repeat(400)}`, `HTTP 500 ${'x'.repeat(231)}`],
+    ['ghp_1234567890abcdefghijklmnopqrstuvwxyz', 'The provider returned an error.'],
+    ['sk-proj-1234567890abcdefghijklmnopqrstuvwxyz', 'The provider returned an error.'],
+    [
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature',
+      'The provider returned an error.',
+    ],
+    ['https://martin:supersecret@example.com/api', 'The provider returned an error.'],
+    [
+      '/Users/martin/private/prompt.txt: failed on customer@example.com',
+      'The provider returned an error.',
+    ],
+    ['the user asked to publish their private prompt fragment', 'The provider returned an error.'],
   ])('normalizes public provider text', (input, expected) => {
     expect(toPublicProviderErrorMessage(new Error(input))).toBe(expected);
   });

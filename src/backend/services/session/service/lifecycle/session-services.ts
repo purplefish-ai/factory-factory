@@ -12,6 +12,7 @@ import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 import { SessionService } from './session.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
 
 const logger = createLogger('session');
 
@@ -94,6 +95,7 @@ export const sessionLifecycleService: SessionLifecycleService = new SessionLifec
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   retryService: sessionRetryService,
   lifecycleEventService: sessionLifecycleEventService,
+  hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   sendSessionMessage: (sessionId, content): Promise<void> =>
     sessionService.sendSessionMessage(sessionId, content),
   onBeforeStopSession: (sessionId) => {

@@ -78,6 +78,14 @@ import type { AcpClientOptions } from './types';
 
 // ---- Helpers ----
 
+describe('PromptTimeoutError', () => {
+  it('retains the caller-specified timeout for durable classification', () => {
+    const error = new PromptTimeoutError('session-1', 300_000);
+
+    expect((error as PromptTimeoutError & { timeoutMs?: number }).timeoutMs).toBe(300_000);
+  });
+});
+
 function createMockChildProcess(): EventEmitter & {
   pid: number;
   exitCode: number | null;
@@ -1349,6 +1357,61 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopAllClients', () => {
+    it('atomically closes admission and reports active and pending session ids', async () => {
+      const activeChild = setupSuccessfulSpawn();
+      await manager.getOrCreateClient(
+        'session-active',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const pendingChild = createMockChildProcess();
+      exitChildAfterSigterm(pendingChild);
+      mockSpawn.mockReturnValueOnce(pendingChild);
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise(() => {
+            // Remain pending until beginShutdown rejects the creation signal.
+          })
+      );
+      const pendingCreation = manager
+        .getOrCreateClient(
+          'session-pending',
+          { ...defaultOptions(), sessionId: 'session-pending' },
+          defaultHandlers(),
+          defaultContext()
+        )
+        .catch((error: unknown) => error);
+      await vi.waitFor(() => {
+        expect(manager.getPendingClient('session-pending')).toBeDefined();
+      });
+
+      const shutdownSessionIds = (
+        manager as unknown as { beginShutdown(): string[] }
+      ).beginShutdown();
+
+      expect(new Set(shutdownSessionIds)).toEqual(new Set(['session-active', 'session-pending']));
+      await expect(
+        manager.getOrCreateClient(
+          'session-too-late',
+          { ...defaultOptions(), sessionId: 'session-too-late' },
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP runtime manager is shutting down');
+
+      activeChild.kill = vi.fn(() => {
+        activeChild.exitCode = 0;
+        activeChild.emit('exit', 0, null);
+        return true;
+      });
+      await manager.stopAllClients(50);
+      await expect(pendingCreation).resolves.toMatchObject({
+        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      });
+    });
+
     it('clears per-client shutdown timeouts when clients stop quickly', async () => {
       const firstChild = setupSuccessfulSpawn();
 

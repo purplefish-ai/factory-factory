@@ -1,8 +1,5 @@
 const MAX_ERROR_MESSAGE_LENGTH = 4000;
-const MAX_PUBLIC_PROVIDER_ERROR_MESSAGE_LENGTH = 240;
 const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
-const SENSITIVE_PROVIDER_ERROR_PATTERN =
-  /\b(?:(?:api|access|secret|bearer|client)[-_ ]?)?(?:token|key|secret)\b|\b(?:authorization|credentials?|password|cookie|bearer)\b/i;
 
 function truncate(value: string): string {
   if (value.length <= MAX_ERROR_MESSAGE_LENGTH) {
@@ -63,17 +60,19 @@ export function toErrorMessage(error: unknown): string {
 
 export function toPublicProviderErrorMessage(error: unknown): string {
   const message = toErrorMessage(error).replace(/\s+/g, ' ').trim();
-  if (SENSITIVE_PROVIDER_ERROR_PATTERN.test(message)) {
-    return GENERIC_PROVIDER_ERROR_MESSAGE;
+  const overloadedMatch = /^HTTP\s+(\d{3})\s*(?::\s*Overloaded|\(\s*Overloaded\s*\))[.!]?$/i.exec(
+    message
+  );
+  if (overloadedMatch) {
+    return `HTTP ${overloadedMatch[1]} (Overloaded)`;
   }
 
-  if (message.length === 0) {
-    return GENERIC_PROVIDER_ERROR_MESSAGE;
+  const httpStatusMatch = /^HTTP\s+(\d{3})\b/i.exec(message);
+  if (httpStatusMatch) {
+    return `HTTP ${httpStatusMatch[1]}`;
   }
 
-  return message
-    .replace(/\bhttp\s+(\d{3})\s*:\s*overloaded\b/i, 'HTTP $1 (Overloaded)')
-    .slice(0, MAX_PUBLIC_PROVIDER_ERROR_MESSAGE_LENGTH);
+  return GENERIC_PROVIDER_ERROR_MESSAGE;
 }
 
 export function toProviderFailureChatMessage(
