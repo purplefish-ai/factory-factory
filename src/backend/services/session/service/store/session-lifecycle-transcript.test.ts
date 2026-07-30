@@ -79,7 +79,7 @@ describe('session lifecycle transcript', () => {
       'provider-at-noon',
       'session-lifecycle:event-1',
     ]);
-    expect(merged.map((message) => message.order)).toEqual([1 / 3, 0, 2 / 3]);
+    expect(merged.map((message) => message.order)).toEqual([-0.5, 0, 0.5]);
     expect(merged.find((message) => message.id === 'provider-at-noon')?.order).toBe(0);
   });
 

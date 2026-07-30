@@ -100,12 +100,12 @@ describe('SessionDomainService', () => {
 
     expect(sessionDomainService.upsertLifecycleMessage('s1', lifecycleMessage)).toBe(true);
     expect(sessionDomainService.getTranscriptSnapshot('s1').map((message) => message.id)).toEqual([
-      'provider-at-noon',
       'session-lifecycle:event-at-eleven',
+      'provider-at-noon',
     ]);
     expect(
       sessionDomainService.getTranscriptSnapshot('s1').map((message) => message.order)
-    ).toEqual([0, 0.5]);
+    ).toEqual([-0.5, 0]);
   });
 
   it('subscribes and emits replay plus runtime delta', async () => {

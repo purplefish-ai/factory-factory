@@ -534,6 +534,55 @@ describe('SessionLifecycleService graceful shutdown', () => {
     );
     expect(runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
   });
+
+  it('continues runtime shutdown when lifecycle recording stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      const runtimeManager = {
+        beginShutdown: vi.fn(() => ['session-active']),
+        stopAllClients: vi.fn(async () => undefined),
+        isStopInProgress: vi.fn(() => false),
+      };
+      const service = new SessionLifecycleService(
+        unsafeCoerce({
+          repository: {
+            getSessionById: vi.fn(async () => ({
+              id: 'session-active',
+              workspaceId: 'workspace-1',
+              workflow: 'code',
+            })),
+          },
+          promptBuilder: {},
+          runtimeManager,
+          sessionDomainService: {},
+          sessionPermissionService: {},
+          sessionConfigService: {},
+          acpEventProcessor: { getWorkspaceId: vi.fn() },
+          promptTurnCompletionService: { clearAll: vi.fn() },
+          retryService: {
+            run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
+          },
+          lifecycleEventService: {
+            record: vi.fn(() => new Promise(() => undefined)),
+            hydrate: vi.fn(async () => undefined),
+          },
+          hydrateProviderHistory: vi.fn(),
+          sendSessionMessage: vi.fn(),
+        })
+      );
+
+      const shutdown = service.stopAllClients(4321);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(runtimeManager.stopAllClients).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      await shutdown;
+
+      expect(runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('SessionLifecycleService pending workspace notifications', () => {

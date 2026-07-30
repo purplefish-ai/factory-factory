@@ -116,7 +116,7 @@ async function stopSessionBestEffort(
   sessionId: string
 ): Promise<void> {
   try {
-    await sessionLifecycleService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId, { recordLifecycleEvent: false });
   } catch {
     // Best-effort cleanup
   }

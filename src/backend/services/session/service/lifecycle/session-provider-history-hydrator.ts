@@ -276,27 +276,25 @@ function handleUnavailableProviderHistory(
   loadResult: Exclude<ProviderHistoryLoadResult, { status: 'loaded' }>,
   options?: { shouldRecheckCodexToolBackfill?: boolean }
 ): void {
-  if (loadResult.status === 'error') {
-    sessionDomainService.setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
-    logger.warn('Provider JSONL history hydration failed; keeping session eligible for retry', {
-      sessionId,
-      provider: dbSession.provider,
-      providerSessionId,
-      filePath: loadResult.filePath,
-    });
+  const latestProviderMessages = providerMessages(
+    sessionDomainService.getTranscriptSnapshot(sessionId)
+  );
+  if (latestProviderMessages.length > 0) {
+    sessionDomainService.clearHistoryRetryCooldown(sessionId);
+    sessionDomainService.markHistoryHydrated(sessionId, 'none');
+    if (options?.shouldRecheckCodexToolBackfill) {
+      scheduleCodexToolBackfillRecheck(sessionId);
+    }
     return;
   }
 
-  sessionDomainService.clearHistoryRetryCooldown(sessionId);
-  sessionDomainService.markHistoryHydrated(sessionId, 'none');
-  if (options?.shouldRecheckCodexToolBackfill) {
-    scheduleCodexToolBackfillRecheck(sessionId);
-  }
-  logger.debug('Provider JSONL history not available; skipping runtime fallback hydration', {
+  sessionDomainService.setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
+  logger.warn('Provider JSONL history unavailable; keeping session eligible for retry', {
     sessionId,
     provider: dbSession.provider,
     providerSessionId,
     loadStatus: loadResult.status,
+    ...(loadResult.status === 'error' ? { filePath: loadResult.filePath } : {}),
   });
 }
 
@@ -415,7 +413,16 @@ function backfillMissingCodexToolTranscript(
     );
   });
 
-  return missingToolMessages.length === 0
-    ? null
-    : normalizeTranscriptOrder([...existingTranscript, ...missingToolMessages]);
+  if (missingToolMessages.length === 0) {
+    return null;
+  }
+
+  const normalizedProviderTranscript = normalizeTranscriptOrder([
+    ...providerMessages(existingTranscript),
+    ...missingToolMessages,
+  ]);
+  const retainedLifecycleMessages = lifecycleMessages(existingTranscript);
+  return retainedLifecycleMessages.length === 0
+    ? normalizedProviderTranscript
+    : mergeLifecycleMessage(normalizedProviderTranscript, retainedLifecycleMessages);
 }

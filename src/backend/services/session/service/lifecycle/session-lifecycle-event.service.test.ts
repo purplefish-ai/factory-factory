@@ -118,8 +118,8 @@ describe('SessionLifecycleEventService', () => {
     expect(
       domain.getTranscriptSnapshot('session-1').map(({ id, order }) => ({ id, order }))
     ).toEqual([
+      { id: 'session-lifecycle:event-at-eleven', order: -0.5 },
       { id: 'provider-at-noon', order: 0 },
-      { id: 'session-lifecycle:event-at-eleven', order: 0.5 },
     ]);
   });
 

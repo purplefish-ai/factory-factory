@@ -566,8 +566,17 @@ const SIDE_TABLE_RELATIONS = {
   pr: 'workspacePR',
   ratchet: 'workspaceRatchet',
   runScript: 'workspaceRunScript',
+  sessionLifecycleEvents: 'sessionLifecycleEvent',
   autoIteration: 'workspaceAutoIteration',
 };
+
+/** Paired rows that are initialized as part of every workspace creation. */
+const WORKSPACE_CREATION_SIDE_TABLES = new Set([
+  'workspacePR',
+  'workspaceRatchet',
+  'workspaceRunScript',
+  'workspaceAutoIteration',
+]);
 
 /**
  * Nested relation operations that reach a side-table row.
@@ -698,7 +707,11 @@ function checkNestedSideTableMutation(relPath, dataExpression, violations, insid
       if (!key || !NESTED_MUTATION_KEYS.has(key)) {
         continue;
       }
-      if (insideWorkspaceCreate && NESTED_CREATION_KEYS.has(key)) {
+      if (
+        insideWorkspaceCreate &&
+        WORKSPACE_CREATION_SIDE_TABLES.has(table) &&
+        NESTED_CREATION_KEYS.has(key)
+      ) {
         continue;
       }
       violations.push(

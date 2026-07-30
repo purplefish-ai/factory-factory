@@ -102,6 +102,7 @@ const SESSION_STOP_MESSAGES: Record<SessionStopReason, string> = {
   WORKSPACE_ARCHIVED: 'Session stopped because the workspace was archived.',
   SYSTEM_STOP: 'Session stopped by the system.',
 };
+const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
 
 type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
 type HydrateProviderHistory = (
@@ -589,33 +590,7 @@ export class SessionLifecycleService {
       this.shutdownSessions.add(sessionId);
     }
 
-    const lifecycleResults = await Promise.allSettled(
-      shutdownSessionIds.map(async (sessionId) => {
-        const session = await this.loadSessionForStop(sessionId);
-        const workspaceId =
-          session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
-        if (!workspaceId) {
-          logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
-          return;
-        }
-        await this.lifecycleEventService.record({
-          workspaceId,
-          sessionId,
-          kind: SessionLifecycleEventKind.SESSION_STOPPED,
-          reason: SessionLifecycleEventReason.SYSTEM_STOP,
-          message: SESSION_STOP_MESSAGES.SYSTEM_STOP,
-          dedupeKey: `session-stop:${randomUUID()}`,
-        });
-      })
-    );
-    for (const [index, result] of lifecycleResults.entries()) {
-      if (result.status === 'rejected') {
-        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
-          sessionId: shutdownSessionIds[index],
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        });
-      }
-    }
+    await this.recordShutdownLifecycleEvents(shutdownSessionIds);
 
     try {
       await this.runtimeManager.stopAllClients(timeoutMs);
@@ -624,6 +599,53 @@ export class SessionLifecycleService {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    }
+  }
+
+  private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
+    const session = await this.loadSessionForStop(sessionId);
+    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
+    if (!workspaceId) {
+      logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
+      return;
+    }
+    await this.lifecycleEventService.record({
+      workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.SESSION_STOPPED,
+      reason: SessionLifecycleEventReason.SYSTEM_STOP,
+      message: SESSION_STOP_MESSAGES.SYSTEM_STOP,
+      dedupeKey: `session-stop:${randomUUID()}`,
+    });
+  }
+
+  private async recordShutdownLifecycleEvents(sessionIds: string[]): Promise<void> {
+    const resultsPromise = Promise.allSettled(
+      sessionIds.map((sessionId) => this.recordShutdownLifecycleEvent(sessionId))
+    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const results = await Promise.race([
+      resultsPromise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    if (results === null) {
+      logger.warn('Timed out recording shutdown lifecycle events; continuing shutdown', {
+        timeoutMs: SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS,
+      });
+      return;
+    }
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
+          sessionId: sessionIds[index],
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
     }
   }
 

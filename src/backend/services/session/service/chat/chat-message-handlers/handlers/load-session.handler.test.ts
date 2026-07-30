@@ -333,7 +333,9 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-race-1', 'none');
   });
 
-  it('marks Claude history hydration as none when JSONL file is not found', async () => {
+  it('keeps Claude history eligible for retry when the JSONL file is not found', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-14T00:00:00.000Z'));
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       status: 'IDLE',
@@ -357,7 +359,11 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-1', 'none');
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+    expect(mocks.setHistoryRetryAt).toHaveBeenCalledWith(
+      'session-1',
+      new Date('2026-02-14T00:00:30.000Z').getTime()
+    );
   });
 
   it('does not mark history hydrated when JSONL read fails', async () => {
@@ -440,23 +446,17 @@ describe('createLoadSessionHandler', () => {
       mocks.isHistoryHydrated.mockReturnValue(false);
       const loader =
         provider === 'CLAUDE' ? mocks.loadClaudeSessionHistory : mocks.loadCodexSessionHistory;
-      loader
-        .mockResolvedValueOnce({
-          status: 'error',
-          reason: 'read_failed',
-          filePath: `/tmp/${providerSessionId}.jsonl`,
-        })
-        .mockResolvedValueOnce({
-          status: 'loaded',
-          filePath: `/tmp/${providerSessionId}.jsonl`,
-          history: [
-            {
-              type: 'user',
-              content: 'Recovered provider history',
-              timestamp: '2026-02-14T00:00:00.000Z',
-            },
-          ],
-        });
+      loader.mockResolvedValueOnce({ status: 'not_found' }).mockResolvedValueOnce({
+        status: 'loaded',
+        filePath: `/tmp/${providerSessionId}.jsonl`,
+        history: [
+          {
+            type: 'user',
+            content: 'Recovered provider history',
+            timestamp: '2026-02-14T00:00:00.000Z',
+          },
+        ],
+      });
 
       const handler = createLoadSessionHandler({
         getClientCreator: () => null,
@@ -895,7 +895,7 @@ describe('createLoadSessionHandler', () => {
   });
 
   it('backfills missing CODEX tool calls from JSONL when a live transcript already exists', async () => {
-    const existingTranscript = [
+    const existingTranscript: ChatMessage[] = [
       {
         id: 'existing-user',
         source: 'user',
@@ -922,6 +922,22 @@ describe('createLoadSessionHandler', () => {
         },
         timestamp: '2026-02-14T00:00:04.000Z',
         order: 2,
+      },
+      {
+        id: 'session-lifecycle:event-between-tool-parts',
+        source: 'agent',
+        timestamp: '2026-02-14T00:00:02.500Z',
+        order: 1.5,
+        message: {
+          type: 'session_lifecycle',
+          lifecycle: {
+            eventId: 'event-between-tool-parts',
+            kind: 'TURN_INTERRUPTED',
+            reason: 'PROVIDER_ERROR',
+            message: 'Turn stopped: the provider returned an error.',
+            timestamp: '2026-02-14T00:00:02.500Z',
+          },
+        },
       },
     ];
 
@@ -1020,7 +1036,15 @@ describe('createLoadSessionHandler', () => {
       ])
     );
     expect(backfilledTranscript.map((message: { order: number }) => message.order)).toEqual([
-      0, 1, 2, 3, 4,
+      0, 1, 2, 2.5, 3, 4,
+    ]);
+    expect(backfilledTranscript.map((message: { id: string }) => message.id)).toEqual([
+      'existing-user',
+      'existing-assistant-1',
+      expect.stringMatching(/^history-/),
+      'session-lifecycle:event-between-tool-parts',
+      expect.stringMatching(/^history-/),
+      'existing-assistant-2',
     ]);
     expect(mocks.replaceTranscript).toHaveBeenCalledWith(
       'session-codex-backfill',

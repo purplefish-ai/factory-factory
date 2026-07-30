@@ -44,6 +44,33 @@ describe('renderer transcript window', () => {
 
     expect(compareTranscriptMessageOrder(firstError, secondError)).toBe(0);
   });
+
+  it('keeps negative lifecycle orders before persisted provider messages', () => {
+    const lifecycleMessage: ChatMessage = {
+      id: 'session-lifecycle:event-1',
+      source: 'agent',
+      timestamp: '2026-02-01T00:00:00.000Z',
+      order: -0.5,
+      message: {
+        type: 'session_lifecycle',
+        lifecycle: {
+          eventId: 'event-1',
+          kind: 'SESSION_STOPPED',
+          reason: 'SYSTEM_STOP',
+          message: 'Session stopped by the system.',
+          timestamp: '2026-02-01T00:00:00.000Z',
+        },
+      },
+    };
+    const providerMessage = rendererMessage('provider-1', 0);
+    const optimisticMessage = rendererMessage('optimistic-1', -1);
+
+    expect(
+      trimTranscriptForRenderer([providerMessage, optimisticMessage, lifecycleMessage]).map(
+        (message) => message.id
+      )
+    ).toEqual(['session-lifecycle:event-1', 'provider-1', 'optimistic-1']);
+  });
 });
 
 describe('agent message types', () => {
