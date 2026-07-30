@@ -363,11 +363,16 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       }
 
       dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled: false } });
+      const syncedSettings = clampChatSettingsForCapabilities(
+        { ...state.chatSettings, planModeEnabled: false },
+        state.chatCapabilities
+      );
+      persistSettings(dbSessionIdRef.current, syncedSettings);
       if (isCodexProvider) {
         queueAutomaticMessage('Approved');
       }
     },
-    [send, dispatch, queueAutomaticMessage]
+    [send, dispatch, dbSessionIdRef, queueAutomaticMessage]
   );
 
   const stopChat = useCallback(() => {

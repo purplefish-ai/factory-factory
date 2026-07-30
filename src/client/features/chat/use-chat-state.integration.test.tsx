@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
+import { createCodexChatBarCapabilities } from '@/shared/chat-capabilities';
+import { loadSettings } from './chat-persistence';
 import { type UseChatStateReturn, useChatState } from './use-chat-state';
 
 vi.mock('sonner', () => ({
@@ -278,6 +280,56 @@ describe('useChatState rejected message recovery', () => {
     expect(harness.chatRef.current?.inputAttachments).toEqual([]);
     expect(sessionStorage.getItem('chat-draft-null')).toBeNull();
     expect(sessionStorage.getItem('chat-attachments-null')).toBeNull();
+
+    harness.cleanup();
+  });
+});
+
+describe('useChatState plan mode persistence', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('persists disabled plan mode after approving ExitPlanMode', async () => {
+    const harness = renderChatState('session-A');
+    await flushEffects();
+
+    flushSync(() => {
+      harness.chatRef.current?.dispatch({
+        type: 'WS_CHAT_CAPABILITIES',
+        payload: { capabilities: createCodexChatBarCapabilities() },
+      });
+    });
+    flushSync(() => {
+      harness.chatRef.current?.updateSettings({ planModeEnabled: true });
+    });
+
+    expect(loadSettings('session-A')?.planModeEnabled).toBe(true);
+
+    flushSync(() => {
+      harness.chatRef.current?.dispatch({
+        type: 'WS_PERMISSION_REQUEST',
+        payload: {
+          requestId: 'exit-plan',
+          toolName: 'ExitPlanMode',
+          toolInput: {},
+          timestamp: '2026-07-30T00:00:00.000Z',
+        },
+      });
+    });
+    flushSync(() => {
+      harness.chatRef.current?.approvePermission('exit-plan', true);
+    });
+
+    expect(harness.chatRef.current?.chatSettings.planModeEnabled).toBe(false);
+    expect(loadSettings('session-A')?.planModeEnabled).toBe(false);
 
     harness.cleanup();
   });
