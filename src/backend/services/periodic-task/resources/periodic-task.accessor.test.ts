@@ -205,6 +205,16 @@ describe('periodicTaskAccessor.computeNextRunAt', () => {
     });
   });
 
+  it('advances from the timezone month when no scheduled time is configured', () => {
+    const timezone = 'Asia/Tokyo';
+    const from = new Date('2024-01-31T15:00:27.123Z'); // Feb 1 in Tokyo
+
+    const nextRunAt = periodicTaskAccessor.computeNextRunAt('MONTHLY', from, null, timezone, 1);
+
+    expect(calendarDate(nextRunAt, timezone)).toBe('2024-03-01');
+    expect(nextRunAt.toISOString()).toBe('2024-02-29T15:00:27.123Z');
+  });
+
   it('preserves local Date monthly clamping when no timezone is configured', () => {
     const from = new Date(2026, 0, 31, 9, 5);
 

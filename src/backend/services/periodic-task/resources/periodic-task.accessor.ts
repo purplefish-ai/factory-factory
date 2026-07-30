@@ -62,6 +62,24 @@ function parseScheduledTime(scheduledTime: string): ScheduledTimeParts {
   };
 }
 
+function getTimeZoneTimeParts(date: Date, timezone: string): ScheduledTimeParts {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value])
+  );
+
+  return {
+    hours: Number(parts.hour) % 24,
+    minutes: Number(parts.minute),
+  };
+}
+
 function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
@@ -136,6 +154,32 @@ function dateFromTimeZoneDateTime(
   return new Date(utcProbeMs);
 }
 
+function computeNextMonthlyRunAtInTimeZone(
+  from: Date,
+  scheduledTime: string | null | undefined,
+  timezone: string,
+  scheduledDayOfMonth: number | null | undefined
+): Date {
+  const fromParts = getTimeZoneDateParts(from, timezone);
+  const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
+  const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
+  const targetDay = Math.min(
+    scheduledDayOfMonth ?? fromParts.day,
+    daysInMonth(targetYear, targetMonth)
+  );
+  const target = dateFromTimeZoneDateTime(
+    { year: targetYear, month: targetMonth, day: targetDay },
+    scheduledTime ? parseScheduledTime(scheduledTime) : getTimeZoneTimeParts(from, timezone),
+    timezone
+  );
+
+  if (!scheduledTime) {
+    target.setUTCSeconds(from.getUTCSeconds(), from.getUTCMilliseconds());
+  }
+
+  return target;
+}
+
 /**
  * When a task has a scheduledTime + timezone, snap the computed next date to
  * that clock time in the user's timezone.
@@ -206,19 +250,12 @@ function computeNextRunAt(
       next.setDate(next.getDate() + 7);
       break;
     case 'MONTHLY': {
-      if (scheduledTime && timezone) {
-        const fromParts = getTimeZoneDateParts(from, timezone);
-        const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
-        const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
-        const targetDay = Math.min(
-          scheduledDayOfMonth ?? fromParts.day,
-          daysInMonth(targetYear, targetMonth)
-        );
-
-        return dateFromTimeZoneDateTime(
-          { year: targetYear, month: targetMonth, day: targetDay },
-          parseScheduledTime(scheduledTime),
-          timezone
+      if (timezone) {
+        return computeNextMonthlyRunAtInTimeZone(
+          from,
+          scheduledTime,
+          timezone,
+          scheduledDayOfMonth
         );
       }
 
