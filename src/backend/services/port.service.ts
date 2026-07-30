@@ -12,6 +12,7 @@ import { createLogger } from './logger.service';
 
 const logger = createLogger('port-service');
 const execAsync = promisify(exec);
+const MIN_PORT = 1;
 const MAX_PORT = 65_535;
 
 /**
@@ -65,6 +66,12 @@ export async function isPortAvailable(port: number): Promise<boolean> {
  * Find an available port starting from the given port.
  */
 export async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
+  if (!Number.isInteger(startPort) || startPort < MIN_PORT || startPort > MAX_PORT) {
+    throw new Error(
+      `Invalid start port ${startPort}: expected an integer between ${MIN_PORT} and ${MAX_PORT}`
+    );
+  }
+
   for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i;
     if (port > MAX_PORT) {

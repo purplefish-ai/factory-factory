@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import treeKill from 'tree-kill';
 
 const execPromise = promisify(exec);
+const MIN_PORT = 1;
 const MAX_PORT = 65_535;
 
 export function ensureDataDir(databasePath: string): void {
@@ -91,6 +92,12 @@ export async function findAvailablePort(
   startPort: number,
   options: FindAvailablePortOptions = {}
 ): Promise<number> {
+  if (!Number.isInteger(startPort) || startPort < MIN_PORT || startPort > MAX_PORT) {
+    throw new Error(
+      `Invalid start port ${startPort}: expected an integer between ${MIN_PORT} and ${MAX_PORT}`
+    );
+  }
+
   const { maxAttempts = 10, excludePorts = [] } = options;
   for (let i = 0; i < maxAttempts; i += 1) {
     const port = startPort + i;
