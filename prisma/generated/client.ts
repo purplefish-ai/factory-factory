@@ -181,6 +181,11 @@ export type WorkspaceAutoIteration = Prisma.WorkspaceAutoIterationModel
  */
 export type AgentSession = Prisma.AgentSessionModel
 /**
+ * Model SessionLifecycleEvent
+ * 
+ */
+export type SessionLifecycleEvent = Prisma.SessionLifecycleEventModel
+/**
  * Model TerminalSession
  * 
  */

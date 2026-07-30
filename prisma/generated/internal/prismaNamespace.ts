@@ -405,6 +405,7 @@ export const ModelName = {
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
+  SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
@@ -426,7 +427,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspacePR" | "workspaceRatchet" | "workspaceRunScript" | "workspaceAutoIteration" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1019,6 +1020,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.AgentSessionCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.AgentSessionCountAggregateOutputType> | number
+        }
+      }
+    }
+    SessionLifecycleEvent: {
+      payload: Prisma.$SessionLifecycleEventPayload<ExtArgs>
+      fields: Prisma.SessionLifecycleEventFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SessionLifecycleEventFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SessionLifecycleEventFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        findFirst: {
+          args: Prisma.SessionLifecycleEventFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SessionLifecycleEventFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        findMany: {
+          args: Prisma.SessionLifecycleEventFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>[]
+        }
+        create: {
+          args: Prisma.SessionLifecycleEventCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        createMany: {
+          args: Prisma.SessionLifecycleEventCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SessionLifecycleEventCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>[]
+        }
+        delete: {
+          args: Prisma.SessionLifecycleEventDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        update: {
+          args: Prisma.SessionLifecycleEventUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        deleteMany: {
+          args: Prisma.SessionLifecycleEventDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SessionLifecycleEventUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SessionLifecycleEventUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>[]
+        }
+        upsert: {
+          args: Prisma.SessionLifecycleEventUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionLifecycleEventPayload>
+        }
+        aggregate: {
+          args: Prisma.SessionLifecycleEventAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSessionLifecycleEvent>
+        }
+        groupBy: {
+          args: Prisma.SessionLifecycleEventGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SessionLifecycleEventGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SessionLifecycleEventCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SessionLifecycleEventCountAggregateOutputType> | number
         }
       }
     }
@@ -1650,6 +1725,20 @@ export const AgentSessionScalarFieldEnum = {
 export type AgentSessionScalarFieldEnum = (typeof AgentSessionScalarFieldEnum)[keyof typeof AgentSessionScalarFieldEnum]
 
 
+export const SessionLifecycleEventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  sessionId: 'sessionId',
+  kind: 'kind',
+  reason: 'reason',
+  message: 'message',
+  dedupeKey: 'dedupeKey',
+  createdAt: 'createdAt'
+} as const
+
+export type SessionLifecycleEventScalarFieldEnum = (typeof SessionLifecycleEventScalarFieldEnum)[keyof typeof SessionLifecycleEventScalarFieldEnum]
+
+
 export const TerminalSessionScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -1928,6 +2017,20 @@ export type EnumSessionProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$
 
 
 /**
+ * Reference to a field of type 'SessionLifecycleEventKind'
+ */
+export type EnumSessionLifecycleEventKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionLifecycleEventKind'>
+    
+
+
+/**
+ * Reference to a field of type 'SessionLifecycleEventReason'
+ */
+export type EnumSessionLifecycleEventReasonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SessionLifecycleEventReason'>
+    
+
+
+/**
  * Reference to a field of type 'RatchetReviewTriggerMode'
  */
 export type EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RatchetReviewTriggerMode'>
@@ -2127,6 +2230,7 @@ export type GlobalOmitConfig = {
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
   workspaceAutoIteration?: Prisma.WorkspaceAutoIterationOmit
   agentSession?: Prisma.AgentSessionOmit
+  sessionLifecycleEvent?: Prisma.SessionLifecycleEventOmit
   terminalSession?: Prisma.TerminalSessionOmit
   closedSession?: Prisma.ClosedSessionOmit
   userSettings?: Prisma.UserSettingsOmit

@@ -43,6 +43,10 @@ const ACCESSOR_POLICIES = {
     owner: 'session',
     module: 'src/backend/services/session/resources/closed-session.accessor',
   },
+  sessionLifecycleEventAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/session-lifecycle-event.accessor',
+  },
   userSettingsAccessor: {
     owner: 'settings',
     module: 'src/backend/services/settings/resources/user-settings.accessor',

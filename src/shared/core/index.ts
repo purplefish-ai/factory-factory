@@ -17,6 +17,8 @@ export {
   RatchetReviewTriggerMode,
   RatchetState,
   RunScriptStatus,
+  SessionLifecycleEventKind,
+  SessionLifecycleEventReason,
   SessionPermissionPreset,
   SessionProvider,
   SessionStatus,
