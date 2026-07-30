@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,23 @@ const archiveDialogMock = vi.hoisted(() =>
       'data-testid': 'archive-dialog',
       'data-active-child-count': props.activeChildCount,
     })
+  )
+);
+
+const rightPanelMock = vi.hoisted(() =>
+  vi.fn((props: { isTakingScreenshots: boolean; onTakeScreenshots: () => Promise<void> }) =>
+    createElement(
+      'button',
+      {
+        'data-testid': 'take-screenshots',
+        'data-loading': String(Boolean(props.isTakingScreenshots)),
+        onClick: () => {
+          void props.onTakeScreenshots();
+        },
+        type: 'button',
+      },
+      'Take screenshots'
+    )
   )
 );
 
@@ -46,7 +63,7 @@ vi.mock('@/components/ui/sheet', () => ({
 
 vi.mock('@/client/features/workspace', () => ({
   ArchiveWorkspaceDialog: archiveDialogMock,
-  RightPanel: () => createElement('aside', null, 'Right panel'),
+  RightPanel: rightPanelMock,
   WorkspaceContentView: ({ children }: { children: ReactNode }) =>
     createElement('main', null, children),
 }));
@@ -209,6 +226,38 @@ describe('WorkspaceDetailView', () => {
     const { container, root } = renderView(props);
 
     expect(container.textContent).toContain('Script failed');
+
+    root.unmount();
+  });
+
+  it('clears screenshot loading when session creation fails', async () => {
+    let rejectSessionCreation: ((error: Error) => void) | undefined;
+    const props = createViewProps(0);
+    props.rightPanelVisible = true;
+    props.header.handleQuickAction = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSessionCreation = reject;
+        })
+    );
+
+    const { container, root } = renderView(props);
+    const takeScreenshotsButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="take-screenshots"]'
+    );
+
+    expect(takeScreenshotsButton?.dataset.loading).toBe('false');
+
+    await act(() => {
+      takeScreenshotsButton?.click();
+    });
+    expect(takeScreenshotsButton?.dataset.loading).toBe('true');
+
+    await act(() => {
+      rejectSessionCreation?.(new Error('Session creation failed'));
+    });
+
+    expect(takeScreenshotsButton?.dataset.loading).toBe('false');
 
     root.unmount();
   });

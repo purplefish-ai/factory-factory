@@ -144,7 +144,7 @@ export interface UseSessionManagementReturn {
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
   handleNewChat: () => void;
-  handleQuickAction: (name: string, prompt: string) => void;
+  handleQuickAction: (name: string, prompt: string) => Promise<void>;
 }
 
 export function useSessionManagement({
@@ -336,11 +336,11 @@ export function useSessionManagement({
   ]);
 
   const handleQuickAction = useCallback(
-    (name: string, prompt: string) => {
+    async (name: string, prompt: string) => {
       const provider = selectedProvider;
       const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
-      createSession.mutate(
-        {
+      try {
+        const session = await createSession.mutateAsync({
           workspaceId,
           workflow: 'followup',
           name,
@@ -348,14 +348,12 @@ export function useSessionManagement({
           provider,
           initialMessage: prompt,
           initialPrompt: '',
-        },
-        {
-          onSuccess: (session) => {
-            // Setting the new session ID triggers WebSocket reconnection automatically
-            setSelectedDbSessionId(session.id);
-          },
-        }
-      );
+        });
+        // Setting the new session ID triggers WebSocket reconnection automatically
+        setSelectedDbSessionId(session.id);
+      } catch {
+        // The mutation's onError handler reports the failure.
+      }
     },
     [createSession, workspaceId, setSelectedDbSessionId, selectedModel, selectedProvider]
   );
