@@ -218,7 +218,12 @@ export default function ProjectsListPage() {
 
       <ConfirmDialog
         open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && archiveMutation.isPending) {
+            return;
+          }
+          setArchiveDialogOpen(open);
+        }}
         title="Archive Project"
         description="Are you sure you want to archive this project?"
         confirmText="Archive"

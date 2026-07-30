@@ -97,10 +97,12 @@ vi.mock('@/components/ui/button', () => ({
 vi.mock('@/components/ui/confirm-dialog', () => ({
   ConfirmDialog: ({
     open,
+    onOpenChange,
     onConfirm,
     isPending,
   }: {
     open: boolean;
+    onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
     isPending?: boolean;
   }) =>
@@ -116,6 +118,15 @@ vi.mock('@/components/ui/confirm-dialog', () => ({
               disabled: isPending,
             },
             isPending ? 'Archiving' : 'Archive'
+          ),
+          createElement(
+            'button',
+            {
+              type: 'button',
+              'data-testid': 'dismiss-dialog',
+              onClick: () => onOpenChange(false),
+            },
+            'Dismiss'
           )
         )
       : null,
@@ -217,6 +228,22 @@ describe('ProjectsListPage archive confirmation', () => {
     mocks.archiveMutationOptions?.onError?.(new Error(''));
 
     expect(mocks.toastError).toHaveBeenCalledWith('Failed to archive project');
+
+    root.unmount();
+  });
+
+  it('prevents the archive dialog from being dismissed while pending', () => {
+    const { container, root } = renderPage();
+    openArchiveDialog(container);
+
+    mocks.archivePending = true;
+    flushSync(() => {
+      root.render(createElement(ProjectsListPage));
+    });
+
+    click(container.querySelector('[data-testid="dismiss-dialog"]'));
+
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 
     root.unmount();
   });
