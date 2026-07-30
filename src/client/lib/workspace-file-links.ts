@@ -25,10 +25,11 @@ function appendNormalizedSegment(
 }
 
 function normalizePathForComparison(pathname: string): string {
-  const hasLeadingSlash = pathname.startsWith('/');
+  const normalizedInput = pathname.replace(/\\/g, '/');
+  const hasLeadingSlash = normalizedInput.startsWith('/') || /^[A-Za-z]:\//.test(normalizedInput);
   const segments: string[] = [];
 
-  for (const segment of pathname.split('/')) {
+  for (const segment of normalizedInput.split('/')) {
     appendNormalizedSegment(segments, segment, hasLeadingSlash);
   }
 

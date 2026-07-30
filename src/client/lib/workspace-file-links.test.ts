@@ -21,6 +21,16 @@ describe('resolveWorkspaceFileLink', () => {
     ).toBe('src/client/App Shell.md');
   });
 
+  it('resolves a file URL against a Windows worktree path', () => {
+    expect(
+      resolveWorkspaceFileLink(
+        'file:///C:/Users/martin/factory-factory/workspace-demo/src/client/App%20Shell.md',
+        String.raw`C:\Users\martin\factory-factory\workspace-demo`,
+        ORIGIN
+      )
+    ).toBe('src/client/App Shell.md');
+  });
+
   it('rejects paths outside the workspace', () => {
     expect(
       resolveWorkspaceFileLink('/Users/martin/factory-factory/other/README.md:3', WORKTREE, ORIGIN)
