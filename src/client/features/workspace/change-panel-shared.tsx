@@ -245,21 +245,21 @@ export interface ChangeTreeNode {
  */
 export function buildChangeTree(entries: ChangeListEntry[]): ChangeTreeNode[] {
   const root: ChangeTreeNode[] = [];
-  // Maps a directory path to its children array (for virtual dirs only)
-  const dirChildrenMap = new Map<string, ChangeTreeNode[]>();
+  const directoryNodeMap = new Map<string, ChangeTreeNode>();
 
-  function ensureVirtualDirChain(dirPath: string): ChangeTreeNode[] {
-    const existing = dirChildrenMap.get(dirPath);
+  function ensureDirectoryNode(dirPath: string): ChangeTreeNode {
+    const existing = directoryNodeMap.get(dirPath);
     if (existing) {
       return existing;
     }
     const lastSlash = dirPath.lastIndexOf('/');
-    const parentList = lastSlash === -1 ? root : ensureVirtualDirChain(dirPath.slice(0, lastSlash));
+    const parentList =
+      lastSlash === -1 ? root : ensureDirectoryNode(dirPath.slice(0, lastSlash)).children;
     const name = lastSlash === -1 ? dirPath : dirPath.slice(lastSlash + 1);
     const node: ChangeTreeNode = { name, path: dirPath, type: 'directory', children: [] };
-    dirChildrenMap.set(dirPath, node.children);
+    directoryNodeMap.set(dirPath, node);
     parentList.push(node);
-    return node.children;
+    return node;
   }
 
   for (const entry of entries) {
@@ -267,15 +267,21 @@ export function buildChangeTree(entries: ChangeListEntry[]): ChangeTreeNode[] {
     // Git reports untracked directories with a trailing slash (e.g. "newfolder/")
     const isGitDir = path.endsWith('/');
     const normalPath = isGitDir ? path.slice(0, -1) : path;
+
+    if (isGitDir) {
+      ensureDirectoryNode(normalPath).entry = entry;
+      continue;
+    }
+
     const lastSlash = normalPath.lastIndexOf('/');
     const name = lastSlash === -1 ? normalPath : normalPath.slice(lastSlash + 1);
     const parentList =
-      lastSlash === -1 ? root : ensureVirtualDirChain(normalPath.slice(0, lastSlash));
+      lastSlash === -1 ? root : ensureDirectoryNode(normalPath.slice(0, lastSlash)).children;
 
     parentList.push({
       name,
       path: normalPath,
-      type: isGitDir ? 'directory' : 'file',
+      type: 'file',
       entry,
       children: [],
     });
