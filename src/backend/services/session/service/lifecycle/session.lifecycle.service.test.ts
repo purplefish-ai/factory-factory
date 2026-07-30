@@ -769,7 +769,7 @@ function createStartableLifecycleService(options?: {
     isPromptInFlight: false,
   };
   const repository = {
-    getSessionById: vi.fn(async () => session),
+    getSessionById: vi.fn(async (): Promise<typeof session | null> => session),
     getWorkspaceById: vi.fn(async () => workspace),
     getProjectById: vi.fn(),
     markWorkspaceHasHadSessions: vi.fn(async () => undefined),
@@ -870,6 +870,26 @@ function createStartableLifecycleService(options?: {
 describe('SessionLifecycleService startSession pending workspace notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('does not retain a stop generation for a missing session', async () => {
+    const { service, repository } = createStartableLifecycleService();
+    repository.getSessionById.mockResolvedValueOnce(null);
+
+    await expect(service.startSession('missing-session')).rejects.toThrow(
+      'Session not found: missing-session'
+    );
+
+    expect(getStopGenerations(service).has('missing-session')).toBe(false);
+  });
+
+  it('releases the stop generation when startup fails before creating a runtime', async () => {
+    const { service, runtimeManager } = createStartableLifecycleService();
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
+
+    await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
+
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
   });
 
   it('dispatches queued notifications after startup presets and skips the default continue prompt', async () => {

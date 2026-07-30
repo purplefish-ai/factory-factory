@@ -145,40 +145,50 @@ export class SessionLifecycleService {
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
-    const stopGeneration = this.getStopGeneration(sessionId);
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    this.assertStartupAllowed(sessionId, stopGeneration);
+    const stopGeneration = this.getStopGeneration(sessionId);
+    try {
+      this.assertStartupAllowed(sessionId, stopGeneration);
 
-    const existingClient = this.runtimeManager.getClient(sessionId);
-    if (existingClient) {
-      throw new Error('Session is already running');
+      const existingClient = this.runtimeManager.getClient(sessionId);
+      if (existingClient) {
+        throw new Error('Session is already running');
+      }
+
+      const startupModePreset = options?.startupModePreset;
+
+      const { handle, resolvedPreset, dispatchableNotificationCount } =
+        await this.getOrCreateAcpSessionClient(sessionId, {}, session, stopGeneration);
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
+      this.assertStartupAllowed(sessionId, stopGeneration);
+
+      const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+      const shouldSendInitialPrompt =
+        dispatchableNotificationCount === 0 ||
+        (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault);
+      if (shouldSendInitialPrompt && initialPrompt) {
+        await this.sendSessionMessage(sessionId, initialPrompt);
+      }
+
+      logger.info('Session started', { sessionId, provider: session.provider });
+    } catch (error) {
+      if (
+        !(this.isSessionStopping(sessionId) || this.runtimeManager.getClient(sessionId)) &&
+        this.isStopGenerationCurrent(sessionId, stopGeneration)
+      ) {
+        this.stopGenerations.delete(sessionId);
+      }
+      throw error;
     }
-
-    const startupModePreset = options?.startupModePreset;
-
-    const { handle, resolvedPreset, dispatchableNotificationCount } =
-      await this.getOrCreateAcpSessionClient(sessionId, {}, session, stopGeneration);
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
-    this.assertStartupAllowed(sessionId, stopGeneration);
-
-    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
-    const shouldSendInitialPrompt =
-      dispatchableNotificationCount === 0 ||
-      (typeof options?.initialPrompt === 'string' && !options.initialPromptIsDefault);
-    if (shouldSendInitialPrompt && initialPrompt) {
-      await this.sendSessionMessage(sessionId, initialPrompt);
-    }
-
-    logger.info('Session started', { sessionId, provider: session.provider });
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
