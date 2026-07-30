@@ -31,6 +31,26 @@ describe('resolveWorkspaceFileLink', () => {
     ).toBe('src/client/App Shell.md');
   });
 
+  it('compares Windows workspace paths case-insensitively', () => {
+    expect(
+      resolveWorkspaceFileLink(
+        'file:///c:/users/MARTIN/factory-factory/workspace-demo/src/client/App%20Shell.md',
+        String.raw`C:\Users\martin\factory-factory\workspace-demo`,
+        ORIGIN
+      )
+    ).toBe('src/client/App Shell.md');
+  });
+
+  it('preserves backslashes as literal characters in POSIX paths', () => {
+    expect(
+      resolveWorkspaceFileLink(
+        'file:///tmp/work/tree/src/client/App%20Shell.md',
+        String.raw`/tmp/work\tree`,
+        ORIGIN
+      )
+    ).toBeNull();
+  });
+
   it('rejects paths outside the workspace', () => {
     expect(
       resolveWorkspaceFileLink('/Users/martin/factory-factory/other/README.md:3', WORKTREE, ORIGIN)
