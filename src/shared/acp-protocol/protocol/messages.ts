@@ -1,4 +1,4 @@
-import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '../../core/index.js';
+import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type {
   AgentContentItem,
   AgentStreamEvent,

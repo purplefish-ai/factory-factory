@@ -3,13 +3,13 @@ import type {
   SessionLifecycleEventRecord,
   SessionLifecycleEventStore,
 } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
-import type { ChatMessage } from '@/shared/acp-protocol';
-import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
-import type { SessionDomainService } from '../session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   mergeLifecycleTranscript,
   toLifecycleChatMessage,
-} from '../store/session-lifecycle-transcript';
+} from '@/backend/services/session/service/store/session-lifecycle-transcript';
+import type { ChatMessage } from '@/shared/acp-protocol';
+import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
 const logger = createLogger('session-lifecycle-event-service');
 
