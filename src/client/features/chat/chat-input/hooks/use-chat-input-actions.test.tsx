@@ -17,30 +17,36 @@ import { useChatInputActions } from './use-chat-input-actions';
 
 interface ShortcutHarnessProps {
   capabilities: ChatBarCapabilities;
+  disabled?: boolean;
   running?: boolean;
   settingsPlanEnabled?: boolean;
   settingsThinkingEnabled?: boolean;
+  onCloseSlashMenu?: () => void;
+  onSend?: (text: string) => void;
   onSettingsChange: (settings: Partial<ChatSettings>) => void;
 }
 
 function ShortcutHarness({
   capabilities,
+  disabled = false,
   running = false,
   settingsPlanEnabled = false,
   settingsThinkingEnabled = false,
+  onCloseSlashMenu = () => undefined,
+  onSend = () => undefined,
   onSettingsChange,
 }: ShortcutHarnessProps) {
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const actions = useChatInputActions({
-    onSend: () => undefined,
+    onSend,
     onStop: () => undefined,
     onOpenQuickActions: () => undefined,
-    onCloseSlashMenu: () => undefined,
+    onCloseSlashMenu,
     onCloseFileMentionMenu: () => undefined,
     onChange: () => undefined,
     onSettingsChange,
     capabilities,
-    disabled: false,
+    disabled,
     running,
     settings: {
       ...DEFAULT_CHAT_SETTINGS,
@@ -94,11 +100,68 @@ function dispatchModShiftShortcut(textarea: HTMLTextAreaElement, key: string): K
   return event;
 }
 
+function dispatchModShortcut(textarea: HTMLTextAreaElement, key: string): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  flushSync(() => {
+    textarea.dispatchEvent(event);
+  });
+  return event;
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
 describe('useChatInputActions keyboard shortcuts', () => {
+  it('does not dismiss the slash menu when a Mod+Enter send is skipped', () => {
+    const onCloseSlashMenu = vi.fn();
+    const onSend = vi.fn();
+    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const { root, container, textarea } = renderHarness({
+      capabilities,
+      disabled: true,
+      onCloseSlashMenu,
+      onSend,
+      onSettingsChange: () => undefined,
+    });
+    textarea.value = '/help';
+
+    dispatchModShortcut(textarea, 'Enter');
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onCloseSlashMenu).not.toHaveBeenCalled();
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('closes the slash menu after a successful Mod+Enter send', () => {
+    const onCloseSlashMenu = vi.fn();
+    const onSend = vi.fn();
+    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const { root, container, textarea } = renderHarness({
+      capabilities,
+      onCloseSlashMenu,
+      onSend,
+      onSettingsChange: () => undefined,
+    });
+    textarea.value = '/help';
+
+    dispatchModShortcut(textarea, 'Enter');
+
+    expect(onSend).toHaveBeenCalledWith('/help');
+    expect(onCloseSlashMenu).toHaveBeenCalledOnce();
+    expect(textarea.value).toBe('');
+
+    root.unmount();
+    container.remove();
+  });
+
   it('toggles plan mode with Mod+Shift+P when plan mode is enabled', () => {
     const onSettingsChange = vi.fn();
     const capabilities = createClaudeChatBarCapabilities('sonnet');

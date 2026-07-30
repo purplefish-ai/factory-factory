@@ -39,6 +39,7 @@ export function useSlashCommands({
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const paletteRef = useRef<SlashCommandPaletteHandle>(null);
+  const userDismissedRef = useRef(false);
   const commandsReady = !enabled || commandsLoaded || slashCommands.length > 0;
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export function useSlashCommands({
 
   // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {
-    if (!enabled || slashCommands.length === 0 || !inputRef?.current) {
+    if (!enabled || slashCommands.length === 0 || !inputRef?.current || userDismissedRef.current) {
       return;
     }
     const currentValue = inputRef.current.value;
@@ -87,6 +88,7 @@ export function useSlashCommands({
 
         // Only show menu if no space yet (still completing command name)
         if (spaceIndex === -1) {
+          userDismissedRef.current = false;
           setSlashFilter(filter);
           setSlashMenuOpen(true);
         } else {
@@ -121,6 +123,7 @@ export function useSlashCommands({
   );
 
   const handleSlashMenuClose = useCallback(() => {
+    userDismissedRef.current = true;
     setSlashMenuOpen(false);
     setSlashFilter('');
   }, []);
@@ -132,6 +135,7 @@ export function useSlashCommands({
       }
       const result = paletteRef.current.handleKeyDown(key);
       if (result === 'close-and-passthrough') {
+        userDismissedRef.current = true;
         setSlashMenuOpen(false);
       }
       return result;
