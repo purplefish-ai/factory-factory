@@ -9,6 +9,7 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
 import {
   ErrorRenderer,
   ResultRenderer,
@@ -41,6 +42,10 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
 }: AssistantMessageRendererProps) {
+  if (message.type === 'session_lifecycle') {
+    return <SessionLifecycleMessageRenderer message={message} className={className} />;
+  }
+
   // Handle tool use/result messages
   if (isToolUseMessage(message) || isToolResultMessage(message)) {
     return <ToolCallRenderer message={message} className={className} />;

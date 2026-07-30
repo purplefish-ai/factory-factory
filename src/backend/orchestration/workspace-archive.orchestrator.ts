@@ -1,5 +1,6 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionStopReason } from '@/backend/services/session';
 import {
   workspaceMaintenanceService,
   workspaceStateMachine,
@@ -29,7 +30,10 @@ export type ArchiveWorkspaceDependencies = {
     evictWorkspaceBuffers(workspaceId: string): void;
   };
   sessionLifecycleService: {
-    stopWorkspaceSessions(workspaceId: string): Promise<void>;
+    stopWorkspaceSessions(
+      workspaceId: string,
+      options?: { reason?: SessionStopReason }
+    ): Promise<void>;
   };
   terminalService: {
     destroyWorkspaceTerminals(workspaceId: string): void;
@@ -53,9 +57,12 @@ export async function cleanupWorkspaceRuntimeResources(
   operation: 'archive' | 'delete'
 ): Promise<void> {
   const { runScriptService, sessionLifecycleService, terminalService } = services;
+  const sessionStopReason = operation === 'archive' ? 'WORKSPACE_ARCHIVED' : 'SYSTEM_STOP';
 
   const cleanupResults = await Promise.allSettled([
-    sessionLifecycleService.stopWorkspaceSessions(workspaceId),
+    sessionLifecycleService.stopWorkspaceSessions(workspaceId, {
+      reason: sessionStopReason,
+    }),
     (async () => {
       const result = await runScriptService.stopRunScript(workspaceId);
       if (!result.success) {

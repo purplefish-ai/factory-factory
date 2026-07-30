@@ -635,7 +635,9 @@ describe('configureDomainBridges', () => {
         })
       ).rejects.toThrow(startupError);
 
-      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session', {
+        recordLifecycleEvent: false,
+      });
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
     });
@@ -725,7 +727,9 @@ describe('configureDomainBridges', () => {
       );
 
       expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('old-session');
-      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session', {
+        recordLifecycleEvent: false,
+      });
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
@@ -852,7 +856,9 @@ describe('configureDomainBridges', () => {
       expect(sessionService.sendAcpMessage).toHaveBeenCalledWith('new-session', [
         { type: 'text', text: 'handoff prompt' },
       ]);
-      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session', {
+        recordLifecycleEvent: false,
+      });
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.updateAgentSession).toHaveBeenCalledWith('old-session', {
@@ -894,7 +900,9 @@ describe('configureDomainBridges', () => {
         'prompt failed'
       );
 
-      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session');
+      expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('new-session', {
+        recordLifecycleEvent: false,
+      });
       expect(sessionDomainService.clearSession).toHaveBeenCalledWith('new-session');
       expect(sessionDataService.deleteAgentSession).toHaveBeenCalledWith('new-session');
       expect(workspaceAutoIterationService.setSession).toHaveBeenCalledTimes(1);

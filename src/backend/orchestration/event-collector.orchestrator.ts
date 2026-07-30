@@ -691,7 +691,9 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
-        dependencies.sessionLifecycleService.stopWorkspaceSessions(event.workspaceId),
+        dependencies.sessionLifecycleService.stopWorkspaceSessions(event.workspaceId, {
+          reason: 'WORKSPACE_ARCHIVED',
+        }),
         Promise.resolve().then(() => {
           dependencies.terminalService.destroyWorkspaceTerminals(event.workspaceId);
         }),

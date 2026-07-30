@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { toErrorMessage } from './session.error-message';
+import {
+  toErrorMessage,
+  toProviderFailureChatMessage,
+  toPublicProviderErrorMessage,
+} from './session.error-message';
 
 describe('toErrorMessage', () => {
   it('returns Error messages directly', () => {
@@ -32,5 +36,34 @@ describe('toErrorMessage', () => {
     expect(toErrorMessage(null)).toBe('null');
     expect(toErrorMessage({ reason: 'boom' })).toBe('boom');
     expect(stringifySpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('provider failure messages', () => {
+  it.each([
+    ['  HTTP 529:   Overloaded  ', 'HTTP 529 (Overloaded)'],
+    ['HTTP 500 opaque upstream detail', 'HTTP 500'],
+    ['request failed: secret-token=abc', 'The provider returned an error.'],
+    ['request failed: api_key=abc', 'The provider returned an error.'],
+    ['ghp_1234567890abcdefghijklmnopqrstuvwxyz', 'The provider returned an error.'],
+    ['sk-proj-1234567890abcdefghijklmnopqrstuvwxyz', 'The provider returned an error.'],
+    [
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature',
+      'The provider returned an error.',
+    ],
+    ['https://martin:supersecret@example.com/api', 'The provider returned an error.'],
+    [
+      '/Users/martin/private/prompt.txt: failed on customer@example.com',
+      'The provider returned an error.',
+    ],
+    ['the user asked to publish their private prompt fragment', 'The provider returned an error.'],
+  ])('normalizes public provider text', (input, expected) => {
+    expect(toPublicProviderErrorMessage(new Error(input))).toBe(expected);
+  });
+
+  it('adds the provider name and terminal punctuation', () => {
+    expect(toProviderFailureChatMessage('CODEX', new Error('HTTP 529: Overloaded'))).toBe(
+      'Turn stopped: Codex returned HTTP 529 (Overloaded).'
+    );
   });
 });

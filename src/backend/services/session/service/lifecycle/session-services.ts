@@ -1,4 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { AcpEventProcessor } from './acp-event-processor';
@@ -10,6 +11,8 @@ import { SessionPromptTurnCompletionService } from './session.prompt-turn-comple
 import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 import { SessionService } from './session.service';
+import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
 
 const logger = createLogger('session');
 
@@ -51,6 +54,10 @@ export const sessionConfigService = new SessionConfigService({
 
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();
 export const sessionRetryService = new SessionRetryService();
+export const sessionLifecycleEventService = new SessionLifecycleEventService({
+  store: sessionLifecycleEventAccessor,
+  sessionDomainService,
+});
 
 export const acpEventProcessor = new AcpEventProcessor({
   runtimeManager: acpRuntimeManager,
@@ -70,6 +77,7 @@ const sessionPromptCoordinator = new SessionService({
   sessionDomainService,
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
+  lifecycleEventService: sessionLifecycleEventService,
   getStopGeneration: (sessionId): number => sessionLifecycleService.getStopGeneration(sessionId),
   isStopGenerationCurrent: (sessionId, stopGeneration): boolean =>
     sessionLifecycleService.isStopGenerationCurrent(sessionId, stopGeneration),
@@ -88,6 +96,8 @@ export const sessionLifecycleService: SessionLifecycleService = new SessionLifec
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   retryService: sessionRetryService,
+  lifecycleEventService: sessionLifecycleEventService,
+  hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   sendSessionMessage: (sessionId, content): Promise<void> =>
     sessionService.sendSessionMessage(sessionId, content),
   onBeforeStopSession: (sessionId) => {

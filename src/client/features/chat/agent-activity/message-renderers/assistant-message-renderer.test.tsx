@@ -4,7 +4,8 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LoadingIndicator } from './assistant-message-renderer';
+import type { AgentMessage } from '@/lib/chat-protocol';
+import { AssistantMessageRenderer, LoadingIndicator } from './assistant-message-renderer';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -121,6 +122,32 @@ describe('LoadingIndicator', () => {
     expect(container.textContent).toContain('Working through partial markdown');
     expect(container.textContent).not.toContain('_');
 
+    root.unmount();
+  });
+});
+
+describe('AssistantMessageRenderer', () => {
+  it('routes lifecycle messages to the dedicated renderer', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const message = {
+      type: 'session_lifecycle',
+      lifecycle: {
+        eventId: 'event-1',
+        kind: 'TURN_INTERRUPTED',
+        reason: 'PROMPT_TIMEOUT',
+        message: 'Turn stopped: reached the 4-hour limit.',
+        timestamp: '2026-07-30T12:22:23.353Z',
+      },
+    } satisfies AgentMessage;
+
+    flushSync(() => {
+      root.render(createElement(AssistantMessageRenderer, { message }));
+    });
+
+    expect(container.querySelector('[data-testid="session-lifecycle-message"]')).not.toBeNull();
+    expect(container.textContent).toContain('Turn stopped: reached the 4-hour limit.');
     root.unmount();
   });
 });

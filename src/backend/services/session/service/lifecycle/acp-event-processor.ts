@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
@@ -19,6 +20,7 @@ import {
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionConfigService } from './session.config.service';
+import { toPublicProviderErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
 
 const logger = createLogger('session');
@@ -84,6 +86,8 @@ export class AcpEventProcessor {
   readonly sessionToWorkingDir = new Map<string, string>();
   /** Maps sessionId → provider for slash command caching */
   private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
+  /** Maps sessionId → stable key for the currently executing prompt attempt. */
+  private readonly activePromptAttemptKeys = new Map<string, string>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -185,19 +189,32 @@ export class AcpEventProcessor {
     this.clearPendingToolCalls(sessionId);
     this.clearReplaySuppression(sessionId);
     this.clearSessionContext(sessionId);
+    this.activePromptAttemptKeys.delete(sessionId);
   }
 
-  beginPromptTurn(sessionId: string): void {
+  beginPromptTurn(sessionId: string): string {
     this.finishAcpTextBlock(sessionId);
     this.pendingAcpToolCalls.set(sessionId, new Map());
+    const attemptKey = randomUUID();
+    this.activePromptAttemptKeys.set(sessionId, attemptKey);
+    return attemptKey;
   }
 
   finishPromptTurn(sessionId: string): void {
     this.finishAcpTextBlock(sessionId);
+    this.activePromptAttemptKeys.delete(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {
     return this.sessionToWorkspace.get(sessionId);
+  }
+
+  getActivePromptAttemptKey(sessionId: string): string | undefined {
+    return this.activePromptAttemptKeys.get(sessionId);
+  }
+
+  getProvider(sessionId: string): 'CLAUDE' | 'CODEX' | undefined {
+    return this.sessionToProvider.get(sessionId);
   }
 
   /**
@@ -240,19 +257,20 @@ export class AcpEventProcessor {
     }
 
     const data = (delta as { data: AgentMessage }).data;
+    const safeData = data.type === 'error' ? this.handlePromptProviderError(data) : data;
 
     // Text chunks: accumulate into single message, reuse same order
     // so the frontend upserts rather than inserting a new bubble per chunk.
-    if (data.type === 'assistant') {
-      this.accumulateAcpText(sid, data);
+    if (safeData.type === 'assistant') {
+      this.accumulateAcpText(sid, safeData);
       return;
     }
 
     // Non-text agent_message (thinking, tool_use, result): close the text block first.
     this.finishAcpTextBlock(sid);
     // Persist to transcript + allocate order in one step
-    const order = this.sessionDomainService.appendClaudeEvent(sid, data);
-    this.sessionDomainService.emitDelta(sid, { ...delta, order });
+    const order = this.sessionDomainService.appendClaudeEvent(sid, safeData);
+    this.sessionDomainService.emitDelta(sid, { ...delta, data: safeData, order });
   }
 
   finalizeOrphanedToolCalls(sid: string, reason: string): void {
@@ -756,6 +774,13 @@ export class AcpEventProcessor {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);
+  }
+
+  private handlePromptProviderError(data: AgentMessage): AgentMessage {
+    const message = toPublicProviderErrorMessage(
+      data.error ?? new Error('The provider returned an error.')
+    );
+    return { type: 'error', error: message };
   }
 
   private startToolCallTimer(sid: string, toolUseId: string, toolName: string): void {

@@ -37,6 +37,9 @@ function isSafeRendererWindowStart(message: ChatMessage): boolean {
 }
 
 function rendererSortOrder(message: ChatMessage): number {
+  if (message.message?.type === 'session_lifecycle') {
+    return message.order;
+  }
   return message.order < 0 ? Number.POSITIVE_INFINITY : message.order;
 }
 

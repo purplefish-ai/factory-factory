@@ -162,7 +162,9 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+        reason: 'WORKSPACE_ARCHIVED',
+      });
       expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
       expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(
@@ -212,6 +214,17 @@ describe('archiveWorkspace', () => {
   });
 
   describe('process cleanup errors (fail closed)', () => {
+    it.each([
+      ['archive', 'WORKSPACE_ARCHIVED'],
+      ['delete', 'SYSTEM_STOP'],
+    ] as const)('uses %s stop reason for shared runtime cleanup', async (operation, reason) => {
+      await cleanupWorkspaceRuntimeResources('ws-1', services, operation);
+
+      expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+        reason,
+      });
+    });
+
     it('uses operation-specific wording when shared runtime cleanup fails', async () => {
       vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
         unsafeCoerce({ success: false, error: 'stop failed' })
@@ -567,7 +580,9 @@ describe('recoverStaleArchivingWorkspaces', () => {
 
     expect(result).toEqual({ archived: ['ws-1'], failed: [] });
     expect(workspaceStateMachine.startArchivingWithSourceStatus).not.toHaveBeenCalled();
-    expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+    expect(services.sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1', {
+      reason: 'WORKSPACE_ARCHIVED',
+    });
     expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
     expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
     expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});

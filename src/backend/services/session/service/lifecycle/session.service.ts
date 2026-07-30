@@ -1,24 +1,51 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import pLimit, { type LimitFunction } from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
-import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
-import { toErrorMessage } from './session.error-message';
+import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
+import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const logger = createLogger('session');
-const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
+const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
+type PromptTimeoutKind = 'standard_user_turn' | 'configured';
+type SendAcpMessageOptions = { timeoutKind?: PromptTimeoutKind };
+
+function formatTimeoutDuration(timeoutMs: number): string {
+  const units = [
+    { milliseconds: 60 * 60 * 1000, label: 'hour' },
+    { milliseconds: 60 * 1000, label: 'minute' },
+    { milliseconds: 1000, label: 'second' },
+  ];
+  for (const unit of units) {
+    if (timeoutMs >= unit.milliseconds && timeoutMs % unit.milliseconds === 0) {
+      const value = timeoutMs / unit.milliseconds;
+      return `${value}-${unit.label}`;
+    }
+  }
+  return `${timeoutMs}-millisecond`;
+}
+
+function timeoutMessage(timeoutMs: number, timeoutKind: PromptTimeoutKind): string {
+  if (timeoutKind === 'standard_user_turn' && timeoutMs === DEFAULT_USER_PROMPT_TIMEOUT_MS) {
+    return 'Turn stopped: reached the 4-hour limit.';
+  }
+  return `Turn stopped: reached the configured ${formatTimeoutDuration(timeoutMs)} limit.`;
+}
 
 export type SessionServiceDependencies = {
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
+  lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   getStopGeneration: (sessionId: string) => number;
   isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
   isSessionStopping: (sessionId: string) => boolean;
@@ -29,6 +56,7 @@ export class SessionService {
   private readonly sessionDomainService: SessionDomainService;
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
+  private readonly lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   private readonly getStopGeneration: (sessionId: string) => number;
   private readonly isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
   private readonly isSessionStopping: (sessionId: string) => boolean;
@@ -41,6 +69,7 @@ export class SessionService {
     this.sessionDomainService = options.sessionDomainService;
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
+    this.lifecycleEventService = options.lifecycleEventService;
     this.getStopGeneration = options.getStopGeneration;
     this.isStopGenerationCurrent = options.isStopGenerationCurrent;
     this.isSessionStopping = options.isSessionStopping;
@@ -60,7 +89,9 @@ export class SessionService {
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS)
+      return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS, {
+        timeoutKind: 'standard_user_turn',
+      })
         .then(() => undefined)
         .catch((error) => {
           const errorMessage = toErrorMessage(error);
@@ -127,9 +158,14 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  sendAcpMessage(sessionId: string, prompt: ContentBlock[], timeoutMs?: number): Promise<string> {
+  sendAcpMessage(
+    sessionId: string,
+    prompt: ContentBlock[],
+    timeoutMs?: number,
+    options?: SendAcpMessageOptions
+  ): Promise<string> {
     return this.withSerializedAcpPrompt(sessionId, () =>
-      this.executeAcpMessage(sessionId, prompt, timeoutMs)
+      this.executeAcpMessage(sessionId, prompt, timeoutMs, options?.timeoutKind ?? 'configured')
     );
   }
 
@@ -176,7 +212,8 @@ export class SessionService {
   private async executeAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
-    timeoutMs?: number
+    timeoutMs: number | undefined,
+    timeoutKind: PromptTimeoutKind
   ): Promise<string> {
     const stopGeneration = this.getStopGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
@@ -185,7 +222,7 @@ export class SessionService {
     let promptError: unknown;
     let promptErrorSet = false;
     // Scope orphan detection to each prompt turn.
-    this.acpEventProcessor.beginPromptTurn(sessionId);
+    const attemptKey = this.acpEventProcessor.beginPromptTurn(sessionId);
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
@@ -201,21 +238,24 @@ export class SessionService {
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       promptCompleted = true;
-      this.completePromptTurnIfCurrent(
+      this.completeSuccessfulPromptTurn({
         sessionId,
         stopGeneration,
-        `stop_reason:${result.stopReason}`,
-        {
-          phase: 'idle',
-          processState: 'alive',
-          activity: 'IDLE',
-          updatedAt: new Date().toISOString(),
-        }
-      );
+        stopReason: result.stopReason,
+      });
       return result.stopReason;
     } catch (error) {
       promptError = error;
       promptErrorSet = true;
+      if (this.shouldRecordPromptFailure(sessionId, stopGeneration, error)) {
+        await this.recordPromptFailure({
+          sessionId,
+          workspaceId,
+          attemptKey,
+          error,
+          timeoutKind,
+        });
+      }
       this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', {
         phase: 'error',
         processState: 'alive',
@@ -240,6 +280,73 @@ export class SessionService {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
+  }
+
+  private completeSuccessfulPromptTurn({
+    sessionId,
+    stopGeneration,
+    stopReason,
+  }: {
+    sessionId: string;
+    stopGeneration: number;
+    stopReason: string;
+  }): void {
+    this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  private async recordPromptFailure({
+    sessionId,
+    workspaceId,
+    attemptKey,
+    error,
+    timeoutKind,
+  }: {
+    sessionId: string;
+    workspaceId: string | undefined;
+    attemptKey: string;
+    error: unknown;
+    timeoutKind: PromptTimeoutKind;
+  }): Promise<void> {
+    const reason =
+      error instanceof PromptTimeoutError
+        ? SessionLifecycleEventReason.PROMPT_TIMEOUT
+        : SessionLifecycleEventReason.PROVIDER_ERROR;
+    if (!workspaceId) {
+      logger.warn('Skipped prompt failure lifecycle event without workspace owner', {
+        sessionId,
+        attemptKey,
+        reason,
+      });
+      return;
+    }
+
+    await this.lifecycleEventService.record({
+      workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.TURN_INTERRUPTED,
+      reason,
+      message:
+        error instanceof PromptTimeoutError
+          ? timeoutMessage(error.timeoutMs, timeoutKind)
+          : toProviderFailureChatMessage(this.acpEventProcessor.getProvider(sessionId), error),
+      dedupeKey: `turn:${attemptKey}:stop`,
+    });
+  }
+
+  private shouldRecordPromptFailure(
+    sessionId: string,
+    stopGeneration: number,
+    error: unknown
+  ): boolean {
+    if (this.isTurnAlreadyInProgressError(error) || this.isSessionStopping(sessionId)) {
+      return false;
+    }
+    return this.getStopGeneration(sessionId) === stopGeneration;
   }
 
   private completePromptTurnIfCurrent(

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
@@ -22,7 +23,12 @@ import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import { SessionStatus, type WorkspaceStatus } from '@/shared/core';
+import {
+  SessionLifecycleEventKind,
+  SessionLifecycleEventReason,
+  SessionStatus,
+  type WorkspaceStatus,
+} from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -44,6 +50,7 @@ import type { SessionPromptBuilder } from './session.prompt-builder';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
+import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { maybeDiscoverPROnSessionEnd as maybeDiscoverPROnSessionEndHelper } from './session-pr-discovery.service';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
@@ -77,11 +84,33 @@ type StartSessionOptions = {
   startupModePreset?: SessionStartupModePreset;
 };
 
-type StopSessionOptions = {
+export type SessionStopReason =
+  | 'USER_STOP'
+  | 'SESSION_CLOSED'
+  | 'WORKSPACE_ARCHIVED'
+  | 'SYSTEM_STOP';
+
+export type StopSessionOptions = {
   cleanupTransientRatchetSession?: boolean;
+  recordLifecycleEvent?: boolean;
+  reason?: SessionStopReason;
 };
 
+const SESSION_STOP_MESSAGES: Record<SessionStopReason, string> = {
+  USER_STOP: 'Session stopped by you.',
+  SESSION_CLOSED: 'Session closed by you.',
+  WORKSPACE_ARCHIVED: 'Session stopped because the workspace was archived.',
+  SYSTEM_STOP: 'Session stopped by the system.',
+};
+const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
+
 type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
+type HydrateProviderHistory = (
+  sessionId: string,
+  session: AgentSessionRecord & {
+    workspace: { worktreePath: string | null };
+  }
+) => Promise<void>;
 
 export type SessionLifecycleServiceDependencies = {
   repository: SessionRepository;
@@ -93,6 +122,8 @@ export type SessionLifecycleServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   retryService: SessionRetryService;
+  lifecycleEventService: SessionLifecycleEventService;
+  hydrateProviderHistory?: HydrateProviderHistory;
   sendSessionMessage: SendSessionMessage;
   onBeforeStopSession?: (sessionId: string) => void;
   onSessionExit?: (sessionId: string) => void;
@@ -108,10 +139,13 @@ export class SessionLifecycleService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
+  private readonly lifecycleEventService: SessionLifecycleEventService;
+  private readonly hydrateProviderHistory: HydrateProviderHistory;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly stoppingSessions = new Set<string>();
+  private readonly shutdownSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, number>();
@@ -130,6 +164,9 @@ export class SessionLifecycleService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.retryService = options.retryService;
+    this.lifecycleEventService = options.lifecycleEventService;
+    this.hydrateProviderHistory =
+      options.hydrateProviderHistory ?? (async (): Promise<void> => undefined);
     this.sendSessionMessage = options.sendSessionMessage;
     this.onBeforeStopSession = options.onBeforeStopSession;
     this.onSessionExit = options.onSessionExit;
@@ -222,8 +259,9 @@ export class SessionLifecycleService {
 
     this.advanceStopGeneration(sessionId);
     this.stoppingSessions.add(sessionId);
+    const stopInvocationId = randomUUID();
     try {
-      await this.stopSessionWithBarrier(sessionId, options);
+      await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
     } finally {
       this.stoppingSessions.delete(sessionId);
       this.stopGenerations.delete(sessionId);
@@ -232,6 +270,7 @@ export class SessionLifecycleService {
 
   private async stopSessionWithBarrier(
     sessionId: string,
+    stopInvocationId: string,
     options?: StopSessionOptions
   ): Promise<void> {
     this.promptTurnCompletionService.clearSession(sessionId);
@@ -239,10 +278,22 @@ export class SessionLifecycleService {
     this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
+    const reason = options?.reason ?? 'SYSTEM_STOP';
 
     if (this.runtimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
+    }
+
+    if (workspaceId && options?.recordLifecycleEvent !== false) {
+      await this.lifecycleEventService.record({
+        workspaceId,
+        sessionId,
+        kind: SessionLifecycleEventKind.SESSION_STOPPED,
+        reason,
+        message: SESSION_STOP_MESSAGES[reason],
+        dedupeKey: `session-stop:${stopInvocationId}`,
+      });
     }
 
     const current = this.getRuntimeSnapshot(sessionId);
@@ -316,7 +367,10 @@ export class SessionLifecycleService {
     }
   }
 
-  async stopWorkspaceSessions(workspaceId: string): Promise<void> {
+  async stopWorkspaceSessions(
+    workspaceId: string,
+    options?: { reason?: SessionStopReason }
+  ): Promise<void> {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
     const stopErrors: unknown[] = [];
 
@@ -326,7 +380,7 @@ export class SessionLifecycleService {
         this.runtimeManager.isSessionRunning(session.id)
       ) {
         try {
-          await this.stopSession(session.id);
+          await this.stopSession(session.id, { reason: options?.reason ?? 'SYSTEM_STOP' });
         } catch (error) {
           logger.error('Failed to stop workspace session', {
             sessionId: session.id,
@@ -531,6 +585,13 @@ export class SessionLifecycleService {
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
     this.promptTurnCompletionService.clearAll();
+    const shutdownSessionIds = this.runtimeManager.beginShutdown();
+    for (const sessionId of shutdownSessionIds) {
+      this.shutdownSessions.add(sessionId);
+    }
+
+    await this.recordShutdownLifecycleEvents(shutdownSessionIds);
+
     try {
       await this.runtimeManager.stopAllClients(timeoutMs);
     } catch (error) {
@@ -541,8 +602,56 @@ export class SessionLifecycleService {
     }
   }
 
+  private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
+    const session = await this.loadSessionForStop(sessionId);
+    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
+    if (!workspaceId) {
+      logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
+      return;
+    }
+    await this.lifecycleEventService.record({
+      workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.SESSION_STOPPED,
+      reason: SessionLifecycleEventReason.SYSTEM_STOP,
+      message: SESSION_STOP_MESSAGES.SYSTEM_STOP,
+      dedupeKey: `session-stop:${randomUUID()}`,
+    });
+  }
+
+  private async recordShutdownLifecycleEvents(sessionIds: string[]): Promise<void> {
+    const resultsPromise = Promise.allSettled(
+      sessionIds.map((sessionId) => this.recordShutdownLifecycleEvent(sessionId))
+    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const results = await Promise.race([
+      resultsPromise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    if (results === null) {
+      logger.warn('Timed out recording shutdown lifecycle events; continuing shutdown', {
+        timeoutMs: SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS,
+      });
+      return;
+    }
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
+          sessionId: sessionIds[index],
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
+    }
+  }
+
   private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
     const runtimeEventHandler = this.acpEventProcessor.createRuntimeEventHandler(sessionId);
+    const runtimeIncarnationId = randomUUID();
 
     return {
       ...runtimeEventHandler,
@@ -567,52 +676,12 @@ export class SessionLifecycleService {
       },
       onExit: async (sid: string, exitCode: number | null) => {
         this.stopGenerations.delete(sid);
-        this.promptTurnCompletionService.clearSession(sid);
-        this.onSessionExit?.(sid);
-        this.finalizeOrphanedToolCalls(sid, 'runtime_exit');
-        this.acpEventProcessor.clearSessionState(sid);
-        this.sessionPermissionService.cancelPendingRequests(sid);
-        acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
-
-        try {
-          this.sessionDomainService.markProcessExit(sid, exitCode);
-          const persistedStatus = getPersistedStatusForExitCode(exitCode);
-          const session = await this.repository.updateSession(sid, {
-            status: persistedStatus,
-          });
-          logger.debug('Updated ACP session status on exit', {
-            sessionId: sid,
-            exitCode,
-            status: persistedStatus,
-          });
-
-          await this.recordRatchetSessionEndOnExit(session.workspaceId, sid, exitCode);
-          void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
-          if (session.workflow === 'ratchet') {
-            await this.persistRatchetTranscript(sid, session);
-            await this.repository.deleteSession(sid);
-            this.sessionDomainService.clearSession(sid);
-            logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
-          }
-          if (session.workflow === 'auto-iteration' && this.autoIterationExitBridge) {
-            // Only propagate death for unexpected exits — intentional stop/recycle sets
-            // isStopInProgress, so the loop should not be marked as failed in those cases.
-            if (!this.runtimeManager.isStopInProgress(sid)) {
-              this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sid);
-            }
-          }
-        } catch (error) {
-          logger.warn('Failed to update ACP session status on exit', {
-            sessionId: sid,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          try {
-            this.clearSessionStoreIfInactive(sid, 'runtime_exit');
-          } finally {
-            acpTraceLogger.closeSession(sid);
-          }
-        }
+        const wasDeliberateStop =
+          this.stoppingSessions.has(sid) ||
+          this.shutdownSessions.has(sid) ||
+          this.runtimeManager.isStopInProgress(sid);
+        this.prepareAcpRuntimeExit(sid, exitCode);
+        await this.handleAcpRuntimeExit(sid, exitCode, wasDeliberateStop, runtimeIncarnationId);
       },
       onError: (sid: string, error: Error) => {
         acpTraceLogger.log(sid, 'runtime_error', {
@@ -630,6 +699,113 @@ export class SessionLifecycleService {
         this.acpEventProcessor.handleAcpLog(sid, payload);
       },
     };
+  }
+
+  private prepareAcpRuntimeExit(sessionId: string, exitCode: number | null): void {
+    this.promptTurnCompletionService.clearSession(sessionId);
+    this.onSessionExit?.(sessionId);
+    this.finalizeOrphanedToolCalls(sessionId, 'runtime_exit');
+    this.acpEventProcessor.clearSessionState(sessionId);
+    this.sessionPermissionService.cancelPendingRequests(sessionId);
+    acpTraceLogger.log(sessionId, 'runtime_exit', { exitCode });
+  }
+
+  private async handleAcpRuntimeExit(
+    sessionId: string,
+    exitCode: number | null,
+    wasDeliberateStop: boolean,
+    runtimeIncarnationId: string
+  ): Promise<void> {
+    try {
+      this.sessionDomainService.markProcessExit(sessionId, exitCode);
+      const session = await this.repository.getSessionById(sessionId);
+      if (!session) {
+        logger.warn('Failed to find ACP session on exit', { sessionId });
+        return;
+      }
+
+      const persistedStatus = getPersistedStatusForExitCode(exitCode);
+      try {
+        await this.repository.updateSession(sessionId, { status: persistedStatus });
+        logger.debug('Updated ACP session status on exit', {
+          sessionId,
+          exitCode,
+          status: persistedStatus,
+        });
+      } catch (error) {
+        logger.warn('Failed to update ACP session status on exit', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      await this.recordUnexpectedExitIfNeeded(
+        session,
+        sessionId,
+        exitCode,
+        wasDeliberateStop,
+        runtimeIncarnationId
+      );
+      await this.recordRatchetSessionEndOnExit(session.workspaceId, sessionId, exitCode);
+      void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
+      await this.cleanupExitedWorkflow(session, sessionId, wasDeliberateStop);
+    } catch (error) {
+      logger.warn('Failed to process ACP session exit', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      try {
+        this.clearSessionStoreIfInactive(sessionId, 'runtime_exit');
+      } finally {
+        acpTraceLogger.closeSession(sessionId);
+      }
+    }
+  }
+
+  private async recordUnexpectedExitIfNeeded(
+    session: AgentSessionRecord,
+    sessionId: string,
+    exitCode: number | null,
+    wasDeliberateStop: boolean,
+    runtimeIncarnationId: string
+  ): Promise<void> {
+    if (wasDeliberateStop) {
+      return;
+    }
+
+    await this.lifecycleEventService.record({
+      workspaceId: session.workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.SESSION_STOPPED,
+      reason: SessionLifecycleEventReason.UNEXPECTED_EXIT,
+      message:
+        exitCode === null
+          ? 'Session stopped: agent process exited unexpectedly.'
+          : `Session stopped: agent process exited unexpectedly (code ${exitCode}).`,
+      dedupeKey: `process-exit:${runtimeIncarnationId}:${exitCode ?? 'signal'}`,
+    });
+  }
+
+  private async cleanupExitedWorkflow(
+    session: AgentSessionRecord,
+    sessionId: string,
+    wasDeliberateStop: boolean
+  ): Promise<void> {
+    if (session.workflow === 'ratchet') {
+      await this.persistRatchetTranscript(sessionId);
+      await this.repository.deleteSession(sessionId);
+      this.sessionDomainService.clearSession(sessionId);
+      logger.debug('Deleted transient ratchet ACP session', { sessionId });
+    }
+
+    if (
+      session.workflow === 'auto-iteration' &&
+      this.autoIterationExitBridge &&
+      !wasDeliberateStop
+    ) {
+      this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sessionId);
+    }
   }
 
   private async createAcpClient(
@@ -884,7 +1060,7 @@ export class SessionLifecycleService {
     }
 
     try {
-      await this.persistRatchetTranscript(sessionId, session);
+      await this.persistRatchetTranscript(sessionId);
       await this.repository.deleteSession(sessionId);
       this.sessionDomainService.clearSession(sessionId);
       logger.debug('Deleted transient ratchet session after stop', { sessionId });
@@ -944,25 +1120,29 @@ export class SessionLifecycleService {
     logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 
-  private async persistRatchetTranscript(
-    sessionId: string,
-    session: AgentSessionRecord
-  ): Promise<void> {
-    if (!this.workspaceBridge) {
-      logger.warn('Cannot persist ratchet transcript: no workspace bridge', { sessionId });
+  async persistClosedSession(sessionId: string): Promise<void> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      logger.warn('Cannot persist closed session: session not found', { sessionId });
       return;
     }
 
-    const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
     const workspace = await workspaceDataService.findById(session.workspaceId);
     if (!workspace?.worktreePath) {
-      logger.warn('Cannot persist ratchet transcript: no worktree path', {
+      logger.warn('Cannot persist closed session: no worktree path', {
         sessionId,
         workspaceId: session.workspaceId,
       });
       return;
     }
 
+    await this.hydrateProviderHistory(sessionId, {
+      ...session,
+      workspace: { worktreePath: workspace.worktreePath },
+    });
+    await this.lifecycleEventService.hydrate(sessionId);
+
+    const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
     await closedSessionPersistenceService.persistClosedSession({
       sessionId,
       workspaceId: session.workspaceId,
@@ -974,6 +1154,10 @@ export class SessionLifecycleService {
       startedAt: session.createdAt,
       messages: transcript,
     });
+  }
+
+  private async persistRatchetTranscript(sessionId: string): Promise<void> {
+    await this.persistClosedSession(sessionId);
   }
 
   private async getOrCreateAcpSessionClient(

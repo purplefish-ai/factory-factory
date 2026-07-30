@@ -29,6 +29,21 @@ enum SessionStatus {
   FAILED
 }
 
+enum SessionLifecycleEventKind {
+  TURN_INTERRUPTED
+  SESSION_STOPPED
+}
+
+enum SessionLifecycleEventReason {
+  PROMPT_TIMEOUT
+  PROVIDER_ERROR
+  USER_STOP
+  SESSION_CLOSED
+  WORKSPACE_ARCHIVED
+  UNEXPECTED_EXIT
+  SYSTEM_STOP
+}
+
 enum SessionProvider {
   CLAUDE
   CODEX
@@ -223,6 +238,7 @@ model Workspace {
   defaultSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
   ratchetSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
   agentSessions       AgentSession[]
+  sessionLifecycleEvents SessionLifecycleEvent[]
   terminalSessions    TerminalSession[]
   closedSessions      ClosedSession[]
   createdAt           DateTime          @default(now())
@@ -497,6 +513,22 @@ model AgentSession {
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, updatedAt])
+}
+
+model SessionLifecycleEvent {
+  id          String                      @id @default(cuid())
+  workspaceId String
+  workspace   Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessionId   String
+  kind        SessionLifecycleEventKind
+  reason      SessionLifecycleEventReason
+  message     String
+  dedupeKey   String
+  createdAt   DateTime                    @default(now())
+
+  @@unique([sessionId, dedupeKey])
+  @@index([sessionId, createdAt])
+  @@index([workspaceId])
 }
 
 model TerminalSession {

@@ -443,6 +443,40 @@ export type EnumSessionProviderWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumSessionProviderFilter<$PrismaModel>
 }
 
+export type EnumSessionLifecycleEventKindFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventKind | Prisma.EnumSessionLifecycleEventKindFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventKind[]
+  notIn?: $Enums.SessionLifecycleEventKind[]
+  not?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel> | $Enums.SessionLifecycleEventKind
+}
+
+export type EnumSessionLifecycleEventReasonFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventReason | Prisma.EnumSessionLifecycleEventReasonFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventReason[]
+  notIn?: $Enums.SessionLifecycleEventReason[]
+  not?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel> | $Enums.SessionLifecycleEventReason
+}
+
+export type EnumSessionLifecycleEventKindWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventKind | Prisma.EnumSessionLifecycleEventKindFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventKind[]
+  notIn?: $Enums.SessionLifecycleEventKind[]
+  not?: Prisma.NestedEnumSessionLifecycleEventKindWithAggregatesFilter<$PrismaModel> | $Enums.SessionLifecycleEventKind
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel>
+}
+
+export type EnumSessionLifecycleEventReasonWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventReason | Prisma.EnumSessionLifecycleEventReasonFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventReason[]
+  notIn?: $Enums.SessionLifecycleEventReason[]
+  not?: Prisma.NestedEnumSessionLifecycleEventReasonWithAggregatesFilter<$PrismaModel> | $Enums.SessionLifecycleEventReason
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel>
+}
+
 export type EnumRatchetReviewTriggerModeFilter<$PrismaModel = never> = {
   equals?: $Enums.RatchetReviewTriggerMode | Prisma.EnumRatchetReviewTriggerModeFieldRefInput<$PrismaModel>
   in?: $Enums.RatchetReviewTriggerMode[]
@@ -950,6 +984,40 @@ export type NestedEnumSessionProviderWithAggregatesFilter<$PrismaModel = never> 
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumSessionProviderFilter<$PrismaModel>
   _max?: Prisma.NestedEnumSessionProviderFilter<$PrismaModel>
+}
+
+export type NestedEnumSessionLifecycleEventKindFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventKind | Prisma.EnumSessionLifecycleEventKindFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventKind[]
+  notIn?: $Enums.SessionLifecycleEventKind[]
+  not?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel> | $Enums.SessionLifecycleEventKind
+}
+
+export type NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventReason | Prisma.EnumSessionLifecycleEventReasonFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventReason[]
+  notIn?: $Enums.SessionLifecycleEventReason[]
+  not?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel> | $Enums.SessionLifecycleEventReason
+}
+
+export type NestedEnumSessionLifecycleEventKindWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventKind | Prisma.EnumSessionLifecycleEventKindFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventKind[]
+  notIn?: $Enums.SessionLifecycleEventKind[]
+  not?: Prisma.NestedEnumSessionLifecycleEventKindWithAggregatesFilter<$PrismaModel> | $Enums.SessionLifecycleEventKind
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumSessionLifecycleEventKindFilter<$PrismaModel>
+}
+
+export type NestedEnumSessionLifecycleEventReasonWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.SessionLifecycleEventReason | Prisma.EnumSessionLifecycleEventReasonFieldRefInput<$PrismaModel>
+  in?: $Enums.SessionLifecycleEventReason[]
+  notIn?: $Enums.SessionLifecycleEventReason[]
+  not?: Prisma.NestedEnumSessionLifecycleEventReasonWithAggregatesFilter<$PrismaModel> | $Enums.SessionLifecycleEventReason
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumSessionLifecycleEventReasonFilter<$PrismaModel>
 }
 
 export type NestedEnumRatchetReviewTriggerModeFilter<$PrismaModel = never> = {

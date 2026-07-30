@@ -9,6 +9,7 @@ import type {
 import { MessageState } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
 import { handleProcessExit } from './store/session-process-exit';
 import { SessionPublisher } from './store/session-publisher';
 import {
@@ -328,6 +329,15 @@ export class SessionDomainService extends EventEmitter {
       timestamp: claudeMessage.timestamp ?? this.nowIso(),
       order,
     });
+  }
+
+  upsertLifecycleMessage(sessionId: string, message: ChatMessage): boolean {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const existed = store.transcript.some((entry) => entry.id === message.id);
+    store.transcript = mergeLifecycleMessage(store.transcript, message);
+    rebuildTranscriptIndex(store);
+    setNextOrderFromTranscript(store);
+    return !existed;
   }
 
   allocateOrder(sessionId: string): number {

@@ -5,7 +5,110 @@ import {
   groupAdjacentToolCalls,
   isReasoningToolCall,
   isToolSequence,
+  isWebSocketMessage,
 } from '@/lib/chat-protocol';
+
+type LifecycleAgentMessage = Extract<AgentMessage, { type: 'session_lifecycle' }>;
+
+const validLifecycleAgentMessage: LifecycleAgentMessage = {
+  type: 'session_lifecycle',
+  lifecycle: {
+    eventId: 'event-1',
+    kind: 'SESSION_STOPPED',
+    reason: 'SYSTEM_STOP',
+    message: 'Session stopped by the system.',
+    timestamp: '2026-07-30T12:22:23.353Z',
+  },
+};
+
+describe('session lifecycle websocket validation', () => {
+  it('accepts the complete discriminated lifecycle payload', () => {
+    expect(
+      isWebSocketMessage({
+        type: 'agent_message',
+        data: validLifecycleAgentMessage,
+      })
+    ).toBe(true);
+  });
+
+  it.each([
+    ['missing lifecycle', undefined],
+    [
+      'empty event id',
+      {
+        ...validLifecycleAgentMessage.lifecycle,
+        eventId: '',
+      },
+    ],
+    [
+      'invalid kind',
+      {
+        ...validLifecycleAgentMessage.lifecycle,
+        kind: 'UNKNOWN_KIND',
+      },
+    ],
+    [
+      'invalid reason',
+      {
+        ...validLifecycleAgentMessage.lifecycle,
+        reason: 'UNKNOWN_REASON',
+      },
+    ],
+    [
+      'empty copy',
+      {
+        ...validLifecycleAgentMessage.lifecycle,
+        message: '',
+      },
+    ],
+    [
+      'invalid timestamp',
+      {
+        ...validLifecycleAgentMessage.lifecycle,
+        timestamp: 'not-a-timestamp',
+      },
+    ],
+  ])('rejects %s', (_label, lifecycle) => {
+    expect(
+      isWebSocketMessage({
+        type: 'agent_message',
+        data: {
+          type: 'session_lifecycle',
+          ...(lifecycle === undefined ? {} : { lifecycle }),
+        },
+      })
+    ).toBe(false);
+  });
+
+  it('validates lifecycle rows carried by authoritative session snapshots', () => {
+    const lifecycleRow = {
+      id: 'session-lifecycle:event-1',
+      source: 'agent',
+      timestamp: validLifecycleAgentMessage.lifecycle.timestamp,
+      order: 0,
+      message: validLifecycleAgentMessage,
+    };
+
+    expect(isWebSocketMessage({ type: 'session_snapshot', messages: [lifecycleRow] })).toBe(true);
+    expect(
+      isWebSocketMessage({
+        type: 'session_snapshot',
+        messages: [
+          {
+            ...lifecycleRow,
+            message: {
+              ...validLifecycleAgentMessage,
+              lifecycle: {
+                ...validLifecycleAgentMessage.lifecycle,
+                reason: 'UNKNOWN_REASON',
+              },
+            },
+          },
+        ],
+      })
+    ).toBe(false);
+  });
+});
 
 function createToolUseMessage(params: {
   id: string;

@@ -399,6 +399,50 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('SESSION_RUNTIME_UPDATED action', () => {
+    it('keeps lifecycle history through runtime updates and reconnect replay', () => {
+      const lifecycle = {
+        type: 'session_lifecycle',
+        lifecycle: {
+          eventId: 'event-1',
+          kind: 'TURN_INTERRUPTED',
+          reason: 'PROMPT_TIMEOUT',
+          message: 'Turn stopped: reached the 4-hour limit.',
+          timestamp: '2026-07-30T12:22:23.353Z',
+        },
+      } satisfies AgentMessage;
+      const live = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: lifecycle, messageId: 'session-lifecycle:event-1', order: 3 },
+      });
+      const idle = chatReducer(live, {
+        type: 'SESSION_RUNTIME_UPDATED',
+        payload: {
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-07-30T12:22:24.000Z',
+          },
+        },
+      });
+      const replayed = chatReducer(initialState, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'agent_message',
+              data: lifecycle,
+              messageId: 'session-lifecycle:event-1',
+              order: 3,
+            },
+          ],
+        },
+      });
+
+      expect(idle.messages.map((message) => message.id)).toContain('session-lifecycle:event-1');
+      expect(replayed.messages.map((message) => message.id)).toContain('session-lifecycle:event-1');
+    });
+
     it('clears transient UI state when runtime indicates process stopped', () => {
       const state: ChatState = {
         ...initialState,
@@ -487,6 +531,59 @@ describe('chatReducer', () => {
       expect(twice.messages).toHaveLength(1);
       expect(twice.messages[0]!.order).toBe(42);
       expect(twice.messages[0]!.message).toEqual(claudeMsg);
+    });
+
+    it('keeps a live provider message when an earlier lifecycle message reorders it', () => {
+      const providerMessage: AgentMessage = {
+        type: 'assistant',
+        message: { role: 'assistant', content: 'Provider message' },
+      };
+      const lifecycleMessage: AgentMessage = {
+        type: 'session_lifecycle',
+        lifecycle: {
+          eventId: 'event-at-eleven',
+          kind: 'TURN_INTERRUPTED',
+          reason: 'PROMPT_TIMEOUT',
+          message: 'Turn stopped before noon.',
+          timestamp: '2026-07-30T11:00:00.000Z',
+        },
+      };
+      const reduceWebSocketMessage = (state: ChatState, message: WebSocketMessage): ChatState => {
+        const action = createActionFromWebSocketMessage(message);
+        if (!action) {
+          throw new Error('Expected a websocket action');
+        }
+        return chatReducer(state, action);
+      };
+
+      const withProvider = reduceWebSocketMessage(initialState, {
+        type: 'agent_message',
+        data: providerMessage,
+        messageId: 'provider-at-noon',
+        order: 0,
+      });
+      const withLifecycle = reduceWebSocketMessage(withProvider, {
+        type: 'agent_message',
+        data: lifecycleMessage,
+        messageId: 'session-lifecycle:event-at-eleven',
+        order: 0,
+      });
+      const reconciled = reduceWebSocketMessage(withLifecycle, {
+        type: 'agent_message',
+        data: providerMessage,
+        messageId: 'provider-at-noon',
+        order: 1,
+      });
+
+      expect(reconciled.messages.map((message) => message.id)).toEqual([
+        'session-lifecycle:event-at-eleven',
+        'provider-at-noon',
+      ]);
+      expect(reconciled.messages.map((message) => message.order)).toEqual([0, 1]);
+      expect(reconciled.messages.map((message) => message.message)).toEqual([
+        lifecycleMessage,
+        providerMessage,
+      ]);
     });
 
     it('does not derive runtime phase changes from Claude message payloads', () => {
@@ -1439,6 +1536,105 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
 
   describe('SESSION_SNAPSHOT action', () => {
+    it('authoritatively reconciles mixed rows and transient-to-durable lifecycle recovery', () => {
+      const transientId = 'session-lifecycle:transient:session-1:stop-1';
+      const state = createInitialChatState({
+        messages: [
+          {
+            id: 'user-1',
+            source: 'user',
+            text: 'Question',
+            timestamp: '2026-07-30T12:00:00.000Z',
+            order: 0,
+          },
+          {
+            id: transientId,
+            source: 'agent',
+            timestamp: '2026-07-30T12:30:00.000Z',
+            order: 1,
+            message: {
+              type: 'session_lifecycle',
+              lifecycle: {
+                eventId: 'transient:session-1:stop-1',
+                kind: 'SESSION_STOPPED',
+                reason: 'SYSTEM_STOP',
+                message: 'Session stopped by the system.',
+                timestamp: '2026-07-30T12:30:00.000Z',
+              },
+            },
+          },
+          {
+            id: 'agent-1',
+            source: 'agent',
+            timestamp: '2026-07-30T13:00:00.000Z',
+            order: 2,
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: 'Answer' },
+            },
+          },
+        ],
+      });
+      const durableId = 'session-lifecycle:event-1';
+
+      const reconciled = chatReducer(state, {
+        type: 'SESSION_SNAPSHOT',
+        payload: {
+          messages: [
+            {
+              id: durableId,
+              source: 'agent',
+              timestamp: '2026-07-30T11:00:00.000Z',
+              order: 0,
+              message: {
+                type: 'session_lifecycle',
+                lifecycle: {
+                  eventId: 'event-1',
+                  kind: 'SESSION_STOPPED',
+                  reason: 'SYSTEM_STOP',
+                  message: 'Session stopped by the system.',
+                  timestamp: '2026-07-30T11:00:00.000Z',
+                },
+              },
+            },
+            {
+              id: 'user-1',
+              source: 'user',
+              text: 'Question',
+              timestamp: '2026-07-30T12:00:00.000Z',
+              order: 1,
+            },
+            {
+              id: 'agent-1',
+              source: 'agent',
+              timestamp: '2026-07-30T13:00:00.000Z',
+              order: 2,
+              message: {
+                type: 'assistant',
+                message: { role: 'assistant', content: 'Answer' },
+              },
+            },
+          ],
+          queuedMessages: [],
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            updatedAt: '2026-07-30T13:00:01.000Z',
+          },
+        },
+      });
+
+      expect(reconciled.messages.map((message) => message.id)).toEqual([
+        durableId,
+        'user-1',
+        'agent-1',
+      ]);
+      expect(reconciled.messages.some((message) => message.id === transientId)).toBe(false);
+      expect(reconciled.agentMessageOrderToIndex.get(0)).toBe(0);
+      expect(reconciled.agentMessageOrderToIndex.get(2)).toBe(2);
+    });
+
     it('should preserve lastRejectedMessage for recovery', () => {
       let state: ChatState = {
         ...initialState,

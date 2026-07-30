@@ -30,7 +30,10 @@ const logger = createLogger('acp-runtime-manager');
 
 /** Thrown when an ACP prompt exceeds the caller-specified timeout. */
 export class PromptTimeoutError extends Error {
-  constructor(sessionId: string, timeoutMs: number) {
+  constructor(
+    sessionId: string,
+    public readonly timeoutMs: number
+  ) {
     super(`ACP prompt timed out after ${timeoutMs}ms for session ${sessionId}`);
     this.name = 'PromptTimeoutError';
   }
@@ -499,16 +502,22 @@ export class AcpRuntimeManager {
     return new Error(`ACP session stop requested; cannot create client ${sessionId}`);
   }
 
-  private beginShutdown(): void {
-    if (this.isShuttingDown) {
-      return;
+  beginShutdown(): string[] {
+    const sessionIds = new Set([
+      ...this.sessions.keys(),
+      ...this.pendingCreation.keys(),
+      ...this.creationLocks.keys(),
+    ]);
+
+    if (!this.isShuttingDown) {
+      this.isShuttingDown = true;
+      for (const rejectShutdown of this.shutdownWaiters) {
+        rejectShutdown();
+      }
+      this.shutdownWaiters.clear();
     }
 
-    this.isShuttingDown = true;
-    for (const rejectShutdown of this.shutdownWaiters) {
-      rejectShutdown();
-    }
-    this.shutdownWaiters.clear();
+    return [...sessionIds];
   }
 
   private beginSessionStop(sessionId: string): void {

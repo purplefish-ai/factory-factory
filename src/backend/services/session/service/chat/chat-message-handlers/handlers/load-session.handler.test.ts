@@ -2,11 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatMessage } from '@/shared/acp-protocol';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   loadClaudeSessionHistory: vi.fn(),
   loadCodexSessionHistory: vi.fn(),
+  hydrateLifecycleEvents: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptionsWithFallback: vi.fn(),
@@ -47,6 +49,9 @@ vi.mock('@/backend/services/session/service/data/codex-session-history-loader.se
 vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
   sessionLifecycleService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
+  },
+  sessionLifecycleEventService: {
+    hydrate: mocks.hydrateLifecycleEvents,
   },
   sessionConfigService: {
     getChatBarCapabilities: mocks.getChatBarCapabilities,
@@ -230,6 +235,40 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
+  it('hydrates lifecycle events after provider history and before replay', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+
+    await handler({
+      ws: { send: vi.fn() } as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    const hydrateProviderHistoryInvocation =
+      mocks.loadClaudeSessionHistory.mock.invocationCallOrder[0];
+    const hydrateLifecycleEventsInvocation =
+      mocks.hydrateLifecycleEvents.mock.invocationCallOrder[0];
+    const subscribeInvocation = mocks.subscribe.mock.invocationCallOrder[0];
+
+    expect(hydrateProviderHistoryInvocation).toBeLessThan(hydrateLifecycleEventsInvocation!);
+    expect(hydrateLifecycleEventsInvocation).toBeLessThan(subscribeInvocation!);
+    expect(mocks.hydrateLifecycleEvents).toHaveBeenCalledWith('session-1');
+  });
+
   it('does not replace transcript when messages arrive while history load is in flight', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
@@ -294,7 +333,9 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-race-1', 'none');
   });
 
-  it('marks Claude history hydration as none when JSONL file is not found', async () => {
+  it('keeps Claude history eligible for retry when the JSONL file is not found', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-14T00:00:00.000Z'));
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       status: 'IDLE',
@@ -318,7 +359,11 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-1', 'none');
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+    expect(mocks.setHistoryRetryAt).toHaveBeenCalledWith(
+      'session-1',
+      new Date('2026-02-14T00:00:30.000Z').getTime()
+    );
   });
 
   it('does not mark history hydrated when JSONL read fails', async () => {
@@ -351,6 +396,100 @@ describe('createLoadSessionHandler', () => {
 
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'CLAUDE',
+    'CODEX',
+  ] as const)('retries full %s history hydration when the failed attempt left lifecycle-only rows', async (provider) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-14T00:00:00.000Z'));
+    try {
+      const sessionId = `session-${provider.toLowerCase()}-lifecycle-retry`;
+      const providerSessionId = `provider-${provider.toLowerCase()}-lifecycle-retry`;
+      const lifecycleMessage: ChatMessage = {
+        id: 'session-lifecycle:event-1',
+        source: 'agent',
+        timestamp: '2026-02-14T00:00:05.000Z',
+        order: 0,
+        message: {
+          type: 'session_lifecycle',
+          lifecycle: {
+            eventId: 'event-1',
+            kind: 'TURN_INTERRUPTED',
+            reason: 'PROVIDER_ERROR',
+            message: 'Turn stopped: the provider returned an error.',
+            timestamp: '2026-02-14T00:00:05.000Z',
+          },
+        },
+      };
+      let transcript: ChatMessage[] = [];
+      mocks.getTranscriptSnapshot.mockImplementation(() => transcript);
+      mocks.hydrateLifecycleEvents.mockImplementation(() => {
+        if (transcript.length === 0) {
+          transcript = [lifecycleMessage];
+        }
+        return Promise.resolve();
+      });
+      mocks.replaceTranscript.mockImplementation(
+        (_loadedSessionId: string, nextTranscript: ChatMessage[]) => {
+          transcript = nextTranscript;
+        }
+      );
+      mocks.findById.mockResolvedValue({
+        provider,
+        status: 'IDLE',
+        model: provider === 'CLAUDE' ? 'claude-sonnet-4-5' : 'gpt-5.3-codex',
+        providerSessionId,
+        workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      });
+      mocks.isHistoryHydrated.mockReturnValue(false);
+      const loader =
+        provider === 'CLAUDE' ? mocks.loadClaudeSessionHistory : mocks.loadCodexSessionHistory;
+      loader.mockResolvedValueOnce({ status: 'not_found' }).mockResolvedValueOnce({
+        status: 'loaded',
+        filePath: `/tmp/${providerSessionId}.jsonl`,
+        history: [
+          {
+            type: 'user',
+            content: 'Recovered provider history',
+            timestamp: '2026-02-14T00:00:00.000Z',
+          },
+        ],
+      });
+
+      const handler = createLoadSessionHandler({
+        getClientCreator: () => null,
+        tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+        setManualDispatchResume: vi.fn(),
+      });
+      const context = {
+        ws: { send: vi.fn() } as never,
+        sessionId,
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      };
+
+      await handler(context);
+      vi.advanceTimersByTime(30_001);
+      await handler(context);
+
+      expect(loader).toHaveBeenCalledTimes(2);
+      expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+        sessionId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'user',
+            text: 'Recovered provider history',
+          }),
+          expect.objectContaining({ id: 'session-lifecycle:event-1' }),
+        ]),
+        { historySource: 'jsonl' }
+      );
+      expect(mocks.markHistoryHydrated).not.toHaveBeenCalledWith(sessionId, 'none');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throttles repeated Claude history reads after read failures', async () => {
@@ -756,7 +895,7 @@ describe('createLoadSessionHandler', () => {
   });
 
   it('backfills missing CODEX tool calls from JSONL when a live transcript already exists', async () => {
-    const existingTranscript = [
+    const existingTranscript: ChatMessage[] = [
       {
         id: 'existing-user',
         source: 'user',
@@ -783,6 +922,22 @@ describe('createLoadSessionHandler', () => {
         },
         timestamp: '2026-02-14T00:00:04.000Z',
         order: 2,
+      },
+      {
+        id: 'session-lifecycle:event-between-tool-parts',
+        source: 'agent',
+        timestamp: '2026-02-14T00:00:02.500Z',
+        order: 1.5,
+        message: {
+          type: 'session_lifecycle',
+          lifecycle: {
+            eventId: 'event-between-tool-parts',
+            kind: 'TURN_INTERRUPTED',
+            reason: 'PROVIDER_ERROR',
+            message: 'Turn stopped: the provider returned an error.',
+            timestamp: '2026-02-14T00:00:02.500Z',
+          },
+        },
       },
     ];
 
@@ -881,7 +1036,15 @@ describe('createLoadSessionHandler', () => {
       ])
     );
     expect(backfilledTranscript.map((message: { order: number }) => message.order)).toEqual([
-      0, 1, 2, 3, 4,
+      0, 1, 2, 2.5, 3, 4,
+    ]);
+    expect(backfilledTranscript.map((message: { id: string }) => message.id)).toEqual([
+      'existing-user',
+      'existing-assistant-1',
+      expect.stringMatching(/^history-/),
+      'session-lifecycle:event-between-tool-parts',
+      expect.stringMatching(/^history-/),
+      'existing-assistant-2',
     ]);
     expect(mocks.replaceTranscript).toHaveBeenCalledWith(
       'session-codex-backfill',
@@ -917,10 +1080,15 @@ describe('createLoadSessionHandler', () => {
         id: 'existing-result',
         source: 'agent',
         message: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: 'call-present', content: 'ok' }],
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 1,
+            content_block: {
+              type: 'tool_result',
+              tool_use_id: 'call-present',
+              content: 'ok',
+            },
           },
         },
         timestamp: '2026-02-14T00:00:03.000Z',

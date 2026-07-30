@@ -38,6 +38,7 @@ function createCaller() {
   const sessionLifecycleService = {
     startSession: vi.fn(async () => undefined),
     stopSession: vi.fn(async () => undefined),
+    persistClosedSession: vi.fn(async () => undefined),
   };
   const sessionDomainService = {
     clearSession: vi.fn(),
@@ -246,6 +247,7 @@ describe('sessionRouter', () => {
 
     expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s-orphan', {
       cleanupTransientRatchetSession: false,
+      recordLifecycleEvent: false,
     });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s-orphan');
     expect(mockSessionDataService.deleteAgentSession).toHaveBeenCalledWith('s-orphan');
@@ -342,8 +344,23 @@ describe('sessionRouter', () => {
     });
     expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1', {
       cleanupTransientRatchetSession: false,
+      reason: 'USER_STOP',
+    });
+    expect(sessionLifecycleService.persistClosedSession).toHaveBeenCalledWith('s1');
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalledWith('s1', {
+      cleanupTransientRatchetSession: false,
+      reason: 'SESSION_CLOSED',
     });
     expect(sessionDomainService.clearSession).toHaveBeenCalledWith('s1');
+    expect(sessionLifecycleService.stopSession.mock.invocationCallOrder[1]).toBeLessThan(
+      sessionLifecycleService.persistClosedSession.mock.invocationCallOrder[0]!
+    );
+    expect(sessionLifecycleService.persistClosedSession.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionDomainService.clearSession.mock.invocationCallOrder[0]!
+    );
+    expect(sessionDomainService.clearSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSessionDataService.deleteAgentSession.mock.invocationCallOrder[0]!
+    );
 
     await expect(caller.listTerminalSessions({ workspaceId: 'w1' })).resolves.toEqual([
       { id: 't1' },

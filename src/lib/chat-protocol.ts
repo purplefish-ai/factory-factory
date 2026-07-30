@@ -28,6 +28,7 @@ import {
   SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
   WEBSOCKET_MESSAGE_TYPES,
 } from '@/shared/acp-protocol';
+import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
 // =============================================================================
 // UI Chat Message Group Types
@@ -59,6 +60,67 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'err
 const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
 const claudeMessageTypes = new Set<string>(AGENT_MESSAGE_TYPES);
+const lifecycleEventKinds = new Set<string>(Object.values(SessionLifecycleEventKind));
+const lifecycleEventReasons = new Set<string>(Object.values(SessionLifecycleEventReason));
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isSessionLifecyclePayload(data: unknown): boolean {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+  const lifecycle = data as {
+    eventId?: unknown;
+    kind?: unknown;
+    reason?: unknown;
+    message?: unknown;
+    timestamp?: unknown;
+  };
+  return (
+    isNonEmptyString(lifecycle.eventId) &&
+    typeof lifecycle.kind === 'string' &&
+    lifecycleEventKinds.has(lifecycle.kind) &&
+    typeof lifecycle.reason === 'string' &&
+    lifecycleEventReasons.has(lifecycle.reason) &&
+    isNonEmptyString(lifecycle.message) &&
+    isNonEmptyString(lifecycle.timestamp) &&
+    !Number.isNaN(Date.parse(lifecycle.timestamp))
+  );
+}
+
+function isAgentMessagePayload(data: unknown): boolean {
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
+  const nested = data as { type?: unknown; lifecycle?: unknown };
+  if (typeof nested.type !== 'string' || !claudeMessageTypes.has(nested.type)) {
+    return false;
+  }
+  return nested.type !== 'session_lifecycle' || isSessionLifecyclePayload(nested.lifecycle);
+}
+
+function hasValidSnapshotLifecycleMessages(data: object): boolean {
+  const messages = (data as { messages?: unknown }).messages;
+  if (!Array.isArray(messages)) {
+    return false;
+  }
+  return messages.every((message) => {
+    if (typeof message !== 'object' || message === null) {
+      return true;
+    }
+    const agentMessage = (message as { message?: unknown }).message;
+    if (
+      typeof agentMessage !== 'object' ||
+      agentMessage === null ||
+      (agentMessage as { type?: unknown }).type !== 'session_lifecycle'
+    ) {
+      return true;
+    }
+    return isAgentMessagePayload(agentMessage);
+  });
+}
 
 function isAssistantTextDeltaMessage(data: object): boolean {
   const delta = data as {
@@ -116,11 +178,11 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 
   // agent_message must include a minimally shaped Claude payload to avoid runtime crashes.
   if (obj.type === 'agent_message') {
-    if (typeof obj.data !== 'object' || obj.data === null) {
-      return false;
-    }
-    const nested = obj.data as { type?: unknown };
-    return typeof nested.type === 'string' && claudeMessageTypes.has(nested.type);
+    return isAgentMessagePayload(obj.data);
+  }
+
+  if (obj.type === 'session_snapshot') {
+    return hasValidSnapshotLifecycleMessages(data);
   }
 
   if (obj.type === 'assistant_text_delta') {

@@ -32,6 +32,27 @@ export const SessionStatus = {
 export type SessionStatus = (typeof SessionStatus)[keyof typeof SessionStatus]
 
 
+export const SessionLifecycleEventKind = {
+  TURN_INTERRUPTED: 'TURN_INTERRUPTED',
+  SESSION_STOPPED: 'SESSION_STOPPED'
+} as const
+
+export type SessionLifecycleEventKind = (typeof SessionLifecycleEventKind)[keyof typeof SessionLifecycleEventKind]
+
+
+export const SessionLifecycleEventReason = {
+  PROMPT_TIMEOUT: 'PROMPT_TIMEOUT',
+  PROVIDER_ERROR: 'PROVIDER_ERROR',
+  USER_STOP: 'USER_STOP',
+  SESSION_CLOSED: 'SESSION_CLOSED',
+  WORKSPACE_ARCHIVED: 'WORKSPACE_ARCHIVED',
+  UNEXPECTED_EXIT: 'UNEXPECTED_EXIT',
+  SYSTEM_STOP: 'SYSTEM_STOP'
+} as const
+
+export type SessionLifecycleEventReason = (typeof SessionLifecycleEventReason)[keyof typeof SessionLifecycleEventReason]
+
+
 export const SessionProvider = {
   CLAUDE: 'CLAUDE',
   CODEX: 'CODEX'

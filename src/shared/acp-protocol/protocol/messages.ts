@@ -1,3 +1,4 @@
+import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type {
   AgentContentItem,
   AgentStreamEvent,
@@ -6,20 +7,30 @@ import type {
   ToolDefinition,
 } from './content';
 
+export interface SessionLifecycleMessage {
+  eventId: string;
+  kind: SessionLifecycleEventKind;
+  reason: SessionLifecycleEventReason;
+  message: string;
+  timestamp: string;
+}
+
 /**
  * Top-level message types received from the WebSocket.
  * These are the messages forwarded from the ACP runtime.
  */
-export interface AgentMessage {
-  type:
-    | 'system'
-    | 'assistant'
-    | 'user'
-    | 'stream_event'
-    | 'result'
-    | 'error'
-    | 'child_workspace_update'
-    | 'parent_workspace_update';
+type AgentMessageType =
+  | 'system'
+  | 'assistant'
+  | 'user'
+  | 'stream_event'
+  | 'result'
+  | 'error'
+  | 'session_lifecycle'
+  | 'child_workspace_update'
+  | 'parent_workspace_update';
+
+interface AgentMessageCommon {
   timestamp?: string;
   // child_workspace_update fields (only present when type === 'child_workspace_update')
   childWorkspaceId?: string;
@@ -59,6 +70,16 @@ export interface AgentMessage {
   status?: string;
 }
 
+export type AgentMessage =
+  | (AgentMessageCommon & {
+      type: 'session_lifecycle';
+      lifecycle: SessionLifecycleMessage;
+    })
+  | (AgentMessageCommon & {
+      type: Exclude<AgentMessageType, 'session_lifecycle'>;
+      lifecycle?: never;
+    });
+
 const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   system: true,
   assistant: true,
@@ -66,6 +87,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   stream_event: true,
   result: true,
   error: true,
+  session_lifecycle: true,
   child_workspace_update: true,
   parent_workspace_update: true,
 };

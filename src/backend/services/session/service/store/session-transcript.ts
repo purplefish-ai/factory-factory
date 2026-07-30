@@ -220,13 +220,16 @@ export function removeTranscriptMessageById(store: SessionStore, messageId: stri
 }
 
 export function setNextOrderFromTranscript(store: SessionStore): void {
-  let maxOrder = -1;
+  let nextOrder = store.nextOrder;
   for (const message of store.transcript) {
-    if (message.order > maxOrder) {
-      maxOrder = message.order;
+    if (message.message?.type === 'session_lifecycle') {
+      continue;
+    }
+    if (message.order >= nextOrder) {
+      nextOrder = message.order + 1;
     }
   }
-  store.nextOrder = maxOrder + 1;
+  store.nextOrder = nextOrder;
 }
 
 function hasMatchingToolResult(message: AgentMessage, toolUseId: string): boolean {

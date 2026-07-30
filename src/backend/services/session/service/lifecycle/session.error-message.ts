@@ -1,4 +1,5 @@
 const MAX_ERROR_MESSAGE_LENGTH = 4000;
+const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
 
 function truncate(value: string): string {
   if (value.length <= MAX_ERROR_MESSAGE_LENGTH) {
@@ -55,4 +56,35 @@ export function toErrorMessage(error: unknown): string {
     return summarizeErrorObject(error);
   }
   return truncate(String(error));
+}
+
+export function toPublicProviderErrorMessage(error: unknown): string {
+  const message = toErrorMessage(error).replace(/\s+/g, ' ').trim();
+  const overloadedMatch = /^HTTP\s+(\d{3})\s*(?::\s*Overloaded|\(\s*Overloaded\s*\))[.!]?$/i.exec(
+    message
+  );
+  if (overloadedMatch) {
+    return `HTTP ${overloadedMatch[1]} (Overloaded)`;
+  }
+
+  const httpStatusMatch = /^HTTP\s+(\d{3})\b/i.exec(message);
+  if (httpStatusMatch) {
+    return `HTTP ${httpStatusMatch[1]}`;
+  }
+
+  return GENERIC_PROVIDER_ERROR_MESSAGE;
+}
+
+export function toProviderFailureChatMessage(
+  provider: 'CLAUDE' | 'CODEX' | undefined,
+  error: unknown
+): string {
+  const message = toPublicProviderErrorMessage(error);
+  if (message === GENERIC_PROVIDER_ERROR_MESSAGE) {
+    return 'Turn stopped: the provider returned an error.';
+  }
+
+  const providerName =
+    provider === 'CODEX' ? 'Codex' : provider === 'CLAUDE' ? 'Claude' : 'The provider';
+  return `Turn stopped: ${providerName} returned ${message.replace(/[.!?]+$/, '')}.`;
 }

@@ -116,7 +116,7 @@ async function stopSessionBestEffort(
   sessionId: string
 ): Promise<void> {
   try {
-    await sessionLifecycleService.stopSession(sessionId);
+    await sessionLifecycleService.stopSession(sessionId, { recordLifecycleEvent: false });
   } catch {
     // Best-effort cleanup
   }
@@ -535,7 +535,9 @@ export function configureDomainBridges(services: BridgeServices): void {
       return session.id;
     },
     async sendPrompt(sessionId, prompt, timeoutMs) {
-      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }], timeoutMs);
+      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }], timeoutMs, {
+        timeoutKind: 'configured',
+      });
     },
     async waitForIdle(_sessionId) {
       // sendAcpMessage already blocks until the turn completes

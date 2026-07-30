@@ -59,6 +59,7 @@ export const ModelName = {
   WorkspaceRunScript: 'WorkspaceRunScript',
   WorkspaceAutoIteration: 'WorkspaceAutoIteration',
   AgentSession: 'AgentSession',
+  SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
   UserSettings: 'UserSettings',
@@ -226,6 +227,20 @@ export const AgentSessionScalarFieldEnum = {
 } as const
 
 export type AgentSessionScalarFieldEnum = (typeof AgentSessionScalarFieldEnum)[keyof typeof AgentSessionScalarFieldEnum]
+
+
+export const SessionLifecycleEventScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  sessionId: 'sessionId',
+  kind: 'kind',
+  reason: 'reason',
+  message: 'message',
+  dedupeKey: 'dedupeKey',
+  createdAt: 'createdAt'
+} as const
+
+export type SessionLifecycleEventScalarFieldEnum = (typeof SessionLifecycleEventScalarFieldEnum)[keyof typeof SessionLifecycleEventScalarFieldEnum]
 
 
 export const TerminalSessionScalarFieldEnum = {

@@ -164,6 +164,7 @@ export const sessionRouter = router({
         try {
           await sessionLifecycleService.stopSession(session.id, {
             cleanupTransientRatchetSession: false,
+            recordLifecycleEvent: false,
           });
         } catch {
           // Best-effort runtime cleanup; preserve the startup error.
@@ -216,6 +217,7 @@ export const sessionRouter = router({
       const { sessionDataService, sessionLifecycleService } = ctx.appContext.services;
       await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
+        reason: 'USER_STOP',
       });
       return sessionDataService.findAgentSessionById(input.id);
     }),
@@ -238,7 +240,9 @@ export const sessionRouter = router({
       // Stop process first to prevent orphaned session processes
       await sessionLifecycleService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
+        reason: 'SESSION_CLOSED',
       });
+      await sessionLifecycleService.persistClosedSession(input.id);
       // Clear any in-memory session store state
       sessionDomainService.clearSession(input.id);
       return sessionDataService.deleteAgentSession(input.id);
