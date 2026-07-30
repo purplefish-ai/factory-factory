@@ -24,6 +24,7 @@ function createPromptService() {
     acpEventProcessor: acpEventProcessor as never,
     promptTurnCompletionService: promptTurnCompletionService as never,
     getStopGeneration: () => 0,
+    isStopGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
     isSessionStopping: () => false,
   });
 

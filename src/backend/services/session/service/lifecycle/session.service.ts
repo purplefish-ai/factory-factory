@@ -20,6 +20,7 @@ export type SessionServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   getStopGeneration: (sessionId: string) => number;
+  isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
   isSessionStopping: (sessionId: string) => boolean;
 };
 
@@ -29,6 +30,7 @@ export class SessionService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly getStopGeneration: (sessionId: string) => number;
+  private readonly isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
   private readonly isSessionStopping: (sessionId: string) => boolean;
   private readonly acpPromptLimiters = new Map<string, LimitFunction>();
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
@@ -40,6 +42,7 @@ export class SessionService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.getStopGeneration = options.getStopGeneration;
+    this.isStopGenerationCurrent = options.isStopGenerationCurrent;
     this.isSessionStopping = options.isSessionStopping;
   }
 
@@ -232,7 +235,7 @@ export class SessionService {
       if (
         (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
         !this.isSessionStopping(sessionId) &&
-        this.getStopGeneration(sessionId) === stopGeneration
+        this.isStopGenerationCurrent(sessionId, stopGeneration)
       ) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
@@ -245,7 +248,7 @@ export class SessionService {
     orphanedToolCallReason: string,
     runtime: SessionRuntimeState
   ): void {
-    if (this.getStopGeneration(sessionId) !== stopGeneration) {
+    if (!this.isStopGenerationCurrent(sessionId, stopGeneration)) {
       return;
     }
     this.acpEventProcessor.finishPromptTurn(sessionId);

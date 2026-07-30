@@ -720,7 +720,7 @@ class ChatMessageHandlerService {
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
     return (
       !sessionLifecycleService.isSessionStopping(dbSessionId) &&
-      sessionLifecycleService.getStopGeneration(dbSessionId) === stopGeneration
+      sessionLifecycleService.isStopGenerationCurrent(dbSessionId, stopGeneration)
     );
   }
 
