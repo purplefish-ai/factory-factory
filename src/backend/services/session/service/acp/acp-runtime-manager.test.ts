@@ -155,6 +155,14 @@ function codexOptions(): AcpClientOptions {
   };
 }
 
+function openhandsOptions(): AcpClientOptions {
+  return {
+    provider: 'OPENHANDS',
+    workingDir: '/tmp/workspace',
+    sessionId: 'test-session-1',
+  };
+}
+
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
@@ -384,6 +392,53 @@ describe('AcpRuntimeManager', () => {
           (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
         )
       ).toBe(true);
+    });
+
+    it('spawns OPENHANDS provider using the native `openhands acp` command', async () => {
+      setupSuccessfulSpawn();
+      // Inject a controlled env so assertions about which keys are/aren't added
+      // are deterministic and independent of the ambient process.env.
+      manager.configureEnvironment({
+        preferSourceEntrypoint: true,
+        childProcessEnvProvider: () => ({
+          PATH: '/usr/local/bin:/usr/bin',
+          LLM_MODEL: 'gpt-4o',
+          LLM_BASE_URL: 'https://router.example/v1',
+          LLM_API_KEY: 'redacted',
+        }),
+      });
+
+      await manager.getOrCreateClient(
+        'session-1',
+        openhandsOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      // OpenHands is invoked via its own CLI, not an internal adapter.
+      expect(spawnArgs[0]).toBe('openhands');
+      // Args must be exactly ['acp', '--override-with-envs']:
+      //  - 'acp' selects the ACP adapter mode
+      //  - --override-with-envs is mandatory: OpenHands ignores env vars without it,
+      //    which would silently break LLM routing to the configured router.
+      // No model/key/base-url is passed as an arg — secrets travel via env, per SPEC-004.
+      expect(spawnArgs[1]).toEqual(['acp', '--override-with-envs']);
+      expect(spawnArgs[2]).toMatchObject({
+        cwd: '/tmp/workspace',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+      });
+      const env = (spawnArgs[2] as { env?: Record<string, string> }).env ?? {};
+      // LLM config is inherited from the factory process env (not as args).
+      expect(env.LLM_MODEL).toBe('gpt-4o');
+      expect(env.LLM_BASE_URL).toBe('https://router.example/v1');
+      expect(env.LLM_API_KEY).toBe('redacted');
+      // BROWSER is forced off for all providers.
+      expect(env.BROWSER).toBe('none');
+      // DOTENV_CONFIG_QUIET is a Codex-only concern and must not leak into OpenHands.
+      expect(env.DOTENV_CONFIG_QUIET).toBeUndefined();
     });
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {
