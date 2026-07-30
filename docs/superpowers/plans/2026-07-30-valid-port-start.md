@@ -79,7 +79,7 @@ Run:
 pnpm vitest run src/cli/runtime-utils.test.ts
 ```
 
-Expected: 2 tests pass.
+Expected: 5 tests pass.
 
 ### Task 2: Backend Port Finder Validation
 
