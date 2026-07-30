@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { toErrorMessage } from './session.error-message';
+import {
+  toErrorMessage,
+  toProviderFailureChatMessage,
+  toPublicProviderErrorMessage,
+} from './session.error-message';
 
 describe('toErrorMessage', () => {
   it('returns Error messages directly', () => {
@@ -32,5 +36,22 @@ describe('toErrorMessage', () => {
     expect(toErrorMessage(null)).toBe('null');
     expect(toErrorMessage({ reason: 'boom' })).toBe('boom');
     expect(stringifySpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('provider failure messages', () => {
+  it.each([
+    ['  HTTP 529:   Overloaded  ', 'HTTP 529 (Overloaded)'],
+    ['request failed: secret-token=abc', 'The provider returned an error.'],
+    ['request failed: api_key=abc', 'The provider returned an error.'],
+    [`HTTP 500 ${'x'.repeat(400)}`, `HTTP 500 ${'x'.repeat(231)}`],
+  ])('normalizes public provider text', (input, expected) => {
+    expect(toPublicProviderErrorMessage(new Error(input))).toBe(expected);
+  });
+
+  it('adds the provider name and terminal punctuation', () => {
+    expect(toProviderFailureChatMessage('CODEX', new Error('HTTP 529: Overloaded'))).toBe(
+      'Turn stopped: Codex returned HTTP 529 (Overloaded).'
+    );
   });
 });

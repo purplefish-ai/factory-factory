@@ -109,6 +109,46 @@ describe('AcpEventProcessor assistant text streaming', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps a stable attempt key until its prompt turn finishes', () => {
+    const processor = new AcpEventProcessor(makeDeps());
+
+    const firstAttemptKey = processor.beginPromptTurn('sid');
+
+    expect(firstAttemptKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+    expect(processor.getActivePromptAttemptKey('sid')).toBe(firstAttemptKey);
+
+    processor.finishPromptTurn('sid');
+    expect(processor.getActivePromptAttemptKey('sid')).toBeUndefined();
+
+    const secondAttemptKey = processor.beginPromptTurn('sid');
+    expect(secondAttemptKey).not.toBe(firstAttemptKey);
+  });
+
+  it('does not record an ACP provider error after an explicit stop begins', () => {
+    const lifecycleEventService = { record: vi.fn().mockResolvedValue(undefined) };
+    const processor = new AcpEventProcessor(
+      makeDeps({
+        lifecycleEventService: lifecycleEventService as never,
+        isSessionStopping: vi.fn().mockReturnValue(true),
+      })
+    );
+    processor.registerSessionContext('sid', {
+      workspaceId: 'workspace-1',
+      workingDir: '/workspace',
+      provider: 'CODEX',
+    });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta('sid', {
+      type: 'agent_message',
+      data: { type: 'error', error: 'Prompt cancelled' },
+    });
+
+    expect(lifecycleEventService.record).not.toHaveBeenCalled();
+  });
+
   it('coalesces many chunks within the bounded flush interval and transmits text once', () => {
     const deps = makeDeps();
     vi.mocked(deps.sessionDomainService.allocateOrder).mockReturnValue(4);

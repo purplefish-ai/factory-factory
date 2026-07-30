@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
@@ -18,8 +19,11 @@ import {
   scanClaudeWorkspaceCommandNames,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionConfigService } from './session.config.service';
+import { toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
+import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const logger = createLogger('session');
 
@@ -49,6 +53,8 @@ export type AcpEventProcessorDependencies = {
   sessionPermissionService: SessionPermissionService;
   sessionConfigService: SessionConfigService;
   onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
+  lifecycleEventService?: Pick<SessionLifecycleEventService, 'record'>;
+  isSessionStopping?: (sessionId: string) => boolean;
   toolCallTimeoutMs?: number;
   textFlushIntervalMs?: number;
 };
@@ -66,6 +72,8 @@ export class AcpEventProcessor {
   ) => void;
   private readonly toolCallTimeoutMs: number;
   private readonly textFlushIntervalMs: number;
+  private readonly lifecycleEventService: Pick<SessionLifecycleEventService, 'record'> | undefined;
+  private readonly isSessionStopping: (sessionId: string) => boolean;
   /** Per-session, per-tool-call timers. Cleared on completion or session teardown. */
   private readonly toolCallTimers = new Map<string, Map<string, ReturnType<typeof setTimeout>>>();
 
@@ -84,6 +92,8 @@ export class AcpEventProcessor {
   readonly sessionToWorkingDir = new Map<string, string>();
   /** Maps sessionId → provider for slash command caching */
   private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
+  /** Maps sessionId → stable key for the currently executing prompt attempt. */
+  private readonly activePromptAttemptKeys = new Map<string, string>();
 
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
@@ -91,6 +101,8 @@ export class AcpEventProcessor {
     this.sessionPermissionService = options.sessionPermissionService;
     this.sessionConfigService = options.sessionConfigService;
     this.onToolCallTimeout = options.onToolCallTimeout;
+    this.lifecycleEventService = options.lifecycleEventService;
+    this.isSessionStopping = options.isSessionStopping ?? (() => false);
     this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
     this.textFlushIntervalMs = options.textFlushIntervalMs ?? DEFAULT_TEXT_FLUSH_INTERVAL_MS;
   }
@@ -185,19 +197,32 @@ export class AcpEventProcessor {
     this.clearPendingToolCalls(sessionId);
     this.clearReplaySuppression(sessionId);
     this.clearSessionContext(sessionId);
+    this.activePromptAttemptKeys.delete(sessionId);
   }
 
-  beginPromptTurn(sessionId: string): void {
+  beginPromptTurn(sessionId: string): string {
     this.finishAcpTextBlock(sessionId);
     this.pendingAcpToolCalls.set(sessionId, new Map());
+    const attemptKey = randomUUID();
+    this.activePromptAttemptKeys.set(sessionId, attemptKey);
+    return attemptKey;
   }
 
   finishPromptTurn(sessionId: string): void {
     this.finishAcpTextBlock(sessionId);
+    this.activePromptAttemptKeys.delete(sessionId);
   }
 
   getWorkspaceId(sessionId: string): string | undefined {
     return this.sessionToWorkspace.get(sessionId);
+  }
+
+  getActivePromptAttemptKey(sessionId: string): string | undefined {
+    return this.activePromptAttemptKeys.get(sessionId);
+  }
+
+  getProvider(sessionId: string): 'CLAUDE' | 'CODEX' | undefined {
+    return this.sessionToProvider.get(sessionId);
   }
 
   /**
@@ -240,6 +265,10 @@ export class AcpEventProcessor {
     }
 
     const data = (delta as { data: AgentMessage }).data;
+
+    if (data.type === 'error') {
+      this.recordActivePromptProviderFailure(sid, data.error);
+    }
 
     // Text chunks: accumulate into single message, reuse same order
     // so the frontend upserts rather than inserting a new bubble per chunk.
@@ -756,6 +785,36 @@ export class AcpEventProcessor {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);
+  }
+
+  private recordActivePromptProviderFailure(sessionId: string, error: unknown): void {
+    if (this.isSessionStopping(sessionId)) {
+      return;
+    }
+    const workspaceId = this.getWorkspaceId(sessionId);
+    const attemptKey = this.getActivePromptAttemptKey(sessionId);
+    if (!(this.lifecycleEventService && workspaceId && attemptKey)) {
+      return;
+    }
+
+    void this.lifecycleEventService
+      .record({
+        workspaceId,
+        sessionId,
+        kind: SessionLifecycleEventKind.TURN_INTERRUPTED,
+        reason: SessionLifecycleEventReason.PROVIDER_ERROR,
+        message: toProviderFailureChatMessage(
+          this.getProvider(sessionId),
+          error ?? new Error('The provider returned an error.')
+        ),
+        dedupeKey: `turn:${attemptKey}:stop`,
+      })
+      .catch((recordError: unknown) => {
+        logger.warn('Failed recording ACP provider failure lifecycle event', {
+          sessionId,
+          error: toProviderFailureChatMessage(undefined, recordError),
+        });
+      });
   }
 
   private startToolCallTimer(sid: string, toolUseId: string, toolName: string): void {

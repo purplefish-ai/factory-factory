@@ -1,17 +1,19 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import pLimit, { type LimitFunction } from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
-import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
-import { toErrorMessage } from './session.error-message';
+import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
+import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const logger = createLogger('session');
-const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
+const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 
 export type SessionServiceDependencies = {
@@ -19,6 +21,7 @@ export type SessionServiceDependencies = {
   sessionDomainService: SessionDomainService;
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
+  lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   getStopGeneration: (sessionId: string) => number;
   isSessionStopping: (sessionId: string) => boolean;
 };
@@ -28,6 +31,7 @@ export class SessionService {
   private readonly sessionDomainService: SessionDomainService;
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
+  private readonly lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   private readonly getStopGeneration: (sessionId: string) => number;
   private readonly isSessionStopping: (sessionId: string) => boolean;
   private readonly acpPromptLimiters = new Map<string, LimitFunction>();
@@ -39,6 +43,7 @@ export class SessionService {
     this.sessionDomainService = options.sessionDomainService;
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
+    this.lifecycleEventService = options.lifecycleEventService;
     this.getStopGeneration = options.getStopGeneration;
     this.isSessionStopping = options.isSessionStopping;
   }
@@ -182,7 +187,7 @@ export class SessionService {
     let promptError: unknown;
     let promptErrorSet = false;
     // Scope orphan detection to each prompt turn.
-    this.acpEventProcessor.beginPromptTurn(sessionId);
+    const attemptKey = this.acpEventProcessor.beginPromptTurn(sessionId);
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
@@ -213,6 +218,9 @@ export class SessionService {
     } catch (error) {
       promptError = error;
       promptErrorSet = true;
+      if (this.shouldRecordPromptFailure(sessionId, stopGeneration, error)) {
+        await this.recordPromptFailure({ sessionId, workspaceId, attemptKey, error });
+      }
       this.completePromptTurnIfCurrent(sessionId, stopGeneration, 'prompt_error', {
         phase: 'error',
         processState: 'alive',
@@ -237,6 +245,54 @@ export class SessionService {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }
+  }
+
+  private async recordPromptFailure({
+    sessionId,
+    workspaceId,
+    attemptKey,
+    error,
+  }: {
+    sessionId: string;
+    workspaceId: string | undefined;
+    attemptKey: string;
+    error: unknown;
+  }): Promise<void> {
+    const reason =
+      error instanceof PromptTimeoutError
+        ? SessionLifecycleEventReason.PROMPT_TIMEOUT
+        : SessionLifecycleEventReason.PROVIDER_ERROR;
+    if (!workspaceId) {
+      logger.warn('Skipped prompt failure lifecycle event without workspace owner', {
+        sessionId,
+        attemptKey,
+        reason,
+      });
+      return;
+    }
+
+    await this.lifecycleEventService.record({
+      workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.TURN_INTERRUPTED,
+      reason,
+      message:
+        error instanceof PromptTimeoutError
+          ? 'Turn stopped: reached the 4-hour limit.'
+          : toProviderFailureChatMessage(this.acpEventProcessor.getProvider(sessionId), error),
+      dedupeKey: `turn:${attemptKey}:stop`,
+    });
+  }
+
+  private shouldRecordPromptFailure(
+    sessionId: string,
+    stopGeneration: number,
+    error: unknown
+  ): boolean {
+    if (this.isTurnAlreadyInProgressError(error) || this.isSessionStopping(sessionId)) {
+      return false;
+    }
+    return this.getStopGeneration(sessionId) === stopGeneration;
   }
 
   private completePromptTurnIfCurrent(

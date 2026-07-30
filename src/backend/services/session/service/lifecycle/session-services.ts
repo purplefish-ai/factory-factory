@@ -64,6 +64,8 @@ export const acpEventProcessor = new AcpEventProcessor({
   sessionPermissionService,
   sessionConfigService,
   onToolCallTimeout: cancelTimedOutToolPrompt,
+  lifecycleEventService: sessionLifecycleEventService,
+  isSessionStopping: (sessionId): boolean => sessionLifecycleService.isSessionStopping(sessionId),
 });
 
 export type SessionPromptService = Pick<
@@ -76,6 +78,7 @@ const sessionPromptCoordinator = new SessionService({
   sessionDomainService,
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
+  lifecycleEventService: sessionLifecycleEventService,
   getStopGeneration: (sessionId): number => sessionLifecycleService.getStopGeneration(sessionId),
   isSessionStopping: (sessionId): boolean => sessionLifecycleService.isSessionStopping(sessionId),
 });
