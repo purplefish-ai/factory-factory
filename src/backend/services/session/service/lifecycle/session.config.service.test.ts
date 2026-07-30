@@ -666,6 +666,58 @@ describe('SessionConfigService', () => {
     expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
   });
 
+  it('resolves and applies the advertised plan collaboration mode', async () => {
+    const modeConfig = {
+      id: 'collaboration_mode',
+      name: 'Collaboration Mode',
+      type: 'select',
+      category: 'mode',
+      currentValue: 'default',
+      options: [
+        { value: 'default', name: 'Default' },
+        { value: 'PLAN', name: 'Plan' },
+      ],
+    };
+    runtimeManager.getClient.mockReturnValue(
+      unsafeCoerce({
+        provider: 'CODEX',
+        providerSessionId: 'provider-session-1',
+        configOptions: [modeConfig],
+      })
+    );
+    runtimeManager.setSessionMode.mockResolvedValue([{ ...modeConfig, currentValue: 'PLAN' }]);
+
+    await service.setSessionCollaborationMode('session-1', 'plan');
+
+    expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-1', 'PLAN');
+  });
+
+  it('skips plan collaboration mode when the session does not advertise it', async () => {
+    runtimeManager.getClient.mockReturnValue(
+      unsafeCoerce({
+        provider: 'CLAUDE',
+        providerSessionId: 'provider-session-1',
+        configOptions: [
+          {
+            id: 'mode',
+            name: 'Mode',
+            type: 'select',
+            category: 'mode',
+            currentValue: 'default',
+            options: [
+              { value: 'default', name: 'Default' },
+              { value: 'acceptEdits', name: 'Accept Edits' },
+            ],
+          },
+        ],
+      })
+    );
+
+    await service.setSessionCollaborationMode('session-1', 'plan');
+
+    expect(runtimeManager.setSessionMode).not.toHaveBeenCalled();
+  });
+
   it('tracks whitespace-only reasoning effort fallback as settings sourced', async () => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({

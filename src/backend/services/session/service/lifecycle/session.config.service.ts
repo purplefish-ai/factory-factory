@@ -278,6 +278,31 @@ export class SessionConfigService {
     logger.debug('No ACP handle for setSessionModel', { sessionId, model });
   }
 
+  async setSessionCollaborationMode(sessionId: string, mode: 'plan'): Promise<void> {
+    const acpHandle = this.runtimeManager.getClient(sessionId);
+    if (!acpHandle) {
+      logger.debug('No ACP handle for setSessionCollaborationMode', { sessionId, mode });
+      return;
+    }
+
+    const modeOption = acpHandle.configOptions.find((option) => option.category === 'mode');
+    if (!modeOption) {
+      return;
+    }
+
+    const availableModeValues = getConfigOptionValues(modeOption);
+    const targetMode = this.resolveStartupModeTarget(
+      acpHandle.provider as SessionProvider,
+      mode,
+      availableModeValues
+    );
+    if (!targetMode || modeOption.currentValue === targetMode) {
+      return;
+    }
+
+    await this.setSessionConfigOption(sessionId, modeOption.id, targetMode);
+  }
+
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {

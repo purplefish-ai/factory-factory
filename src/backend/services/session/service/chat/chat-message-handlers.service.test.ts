@@ -33,6 +33,7 @@ const {
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
+    setSessionCollaborationMode: vi.fn(),
     sendSessionMessage: vi.fn(),
   },
   mockSessionDataService: {
@@ -101,6 +102,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.setSessionThinkingBudget.mockResolvedValue(undefined);
     mockSessionService.setSessionModel.mockResolvedValue(undefined);
     mockSessionService.setSessionReasoningEffort.mockResolvedValue(undefined);
+    mockSessionService.setSessionCollaborationMode.mockResolvedValue(undefined);
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
     mockWorkspaceNotificationService.markDelivered.mockResolvedValue(undefined);
     mockWorkspaceNotificationService.findForDelivery.mockResolvedValue(null);
@@ -826,6 +828,34 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     );
   });
 
+  it('applies queued plan mode before dispatching the prompt', async () => {
+    const planMessage: QueuedMessage = {
+      ...queuedMessage,
+      settings: {
+        ...queuedMessage.settings,
+        planModeEnabled: true,
+      },
+    };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(planMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(planMessage);
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.setSessionCollaborationMode).toHaveBeenCalledWith('s1', 'plan');
+    expect(mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSessionService.sendSessionMessage.mock.invocationCallOrder[0] ?? 0
+    );
+  });
+
+  it('does not change collaboration mode for a non-plan queued message', async () => {
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.setSessionCollaborationMode).not.toHaveBeenCalled();
+  });
+
   it('persists dispatched user message before turn completion', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
@@ -992,5 +1022,36 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     resolveFirstSend?.();
     await firstDispatch;
+  });
+
+  it('applies plan mode before the first prompt after auto-start', async () => {
+    const planMessage: QueuedMessage = {
+      ...queuedMessage,
+      settings: {
+        ...queuedMessage.settings,
+        planModeEnabled: true,
+      },
+    };
+    const client = { sessionId: 's1', threadId: 't1' };
+    const getOrCreate = vi.fn(async () => client);
+    chatMessageHandlerService.setClientCreator({ getOrCreate });
+    mockSessionDomainService.peekNextMessage.mockReturnValue(planMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(planMessage);
+    mockSessionService.getSessionClient.mockReturnValueOnce(undefined).mockReturnValue(client);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(getOrCreate).toHaveBeenCalledWith('s1', {
+      thinkingEnabled: false,
+      planModeEnabled: true,
+      model: undefined,
+      reasoningEffort: undefined,
+    });
+    expect(getOrCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0] ?? 0
+    );
+    expect(mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSessionService.sendSessionMessage.mock.invocationCallOrder[0] ?? 0
+    );
   });
 });

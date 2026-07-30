@@ -581,6 +581,10 @@ class ChatMessageHandlerService {
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
+    if (msg.settings.planModeEnabled) {
+      await sessionConfigService.setSessionCollaborationMode(dbSessionId, 'plan');
+    }
+
     // Only clients that expose thinking-budget controls support this feature.
     // Keep this before state mutation so provider errors can be safely requeued.
     if (isThinkingBudgetClient(client)) {
