@@ -68,18 +68,48 @@ export function mergeLifecycleMessage(
     );
   }
 
-  return [...byId.values()]
-    .sort((left, right) => {
-      if (left.timestampMs !== right.timestampMs) {
-        return left.timestampMs - right.timestampMs;
-      }
-      if (left.isLifecycle !== right.isLifecycle) {
-        return left.isLifecycle ? 1 : -1;
-      }
-      if (left.isLifecycle) {
-        return left.message.id.localeCompare(right.message.id);
-      }
-      return left.originalIndex - right.originalIndex;
-    })
-    .map(({ message }, order) => ({ ...message, order }));
+  const sortedMessages = [...byId.values()].sort((left, right) => {
+    if (left.timestampMs !== right.timestampMs) {
+      return left.timestampMs - right.timestampMs;
+    }
+    if (left.isLifecycle !== right.isLifecycle) {
+      return left.isLifecycle ? 1 : -1;
+    }
+    if (left.isLifecycle) {
+      return left.message.id.localeCompare(right.message.id);
+    }
+    return left.originalIndex - right.originalIndex;
+  });
+
+  const providerMessages = sortedMessages.filter(({ isLifecycle }) => !isLifecycle);
+  const lifecycleMessagesByProviderIndex = new Map<number, IndexedMessage[]>();
+  let precedingProviderCount = 0;
+  for (const indexedMessage of sortedMessages) {
+    if (!indexedMessage.isLifecycle) {
+      precedingProviderCount += 1;
+      continue;
+    }
+    const providerIndex = Math.max(0, precedingProviderCount - 1);
+    const messages = lifecycleMessagesByProviderIndex.get(providerIndex) ?? [];
+    messages.push(indexedMessage);
+    lifecycleMessagesByProviderIndex.set(providerIndex, messages);
+  }
+
+  for (const [providerIndex, messages] of lifecycleMessagesByProviderIndex) {
+    const lowerOrder = providerMessages[providerIndex]?.message.order ?? 0;
+    const nextProviderOrder = providerMessages[providerIndex + 1]?.message.order;
+    const upperOrder =
+      nextProviderOrder !== undefined && nextProviderOrder > lowerOrder
+        ? nextProviderOrder
+        : lowerOrder + 1;
+    const interval = upperOrder - lowerOrder;
+    messages.forEach((indexedMessage, index) => {
+      indexedMessage.message = {
+        ...indexedMessage.message,
+        order: lowerOrder + (interval * (index + 1)) / (messages.length + 1),
+      };
+    });
+  }
+
+  return sortedMessages.map(({ message }) => message);
 }

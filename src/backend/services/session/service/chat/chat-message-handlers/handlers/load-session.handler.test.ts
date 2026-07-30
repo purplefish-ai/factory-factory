@@ -1056,10 +1056,15 @@ describe('createLoadSessionHandler', () => {
         id: 'existing-result',
         source: 'agent',
         message: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: 'call-present', content: 'ok' }],
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 1,
+            content_block: {
+              type: 'tool_result',
+              tool_use_id: 'call-present',
+              content: 'ok',
+            },
           },
         },
         timestamp: '2026-02-14T00:00:03.000Z',

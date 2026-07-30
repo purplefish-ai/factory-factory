@@ -525,15 +525,16 @@ function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
 }
 
 /**
- * Tables split off `Workspace` whose single writer is one file.
+ * Tables whose single writer is one file.
  *
- * The field-ownership table above cannot police these: it works on `Workspace`
- * columns, and these are not `Workspace` columns any more. Moving them made the
- * old lint entries unnecessary but did not make the invariant self-enforcing —
- * dep-cruiser limits `@/backend/db` to `services/*\/resources/`, so another
- * accessor in that directory could still write them. This closes that.
+ * The field-ownership table above cannot police models other than `Workspace`.
+ * Dep-cruiser limits `@/backend/db` to `services/*\/resources/`, but another
+ * accessor in those directories could still write these models. This closes
+ * that gap for the workspace side tables and other single-writer models.
  */
 const OWNED_SIDE_TABLES = {
+  sessionLifecycleEvent:
+    'src/backend/services/session/resources/session-lifecycle-event.accessor.ts',
   workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
   workspaceRatchet: 'src/backend/services/workspace/resources/workspace-ratchet.accessor.ts',
   workspaceRunScript:

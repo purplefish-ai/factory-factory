@@ -333,7 +333,17 @@ function getToolResultUseId(message: ChatMessage): string | null {
   if (message.source !== 'agent' || !message.message) {
     return null;
   }
-  const content = message.message.message?.content;
+
+  const agentMessage = message.message;
+  if (
+    agentMessage.type === 'stream_event' &&
+    agentMessage.event?.type === 'content_block_start' &&
+    agentMessage.event.content_block.type === 'tool_result'
+  ) {
+    return agentMessage.event.content_block.tool_use_id;
+  }
+
+  const content = agentMessage.message?.content;
   if (!Array.isArray(content)) {
     return null;
   }

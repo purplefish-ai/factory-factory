@@ -79,7 +79,8 @@ describe('session lifecycle transcript', () => {
       'provider-at-noon',
       'session-lifecycle:event-1',
     ]);
-    expect(merged.map((message) => message.order)).toEqual([0, 1, 2]);
+    expect(merged.map((message) => message.order)).toEqual([1 / 3, 0, 2 / 3]);
+    expect(merged.find((message) => message.id === 'provider-at-noon')?.order).toBe(0);
   });
 
   it('fast-paths an empty lifecycle event set without reordering provider history', () => {
@@ -144,6 +145,6 @@ describe('session lifecycle transcript', () => {
       'provider-a',
       'session-lifecycle:event-1',
     ]);
-    expect(merged.map((message) => message.order)).toEqual([0, 1, 2]);
+    expect(merged.map((message) => message.order)).toEqual([0, 1, 1.5]);
   });
 });

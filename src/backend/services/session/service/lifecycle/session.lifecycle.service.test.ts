@@ -213,6 +213,7 @@ function createStopReasonLifecycleService(options?: { providerProcessPid?: numbe
   const runtimeHandlers = createRuntimeHandlers().setupAcpEventHandler('session-1');
   return {
     service,
+    repository,
     lifecycleEventService,
     runtimeManager,
     runtimeHandlers,
@@ -315,6 +316,21 @@ describe('SessionLifecycleService stop causes', () => {
         dedupeKey: expect.stringMatching(
           /^process-exit:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:1$/
         ),
+      })
+    );
+  });
+
+  it('records an unexpected process exit when the status update fails', async () => {
+    const { lifecycleEventService, repository, runtimeHandlers } =
+      createStopReasonLifecycleService();
+    repository.updateSession.mockRejectedValueOnce(new Error('database write failed'));
+
+    await runtimeHandlers.onExit?.('session-1', 1);
+
+    expect(lifecycleEventService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'UNEXPECTED_EXIT',
+        dedupeKey: expect.stringMatching(/^process-exit:.+:1$/),
       })
     );
   });

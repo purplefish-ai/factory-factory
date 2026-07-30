@@ -86,11 +86,11 @@ describe('SessionLifecycleEventService', () => {
       'session-lifecycle:event-1',
     ]);
     expect(domain.getTranscriptSnapshot('session-1').map((message) => message.order)).toEqual([
-      0, 1,
+      0, 0.5,
     ]);
   });
 
-  it('re-emits a provider message whose order shifts after an earlier lifecycle event', async () => {
+  it('preserves a provider message order when adding an earlier lifecycle event', async () => {
     const providerMessage = {
       id: 'provider-at-noon',
       source: 'agent' as const,
@@ -118,12 +118,12 @@ describe('SessionLifecycleEventService', () => {
     expect(
       domain.getTranscriptSnapshot('session-1').map(({ id, order }) => ({ id, order }))
     ).toEqual([
-      { id: 'session-lifecycle:event-at-eleven', order: 0 },
-      { id: 'provider-at-noon', order: 1 },
+      { id: 'provider-at-noon', order: 0 },
+      { id: 'session-lifecycle:event-at-eleven', order: 0.5 },
     ]);
   });
 
-  it('publishes one authoritative snapshot when lifecycle insertion reindexes mixed transcript rows', async () => {
+  it('publishes one authoritative snapshot without reindexing mixed transcript rows', async () => {
     domain.replaceTranscript('session-1', [
       {
         id: 'provider-user',
@@ -158,7 +158,34 @@ describe('SessionLifecycleEventService', () => {
       'session-lifecycle:event-1',
       'provider-agent',
     ]);
-    expect(snapshots[0]?.messages?.map((message) => message.order)).toEqual([0, 1, 2]);
+    expect(snapshots[0]?.messages?.map((message) => message.order)).toEqual([0, 0.5, 1]);
+  });
+
+  it('does not reuse an outstanding ACP order when a lifecycle event is inserted', async () => {
+    domain.replaceTranscript('session-1', [
+      {
+        id: 'provider-at-noon',
+        source: 'agent',
+        timestamp: '2026-07-30T12:00:00.000Z',
+        order: 0,
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: 'Provider message' },
+        },
+      },
+    ]);
+    const outstandingOrder = domain.allocateOrder('session-1');
+
+    await service.record(input);
+
+    expect(outstandingOrder).toBe(1);
+    expect(domain.allocateOrder('session-1')).toBe(2);
+    expect(
+      domain.getTranscriptSnapshot('session-1').map(({ id, order }) => ({ id, order }))
+    ).toEqual([
+      { id: 'provider-at-noon', order: 0 },
+      { id: 'session-lifecycle:event-1', order: 0.5 },
+    ]);
   });
 
   it('returns the durable event when live publication fails', async () => {

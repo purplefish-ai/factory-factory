@@ -695,13 +695,26 @@ export class SessionLifecycleService {
   ): Promise<void> {
     try {
       this.sessionDomainService.markProcessExit(sessionId, exitCode);
+      const session = await this.repository.getSessionById(sessionId);
+      if (!session) {
+        logger.warn('Failed to find ACP session on exit', { sessionId });
+        return;
+      }
+
       const persistedStatus = getPersistedStatusForExitCode(exitCode);
-      const session = await this.repository.updateSession(sessionId, { status: persistedStatus });
-      logger.debug('Updated ACP session status on exit', {
-        sessionId,
-        exitCode,
-        status: persistedStatus,
-      });
+      try {
+        await this.repository.updateSession(sessionId, { status: persistedStatus });
+        logger.debug('Updated ACP session status on exit', {
+          sessionId,
+          exitCode,
+          status: persistedStatus,
+        });
+      } catch (error) {
+        logger.warn('Failed to update ACP session status on exit', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       await this.recordUnexpectedExitIfNeeded(
         session,
@@ -714,7 +727,7 @@ export class SessionLifecycleService {
       void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
       await this.cleanupExitedWorkflow(session, sessionId, wasDeliberateStop);
     } catch (error) {
-      logger.warn('Failed to update ACP session status on exit', {
+      logger.warn('Failed to process ACP session exit', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
