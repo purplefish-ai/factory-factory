@@ -9,6 +9,15 @@ import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('acp-session-config-options');
 const REQUIRED_CONFIG_CATEGORIES = ['model', 'mode'] as const;
+// OpenHands is router-backed: the model is fixed via LLM_MODEL/--override-with-envs,
+// so it advertises no model selector. Only `mode` is required for it.
+const OPENHANDS_REQUIRED_CONFIG_CATEGORIES = ['mode'] as const;
+
+function getRequiredConfigCategories(provider: string): readonly string[] {
+  return provider === 'OPENHANDS'
+    ? OPENHANDS_REQUIRED_CONFIG_CATEGORIES
+    : REQUIRED_CONFIG_CATEGORIES;
+}
 
 type SessionResultWithFallbackState = {
   configOptions?: SessionConfigOption[] | null;
@@ -213,7 +222,7 @@ export function requireSessionConfigOptions(
   }
 
   const normalizedConfigOptions = normalizeSessionConfigOptions(provider, configOptions);
-  const missingCategories = REQUIRED_CONFIG_CATEGORIES.filter(
+  const missingCategories = getRequiredConfigCategories(provider).filter(
     (category) => !normalizedConfigOptions.some((option) => option.category === category)
   );
   if (missingCategories.length > 0) {
