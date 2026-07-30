@@ -143,7 +143,7 @@ export function useChatInputActions({
   const sendFromInput = useCallback(
     (inputElement: HTMLTextAreaElement | null) => {
       if (!inputElement) {
-        return;
+        return false;
       }
       const text = inputElement.value.trim();
       if ((text || attachments.length > 0) && !disabled) {
@@ -151,7 +151,9 @@ export function useChatInputActions({
         inputElement.value = '';
         onChange?.('');
         setAttachments([]);
+        return true;
       }
+      return false;
     },
     [attachments.length, disabled, onChange, onSend, setAttachments]
   );
@@ -164,9 +166,10 @@ export function useChatInputActions({
         shift: false,
         alt: false,
         action: (event) => {
-          onCloseSlashMenu?.();
-          onCloseFileMentionMenu?.();
-          sendFromInput(event.currentTarget);
+          if (sendFromInput(event.currentTarget)) {
+            onCloseSlashMenu?.();
+            onCloseFileMentionMenu?.();
+          }
         },
       },
       {

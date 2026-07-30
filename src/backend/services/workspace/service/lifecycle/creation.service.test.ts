@@ -181,6 +181,23 @@ describe('WorkspaceCreationService', () => {
         });
       });
 
+      it('persists selected provider for manual workspaces', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'My Workspace',
+          provider: 'CODEX',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultSessionProvider: 'CODEX',
+          })
+        );
+      });
+
       it('should use explicit ratchetEnabled value', async () => {
         const source: WorkspaceCreationSource = {
           type: 'MANUAL',

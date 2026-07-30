@@ -234,6 +234,7 @@ export class WorkspaceCreationService {
         name: source.name,
         description: source.description,
         branchName: source.branchName,
+        defaultSessionProvider: source.provider,
         creationSource: 'MANUAL',
         ...(Object.keys(metadata).length > 0
           ? { creationMetadata: metadata as Prisma.InputJsonValue }

@@ -9,6 +9,40 @@ import {
 } from './setup-warning-storage';
 import type { useWorkspaceData } from './use-workspace-detail';
 
+type WorkspaceHasChangesSource = Pick<
+  NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>,
+  'hasHadSessions' | 'prState'
+>;
+
+export function useWorkspaceHasChanges(
+  workspaceId: string,
+  workspace: WorkspaceHasChangesSource | undefined,
+  running: boolean,
+  utils: ReturnType<typeof trpc.useUtils>
+): boolean | undefined {
+  const shouldCheckForChanges = workspace?.hasHadSessions === true && workspace.prState === 'NONE';
+  const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
+    { workspaceId },
+    { enabled: shouldCheckForChanges }
+  );
+  const previousStateRef = useRef({ workspaceId, running });
+
+  useEffect(() => {
+    const previousState = previousStateRef.current;
+    if (
+      shouldCheckForChanges &&
+      previousState.workspaceId === workspaceId &&
+      previousState.running &&
+      !running
+    ) {
+      void utils.workspace.hasChanges.invalidate({ workspaceId });
+    }
+    previousStateRef.current = { workspaceId, running };
+  }, [running, shouldCheckForChanges, utils, workspaceId]);
+
+  return hasChanges;
+}
+
 export function useWorkspaceInitStatus(
   workspaceId: string,
   workspace: ReturnType<typeof useWorkspaceData>['workspace'],

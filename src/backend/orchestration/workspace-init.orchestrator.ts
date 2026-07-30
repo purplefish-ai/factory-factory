@@ -50,7 +50,14 @@ type UnregisteredWorktreeCleanupCandidate = {
   worktreeInfo: CreatedWorktreeInfo;
 };
 
+type WorkspaceInitializationOptions = {
+  branchName?: string;
+  useExistingBranch?: boolean;
+  provisioningAlreadyStarted?: boolean;
+};
+
 const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
+const workspaceInitializationTails = new Map<string, Promise<void>>();
 
 function getCachedGitHubUsername(): Promise<string | null> {
   return gitHubUsernameCache.getCachedUsername();
@@ -58,6 +65,7 @@ function getCachedGitHubUsername(): Promise<string | null> {
 
 export function clearWorkspaceInitOrchestratorStateForTests(): void {
   gitHubUsernameCache.clear();
+  workspaceInitializationTails.clear();
 }
 
 async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
@@ -166,6 +174,14 @@ async function cleanupUnregisteredWorktreeAfterInitFailure(
         workspaceId,
         createdWorktreePath: worktreeInfo.worktreePath,
         persistedWorktreePath: workspace.worktreePath,
+      });
+      return;
+    }
+
+    if (workspace?.status === 'PROVISIONING') {
+      logger.info('Skipping unregistered worktree cleanup while workspace is provisioning', {
+        workspaceId,
+        worktreePath: worktreeInfo.worktreePath,
       });
       return;
     }
@@ -693,13 +709,9 @@ async function handlePostInitSessionStart(
   }
 }
 
-export async function initializeWorkspaceWorktree(
+async function runWorkspaceInitialization(
   workspaceId: string,
-  options?: {
-    branchName?: string;
-    useExistingBranch?: boolean;
-    provisioningAlreadyStarted?: boolean;
-  }
+  options?: WorkspaceInitializationOptions
 ): Promise<void> {
   if (!options?.provisioningAlreadyStarted) {
     const startedProvisioning = await startProvisioningOrLog(workspaceId);
@@ -821,4 +833,22 @@ export async function initializeWorkspaceWorktree(
       await worktreeLifecycleService.clearInitMode(workspaceId);
     }
   }
+}
+
+export function initializeWorkspaceWorktree(
+  workspaceId: string,
+  options?: WorkspaceInitializationOptions
+): Promise<void> {
+  const previousInitialization = workspaceInitializationTails.get(workspaceId) ?? Promise.resolve();
+  const initialization = previousInitialization
+    .catch(() => undefined)
+    .then(() => runWorkspaceInitialization(workspaceId, options));
+
+  workspaceInitializationTails.set(workspaceId, initialization);
+
+  return initialization.finally(() => {
+    if (workspaceInitializationTails.get(workspaceId) === initialization) {
+      workspaceInitializationTails.delete(workspaceId);
+    }
+  });
 }
