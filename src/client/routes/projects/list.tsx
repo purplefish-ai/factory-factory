@@ -1,6 +1,7 @@
 import { ArchiveIcon, PlusIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
 import { trpc } from '@/client/lib/trpc';
@@ -75,7 +76,11 @@ export default function ProjectsListPage() {
 
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {
+      setArchiveDialogOpen(false);
       refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to archive project');
     },
   });
 
@@ -213,7 +218,12 @@ export default function ProjectsListPage() {
 
       <ConfirmDialog
         open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && archiveMutation.isPending) {
+            return;
+          }
+          setArchiveDialogOpen(open);
+        }}
         title="Archive Project"
         description="Are you sure you want to archive this project?"
         confirmText="Archive"
@@ -222,7 +232,6 @@ export default function ProjectsListPage() {
           if (projectToArchive) {
             archiveMutation.mutate({ id: projectToArchive });
           }
-          setArchiveDialogOpen(false);
         }}
         isPending={archiveMutation.isPending}
       />
