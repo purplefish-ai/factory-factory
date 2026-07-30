@@ -129,6 +129,24 @@ describe('SessionLifecycleEventService', () => {
     ]);
   });
 
+  it('returns the durable event when live publication fails', async () => {
+    const upsertLifecycleMessage = vi.spyOn(domain, 'upsertLifecycleMessage');
+    vi.spyOn(domain, 'emitDelta').mockImplementation(() => {
+      throw new Error('emit failed');
+    });
+
+    await expect(service.record(input)).resolves.toEqual(eventRecord);
+
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    expect(upsertLifecycleMessage).toHaveBeenCalledTimes(1);
+    expect(mockError).toHaveBeenCalledTimes(1);
+    expect(mockError).toHaveBeenCalledWith(
+      'Failed publishing session lifecycle event',
+      expect.any(Error),
+      expect.objectContaining({ sessionId: 'session-1', durable: true })
+    );
+  });
+
   it('emits a best-effort transient lifecycle message when persistence fails', async () => {
     store.upsert.mockRejectedValue(new Error('database unavailable'));
     const emitDelta = vi.spyOn(domain, 'emitDelta').mockImplementation(() => undefined);
@@ -150,6 +168,30 @@ describe('SessionLifecycleEventService', () => {
       expect.any(Error),
       expect.objectContaining({ sessionId: 'session-1' })
     );
+  });
+
+  it('returns null when persistence and transient publication both fail', async () => {
+    store.upsert.mockRejectedValue(new Error('database unavailable'));
+    const upsertLifecycleMessage = vi.spyOn(domain, 'upsertLifecycleMessage');
+    vi.spyOn(domain, 'emitDelta').mockImplementation(() => {
+      throw new Error('emit failed');
+    });
+
+    await expect(service.record(input)).resolves.toBeNull();
+
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    expect(upsertLifecycleMessage).toHaveBeenCalledTimes(1);
+    expect(mockError).toHaveBeenCalledTimes(2);
+    expect(mockError.mock.calls[0]).toEqual([
+      'Failed persisting session lifecycle event',
+      expect.any(Error),
+      expect.objectContaining({ sessionId: 'session-1' }),
+    ]);
+    expect(mockError.mock.calls[1]).toEqual([
+      'Failed publishing session lifecycle event',
+      expect.any(Error),
+      expect.objectContaining({ sessionId: 'session-1', durable: false }),
+    ]);
   });
 
   it('replaces a transient lifecycle message after persistence recovers', async () => {

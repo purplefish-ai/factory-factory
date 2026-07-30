@@ -42,24 +42,25 @@ export class SessionLifecycleEventService {
 
   async record(input: RecordLifecycleEventInput): Promise<SessionLifecycleEventRecord | null> {
     const createdAt = input.createdAt ?? new Date();
+    let event: SessionLifecycleEventRecord;
     try {
-      const event = await this.dependencies.store.upsert({ ...input, createdAt });
-      this.dependencies.sessionDomainService.removeTranscriptMessageById(
-        input.sessionId,
-        transientLifecycleMessageId(input),
-        { emitSnapshot: false }
-      );
-      this.publish(input.sessionId, toLifecycleChatMessage(event));
-      return event;
+      event = await this.dependencies.store.upsert({ ...input, createdAt });
     } catch (error) {
       logger.error(
         'Failed persisting session lifecycle event',
         toError(error),
         lifecycleEventLogContext(input)
       );
-      this.publish(input.sessionId, toLifecycleChatMessage(toTransientEvent(input, createdAt)));
+      this.publishBestEffort(
+        input,
+        toLifecycleChatMessage(toTransientEvent(input, createdAt)),
+        false
+      );
       return null;
     }
+
+    this.publishBestEffort(input, toLifecycleChatMessage(event), true);
+    return event;
   }
 
   async hydrate(sessionId: string): Promise<void> {
@@ -105,6 +106,28 @@ export class SessionLifecycleEventService {
         data: agentMessage,
         messageId: changedMessage.id,
         order: changedMessage.order,
+      });
+    }
+  }
+
+  private publishBestEffort(
+    input: RecordLifecycleEventInput,
+    message: ChatMessage,
+    durable: boolean
+  ): void {
+    try {
+      if (durable) {
+        this.dependencies.sessionDomainService.removeTranscriptMessageById(
+          input.sessionId,
+          transientLifecycleMessageId(input),
+          { emitSnapshot: false }
+        );
+      }
+      this.publish(input.sessionId, message);
+    } catch (error) {
+      logger.error('Failed publishing session lifecycle event', toError(error), {
+        ...lifecycleEventLogContext(input),
+        durable,
       });
     }
   }
