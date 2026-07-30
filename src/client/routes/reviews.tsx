@@ -352,7 +352,6 @@ function ReviewsDesktopLayout({
 function useReviewActions({
   selectedPR,
   selectedKey,
-  selectedDetails,
   diffs,
   setPrDetails,
   setDiffs,
@@ -360,7 +359,6 @@ function useReviewActions({
 }: {
   selectedPR: ReviewRequest | undefined;
   selectedKey: string | null;
-  selectedDetails: PRWithFullDetails | null;
   diffs: Map<string, string>;
   setPrDetails: React.Dispatch<React.SetStateAction<Map<string, PRWithFullDetails>>>;
   setDiffs: React.Dispatch<React.SetStateAction<Map<string, string>>>;
@@ -369,14 +367,21 @@ function useReviewActions({
   const utils = trpc.useUtils();
 
   const approveMutation = trpc.prReview.submitReview.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success('PR approved successfully');
       utils.prReview.listReviewRequests.invalidate();
-      if (!(selectedKey && selectedDetails)) {
-        return;
-      }
-      const updated = { ...selectedDetails, reviewDecision: 'APPROVED' as const };
-      setPrDetails((prev) => new Map(prev).set(selectedKey, updated));
+
+      const approvedKey = `${variables.repo}#${variables.number}`;
+      setPrDetails((prev) => {
+        const approvedDetails = prev.get(approvedKey);
+        if (!approvedDetails) {
+          return prev;
+        }
+        return new Map(prev).set(approvedKey, {
+          ...approvedDetails,
+          reviewDecision: 'APPROVED',
+        });
+      });
     },
     onError: (err) => {
       toast.error(`Failed to approve PR: ${err.message}`);
@@ -492,7 +497,6 @@ function ReviewsPageContent() {
   const { fetchDiff, handleApprove, handleOpenGitHub, approving } = useReviewActions({
     selectedPR,
     selectedKey,
-    selectedDetails,
     diffs,
     setPrDetails,
     setDiffs,
