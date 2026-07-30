@@ -147,6 +147,7 @@ vi.mock('@/backend/services/terminal', () => ({
 
 vi.mock('./workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
+  recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
 // --- Import mocked modules to get references ---
@@ -182,7 +183,10 @@ import {
 } from '@/backend/services/workspace';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
 import { reconciliationService } from './reconciliation.service';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+import {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from './workspace-init.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
@@ -216,6 +220,7 @@ function createBridgeServices(overrides: Partial<BridgeServices> = {}): BridgeSe
     prFetchCoordinator,
     prSnapshotService,
     ratchetService,
+    recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionDataService,
     sessionDomainService,
@@ -437,12 +442,12 @@ describe('configureDomainBridges', () => {
   });
 
   describe('reconciliation bridge delegation', () => {
-    it('workspace bridge markFailed delegates to workspaceStateMachine', async () => {
+    it('workspace bridge recovery delegates to recoverStaleProvisioningWorkspace', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(reconciliationService.configure);
 
-      await bridge.workspace.markFailed('ws1', 'broken');
-      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith('ws1', 'broken');
+      await bridge.workspace.recoverStaleProvisioningWorkspace('ws1', 'timed out');
+      expect(recoverStaleProvisioningWorkspace).toHaveBeenCalledWith('ws1', 'timed out');
     });
 
     it('workspace bridge initializeWorktree delegates to initializeWorkspaceWorktree', async () => {

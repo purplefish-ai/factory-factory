@@ -119,6 +119,23 @@ class WorktreeLifecycleService {
     return Promise.resolve();
   }
 
+  /** Returns whether the freshly read workspace should be transitioned to FAILED. */
+  async prepareStaleProvisioningRecovery(workspaceId: string): Promise<boolean> {
+    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+    if (!workspace || workspace.status !== 'PROVISIONING') {
+      return false;
+    }
+    if (workspace.worktreePath) {
+      return true;
+    }
+
+    const project = getProjectOrThrow(workspace);
+    const worktreePath = path.join(project.worktreeBasePath, `workspace-${workspaceId}`);
+    await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
+    await gitOpsService.removeWorktree(worktreePath, project);
+    return true;
+  }
+
   async cleanupWorkspaceWorktree(
     workspace: WorkspaceWithProject,
     options: WorktreeArchiveOptions
