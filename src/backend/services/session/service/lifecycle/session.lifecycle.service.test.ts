@@ -773,7 +773,7 @@ function createStartableLifecycleService(options?: {
     getWorkspaceById: vi.fn(async () => workspace),
     getProjectById: vi.fn(),
     markWorkspaceHasHadSessions: vi.fn(async () => undefined),
-    updateSession: vi.fn(async () => undefined),
+    updateSession: vi.fn(async () => session),
     updateSessionIfStatus: vi.fn(async () => null),
   };
   const promptBuilder = {
@@ -805,6 +805,7 @@ function createStartableLifecycleService(options?: {
     })),
     clearQueuedWork: vi.fn(),
     clearSession: vi.fn(),
+    markProcessExit: vi.fn(),
   };
   const sessionConfigService = {
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
@@ -857,6 +858,8 @@ function createStartableLifecycleService(options?: {
 
   return {
     service,
+    session,
+    repository,
     sendSessionMessage,
     tryDispatchNextMessage,
     sessionConfigService,
@@ -944,6 +947,37 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     await service.stopSession('session-1');
 
     expect(getStopGenerations(service).has('session-1')).toBe(false);
+  });
+
+  it('does not clear a restarted generation when an old runtime exit finishes', async () => {
+    const { service, session, repository } = createStartableLifecycleService();
+    let resolveUpdate!: (value: typeof session) => void;
+    repository.updateSession.mockReturnValueOnce(
+      new Promise<typeof session>((resolve) => {
+        resolveUpdate = resolve;
+      })
+    );
+    const oldGeneration = service.getStopGeneration('session-1');
+    const handlers = (
+      service as unknown as {
+        setupAcpEventHandler(sessionId: string): {
+          onExit(sessionId: string, exitCode: number | null): Promise<void>;
+        };
+      }
+    ).setupAcpEventHandler('session-1');
+
+    const exitPromise = handlers.onExit('session-1', 0);
+
+    expect(getStopGenerations(service).has('session-1')).toBe(false);
+    await service.startSession('session-1');
+    const restartedGeneration = service.getStopGeneration('session-1');
+    expect(restartedGeneration).not.toBe(oldGeneration);
+
+    resolveUpdate(session);
+    await exitPromise;
+
+    expect(service.isStopGenerationCurrent('session-1', restartedGeneration)).toBe(true);
+    expect(service.isStopGenerationCurrent('session-1', oldGeneration)).toBe(false);
   });
 
   it('waits for a registered client creation and stops the resulting runtime', async () => {

@@ -516,6 +516,7 @@ export class SessionLifecycleService {
         }
       },
       onExit: async (sid: string, exitCode: number | null) => {
+        this.stopGenerations.delete(sid);
         this.promptTurnCompletionService.clearSession(sid);
         this.onSessionExit?.(sid);
         this.finalizeOrphanedToolCalls(sid, 'runtime_exit');
@@ -559,7 +560,6 @@ export class SessionLifecycleService {
           try {
             this.clearSessionStoreIfInactive(sid, 'runtime_exit');
           } finally {
-            this.stopGenerations.delete(sid);
             acpTraceLogger.closeSession(sid);
           }
         }

@@ -123,7 +123,7 @@ In `stopSession`’s outer `finally`, delete the map entry after releasing `stop
 this.stopGenerations.delete(sessionId);
 ```
 
-In the runtime `onExit` handler’s outer `finally`, delete the map entry after the existing inactive-store cleanup attempt and before closing the trace. These two cleanup points cover manual stops, runtime exits, viewed sessions whose domain state is retained temporarily, and transient workflows. Late async work uses the non-mutating comparison and cannot repopulate the entry.
+In the runtime `onExit` handler, delete the map entry synchronously as the first action, before any callback or `await`. Do not delete it again in the handler’s final cleanup because an old exit callback may finish after a restart has captured a newer generation. These two cleanup points cover manual stops, runtime exits, viewed sessions whose domain state is retained temporarily, and transient workflows. Late async work uses the non-mutating comparison and cannot repopulate the entry.
 
 - [ ] **Step 6: Run the stop-barrier regression group and verify GREEN**
 
@@ -141,6 +141,7 @@ pnpm vitest run \
 Expected: all selected regressions pass, including:
 
 - the new cleanup regression;
+- `does not clear a restarted generation when an old runtime exit finishes`, which proves delayed exit cleanup cannot erase a newer restart’s generation;
 - `does not create a client after stop completes during permission resolution`, which proves deletion does not reintroduce the numeric default-value ABA race;
 - `waits for a registered client creation and stops the resulting runtime`, which proves registered client creation remains fenced.
 
