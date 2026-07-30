@@ -3,18 +3,28 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
-import { resolveSelectedSessionId, useWorkspaceInitStatus } from './use-workspace-detail-hooks';
+import {
+  resolveSelectedSessionId,
+  useWorkspaceHasChanges,
+  useWorkspaceInitStatus,
+} from './use-workspace-detail-hooks';
 
 const getInitStatusUseQueryMock = vi.hoisted(() => vi.fn());
+const hasChangesUseQueryMock = vi.hoisted(() => vi.fn());
+const workspaceGetInvalidateMock = vi.hoisted(() => vi.fn());
+const workspaceHasChangesInvalidateMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
       workspace: {
         get: {
-          invalidate: vi.fn(),
+          invalidate: workspaceGetInvalidateMock,
+        },
+        hasChanges: {
+          invalidate: workspaceHasChangesInvalidateMock,
         },
       },
     }),
@@ -22,13 +32,103 @@ vi.mock('@/client/lib/trpc', () => ({
       getInitStatus: {
         useQuery: getInitStatusUseQueryMock,
       },
+      hasChanges: {
+        useQuery: hasChangesUseQueryMock,
+      },
     },
   },
 }));
 
+beforeEach(() => {
+  hasChangesUseQueryMock.mockReturnValue({ data: false });
+  workspaceHasChangesInvalidateMock.mockResolvedValue(undefined);
+});
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
+});
+
+describe('useWorkspaceHasChanges', () => {
+  function Probe({
+    workspaceId = 'workspace-1',
+    running,
+    prState = 'NONE',
+  }: {
+    workspaceId?: string;
+    running: boolean;
+    prState?: 'NONE' | 'OPEN';
+  }) {
+    const utils = trpc.useUtils();
+    useWorkspaceHasChanges(workspaceId, { hasHadSessions: true, prState }, running, utils);
+    return null;
+  }
+
+  it('invalidates hasChanges when a running session stops', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe, { running: true }));
+    });
+    expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
+
+    flushSync(() => {
+      root.render(createElement(Probe, { running: false }));
+    });
+    expect(workspaceHasChangesInvalidateMock).toHaveBeenCalledOnce();
+    expect(workspaceHasChangesInvalidateMock).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+    });
+
+    root.unmount();
+  });
+
+  it('does not invalidate for an initially stopped workspace', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe, { running: false }));
+    });
+
+    expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
+    root.unmount();
+  });
+
+  it('does not treat navigation to a stopped workspace as a session completion', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe, { workspaceId: 'workspace-1', running: true }));
+    });
+    flushSync(() => {
+      root.render(createElement(Probe, { workspaceId: 'workspace-2', running: false }));
+    });
+
+    expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
+    root.unmount();
+  });
+
+  it('does not invalidate when the workspace already has a pull request', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(Probe, { running: true, prState: 'OPEN' }));
+    });
+    flushSync(() => {
+      root.render(createElement(Probe, { running: false, prState: 'OPEN' }));
+    });
+
+    expect(workspaceHasChangesInvalidateMock).not.toHaveBeenCalled();
+    root.unmount();
+  });
 });
 
 describe('useWorkspaceInitStatus', () => {
