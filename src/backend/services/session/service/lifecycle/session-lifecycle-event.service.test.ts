@@ -92,6 +92,43 @@ describe('SessionLifecycleEventService', () => {
     ]);
   });
 
+  it('re-emits a provider message whose order shifts after an earlier lifecycle event', async () => {
+    const providerMessage = {
+      id: 'provider-at-noon',
+      source: 'agent' as const,
+      timestamp: '2026-07-30T12:00:00.000Z',
+      order: 0,
+      message: {
+        type: 'assistant' as const,
+        message: { role: 'assistant' as const, content: 'Provider message' },
+      },
+    };
+    const earlierEvent = {
+      ...eventRecord,
+      id: 'event-at-eleven',
+      createdAt: new Date('2026-07-30T11:00:00.000Z'),
+    };
+    store.upsert.mockResolvedValue(earlierEvent);
+    domain.replaceTranscript('session-1', [providerMessage]);
+    const emitDelta = vi.spyOn(domain, 'emitDelta').mockImplementation(() => undefined);
+
+    await service.record({ ...input, createdAt: earlierEvent.createdAt });
+
+    expect(emitDelta.mock.calls.map(([, event]) => event)).toEqual([
+      expect.objectContaining({
+        type: 'agent_message',
+        messageId: 'session-lifecycle:event-at-eleven',
+        order: 0,
+      }),
+      {
+        type: 'agent_message',
+        data: providerMessage.message,
+        messageId: 'provider-at-noon',
+        order: 1,
+      },
+    ]);
+  });
+
   it('emits a best-effort transient lifecycle message when persistence fails', async () => {
     store.upsert.mockRejectedValue(new Error('database unavailable'));
     const emitDelta = vi.spyOn(domain, 'emitDelta').mockImplementation(() => undefined);

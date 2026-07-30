@@ -79,21 +79,34 @@ export class SessionLifecycleEventService {
   }
 
   private publish(sessionId: string, message: ChatMessage): void {
+    const previousOrderById = new Map(
+      this.dependencies.sessionDomainService
+        .getTranscriptSnapshot(sessionId)
+        .map((entry) => [entry.id, entry.order])
+    );
     if (!this.dependencies.sessionDomainService.upsertLifecycleMessage(sessionId, message)) {
       return;
     }
-    const lifecycleMessage = this.dependencies.sessionDomainService
+    const changedMessages = this.dependencies.sessionDomainService
       .getTranscriptSnapshot(sessionId)
-      .find((entry) => entry.id === message.id);
-    if (!lifecycleMessage?.message) {
-      return;
+      .filter(
+        (entry) =>
+          entry.source === 'agent' &&
+          entry.message !== undefined &&
+          previousOrderById.get(entry.id) !== entry.order
+      );
+    for (const changedMessage of changedMessages) {
+      const agentMessage = changedMessage.message;
+      if (!agentMessage) {
+        continue;
+      }
+      this.dependencies.sessionDomainService.emitDelta(sessionId, {
+        type: 'agent_message',
+        data: agentMessage,
+        messageId: changedMessage.id,
+        order: changedMessage.order,
+      });
     }
-    this.dependencies.sessionDomainService.emitDelta(sessionId, {
-      type: 'agent_message',
-      data: lifecycleMessage.message,
-      messageId: lifecycleMessage.id,
-      order: lifecycleMessage.order,
-    });
   }
 }
 

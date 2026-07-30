@@ -489,6 +489,59 @@ describe('chatReducer', () => {
       expect(twice.messages[0]!.message).toEqual(claudeMsg);
     });
 
+    it('keeps a live provider message when an earlier lifecycle message reorders it', () => {
+      const providerMessage: AgentMessage = {
+        type: 'assistant',
+        message: { role: 'assistant', content: 'Provider message' },
+      };
+      const lifecycleMessage: AgentMessage = {
+        type: 'session_lifecycle',
+        lifecycle: {
+          eventId: 'event-at-eleven',
+          kind: 'TURN_INTERRUPTED',
+          reason: 'PROMPT_TIMEOUT',
+          message: 'Turn stopped before noon.',
+          timestamp: '2026-07-30T11:00:00.000Z',
+        },
+      };
+      const reduceWebSocketMessage = (state: ChatState, message: WebSocketMessage): ChatState => {
+        const action = createActionFromWebSocketMessage(message);
+        if (!action) {
+          throw new Error('Expected a websocket action');
+        }
+        return chatReducer(state, action);
+      };
+
+      const withProvider = reduceWebSocketMessage(initialState, {
+        type: 'agent_message',
+        data: providerMessage,
+        messageId: 'provider-at-noon',
+        order: 0,
+      });
+      const withLifecycle = reduceWebSocketMessage(withProvider, {
+        type: 'agent_message',
+        data: lifecycleMessage,
+        messageId: 'session-lifecycle:event-at-eleven',
+        order: 0,
+      });
+      const reconciled = reduceWebSocketMessage(withLifecycle, {
+        type: 'agent_message',
+        data: providerMessage,
+        messageId: 'provider-at-noon',
+        order: 1,
+      });
+
+      expect(reconciled.messages.map((message) => message.id)).toEqual([
+        'session-lifecycle:event-at-eleven',
+        'provider-at-noon',
+      ]);
+      expect(reconciled.messages.map((message) => message.order)).toEqual([0, 1]);
+      expect(reconciled.messages.map((message) => message.message)).toEqual([
+        lifecycleMessage,
+        providerMessage,
+      ]);
+    });
+
     it('does not derive runtime phase changes from Claude message payloads', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
