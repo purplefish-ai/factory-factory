@@ -38,7 +38,14 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       createAndStartSession: {
         useMutation: () => ({
-          mutate: vi.fn(),
+          mutate: vi.fn(
+            (
+              { workspaceId }: { workspaceId: string },
+              options?: { onSuccess?: (session: { id: string }) => void }
+            ) => {
+              options?.onSuccess?.({ id: `created-for-${workspaceId}` });
+            }
+          ),
           isPending: false,
         }),
       },
@@ -130,6 +137,21 @@ afterEach(() => {
 });
 
 describe('useQuickChat session selection', () => {
+  it.each([
+    ['new chat', (result: QuickChatResult) => result.handleNewChat()],
+    ['quick action', (result: QuickChatResult) => result.handleQuickAction('Review', 'Review it')],
+  ])('keeps a session selected after a %s while the session list is stale', (_label, create) => {
+    sessionsByWorkspace.set('workspace-a', []);
+    const rendered = renderHook('workspace-a');
+
+    flushSync(() => {
+      create(rendered.getResult());
+    });
+
+    rendered.rerender('workspace-a');
+    expect(rendered.getResult().selectedSessionId).toBe('created-for-workspace-a');
+  });
+
   it('clears a stale session after the new workspace confirms it has no sessions', async () => {
     sessionsByWorkspace.set('workspace-a', [{ id: 'session-a' }]);
     const rendered = renderHook('workspace-a');

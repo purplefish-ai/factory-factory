@@ -4,6 +4,14 @@ import { useChatWebSocket } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 
+function isPendingCreatedSelection(
+  pendingSession: { id: string; workspaceId: string } | null,
+  workspaceId: string,
+  selectedSessionId: string | null
+) {
+  return pendingSession?.workspaceId === workspaceId && pendingSession.id === selectedSessionId;
+}
+
 export function useQuickChat(workspaceId: string | null) {
   const utils = trpc.useUtils();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -15,26 +23,44 @@ export function useQuickChat(workspaceId: string | null) {
   );
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const pendingCreatedSessionRef = useRef<{ id: string; workspaceId: string } | null>(null);
 
   // Auto-select first session; reset when workspace changes
   useEffect(() => {
     if (!workspaceId) {
+      pendingCreatedSessionRef.current = null;
       setSelectedSessionId(null);
       return;
     }
-    if (sessions?.length === 0) {
+    if (!sessions) {
+      return;
+    }
+
+    const currentValid = sessions.some((session) => session.id === selectedSessionId);
+    const pendingCreatedSession = pendingCreatedSessionRef.current;
+    const currentIsPending = isPendingCreatedSelection(
+      pendingCreatedSession,
+      workspaceId,
+      selectedSessionId
+    );
+
+    if (currentValid && currentIsPending) {
+      pendingCreatedSessionRef.current = null;
+    }
+    if (currentValid) {
+      return;
+    }
+    if (currentIsPending) {
+      return;
+    }
+    if (sessions.length === 0) {
       setSelectedSessionId(null);
       return;
     }
-    if (sessions && sessions.length > 0) {
-      // Keep current selection if it's still valid
-      const currentValid = sessions.some((s) => s.id === selectedSessionId);
-      if (!currentValid) {
-        const firstSession = sessions[0];
-        if (firstSession) {
-          setSelectedSessionId(firstSession.id);
-        }
-      }
+
+    const firstSession = sessions[0];
+    if (firstSession) {
+      setSelectedSessionId(firstSession.id);
     }
   }, [workspaceId, sessions, selectedSessionId]);
 
@@ -121,6 +147,7 @@ export function useQuickChat(workspaceId: string | null) {
       { workspaceId, workflow: 'followup', model: '', name, initialPrompt: '' },
       {
         onSuccess: (session) => {
+          pendingCreatedSessionRef.current = { id: session.id, workspaceId };
           setSelectedSessionId(session.id);
         },
       }
@@ -143,6 +170,7 @@ export function useQuickChat(workspaceId: string | null) {
         },
         {
           onSuccess: (session) => {
+            pendingCreatedSessionRef.current = { id: session.id, workspaceId };
             setSelectedSessionId(session.id);
           },
         }
