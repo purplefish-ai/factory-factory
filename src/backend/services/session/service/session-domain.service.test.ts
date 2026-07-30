@@ -44,6 +44,29 @@ describe('SessionDomainService', () => {
     sessionDomainService.clearAllSessions();
   });
 
+  it('upserts a lifecycle message once by its stable ID', () => {
+    const lifecycleMessage = {
+      id: 'session-lifecycle:event-1',
+      source: 'agent' as const,
+      timestamp: '2026-07-30T12:22:23.353Z',
+      order: 0,
+      message: {
+        type: 'session_lifecycle' as const,
+        lifecycle: {
+          eventId: 'event-1',
+          kind: 'TURN_INTERRUPTED' as const,
+          reason: 'PROMPT_TIMEOUT' as const,
+          message: 'Turn stopped: reached the 4-hour limit.',
+          timestamp: '2026-07-30T12:22:23.353Z',
+        },
+      },
+    };
+
+    expect(sessionDomainService.upsertLifecycleMessage('s1', lifecycleMessage)).toBe(true);
+    expect(sessionDomainService.upsertLifecycleMessage('s1', lifecycleMessage)).toBe(false);
+    expect(sessionDomainService.getTranscriptSnapshot('s1')).toEqual([lifecycleMessage]);
+  });
+
   it('subscribes and emits replay plus runtime delta', async () => {
     await sessionDomainService.subscribe({
       sessionId: 's1',

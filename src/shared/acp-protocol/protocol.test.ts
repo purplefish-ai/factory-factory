@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_MESSAGE_TYPES,
   type AgentContentItem,
   type ChatMessage,
   compareTranscriptMessageOrder,
@@ -42,6 +43,12 @@ describe('renderer transcript window', () => {
     const secondError = rendererMessage('error-2', -1);
 
     expect(compareTranscriptMessageOrder(firstError, secondError)).toBe(0);
+  });
+});
+
+describe('agent message types', () => {
+  it('accepts session lifecycle messages', () => {
+    expect(AGENT_MESSAGE_TYPES).toContain('session_lifecycle');
   });
 });
 

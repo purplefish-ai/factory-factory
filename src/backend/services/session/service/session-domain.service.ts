@@ -330,6 +330,13 @@ export class SessionDomainService extends EventEmitter {
     });
   }
 
+  upsertLifecycleMessage(sessionId: string, message: ChatMessage): boolean {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const existed = store.transcript.some((entry) => entry.id === message.id);
+    upsertTranscriptMessage(store, message);
+    return !existed;
+  }
+
   allocateOrder(sessionId: string): number {
     const store = this.registry.getOrCreateActive(sessionId);
     const order = store.nextOrder;

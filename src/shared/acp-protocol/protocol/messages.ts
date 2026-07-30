@@ -1,3 +1,4 @@
+import type { SessionLifecycleEventKind, SessionLifecycleEventReason } from '../../core/index.js';
 import type {
   AgentContentItem,
   AgentStreamEvent,
@@ -5,6 +6,14 @@ import type {
   ModelUsage,
   ToolDefinition,
 } from './content';
+
+export interface SessionLifecycleMessage {
+  eventId: string;
+  kind: SessionLifecycleEventKind;
+  reason: SessionLifecycleEventReason;
+  message: string;
+  timestamp: string;
+}
 
 /**
  * Top-level message types received from the WebSocket.
@@ -18,9 +27,11 @@ export interface AgentMessage {
     | 'stream_event'
     | 'result'
     | 'error'
+    | 'session_lifecycle'
     | 'child_workspace_update'
     | 'parent_workspace_update';
   timestamp?: string;
+  lifecycle?: SessionLifecycleMessage;
   // child_workspace_update fields (only present when type === 'child_workspace_update')
   childWorkspaceId?: string;
   childWorkspaceName?: string;
@@ -66,6 +77,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   stream_event: true,
   result: true,
   error: true,
+  session_lifecycle: true,
   child_workspace_update: true,
   parent_workspace_update: true,
 };

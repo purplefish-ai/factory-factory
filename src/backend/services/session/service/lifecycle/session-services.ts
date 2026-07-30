@@ -1,4 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { AcpEventProcessor } from './acp-event-processor';
@@ -10,6 +11,7 @@ import { SessionPromptTurnCompletionService } from './session.prompt-turn-comple
 import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 import { SessionService } from './session.service';
+import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const logger = createLogger('session');
 
@@ -51,6 +53,10 @@ export const sessionConfigService = new SessionConfigService({
 
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();
 export const sessionRetryService = new SessionRetryService();
+export const sessionLifecycleEventService = new SessionLifecycleEventService({
+  store: sessionLifecycleEventAccessor,
+  sessionDomainService,
+});
 
 export const acpEventProcessor = new AcpEventProcessor({
   runtimeManager: acpRuntimeManager,
