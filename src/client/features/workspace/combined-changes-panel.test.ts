@@ -1,9 +1,84 @@
 import { describe, expect, it } from 'vitest';
+import { buildChangeTree, type ChangeListEntry } from './change-panel-shared';
 import {
   buildCombinedEntries,
   getIndicatorLabel,
   getPartialDataWarning,
 } from './combined-changes-panel';
+
+const gitDirectoryEntry: ChangeListEntry = {
+  path: 'myfolder/',
+  kind: 'untracked',
+  statusCode: '?',
+};
+const childFileEntry: ChangeListEntry = {
+  path: 'myfolder/a.ts',
+  kind: 'modified',
+  statusCode: 'M',
+};
+
+describe('buildChangeTree', () => {
+  it.each([
+    ['before', [gitDirectoryEntry, childFileEntry]],
+    ['after', [childFileEntry, gitDirectoryEntry]],
+  ])('unifies a git-reported directory with its child when the directory appears %s the child', (_order, entries) => {
+    expect(buildChangeTree(entries)).toEqual([
+      {
+        name: 'myfolder',
+        path: 'myfolder',
+        type: 'directory',
+        entry: gitDirectoryEntry,
+        children: [
+          {
+            name: 'a.ts',
+            path: 'myfolder/a.ts',
+            type: 'file',
+            entry: childFileEntry,
+            children: [],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('unifies a nested git-reported directory with its child file', () => {
+    const nestedDirectoryEntry: ChangeListEntry = {
+      path: 'outer/inner/',
+      kind: 'untracked',
+      statusCode: '?',
+    };
+    const nestedFileEntry: ChangeListEntry = {
+      path: 'outer/inner/a.ts',
+      kind: 'modified',
+      statusCode: 'M',
+    };
+
+    expect(buildChangeTree([nestedDirectoryEntry, nestedFileEntry])).toEqual([
+      {
+        name: 'outer',
+        path: 'outer',
+        type: 'directory',
+        children: [
+          {
+            name: 'inner',
+            path: 'outer/inner',
+            type: 'directory',
+            entry: nestedDirectoryEntry,
+            children: [
+              {
+                name: 'a.ts',
+                path: 'outer/inner/a.ts',
+                type: 'file',
+                entry: nestedFileEntry,
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+});
 
 describe('buildCombinedEntries', () => {
   it('does not mark main-relative files as not pushed when upstream is in sync', () => {
