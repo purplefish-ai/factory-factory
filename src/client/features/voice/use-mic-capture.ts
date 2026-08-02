@@ -145,11 +145,25 @@ export function useMicCapture({
         }
       };
 
+      // Browsers deliberately withhold the HTTP-level detail of a rejected WS
+      // handshake from JS (security restriction) — `error` carries nothing,
+      // and even `close` usually just reports code 1006 with no reason. The
+      // close code is still worth surfacing since it at least distinguishes
+      // failure classes; the actual cause (status/body) is only visible in
+      // the browser's Network panel.
       await new Promise<void>((resolve, reject) => {
         socket.addEventListener('open', () => resolve(), { once: true });
-        socket.addEventListener('error', () => reject(new Error('Failed to connect to Deepgram')), {
-          once: true,
-        });
+        socket.addEventListener(
+          'close',
+          (event) => {
+            reject(
+              new Error(
+                `Failed to connect to Deepgram (WebSocket closed, code ${event.code}${event.reason ? `: ${event.reason}` : ''}). Check the browser Network tab for the actual handshake response.`
+              )
+            );
+          },
+          { once: true }
+        );
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
