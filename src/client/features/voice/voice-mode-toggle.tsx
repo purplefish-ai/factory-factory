@@ -68,7 +68,7 @@ export function VoiceModeToggle({
     <Button
       type="button"
       variant={isCapturing ? 'default' : 'outline'}
-      size="icon"
+      size="sm"
       className="shrink-0"
       disabled={disabled || !sessionId}
       title={error ?? (isCapturing ? 'Exit voice mode' : 'Enter voice mode')}
@@ -79,6 +79,7 @@ export function VoiceModeToggle({
       ) : (
         <MicrophoneSlashIcon className="h-4 w-4" />
       )}
+      {isCapturing ? 'Voice On' : 'Voice Off'}
     </Button>
   );
 }
