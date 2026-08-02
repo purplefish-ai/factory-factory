@@ -167,10 +167,20 @@ class VoiceNarrationService {
         turn.suppressThinking = false;
         return;
       }
-      if (payload.sessionRuntime.activity === 'IDLE' && turn.finalText.trim().length > 0) {
-        const textToSpeak = turn.finalText;
-        turn.finalText = '';
-        void this.speakClause(event.sessionId, ws, turn, textToSpeak, 'final');
+      if (payload.sessionRuntime.activity === 'IDLE') {
+        if (turn.finalText.trim().length > 0) {
+          const textToSpeak = turn.finalText;
+          turn.finalText = '';
+          logger.info('Turn complete with text to speak', {
+            sessionId: event.sessionId,
+            textLength: textToSpeak.length,
+          });
+          void this.speakClause(event.sessionId, ws, turn, textToSpeak, 'final');
+        } else {
+          logger.info('Turn complete with no accumulated text — nothing to speak', {
+            sessionId: event.sessionId,
+          });
+        }
       }
     }
   }
@@ -231,6 +241,11 @@ class VoiceNarrationService {
   ): Promise<void> {
     const settings = await userSettingsService.get();
     if (!(settings.voiceModeEnabled && settings.deepgramApiKeyEncrypted)) {
+      logger.info('Skipping narration — voice mode disabled or no key configured', {
+        sessionId,
+        voiceModeEnabled: settings.voiceModeEnabled,
+        hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
+      });
       return;
     }
     const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
@@ -240,14 +255,24 @@ class VoiceNarrationService {
       encoding: TTS_ENCODING,
       sample_rate: String(TTS_SAMPLE_RATE),
     });
+    logger.info('Opening Deepgram TTS connection', { sessionId, kind, textLength: text.length });
     const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
       headers: { Authorization: `Token ${apiKey}` },
     });
     const active: ActiveNarration = { socket: ttsSocket, kind };
     turn.activeTts = active;
 
+    let chunkCount = 0;
+    let byteCount = 0;
+
     await new Promise<void>((resolve) => {
       const finish = () => {
+        logger.info('Finished Deepgram TTS narration', {
+          sessionId,
+          kind,
+          chunkCount,
+          byteCount,
+        });
         ttsSocket.removeAllListeners();
         if (ttsSocket.readyState === WebSocket.OPEN) {
           ttsSocket.close();
@@ -277,10 +302,14 @@ class VoiceNarrationService {
           return;
         }
         if (isBinary) {
+          chunkCount += 1;
+          byteCount += data.length;
           this.forwardAudioChunk(sessionId, ws, data);
           return;
         }
-        this.handleTtsControlMessage(ttsSocket, this.parseControlMessage(data), finish);
+        const message = this.parseControlMessage(data);
+        logger.info('Deepgram TTS control message', { sessionId, message });
+        this.handleTtsControlMessage(ttsSocket, message, finish);
       });
 
       ttsSocket.on('error', (error) => {
