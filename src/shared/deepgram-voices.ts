@@ -57,8 +57,10 @@ export const DEEPGRAM_AURA2_ENGLISH_VOICES: DeepgramVoiceOption[] = [
 
 export const DEFAULT_DEEPGRAM_TTS_MODEL = 'aura-2-thalia-en';
 
-export const DEEPGRAM_TTS_SPEED_MIN = 0.5;
-export const DEEPGRAM_TTS_SPEED_MAX = 2;
+// Deepgram rejects speed values outside this range with a 400 for Aura-2
+// voices, even though it isn't documented anywhere but the error message.
+export const DEEPGRAM_TTS_SPEED_MIN = 0.7;
+export const DEEPGRAM_TTS_SPEED_MAX = 1.5;
 export const DEFAULT_DEEPGRAM_TTS_SPEED = 1;
 
 export function isKnownDeepgramVoiceModel(model: string): boolean {
