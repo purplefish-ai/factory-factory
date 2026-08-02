@@ -100,6 +100,17 @@ describe('voiceRouter', () => {
 
       expect(result).toEqual({ valid: false, error: 'network down' });
     });
+
+    it('trims whitespace from a copy-pasted key before sending it to Deepgram', async () => {
+      vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+
+      await createCaller().validateApiKey({ apiKey: '  dg_test\n' });
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.deepgram.com/v1/projects',
+        expect.objectContaining({ headers: { Authorization: 'Token dg_test' } })
+      );
+    });
   });
 
   describe('updateConfig', () => {
@@ -134,6 +145,18 @@ describe('voiceRouter', () => {
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: undefined,
       });
+    });
+
+    it('trims whitespace from a copy-pasted key before encrypting it', async () => {
+      mockUserSettingsQueryService.update.mockResolvedValue(undefined);
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: 'encrypted:dg_new',
+      });
+
+      await createCaller().updateConfig({ enabled: true, apiKey: '  dg_new\n' });
+
+      expect(mockCryptoService.encrypt).toHaveBeenCalledWith('dg_new');
     });
   });
 
@@ -212,6 +235,20 @@ describe('voiceRouter', () => {
 
       await expect(createCaller().mintGrantToken()).rejects.toThrow(/invalid/i);
       await expect(createCaller().mintGrantToken()).rejects.toThrow(/console/i);
+    });
+
+    it('throws a friendly, actionable message for a 400 BAD_REQUEST response (malformed/whitespace-padded key)', async () => {
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+      });
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: () => Promise.resolve('{"err_code":"BAD_REQUEST","err_msg":"Invalid credentials."}'),
+      } as Response);
+
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(/whitespace|newline/i);
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(/re-copy/i);
     });
   });
 });

@@ -55,6 +55,15 @@ function friendlyDeepgramAuthError(status: number, detail: string): string | nul
       "hasn't been deleted or regenerated there since it was saved."
     );
   }
+  if (status === 400 && errCode === 'BAD_REQUEST') {
+    return (
+      'Deepgram rejected this request as malformed, which usually means the saved API key ' +
+      "has extra whitespace or a stray newline from copy-pasting (Deepgram's own error " +
+      'message for this case misleadingly says "Invalid credentials" even though the key ' +
+      'itself may be correct). Re-copy the key from the Deepgram console and save it again ' +
+      'in Voice Mode settings.'
+    );
+  }
   if (status === 403 && errCode === 'INSUFFICIENT_PERMISSIONS') {
     return (
       "This Deepgram API key doesn't have permission to start voice sessions. " +
@@ -97,7 +106,10 @@ export const voiceRouter = router({
 
   /** Validate a Deepgram API key before it's saved. */
   validateApiKey: publicProcedure
-    .input(z.object({ apiKey: z.string().min(1) }))
+    // .trim() first: copy-pasted keys routinely carry a trailing newline or
+    // leading/trailing space, which Deepgram rejects with a misleading
+    // "Invalid credentials" 400 rather than an obvious whitespace complaint.
+    .input(z.object({ apiKey: z.string().trim().min(1) }))
     .mutation(({ input }) => {
       return validateDeepgramApiKey(input.apiKey);
     }),
@@ -111,7 +123,7 @@ export const voiceRouter = router({
     .input(
       z.object({
         enabled: z.boolean(),
-        apiKey: z.string().min(1).optional(),
+        apiKey: z.string().trim().min(1).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
