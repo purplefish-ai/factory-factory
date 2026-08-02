@@ -1,8 +1,9 @@
-import { MicrophoneIcon, MicrophoneSlashIcon } from '@phosphor-icons/react';
+import { MicrophoneIcon, MicrophoneSlashIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useMicCapture } from './use-mic-capture';
 import { useVoicePlayback } from './use-voice-playback';
 
@@ -13,6 +14,57 @@ export interface VoiceModeToggleProps {
   /** Whether the agent turn is currently running — gates "please stop" detection. */
   running?: boolean;
   disabled?: boolean;
+}
+
+interface VoiceStatus {
+  label: string;
+  title: string;
+}
+
+function getVoiceStatus(
+  isConnecting: boolean,
+  isCapturing: boolean,
+  error: string | null
+): VoiceStatus {
+  if (error) {
+    const label = isCapturing ? 'Voice On' : 'Voice Off';
+    return { label, title: error };
+  }
+  if (isConnecting) {
+    return { label: 'Connecting…', title: 'Connecting to Deepgram — speech is not captured yet' };
+  }
+  if (isCapturing) {
+    return { label: 'Voice On', title: 'Exit voice mode' };
+  }
+  return { label: 'Voice Off', title: 'Enter voice mode' };
+}
+
+/** Small dot + text next to the button clarifying whether speech is actually being captured yet. */
+function VoiceStatusBadge({
+  isConnecting,
+  isCapturing,
+  isSpeaking,
+}: {
+  isConnecting: boolean;
+  isCapturing: boolean;
+  isSpeaking: boolean;
+}) {
+  if (!(isConnecting || isCapturing)) {
+    return null;
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full',
+          isConnecting && 'animate-pulse bg-amber-500',
+          isCapturing && isSpeaking && 'animate-pulse bg-blue-500',
+          isCapturing && !isSpeaking && 'bg-green-500'
+        )}
+      />
+      {isConnecting ? 'Connecting' : isSpeaking ? 'Speaking' : 'Listening'}
+    </span>
+  );
 }
 
 /**
@@ -40,7 +92,7 @@ export function VoiceModeToggle({
     sessionId,
     enabled: voiceModeOn,
   });
-  const { isCapturing, error, start, stop } = useMicCapture({
+  const { isCapturing, isConnecting, error, start, stop } = useMicCapture({
     onFinalTranscript,
     running,
     onSoftStop: sendSoftStop,
@@ -64,32 +116,43 @@ export function VoiceModeToggle({
     if (isCapturing) {
       stop();
       setVoiceModeOn(false);
-    } else {
+    } else if (!isConnecting) {
       setVoiceModeOn(true);
       void start();
     }
-  }, [isCapturing, start, stop]);
+  }, [isCapturing, isConnecting, start, stop]);
 
   if (!(config?.enabled && config.hasApiKey)) {
     return null;
   }
 
+  const status = getVoiceStatus(isConnecting, isCapturing, error);
+
   return (
-    <Button
-      type="button"
-      variant={isCapturing ? 'default' : 'outline'}
-      size="sm"
-      className="shrink-0"
-      disabled={disabled || !sessionId}
-      title={error ?? (isCapturing ? 'Exit voice mode' : 'Enter voice mode')}
-      onClick={handleClick}
-    >
-      {isCapturing ? (
-        <MicrophoneIcon className={isSpeaking ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
-      ) : (
-        <MicrophoneSlashIcon className="h-4 w-4" />
-      )}
-      {isCapturing ? 'Voice On' : 'Voice Off'}
-    </Button>
+    <div className="flex shrink-0 items-center gap-2">
+      <Button
+        type="button"
+        variant={isCapturing ? 'default' : 'outline'}
+        size="sm"
+        className="shrink-0"
+        disabled={disabled || !sessionId || isConnecting}
+        title={status.title}
+        onClick={handleClick}
+      >
+        {isConnecting ? (
+          <SpinnerGapIcon className="h-4 w-4 animate-spin" />
+        ) : isCapturing ? (
+          <MicrophoneIcon className={isSpeaking ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
+        ) : (
+          <MicrophoneSlashIcon className="h-4 w-4" />
+        )}
+        {status.label}
+      </Button>
+      <VoiceStatusBadge
+        isConnecting={isConnecting}
+        isCapturing={isCapturing}
+        isSpeaking={isSpeaking}
+      />
+    </div>
   );
 }

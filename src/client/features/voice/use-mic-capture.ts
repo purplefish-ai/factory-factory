@@ -53,7 +53,10 @@ export interface UseMicCaptureOptions {
 }
 
 export interface UseMicCaptureResult {
+  /** True once the mic is open and streaming to Deepgram — speech before this is dropped. */
   isCapturing: boolean;
+  /** True from the moment `start()` is called until capture is ready (or fails). */
+  isConnecting: boolean;
   error: string | null;
   start: () => Promise<void>;
   stop: () => void;
@@ -73,6 +76,7 @@ export function useMicCapture({
   onSpeechDetected,
 }: UseMicCaptureOptions): UseMicCaptureResult {
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mintGrantToken = trpc.voice.mintGrantToken.useMutation();
 
@@ -113,6 +117,7 @@ export function useMicCapture({
 
   const start = useCallback(async () => {
     setError(null);
+    setIsConnecting(true);
     try {
       const { accessToken } = await mintGrantToken.mutateAsync();
 
@@ -222,6 +227,8 @@ export function useMicCapture({
     } catch (err) {
       cleanup();
       setError(err instanceof Error ? err.message : 'Failed to start voice capture');
+    } finally {
+      setIsConnecting(false);
     }
   }, [
     cleanup,
@@ -236,5 +243,5 @@ export function useMicCapture({
     cleanup();
   }, [cleanup]);
 
-  return { isCapturing, error, start, stop };
+  return { isCapturing, isConnecting, error, start, stop };
 }
