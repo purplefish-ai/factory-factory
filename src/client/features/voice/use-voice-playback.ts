@@ -63,44 +63,41 @@ export function useVoicePlayback({
   const activeSourcesRef = useRef(new Set<AudioBufferSourceNode>());
   const wsRef = useRef<WebSocket | null>(null);
 
-  const getAudioContext = useCallback((): AudioContext => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-      nextStartTimeRef.current = 0;
+  const playChunk = useCallback((pcm: Int16Array) => {
+    const audioContext = audioContextRef.current;
+    if (!audioContext) {
+      return;
     }
-    return audioContextRef.current;
-  }, []);
+    // Browsers can suspend a context again after backgrounding the tab
+    // etc.; resuming is a cheap no-op when it's already running.
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => undefined);
+    }
+    const samples = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      samples[i] = (pcm[i] ?? 0) / 0x80_00;
+    }
 
-  const playChunk = useCallback(
-    (pcm: Int16Array) => {
-      const audioContext = getAudioContext();
-      const samples = new Float32Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) {
-        samples[i] = (pcm[i] ?? 0) / 0x80_00;
+    const buffer = audioContext.createBuffer(1, samples.length, PLAYBACK_SAMPLE_RATE);
+    buffer.copyToChannel(samples, 0);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+
+    const startAt = Math.max(audioContext.currentTime, nextStartTimeRef.current);
+    source.start(startAt);
+    nextStartTimeRef.current = startAt + buffer.duration;
+
+    activeSourcesRef.current.add(source);
+    setIsSpeaking(true);
+    source.onended = () => {
+      activeSourcesRef.current.delete(source);
+      if (activeSourcesRef.current.size === 0) {
+        setIsSpeaking(false);
       }
-
-      const buffer = audioContext.createBuffer(1, samples.length, PLAYBACK_SAMPLE_RATE);
-      buffer.copyToChannel(samples, 0);
-
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContext.destination);
-
-      const startAt = Math.max(audioContext.currentTime, nextStartTimeRef.current);
-      source.start(startAt);
-      nextStartTimeRef.current = startAt + buffer.duration;
-
-      activeSourcesRef.current.add(source);
-      setIsSpeaking(true);
-      source.onended = () => {
-        activeSourcesRef.current.delete(source);
-        if (activeSourcesRef.current.size === 0) {
-          setIsSpeaking(false);
-        }
-      };
-    },
-    [getAudioContext]
-  );
+    };
+  }, []);
 
   const stopPlayback = useCallback(() => {
     for (const source of activeSourcesRef.current) {
@@ -125,6 +122,17 @@ export function useVoicePlayback({
     if (!(enabled && sessionId)) {
       return;
     }
+
+    // Created here — synchronously when voice mode is switched on, close to
+    // the user's click — rather than lazily on the first audio chunk, which
+    // arrives seconds later after transcription + the agent's turn + TTS
+    // synthesis. By then the browser's autoplay policy has typically
+    // suspended a freshly-created AudioContext, and buffers scheduled
+    // against a suspended context play silently with no error.
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
+    nextStartTimeRef.current = 0;
+    audioContext.resume().catch(() => undefined);
 
     const ws = new WebSocket(buildWebSocketUrl('/voice', { sessionId }));
     wsRef.current = ws;
