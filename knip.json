@@ -35,7 +35,6 @@
     "src/components/ui/menubar.tsx",
     "src/components/ui/navigation-menu.tsx",
     "src/components/ui/pagination.tsx",
-    "src/components/ui/slider.tsx",
     "src/components/ui/toggle-group.tsx"
   ],
   "ignoreDependencies": [
@@ -48,7 +47,6 @@
     "@radix-ui/react-hover-card",
     "@radix-ui/react-menubar",
     "@radix-ui/react-navigation-menu",
-    "@radix-ui/react-slider",
     "embla-carousel-react",
     "input-otp",
     "react-hook-form",
