@@ -9,8 +9,14 @@ const PLAYBACK_SAMPLE_RATE = 24_000;
  * steady bitrate, so without this, scheduling a chunk flush against
  * `currentTime` means the next moment of network jitter produces an audible
  * gap — and every chunk after that keeps re-triggering the same gap.
+ *
+ * Deepgram streams audio in ~40ms chunks (measured from real sessions), so
+ * a 120ms cushion was only ~3 chunks of headroom against a busy main thread
+ * that's also re-rendering the streaming chat transcript concurrently — not
+ * enough. 300ms trades a bit more onset latency (barely noticeable in a
+ * spoken conversation) for real robustness against that contention.
  */
-const JITTER_BUFFER_SECONDS = 0.12;
+const JITTER_BUFFER_SECONDS = 0.3;
 
 interface AudioChunkMessage {
   type: 'audio_chunk';
