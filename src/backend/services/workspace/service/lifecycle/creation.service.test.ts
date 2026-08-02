@@ -145,6 +145,8 @@ describe('WorkspaceCreationService', () => {
       ratchetPermissions: 'YOLO',
       voiceModeEnabled: false,
       deepgramApiKeyEncrypted: null,
+      voiceTtsModel: 'aura-2-thalia-en',
+      voiceTtsSpeed: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -241,6 +243,8 @@ describe('WorkspaceCreationService', () => {
           ratchetPermissions: 'YOLO',
           voiceModeEnabled: false,
           deepgramApiKeyEncrypted: null,
+          voiceTtsModel: 'aura-2-thalia-en',
+          voiceTtsSpeed: 1,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

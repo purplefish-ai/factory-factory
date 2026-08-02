@@ -22,6 +22,8 @@ export interface UpdateUserSettingsInput {
   ratchetPermissions?: SessionPermissionPreset;
   voiceModeEnabled?: boolean;
   deepgramApiKeyEncrypted?: string | null;
+  voiceTtsModel?: string;
+  voiceTtsSpeed?: number;
 }
 
 class UserSettingsService {

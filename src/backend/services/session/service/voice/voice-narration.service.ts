@@ -46,7 +46,6 @@ import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema
 const logger = createLogger('voice-narration');
 
 const DEEPGRAM_TTS_URL = 'wss://api.deepgram.com/v1/speak';
-const TTS_MODEL = 'aura-2-thalia-en';
 const TTS_ENCODING = 'linear16';
 const TTS_SAMPLE_RATE = 24_000;
 
@@ -320,11 +319,18 @@ class VoiceNarrationService {
     const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
 
     const params = new URLSearchParams({
-      model: TTS_MODEL,
+      model: settings.voiceTtsModel,
       encoding: TTS_ENCODING,
       sample_rate: String(TTS_SAMPLE_RATE),
+      speed: String(settings.voiceTtsSpeed),
     });
-    logger.info('Opening Deepgram TTS connection', { sessionId, kind, textLength: text.length });
+    logger.info('Opening Deepgram TTS connection', {
+      sessionId,
+      kind,
+      textLength: text.length,
+      model: settings.voiceTtsModel,
+      speed: settings.voiceTtsSpeed,
+    });
     const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
       headers: { Authorization: `Token ${apiKey}` },
     });

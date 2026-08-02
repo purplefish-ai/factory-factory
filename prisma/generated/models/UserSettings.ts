@@ -20,8 +20,18 @@ export type UserSettingsModel = runtime.Types.Result.DefaultSelection<Prisma.$Us
 
 export type AggregateUserSettings = {
   _count: UserSettingsCountAggregateOutputType | null
+  _avg: UserSettingsAvgAggregateOutputType | null
+  _sum: UserSettingsSumAggregateOutputType | null
   _min: UserSettingsMinAggregateOutputType | null
   _max: UserSettingsMaxAggregateOutputType | null
+}
+
+export type UserSettingsAvgAggregateOutputType = {
+  voiceTtsSpeed: number | null
+}
+
+export type UserSettingsSumAggregateOutputType = {
+  voiceTtsSpeed: number | null
 }
 
 export type UserSettingsMinAggregateOutputType = {
@@ -43,6 +53,8 @@ export type UserSettingsMinAggregateOutputType = {
   ratchetPermissions: $Enums.SessionPermissionPreset | null
   voiceModeEnabled: boolean | null
   deepgramApiKeyEncrypted: string | null
+  voiceTtsModel: string | null
+  voiceTtsSpeed: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -66,6 +78,8 @@ export type UserSettingsMaxAggregateOutputType = {
   ratchetPermissions: $Enums.SessionPermissionPreset | null
   voiceModeEnabled: boolean | null
   deepgramApiKeyEncrypted: string | null
+  voiceTtsModel: string | null
+  voiceTtsSpeed: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -91,11 +105,21 @@ export type UserSettingsCountAggregateOutputType = {
   ratchetPermissions: number
   voiceModeEnabled: number
   deepgramApiKeyEncrypted: number
+  voiceTtsModel: number
+  voiceTtsSpeed: number
   createdAt: number
   updatedAt: number
   _all: number
 }
 
+
+export type UserSettingsAvgAggregateInputType = {
+  voiceTtsSpeed?: true
+}
+
+export type UserSettingsSumAggregateInputType = {
+  voiceTtsSpeed?: true
+}
 
 export type UserSettingsMinAggregateInputType = {
   id?: true
@@ -116,6 +140,8 @@ export type UserSettingsMinAggregateInputType = {
   ratchetPermissions?: true
   voiceModeEnabled?: true
   deepgramApiKeyEncrypted?: true
+  voiceTtsModel?: true
+  voiceTtsSpeed?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -139,6 +165,8 @@ export type UserSettingsMaxAggregateInputType = {
   ratchetPermissions?: true
   voiceModeEnabled?: true
   deepgramApiKeyEncrypted?: true
+  voiceTtsModel?: true
+  voiceTtsSpeed?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -164,6 +192,8 @@ export type UserSettingsCountAggregateInputType = {
   ratchetPermissions?: true
   voiceModeEnabled?: true
   deepgramApiKeyEncrypted?: true
+  voiceTtsModel?: true
+  voiceTtsSpeed?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -207,6 +237,18 @@ export type UserSettingsAggregateArgs<ExtArgs extends runtime.Types.Extensions.I
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: UserSettingsAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: UserSettingsSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: UserSettingsMinAggregateInputType
@@ -237,6 +279,8 @@ export type UserSettingsGroupByArgs<ExtArgs extends runtime.Types.Extensions.Int
   take?: number
   skip?: number
   _count?: UserSettingsCountAggregateInputType | true
+  _avg?: UserSettingsAvgAggregateInputType
+  _sum?: UserSettingsSumAggregateInputType
   _min?: UserSettingsMinAggregateInputType
   _max?: UserSettingsMaxAggregateInputType
 }
@@ -262,9 +306,13 @@ export type UserSettingsGroupByOutputType = {
   ratchetPermissions: $Enums.SessionPermissionPreset
   voiceModeEnabled: boolean
   deepgramApiKeyEncrypted: string | null
+  voiceTtsModel: string
+  voiceTtsSpeed: number
   createdAt: Date
   updatedAt: Date
   _count: UserSettingsCountAggregateOutputType | null
+  _avg: UserSettingsAvgAggregateOutputType | null
+  _sum: UserSettingsSumAggregateOutputType | null
   _min: UserSettingsMinAggregateOutputType | null
   _max: UserSettingsMaxAggregateOutputType | null
 }
@@ -308,6 +356,8 @@ export type UserSettingsWhereInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   deepgramApiKeyEncrypted?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  voiceTtsModel?: Prisma.StringFilter<"UserSettings"> | string
+  voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }
@@ -333,6 +383,8 @@ export type UserSettingsOrderByWithRelationInput = {
   ratchetPermissions?: Prisma.SortOrder
   voiceModeEnabled?: Prisma.SortOrder
   deepgramApiKeyEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  voiceTtsModel?: Prisma.SortOrder
+  voiceTtsSpeed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -361,6 +413,8 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFilter<"UserSettings"> | boolean
   deepgramApiKeyEncrypted?: Prisma.StringNullableFilter<"UserSettings"> | string | null
+  voiceTtsModel?: Prisma.StringFilter<"UserSettings"> | string
+  voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }, "id" | "userId">
@@ -386,11 +440,15 @@ export type UserSettingsOrderByWithAggregationInput = {
   ratchetPermissions?: Prisma.SortOrder
   voiceModeEnabled?: Prisma.SortOrder
   deepgramApiKeyEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  voiceTtsModel?: Prisma.SortOrder
+  voiceTtsSpeed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.UserSettingsCountOrderByAggregateInput
+  _avg?: Prisma.UserSettingsAvgOrderByAggregateInput
   _max?: Prisma.UserSettingsMaxOrderByAggregateInput
   _min?: Prisma.UserSettingsMinOrderByAggregateInput
+  _sum?: Prisma.UserSettingsSumOrderByAggregateInput
 }
 
 export type UserSettingsScalarWhereWithAggregatesInput = {
@@ -417,6 +475,8 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetWithAggregatesFilter<"UserSettings"> | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolWithAggregatesFilter<"UserSettings"> | boolean
   deepgramApiKeyEncrypted?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
+  voiceTtsModel?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
+  voiceTtsSpeed?: Prisma.FloatWithAggregatesFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
 }
@@ -442,6 +502,8 @@ export type UserSettingsCreateInput = {
   ratchetPermissions?: $Enums.SessionPermissionPreset
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: string | null
+  voiceTtsModel?: string
+  voiceTtsSpeed?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -467,6 +529,8 @@ export type UserSettingsUncheckedCreateInput = {
   ratchetPermissions?: $Enums.SessionPermissionPreset
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: string | null
+  voiceTtsModel?: string
+  voiceTtsSpeed?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -492,6 +556,8 @@ export type UserSettingsUpdateInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
+  voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -517,6 +583,8 @@ export type UserSettingsUncheckedUpdateInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
+  voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -542,6 +610,8 @@ export type UserSettingsCreateManyInput = {
   ratchetPermissions?: $Enums.SessionPermissionPreset
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: string | null
+  voiceTtsModel?: string
+  voiceTtsSpeed?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -567,6 +637,8 @@ export type UserSettingsUpdateManyMutationInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
+  voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -592,6 +664,8 @@ export type UserSettingsUncheckedUpdateManyInput = {
   ratchetPermissions?: Prisma.EnumSessionPermissionPresetFieldUpdateOperationsInput | $Enums.SessionPermissionPreset
   voiceModeEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
+  voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -617,8 +691,14 @@ export type UserSettingsCountOrderByAggregateInput = {
   ratchetPermissions?: Prisma.SortOrder
   voiceModeEnabled?: Prisma.SortOrder
   deepgramApiKeyEncrypted?: Prisma.SortOrder
+  voiceTtsModel?: Prisma.SortOrder
+  voiceTtsSpeed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+}
+
+export type UserSettingsAvgOrderByAggregateInput = {
+  voiceTtsSpeed?: Prisma.SortOrder
 }
 
 export type UserSettingsMaxOrderByAggregateInput = {
@@ -640,6 +720,8 @@ export type UserSettingsMaxOrderByAggregateInput = {
   ratchetPermissions?: Prisma.SortOrder
   voiceModeEnabled?: Prisma.SortOrder
   deepgramApiKeyEncrypted?: Prisma.SortOrder
+  voiceTtsModel?: Prisma.SortOrder
+  voiceTtsSpeed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -663,8 +745,14 @@ export type UserSettingsMinOrderByAggregateInput = {
   ratchetPermissions?: Prisma.SortOrder
   voiceModeEnabled?: Prisma.SortOrder
   deepgramApiKeyEncrypted?: Prisma.SortOrder
+  voiceTtsModel?: Prisma.SortOrder
+  voiceTtsSpeed?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+}
+
+export type UserSettingsSumOrderByAggregateInput = {
+  voiceTtsSpeed?: Prisma.SortOrder
 }
 
 export type EnumRatchetReviewTriggerModeFieldUpdateOperationsInput = {
@@ -673,6 +761,14 @@ export type EnumRatchetReviewTriggerModeFieldUpdateOperationsInput = {
 
 export type EnumSessionPermissionPresetFieldUpdateOperationsInput = {
   set?: $Enums.SessionPermissionPreset
+}
+
+export type FloatFieldUpdateOperationsInput = {
+  set?: number
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
 }
 
 
@@ -698,6 +794,8 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   ratchetPermissions?: boolean
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: boolean
+  voiceTtsModel?: boolean
+  voiceTtsSpeed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -723,6 +821,8 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   ratchetPermissions?: boolean
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: boolean
+  voiceTtsModel?: boolean
+  voiceTtsSpeed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -748,6 +848,8 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   ratchetPermissions?: boolean
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: boolean
+  voiceTtsModel?: boolean
+  voiceTtsSpeed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -773,11 +875,13 @@ export type UserSettingsSelectScalar = {
   ratchetPermissions?: boolean
   voiceModeEnabled?: boolean
   deepgramApiKeyEncrypted?: boolean
+  voiceTtsModel?: boolean
+  voiceTtsSpeed?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -803,6 +907,8 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     ratchetPermissions: $Enums.SessionPermissionPreset
     voiceModeEnabled: boolean
     deepgramApiKeyEncrypted: string | null
+    voiceTtsModel: string
+    voiceTtsSpeed: number
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["userSettings"]>
@@ -1248,6 +1354,8 @@ export interface UserSettingsFieldRefs {
   readonly ratchetPermissions: Prisma.FieldRef<"UserSettings", 'SessionPermissionPreset'>
   readonly voiceModeEnabled: Prisma.FieldRef<"UserSettings", 'Boolean'>
   readonly deepgramApiKeyEncrypted: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly voiceTtsModel: Prisma.FieldRef<"UserSettings", 'String'>
+  readonly voiceTtsSpeed: Prisma.FieldRef<"UserSettings", 'Float'>
   readonly createdAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
 }

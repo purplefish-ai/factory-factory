@@ -293,6 +293,8 @@ export const UserSettingsScalarFieldEnum = {
   ratchetPermissions: 'ratchetPermissions',
   voiceModeEnabled: 'voiceModeEnabled',
   deepgramApiKeyEncrypted: 'deepgramApiKeyEncrypted',
+  voiceTtsModel: 'voiceTtsModel',
+  voiceTtsSpeed: 'voiceTtsSpeed',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

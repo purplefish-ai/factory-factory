@@ -28,6 +28,8 @@ interface UpdateUserSettingsInput {
   ratchetPermissions?: SessionPermissionPreset;
   voiceModeEnabled?: boolean;
   deepgramApiKeyEncrypted?: string | null;
+  voiceTtsModel?: string;
+  voiceTtsSpeed?: number;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }

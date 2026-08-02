@@ -1,19 +1,41 @@
 import { CheckCircleIcon, MicrophoneIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import {
+  DEEPGRAM_AURA2_ENGLISH_VOICES,
+  DEEPGRAM_TTS_SPEED_MAX,
+  DEEPGRAM_TTS_SPEED_MIN,
+  DEFAULT_DEEPGRAM_TTS_MODEL,
+  DEFAULT_DEEPGRAM_TTS_SPEED,
+} from '@/shared/deepgram-voices';
 
 export function VoiceModeSection() {
   const { data: config, isLoading } = trpc.voice.getConfig.useQuery();
   const utils = trpc.useUtils();
   const [apiKey, setApiKey] = useState('');
   const [validated, setValidated] = useState(false);
+  const [speed, setSpeed] = useState(DEFAULT_DEEPGRAM_TTS_SPEED);
+
+  useEffect(() => {
+    if (config?.ttsSpeed !== undefined) {
+      setSpeed(config.ttsSpeed);
+    }
+  }, [config?.ttsSpeed]);
 
   const validateApiKey = trpc.voice.validateApiKey.useMutation({
     onSuccess: (result) => {
@@ -29,10 +51,7 @@ export function VoiceModeSection() {
 
   const updateConfig = trpc.voice.updateConfig.useMutation({
     onSuccess: () => {
-      toast.success('Voice mode settings saved');
       utils.voice.getConfig.invalidate();
-      setApiKey('');
-      setValidated(false);
     },
     onError: (error) => toast.error(`Failed to save: ${error.message}`),
   });
@@ -55,6 +74,7 @@ export function VoiceModeSection() {
 
   const hasStoredKey = config?.hasApiKey ?? false;
   const enabled = config?.enabled ?? false;
+  const ttsModel = config?.ttsModel ?? DEFAULT_DEEPGRAM_TTS_MODEL;
 
   const handleValidate = () => {
     if (apiKey) {
@@ -65,6 +85,8 @@ export function VoiceModeSection() {
   const handleSaveKey = () => {
     if (apiKey && validated) {
       updateConfig.mutate({ enabled, apiKey });
+      setApiKey('');
+      setValidated(false);
     }
   };
 
@@ -144,6 +166,50 @@ export function VoiceModeSection() {
             console.deepgram.com
           </a>
         </p>
+
+        <div className="border-t pt-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="voice-model">Voice</Label>
+            <Select
+              value={ttsModel}
+              onValueChange={(value) => updateConfig.mutate({ enabled, ttsModel: value })}
+              disabled={updateConfig.isPending || !hasStoredKey}
+            >
+              <SelectTrigger id="voice-model" className="w-[280px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DEEPGRAM_AURA2_ENGLISH_VOICES.map((voice) => (
+                  <SelectItem key={voice.model} value={voice.model}>
+                    {voice.name}
+                    {voice.description ? ` — ${voice.description}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Deepgram Aura-2 English voices</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between w-[280px]">
+              <Label htmlFor="voice-speed">Speed</Label>
+              <span className="text-xs text-muted-foreground font-mono">{speed.toFixed(1)}x</span>
+            </div>
+            <Slider
+              id="voice-speed"
+              className="w-[280px]"
+              value={[speed]}
+              onValueChange={([value]) => setSpeed(value ?? DEFAULT_DEEPGRAM_TTS_SPEED)}
+              onValueCommit={([value]) =>
+                updateConfig.mutate({ enabled, ttsSpeed: value ?? DEFAULT_DEEPGRAM_TTS_SPEED })
+              }
+              min={DEEPGRAM_TTS_SPEED_MIN}
+              max={DEEPGRAM_TTS_SPEED_MAX}
+              step={0.1}
+              disabled={updateConfig.isPending || !hasStoredKey}
+            />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

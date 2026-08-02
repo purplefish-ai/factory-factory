@@ -600,6 +600,8 @@ model UserSettings {
   // Voice Mode Settings (BYOK Deepgram)
   voiceModeEnabled          Boolean  @default(false)  // Admin toggle for the voice mode feature
   deepgramApiKeyEncrypted   String?                    // AES-256-GCM encrypted, same scheme as Linear's apiKey
+  voiceTtsModel             String   @default("aura-2-thalia-en")  // Deepgram Aura-2 voice, e.g. aura-2-thalia-en
+  voiceTtsSpeed             Float    @default(1)  // Deepgram TTS speed multiplier (0.5-2.0)
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

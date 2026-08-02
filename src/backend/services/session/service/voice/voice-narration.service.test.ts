@@ -109,6 +109,8 @@ describe('voiceNarrationService', () => {
     mockUserSettingsService.get.mockResolvedValue({
       voiceModeEnabled: true,
       deepgramApiKeyEncrypted: 'enc:dg_secret',
+      voiceTtsModel: 'aura-2-thalia-en',
+      voiceTtsSpeed: 1,
     });
   });
 

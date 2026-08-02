@@ -8,6 +8,11 @@
 
 import { z } from 'zod';
 import type { ApplicationServices } from '@/backend/app-context';
+import {
+  DEEPGRAM_TTS_SPEED_MAX,
+  DEEPGRAM_TTS_SPEED_MIN,
+  isKnownDeepgramVoiceModel,
+} from '@/shared/deepgram-voices';
 import { publicProcedure, router } from './trpc';
 
 const DEEPGRAM_PROJECTS_URL = 'https://api.deepgram.com/v1/projects';
@@ -101,6 +106,8 @@ export const voiceRouter = router({
     return {
       enabled: settings.voiceModeEnabled,
       hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
+      ttsModel: settings.voiceTtsModel,
+      ttsSpeed: settings.voiceTtsSpeed,
     };
   }),
 
@@ -117,13 +124,21 @@ export const voiceRouter = router({
   /**
    * Update voice mode config. `apiKey` is only encrypted and persisted when
    * provided; omitting it leaves the currently stored key untouched, mirroring
-   * the Linear config form's "blank means don't change" behavior.
+   * the Linear config form's "blank means don't change" behavior. `ttsModel`
+   * and `ttsSpeed` are likewise only touched when provided, so the voice
+   * settings form can save independently of the enabled toggle or key.
    */
   updateConfig: publicProcedure
     .input(
       z.object({
         enabled: z.boolean(),
         apiKey: z.string().trim().min(1).optional(),
+        ttsModel: z
+          .string()
+          .min(1)
+          .refine(isKnownDeepgramVoiceModel, 'Unknown Deepgram voice model')
+          .optional(),
+        ttsSpeed: z.number().min(DEEPGRAM_TTS_SPEED_MIN).max(DEEPGRAM_TTS_SPEED_MAX).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -131,11 +146,15 @@ export const voiceRouter = router({
       await userSettingsQueryService.update({
         voiceModeEnabled: input.enabled,
         deepgramApiKeyEncrypted: input.apiKey ? cryptoService.encrypt(input.apiKey) : undefined,
+        voiceTtsModel: input.ttsModel,
+        voiceTtsSpeed: input.ttsSpeed,
       });
       const settings = await userSettingsQueryService.get();
       return {
         enabled: settings.voiceModeEnabled,
         hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
+        ttsModel: settings.voiceTtsModel,
+        ttsSpeed: settings.voiceTtsSpeed,
       };
     }),
 

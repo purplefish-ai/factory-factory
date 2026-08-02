@@ -237,6 +237,8 @@ const mockUserSettings: UserSettings = {
   ratchetPermissions: 'YOLO',
   voiceModeEnabled: false,
   deepgramApiKeyEncrypted: null,
+  voiceTtsModel: 'aura-2-thalia-en',
+  voiceTtsSpeed: 1,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
