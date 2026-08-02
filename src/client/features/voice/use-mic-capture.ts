@@ -128,9 +128,19 @@ export function useMicCapture({
         interim_results: 'true',
         smart_format: 'true',
         vad_events: 'true',
-        access_token: accessToken,
       });
-      const socket = new WebSocket(`${DEEPGRAM_STT_URL}?${params.toString()}`);
+      // Grant tokens (JWTs from /v1/auth/grant) are rejected as
+      // INVALID_AUTH when passed via an ?access_token= query param on this
+      // endpoint, despite Deepgram's own docs suggesting that works —
+      // verified live against a real account. The Sec-WebSocket-Protocol
+      // subprotocol list is the one auth channel a browser WebSocket can
+      // actually set without custom headers, and Deepgram does accept the
+      // token there under the "bearer" subprotocol (mirroring their
+      // documented `["token", apiKey]` pattern for raw API keys).
+      const socket = new WebSocket(`${DEEPGRAM_STT_URL}?${params.toString()}`, [
+        'bearer',
+        accessToken,
+      ]);
       socketRef.current = socket;
 
       socket.onmessage = (event) => {

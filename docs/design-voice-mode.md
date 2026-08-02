@@ -382,7 +382,7 @@ Confirmed against Deepgram's current API docs and this repo's exact boilerplate.
 
 - **STT**: `wss://api.deepgram.com/v1/listen` — query params `model`, `language`, `encoding`, `sample_rate`, `channels`, `interim_results`, `endpointing`, `utterance_end_ms`, `vad_events`, `smart_format`. Server sends `Results` (`is_final`/`speech_final`), `UtteranceEnd`, `SpeechStarted`, `Metadata`. Client ends the stream with `{type: "CloseStream"}`.
 - **TTS**: `wss://api.deepgram.com/v1/speak` — query params `model` (voice, e.g. `aura-2-*`), `encoding` (`linear16`/`mulaw`/`alaw`), `sample_rate`, `speed`. Client sends `{type:"Speak", text}`, `{type:"Flush"}` (synthesize what's buffered now), `{type:"Clear"}` (discard buffered/in-flight audio — this is the built-in "user interrupted the agent" primitive), `{type:"Close"}`. Server streams raw binary audio frames back (no JSON wrapper), plus `Metadata`/`Flushed`/`Cleared`/`Warning` JSON control messages.
-- **Browser auth** (native `WebSocket` can't set custom headers): pass the short-lived grant token via the `access_token` query parameter — `wss://api.deepgram.com/v1/listen?...&access_token=<jwt>`. Minted server-side via `POST https://api.deepgram.com/v1/auth/grant` with `Authorization: Token <decrypted long-lived key>`, optional `ttl_seconds` (default 30s, max 3600s).
+- **Browser auth** (native `WebSocket` can't set custom headers): minted server-side via `POST https://api.deepgram.com/v1/auth/grant` with `Authorization: Token <decrypted long-lived key>`, optional `ttl_seconds` (default 30s, max 3600s). **Correction from live testing (see §9):** Deepgram's own docs suggest passing the grant token via an `?access_token=<jwt>` query parameter, but a real account rejects that with `401 INVALID_AUTH` at `/v1/listen` — verified via a direct Node `ws` connection showing the raw HTTP response, which the browser hides. The working mechanism is the `Sec-WebSocket-Protocol` subprotocol list — `new WebSocket(url, ['bearer', token])` — the one auth channel a browser `WebSocket` actually can set without custom headers.
 - **This repo's WS registration boilerplate** is a one-line addition: `server.ts` builds each handler via `create<X>UpgradeHandler(application)` and adds it to a `Map<string, Handler>` (`server.ts:107-116`) that a single `server.on('upgrade', ...)` dispatcher reads by pathname (`server.ts:363-384`). A `/voice` route is exactly this pattern — no change to existing entries.
 - **`stop` lives in the same discriminated union as every other chat control message** (`ChatMessageSchema`, `src/shared/websocket/chat-message.schema.ts:36-112`). Giving voice its own `voice-message.schema.ts` and its own `/voice` connection means the existing chat schema and its handlers gain zero new variants — an even cleaner separation than implied earlier.
 
@@ -409,7 +409,7 @@ Confirmed against Deepgram's current API docs and this repo's exact boilerplate.
 
 **Tasks:**
 - `voice.trpc.ts`: add `mintGrantToken` mutation — calls Deepgram's `/v1/auth/grant` with the decrypted key, returns `{ accessToken, expiresAt }`. Never exposes the long-lived key.
-- `src/client/features/voice/use-mic-capture.ts` (NEW): `getUserMedia` → capture → `new WebSocket('wss://api.deepgram.com/v1/listen?...&access_token=' + token)` with `model=nova-3`, `encoding=linear16`, `sample_rate=16000`, `interim_results=true`, `smart_format=true`, `vad_events=true`. Final `Results` → `onFinalTranscript(text)`; interim `Results` → `onInterimTranscript(text)` (unused until Phase 4). Mic release sends `{type:'CloseStream'}`.
+- `src/client/features/voice/use-mic-capture.ts` (NEW): `getUserMedia` → capture → `new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', token])` (subprotocol auth, see §9 correction above — not a query param) with `model=nova-3`, `language=en`, `encoding=linear16`, `sample_rate=16000`, `interim_results=true`, `smart_format=true`, `vad_events=true`. Final `Results` → `onFinalTranscript(text)`; interim `Results` → `onInterimTranscript(text)` (unused until Phase 4). Mic release sends `{type:'CloseStream'}`.
 - `onFinalTranscript` feeds into the **exact same** send path the composer already uses for typed text (`use-chat-actions.ts`) — zero new code on the send side.
 - `src/shared/chat-capabilities.ts`: add `voiceInput.enabled`, computed from `voiceModeEnabled && hasApiKey`.
 - `src/client/features/voice/voice-mode-toggle.tsx` (NEW): push-to-talk control, gated by that flag.
@@ -467,3 +467,25 @@ Confirmed against Deepgram's current API docs and this repo's exact boilerplate.
 - Barge-in sensitivity (RMS threshold, minimum sustained-speech duration) — expect iteration, same as Phase 3.
 
 **Acceptance criteria:** "please stop" cancels generation within roughly one STT round-trip; the ACP subprocess is confirmed still alive afterward (no respawn); the next spoken instruction is picked up immediately with no restart delay.
+
+---
+
+## 9. Post-Implementation Corrections
+
+Findings from live testing against a real Deepgram account, after the design above was written but before it had been verified end-to-end (see §7's stated gap: "never tested against a live Deepgram account").
+
+### 9.1 Grant-token browser auth: query param doesn't work, subprotocol does
+
+§8's Phase 1 scoping stated the browser passes its STT grant token via `?access_token=<jwt>` on the query string, based on Deepgram's own token-based-auth guide ("pass the resulting JWT via the URL query parameter... instead of the Sec-WebSocket-Protocol header"). **This is wrong for `/v1/listen` on a real account.**
+
+Diagnosis path (browser `WebSocket` objects intentionally hide the HTTP-level detail of a failed handshake — no status code, no body, just an `error` event with no properties and a `close` event with code `1006` and no reason):
+1. Ruled out CSP (none configured anywhere in this app), an app-side race closing the socket early (reproduced identically in a bare `new WebSocket(...)` in a fresh console context, outside all app code), and token expiry (reproduced with a token minted and used within the same second).
+2. Used Node's `ws` library server-side — unlike a browser, it surfaces the real HTTP response for a rejected upgrade. A fresh, valid, correctly-scoped grant token passed via `?access_token=` got a clean `401 { err_code: "INVALID_AUTH", err_msg: "Invalid credentials." }` from Deepgram's server.
+3. The same token via the `Authorization: Bearer <token>` header succeeded — proving the token itself was valid and the endpoint accepts it, just not via the query parameter.
+4. Since browsers can't set that header, tested the `Sec-WebSocket-Protocol` subprotocol list instead (`new WebSocket(url, protocols)` — a real browser API, unlike headers). `['bearer', token]` succeeded; `['Bearer', token]` succeeded; `['token', token]` (the pattern Deepgram documents for raw API keys) did not.
+
+**Corrected mechanism:** `new WebSocket('wss://api.deepgram.com/v1/listen?...', ['bearer', accessToken])`. Implemented in `use-mic-capture.ts`. No backend change needed — `mintGrantToken` itself was already correct; this only affected how the browser presents the token it returns.
+
+### 9.2 `language=en` set explicitly
+
+Also added `language=en` to the STT connection params during this investigation (Deepgram has reported project/model access issues for `nova-3` connections that omit it, despite English being documented as the model's default). Cheap, safe, and removes one more unverified assumption — kept even though the root cause above turned out to be the auth mechanism, not this.
