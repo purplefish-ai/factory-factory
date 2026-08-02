@@ -61,6 +61,10 @@ export default defineConfig({
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
+      '/voice': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
     },
   },
 });
