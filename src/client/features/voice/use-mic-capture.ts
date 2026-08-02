@@ -149,14 +149,19 @@ export function useMicCapture({
         if (!transcript) {
           return;
         }
+        // Checked before the interim/final branch below: a short phrase like
+        // "stop now" can arrive directly as Deepgram's final result without
+        // ever appearing in an interim first, so gating this on the interim
+        // path only would silently send it as a chat message instead.
+        if (runningRef.current && matchesStopPhrase(transcript)) {
+          onSoftStop?.();
+          return;
+        }
         if (message?.is_final) {
           onFinalTranscript(transcript);
           return;
         }
         onInterimTranscript?.(transcript);
-        if (runningRef.current && matchesStopPhrase(transcript)) {
-          onSoftStop?.();
-        }
       };
 
       // Browsers deliberately withhold the HTTP-level detail of a rejected WS

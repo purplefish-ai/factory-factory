@@ -150,7 +150,7 @@ class VoiceNarrationService {
     const { payload } = event;
 
     if (payload.type === 'session_delta' && payload.data.type === 'assistant_text_delta') {
-      this.handleFinalTextDelta(event.sessionId, turn, payload.data.text);
+      this.handleFinalTextDelta(event.sessionId, ws, turn, payload.data.text);
       return;
     }
 
@@ -186,7 +186,12 @@ class VoiceNarrationService {
     }
   }
 
-  private handleFinalTextDelta(sessionId: string, turn: TurnState, text: string): void {
+  private handleFinalTextDelta(
+    sessionId: string,
+    ws: WebSocket,
+    turn: TurnState,
+    text: string
+  ): void {
     turn.finalText += text;
     if (turn.suppressThinking) {
       return;
@@ -197,6 +202,12 @@ class VoiceNarrationService {
     turn.thinkingBuffer = '';
     if (turn.activeTts?.kind === 'thinking') {
       this.clearActiveNarration(sessionId, turn.activeTts);
+      // Cancelling Deepgram's synthesis only stops *new* audio; chunks
+      // already forwarded to the browser before this point are already
+      // scheduled for local playback and would otherwise keep playing
+      // underneath the final answer. Tell the client to drop them too.
+      const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
+      safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
     }
   }
 

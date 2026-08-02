@@ -10,13 +10,23 @@ interface AudioChunkMessage {
   seq: number;
 }
 
-function parseAudioChunkMessage(data: unknown): AudioChunkMessage | null {
+interface ClearPlaybackMessage {
+  type: 'clear_playback';
+}
+
+type VoiceServerMessage = AudioChunkMessage | ClearPlaybackMessage;
+
+const VOICE_SERVER_MESSAGE_TYPES = new Set(['audio_chunk', 'clear_playback']);
+
+function parseVoiceServerMessage(data: unknown): VoiceServerMessage | null {
   if (typeof data !== 'string') {
     return null;
   }
   try {
     const parsed = JSON.parse(data);
-    return parsed && typeof parsed === 'object' && parsed.type === 'audio_chunk' ? parsed : null;
+    return parsed && typeof parsed === 'object' && VOICE_SERVER_MESSAGE_TYPES.has(parsed.type)
+      ? parsed
+      : null;
   } catch {
     return null;
   }
@@ -137,9 +147,11 @@ export function useVoicePlayback({
     const ws = new WebSocket(buildWebSocketUrl('/voice', { sessionId }));
     wsRef.current = ws;
     ws.onmessage = (event) => {
-      const message = parseAudioChunkMessage(event.data);
-      if (message) {
+      const message = parseVoiceServerMessage(event.data);
+      if (message?.type === 'audio_chunk') {
         playChunk(decodeBase64ToInt16(message.data));
+      } else if (message?.type === 'clear_playback') {
+        stopPlayback();
       }
     };
 
@@ -159,7 +171,7 @@ export function useVoicePlayback({
       nextStartTimeRef.current = 0;
       setIsSpeaking(false);
     };
-  }, [enabled, sessionId, playChunk]);
+  }, [enabled, sessionId, playChunk, stopPlayback]);
 
   return { isSpeaking, sendSoftStop, stopPlayback };
 }

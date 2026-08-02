@@ -20,16 +20,22 @@ export interface VoiceSoftStopDependencies {
   acpRuntimeManager: Pick<AcpRuntimeManager, 'cancelPrompt'>;
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionById'>;
   sessionLifecycleEventService: Pick<typeof sessionLifecycleEventService, 'record'>;
+  logger: { info(message: string, context?: Record<string, unknown>): void };
 }
 
 export function createVoiceSoftStopHandler(
   deps: VoiceSoftStopDependencies
 ): (sessionId: string) => Promise<void> {
   return async (sessionId: string) => {
+    deps.logger.info('Voice soft_stop received', { sessionId });
     await deps.acpRuntimeManager.cancelPrompt(sessionId);
+    deps.logger.info('cancelPrompt completed for voice soft_stop', { sessionId });
 
     const session = await deps.sessionDataService.findAgentSessionById(sessionId);
     if (!session) {
+      deps.logger.info('Skipped voice_interrupt lifecycle event — session not found', {
+        sessionId,
+      });
       return;
     }
     await deps.sessionLifecycleEventService.record({

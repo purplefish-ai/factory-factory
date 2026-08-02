@@ -6,6 +6,7 @@ function createDeps() {
     acpRuntimeManager: { cancelPrompt: vi.fn().mockResolvedValue(undefined) },
     sessionDataService: { findAgentSessionById: vi.fn() },
     sessionLifecycleEventService: { record: vi.fn().mockResolvedValue(null) },
+    logger: { info: vi.fn() },
   };
 }
 

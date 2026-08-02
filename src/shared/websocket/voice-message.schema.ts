@@ -34,4 +34,19 @@ export interface VoiceErrorMessage {
   message: string;
 }
 
-export type VoiceServerMessage = VoiceAudioChunkMessage | VoiceErrorMessage;
+/**
+ * Tells the browser to immediately drop any playing/queued audio for the
+ * current turn. Sent when in-flight thinking narration is cut short by the
+ * final answer starting — cancelling Deepgram's synthesis (server-side)
+ * stops new audio, but chunks already forwarded to the browser before that
+ * happens are already scheduled for local playback and need their own
+ * cancellation.
+ */
+export interface VoiceClearPlaybackMessage {
+  type: 'clear_playback';
+}
+
+export type VoiceServerMessage =
+  | VoiceAudioChunkMessage
+  | VoiceErrorMessage
+  | VoiceClearPlaybackMessage;

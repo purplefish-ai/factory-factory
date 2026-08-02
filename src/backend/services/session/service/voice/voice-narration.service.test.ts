@@ -280,6 +280,15 @@ describe('voiceNarrationService', () => {
         thinkingSocket.sentMessages.some((m) => JSON.parse(m as string).type === 'Clear')
       ).toBe(true);
 
+      // The browser must also be told to drop any thinking audio it already
+      // received and queued locally — cancelling Deepgram's synthesis alone
+      // doesn't un-schedule chunks the client already has.
+      expect(
+        clientWs.send.mock.calls.some(
+          (call) => JSON.parse(call[0] as string).type === 'clear_playback'
+        )
+      ).toBe(true);
+
       // Further thinking deltas this turn are ignored entirely now.
       emitThinking('sess-thinking-3', 'This should never be spoken. ');
       await new Promise((resolve) => setTimeout(resolve, 0));

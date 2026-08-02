@@ -29,6 +29,7 @@ export function createVoiceUpgradeHandler(appContext: AppContext) {
     acpRuntimeManager,
     sessionDataService,
     sessionLifecycleEventService,
+    logger,
   });
 
   return createWebSocketUpgradeHandler({
