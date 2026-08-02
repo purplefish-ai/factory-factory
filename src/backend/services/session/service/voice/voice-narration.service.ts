@@ -20,6 +20,15 @@
  * backlog. The moment the agent's final answer starts streaming, any
  * in-flight thinking utterance is cut short (Deepgram's own `Clear` control
  * message) and narration switches to the final answer.
+ *
+ * The final answer is narrated the same clause-by-clause way, not
+ * accumulated silently and spoken all at once at turn-complete — for a long
+ * response that reads as a multi-second dead-air gap followed by a wall of
+ * speech, which doesn't feel like a conversation. Unlike thinking, final-
+ * answer clauses are never dropped: they're queued (`finalClauseQueue`) and
+ * drained one at a time as the current narration finishes, since a dropped
+ * word here would mean the agent's actual answer is missing content rather
+ * than missing some reasoning color commentary.
  */
 
 import WebSocket from 'ws';
@@ -56,7 +65,10 @@ interface ActiveNarration {
 }
 
 interface TurnState {
-  finalText: string;
+  /** Final-answer text received but not yet split into a complete clause. */
+  finalTextBuffer: string;
+  /** Complete final-answer clauses waiting their turn to be spoken, in order. */
+  finalClauseQueue: string[];
   thinkingBuffer: string;
   /** True once this turn's final answer has started streaming. */
   suppressThinking: boolean;
@@ -64,7 +76,13 @@ interface TurnState {
 }
 
 function createTurnState(): TurnState {
-  return { finalText: '', thinkingBuffer: '', suppressThinking: false, activeTts: null };
+  return {
+    finalTextBuffer: '',
+    finalClauseQueue: [],
+    thinkingBuffer: '',
+    suppressThinking: false,
+    activeTts: null,
+  };
 }
 
 function extractClause(buffer: string): { clause: string; remainder: string } | null {
@@ -161,28 +179,40 @@ class VoiceNarrationService {
     }
 
     if (payload.type === 'session_delta' && payload.data.type === 'session_runtime_updated') {
-      const { sessionRuntime } = payload.data;
-      if (sessionRuntime.activity === 'WORKING') {
-        turn.finalText = '';
-        turn.thinkingBuffer = '';
-        turn.suppressThinking = false;
-        return;
-      }
-      if (sessionRuntime.activity === 'IDLE') {
-        if (turn.finalText.trim().length > 0) {
-          const textToSpeak = turn.finalText;
-          turn.finalText = '';
-          logger.info('Turn complete with text to speak', {
-            sessionId: event.sessionId,
-            textLength: textToSpeak.length,
-          });
-          void this.speakClause(event.sessionId, ws, turn, textToSpeak, 'final');
-        } else {
-          logger.info('Turn complete with no accumulated text — nothing to speak', {
-            sessionId: event.sessionId,
-          });
-        }
-      }
+      this.handleRuntimeUpdate(event.sessionId, ws, turn, payload.data.sessionRuntime.activity);
+    }
+  }
+
+  private handleRuntimeUpdate(
+    sessionId: string,
+    ws: WebSocket,
+    turn: TurnState,
+    activity: 'WORKING' | 'IDLE'
+  ): void {
+    if (activity === 'WORKING') {
+      turn.finalTextBuffer = '';
+      turn.finalClauseQueue = [];
+      turn.thinkingBuffer = '';
+      turn.suppressThinking = false;
+      return;
+    }
+
+    // Flush a trailing fragment that never reached a clause boundary (e.g.
+    // the answer didn't end in sentence-ending punctuation) — unlike
+    // thinking, this must still be spoken, not dropped.
+    const trailing = turn.finalTextBuffer.trim();
+    if (trailing.length > 0) {
+      turn.finalClauseQueue.push(trailing);
+      turn.finalTextBuffer = '';
+    }
+    if (turn.finalClauseQueue.length > 0) {
+      logger.info('Turn complete, draining remaining final clauses', {
+        sessionId,
+        queueLength: turn.finalClauseQueue.length,
+      });
+      this.maybeStartNextFinalClause(sessionId, ws, turn);
+    } else {
+      logger.info('Turn complete with no remaining text — nothing to speak', { sessionId });
     }
   }
 
@@ -192,23 +222,50 @@ class VoiceNarrationService {
     turn: TurnState,
     text: string
   ): void {
-    turn.finalText += text;
-    if (turn.suppressThinking) {
+    if (!turn.suppressThinking) {
+      // First final-answer chunk this turn: the agent is done thinking, so cut
+      // off any in-flight thinking narration and stop buffering more of it.
+      turn.suppressThinking = true;
+      turn.thinkingBuffer = '';
+      if (turn.activeTts?.kind === 'thinking') {
+        this.clearActiveNarration(sessionId, turn.activeTts);
+        // Cancelling Deepgram's synthesis only stops *new* audio; chunks
+        // already forwarded to the browser before this point are already
+        // scheduled for local playback and would otherwise keep playing
+        // underneath the final answer. Tell the client to drop them too.
+        const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
+        safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
+      }
+    }
+
+    // Speak the final answer as it streams in, the same way thinking is
+    // narrated — not accumulated silently until turn-complete, which for a
+    // long response reads as dead air followed by a wall of speech.
+    turn.finalTextBuffer += text;
+    let extracted = extractClause(turn.finalTextBuffer);
+    while (extracted) {
+      turn.finalClauseQueue.push(extracted.clause);
+      turn.finalTextBuffer = extracted.remainder;
+      extracted = extractClause(turn.finalTextBuffer);
+    }
+    this.maybeStartNextFinalClause(sessionId, ws, turn);
+  }
+
+  /**
+   * Starts the next queued final-answer clause if nothing is currently
+   * speaking. Called both when new clauses are extracted and when a
+   * narration finishes, so the queue drains itself without waiting for a
+   * new incoming event once all the text has already streamed in.
+   */
+  private maybeStartNextFinalClause(sessionId: string, ws: WebSocket, turn: TurnState): void {
+    if (turn.activeTts) {
       return;
     }
-    // First final-answer chunk this turn: the agent is done thinking, so cut
-    // off any in-flight thinking narration and stop buffering more of it.
-    turn.suppressThinking = true;
-    turn.thinkingBuffer = '';
-    if (turn.activeTts?.kind === 'thinking') {
-      this.clearActiveNarration(sessionId, turn.activeTts);
-      // Cancelling Deepgram's synthesis only stops *new* audio; chunks
-      // already forwarded to the browser before this point are already
-      // scheduled for local playback and would otherwise keep playing
-      // underneath the final answer. Tell the client to drop them too.
-      const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
-      safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
+    const next = turn.finalClauseQueue.shift();
+    if (next === undefined) {
+      return;
     }
+    void this.speakClause(sessionId, ws, turn, next, 'final');
   }
 
   private handleThinkingDelta(
@@ -293,6 +350,10 @@ class VoiceNarrationService {
           turn.activeTts = null;
         }
         resolve();
+        // The queue must keep draining itself once text has stopped
+        // streaming in — otherwise the last few clauses would wait
+        // indefinitely for an event that's never coming.
+        this.maybeStartNextFinalClause(sessionId, ws, turn);
       };
 
       ttsSocket.on('open', () => {

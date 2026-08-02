@@ -311,4 +311,90 @@ describe('voiceNarrationService', () => {
       voiceNarrationService.unregisterConnection('sess-thinking-3');
     });
   });
+
+  describe('incremental final-answer narration', () => {
+    it('starts speaking the first sentence before the rest of a long answer has arrived', async () => {
+      const clientWs = createFakeClientWs();
+      voiceNarrationService.registerConnection('sess-stream', clientWs as never);
+
+      emitDelta('sess-stream', {
+        type: 'session_delta',
+        data: { type: 'assistant_text_delta', text: 'This is the first sentence. ' },
+      });
+
+      // The rest of a long answer hasn't streamed in yet — narration must
+      // not wait for turn-complete to start on the sentence already here.
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const firstSocket = FakeDeepgramSocket.instances[0] as InstanceType<
+        typeof FakeDeepgramSocket
+      >;
+      firstSocket.emit('open');
+      expect(JSON.parse(firstSocket.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'This is the first sentence.',
+      });
+
+      voiceNarrationService.unregisterConnection('sess-stream');
+    });
+
+    it('queues later clauses rather than dropping them, and speaks all of them in order', async () => {
+      const clientWs = createFakeClientWs();
+      voiceNarrationService.registerConnection('sess-queue', clientWs as never);
+
+      emitDelta('sess-queue', {
+        type: 'session_delta',
+        data: {
+          type: 'assistant_text_delta',
+          text: 'Sentence one is here. Sentence two is here. Sentence three is here. ',
+        },
+      });
+
+      // All three sentences arrived in a single delta — only the first
+      // should start speaking; the rest must queue, not drop.
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const first = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      first.emit('open');
+      expect(JSON.parse(first.sentMessages[0] as string).text).toBe('Sentence one is here.');
+
+      first.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
+      const second = FakeDeepgramSocket.instances[1] as InstanceType<typeof FakeDeepgramSocket>;
+      second.emit('open');
+      expect(JSON.parse(second.sentMessages[0] as string).text).toBe('Sentence two is here.');
+
+      second.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 3);
+      const third = FakeDeepgramSocket.instances[2] as InstanceType<typeof FakeDeepgramSocket>;
+      third.emit('open');
+      expect(JSON.parse(third.sentMessages[0] as string).text).toBe('Sentence three is here.');
+
+      voiceNarrationService.unregisterConnection('sess-queue');
+    });
+
+    it('speaks a trailing fragment with no sentence-ending punctuation once the turn completes', async () => {
+      const clientWs = createFakeClientWs();
+      voiceNarrationService.registerConnection('sess-trailing', clientWs as never);
+
+      emitDelta('sess-trailing', {
+        type: 'session_delta',
+        data: { type: 'assistant_text_delta', text: 'no punctuation at the end' },
+      });
+
+      // Nothing to speak yet — buffered, not a complete clause.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(FakeDeepgramSocket.instances).toHaveLength(0);
+
+      emitRuntimeUpdate('sess-trailing', 'IDLE');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      socket.emit('open');
+      expect(JSON.parse(socket.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'no punctuation at the end',
+      });
+
+      voiceNarrationService.unregisterConnection('sess-trailing');
+    });
+  });
 });
