@@ -106,7 +106,10 @@ export const voiceRouter = router({
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to mint Deepgram grant token: ${response.status}`);
+      const detail = await response.text().catch(() => '');
+      throw new Error(
+        `Failed to mint Deepgram grant token: ${response.status}${detail ? ` — ${detail}` : ''}`
+      );
     }
 
     const body = (await response.json()) as { access_token: string; expires_in?: number };

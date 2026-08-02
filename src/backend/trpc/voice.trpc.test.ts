@@ -151,14 +151,18 @@ describe('voiceRouter', () => {
       expect(result).toEqual({ accessToken: 'jwt-token', expiresInSeconds: 600 });
     });
 
-    it('throws when Deepgram rejects the grant request', async () => {
+    it("throws when Deepgram rejects the grant request, including Deepgram's error detail", async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
-      vi.mocked(fetch).mockResolvedValue({ ok: false, status: 403 } as Response);
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve('{"err_msg":"Insufficient permissions"}'),
+      } as Response);
 
       await expect(createCaller().mintGrantToken()).rejects.toThrow(
-        'Failed to mint Deepgram grant token: 403'
+        'Failed to mint Deepgram grant token: 403 — {"err_msg":"Insufficient permissions"}'
       );
     });
   });
