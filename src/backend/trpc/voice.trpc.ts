@@ -30,28 +30,39 @@ async function getDecryptedApiKey(
 }
 
 /**
- * Deepgram's /v1/auth/grant requires an API key with Member permissions or
- * higher — a default-scope key (which passes the plain /v1/projects check
- * validateApiKey uses) gets a 403 INSUFFICIENT_PERMISSIONS here instead.
- * This is common enough in practice to call out with a specific fix rather
- * than surfacing it as an opaque HTTP status.
+ * Deepgram's error responses share a consistent {err_code, err_msg} shape.
+ * Two auth failures are common enough configuring voice mode to call out
+ * with a specific fix rather than surfacing an opaque HTTP status:
+ *  - 401 INVALID_AUTH: the key itself is wrong, mistyped, or revoked.
+ *  - 403 INSUFFICIENT_PERMISSIONS: a real key, but /v1/auth/grant needs
+ *    Member scope or higher — a default-scope key passes the plain
+ *    /v1/projects check validateApiKey uses but fails here.
+ * Returns null when the error doesn't match either, so callers fall back
+ * to their own generic message.
  */
-function describeGrantTokenError(status: number, detail: string): string {
-  if (status === 403) {
-    try {
-      const parsed = JSON.parse(detail);
-      if (parsed?.err_code === 'INSUFFICIENT_PERMISSIONS') {
-        return (
-          "This Deepgram API key doesn't have permission to start voice sessions. " +
-          'Create a new key in the Deepgram console with the "Member" role ' +
-          '(API Keys → Create Key → Advanced → Member) and save it in Voice Mode settings.'
-        );
-      }
-    } catch {
-      // Not the JSON shape we're matching on — fall through to the generic message.
-    }
+function friendlyDeepgramAuthError(status: number, detail: string): string | null {
+  let errCode: unknown;
+  try {
+    errCode = JSON.parse(detail)?.err_code;
+  } catch {
+    return null;
   }
-  return `Failed to mint Deepgram grant token: ${status}${detail ? ` — ${detail}` : ''}`;
+
+  if (status === 401 && errCode === 'INVALID_AUTH') {
+    return (
+      'Deepgram rejected this API key as invalid. Double-check you copied the full key ' +
+      'from the Deepgram console with no extra spaces or missing characters, and that it ' +
+      "hasn't been deleted or regenerated there since it was saved."
+    );
+  }
+  if (status === 403 && errCode === 'INSUFFICIENT_PERMISSIONS') {
+    return (
+      "This Deepgram API key doesn't have permission to start voice sessions. " +
+      'Create a new key in the Deepgram console with the "Member" role ' +
+      '(API Keys → Create Key → Advanced → Member) and save it in Voice Mode settings.'
+    );
+  }
+  return null;
 }
 
 async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
@@ -62,7 +73,13 @@ async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean;
     if (response.ok) {
       return { valid: true };
     }
-    return { valid: false, error: `Deepgram returned ${response.status}` };
+    const detail = await response.text().catch(() => '');
+    return {
+      valid: false,
+      error:
+        friendlyDeepgramAuthError(response.status, detail) ??
+        `Deepgram returned ${response.status}`,
+    };
   } catch (err) {
     return { valid: false, error: err instanceof Error ? err.message : 'Request failed' };
   }
@@ -132,7 +149,11 @@ export const voiceRouter = router({
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(describeGrantTokenError(response.status, detail));
+      const friendly = friendlyDeepgramAuthError(response.status, detail);
+      throw new Error(
+        friendly ??
+          `Failed to mint Deepgram grant token: ${response.status}${detail ? ` — ${detail}` : ''}`
+      );
     }
 
     const body = (await response.json()) as { access_token: string; expires_in?: number };

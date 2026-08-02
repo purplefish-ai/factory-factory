@@ -67,12 +67,30 @@ describe('voiceRouter', () => {
       );
     });
 
-    it('returns invalid with an error when Deepgram rejects the key', async () => {
-      vi.mocked(fetch).mockResolvedValue({ ok: false, status: 401 } as Response);
+    it('returns invalid with the raw status when the failure is unrecognized', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve(''),
+      } as Response);
 
       const result = await createCaller().validateApiKey({ apiKey: 'bad_key' });
 
-      expect(result).toEqual({ valid: false, error: 'Deepgram returned 401' });
+      expect(result).toEqual({ valid: false, error: 'Deepgram returned 500' });
+    });
+
+    it('returns a friendly, actionable error for a 401 INVALID_AUTH response', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('{"err_code":"INVALID_AUTH","err_msg":"Invalid credentials."}'),
+      } as Response);
+
+      const result = await createCaller().validateApiKey({ apiKey: 'bad_key' });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/invalid/i);
+      expect(result.error).toMatch(/console/i);
     });
 
     it('returns invalid when the request throws', async () => {
@@ -180,6 +198,20 @@ describe('voiceRouter', () => {
       } as Response);
 
       await expect(createCaller().mintGrantToken()).rejects.toThrow(/Member.*role/);
+    });
+
+    it('throws a friendly, actionable message for a 401 INVALID_AUTH response', async () => {
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+      });
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('{"err_code":"INVALID_AUTH","err_msg":"Invalid credentials."}'),
+      } as Response);
+
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(/invalid/i);
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(/console/i);
     });
   });
 });
