@@ -118,6 +118,10 @@ export function useMicCapture({
 
       const params = new URLSearchParams({
         model: 'nova-3',
+        // Required explicitly: Deepgram has reported project/model access
+        // failures for nova-3 connections that omit language, even though
+        // English is the model's default.
+        language: 'en',
         encoding: 'linear16',
         sample_rate: String(TARGET_SAMPLE_RATE),
         channels: '1',
