@@ -87,6 +87,21 @@ function emitThinking(sessionId: string, thinking: string) {
   });
 }
 
+/**
+ * Matches how SessionPublisher.emitDelta actually publishes this event in
+ * production (session-publisher.ts) — always wrapped in a session_delta
+ * envelope, never as a bare top-level session_runtime_updated message. A
+ * previous version of this helper (and the service code under test) used
+ * the bare shape, which meant these tests validated the implementation
+ * against itself rather than against what the backend really sends.
+ */
+function emitRuntimeUpdate(sessionId: string, activity: 'WORKING' | 'IDLE') {
+  emitDelta(sessionId, {
+    type: 'session_delta',
+    data: { type: 'session_runtime_updated', sessionRuntime: { activity } },
+  });
+}
+
 describe('voiceNarrationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -129,14 +144,8 @@ describe('voiceNarrationService', () => {
       type: 'session_delta',
       data: { type: 'assistant_text_delta', text: 'stale answer' },
     });
-    emitDelta('sess-reset', {
-      type: 'session_runtime_updated',
-      sessionRuntime: { activity: 'WORKING' },
-    });
-    emitDelta('sess-reset', {
-      type: 'session_runtime_updated',
-      sessionRuntime: { activity: 'IDLE' },
-    });
+    emitRuntimeUpdate('sess-reset', 'WORKING');
+    emitRuntimeUpdate('sess-reset', 'IDLE');
 
     // Turn text was cleared by WORKING before IDLE fired, so nothing should be spoken.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -157,10 +166,7 @@ describe('voiceNarrationService', () => {
       type: 'session_delta',
       data: { type: 'assistant_text_delta', text: 'final answer' },
     });
-    emitDelta('sess-disabled', {
-      type: 'session_runtime_updated',
-      sessionRuntime: { activity: 'IDLE' },
-    });
+    emitRuntimeUpdate('sess-disabled', 'IDLE');
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(FakeDeepgramSocket.instances).toHaveLength(0);
@@ -180,10 +186,7 @@ describe('voiceNarrationService', () => {
       type: 'session_delta',
       data: { type: 'assistant_text_delta', text: 'world.' },
     });
-    emitDelta('sess-speak', {
-      type: 'session_runtime_updated',
-      sessionRuntime: { activity: 'IDLE' },
-    });
+    emitRuntimeUpdate('sess-speak', 'IDLE');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
     const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
@@ -284,10 +287,7 @@ describe('voiceNarrationService', () => {
 
       thinkingSocket.emit('message', Buffer.from(JSON.stringify({ type: 'Cleared' })), false);
 
-      emitDelta('sess-thinking-3', {
-        type: 'session_runtime_updated',
-        sessionRuntime: { activity: 'IDLE' },
-      });
+      emitRuntimeUpdate('sess-thinking-3', 'IDLE');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
       const finalSocket = FakeDeepgramSocket.instances[1] as InstanceType<

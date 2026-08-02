@@ -160,14 +160,15 @@ class VoiceNarrationService {
       return;
     }
 
-    if (payload.type === 'session_runtime_updated') {
-      if (payload.sessionRuntime.activity === 'WORKING') {
+    if (payload.type === 'session_delta' && payload.data.type === 'session_runtime_updated') {
+      const { sessionRuntime } = payload.data;
+      if (sessionRuntime.activity === 'WORKING') {
         turn.finalText = '';
         turn.thinkingBuffer = '';
         turn.suppressThinking = false;
         return;
       }
-      if (payload.sessionRuntime.activity === 'IDLE') {
+      if (sessionRuntime.activity === 'IDLE') {
         if (turn.finalText.trim().length > 0) {
           const textToSpeak = turn.finalText;
           turn.finalText = '';
