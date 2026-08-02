@@ -9,6 +9,7 @@
  * voice "please stop" doesn't kill and respawn the ACP subprocess.
  */
 
+import { randomUUID } from 'node:crypto';
 import type {
   AcpRuntimeManager,
   sessionDataService,
@@ -28,8 +29,14 @@ export function createVoiceSoftStopHandler(
 ): (sessionId: string) => Promise<void> {
   return async (sessionId: string) => {
     deps.logger.info('Voice soft_stop received', { sessionId });
-    await deps.acpRuntimeManager.cancelPrompt(sessionId);
-    deps.logger.info('cancelPrompt completed for voice soft_stop', { sessionId });
+    const cancelled = await deps.acpRuntimeManager.cancelPrompt(sessionId);
+    deps.logger.info('cancelPrompt completed for voice soft_stop', { sessionId, cancelled });
+
+    if (!cancelled) {
+      // No prompt was actually in flight (e.g. an idle session) — recording
+      // a "Turn interrupted" event here would be a false transcript entry.
+      return;
+    }
 
     const session = await deps.sessionDataService.findAgentSessionById(sessionId);
     if (!session) {
@@ -44,7 +51,7 @@ export function createVoiceSoftStopHandler(
       kind: SessionLifecycleEventKind.TURN_INTERRUPTED,
       reason: SessionLifecycleEventReason.VOICE_INTERRUPT,
       message: 'Turn interrupted by voice command.',
-      dedupeKey: `voice-interrupt:${sessionId}:${Date.now()}`,
+      dedupeKey: `voice-interrupt:${sessionId}:${randomUUID()}`,
     });
   };
 }

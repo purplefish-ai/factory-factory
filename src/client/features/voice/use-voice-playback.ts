@@ -86,6 +86,9 @@ export function useVoicePlayback({
   const nextStartTimeRef = useRef(0);
   const activeSourcesRef = useRef(new Set<AudioBufferSourceNode>());
   const wsRef = useRef<WebSocket | null>(null);
+  // Guards against a burst of chunks arriving while suspended each starting
+  // their own overlapping resume() call.
+  const resumingRef = useRef(false);
 
   const playChunk = useCallback((pcm: Int16Array) => {
     const audioContext = audioContextRef.current;
@@ -94,8 +97,14 @@ export function useVoicePlayback({
     }
     // Browsers can suspend a context again after backgrounding the tab
     // etc.; resuming is a cheap no-op when it's already running.
-    if (audioContext.state === 'suspended') {
-      audioContext.resume().catch(() => undefined);
+    if (audioContext.state === 'suspended' && !resumingRef.current) {
+      resumingRef.current = true;
+      audioContext
+        .resume()
+        .catch(() => undefined)
+        .finally(() => {
+          resumingRef.current = false;
+        });
     }
     const samples = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {

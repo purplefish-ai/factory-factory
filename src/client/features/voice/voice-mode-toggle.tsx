@@ -31,7 +31,10 @@ function getVoiceStatus(
     return { label, title: error };
   }
   if (isConnecting) {
-    return { label: 'Connecting…', title: 'Connecting to Deepgram — speech is not captured yet' };
+    return {
+      label: 'Connecting…',
+      title: 'Connecting to Deepgram — speech is not captured yet. Click to cancel.',
+    };
   }
   if (isCapturing) {
     return { label: 'Voice On', title: 'Exit voice mode' };
@@ -53,7 +56,7 @@ function VoiceStatusBadge({
     return null;
   }
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <output className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
@@ -63,7 +66,7 @@ function VoiceStatusBadge({
         )}
       />
       {isConnecting ? 'Connecting' : isSpeaking ? 'Speaking' : 'Listening'}
-    </span>
+    </output>
   );
 }
 
@@ -128,10 +131,12 @@ export function VoiceModeToggle({
   }, [error]);
 
   const handleClick = useCallback(() => {
-    if (isCapturing) {
+    if (isCapturing || isConnecting) {
+      // Also cancels a still-connecting attempt rather than leaving the
+      // user stuck on "Connecting…" with no way out.
       stop();
       setVoiceModeOn(false);
-    } else if (!isConnecting) {
+    } else {
       setVoiceModeOn(true);
       void start();
     }
@@ -150,7 +155,7 @@ export function VoiceModeToggle({
         variant={isCapturing ? 'default' : 'outline'}
         size="sm"
         className="shrink-0"
-        disabled={disabled || !sessionId || isConnecting}
+        disabled={disabled || !sessionId}
         title={status.title}
         onClick={handleClick}
       >

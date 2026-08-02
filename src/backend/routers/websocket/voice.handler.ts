@@ -59,7 +59,7 @@ export function createVoiceUpgradeHandler(appContext: AppContext) {
 
       ws.on('close', () => {
         logger.info('Voice WebSocket connection closed', { sessionId });
-        voiceNarrationService.unregisterConnection(sessionId);
+        voiceNarrationService.unregisterConnection(sessionId, ws);
       });
 
       ws.on('error', (error) => {

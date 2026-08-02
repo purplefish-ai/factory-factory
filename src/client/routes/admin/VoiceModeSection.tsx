@@ -28,7 +28,11 @@ export function VoiceModeSection() {
   const { data: config, isLoading } = trpc.voice.getConfig.useQuery();
   const utils = trpc.useUtils();
   const [apiKey, setApiKey] = useState('');
-  const [validated, setValidated] = useState(false);
+  // Tied to the exact key text that was validated, rather than a bare
+  // boolean, so a validation response that resolves after the user has
+  // already edited the field can't mark the new, unvalidated text as valid.
+  const [validatedKey, setValidatedKey] = useState<string | null>(null);
+  const validated = validatedKey !== null && validatedKey === apiKey;
   const [speed, setSpeed] = useState(DEFAULT_DEEPGRAM_TTS_SPEED);
 
   useEffect(() => {
@@ -38,15 +42,19 @@ export function VoiceModeSection() {
   }, [config?.ttsSpeed]);
 
   const validateApiKey = trpc.voice.validateApiKey.useMutation({
-    onSuccess: (result) => {
-      setValidated(result.valid);
+    onSuccess: (result, variables) => {
       if (result.valid) {
+        setValidatedKey(variables.apiKey);
         toast.success('Deepgram API key is valid');
       } else {
+        setValidatedKey(null);
         toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
       }
     },
-    onError: (error) => toast.error(`Validation failed: ${error.message}`),
+    onError: (error) => {
+      setValidatedKey(null);
+      toast.error(`Validation failed: ${error.message}`);
+    },
   });
 
   const updateConfig = trpc.voice.updateConfig.useMutation({
@@ -86,7 +94,7 @@ export function VoiceModeSection() {
     if (apiKey && validated) {
       updateConfig.mutate({ enabled, apiKey });
       setApiKey('');
-      setValidated(false);
+      setValidatedKey(null);
     }
   };
 
@@ -135,7 +143,7 @@ export function VoiceModeSection() {
               value={apiKey}
               onChange={(e) => {
                 setApiKey(e.target.value);
-                setValidated(false);
+                setValidatedKey(null);
               }}
               placeholder={hasStoredKey ? '••••••••••••••••••••' : 'Enter your Deepgram API key'}
               className="font-mono text-sm w-[280px]"

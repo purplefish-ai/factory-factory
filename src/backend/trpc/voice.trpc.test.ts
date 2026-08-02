@@ -161,8 +161,21 @@ describe('voiceRouter', () => {
   });
 
   describe('mintGrantToken', () => {
+    it('throws when voice mode is disabled, even if a key is configured', async () => {
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: false,
+        deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+      });
+
+      await expect(createCaller().mintGrantToken()).rejects.toThrow('Voice mode is disabled');
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
     it('throws when no key is configured', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({ deepgramApiKeyEncrypted: null });
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: null,
+      });
 
       await expect(createCaller().mintGrantToken()).rejects.toThrow(
         'Voice mode is not configured with a Deepgram API key'
@@ -172,6 +185,7 @@ describe('voiceRouter', () => {
 
     it('decrypts the stored key and returns the minted grant token', async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({
@@ -194,6 +208,7 @@ describe('voiceRouter', () => {
 
     it("throws with Deepgram's raw error detail for an unrecognized failure", async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({
@@ -209,6 +224,7 @@ describe('voiceRouter', () => {
 
     it('throws a friendly, actionable message for a 403 INSUFFICIENT_PERMISSIONS response', async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({
@@ -225,6 +241,7 @@ describe('voiceRouter', () => {
 
     it('throws a friendly, actionable message for a 401 INVALID_AUTH response', async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({
@@ -239,6 +256,7 @@ describe('voiceRouter', () => {
 
     it('throws a friendly, actionable message for a 400 BAD_REQUEST response (malformed/whitespace-padded key)', async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({

@@ -326,6 +326,23 @@ describe('server websocket upgrade routing', () => {
     expect(handlerFactories.devLogs).toHaveBeenCalledWith(application);
     expect(handlerFactories.postRunLogs).toHaveBeenCalledWith(application);
     expect(handlerFactories.snapshots).toHaveBeenCalledWith(application);
+    expect(handlerFactories.voice).toHaveBeenCalledWith(application);
+  });
+
+  it('routes /voice upgrades to voice handler', () => {
+    const server = createTestServer();
+
+    const request = {
+      headers: { host: 'localhost:3001' },
+      url: '/voice?sessionId=s1',
+    };
+    const socket = { destroy: vi.fn() };
+
+    server.getHttpServer().emit('upgrade', request, socket, Buffer.alloc(0));
+
+    expect(handlers.voice).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+    expect(handlers.terminal).not.toHaveBeenCalled();
   });
 
   it('routes /terminal upgrades to terminal handler', () => {

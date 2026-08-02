@@ -1805,11 +1805,12 @@ describe('AcpRuntimeManager', () => {
       );
       handle.isPromptInFlight = true;
 
-      await manager.cancelPrompt('session-1');
+      const cancelled = await manager.cancelPrompt('session-1');
 
       expect(mockCancel).toHaveBeenCalledWith({
         sessionId: 'provider-session-123',
       });
+      expect(cancelled).toBe(true);
     });
 
     it('does nothing when no prompt is in flight', async () => {
@@ -1822,14 +1823,16 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      await manager.cancelPrompt('session-1');
+      const cancelled = await manager.cancelPrompt('session-1');
 
       expect(mockCancel).not.toHaveBeenCalled();
+      expect(cancelled).toBe(false);
     });
 
     it('does nothing for nonexistent session', async () => {
-      await manager.cancelPrompt('nonexistent');
+      const cancelled = await manager.cancelPrompt('nonexistent');
       expect(mockCancel).not.toHaveBeenCalled();
+      expect(cancelled).toBe(false);
     });
   });
 

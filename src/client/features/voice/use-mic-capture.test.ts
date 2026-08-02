@@ -16,7 +16,11 @@ describe('matchesStopPhrase', () => {
 
   it('does not match unrelated speech', () => {
     expect(matchesStopPhrase('add a new function to the file')).toBe(false);
-    expect(matchesStopPhrase('what does this stopwatch component do')).toBe(true); // "stop" substring — documents current limitation
+  });
+
+  it('does not match words that merely contain a stop phrase as a substring', () => {
+    expect(matchesStopPhrase('what does this stopwatch component do')).toBe(false);
+    expect(matchesStopPhrase('please await the response')).toBe(false);
   });
 
   it('does not match an empty transcript', () => {

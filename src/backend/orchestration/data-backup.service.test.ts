@@ -404,8 +404,13 @@ describe('DataBackupService', () => {
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          voiceTtsModel: 'aura-2-thalia-en',
+          voiceTtsSpeed: 1,
         })
       );
+      // The Deepgram API key is a secret, not a preference — it must never
+      // appear in an export.
+      expect(result.data.userSettings).not.toHaveProperty('deepgramApiKeyEncrypted');
       expect(exportDataSchema.safeParse(result).success).toBe(true);
     });
 
@@ -642,8 +647,15 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          voiceTtsModel: 'aura-2-thalia-en',
+          voiceTtsSpeed: 1,
         }),
       });
+      // The Deepgram API key is never part of the export, so a restore
+      // never sets it — the admin re-enters it after import.
+      expect(mockTx.userSettings.create.mock.calls[0]?.[0].data).not.toHaveProperty(
+        'deepgramApiKeyEncrypted'
+      );
     });
 
     it('skips existing projects', async () => {

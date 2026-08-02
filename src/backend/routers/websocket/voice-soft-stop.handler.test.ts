@@ -3,7 +3,7 @@ import { createVoiceSoftStopHandler } from './voice-soft-stop.handler';
 
 function createDeps() {
   return {
-    acpRuntimeManager: { cancelPrompt: vi.fn().mockResolvedValue(undefined) },
+    acpRuntimeManager: { cancelPrompt: vi.fn().mockResolvedValue(true) },
     sessionDataService: { findAgentSessionById: vi.fn() },
     sessionLifecycleEventService: { record: vi.fn().mockResolvedValue(null) },
     logger: { info: vi.fn() },
@@ -47,6 +47,18 @@ describe('createVoiceSoftStopHandler', () => {
     );
   });
 
+  it('skips recording when no prompt was actually in flight to cancel', async () => {
+    const deps = createDeps();
+    deps.acpRuntimeManager.cancelPrompt.mockResolvedValue(false);
+    deps.sessionDataService.findAgentSessionById.mockResolvedValue({ workspaceId: 'ws-1' });
+    const handleSoftStop = createVoiceSoftStopHandler(deps);
+
+    await handleSoftStop('session-idle');
+
+    expect(deps.sessionDataService.findAgentSessionById).not.toHaveBeenCalled();
+    expect(deps.sessionLifecycleEventService.record).not.toHaveBeenCalled();
+  });
+
   it('cancels the prompt even when the session cannot be found, but skips recording', async () => {
     const deps = createDeps();
     deps.sessionDataService.findAgentSessionById.mockResolvedValue(null);
@@ -63,7 +75,7 @@ describe('createVoiceSoftStopHandler', () => {
     const callOrder: string[] = [];
     deps.acpRuntimeManager.cancelPrompt.mockImplementation(() => {
       callOrder.push('cancelPrompt');
-      return Promise.resolve();
+      return Promise.resolve(true);
     });
     deps.sessionDataService.findAgentSessionById.mockImplementation(() => {
       callOrder.push('findAgentSessionById');

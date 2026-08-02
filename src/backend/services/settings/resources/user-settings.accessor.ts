@@ -80,6 +80,106 @@ function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKn
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
+function buildGeneralPreferenceDefaults(
+  data: UpdateUserSettingsInput
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  'preferredIde' | 'customIdeCommand' | 'playSoundOnComplete' | 'cachedSlashCommands'
+> {
+  return {
+    preferredIde: data.preferredIde ?? 'cursor',
+    customIdeCommand: data.customIdeCommand ?? null,
+    playSoundOnComplete: data.playSoundOnComplete ?? true,
+    cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+  };
+}
+
+function buildRatchetDefaults(
+  data: UpdateUserSettingsInput
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  | 'ratchetEnabled'
+  | 'ratchetReplyToPrComments'
+  | 'ratchetReviewTriggerMode'
+  | 'ratchetPermissions'
+  | 'defaultWorkspacePermissions'
+> {
+  return {
+    ratchetEnabled: data.ratchetEnabled ?? false,
+    ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
+    ratchetReviewTriggerMode: data.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED',
+    ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
+    defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
+  };
+}
+
+function buildSessionModelDefaults(
+  data: UpdateUserSettingsInput,
+  normalizedClaudeModel: string | undefined,
+  normalizedCodexModel: string | undefined,
+  normalizedClaudeEffort: string | null | undefined,
+  normalizedCodexEffort: string | null | undefined
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  | 'defaultSessionProvider'
+  | 'defaultClaudeModel'
+  | 'defaultCodexModel'
+  | 'defaultClaudeReasoningEffort'
+  | 'defaultCodexReasoningEffort'
+> {
+  return {
+    defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
+    defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
+    defaultCodexModel: normalizedCodexModel ?? 'default',
+    defaultClaudeReasoningEffort: normalizedClaudeEffort ?? null,
+    defaultCodexReasoningEffort: normalizedCodexEffort ?? null,
+  };
+}
+
+function buildVoiceDefaults(
+  data: UpdateUserSettingsInput
+): Pick<
+  Prisma.UserSettingsCreateInput,
+  'voiceModeEnabled' | 'deepgramApiKeyEncrypted' | 'voiceTtsModel' | 'voiceTtsSpeed'
+> {
+  return {
+    voiceModeEnabled: data.voiceModeEnabled ?? false,
+    deepgramApiKeyEncrypted: data.deepgramApiKeyEncrypted ?? null,
+    voiceTtsModel: data.voiceTtsModel ?? undefined,
+    voiceTtsSpeed: data.voiceTtsSpeed ?? undefined,
+  };
+}
+
+/**
+ * Builds the upsert `create` branch's data, so a first-time write of any
+ * field (e.g. voice mode config before any other setting has been saved)
+ * still lands with sensible defaults for everything else rather than
+ * relying on Prisma's `@default` — which the `update` branch above bypasses
+ * entirely since it spreads `data` directly.
+ */
+function buildCreateData(
+  userId: string,
+  data: UpdateUserSettingsInput,
+  normalizedClaudeModel: string | undefined,
+  normalizedCodexModel: string | undefined,
+  normalizedClaudeEffort: string | null | undefined,
+  normalizedCodexEffort: string | null | undefined
+): Prisma.UserSettingsCreateInput {
+  return {
+    userId,
+    ...buildGeneralPreferenceDefaults(data),
+    ...buildRatchetDefaults(data),
+    ...buildSessionModelDefaults(
+      data,
+      normalizedClaudeModel,
+      normalizedCodexModel,
+      normalizedClaudeEffort,
+      normalizedCodexEffort
+    ),
+    ...buildVoiceDefaults(data),
+  };
+}
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -155,23 +255,14 @@ class UserSettingsAccessor {
         defaultClaudeReasoningEffort: normalizedClaudeEffort,
         defaultCodexReasoningEffort: normalizedCodexEffort,
       },
-      create: {
+      create: buildCreateData(
         userId,
-        preferredIde: data.preferredIde ?? 'cursor',
-        customIdeCommand: data.customIdeCommand ?? null,
-        playSoundOnComplete: data.playSoundOnComplete ?? true,
-        cachedSlashCommands: data.cachedSlashCommands ?? undefined,
-        ratchetEnabled: data.ratchetEnabled ?? false,
-        defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
-        defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
-        defaultCodexModel: normalizedCodexModel ?? 'default',
-        defaultClaudeReasoningEffort: normalizedClaudeEffort ?? null,
-        defaultCodexReasoningEffort: normalizedCodexEffort ?? null,
-        defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
-        ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
-        ratchetReviewTriggerMode: data.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED',
-        ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
-      },
+        data,
+        normalizedClaudeModel,
+        normalizedCodexModel,
+        normalizedClaudeEffort,
+        normalizedCodexEffort
+      ),
     });
   }
 

@@ -442,8 +442,11 @@ async function importUserSettings(
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
       ratchetPermissions: settings.ratchetPermissions,
+      voiceTtsModel: settings.voiceTtsModel,
+      voiceTtsSpeed: settings.voiceTtsSpeed,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
-      // as they are rebuild-able cache data
+      // as they are rebuild-able cache data. deepgramApiKeyEncrypted is never
+      // exported (secret), so it's left unset here too.
     },
   });
 
@@ -589,8 +592,11 @@ class DataBackupService {
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
               ratchetPermissions: userSettings.ratchetPermissions,
+              voiceTtsModel: userSettings.voiceTtsModel,
+              voiceTtsSpeed: userSettings.voiceTtsSpeed,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
-              // as they are rebuild-able cache data (per design doc)
+              // as they are rebuild-able cache data (per design doc). The Deepgram
+              // API key is excluded too — it's a secret, not a preference.
             }
           : null,
       },

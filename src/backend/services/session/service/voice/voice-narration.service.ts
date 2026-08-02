@@ -59,8 +59,19 @@ const MIN_CLAUSE_LENGTH = 12;
 type NarrationKind = 'thinking' | 'final';
 
 interface ActiveNarration {
-  socket: WebSocket;
+  // Created and assigned to turn.activeTts synchronously by the caller,
+  // before the socket exists — closes the window where a burst of
+  // synchronous thinking_delta events (sessionEventBus is a plain
+  // EventEmitter) could all pass the `!turn.activeTts` guard while the
+  // first attempt is still awaiting settings/decrypt and spawn duplicate
+  // Deepgram sockets for the same session.
+  socket: WebSocket | null;
   kind: NarrationKind;
+  // Set by clearActiveNarration when a newer utterance (final answer)
+  // supersedes this one. Checked before ever sending Speak, so a socket
+  // that was still CONNECTING when the Clear was requested can't go on to
+  // speak stale text once it opens.
+  cancelled: boolean;
 }
 
 interface TurnState {
@@ -85,14 +96,22 @@ function createTurnState(): TurnState {
 }
 
 function extractClause(buffer: string): { clause: string; remainder: string } | null {
-  const match = buffer.match(CLAUSE_BOUNDARY_PATTERN);
-  if (match?.index !== undefined) {
-    const end = match.index + match[0].length;
+  // A boundary yielding a too-short clause (e.g. "Ok. ") is skipped rather
+  // than rejected outright — otherwise the same leading fragment matches on
+  // every subsequent delta and narration never resumes past it. Buffering
+  // continues through a later boundary and emits the combined clause.
+  let searchFrom = 0;
+  while (true) {
+    const match = buffer.slice(searchFrom).match(CLAUSE_BOUNDARY_PATTERN);
+    if (match?.index === undefined) {
+      break;
+    }
+    const end = searchFrom + match.index + match[0].length;
     const clause = buffer.slice(0, end).trim();
     if (clause.length >= MIN_CLAUSE_LENGTH) {
       return { clause, remainder: buffer.slice(end) };
     }
-    return null;
+    searchFrom = end;
   }
   if (buffer.length >= MAX_CLAUSE_LENGTH) {
     const lastSpace = buffer.lastIndexOf(' ', MAX_CLAUSE_LENGTH);
@@ -116,7 +135,7 @@ function stripMarkdownForSpeech(text: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/(\*\*\*|___)(.+?)\1/g, '$2')
     .replace(/(\*\*|__)(.+?)\1/g, '$2')
-    .replace(/(?<![\w*])\*([^*\n]+)\*(?!\w)/g, '$1')
+    .replace(/(?<![\w*])\*(?!\s)([^*\n]*[^\s*\n])\*(?!\w)/g, '$1')
     .replace(/(?<![\w_])_([^_\n]+)_(?!\w)/g, '$1')
     .replace(/~~(.+?)~~/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
@@ -158,7 +177,16 @@ class VoiceNarrationService {
     this.attachBusListener();
   }
 
-  unregisterConnection(sessionId: string): void {
+  /**
+   * `ws` must be passed so a reconnect isn't lost: if a second connection
+   * for the same session has already replaced this one in `connections` by
+   * the time the first socket's 'close' fires, that's a stale close and
+   * must not delete the newer connection's state.
+   */
+  unregisterConnection(sessionId: string, ws: WebSocket): void {
+    if (this.connections.get(sessionId) !== ws) {
+      return;
+    }
     this.connections.delete(sessionId);
     this.turns.delete(sessionId);
     this.seqBySession.delete(sessionId);
@@ -290,7 +318,7 @@ class VoiceNarrationService {
     if (next === undefined) {
       return;
     }
-    void this.speakClause(sessionId, ws, turn, next, 'final');
+    this.startNarration(sessionId, ws, turn, next, 'final');
   }
 
   private handleThinkingDelta(
@@ -310,14 +338,41 @@ class VoiceNarrationService {
       return;
     }
     turn.thinkingBuffer = extracted.remainder;
-    void this.speakClause(sessionId, ws, turn, extracted.clause, 'thinking');
+    this.startNarration(sessionId, ws, turn, extracted.clause, 'thinking');
+  }
+
+  /**
+   * Claims `turn.activeTts` synchronously, before any await, so a burst of
+   * synchronous events can't all see `activeTts` unset and each start their
+   * own Deepgram socket for the same turn.
+   */
+  private startNarration(
+    sessionId: string,
+    ws: WebSocket,
+    turn: TurnState,
+    rawText: string,
+    kind: NarrationKind
+  ): void {
+    const active: ActiveNarration = { socket: null, kind, cancelled: false };
+    turn.activeTts = active;
+    void this.speakClause(sessionId, ws, turn, rawText, active);
   }
 
   private clearActiveNarration(sessionId: string, active: ActiveNarration): void {
+    active.cancelled = true;
+    if (!active.socket) {
+      // Not created yet (still resolving settings/decrypting the key) — the
+      // pending speakClause call checks `cancelled` before ever opening a
+      // connection or sending Speak.
+      return;
+    }
     try {
       if (active.socket.readyState === WebSocket.OPEN) {
         active.socket.send(JSON.stringify({ type: 'Clear' }));
       }
+      // Otherwise still CONNECTING: there's nothing to Clear yet, but the
+      // pending 'open' handler checks `cancelled` and will settle without
+      // ever speaking the superseded text.
     } catch (error) {
       logger.error('Failed to clear in-flight Deepgram TTS narration', {
         error: error instanceof Error ? error.message : String(error),
@@ -326,109 +381,147 @@ class VoiceNarrationService {
     }
   }
 
+  /**
+   * Releases `active`'s claim on `turn.activeTts` and drains the next queued
+   * clause, if any. Called synchronously at every settle point — including
+   * from inside the socket's `finish` closure, *not* deferred until after
+   * `speakClause`'s outer `await` resumes — because `resolve()` only
+   * schedules that continuation as a microtask, and a caller may emit the
+   * next clause synchronously right after triggering this one's finish
+   * (see the "drops a clause..." / queue-draining tests).
+   */
+  private settleNarration(
+    sessionId: string,
+    ws: WebSocket,
+    turn: TurnState,
+    active: ActiveNarration
+  ): void {
+    if (turn.activeTts === active) {
+      turn.activeTts = null;
+    }
+    this.maybeStartNextFinalClause(sessionId, ws, turn);
+  }
+
   private async speakClause(
     sessionId: string,
     ws: WebSocket,
     turn: TurnState,
     rawText: string,
-    kind: NarrationKind
+    active: ActiveNarration
   ): Promise<void> {
-    const settings = await userSettingsService.get();
-    if (!(settings.voiceModeEnabled && settings.deepgramApiKeyEncrypted)) {
-      logger.info('Skipping narration — voice mode disabled or no key configured', {
-        sessionId,
-        voiceModeEnabled: settings.voiceModeEnabled,
-        hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
-      });
-      return;
-    }
-    const text = stripMarkdownForSpeech(rawText);
-    if (!text) {
-      this.maybeStartNextFinalClause(sessionId, ws, turn);
-      return;
-    }
-    const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
-
-    const params = new URLSearchParams({
-      model: settings.voiceTtsModel,
-      encoding: TTS_ENCODING,
-      sample_rate: String(TTS_SAMPLE_RATE),
-      speed: String(settings.voiceTtsSpeed),
-    });
-    logger.info('Opening Deepgram TTS connection', {
-      sessionId,
-      kind,
-      textLength: text.length,
-      model: settings.voiceTtsModel,
-      speed: settings.voiceTtsSpeed,
-    });
-    const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
-      headers: { Authorization: `Token ${apiKey}` },
-    });
-    const active: ActiveNarration = { socket: ttsSocket, kind };
-    turn.activeTts = active;
-
-    let chunkCount = 0;
-    let byteCount = 0;
-
-    await new Promise<void>((resolve) => {
-      const finish = () => {
-        logger.info('Finished Deepgram TTS narration', {
+    try {
+      const settings = await userSettingsService.get();
+      if (active.cancelled) {
+        this.settleNarration(sessionId, ws, turn, active);
+        return;
+      }
+      if (!(settings.voiceModeEnabled && settings.deepgramApiKeyEncrypted)) {
+        logger.info('Skipping narration — voice mode disabled or no key configured', {
           sessionId,
-          kind,
-          chunkCount,
-          byteCount,
+          voiceModeEnabled: settings.voiceModeEnabled,
+          hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
         });
-        ttsSocket.removeAllListeners();
-        if (ttsSocket.readyState === WebSocket.OPEN) {
-          ttsSocket.close();
-        }
-        if (turn.activeTts === active) {
-          turn.activeTts = null;
-        }
-        resolve();
-        // The queue must keep draining itself once text has stopped
-        // streaming in — otherwise the last few clauses would wait
-        // indefinitely for an event that's never coming.
-        this.maybeStartNextFinalClause(sessionId, ws, turn);
-      };
+        this.settleNarration(sessionId, ws, turn, active);
+        return;
+      }
+      const text = stripMarkdownForSpeech(rawText);
+      if (!text) {
+        this.settleNarration(sessionId, ws, turn, active);
+        return;
+      }
+      const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
 
-      ttsSocket.on('open', () => {
-        try {
-          ttsSocket.send(JSON.stringify({ type: 'Speak', text }));
-          ttsSocket.send(JSON.stringify({ type: 'Flush' }));
-        } catch (error) {
-          logger.error('Failed to send text to Deepgram TTS', {
-            error: error instanceof Error ? error.message : String(error),
+      const params = new URLSearchParams({
+        model: settings.voiceTtsModel,
+        encoding: TTS_ENCODING,
+        sample_rate: String(TTS_SAMPLE_RATE),
+        speed: String(settings.voiceTtsSpeed),
+      });
+      logger.info('Opening Deepgram TTS connection', {
+        sessionId,
+        kind: active.kind,
+        textLength: text.length,
+        model: settings.voiceTtsModel,
+        speed: settings.voiceTtsSpeed,
+      });
+      const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
+        headers: { Authorization: `Token ${apiKey}` },
+      });
+      active.socket = ttsSocket;
+
+      let chunkCount = 0;
+      let byteCount = 0;
+
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          logger.info('Finished Deepgram TTS narration', {
             sessionId,
+            kind: active.kind,
+            chunkCount,
+            byteCount,
           });
+          ttsSocket.removeAllListeners();
+          if (
+            ttsSocket.readyState === WebSocket.OPEN ||
+            ttsSocket.readyState === WebSocket.CONNECTING
+          ) {
+            ttsSocket.close();
+          }
+          resolve();
+          this.settleNarration(sessionId, ws, turn, active);
+        };
+
+        ttsSocket.on('open', () => {
+          if (active.cancelled) {
+            finish();
+            return;
+          }
+          try {
+            ttsSocket.send(JSON.stringify({ type: 'Speak', text }));
+            ttsSocket.send(JSON.stringify({ type: 'Flush' }));
+          } catch (error) {
+            logger.error('Failed to send text to Deepgram TTS', {
+              error: error instanceof Error ? error.message : String(error),
+              sessionId,
+            });
+            finish();
+          }
+        });
+
+        ttsSocket.on('message', (data: Buffer, isBinary: boolean) => {
+          if (!this.connections.has(sessionId)) {
+            finish();
+            return;
+          }
+          if (isBinary) {
+            chunkCount += 1;
+            byteCount += data.length;
+            this.forwardAudioChunk(sessionId, ws, data);
+            return;
+          }
+          const message = this.parseControlMessage(data);
+          logger.info('Deepgram TTS control message', { sessionId, message });
+          this.handleTtsControlMessage(ttsSocket, message, finish);
+        });
+
+        ttsSocket.on('error', (error) => {
+          logger.error('Deepgram TTS connection error', { error: error.message, sessionId });
           finish();
-        }
-      });
+        });
 
-      ttsSocket.on('message', (data: Buffer, isBinary: boolean) => {
-        if (!this.connections.has(sessionId)) {
-          finish();
-          return;
-        }
-        if (isBinary) {
-          chunkCount += 1;
-          byteCount += data.length;
-          this.forwardAudioChunk(sessionId, ws, data);
-          return;
-        }
-        const message = this.parseControlMessage(data);
-        logger.info('Deepgram TTS control message', { sessionId, message });
-        this.handleTtsControlMessage(ttsSocket, message, finish);
+        ttsSocket.on('close', finish);
       });
-
-      ttsSocket.on('error', (error) => {
-        logger.error('Deepgram TTS connection error', { error: error.message, sessionId });
-        finish();
+    } catch (error) {
+      // Fail closed: settings lookup, decrypt, or socket construction can
+      // all throw, and this runs fire-and-forget from a synchronous event
+      // handler — an uncaught rejection here would be unhandled.
+      logger.error('Voice narration clause failed', {
+        sessionId,
+        kind: active.kind,
+        error: error instanceof Error ? error.message : String(error),
       });
-
-      ttsSocket.on('close', finish);
-    });
+      this.settleNarration(sessionId, ws, turn, active);
+    }
   }
 
   /** Handles Deepgram's Flushed (utterance complete) and Cleared (interrupted) control messages. */

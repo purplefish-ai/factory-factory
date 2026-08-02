@@ -13,7 +13,7 @@ import {
   DEEPGRAM_TTS_SPEED_MIN,
   isKnownDeepgramVoiceModel,
 } from '@/shared/deepgram-voices';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const DEEPGRAM_PROJECTS_URL = 'https://api.deepgram.com/v1/projects';
 const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant';
@@ -23,11 +23,14 @@ const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant';
  * limit exposure if it leaks (e.g. via devtools network tab). */
 const GRANT_TOKEN_TTL_SECONDS = 600;
 
-async function getDecryptedApiKey(
+/** Bounds outbound Deepgram calls so a stalled connection fails fast with a
+ * usable error instead of hanging until the runtime's network timeout. */
+const DEEPGRAM_FETCH_TIMEOUT_MS = 10_000;
+
+function getDecryptedApiKey(
   cryptoService: ApplicationServices['cryptoService'],
-  userSettingsQueryService: ApplicationServices['userSettingsQueryService']
-): Promise<string | null> {
-  const settings = await userSettingsQueryService.get();
+  settings: { deepgramApiKeyEncrypted: string | null }
+): string | null {
   if (!settings.deepgramApiKeyEncrypted) {
     return null;
   }
@@ -62,11 +65,9 @@ function friendlyDeepgramAuthError(status: number, detail: string): string | nul
   }
   if (status === 400 && errCode === 'BAD_REQUEST') {
     return (
-      'Deepgram rejected this request as malformed, which usually means the saved API key ' +
-      "has extra whitespace or a stray newline from copy-pasting (Deepgram's own error " +
-      'message for this case misleadingly says "Invalid credentials" even though the key ' +
-      'itself may be correct). Re-copy the key from the Deepgram console and save it again ' +
-      'in Voice Mode settings.'
+      'Deepgram rejected this request as malformed. If you recently copied the key ' +
+      'from the console it may include a stray newline or extra space; re-copy and save ' +
+      'it again in Voice Mode settings.'
     );
   }
   if (status === 403 && errCode === 'INSUFFICIENT_PERMISSIONS') {
@@ -83,6 +84,7 @@ async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean;
   try {
     const response = await fetch(DEEPGRAM_PROJECTS_URL, {
       headers: { Authorization: `Token ${apiKey}` },
+      signal: AbortSignal.timeout(DEEPGRAM_FETCH_TIMEOUT_MS),
     });
     if (response.ok) {
       return { valid: true };
@@ -112,7 +114,7 @@ export const voiceRouter = router({
   }),
 
   /** Validate a Deepgram API key before it's saved. */
-  validateApiKey: publicProcedure
+  validateApiKey: trustedLocalProcedure
     // .trim() first: copy-pasted keys routinely carry a trailing newline or
     // leading/trailing space, which Deepgram rejects with a misleading
     // "Invalid credentials" 400 rather than an obvious whitespace complaint.
@@ -128,7 +130,7 @@ export const voiceRouter = router({
    * and `ttsSpeed` are likewise only touched when provided, so the voice
    * settings form can save independently of the enabled toggle or key.
    */
-  updateConfig: publicProcedure
+  updateConfig: trustedLocalProcedure
     .input(
       z.object({
         enabled: z.boolean(),
@@ -162,9 +164,13 @@ export const voiceRouter = router({
    * Mint a short-lived Deepgram grant token so the browser can connect
    * directly to Deepgram's streaming STT without ever seeing the long-lived key.
    */
-  mintGrantToken: publicProcedure.mutation(async ({ ctx }) => {
+  mintGrantToken: trustedLocalProcedure.mutation(async ({ ctx }) => {
     const { cryptoService, userSettingsQueryService } = ctx.appContext.services;
-    const apiKey = await getDecryptedApiKey(cryptoService, userSettingsQueryService);
+    const settings = await userSettingsQueryService.get();
+    if (!settings.voiceModeEnabled) {
+      throw new Error('Voice mode is disabled');
+    }
+    const apiKey = getDecryptedApiKey(cryptoService, settings);
     if (!apiKey) {
       throw new Error('Voice mode is not configured with a Deepgram API key');
     }
@@ -176,6 +182,7 @@ export const voiceRouter = router({
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ ttl_seconds: GRANT_TOKEN_TTL_SECONDS }),
+      signal: AbortSignal.timeout(DEEPGRAM_FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) {

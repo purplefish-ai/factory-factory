@@ -1,7 +1,7 @@
 /**
  * Deepgram Aura-2 English TTS voices. Deepgram has no API to list voices
  * programmatically, so this is a hardcoded snapshot of the documented
- * catalog (developers.deepgram.com/docs/tts-models) — 40 named voices,
+ * catalog (developers.deepgram.com/docs/tts-models),
  * `[modelname]-[voicename]-[language]` (e.g. aura-2-thalia-en).
  */
 
