@@ -151,19 +151,35 @@ describe('voiceRouter', () => {
       expect(result).toEqual({ accessToken: 'jwt-token', expiresInSeconds: 600 });
     });
 
-    it("throws when Deepgram rejects the grant request, including Deepgram's error detail", async () => {
+    it("throws with Deepgram's raw error detail for an unrecognized failure", async () => {
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+      });
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('{"err_msg":"Internal error"}'),
+      } as Response);
+
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(
+        'Failed to mint Deepgram grant token: 500 — {"err_msg":"Internal error"}'
+      );
+    });
+
+    it('throws a friendly, actionable message for a 403 INSUFFICIENT_PERMISSIONS response', async () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
       vi.mocked(fetch).mockResolvedValue({
         ok: false,
         status: 403,
-        text: () => Promise.resolve('{"err_msg":"Insufficient permissions"}'),
+        text: () =>
+          Promise.resolve(
+            '{"err_code":"INSUFFICIENT_PERMISSIONS","err_msg":"Insufficient permissions"}'
+          ),
       } as Response);
 
-      await expect(createCaller().mintGrantToken()).rejects.toThrow(
-        'Failed to mint Deepgram grant token: 403 — {"err_msg":"Insufficient permissions"}'
-      );
+      await expect(createCaller().mintGrantToken()).rejects.toThrow(/Member.*role/);
     });
   });
 });

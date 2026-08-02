@@ -1,5 +1,6 @@
 import { MicrophoneIcon, MicrophoneSlashIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { useMicCapture } from './use-mic-capture';
@@ -49,6 +50,15 @@ export function VoiceModeToggle({
   useEffect(() => {
     return () => stop();
   }, [stop]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      // start() failed after we optimistically flipped this on — make sure
+      // playback doesn't stay "enabled" for a capture session that never started.
+      setVoiceModeOn(false);
+    }
+  }, [error]);
 
   const handleClick = useCallback(() => {
     if (isCapturing) {

@@ -29,6 +29,31 @@ async function getDecryptedApiKey(
   return cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
 }
 
+/**
+ * Deepgram's /v1/auth/grant requires an API key with Member permissions or
+ * higher — a default-scope key (which passes the plain /v1/projects check
+ * validateApiKey uses) gets a 403 INSUFFICIENT_PERMISSIONS here instead.
+ * This is common enough in practice to call out with a specific fix rather
+ * than surfacing it as an opaque HTTP status.
+ */
+function describeGrantTokenError(status: number, detail: string): string {
+  if (status === 403) {
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed?.err_code === 'INSUFFICIENT_PERMISSIONS') {
+        return (
+          "This Deepgram API key doesn't have permission to start voice sessions. " +
+          'Create a new key in the Deepgram console with the "Member" role ' +
+          '(API Keys → Create Key → Advanced → Member) and save it in Voice Mode settings.'
+        );
+      }
+    } catch {
+      // Not the JSON shape we're matching on — fall through to the generic message.
+    }
+  }
+  return `Failed to mint Deepgram grant token: ${status}${detail ? ` — ${detail}` : ''}`;
+}
+
 async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const response = await fetch(DEEPGRAM_PROJECTS_URL, {
@@ -107,9 +132,7 @@ export const voiceRouter = router({
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(
-        `Failed to mint Deepgram grant token: ${response.status}${detail ? ` — ${detail}` : ''}`
-      );
+      throw new Error(describeGrantTokenError(response.status, detail));
     }
 
     const body = (await response.json()) as { access_token: string; expires_in?: number };
