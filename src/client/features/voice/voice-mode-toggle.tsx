@@ -103,6 +103,21 @@ export function VoiceModeToggle({
     return () => stop();
   }, [stop]);
 
+  // Lets WorkspaceNotificationManager (mounted once at the app root, with no
+  // other view into this component) suppress the workspace-complete chime
+  // while voice mode is on — the agent's response is already spoken aloud,
+  // so the chime is a redundant, jarring second notification on top of it.
+  // The cleanup fires "false" both on toggle-off and on unmount (e.g.
+  // navigating away mid-session), so the suppression can never get stuck on.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('voice-mode-changed', { detail: { active: isCapturing } })
+    );
+    return () => {
+      window.dispatchEvent(new CustomEvent('voice-mode-changed', { detail: { active: false } }));
+    };
+  }, [isCapturing]);
+
   useEffect(() => {
     if (error) {
       toast.error(error);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { trpc } from '@/client/lib/trpc';
 
 interface NotificationRequest {
@@ -14,6 +14,20 @@ interface NotificationRequest {
  */
 export function WorkspaceNotificationManager() {
   const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
+  // Set by VoiceModeToggle (mounted separately, per open workspace chat) —
+  // the completion chime is redundant, jarring noise on top of the agent's
+  // spoken response while voice mode is active.
+  const voiceModeActiveRef = useRef(false);
+
+  useEffect(() => {
+    const handleVoiceModeChanged = (event: CustomEvent<{ active: boolean }>) => {
+      voiceModeActiveRef.current = event.detail.active;
+    };
+    window.addEventListener('voice-mode-changed', handleVoiceModeChanged as EventListener);
+    return () => {
+      window.removeEventListener('voice-mode-changed', handleVoiceModeChanged as EventListener);
+    };
+  }, []);
 
   const handleWorkspaceNotification = useCallback(
     (request: NotificationRequest) => {
@@ -23,7 +37,11 @@ export function WorkspaceNotificationManager() {
       // Default to true once settings are available, but don't play while loading
       // to avoid playing sound when user may have disabled it
       const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
-      sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
+      sendWorkspaceNotification(
+        workspaceName,
+        sessionCount,
+        playSoundOnComplete && !voiceModeActiveRef.current
+      );
 
       // Dispatch attention event for red glow animation
       window.dispatchEvent(
