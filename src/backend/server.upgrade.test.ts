@@ -16,6 +16,7 @@ const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
     devLogs: vi.fn(),
     postRunLogs: vi.fn(),
     snapshots: vi.fn(),
+    voice: vi.fn(),
   };
 
   return {
@@ -27,6 +28,7 @@ const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
       devLogs: vi.fn(() => upgradeHandlers.devLogs),
       postRunLogs: vi.fn(() => upgradeHandlers.postRunLogs),
       snapshots: vi.fn(() => upgradeHandlers.snapshots),
+      voice: vi.fn(() => upgradeHandlers.voice),
     },
     transportDisposers: {
       chat: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock('@/backend/routers/websocket', () => ({
   createDevLogsUpgradeHandler: handlerFactories.devLogs,
   createPostRunLogsUpgradeHandler: handlerFactories.postRunLogs,
   createSnapshotsUpgradeHandler: handlerFactories.snapshots,
+  createVoiceUpgradeHandler: handlerFactories.voice,
   disposeChatTransportForApplication: transportDisposers.chat,
   disposeSnapshotsHandlerState: transportDisposers.snapshots,
 }));

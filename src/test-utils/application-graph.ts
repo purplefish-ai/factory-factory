@@ -120,11 +120,13 @@ vi.mock('@/backend/services/session', () => ({
   sessionDomainService: {},
   sessionEventBus: {},
   sessionFileLogger: {},
+  sessionLifecycleEventService: {},
   sessionLifecycleService: {},
   sessionProviderResolverService: {},
   sessionPromptTurnCompletionService: {},
   sessionRepository: {},
   sessionService: {},
+  voiceNarrationService: {},
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 vi.mock('@/backend/services/terminal', () => ({
@@ -231,11 +233,13 @@ import {
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
+  sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionProviderResolverService,
   sessionRepository,
   sessionService,
+  voiceNarrationService,
 } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
 import { terminalService, terminalSessionService } from '@/backend/services/terminal';
@@ -389,6 +393,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     sessionDomainService,
     sessionEventBus,
     sessionFileLogger,
+    sessionLifecycleEventService,
     sessionLifecycleService: graphSessionLifecycleService,
     sessionProviderResolverService,
     sessionPromptTurnCompletionService,
@@ -398,6 +403,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     terminalService,
     terminalSessionService,
     userSettingsQueryService: userSettingsService,
+    voiceNarrationService,
     workspaceActivityService,
     workspaceAutoIterationService,
     workspaceCreationService: {

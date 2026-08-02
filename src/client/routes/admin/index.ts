@@ -8,3 +8,4 @@ export {
   ProcessesSectionSkeleton,
 } from './ProcessesSection';
 export { StatCard, type StatCardProps } from './StatCard';
+export { VoiceModeSection } from './VoiceModeSection';

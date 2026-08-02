@@ -21,3 +21,4 @@ export {
   createTerminalUpgradeHandler,
   terminalConnections,
 } from './terminal.handler';
+export { createVoiceUpgradeHandler } from './voice.handler';

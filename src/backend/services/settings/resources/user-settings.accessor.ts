@@ -26,6 +26,8 @@ interface UpdateUserSettingsInput {
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
   ratchetPermissions?: SessionPermissionPreset;
+  voiceModeEnabled?: boolean;
+  deepgramApiKeyEncrypted?: string | null;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }

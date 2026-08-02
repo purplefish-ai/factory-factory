@@ -143,6 +143,8 @@ describe('WorkspaceCreationService', () => {
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
+      voiceModeEnabled: false,
+      deepgramApiKeyEncrypted: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -237,6 +239,8 @@ describe('WorkspaceCreationService', () => {
           defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          voiceModeEnabled: false,
+          deepgramApiKeyEncrypted: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

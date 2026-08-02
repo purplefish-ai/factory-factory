@@ -278,6 +278,7 @@ export function WorkspaceDetailContainer() {
 
   const chatViewModel: ChatContentProps = {
     workspaceId,
+    sessionId: selectedDbSessionId,
     resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
     onWorkspaceFileLink: handleWorkspaceFileLink,
     messages,

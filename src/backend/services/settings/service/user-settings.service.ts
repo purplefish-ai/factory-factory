@@ -20,6 +20,8 @@ export interface UpdateUserSettingsInput {
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
   ratchetPermissions?: SessionPermissionPreset;
+  voiceModeEnabled?: boolean;
+  deepgramApiKeyEncrypted?: string | null;
 }
 
 class UserSettingsService {

@@ -69,11 +69,13 @@ import {
   sessionDomainService,
   sessionEventBus,
   sessionFileLogger,
+  sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionProviderResolverService,
   sessionRepository,
   sessionService,
+  voiceNarrationService,
 } from './services/session';
 import { userSettingsService } from './services/settings';
 import { terminalService, terminalSessionService } from './services/terminal';
@@ -133,12 +135,14 @@ export type ApplicationServices = BridgeServices & {
   serverInstanceService: ServerInstanceService;
   sessionEventBus: typeof sessionEventBus;
   sessionFileLogger: SessionFileLogger;
+  sessionLifecycleEventService: typeof sessionLifecycleEventService;
   sessionLifecycleService: typeof sessionLifecycleService;
   sessionProviderResolverService: typeof sessionProviderResolverService;
   sessionPromptTurnCompletionService: typeof sessionPromptTurnCompletionService;
   sessionRepository: typeof sessionRepository;
   terminalService: typeof terminalService;
   userSettingsQueryService: typeof userSettingsService;
+  voiceNarrationService: typeof voiceNarrationService;
   workspaceDataService: typeof workspaceDataService;
   workspaceGitStateService: typeof workspaceGitStateService;
   workspaceNotificationService: typeof workspaceNotificationService;
@@ -244,6 +248,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionDomainService,
     sessionEventBus,
     sessionFileLogger,
+    sessionLifecycleEventService,
     sessionLifecycleService,
     sessionProviderResolverService,
     sessionPromptTurnCompletionService,
@@ -253,6 +258,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     terminalService,
     terminalSessionService,
     userSettingsQueryService: userSettingsService,
+    voiceNarrationService,
     workspaceActivityService,
     workspaceAutoIterationService,
     workspaceCreationService,
