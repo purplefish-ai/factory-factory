@@ -3,6 +3,14 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 
 /** Must match TTS_SAMPLE_RATE in voice-narration.service.ts. */
 const PLAYBACK_SAMPLE_RATE = 24_000;
+/**
+ * Cushion added before starting playback whenever the scheduled runway has
+ * run dry (start of an utterance, or a stall). Deepgram doesn't deliver a
+ * steady bitrate, so without this, scheduling a chunk flush against
+ * `currentTime` means the next moment of network jitter produces an audible
+ * gap — and every chunk after that keeps re-triggering the same gap.
+ */
+const JITTER_BUFFER_SECONDS = 0.12;
 
 interface AudioChunkMessage {
   type: 'audio_chunk';
@@ -95,7 +103,13 @@ export function useVoicePlayback({
     source.buffer = buffer;
     source.connect(audioContext.destination);
 
-    const startAt = Math.max(audioContext.currentTime, nextStartTimeRef.current);
+    // Once the scheduled runway is behind "now", this is either the first
+    // chunk of a fresh utterance or a stall from a network gap — either way,
+    // resume with a fresh cushion rather than flush against currentTime.
+    const isUnderrun = nextStartTimeRef.current <= audioContext.currentTime;
+    const startAt = isUnderrun
+      ? audioContext.currentTime + JITTER_BUFFER_SECONDS
+      : nextStartTimeRef.current;
     source.start(startAt);
     nextStartTimeRef.current = startAt + buffer.duration;
 

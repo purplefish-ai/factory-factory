@@ -102,6 +102,32 @@ function extractClause(buffer: string): { clause: string; remainder: string } | 
   return null;
 }
 
+/**
+ * Strips Markdown syntax before handing text to Deepgram, which otherwise
+ * speaks the literal punctuation (e.g. "**bold**" comes out as "star star
+ * bold star star") — the agent's messages are Markdown-formatted for the
+ * chat UI, and voice narration reads that same raw stream.
+ */
+function stripMarkdownForSpeech(text: string): string {
+  return text
+    .replace(/```[\w-]*\n?/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*\*|___)(.+?)\1/g, '$2')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(?<![\w*])\*([^*\n]+)\*(?!\w)/g, '$1')
+    .replace(/(?<![\w_])_([^_\n]+)_(?!\w)/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 /** Extracts thinking-delta text from a session_delta event, if that's what it is. */
 function extractThinkingDelta(payload: SessionOutboundEvent['payload']): string | null {
   if (payload.type !== 'session_delta' || payload.data.type !== 'agent_message') {
@@ -304,7 +330,7 @@ class VoiceNarrationService {
     sessionId: string,
     ws: WebSocket,
     turn: TurnState,
-    text: string,
+    rawText: string,
     kind: NarrationKind
   ): Promise<void> {
     const settings = await userSettingsService.get();
@@ -314,6 +340,11 @@ class VoiceNarrationService {
         voiceModeEnabled: settings.voiceModeEnabled,
         hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
       });
+      return;
+    }
+    const text = stripMarkdownForSpeech(rawText);
+    if (!text) {
+      this.maybeStartNextFinalClause(sessionId, ws, turn);
       return;
     }
     const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);

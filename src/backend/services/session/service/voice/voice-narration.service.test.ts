@@ -220,6 +220,50 @@ describe('voiceNarrationService', () => {
     voiceNarrationService.unregisterConnection('sess-speak');
   });
 
+  describe('markdown stripping', () => {
+    it('strips bold, italic, and inline code before speaking a final-answer clause', async () => {
+      const clientWs = createFakeClientWs();
+      voiceNarrationService.registerConnection('sess-markdown', clientWs as never);
+
+      emitDelta('sess-markdown', {
+        type: 'session_delta',
+        data: {
+          type: 'assistant_text_delta',
+          text: 'This is **bold**, this is *italic*, and this is `code`. ',
+        },
+      });
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      ttsSocket.emit('open');
+
+      expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'This is bold, this is italic, and this is code.',
+      });
+
+      voiceNarrationService.unregisterConnection('sess-markdown');
+    });
+
+    it('strips links, headers, and list markers before speaking a thinking clause', async () => {
+      const clientWs = createFakeClientWs();
+      voiceNarrationService.registerConnection('sess-markdown-2', clientWs as never);
+
+      emitThinking('sess-markdown-2', '# Plan\n- Check the [docs](https://example.com) first. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      ttsSocket.emit('open');
+
+      expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'Plan\nCheck the docs first.',
+      });
+
+      voiceNarrationService.unregisterConnection('sess-markdown-2');
+    });
+  });
+
   describe('selective thinking narration', () => {
     it('speaks a thinking clause once a sentence boundary is reached', async () => {
       const clientWs = createFakeClientWs();
