@@ -307,7 +307,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           onAnswer={props.answerQuestion}
         />
 
-        <div className="flex items-end gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <VoiceModeToggle
             sessionId={props.sessionId}
             onFinalTranscript={props.sendMessage}
