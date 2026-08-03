@@ -72,9 +72,10 @@ import {
 } from '@/backend/services/session/service/session-event-bus';
 import { voiceNarrationService } from './voice-narration.service';
 
-function createFakeClientWs() {
+function createFakeClientWs(bufferedAmount = 0) {
   return {
     readyState: 1,
+    bufferedAmount,
     send: vi.fn(),
   };
 }
@@ -256,6 +257,149 @@ describe('voiceNarrationService', () => {
     expect(JSON.parse(ttsSocket.sentMessages[2] as string)).toEqual({ type: 'Close' });
 
     voiceNarrationService.unregisterConnection('sess-speak', clientWs as never);
+  });
+
+  it('isCurrentConnection is true only for the connection currently registered', () => {
+    const firstWs = createFakeClientWs();
+    const secondWs = createFakeClientWs();
+    voiceNarrationService.registerConnection('sess-current', firstWs as never);
+
+    expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(true);
+
+    // A reconnect replaces the registered connection — the superseded socket
+    // must no longer read as current, even though it's still open.
+    voiceNarrationService.registerConnection('sess-current', secondWs as never);
+    expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(false);
+    expect(voiceNarrationService.isCurrentConnection('sess-current', secondWs as never)).toBe(true);
+
+    voiceNarrationService.unregisterConnection('sess-current', secondWs as never);
+  });
+
+  it('cancelNarration clears the active narration and queued clauses, and clears client playback', async () => {
+    const clientWs = createFakeClientWs();
+    voiceNarrationService.registerConnection('sess-cancel', clientWs as never);
+
+    emitDelta('sess-cancel', {
+      type: 'session_delta',
+      data: {
+        type: 'assistant_text_delta',
+        text: 'Sentence one is here. Sentence two is here. ',
+      },
+    });
+
+    await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    active.emit('open');
+    clientWs.send.mockClear();
+
+    voiceNarrationService.cancelNarration('sess-cancel');
+
+    // Cancels the in-flight clause's Deepgram synthesis...
+    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Clear' });
+    // ...and tells the client to drop whatever's already scheduled locally.
+    expect(clientWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'clear_playback' }));
+
+    // The second, still-queued clause must not start once the active one
+    // settles — otherwise cancelling mid-turn would still finish speaking.
+    active.emit('close');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(FakeDeepgramSocket.instances).toHaveLength(1);
+
+    voiceNarrationService.unregisterConnection('sess-cancel', clientWs as never);
+  });
+
+  it('cancels in-flight narration and clears client playback when a new turn starts mid-speech', async () => {
+    const clientWs = createFakeClientWs();
+    voiceNarrationService.registerConnection('sess-new-turn', clientWs as never);
+
+    emitDelta('sess-new-turn', {
+      type: 'session_delta',
+      data: { type: 'assistant_text_delta', text: 'Previous turn is still speaking. ' },
+    });
+
+    await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    active.emit('open');
+    clientWs.send.mockClear();
+
+    // A new turn starting shouldn't wait for the previous turn's narration
+    // to finish on its own.
+    emitRuntimeUpdate('sess-new-turn', 'WORKING');
+
+    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Clear' });
+    expect(clientWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'clear_playback' }));
+
+    voiceNarrationService.unregisterConnection('sess-new-turn', clientWs as never);
+  });
+
+  it('unregisterConnection cancels active narration and drains the queue', async () => {
+    const clientWs = createFakeClientWs();
+    voiceNarrationService.registerConnection('sess-unregister', clientWs as never);
+
+    emitDelta('sess-unregister', {
+      type: 'session_delta',
+      data: {
+        type: 'assistant_text_delta',
+        text: 'Sentence one is here. Sentence two is here. ',
+      },
+    });
+
+    await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    active.emit('open');
+
+    voiceNarrationService.unregisterConnection('sess-unregister', clientWs as never);
+
+    // Settling the now-cancelled clause must not open a fresh Deepgram
+    // connection for the queued second clause — nobody's listening anymore.
+    active.emit('close');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(FakeDeepgramSocket.instances).toHaveLength(1);
+  });
+
+  it('drops audio chunks once the client send buffer is backed up', async () => {
+    const clientWs = createFakeClientWs(2_000_000);
+    voiceNarrationService.registerConnection('sess-backpressure', clientWs as never);
+
+    emitDelta('sess-backpressure', {
+      type: 'session_delta',
+      data: { type: 'assistant_text_delta', text: 'A long answer that gets spoken. ' },
+    });
+
+    await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+    const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    socket.emit('open');
+
+    socket.emit('message', Buffer.from([1, 2, 3, 4]), true);
+
+    expect(clientWs.send).not.toHaveBeenCalled();
+
+    voiceNarrationService.unregisterConnection('sess-backpressure', clientWs as never);
+  });
+
+  it('drops binary audio frames arriving for a narration already cancelled', async () => {
+    const clientWs = createFakeClientWs();
+    voiceNarrationService.registerConnection('sess-cancelled-audio', clientWs as never);
+
+    emitDelta('sess-cancelled-audio', {
+      type: 'session_delta',
+      data: { type: 'assistant_text_delta', text: 'Answer being spoken. ' },
+    });
+
+    await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+    const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    socket.emit('open');
+    clientWs.send.mockClear();
+
+    voiceNarrationService.cancelNarration('sess-cancelled-audio');
+    clientWs.send.mockClear();
+
+    // Audio already in flight when Clear was requested keeps arriving until
+    // Deepgram's Cleared ack — it must not be forwarded to the client.
+    socket.emit('message', Buffer.from([9, 9, 9]), true);
+    expect(clientWs.send).not.toHaveBeenCalled();
+
+    voiceNarrationService.unregisterConnection('sess-cancelled-audio', clientWs as never);
   });
 
   describe('markdown stripping', () => {
