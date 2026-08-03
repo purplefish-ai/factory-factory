@@ -200,6 +200,51 @@ function createUtteranceBuffer() {
   };
 }
 
+type UtteranceBuffer = ReturnType<typeof createUtteranceBuffer>;
+
+/**
+ * Handles a single `Results` message. Split out of `attachTranscriptHandler`
+ * so that closure's cognitive complexity stays under the lint threshold —
+ * this still shares its buffer/discard state with the caller by reference.
+ */
+function handleTranscriptResult(
+  message: DeepgramResultsMessage,
+  buffer: UtteranceBuffer,
+  deps: TranscriptHandlerDeps,
+  discardingRef: { current: boolean }
+): void {
+  const transcript = message.channel?.alternatives?.[0]?.transcript;
+  if (!transcript) {
+    return;
+  }
+  // Checked against each incoming chunk, not the accumulated utterance: a
+  // short phrase like "stop now" needs to react immediately, not wait out
+  // the UtteranceEnd silence window like a normal dictated sentence would.
+  if (deps.runningRef.current && matchesStopPhrase(transcript)) {
+    // Discard whatever had already settled before "stop" — otherwise it
+    // would still be flushed as a new chat request once UtteranceEnd fires.
+    buffer.flush();
+    discardingRef.current = true;
+    deps.onSoftStop?.();
+    return;
+  }
+  if (discardingRef.current) {
+    return;
+  }
+  // buffer.appendFinal must run unconditionally, as its own statement —
+  // deps.onInterimTranscript?.(buffer.appendFinal(transcript)) looks
+  // equivalent but isn't: optional-call syntax skips evaluating its
+  // arguments entirely when the callee is nullish, and no caller
+  // currently passes onInterimTranscript, so that form silently never
+  // accumulated anything and UtteranceEnd always flushed empty.
+  if (message.is_final) {
+    const settled = buffer.appendFinal(transcript);
+    deps.onInterimTranscript?.(settled);
+    return;
+  }
+  deps.onInterimTranscript?.(buffer.preview(transcript));
+}
+
 /**
  * `is_final` chunks are accumulated (see `createUtteranceBuffer`) rather
  * than sent immediately; the accumulated utterance is only handed to
@@ -209,40 +254,26 @@ function createUtteranceBuffer() {
  */
 export function attachTranscriptHandler(socket: WebSocket, deps: TranscriptHandlerDeps): void {
   const buffer = createUtteranceBuffer();
+  // Set once a stop phrase interrupts the current utterance, so any Results
+  // still arriving for it (the tail end of "stop", or words spoken right
+  // after it) don't get accumulated and later flushed as a new chat message
+  // once UtteranceEnd fires. Cleared on that same UtteranceEnd.
+  const discardingRef = { current: false };
 
   socket.onmessage = (event) => {
     const message = parseDeepgramMessage(event.data);
     if (message?.type === 'UtteranceEnd') {
       const text = buffer.flush();
-      if (text) {
+      const wasDiscarding = discardingRef.current;
+      discardingRef.current = false;
+      if (!wasDiscarding && text) {
         deps.onFinalTranscript(text);
       }
       return;
     }
-
-    const transcript = message?.channel?.alternatives?.[0]?.transcript;
-    if (!transcript) {
-      return;
+    if (message?.type === 'Results') {
+      handleTranscriptResult(message, buffer, deps, discardingRef);
     }
-    // Checked against each incoming chunk, not the accumulated utterance: a
-    // short phrase like "stop now" needs to react immediately, not wait out
-    // the UtteranceEnd silence window like a normal dictated sentence would.
-    if (deps.runningRef.current && matchesStopPhrase(transcript)) {
-      deps.onSoftStop?.();
-      return;
-    }
-    // buffer.appendFinal must run unconditionally, as its own statement —
-    // deps.onInterimTranscript?.(buffer.appendFinal(transcript)) looks
-    // equivalent but isn't: optional-call syntax skips evaluating its
-    // arguments entirely when the callee is nullish, and no caller
-    // currently passes onInterimTranscript, so that form silently never
-    // accumulated anything and UtteranceEnd always flushed empty.
-    if (message?.is_final) {
-      const settled = buffer.appendFinal(transcript);
-      deps.onInterimTranscript?.(settled);
-      return;
-    }
-    deps.onInterimTranscript?.(buffer.preview(transcript));
   };
 }
 
@@ -321,7 +352,18 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
   // gesture that triggered start() — otherwise the browser's autoplay
   // policy can leave it suspended, and a worklet graph on a suspended
   // context never runs: the mic silently produces no audio.
-  const audioContext: AudioContext = new AudioContext();
+  //
+  // Requesting TARGET_SAMPLE_RATE explicitly (rather than the device
+  // default) matters beyond autoplay: the worklet's decimation ratio is
+  // `sampleRate / targetSampleRate`, and Deepgram is told the stream is
+  // TARGET_SAMPLE_RATE regardless of what the context actually ran at. A
+  // low-rate input device whose default context rate is *below*
+  // TARGET_SAMPLE_RATE would otherwise produce a ratio < 1 — meaning no
+  // downsampling happens at all — while still being declared as 16kHz,
+  // corrupting/speeding up transcription. Requesting the rate here makes
+  // Web Audio itself resample the input up to it before the worklet ever
+  // sees it.
+  const audioContext: AudioContext = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
   audioContext.resume().catch(() => undefined);
   let workletNode: AudioWorkletNode | null = null;
   let silentGain: GainNode | null = null;
@@ -516,6 +558,11 @@ export function useMicCapture({
   const stop = useCallback(() => {
     generationRef.current += 1;
     cleanup();
+    // Also invalidates a still-connecting attempt: its `finally` block skips
+    // `setIsConnecting(false)` once stale (see `start`'s isStale check,
+    // needed so a *newer* start() isn't clobbered), so nothing else would
+    // ever clear it and the control would stay stuck on "Connecting…".
+    setIsConnecting(false);
   }, [cleanup]);
 
   return { isCapturing, isConnecting, error, start, stop };

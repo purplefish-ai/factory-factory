@@ -143,7 +143,15 @@ describe('attachTranscriptHandler', () => {
     expect(onSoftStop).toHaveBeenCalledTimes(1);
     expect(onFinalTranscript).not.toHaveBeenCalled();
 
-    // The stop phrase itself must not linger in the buffer for the next utterance.
+    // Still part of the same (interrupted) utterance — arriving before its
+    // UtteranceEnd — so it must be discarded too, not enqueued as a new
+    // chat request once that UtteranceEnd fires.
+    sendResults(socket, 'add a new function', true);
+    sendUtteranceEnd(socket);
+    expect(onFinalTranscript).not.toHaveBeenCalled();
+
+    // A genuinely new utterance, after the interrupted one's UtteranceEnd,
+    // is unaffected.
     sendResults(socket, 'add a new function', true);
     sendUtteranceEnd(socket);
     expect(onFinalTranscript).toHaveBeenCalledWith('add a new function');

@@ -56,6 +56,8 @@ const CLAUSE_BOUNDARY_PATTERN = /[.!?](?:\s|$)/;
 const MAX_CLAUSE_LENGTH = 220;
 /** Below this, keep buffering rather than speaking a fragment like "Ok." */
 const MIN_CLAUSE_LENGTH = 12;
+/** See forwardAudioChunk's bounded backpressure policy. */
+const MAX_AUDIO_BUFFERED_BYTES = 1_000_000;
 
 type NarrationKind = 'thinking' | 'final';
 
@@ -205,7 +207,57 @@ class VoiceNarrationService {
       return;
     }
     this.connections.delete(sessionId);
+    // Cancel and drain rather than just deleting the map entry: `speakClause`
+    // closes over `turn` directly, not a `this.turns` lookup, so a queued
+    // clause would otherwise keep opening fresh Deepgram TTS connections for
+    // a session nobody's listening to anymore once the current one settles.
+    const turn = this.turns.get(sessionId);
+    if (turn) {
+      this.resetTurnNarration(sessionId, turn);
+    }
     this.turns.delete(sessionId);
+  }
+
+  /**
+   * True only for the connection currently registered for `sessionId` — a
+   * superseded connection (an earlier /voice socket for a session that has
+   * since reconnected) must not be able to act on its behalf, even though
+   * the socket itself is still open and can still emit messages.
+   */
+  isCurrentConnection(sessionId: string, ws: WebSocket): boolean {
+    return this.connections.get(sessionId) === ws;
+  }
+
+  /**
+   * Immediately cancels and empties any in-flight or queued narration for a
+   * session — called when a spoken "please stop" cancels the turn. Without
+   * this, text already buffered/queued at the moment of cancellation would
+   * still be spoken once the turn settles to IDLE: `handleRuntimeUpdate`'s
+   * IDLE branch drains whatever is left in the queue unconditionally, since
+   * on its own it can't distinguish a cancelled turn from one that finished
+   * normally.
+   */
+  cancelNarration(sessionId: string): void {
+    const turn = this.turns.get(sessionId);
+    if (!turn) {
+      return;
+    }
+    this.resetTurnNarration(sessionId, turn);
+    const ws = this.connections.get(sessionId);
+    if (ws) {
+      const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
+      safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
+    }
+  }
+
+  /** Clears queued/buffered text and cancels any active Deepgram TTS synthesis for a turn. */
+  private resetTurnNarration(sessionId: string, turn: TurnState): void {
+    turn.finalClauseQueue = [];
+    turn.finalTextBuffer = '';
+    turn.thinkingBuffer = '';
+    if (turn.activeTts) {
+      this.clearActiveNarration(sessionId, turn.activeTts);
+    }
   }
 
   private attachBusListener(): void {
@@ -259,6 +311,17 @@ class VoiceNarrationService {
     activity: 'WORKING' | 'IDLE'
   ): void {
     if (activity === 'WORKING') {
+      // A new turn starting doesn't wait for the previous turn's narration
+      // to finish on its own — without this, a still-speaking `activeTts`
+      // both blocks this turn's narration from starting (maybeStartNext-
+      // FinalClause no-ops while it's set) and keeps playing audio for a
+      // turn that's already superseded. Same cutover `handleFinalTextDelta`
+      // does for thinking->final within a turn, applied across turns.
+      if (turn.activeTts) {
+        this.clearActiveNarration(sessionId, turn.activeTts);
+        const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
+        safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
+      }
       turn.finalTextBuffer = '';
       turn.finalClauseQueue = [];
       turn.thinkingBuffer = '';
@@ -525,9 +588,17 @@ class VoiceNarrationService {
             return;
           }
           if (isBinary) {
+            // Deepgram's `Clear` (sent by clearActiveNarration) stops *new*
+            // synthesis, but audio already in flight when the cancellation
+            // was requested keeps arriving until the `Cleared` ack — forward
+            // it and stale reasoning audio can resume playing underneath
+            // the answer that just cut it off.
+            if (active.cancelled) {
+              return;
+            }
             chunkCount += 1;
             byteCount += data.length;
-            this.forwardAudioChunk(ws, data);
+            this.forwardAudioChunk(sessionId, ws, data);
             return;
           }
           const message = this.parseControlMessage(data);
@@ -585,7 +656,21 @@ class VoiceNarrationService {
     }
   }
 
-  private forwardAudioChunk(ws: WebSocket, data: Buffer): void {
+  private forwardAudioChunk(sessionId: string, ws: WebSocket, data: Buffer): void {
+    // A client that can't keep up (slow network, backgrounded tab) would
+    // otherwise let `ws.send` keep enqueueing chunks for the full length of
+    // a long answer, growing server memory with no bound. Dropping chunks
+    // past the threshold is preferable to buffering them server-side or
+    // pausing Deepgram mid-utterance — the client already tolerates gaps
+    // (see the jitter buffer in useVoicePlayback), and a stalled connection
+    // will surface as silence rather than an unbounded backlog.
+    if (ws.bufferedAmount > MAX_AUDIO_BUFFERED_BYTES) {
+      logger.warn('Dropping voice audio chunk — client send buffer is backed up', {
+        sessionId,
+        bufferedAmount: ws.bufferedAmount,
+      });
+      return;
+    }
     const message: VoiceServerMessage = {
       type: 'audio_chunk',
       data: data.toString('base64'),

@@ -23,15 +23,15 @@ export type SoftStopMessage = Extract<VoiceClientMessage, { type: 'soft_stop' }>
 // ============================================================================
 
 /** Base64-encoded linear16 PCM audio chunk synthesized by Deepgram TTS. */
-export interface VoiceAudioChunkMessage {
-  type: 'audio_chunk';
-  data: string;
-}
+export const VoiceAudioChunkMessageSchema = z.object({
+  type: z.literal('audio_chunk'),
+  data: z.string(),
+});
 
-export interface VoiceErrorMessage {
-  type: 'voice_error';
-  message: string;
-}
+export const VoiceErrorMessageSchema = z.object({
+  type: z.literal('voice_error'),
+  message: z.string(),
+});
 
 /**
  * Tells the browser to immediately drop any playing/queued audio for the
@@ -41,11 +41,15 @@ export interface VoiceErrorMessage {
  * happens are already scheduled for local playback and need their own
  * cancellation.
  */
-export interface VoiceClearPlaybackMessage {
-  type: 'clear_playback';
-}
+export const VoiceClearPlaybackMessageSchema = z.object({ type: z.literal('clear_playback') });
 
-export type VoiceServerMessage =
-  | VoiceAudioChunkMessage
-  | VoiceErrorMessage
-  | VoiceClearPlaybackMessage;
+export const VoiceServerMessageSchema = z.discriminatedUnion('type', [
+  VoiceAudioChunkMessageSchema,
+  VoiceErrorMessageSchema,
+  VoiceClearPlaybackMessageSchema,
+]);
+
+export type VoiceAudioChunkMessage = z.infer<typeof VoiceAudioChunkMessageSchema>;
+export type VoiceErrorMessage = z.infer<typeof VoiceErrorMessageSchema>;
+export type VoiceClearPlaybackMessage = z.infer<typeof VoiceClearPlaybackMessageSchema>;
+export type VoiceServerMessage = z.infer<typeof VoiceServerMessageSchema>;

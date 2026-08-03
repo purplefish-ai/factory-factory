@@ -110,7 +110,7 @@ export function VoiceModeToggle({
   // to avoid a circular dependency: useMicCapture needs useVoicePlayback's
   // sendSoftStop/stopPlayback, so useVoicePlayback must be constructed first.
   const [voiceModeOn, setVoiceModeOn] = useState(false);
-  const { isSpeaking, sendSoftStop, stopPlayback } = useVoicePlayback({
+  const { isSpeaking, sendSoftStop, stopPlayback, primeAudioContext } = useVoicePlayback({
     sessionId,
     enabled: voiceModeOn,
   });
@@ -149,6 +149,18 @@ export function VoiceModeToggle({
     }
   }, [error]);
 
+  // An admin can disable voice mode or remove its API key while a workspace
+  // is open. Without this, the toggle just disappears (the early return
+  // below) while an active mic and /voice connection keep running with no
+  // visible control to stop them.
+  const voiceModeAvailable = Boolean(config?.enabled && config.hasApiKey);
+  useEffect(() => {
+    if (config !== undefined && !voiceModeAvailable && (isCapturing || isConnecting)) {
+      stop();
+      setVoiceModeOn(false);
+    }
+  }, [config, voiceModeAvailable, isCapturing, isConnecting, stop]);
+
   const handleClick = useCallback(() => {
     if (isCapturing || isConnecting) {
       // Also cancels a still-connecting attempt rather than leaving the
@@ -156,12 +168,15 @@ export function VoiceModeToggle({
       stop();
       setVoiceModeOn(false);
     } else {
+      // Synchronously inside the click gesture — see primeAudioContext's
+      // definition for why this can't happen later in an effect.
+      primeAudioContext();
       setVoiceModeOn(true);
       void start();
     }
-  }, [isCapturing, isConnecting, start, stop]);
+  }, [isCapturing, isConnecting, start, stop, primeAudioContext]);
 
-  if (!(config?.enabled && config.hasApiKey)) {
+  if (!voiceModeAvailable) {
     return null;
   }
 
@@ -174,7 +189,12 @@ export function VoiceModeToggle({
         variant={isCapturing ? 'default' : 'outline'}
         size="sm"
         className="shrink-0"
-        disabled={disabled || !sessionId}
+        // An active or connecting capture must stay clickable regardless of
+        // `disabled`/`sessionId` — it's the only control that calls stop(),
+        // and losing the chat connection (or session id) must not strand
+        // the mic running with no way to turn it off. Reserve the disabled
+        // state for starting a new session.
+        disabled={!(isCapturing || isConnecting) && (disabled || !sessionId)}
         title={status.title}
         onClick={handleClick}
       >

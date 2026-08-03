@@ -235,10 +235,14 @@ const mockUserSettings: UserSettings = {
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
   ratchetPermissions: 'YOLO',
-  voiceModeEnabled: false,
+  // Non-default values — an export/import test that only ever exercises
+  // defaults can't tell a real persisted preference from a value the
+  // schema's default happened to backfill (see the voiceModeEnabled et al.
+  // assertions below).
+  voiceModeEnabled: true,
   deepgramApiKeyEncrypted: null,
-  voiceTtsModel: 'aura-2-thalia-en',
-  voiceTtsSpeed: 1,
+  voiceTtsModel: 'aura-2-apollo-en',
+  voiceTtsSpeed: 1.3,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
@@ -364,6 +368,11 @@ function createImportData(
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
         ratchetPermissions: 'YOLO',
+        // Non-default so the import test below actually exercises restoring
+        // a persisted preference, not just the schema's own default.
+        voiceModeEnabled: true,
+        voiceTtsModel: 'aura-2-apollo-en',
+        voiceTtsSpeed: 1.3,
       },
       ...overrides,
     },
@@ -404,9 +413,9 @@ describe('DataBackupService', () => {
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
-          voiceModeEnabled: false,
-          voiceTtsModel: 'aura-2-thalia-en',
-          voiceTtsSpeed: 1,
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 1.3,
         })
       );
       // The Deepgram API key is a secret, not a preference — it must never
@@ -648,9 +657,9 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
-          voiceModeEnabled: false,
-          voiceTtsModel: 'aura-2-thalia-en',
-          voiceTtsSpeed: 1,
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 1.3,
         }),
       });
       // The Deepgram API key is never part of the export, so a restore

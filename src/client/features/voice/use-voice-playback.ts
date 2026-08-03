@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import {
+  type VoiceServerMessage,
+  VoiceServerMessageSchema,
+} from '@/shared/websocket/voice-message.schema';
 
 /** Must match TTS_SAMPLE_RATE in voice-narration.service.ts. */
 const PLAYBACK_SAMPLE_RATE = 24_000;
@@ -31,33 +36,6 @@ const JITTER_BUFFER_SECONDS = 0.3;
  */
 const COALESCE_WINDOW_MS = 120;
 
-interface AudioChunkMessage {
-  type: 'audio_chunk';
-  data: string;
-}
-
-interface ClearPlaybackMessage {
-  type: 'clear_playback';
-}
-
-type VoiceServerMessage = AudioChunkMessage | ClearPlaybackMessage;
-
-const VOICE_SERVER_MESSAGE_TYPES = new Set(['audio_chunk', 'clear_playback']);
-
-function parseVoiceServerMessage(data: unknown): VoiceServerMessage | null {
-  if (typeof data !== 'string') {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(data);
-    return parsed && typeof parsed === 'object' && VOICE_SERVER_MESSAGE_TYPES.has(parsed.type)
-      ? parsed
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function decodeBase64ToInt16(base64: string): Int16Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -81,6 +59,12 @@ export interface UseVoicePlaybackResult {
    * independent of whether the interruption also becomes a soft_stop.
    */
   stopPlayback: () => void;
+  /**
+   * Creates (or resumes) the playback AudioContext. Must be called
+   * synchronously from a user gesture (the mic button's click handler) —
+   * see its call site for why.
+   */
+  primeAudioContext: () => void;
 }
 
 /**
@@ -97,7 +81,6 @@ export function useVoicePlayback({
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const activeSourcesRef = useRef(new Set<AudioBufferSourceNode>());
-  const wsRef = useRef<WebSocket | null>(null);
   // Guards against a burst of chunks arriving while suspended each starting
   // their own overlapping resume() call.
   const resumingRef = useRef(false);
@@ -206,43 +189,61 @@ export function useVoicePlayback({
     setIsSpeaking(false);
   }, [cancelCoalescing]);
 
-  const sendSoftStop = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'soft_stop' }));
+  // Creates (or resumes) the AudioContext. Exposed so the mic button's click
+  // handler can call it synchronously, inside the user gesture — otherwise
+  // (e.g. creating it lazily in the effect below, after the `enabled` state
+  // update has propagated through a render) some browsers reject the resume
+  // as not originating from a gesture, and the freshly-created context stays
+  // suspended: buffers scheduled against it play silently with no error, no
+  // audio, no signal anything is wrong.
+  const primeAudioContext = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+      nextStartTimeRef.current = 0;
     }
+    audioContextRef.current.resume().catch(() => undefined);
   }, []);
 
+  const handleMessage = useCallback(
+    (message: VoiceServerMessage) => {
+      if (message.type === 'audio_chunk') {
+        enqueueChunk(decodeBase64ToInt16(message.data));
+      } else if (message.type === 'clear_playback') {
+        stopPlayback();
+      }
+    },
+    [enqueueChunk, stopPlayback]
+  );
+
+  // useWebSocketChannel (built on useWebSocketTransport) gives this
+  // connection automatic reconnection with backoff — a transient drop no
+  // longer permanently strands voice mode with narration silently
+  // discarded server-side and no way to hear it — and, via the default
+  // 'replay' queue policy, queues an outbound soft_stop sent while
+  // momentarily disconnected instead of dropping the interrupt.
+  const url = enabled && sessionId ? buildWebSocketUrl('/voice', { sessionId }) : null;
+  const { send } = useWebSocketChannel({
+    url,
+    schema: VoiceServerMessageSchema,
+    onMessage: handleMessage,
+  });
+
+  const sendSoftStop = useCallback(() => {
+    send({ type: 'soft_stop' });
+  }, [send]);
+
+  // AudioContext lifecycle tracks `enabled`/`sessionId` directly (not the
+  // websocket connection state) so a transient reconnect doesn't tear down
+  // and recreate — and lose the scheduled-playback timeline of — the audio
+  // graph.
   useEffect(() => {
     if (!(enabled && sessionId)) {
       return;
     }
-
-    // Created here — synchronously when voice mode is switched on, close to
-    // the user's click — rather than lazily on the first audio chunk, which
-    // arrives seconds later after transcription + the agent's turn + TTS
-    // synthesis. By then the browser's autoplay policy has typically
-    // suspended a freshly-created AudioContext, and buffers scheduled
-    // against a suspended context play silently with no error.
-    const audioContext = new AudioContext();
-    audioContextRef.current = audioContext;
-    nextStartTimeRef.current = 0;
-    audioContext.resume().catch(() => undefined);
-
-    const ws = new WebSocket(buildWebSocketUrl('/voice', { sessionId }));
-    wsRef.current = ws;
-    ws.onmessage = (event) => {
-      const message = parseVoiceServerMessage(event.data);
-      if (message?.type === 'audio_chunk') {
-        enqueueChunk(decodeBase64ToInt16(message.data));
-      } else if (message?.type === 'clear_playback') {
-        stopPlayback();
-      }
-    };
+    primeAudioContext();
 
     return () => {
       cancelCoalescing();
-      ws.close();
-      wsRef.current = null;
       for (const source of activeSourcesRef.current) {
         try {
           source.stop();
@@ -256,7 +257,7 @@ export function useVoicePlayback({
       nextStartTimeRef.current = 0;
       setIsSpeaking(false);
     };
-  }, [enabled, sessionId, enqueueChunk, stopPlayback, cancelCoalescing]);
+  }, [enabled, sessionId, cancelCoalescing, primeAudioContext]);
 
-  return { isSpeaking, sendSoftStop, stopPlayback };
+  return { isSpeaking, sendSoftStop, stopPlayback, primeAudioContext };
 }

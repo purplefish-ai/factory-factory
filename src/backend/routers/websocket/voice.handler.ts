@@ -51,6 +51,19 @@ export function createVoiceUpgradeHandler(appContext: AppContext) {
           { sessionId }
         );
         if (message?.type === 'soft_stop') {
+          // A second /voice connection for this session replaces this one
+          // in voiceNarrationService without closing the first socket — it
+          // can still emit messages even though it no longer receives
+          // narration, and must not be able to cancel the turn on the
+          // current connection's behalf.
+          if (!voiceNarrationService.isCurrentConnection(sessionId, ws)) {
+            return;
+          }
+          // Cancelled immediately rather than left to the resulting IDLE
+          // transition — that transition alone can't distinguish a cancelled
+          // turn from one that finished normally, so any answer text already
+          // queued/buffered at this point would otherwise still be spoken.
+          voiceNarrationService.cancelNarration(sessionId);
           handleSoftStop(sessionId).catch((error) => {
             logger.error('Failed to handle voice soft_stop', toError(error), { sessionId });
           });

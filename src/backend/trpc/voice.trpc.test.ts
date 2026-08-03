@@ -34,11 +34,13 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+        voiceTtsModel: 'aura-2-thalia-en',
+        voiceTtsSpeed: 1,
       });
 
       const result = await createCaller().getConfig();
 
-      expect(result).toEqual({ enabled: true, hasApiKey: true });
+      expect(result).toEqual(expect.objectContaining({ enabled: true, hasApiKey: true }));
       expect(JSON.stringify(result)).not.toContain('dg_secret');
     });
 
@@ -46,11 +48,28 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: null,
+        voiceTtsModel: 'aura-2-thalia-en',
+        voiceTtsSpeed: 1,
       });
 
       const result = await createCaller().getConfig();
 
-      expect(result).toEqual({ enabled: false, hasApiKey: false });
+      expect(result).toEqual(expect.objectContaining({ enabled: false, hasApiKey: false }));
+    });
+
+    it('also returns the configured TTS model and speed', async () => {
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: 'encrypted:dg_secret',
+        voiceTtsModel: 'aura-2-apollo-en',
+        voiceTtsSpeed: 1.3,
+      });
+
+      const result = await createCaller().getConfig();
+
+      expect(result).toEqual(
+        expect.objectContaining({ ttsModel: 'aura-2-apollo-en', ttsSpeed: 1.3 })
+      );
     });
   });
 
@@ -61,9 +80,15 @@ describe('voiceRouter', () => {
       const result = await createCaller().validateApiKey({ apiKey: 'dg_test' });
 
       expect(result).toEqual({ valid: true });
+      // Exercises the same grant-issuance call mintGrantToken makes, not the
+      // more permissive /v1/projects — a key can list projects but still
+      // lack the scope /v1/auth/grant requires.
       expect(fetch).toHaveBeenCalledWith(
-        'https://api.deepgram.com/v1/projects',
-        expect.objectContaining({ headers: { Authorization: 'Token dg_test' } })
+        'https://api.deepgram.com/v1/auth/grant',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Token dg_test' }),
+        })
       );
     });
 
@@ -93,6 +118,22 @@ describe('voiceRouter', () => {
       expect(result.error).toMatch(/console/i);
     });
 
+    it('returns a friendly, actionable error for a 403 INSUFFICIENT_PERMISSIONS response', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: () =>
+          Promise.resolve(
+            '{"err_code":"INSUFFICIENT_PERMISSIONS","err_msg":"Insufficient permissions"}'
+          ),
+      } as Response);
+
+      const result = await createCaller().validateApiKey({ apiKey: 'scoped_key' });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/Member.*role/);
+    });
+
     it('returns invalid when the request throws', async () => {
       vi.mocked(fetch).mockRejectedValue(new Error('network down'));
 
@@ -107,8 +148,10 @@ describe('voiceRouter', () => {
       await createCaller().validateApiKey({ apiKey: '  dg_test\n' });
 
       expect(fetch).toHaveBeenCalledWith(
-        'https://api.deepgram.com/v1/projects',
-        expect.objectContaining({ headers: { Authorization: 'Token dg_test' } })
+        'https://api.deepgram.com/v1/auth/grant',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Token dg_test' }),
+        })
       );
     });
   });

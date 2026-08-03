@@ -15,7 +15,6 @@ import {
 } from '@/shared/deepgram-voices';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
-const DEEPGRAM_PROJECTS_URL = 'https://api.deepgram.com/v1/projects';
 const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant';
 
 /** Default grant token lifetime: long enough to cover a voice-mode session's
@@ -43,8 +42,7 @@ function getDecryptedApiKey(
  * with a specific fix rather than surfacing an opaque HTTP status:
  *  - 401 INVALID_AUTH: the key itself is wrong, mistyped, or revoked.
  *  - 403 INSUFFICIENT_PERMISSIONS: a real key, but /v1/auth/grant needs
- *    Member scope or higher — a default-scope key passes the plain
- *    /v1/projects check validateApiKey uses but fails here.
+ *    Member scope or higher than the key actually has.
  * Returns null when the error doesn't match either, so callers fall back
  * to their own generic message.
  */
@@ -80,10 +78,19 @@ function friendlyDeepgramAuthError(status: number, detail: string): string | nul
   return null;
 }
 
+/**
+ * Exercises the same /v1/auth/grant call mintGrantToken makes (discarding
+ * the returned token) rather than the more permissive /v1/projects — a key
+ * that passes a plain project-listing check can still lack the Member/
+ * `usage::write` scope grant issuance requires, which would otherwise defer
+ * the real failure until the user actually tries to start a voice session.
+ */
 async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
   try {
-    const response = await fetch(DEEPGRAM_PROJECTS_URL, {
-      headers: { Authorization: `Token ${apiKey}` },
+    const response = await fetch(DEEPGRAM_GRANT_URL, {
+      method: 'POST',
+      headers: { Authorization: `Token ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl_seconds: GRANT_TOKEN_TTL_SECONDS }),
       signal: AbortSignal.timeout(DEEPGRAM_FETCH_TIMEOUT_MS),
     });
     if (response.ok) {

@@ -100,9 +100,18 @@ export function VoiceModeSection() {
 
   const handleSaveKey = () => {
     if (apiKey && validated) {
-      updateConfig.mutate({ enabled, apiKey });
-      setApiKey('');
-      setValidatedKey(null);
+      // Cleared only on success — clearing eagerly would force re-entering
+      // and re-validating the key after a failed save, even though the
+      // validated text the user already typed is still sitting right there.
+      updateConfig.mutate(
+        { enabled, apiKey },
+        {
+          onSuccess: () => {
+            setApiKey('');
+            setValidatedKey(null);
+          },
+        }
+      );
     }
   };
 
@@ -217,7 +226,15 @@ export function VoiceModeSection() {
               value={[speed]}
               onValueChange={([value]) => setSpeed(value ?? DEFAULT_DEEPGRAM_TTS_SPEED)}
               onValueCommit={([value]) =>
-                updateConfig.mutate({ enabled, ttsSpeed: value ?? DEFAULT_DEEPGRAM_TTS_SPEED })
+                updateConfig.mutate(
+                  { enabled, ttsSpeed: value ?? DEFAULT_DEEPGRAM_TTS_SPEED },
+                  {
+                    // A failed save must not leave the slider showing a
+                    // value voice playback isn't actually using — revert to
+                    // whatever's still persisted.
+                    onError: () => setSpeed(config?.ttsSpeed ?? DEFAULT_DEEPGRAM_TTS_SPEED),
+                  }
+                )
               }
               min={DEEPGRAM_TTS_SPEED_MIN}
               max={DEEPGRAM_TTS_SPEED_MAX}

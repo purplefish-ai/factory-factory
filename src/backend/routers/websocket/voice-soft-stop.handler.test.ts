@@ -94,10 +94,12 @@ describe('createVoiceSoftStopHandler', () => {
     const handleSoftStop = createVoiceSoftStopHandler(deps);
 
     await handleSoftStop('session-1');
-    await new Promise((resolve) => setTimeout(resolve, 2));
     await handleSoftStop('session-1');
 
+    expect(deps.sessionLifecycleEventService.record).toHaveBeenCalledTimes(2);
     const [firstCall, secondCall] = deps.sessionLifecycleEventService.record.mock.calls;
+    expect(firstCall?.[0].dedupeKey).toBeDefined();
+    expect(secondCall?.[0].dedupeKey).toBeDefined();
     expect(firstCall?.[0].dedupeKey).not.toEqual(secondCall?.[0].dedupeKey);
   });
 });
