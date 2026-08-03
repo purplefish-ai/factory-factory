@@ -42,19 +42,37 @@ function getVoiceStatus(
   return { label: 'Voice Off', title: 'Enter voice mode' };
 }
 
-/** Small dot + text next to the button clarifying whether speech is actually being captured yet. */
+/**
+ * Small dot + text next to the button clarifying what voice mode is
+ * currently doing. The mic keeps capturing continuously the whole time
+ * voice mode is on (to catch a stop-phrase mid-turn and to detect barge-in),
+ * so "Listening" alone can't distinguish "still waiting for you to finish
+ * talking — nothing sent yet" from "your turn was sent, the agent is now
+ * working on it." `running` (the agent turn's actual status) is what draws
+ * that line: once it flips true, the badge switches to "Thinking" even
+ * though capture never stopped.
+ */
 function VoiceStatusBadge({
   isConnecting,
   isCapturing,
   isSpeaking,
+  isThinking,
 }: {
   isConnecting: boolean;
   isCapturing: boolean;
   isSpeaking: boolean;
+  isThinking: boolean;
 }) {
   if (!(isConnecting || isCapturing)) {
     return null;
   }
+  const label = isConnecting
+    ? 'Connecting'
+    : isSpeaking
+      ? 'Speaking'
+      : isThinking
+        ? 'Thinking'
+        : 'Listening';
   return (
     <output className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <span
@@ -62,10 +80,11 @@ function VoiceStatusBadge({
           'h-1.5 w-1.5 rounded-full',
           isConnecting && 'animate-pulse bg-amber-500',
           isCapturing && isSpeaking && 'animate-pulse bg-blue-500',
-          isCapturing && !isSpeaking && 'bg-green-500'
+          isCapturing && !isSpeaking && isThinking && 'animate-pulse bg-purple-500',
+          isCapturing && !isSpeaking && !isThinking && 'bg-green-500'
         )}
       />
-      {isConnecting ? 'Connecting' : isSpeaking ? 'Speaking' : 'Listening'}
+      {label}
     </output>
   );
 }
@@ -172,6 +191,7 @@ export function VoiceModeToggle({
         isConnecting={isConnecting}
         isCapturing={isCapturing}
         isSpeaking={isSpeaking}
+        isThinking={Boolean(running) && !isSpeaking}
       />
     </div>
   );
