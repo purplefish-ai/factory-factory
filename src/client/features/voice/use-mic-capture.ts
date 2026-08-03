@@ -34,14 +34,22 @@ interface DeepgramResultsMessage {
   channel?: { alternatives?: Array<{ transcript?: string }> };
 }
 
-function parseDeepgramMessage(data: unknown): DeepgramResultsMessage | null {
+interface DeepgramUtteranceEndMessage {
+  type: 'UtteranceEnd';
+}
+
+type DeepgramMessage = DeepgramResultsMessage | DeepgramUtteranceEndMessage;
+
+const DEEPGRAM_MESSAGE_TYPES = new Set(['Results', 'UtteranceEnd']);
+
+function parseDeepgramMessage(data: unknown): DeepgramMessage | null {
   if (typeof data !== 'string') {
     return null;
   }
   try {
     const parsed = JSON.parse(data);
-    if (parsed && typeof parsed === 'object' && parsed.type === 'Results') {
-      return parsed as DeepgramResultsMessage;
+    if (parsed && typeof parsed === 'object' && DEEPGRAM_MESSAGE_TYPES.has(parsed.type)) {
+      return parsed as DeepgramMessage;
     }
   } catch {
     // Not JSON we care about
@@ -119,6 +127,11 @@ function createDeepgramSocket(accessToken: string): WebSocket {
     interim_results: 'true',
     smart_format: 'true',
     vad_events: 'true',
+    // is_final marks a Results message's transcript as settled, but it fires
+    // on every short pause — including a mid-sentence breath — not just when
+    // the user is actually done talking. UtteranceEnd is the separate event
+    // that means "done"; it requires interim_results (above) plus this.
+    utterance_end_ms: '1000',
   });
   // Grant tokens (JWTs from /v1/auth/grant) are rejected as INVALID_AUTH
   // when passed via an ?access_token= query param on this endpoint, despite
@@ -154,33 +167,73 @@ async function setupAudioGraph(
   return { workletNode, silentGain };
 }
 
-interface TranscriptHandlerDeps {
+export interface TranscriptHandlerDeps {
   runningRef: { current: boolean };
   onSoftStop?: () => void;
   onFinalTranscript: (text: string) => void;
   onInterimTranscript?: (text: string) => void;
 }
 
-function attachTranscriptHandler(socket: WebSocket, deps: TranscriptHandlerDeps): void {
+/**
+ * Accumulates Deepgram's settled (`is_final`) transcript chunks across an
+ * utterance, since `is_final` fires on every short pause — including a
+ * mid-sentence breath — not just when the user is actually done talking.
+ */
+function createUtteranceBuffer() {
+  let finalizedText = '';
+  return {
+    /** Appends a settled chunk and returns the buffer so far, for live preview. */
+    appendFinal(transcript: string): string {
+      finalizedText = finalizedText ? `${finalizedText} ${transcript}` : transcript;
+      return finalizedText;
+    },
+    /** Previews the settled buffer plus a still-changing interim chunk. */
+    preview(transcript: string): string {
+      return finalizedText ? `${finalizedText} ${transcript}` : transcript;
+    },
+    /** Clears the buffer and returns what had accumulated, trimmed. */
+    flush(): string {
+      const text = finalizedText.trim();
+      finalizedText = '';
+      return text;
+    },
+  };
+}
+
+/**
+ * `is_final` chunks are accumulated (see `createUtteranceBuffer`) rather
+ * than sent immediately; the accumulated utterance is only handed to
+ * `onFinalTranscript` once Deepgram's separate `UtteranceEnd` event confirms
+ * a real gap (`utterance_end_ms` in `createDeepgramSocket`) — the documented
+ * pattern for distinguishing "paused" from "finished."
+ */
+export function attachTranscriptHandler(socket: WebSocket, deps: TranscriptHandlerDeps): void {
+  const buffer = createUtteranceBuffer();
+
   socket.onmessage = (event) => {
     const message = parseDeepgramMessage(event.data);
+    if (message?.type === 'UtteranceEnd') {
+      const text = buffer.flush();
+      if (text) {
+        deps.onFinalTranscript(text);
+      }
+      return;
+    }
+
     const transcript = message?.channel?.alternatives?.[0]?.transcript;
     if (!transcript) {
       return;
     }
-    // Checked before the interim/final branch below: a short phrase like
-    // "stop now" can arrive directly as Deepgram's final result without
-    // ever appearing in an interim first, so gating this on the interim
-    // path only would silently send it as a chat message instead.
+    // Checked against each incoming chunk, not the accumulated utterance: a
+    // short phrase like "stop now" needs to react immediately, not wait out
+    // the UtteranceEnd silence window like a normal dictated sentence would.
     if (deps.runningRef.current && matchesStopPhrase(transcript)) {
       deps.onSoftStop?.();
       return;
     }
-    if (message?.is_final) {
-      deps.onFinalTranscript(transcript);
-      return;
-    }
-    deps.onInterimTranscript?.(transcript);
+    deps.onInterimTranscript?.(
+      message?.is_final ? buffer.appendFinal(transcript) : buffer.preview(transcript)
+    );
   };
 }
 
