@@ -489,3 +489,86 @@ Diagnosis path (browser `WebSocket` objects intentionally hide the HTTP-level de
 ### 9.2 `language=en` set explicitly
 
 Also added `language=en` to the STT connection params during this investigation (Deepgram has reported project/model access issues for `nova-3` connections that omit it, despite English being documented as the model's default). Cheap, safe, and removes one more unverified assumption — kept even though the root cause above turned out to be the auth mechanism, not this.
+
+---
+
+## 10. Proposed (Unimplemented): Voice-Mode-Aware Response Brevity
+
+Phases 0–4 above are fully implemented and shipped (PR #2126). This section is a **proposal for a follow-on body of work**, not yet built — captured here so the design and the investigation behind it aren't lost between sessions.
+
+### 10.1 Problem
+
+The coding harness (Claude/Codex) often responds with multi-paragraph, structured answers — headers, bullet lists, code blocks — which is the right format for a screen but hard to follow spoken aloud one sentence at a time. Users in voice mode want noticeably shorter, more conversational replies while voice mode is on, reverting to normal-length replies once it's off.
+
+This is a distinct problem from the markdown-stripping already implemented in `voice-narration.service.ts`'s `stripMarkdownForSpeech` — that makes long structured text *speakable*, but doesn't make it *shorter*. Both remain useful together: even a deliberately concise voice-mode reply may still contain the odd bit of markdown, and stripping stays a correctness safety net regardless of how well the brevity instruction is followed.
+
+### 10.2 Why there's no existing hook for this
+
+Investigated end-to-end (backend message-send path) before writing this proposal:
+
+- The ACP protocol's `PromptRequest.prompt` field is exactly `ContentBlock[]` — content blocks that make up **the user's message**. There is no system/role-tagged channel, no analog to an OpenAI `system` message, nothing resembling this CLI's own `<system-reminder>` mechanism. Confirmed against the `@agentclientprotocol/sdk` schema.
+- There *is* a `systemPrompt?: string` field already defined on `AcpClientOptions` (`src/backend/services/session/service/acp/types.ts:19`) that looks like it should be exactly this hook — but it's dead code. Nothing in `acp-runtime-manager.ts` reads it; `connection.newSession({ cwd, mcpServers })` and `connection.loadSession({ sessionId, cwd, mcpServers })` (the only two calls that create/resume a session) don't pass it through. It was likely built for a different purpose (workspace/session-level context — see `SessionPromptBuilder.buildSystemPrompt`, which *does* get threaded into `AcpClientOptions.systemPrompt` at session creation, just never delivered) and isn't a live wire today.
+- So: no protocol-level "mode" flag exists to flip. Any brevity instruction has to travel as ordinary message content, because that's the only channel ACP exposes.
+
+### 10.3 Message-send path today (verified)
+
+```mermaid
+flowchart LR
+    Voice["VoiceModeToggle<br/>onFinalTranscript"] -->|"transcript text"| SendMsg["sendMessage<br/>use-chat-actions.ts:276"]
+    SendMsg -->|"queue_message,<br/>over the chat WS"| ChatWS["/chat WS handler"]
+    ChatWS --> QueueH["queue-message.handler.ts:44<br/>builds and persists the queued message<br/>from the original text"]
+    QueueH --> Dispatch["tryDispatchNextMessage"]
+    Dispatch --> UserInputH["user-input.handler.ts:33<br/>calls sendSessionMessage"]
+    UserInputH --> SendSession["session.service.ts:85<br/>sendSessionMessage<br/>accepts a string or a content-item array"]
+    SendSession -->|"plain string"| ToBlocks1["wrapped as a single text block"]
+    SendSession -->|"content-item array"| ToBlocks2["toContentBlocks<br/>session.service.ts:121"]
+    ToBlocks1 --> Prompt["prompt content blocks"]
+    ToBlocks2 --> Prompt
+    Prompt --> RuntimeMgr["AcpRuntimeManager.sendPrompt<br/>acp-runtime-manager.ts:838"]
+    RuntimeMgr -->|"ACP prompt request"| ACP["ACP subprocess"]
+
+    style QueueH fill:#e1f5fe
+    style SendSession fill:#c8e6c9
+```
+
+The key structural fact this diagram makes visible: **persistence (`queue-message.handler.ts`, what's stored and shown in the chat transcript) and transmission (`sendSessionMessage`, what's actually sent to the agent) are already two separate steps operating on the same text.** `sendSessionMessage`'s `content` parameter accepts either a plain string *or* an `AgentContentItem[]` — when it's an array, `toContentBlocks` turns every item into its own `ContentBlock` in the same `prompt` array sent to ACP. That's the seam: nothing stops `user-input.handler.ts` from calling `sendSessionMessage` with `[{type:'text', text: originalTranscript}, {type:'text', text: BRIEF_INSTRUCTION}]` instead of the bare string — the persisted chat message (built earlier, from the untouched original text) never sees the second block.
+
+### 10.4 Proposed design
+
+1. **Carry a `voiceMode: boolean` flag on the message itself**, not as session-level state. Add it to the `queue_message` (and `user_input`) zod schemas in `src/shared/websocket/chat-message.schema.ts` (mirrors how `settings?: ChatSettingsSchema` already rides along per-message). `VoiceModeToggle` is the only caller that would ever set it `true`; the normal composer never sets it. This means the "until voice mode is over" requirement in the original ask is free — the flag is per-message, so the instant a message *isn't* voice-flagged (typed, or after voice mode is turned off), the agent gets its normal unmodified prompt. No separate "resume normal-length" signal is needed.
+2. **Client**: `use-chat-actions.ts`'s `sendMessage` gains an options parameter (`sendMessage(text, { voiceMode: true })`); `VoiceModeToggle`'s `onFinalTranscript` wraps `props.sendMessage` to always pass `voiceMode: true` rather than being passed directly as it is today.
+3. **Backend**: wherever the message is handed to `sendSessionMessage` (`user-input.handler.ts:33`, and the equivalent call reached via the queued/dispatch path), if the originating message was voice-flagged, pass an `AgentContentItem[]` instead of a bare string: the original text as one `{type:'text'}` block, followed by a second `{type:'text'}` block carrying the brevity instruction. Persistence (`buildQueuedMessage` in `queue-message.handler.ts`) is untouched — it already only ever sees the original text.
+4. **Instruction wording** (starting point, expect iteration — same spirit as the clause-length tuning in §8 Phase 3): *"The user is speaking to you by voice and will hear this reply read aloud via text-to-speech, not read it on screen. Keep the reply to 2–4 short sentences for a straightforward answer. Avoid headers, bullet/numbered lists, tables, and code blocks unless the content genuinely can't be conveyed without them — describe steps in flowing prose instead."*
+5. **Send it on every voice-flagged message, not just the first.** ACP sessions are conversational, but an instruction given once early in a long session is exactly the kind of thing model adherence can drift away from over many turns (same failure mode as any long-context instruction-following). Repeating a short instruction every turn costs a little context but removes that whole class of risk — and it's the only option anyway, since per §10.2 there's no persistent system-level place to put it once.
+
+### 10.5 Alternatives considered
+
+| Option | Description | Rejected because |
+|---|---|---|
+| Append instruction to the *visible* message text | Simplest: just concatenate before both storing and sending. | User's own chat bubble would show a repeated instructional suffix on every voice turn — clutters the transcript, and the agent may visibly acknowledge/quote it back ("Since you're on voice, I'll keep this short..."), which is itself the wrong kind of length. |
+| Wire up the dead `AcpClientOptions.systemPrompt` field, gated on a per-session voice flag | Would feel like "the proper way" if it worked. | It's genuinely not delivered anywhere in the ACP calls today (§10.2) — fixing that is a larger, riskier change to session creation/resumption for a payoff no bigger than the per-message approach, and `systemPrompt` is session-scoped, not message-scoped, so it wouldn't cleanly turn off the instant voice mode is toggled off mid-session without extra plumbing anyway. |
+| Admin-configurable target length / instruction text (mirroring the TTS voice/speed admin controls) | Consistent with existing admin UX for voice tuning. | Reasonable future refinement, not blocking for v1 — start with a single hardcoded instruction, revisit if real usage shows the fixed wording is wrong for some users' workflows. |
+
+### 10.6 Interaction with existing narration (§2.3 / §9)
+
+No change needed to `VoiceNarrationService`'s clause-buffering/streaming narration — shorter responses just mean fewer clauses to narrate per turn, which is strictly easier on that pipeline, not a conflict. `stripMarkdownForSpeech` stays as-is regardless of how well the brevity instruction is followed by the model.
+
+### 10.7 Open questions / risks
+
+1. **Provider-agnostic by construction, but unverified in practice.** The injection point (`sendSessionMessage`/`toContentBlocks`) is shared code upstream of both the Claude and Codex ACP adapters, so this should work identically for both — but neither has been tested against this specific two-block prompt shape and should be verified for each during implementation.
+2. **Instruction adherence is a model-behavior problem, not an architecture problem** — same category as the clause-segmentation tuning in §8 Phase 3. Expect iteration on wording, and expect it to work better for straightforward Q&A turns than for turns where genuine complexity (e.g. explaining a multi-file change) makes brevity actively unhelpful; the instruction as worded above already hedges with "for a straightforward answer" for this reason.
+3. **Attachments/non-text turns**: `content` can already be an `AgentContentItem[]` today (e.g. images) via the `user_input` path with `content` rather than `text`. Need to confirm the append-a-second-block approach composes cleanly when a voice-flagged message somehow also carries attachments (voice mode currently has no attachment UI, so this is likely a non-issue in practice, but the type signature allows it).
+4. **Whether to expose a toggle for this at all, or make it the unconditional behavior of voice mode.** Given the design is a per-message flag with no other UI surface proposed, the simplest v1 is "always on whenever voice mode is on, no separate setting" — matches how markdown-stripping and clause-by-clause narration aren't separately toggleable either.
+
+### 10.8 Rough implementation shape
+
+Not phased like §8 — this is small enough to be one unit of work:
+
+- `src/shared/websocket/chat-message.schema.ts`: add `voiceMode: z.boolean().optional()` to `queue_message` and `user_input` schemas.
+- `src/client/features/chat/use-chat-actions.ts`: `sendMessage` accepts an options param; thread `voiceMode` into the `QueueMessageRequest` sent over the WS.
+- `src/client/features/voice/voice-mode-toggle.tsx`: wrap `props.onFinalTranscript` so it always calls through with `voiceMode: true` instead of being passed as `onFinalTranscript` directly.
+- `src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts` (and the queued-dispatch equivalent): when the message was voice-flagged, build `messageContent` as `AgentContentItem[]` (original text block + instruction block) instead of a bare string before calling `sendSessionMessage`.
+- A new constant for the instruction text, colocated with the other voice-mode constants (e.g. alongside `voice-narration.service.ts` or a new small shared module) so it's one place to tune.
+- Tests: a handler-level test asserting the second content block is present only when `voiceMode: true`, and absent for a normal typed/queued message — the STT `UtteranceEnd` fix earlier in this work shipped a "looks right, isn't" bug (a side effect hidden inside an optional-call argument that never ran in production) past a test suite that happened to always provide the optional callback; don't repeat that mistake here by testing only the case where every optional field is populated.
+
+**Acceptance criteria:** a voice-mode turn produces a visibly shorter response than the same question asked via typed chat in the same session; the chat transcript shows only the user's actual spoken words, never the injected instruction; toggling voice mode off mid-session immediately returns to normal-length responses on the very next message.
