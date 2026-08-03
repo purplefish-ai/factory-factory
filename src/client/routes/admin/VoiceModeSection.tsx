@@ -66,7 +66,13 @@ export function VoiceModeSection() {
   });
 
   const updateConfig = trpc.voice.updateConfig.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Seed the cache with this mutation's own result before invalidating —
+      // otherwise a second mutation (e.g. changing Speed right after
+      // toggling Enable) fires while the invalidated query is still
+      // refetching, reads the stale `config.enabled` closure below, and
+      // resends it, silently reverting the toggle.
+      utils.voice.getConfig.setData(undefined, result);
       utils.voice.getConfig.invalidate();
     },
     onError: (error) => toast.error(`Failed to save: ${error.message}`),

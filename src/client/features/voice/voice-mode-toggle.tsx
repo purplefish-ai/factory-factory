@@ -110,15 +110,17 @@ export function VoiceModeToggle({
   // to avoid a circular dependency: useMicCapture needs useVoicePlayback's
   // sendSoftStop/stopPlayback, so useVoicePlayback must be constructed first.
   const [voiceModeOn, setVoiceModeOn] = useState(false);
-  const { isSpeaking, sendSoftStop, stopPlayback, primeAudioContext } = useVoicePlayback({
-    sessionId,
-    enabled: voiceModeOn,
-  });
+  const { isSpeaking, sendSoftStop, primeAudioContext, beginBargeIn, endBargeIn } =
+    useVoicePlayback({
+      sessionId,
+      enabled: voiceModeOn,
+    });
   const { isCapturing, isConnecting, error, start, stop } = useMicCapture({
     onFinalTranscript,
     running,
     onSoftStop: sendSoftStop,
-    onSpeechDetected: stopPlayback,
+    onSpeechDetected: beginBargeIn,
+    onSpeechEnded: endBargeIn,
   });
 
   useEffect(() => {

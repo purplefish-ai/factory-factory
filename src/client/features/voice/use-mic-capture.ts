@@ -4,14 +4,17 @@ import { SpeechActivityDetector } from './voice-activity';
 
 const DEEPGRAM_STT_URL = 'wss://api.deepgram.com/v1/listen';
 const TARGET_SAMPLE_RATE = 16_000;
-const WORKLET_MODULE_URL = '/audio-worklets/pcm-capture-processor.js';
+const WORKLET_MODULE_URL = `${import.meta.env.BASE_URL}audio-worklets/pcm-capture-processor.js`;
 
 /**
- * Only scanned while the agent turn is running (see `running` option) — this
- * naturally disambiguates a command from normal dictation, since these
- * phrases only mean "stop" mid-turn.
+ * Only scanned while the agent turn is running (see `running` option), and
+ * deliberately limited to command-like, multi-word phrases — a bare "stop"
+ * or "wait" is common enough in ordinary dictation ("wait, that's not what I
+ * meant") that gating on `running` alone doesn't rule out false positives:
+ * the user can still be talking normally, about something else, while a
+ * turn happens to be in flight.
  */
-const STOP_PHRASES = ['stop', 'please stop', 'hold on', 'wait', 'cancel that'];
+const STOP_PHRASES = ['please stop', 'hold on', 'cancel that'];
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -82,6 +85,13 @@ function disposeCaptureResources({
   }
   if (socket) {
     socket.onclose = null;
+    // Also detach onmessage, not just onclose: `close()` is asynchronous, and
+    // a Deepgram Results/UtteranceEnd message already in flight can still
+    // arrive on this socket afterward. Without this, a superseded socket's
+    // handler — bound to the deps/buffer of the capture attempt that created
+    // it — could still process it and flush a stale transcript (or a stale
+    // soft stop) into the current session.
+    socket.onmessage = null;
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'CloseStream' }));
     }
@@ -281,6 +291,8 @@ interface PcmForwarderDeps {
   socketRef: { current: WebSocket | null };
   speechDetectorRef: { current: SpeechActivityDetector | null };
   onSpeechDetected?: () => void;
+  /** Called the instant sustained speech ends (for resuming barge-in-suppressed playback). */
+  onSpeechEnded?: () => void;
 }
 
 function attachPcmForwarder(workletNode: AudioWorkletNode, deps: PcmForwarderDeps): void {
@@ -288,11 +300,15 @@ function attachPcmForwarder(workletNode: AudioWorkletNode, deps: PcmForwarderDep
     if (deps.socketRef.current?.readyState === WebSocket.OPEN) {
       deps.socketRef.current.send(event.data);
     }
-    if (
-      deps.onSpeechDetected &&
-      deps.speechDetectorRef.current?.observe(new Int16Array(event.data))
-    ) {
-      deps.onSpeechDetected();
+    const detector = deps.speechDetectorRef.current;
+    if (!detector) {
+      return;
+    }
+    const wasSpeaking = detector.isSpeaking();
+    if (detector.observe(new Int16Array(event.data))) {
+      deps.onSpeechDetected?.();
+    } else if (wasSpeaking && !detector.isSpeaking()) {
+      deps.onSpeechEnded?.();
     }
   };
 }
@@ -440,6 +456,8 @@ export interface UseMicCaptureOptions {
   onSoftStop?: () => void;
   /** Called the instant sustained speech is detected (for barge-in). */
   onSpeechDetected?: () => void;
+  /** Called the instant sustained speech ends (for resuming barge-in-suppressed playback). */
+  onSpeechEnded?: () => void;
 }
 
 export interface UseMicCaptureResult {
@@ -464,6 +482,7 @@ export function useMicCapture({
   running,
   onSoftStop,
   onSpeechDetected,
+  onSpeechEnded,
 }: UseMicCaptureOptions): UseMicCaptureResult {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -521,6 +540,7 @@ export function useMicCapture({
         onFinalTranscript,
         onInterimTranscript,
         onSpeechDetected,
+        onSpeechEnded,
         socketRef,
         cleanup,
         setError,
@@ -553,6 +573,7 @@ export function useMicCapture({
     onInterimTranscript,
     onSoftStop,
     onSpeechDetected,
+    onSpeechEnded,
   ]);
 
   const stop = useCallback(() => {

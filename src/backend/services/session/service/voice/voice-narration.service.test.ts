@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUserSettingsService = vi.hoisted(() => ({ get: vi.fn() }));
 const mockCryptoService = vi.hoisted(() => ({
@@ -116,6 +116,26 @@ function emitRuntimeUpdate(sessionId: string, activity: 'WORKING' | 'IDLE') {
   });
 }
 
+// Tracked so `afterEach` can unregister anything a failed assertion left
+// behind — each test unregisters its own connections on its success path,
+// but a thrown expectation skips that, leaking a live connection/turn into
+// whichever later test happens to reuse the singleton's shared internal
+// state (e.g. FakeDeepgramSocket.instances).
+const liveConnections: Array<{ sessionId: string; ws: never }> = [];
+
+function register(sessionId: string, ws: never): void {
+  voiceNarrationService.registerConnection(sessionId, ws);
+  liveConnections.push({ sessionId, ws });
+}
+
+function unregister(sessionId: string, ws: never): void {
+  voiceNarrationService.unregisterConnection(sessionId, ws);
+  const index = liveConnections.findIndex((c) => c.sessionId === sessionId && c.ws === ws);
+  if (index !== -1) {
+    liveConnections.splice(index, 1);
+  }
+}
+
 describe('voiceNarrationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -126,6 +146,12 @@ describe('voiceNarrationService', () => {
       voiceTtsModel: 'aura-2-thalia-en',
       voiceTtsSpeed: 1,
     });
+  });
+
+  afterEach(() => {
+    for (const { sessionId, ws } of liveConnections.splice(0)) {
+      voiceNarrationService.unregisterConnection(sessionId, ws);
+    }
   });
 
   it('ignores events for sessions with no registered voice connection', () => {
@@ -140,7 +166,7 @@ describe('voiceNarrationService', () => {
 
   it('does not throw when a malformed event reaches the listener (fail-closed)', () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-malformed', clientWs as never);
+    register('sess-malformed', clientWs as never);
 
     expect(() =>
       sessionEventBus.emit(SESSION_OUTBOUND_EVENT, {
@@ -149,18 +175,18 @@ describe('voiceNarrationService', () => {
       })
     ).not.toThrow();
 
-    voiceNarrationService.unregisterConnection('sess-malformed', clientWs as never);
+    unregister('sess-malformed', clientWs as never);
   });
 
   it('ignores a stale unregister from a replaced connection, keeping the newer one registered', async () => {
     const firstWs = createFakeClientWs();
     const secondWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-reconnect', firstWs as never);
-    voiceNarrationService.registerConnection('sess-reconnect', secondWs as never);
+    register('sess-reconnect', firstWs as never);
+    register('sess-reconnect', secondWs as never);
 
     // The first connection's 'close' fires after it was already replaced by
     // a reconnect — this must not wipe the second connection's state.
-    voiceNarrationService.unregisterConnection('sess-reconnect', firstWs as never);
+    unregister('sess-reconnect', firstWs as never);
 
     emitDelta('sess-reconnect', {
       type: 'session_delta',
@@ -175,12 +201,12 @@ describe('voiceNarrationService', () => {
     expect(secondWs.send).toHaveBeenCalled();
     expect(firstWs.send).not.toHaveBeenCalled();
 
-    voiceNarrationService.unregisterConnection('sess-reconnect', secondWs as never);
+    unregister('sess-reconnect', secondWs as never);
   });
 
   it('resets accumulated text when a new turn starts (activity WORKING)', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-reset', clientWs as never);
+    register('sess-reset', clientWs as never);
 
     emitDelta('sess-reset', {
       type: 'session_delta',
@@ -193,7 +219,7 @@ describe('voiceNarrationService', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(FakeDeepgramSocket.instances).toHaveLength(0);
 
-    voiceNarrationService.unregisterConnection('sess-reset', clientWs as never);
+    unregister('sess-reset', clientWs as never);
   });
 
   it('does not synthesize speech when voice mode is disabled', async () => {
@@ -202,7 +228,7 @@ describe('voiceNarrationService', () => {
       deepgramApiKeyEncrypted: 'enc:dg_secret',
     });
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-disabled', clientWs as never);
+    register('sess-disabled', clientWs as never);
 
     emitDelta('sess-disabled', {
       type: 'session_delta',
@@ -213,12 +239,12 @@ describe('voiceNarrationService', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(FakeDeepgramSocket.instances).toHaveLength(0);
 
-    voiceNarrationService.unregisterConnection('sess-disabled', clientWs as never);
+    unregister('sess-disabled', clientWs as never);
   });
 
   it('synthesizes and forwards audio for the final answer on turn-complete', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-speak', clientWs as never);
+    register('sess-speak', clientWs as never);
 
     emitDelta('sess-speak', {
       type: 'session_delta',
@@ -256,28 +282,28 @@ describe('voiceNarrationService', () => {
     ttsSocket.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
     expect(JSON.parse(ttsSocket.sentMessages[2] as string)).toEqual({ type: 'Close' });
 
-    voiceNarrationService.unregisterConnection('sess-speak', clientWs as never);
+    unregister('sess-speak', clientWs as never);
   });
 
   it('isCurrentConnection is true only for the connection currently registered', () => {
     const firstWs = createFakeClientWs();
     const secondWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-current', firstWs as never);
+    register('sess-current', firstWs as never);
 
     expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(true);
 
     // A reconnect replaces the registered connection — the superseded socket
     // must no longer read as current, even though it's still open.
-    voiceNarrationService.registerConnection('sess-current', secondWs as never);
+    register('sess-current', secondWs as never);
     expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(false);
     expect(voiceNarrationService.isCurrentConnection('sess-current', secondWs as never)).toBe(true);
 
-    voiceNarrationService.unregisterConnection('sess-current', secondWs as never);
+    unregister('sess-current', secondWs as never);
   });
 
   it('cancelNarration clears the active narration and queued clauses, and clears client playback', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-cancel', clientWs as never);
+    register('sess-cancel', clientWs as never);
 
     emitDelta('sess-cancel', {
       type: 'session_delta',
@@ -305,12 +331,12 @@ describe('voiceNarrationService', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(FakeDeepgramSocket.instances).toHaveLength(1);
 
-    voiceNarrationService.unregisterConnection('sess-cancel', clientWs as never);
+    unregister('sess-cancel', clientWs as never);
   });
 
   it('cancels in-flight narration and clears client playback when a new turn starts mid-speech', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-new-turn', clientWs as never);
+    register('sess-new-turn', clientWs as never);
 
     emitDelta('sess-new-turn', {
       type: 'session_delta',
@@ -329,12 +355,12 @@ describe('voiceNarrationService', () => {
     expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Clear' });
     expect(clientWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'clear_playback' }));
 
-    voiceNarrationService.unregisterConnection('sess-new-turn', clientWs as never);
+    unregister('sess-new-turn', clientWs as never);
   });
 
   it('unregisterConnection cancels active narration and drains the queue', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-unregister', clientWs as never);
+    register('sess-unregister', clientWs as never);
 
     emitDelta('sess-unregister', {
       type: 'session_delta',
@@ -348,7 +374,7 @@ describe('voiceNarrationService', () => {
     const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
     active.emit('open');
 
-    voiceNarrationService.unregisterConnection('sess-unregister', clientWs as never);
+    unregister('sess-unregister', clientWs as never);
 
     // Settling the now-cancelled clause must not open a fresh Deepgram
     // connection for the queued second clause — nobody's listening anymore.
@@ -359,7 +385,7 @@ describe('voiceNarrationService', () => {
 
   it('drops audio chunks once the client send buffer is backed up', async () => {
     const clientWs = createFakeClientWs(2_000_000);
-    voiceNarrationService.registerConnection('sess-backpressure', clientWs as never);
+    register('sess-backpressure', clientWs as never);
 
     emitDelta('sess-backpressure', {
       type: 'session_delta',
@@ -374,12 +400,12 @@ describe('voiceNarrationService', () => {
 
     expect(clientWs.send).not.toHaveBeenCalled();
 
-    voiceNarrationService.unregisterConnection('sess-backpressure', clientWs as never);
+    unregister('sess-backpressure', clientWs as never);
   });
 
   it('drops binary audio frames arriving for a narration already cancelled', async () => {
     const clientWs = createFakeClientWs();
-    voiceNarrationService.registerConnection('sess-cancelled-audio', clientWs as never);
+    register('sess-cancelled-audio', clientWs as never);
 
     emitDelta('sess-cancelled-audio', {
       type: 'session_delta',
@@ -399,13 +425,13 @@ describe('voiceNarrationService', () => {
     socket.emit('message', Buffer.from([9, 9, 9]), true);
     expect(clientWs.send).not.toHaveBeenCalled();
 
-    voiceNarrationService.unregisterConnection('sess-cancelled-audio', clientWs as never);
+    unregister('sess-cancelled-audio', clientWs as never);
   });
 
   describe('markdown stripping', () => {
     it('strips bold, italic, and inline code before speaking a final-answer clause', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-markdown', clientWs as never);
+      register('sess-markdown', clientWs as never);
 
       emitDelta('sess-markdown', {
         type: 'session_delta',
@@ -424,12 +450,12 @@ describe('voiceNarrationService', () => {
         text: 'This is bold, this is italic, and this is code.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-markdown', clientWs as never);
+      unregister('sess-markdown', clientWs as never);
     });
 
     it('strips links, headers, and list markers before speaking a thinking clause', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-markdown-2', clientWs as never);
+      register('sess-markdown-2', clientWs as never);
 
       emitThinking('sess-markdown-2', '# Plan\n- Check the [docs](https://example.com) first. ');
 
@@ -442,12 +468,12 @@ describe('voiceNarrationService', () => {
         text: 'Plan\nCheck the docs first.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-markdown-2', clientWs as never);
+      unregister('sess-markdown-2', clientWs as never);
     });
 
     it('does not treat spaced asterisks (e.g. multiplication) as italic markdown', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-math', clientWs as never);
+      register('sess-math', clientWs as never);
 
       emitDelta('sess-math', {
         type: 'session_delta',
@@ -463,14 +489,14 @@ describe('voiceNarrationService', () => {
         text: 'The result is 1 * 2 * 3 = 6.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-math', clientWs as never);
+      unregister('sess-math', clientWs as never);
     });
   });
 
   describe('selective thinking narration', () => {
     it('speaks a thinking clause once a sentence boundary is reached', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-thinking-1', clientWs as never);
+      register('sess-thinking-1', clientWs as never);
 
       emitThinking('sess-thinking-1', 'Let me consider this problem carefully. ');
 
@@ -482,12 +508,12 @@ describe('voiceNarrationService', () => {
         text: 'Let me consider this problem carefully.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-thinking-1', clientWs as never);
+      unregister('sess-thinking-1', clientWs as never);
     });
 
     it('drops a clause that arrives while a narration is already in flight', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-thinking-2', clientWs as never);
+      register('sess-thinking-2', clientWs as never);
 
       emitThinking('sess-thinking-2', 'First thought completed here. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
@@ -505,12 +531,12 @@ describe('voiceNarrationService', () => {
       emitThinking('sess-thinking-2', 'Third thought completed here. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
 
-      voiceNarrationService.unregisterConnection('sess-thinking-2', clientWs as never);
+      unregister('sess-thinking-2', clientWs as never);
     });
 
     it('cuts off in-flight thinking narration and switches to the final answer', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-thinking-3', clientWs as never);
+      register('sess-thinking-3', clientWs as never);
 
       emitThinking('sess-thinking-3', 'Reasoning about the approach now. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
@@ -557,12 +583,12 @@ describe('voiceNarrationService', () => {
         text: 'The answer is 42.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-thinking-3', clientWs as never);
+      unregister('sess-thinking-3', clientWs as never);
     });
 
     it('claims activeTts synchronously so a synchronous burst of thinking deltas cannot spawn duplicate sockets', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-burst', clientWs as never);
+      register('sess-burst', clientWs as never);
 
       // Emitted back-to-back, synchronously — before the async settings
       // lookup inside speakClause has had any chance to resolve,
@@ -575,12 +601,12 @@ describe('voiceNarrationService', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(FakeDeepgramSocket.instances).toHaveLength(1);
 
-      voiceNarrationService.unregisterConnection('sess-burst', clientWs as never);
+      unregister('sess-burst', clientWs as never);
     });
 
     it('does not speak stale thinking text if the socket is still connecting when the final answer cuts it off', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-thinking-connecting', clientWs as never);
+      register('sess-thinking-connecting', clientWs as never);
 
       emitThinking('sess-thinking-connecting', 'Reasoning about the approach now. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
@@ -600,12 +626,12 @@ describe('voiceNarrationService', () => {
       thinkingSocket.emit('open');
       expect(thinkingSocket.sentMessages).toHaveLength(0);
 
-      voiceNarrationService.unregisterConnection('sess-thinking-connecting', clientWs as never);
+      unregister('sess-thinking-connecting', clientWs as never);
     });
 
     it('keeps buffering past a too-short opening sentence and speaks the combined clause', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-thinking-short', clientWs as never);
+      register('sess-thinking-short', clientWs as never);
 
       emitThinking('sess-thinking-short', 'Ok. ');
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -620,12 +646,12 @@ describe('voiceNarrationService', () => {
         text: 'Ok. Let me look at the file and explain what it does.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-thinking-short', clientWs as never);
+      unregister('sess-thinking-short', clientWs as never);
     });
 
     it('does not leave activeTts stuck and still drains the queue when the settings lookup throws', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-throws', clientWs as never);
+      register('sess-throws', clientWs as never);
       mockUserSettingsService.get.mockRejectedValueOnce(new Error('boom'));
 
       emitThinking('sess-throws', 'This will fail to look up settings. ');
@@ -643,14 +669,14 @@ describe('voiceNarrationService', () => {
       emitThinking('sess-throws', 'This one should work fine now. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
 
-      voiceNarrationService.unregisterConnection('sess-throws', clientWs as never);
+      unregister('sess-throws', clientWs as never);
     });
   });
 
   describe('incremental final-answer narration', () => {
     it('starts speaking the first sentence before the rest of a long answer has arrived', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-stream', clientWs as never);
+      register('sess-stream', clientWs as never);
 
       emitDelta('sess-stream', {
         type: 'session_delta',
@@ -669,12 +695,12 @@ describe('voiceNarrationService', () => {
         text: 'This is the first sentence.',
       });
 
-      voiceNarrationService.unregisterConnection('sess-stream', clientWs as never);
+      unregister('sess-stream', clientWs as never);
     });
 
     it('queues later clauses rather than dropping them, and speaks all of them in order', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-queue', clientWs as never);
+      register('sess-queue', clientWs as never);
 
       emitDelta('sess-queue', {
         type: 'session_delta',
@@ -703,12 +729,12 @@ describe('voiceNarrationService', () => {
       third.emit('open');
       expect(JSON.parse(third.sentMessages[0] as string).text).toBe('Sentence three is here.');
 
-      voiceNarrationService.unregisterConnection('sess-queue', clientWs as never);
+      unregister('sess-queue', clientWs as never);
     });
 
     it('speaks a trailing fragment with no sentence-ending punctuation once the turn completes', async () => {
       const clientWs = createFakeClientWs();
-      voiceNarrationService.registerConnection('sess-trailing', clientWs as never);
+      register('sess-trailing', clientWs as never);
 
       emitDelta('sess-trailing', {
         type: 'session_delta',
@@ -729,7 +755,7 @@ describe('voiceNarrationService', () => {
         text: 'no punctuation at the end',
       });
 
-      voiceNarrationService.unregisterConnection('sess-trailing', clientWs as never);
+      unregister('sess-trailing', clientWs as never);
     });
   });
 });

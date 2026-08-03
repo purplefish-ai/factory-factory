@@ -40,6 +40,11 @@ export class SpeechActivityDetector {
     return false;
   }
 
+  /** Whether the most recent `observe()` call is still within sustained speech. */
+  isSpeaking(): boolean {
+    return this.speaking;
+  }
+
   reset(): void {
     this.loudFrameStreak = 0;
     this.speaking = false;

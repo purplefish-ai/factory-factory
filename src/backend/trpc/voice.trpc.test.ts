@@ -201,6 +201,32 @@ describe('voiceRouter', () => {
 
       expect(mockCryptoService.encrypt).toHaveBeenCalledWith('dg_new');
     });
+
+    it('persists and returns ttsModel and ttsSpeed when provided', async () => {
+      mockUserSettingsQueryService.update.mockResolvedValue(undefined);
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: 'encrypted:dg_existing',
+        voiceTtsModel: 'aura-2-luna-en',
+        voiceTtsSpeed: 1.2,
+      });
+
+      const result = await createCaller().updateConfig({
+        enabled: true,
+        ttsModel: 'aura-2-luna-en',
+        ttsSpeed: 1.2,
+      });
+
+      expect(mockUserSettingsQueryService.update).toHaveBeenCalledWith({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: undefined,
+        voiceTtsModel: 'aura-2-luna-en',
+        voiceTtsSpeed: 1.2,
+      });
+      expect(result).toEqual(
+        expect.objectContaining({ ttsModel: 'aura-2-luna-en', ttsSpeed: 1.2 })
+      );
+    });
   });
 
   describe('mintGrantToken', () => {
@@ -294,8 +320,9 @@ describe('voiceRouter', () => {
         text: () => Promise.resolve('{"err_code":"INVALID_AUTH","err_msg":"Invalid credentials."}'),
       } as Response);
 
-      await expect(createCaller().mintGrantToken()).rejects.toThrow(/invalid/i);
-      await expect(createCaller().mintGrantToken()).rejects.toThrow(/console/i);
+      const rejection = createCaller().mintGrantToken();
+      await expect(rejection).rejects.toThrow(/invalid/i);
+      await expect(rejection).rejects.toThrow(/console/i);
     });
 
     it('throws a friendly, actionable message for a 400 BAD_REQUEST response (malformed/whitespace-padded key)', async () => {

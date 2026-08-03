@@ -201,7 +201,10 @@ export const voiceRouter = router({
       );
     }
 
-    const body = (await response.json()) as { access_token: string; expires_in?: number };
+    const body = (await response.json()) as { access_token?: unknown; expires_in?: number };
+    if (typeof body.access_token !== 'string' || !body.access_token) {
+      throw new Error('Deepgram grant response did not include an access token');
+    }
     return {
       accessToken: body.access_token,
       expiresInSeconds: body.expires_in ?? GRANT_TOKEN_TTL_SECONDS,

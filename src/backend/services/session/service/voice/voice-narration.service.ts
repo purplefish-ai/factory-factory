@@ -33,7 +33,7 @@
 
 import type { UserSettings } from '@prisma-gen/client';
 import WebSocket from 'ws';
-import { safeSend } from '@/backend/lib/websocket-send';
+import { safeSend, sendStreamOutput } from '@/backend/lib/websocket-send';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
@@ -56,8 +56,6 @@ const CLAUSE_BOUNDARY_PATTERN = /[.!?](?:\s|$)/;
 const MAX_CLAUSE_LENGTH = 220;
 /** Below this, keep buffering rather than speaking a fragment like "Ok." */
 const MIN_CLAUSE_LENGTH = 12;
-/** See forwardAudioChunk's bounded backpressure policy. */
-const MAX_AUDIO_BUFFERED_BYTES = 1_000_000;
 
 type NarrationKind = 'thinking' | 'final';
 
@@ -102,6 +100,16 @@ interface TurnState {
    * caching a superseded turn's credentials/preferences into the new turn.
    */
   generation: number;
+  /**
+   * Set by cancelNarration ("please stop") and held until the next WORKING
+   * transition — not just cleared alongside the buffers it resets. ACP
+   * cancellation is asynchronous, so a final or thinking delta already in
+   * flight when the user spoke can still arrive afterward; without this flag
+   * surviving past the reset, that delta would be treated as ordinary new
+   * content and narrated once the current socket settles, un-cancelling a
+   * turn the user just stopped.
+   */
+  stopped: boolean;
 }
 
 function createTurnState(): TurnState {
@@ -113,6 +121,7 @@ function createTurnState(): TurnState {
     activeTts: null,
     voiceSettings: null,
     generation: 0,
+    stopped: false,
   };
 }
 
@@ -191,6 +200,17 @@ class VoiceNarrationService {
   private busListenerAttached = false;
 
   registerConnection(sessionId: string, ws: WebSocket): void {
+    // A reconnect for a session that already has a connection registered
+    // replaces both map entries below without the old connection's 'close'
+    // event ever firing first (that fires later, and unregisterConnection's
+    // stale-close guard then no-ops since `ws` no longer matches). Without
+    // this, the previous TurnState's Deepgram socket and queued clauses are
+    // orphaned — never cancelled, still burning Deepgram quota and forwarding
+    // audio to a `ws` that's already been replaced.
+    const previousTurn = this.turns.get(sessionId);
+    if (previousTurn) {
+      this.resetTurnNarration(sessionId, previousTurn);
+    }
     this.connections.set(sessionId, ws);
     this.turns.set(sessionId, createTurnState());
     this.attachBusListener();
@@ -242,6 +262,8 @@ class VoiceNarrationService {
     if (!turn) {
       return;
     }
+    // Held until the next WORKING transition — see TurnState.stopped.
+    turn.stopped = true;
     this.resetTurnNarration(sessionId, turn);
     const ws = this.connections.get(sessionId);
     if (ws) {
@@ -328,6 +350,15 @@ class VoiceNarrationService {
       turn.suppressThinking = false;
       turn.voiceSettings = null;
       turn.generation += 1;
+      turn.stopped = false;
+      return;
+    }
+
+    if (turn.stopped) {
+      // A "please stop" landed and ACP cancellation is still settling — a
+      // trailing delta that arrived just before this IDLE must not be
+      // flushed and spoken now. Left set until the next WORKING transition.
+      logger.info('Turn complete after cancellation — nothing to speak', { sessionId });
       return;
     }
 
@@ -356,6 +387,11 @@ class VoiceNarrationService {
     turn: TurnState,
     text: string
   ): void {
+    if (turn.stopped) {
+      // See TurnState.stopped: a delta arriving after "please stop" while
+      // ACP cancellation is still in flight must not be narrated.
+      return;
+    }
     if (!turn.suppressThinking) {
       // First final-answer chunk this turn: the agent is done thinking, so cut
       // off any in-flight thinking narration and stop buffering more of it.
@@ -408,6 +444,11 @@ class VoiceNarrationService {
     turn: TurnState,
     deltaText: string
   ): void {
+    if (turn.stopped) {
+      // See TurnState.stopped: a delta arriving after "please stop" while
+      // ACP cancellation is still in flight must not be narrated.
+      return;
+    }
     if (turn.suppressThinking || turn.activeTts) {
       // Either past the thinking phase for this turn, or already speaking —
       // drop the clause rather than let a backlog build up.
@@ -418,7 +459,12 @@ class VoiceNarrationService {
     if (!extracted) {
       return;
     }
-    turn.thinkingBuffer = extracted.remainder;
+    // Thinking narration is drop-when-busy, not queued (see the guard at the
+    // top of this method): a delta spanning more than one sentence must not
+    // leave the remainder sitting in `thinkingBuffer` while the first clause
+    // speaks, or it either gets silently stranded (no later delta arrives) or
+    // gets glued onto unrelated later reasoning (one does).
+    turn.thinkingBuffer = '';
     this.startNarration(sessionId, ws, turn, extracted.clause, 'thinking');
   }
 
@@ -663,19 +709,20 @@ class VoiceNarrationService {
     // past the threshold is preferable to buffering them server-side or
     // pausing Deepgram mid-utterance — the client already tolerates gaps
     // (see the jitter buffer in useVoicePlayback), and a stalled connection
-    // will surface as silence rather than an unbounded backlog.
-    if (ws.bufferedAmount > MAX_AUDIO_BUFFERED_BYTES) {
-      logger.warn('Dropping voice audio chunk — client send buffer is backed up', {
-        sessionId,
-        bufferedAmount: ws.bufferedAmount,
-      });
-      return;
-    }
+    // will surface as silence rather than an unbounded backlog. Reuses the
+    // same bounded, one-warning-per-congestion-window sender as other
+    // high-volume WebSocket streams, rather than a bespoke threshold check
+    // that would log once per dropped frame.
     const message: VoiceServerMessage = {
       type: 'audio_chunk',
       data: data.toString('base64'),
     };
-    safeSend(ws, JSON.stringify(message), logger, 'voice audio chunk');
+    sendStreamOutput(
+      ws,
+      JSON.stringify(message),
+      logger,
+      `voice audio chunk (session ${sessionId})`
+    );
   }
 }
 

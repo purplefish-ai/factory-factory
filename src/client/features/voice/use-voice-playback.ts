@@ -65,6 +65,17 @@ export interface UseVoicePlaybackResult {
    * see its call site for why.
    */
   primeAudioContext: () => void;
+  /**
+   * Barge-in start: stops current playback (like `stopPlayback`) and, unlike
+   * it, also suppresses further `audio_chunk`s until `endBargeIn()` — the
+   * server-side narration for the interrupted clause keeps streaming chunks
+   * for a beat after the client detects speech, and without suppression
+   * those chunks would immediately restart playback on top of the user still
+   * talking.
+   */
+  beginBargeIn: () => void;
+  /** Barge-in end: resumes accepting `audio_chunk`s once the user stops talking. */
+  endBargeIn: () => void;
 }
 
 /**
@@ -84,6 +95,11 @@ export function useVoicePlayback({
   // Guards against a burst of chunks arriving while suspended each starting
   // their own overlapping resume() call.
   const resumingRef = useRef(false);
+  // Set for the duration of a barge-in (see beginBargeIn/endBargeIn) so
+  // audio_chunks that keep arriving from the interrupted clause's still-
+  // streaming server-side narration are dropped instead of restarting
+  // playback on top of the user's speech.
+  const suppressedRef = useRef(false);
   // Chunks received but not yet merged into a scheduled buffer — see
   // COALESCE_WINDOW_MS.
   const pendingChunksRef = useRef<Int16Array[]>([]);
@@ -207,6 +223,9 @@ export function useVoicePlayback({
   const handleMessage = useCallback(
     (message: VoiceServerMessage) => {
       if (message.type === 'audio_chunk') {
+        if (suppressedRef.current) {
+          return;
+        }
         enqueueChunk(decodeBase64ToInt16(message.data));
       } else if (message.type === 'clear_playback') {
         stopPlayback();
@@ -214,6 +233,15 @@ export function useVoicePlayback({
     },
     [enqueueChunk, stopPlayback]
   );
+
+  const beginBargeIn = useCallback(() => {
+    suppressedRef.current = true;
+    stopPlayback();
+  }, [stopPlayback]);
+
+  const endBargeIn = useCallback(() => {
+    suppressedRef.current = false;
+  }, []);
 
   // useWebSocketChannel (built on useWebSocketTransport) gives this
   // connection automatic reconnection with backoff — a transient drop no
@@ -255,9 +283,10 @@ export function useVoicePlayback({
       audioContextRef.current?.close().catch(() => undefined);
       audioContextRef.current = null;
       nextStartTimeRef.current = 0;
+      suppressedRef.current = false;
       setIsSpeaking(false);
     };
   }, [enabled, sessionId, cancelCoalescing, primeAudioContext]);
 
-  return { isSpeaking, sendSoftStop, stopPlayback, primeAudioContext };
+  return { isSpeaking, sendSoftStop, stopPlayback, primeAudioContext, beginBargeIn, endBargeIn };
 }

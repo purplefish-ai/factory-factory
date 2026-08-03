@@ -4,9 +4,8 @@ import { attachTranscriptHandler, matchesStopPhrase } from './use-mic-capture';
 describe('matchesStopPhrase', () => {
   it('matches common stop phrases regardless of case', () => {
     expect(matchesStopPhrase('Please stop')).toBe(true);
-    expect(matchesStopPhrase('STOP')).toBe(true);
+    expect(matchesStopPhrase('PLEASE STOP')).toBe(true);
     expect(matchesStopPhrase('hold on a second')).toBe(true);
-    expect(matchesStopPhrase('wait')).toBe(true);
     expect(matchesStopPhrase('cancel that')).toBe(true);
   });
 
@@ -21,6 +20,15 @@ describe('matchesStopPhrase', () => {
   it('does not match words that merely contain a stop phrase as a substring', () => {
     expect(matchesStopPhrase('what does this stopwatch component do')).toBe(false);
     expect(matchesStopPhrase('please await the response')).toBe(false);
+  });
+
+  it('does not match bare generic words that are common in ordinary dictation', () => {
+    // "stop" and "wait" alone were dropped from the phrase list: they're
+    // common enough in normal speech ("wait, that's not what I meant") that
+    // matching them mid-turn caused unintended cancellations.
+    expect(matchesStopPhrase('stop')).toBe(false);
+    expect(matchesStopPhrase('wait')).toBe(false);
+    expect(matchesStopPhrase("wait, that's not what I meant")).toBe(false);
   });
 
   it('does not match an empty transcript', () => {

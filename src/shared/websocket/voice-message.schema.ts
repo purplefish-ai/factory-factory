@@ -28,11 +28,6 @@ export const VoiceAudioChunkMessageSchema = z.object({
   data: z.string(),
 });
 
-export const VoiceErrorMessageSchema = z.object({
-  type: z.literal('voice_error'),
-  message: z.string(),
-});
-
 /**
  * Tells the browser to immediately drop any playing/queued audio for the
  * current turn. Sent when in-flight thinking narration is cut short by the
@@ -45,11 +40,9 @@ export const VoiceClearPlaybackMessageSchema = z.object({ type: z.literal('clear
 
 export const VoiceServerMessageSchema = z.discriminatedUnion('type', [
   VoiceAudioChunkMessageSchema,
-  VoiceErrorMessageSchema,
   VoiceClearPlaybackMessageSchema,
 ]);
 
 export type VoiceAudioChunkMessage = z.infer<typeof VoiceAudioChunkMessageSchema>;
-export type VoiceErrorMessage = z.infer<typeof VoiceErrorMessageSchema>;
 export type VoiceClearPlaybackMessage = z.infer<typeof VoiceClearPlaybackMessageSchema>;
 export type VoiceServerMessage = z.infer<typeof VoiceServerMessageSchema>;
