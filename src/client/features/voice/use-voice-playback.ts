@@ -17,6 +17,19 @@ const PLAYBACK_SAMPLE_RATE = 24_000;
  * spoken conversation) for real robustness against that contention.
  */
 const JITTER_BUFFER_SECONDS = 0.3;
+/**
+ * How long to accumulate incoming ~40ms chunks before merging them into one
+ * scheduled AudioBuffer. Deepgram's own official streaming-TTS examples
+ * (deepgram-starters/live-text-to-speech-html, voice-agent-html) schedule
+ * one buffer per network chunk with no coalescing and only a 100ms
+ * lookahead — proven, but their demo doesn't relay audio through a second
+ * WebSocket hop off a Node process that's concurrently running a coding
+ * agent's tool calls and chat streaming, the way this app does. Batching
+ * ~3 chunks per buffer cuts the Web Audio scheduling/allocation rate ~4x —
+ * the same technique the `pcm-player` library uses for jittery sources —
+ * while keeping the identical chained-offset scheduler below.
+ */
+const COALESCE_WINDOW_MS = 120;
 
 interface AudioChunkMessage {
   type: 'audio_chunk';
@@ -88,8 +101,20 @@ export function useVoicePlayback({
   // Guards against a burst of chunks arriving while suspended each starting
   // their own overlapping resume() call.
   const resumingRef = useRef(false);
+  // Chunks received but not yet merged into a scheduled buffer — see
+  // COALESCE_WINDOW_MS.
+  const pendingChunksRef = useRef<Int16Array[]>([]);
+  const coalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const playChunk = useCallback((pcm: Int16Array) => {
+  const cancelCoalescing = useCallback(() => {
+    if (coalesceTimerRef.current !== null) {
+      clearTimeout(coalesceTimerRef.current);
+      coalesceTimerRef.current = null;
+    }
+    pendingChunksRef.current = [];
+  }, []);
+
+  const schedulePcm = useCallback((pcm: Int16Array) => {
     const audioContext = audioContextRef.current;
     if (!audioContext) {
       return;
@@ -137,7 +162,38 @@ export function useVoicePlayback({
     };
   }, []);
 
+  const flushPending = useCallback(() => {
+    coalesceTimerRef.current = null;
+    const chunks = pendingChunksRef.current;
+    pendingChunksRef.current = [];
+    if (chunks.length === 0) {
+      return;
+    }
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const merged = new Int16Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    schedulePcm(merged);
+  }, [schedulePcm]);
+
+  const enqueueChunk = useCallback(
+    (pcm: Int16Array) => {
+      pendingChunksRef.current.push(pcm);
+      // Only the first chunk of a batch arms the timer — later chunks just
+      // join the same window, which is what bounds it to COALESCE_WINDOW_MS
+      // rather than restarting on every arrival.
+      if (coalesceTimerRef.current === null) {
+        coalesceTimerRef.current = setTimeout(flushPending, COALESCE_WINDOW_MS);
+      }
+    },
+    [flushPending]
+  );
+
   const stopPlayback = useCallback(() => {
+    cancelCoalescing();
     for (const source of activeSourcesRef.current) {
       try {
         source.stop();
@@ -148,7 +204,7 @@ export function useVoicePlayback({
     activeSourcesRef.current.clear();
     nextStartTimeRef.current = audioContextRef.current?.currentTime ?? 0;
     setIsSpeaking(false);
-  }, []);
+  }, [cancelCoalescing]);
 
   const sendSoftStop = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -177,13 +233,14 @@ export function useVoicePlayback({
     ws.onmessage = (event) => {
       const message = parseVoiceServerMessage(event.data);
       if (message?.type === 'audio_chunk') {
-        playChunk(decodeBase64ToInt16(message.data));
+        enqueueChunk(decodeBase64ToInt16(message.data));
       } else if (message?.type === 'clear_playback') {
         stopPlayback();
       }
     };
 
     return () => {
+      cancelCoalescing();
       ws.close();
       wsRef.current = null;
       for (const source of activeSourcesRef.current) {
@@ -199,7 +256,7 @@ export function useVoicePlayback({
       nextStartTimeRef.current = 0;
       setIsSpeaking(false);
     };
-  }, [enabled, sessionId, playChunk, stopPlayback]);
+  }, [enabled, sessionId, enqueueChunk, stopPlayback, cancelCoalescing]);
 
   return { isSpeaking, sendSoftStop, stopPlayback };
 }
