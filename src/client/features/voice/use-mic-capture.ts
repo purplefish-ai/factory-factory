@@ -231,9 +231,18 @@ export function attachTranscriptHandler(socket: WebSocket, deps: TranscriptHandl
       deps.onSoftStop?.();
       return;
     }
-    deps.onInterimTranscript?.(
-      message?.is_final ? buffer.appendFinal(transcript) : buffer.preview(transcript)
-    );
+    // buffer.appendFinal must run unconditionally, as its own statement —
+    // deps.onInterimTranscript?.(buffer.appendFinal(transcript)) looks
+    // equivalent but isn't: optional-call syntax skips evaluating its
+    // arguments entirely when the callee is nullish, and no caller
+    // currently passes onInterimTranscript, so that form silently never
+    // accumulated anything and UtteranceEnd always flushed empty.
+    if (message?.is_final) {
+      const settled = buffer.appendFinal(transcript);
+      deps.onInterimTranscript?.(settled);
+      return;
+    }
+    deps.onInterimTranscript?.(buffer.preview(transcript));
   };
 }
 

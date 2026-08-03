@@ -78,6 +78,21 @@ describe('attachTranscriptHandler', () => {
     expect(onFinalTranscript).toHaveBeenCalledWith('Let me think about this for a second.');
   });
 
+  it('still accumulates and sends when onInterimTranscript is not provided (real production usage — VoiceModeToggle never passes it)', () => {
+    const socket = createFakeSocket();
+    const onFinalTranscript = vi.fn();
+    attachTranscriptHandler(socket, {
+      runningRef: { current: false },
+      onFinalTranscript,
+      // onInterimTranscript intentionally omitted.
+    });
+
+    sendResults(socket, 'Let me think about this for a second.', true);
+    sendUtteranceEnd(socket);
+
+    expect(onFinalTranscript).toHaveBeenCalledWith('Let me think about this for a second.');
+  });
+
   it('joins multiple is_final chunks from separate pauses into one message', () => {
     const { socket, onFinalTranscript } = setup();
 
