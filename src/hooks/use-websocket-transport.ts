@@ -15,7 +15,7 @@ const MAX_FLUSH_BATCH_SIZE = 10;
  * Message types that are time-sensitive and should not be queued/replayed after reconnect.
  * These commands only make sense in the context of an active session at the time they were sent.
  */
-const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt']);
+const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt', 'soft_stop']);
 
 export type WebSocketQueuePolicy = 'replay' | 'drop';
 

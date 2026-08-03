@@ -291,6 +291,10 @@ export const UserSettingsScalarFieldEnum = {
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
   ratchetPermissions: 'ratchetPermissions',
+  voiceModeEnabled: 'voiceModeEnabled',
+  deepgramApiKeyEncrypted: 'deepgramApiKeyEncrypted',
+  voiceTtsModel: 'voiceTtsModel',
+  voiceTtsSpeed: 'voiceTtsSpeed',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

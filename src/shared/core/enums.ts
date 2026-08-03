@@ -32,6 +32,7 @@ export const SessionLifecycleEventReason = {
   WORKSPACE_ARCHIVED: 'WORKSPACE_ARCHIVED',
   UNEXPECTED_EXIT: 'UNEXPECTED_EXIT',
   SYSTEM_STOP: 'SYSTEM_STOP',
+  VOICE_INTERRUPT: 'VOICE_INTERRUPT',
 } as const;
 export type SessionLifecycleEventReason =
   (typeof SessionLifecycleEventReason)[keyof typeof SessionLifecycleEventReason];

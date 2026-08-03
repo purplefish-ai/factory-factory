@@ -42,6 +42,7 @@ enum SessionLifecycleEventReason {
   WORKSPACE_ARCHIVED
   UNEXPECTED_EXIT
   SYSTEM_STOP
+  VOICE_INTERRUPT
 }
 
 enum SessionProvider {
@@ -595,6 +596,12 @@ model UserSettings {
   defaultCodexReasoningEffort  String?
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
   ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
+
+  // Voice Mode Settings (BYOK Deepgram)
+  voiceModeEnabled          Boolean  @default(false)  // Admin toggle for the voice mode feature
+  deepgramApiKeyEncrypted   String?                    // AES-256-GCM encrypted, same scheme as Linear's apiKey
+  voiceTtsModel             String   @default("aura-2-thalia-en")  // Deepgram Aura-2 voice, e.g. aura-2-thalia-en
+  voiceTtsSpeed             Float    @default(1)  // Deepgram TTS speed multiplier (0.5-2.0)
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

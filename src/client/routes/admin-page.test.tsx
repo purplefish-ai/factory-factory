@@ -94,6 +94,7 @@ vi.mock('./admin/index', () => ({
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),
   ProjectIssueTrackingCard: () => createElement('section', null, 'Issue Tracking Card'),
+  VoiceModeSection: () => createElement('section', null, 'Voice Mode'),
 }));
 
 vi.mock('@/client/lib/trpc', () => {

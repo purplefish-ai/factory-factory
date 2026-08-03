@@ -14,6 +14,7 @@ import {
   RewindConfirmationDialog,
   VirtualizedMessageList,
 } from '@/client/features/chat';
+import { VoiceModeToggle } from '@/client/features/voice';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
@@ -24,6 +25,7 @@ import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
 export interface ChatContentProps {
   workspaceId: string;
+  sessionId: string | null;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
@@ -305,31 +307,39 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           onAnswer={props.answerQuestion}
         />
 
-        <ChatInput
-          className="shrink-0"
-          onSend={props.sendMessage}
-          onStop={props.stopChat}
-          disabled={!props.connected || loadingSession}
-          running={running}
-          stopping={stopping}
-          inputRef={props.inputRef}
-          placeholder={placeholder}
-          settings={props.chatSettings}
-          capabilities={props.chatCapabilities}
-          onSettingsChange={props.updateSettings}
-          value={props.inputDraft}
-          onChange={props.setInputDraft}
-          attachments={props.inputAttachments}
-          onAttachmentsChange={props.setInputAttachments}
-          onHeightChange={handleHeightChange}
-          pendingMessageCount={props.pendingMessages.size}
-          slashCommands={props.slashCommands}
-          slashCommandsLoaded={props.slashCommandsLoaded}
-          tokenStats={props.tokenStats}
-          workspaceId={props.workspaceId}
-          acpConfigOptions={props.acpConfigOptions}
-          onSetConfigOption={props.setConfigOption}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          <VoiceModeToggle
+            sessionId={props.sessionId}
+            onFinalTranscript={props.sendMessage}
+            running={running}
+            disabled={!props.connected || loadingSession}
+          />
+          <ChatInput
+            className="flex-1 min-w-0"
+            onSend={props.sendMessage}
+            onStop={props.stopChat}
+            disabled={!props.connected || loadingSession}
+            running={running}
+            stopping={stopping}
+            inputRef={props.inputRef}
+            placeholder={placeholder}
+            settings={props.chatSettings}
+            capabilities={props.chatCapabilities}
+            onSettingsChange={props.updateSettings}
+            value={props.inputDraft}
+            onChange={props.setInputDraft}
+            attachments={props.inputAttachments}
+            onAttachmentsChange={props.setInputAttachments}
+            onHeightChange={handleHeightChange}
+            pendingMessageCount={props.pendingMessages.size}
+            slashCommands={props.slashCommands}
+            slashCommandsLoaded={props.slashCommandsLoaded}
+            tokenStats={props.tokenStats}
+            workspaceId={props.workspaceId}
+            acpConfigOptions={props.acpConfigOptions}
+            onSetConfigOption={props.setConfigOption}
+          />
+        </div>
       </div>
 
       <RewindConfirmationDialog

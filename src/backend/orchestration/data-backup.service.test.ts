@@ -235,6 +235,14 @@ const mockUserSettings: UserSettings = {
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
   ratchetPermissions: 'YOLO',
+  // Non-default values — an export/import test that only ever exercises
+  // defaults can't tell a real persisted preference from a value the
+  // schema's default happened to backfill (see the voiceModeEnabled et al.
+  // assertions below).
+  voiceModeEnabled: true,
+  deepgramApiKeyEncrypted: null,
+  voiceTtsModel: 'aura-2-apollo-en',
+  voiceTtsSpeed: 1.3,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
@@ -360,6 +368,11 @@ function createImportData(
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
         ratchetPermissions: 'YOLO',
+        // Non-default so the import test below actually exercises restoring
+        // a persisted preference, not just the schema's own default.
+        voiceModeEnabled: true,
+        voiceTtsModel: 'aura-2-apollo-en',
+        voiceTtsSpeed: 1.3,
       },
       ...overrides,
     },
@@ -400,8 +413,14 @@ describe('DataBackupService', () => {
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 1.3,
         })
       );
+      // The Deepgram API key is a secret, not a preference — it must never
+      // appear in an export.
+      expect(result.data.userSettings).not.toHaveProperty('deepgramApiKeyEncrypted');
       expect(exportDataSchema.safeParse(result).success).toBe(true);
     });
 
@@ -638,8 +657,16 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 1.3,
         }),
       });
+      // The Deepgram API key is never part of the export, so a restore
+      // never sets it — the admin re-enters it after import.
+      expect(mockTx.userSettings.create.mock.calls[0]?.[0].data).not.toHaveProperty(
+        'deepgramApiKeyEncrypted'
+      );
     });
 
     it('skips existing projects', async () => {

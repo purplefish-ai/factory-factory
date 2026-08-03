@@ -2311,7 +2311,7 @@ describe('SessionService', () => {
       const acpProcessor = getAcpProcessorState();
       vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
       vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(true);
-      vi.mocked(acpRuntimeManager.cancelPrompt).mockResolvedValue(undefined);
+      vi.mocked(acpRuntimeManager.cancelPrompt).mockResolvedValue(true);
 
       acpProcessor.registerSessionContext('session-1', {
         workspaceId: 'workspace-1',

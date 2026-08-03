@@ -47,6 +47,7 @@ import {
   ProcessesSection,
   ProcessesSectionSkeleton,
   ProjectIssueTrackingCard,
+  VoiceModeSection,
 } from './admin/index';
 
 function formatPortLabel(
@@ -1088,9 +1089,9 @@ function ServerLogsSection() {
 
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
-  const [settingsTab, setSettingsTab] = useState<'general' | 'project' | 'periodic-tasks'>(
-    'general'
-  );
+  const [settingsTab, setSettingsTab] = useState<
+    'general' | 'project' | 'periodic-tasks' | 'voice'
+  >('general');
 
   const {
     data: stats,
@@ -1134,7 +1135,7 @@ export default function AdminDashboardPage() {
         <Tabs
           value={settingsTab}
           onValueChange={(value) =>
-            setSettingsTab(value as 'general' | 'project' | 'periodic-tasks')
+            setSettingsTab(value as 'general' | 'project' | 'periodic-tasks' | 'voice')
           }
         >
           <TabsList className="w-full sm:w-auto">
@@ -1146,6 +1147,9 @@ export default function AdminDashboardPage() {
             </TabsTrigger>
             <TabsTrigger value="periodic-tasks" className="flex-1 sm:flex-initial">
               Periodic Tasks
+            </TabsTrigger>
+            <TabsTrigger value="voice" className="flex-1 sm:flex-initial">
+              Voice Mode
             </TabsTrigger>
           </TabsList>
 
@@ -1196,6 +1200,10 @@ export default function AdminDashboardPage() {
             ) : (
               <p className="text-sm text-muted-foreground">Loading projects...</p>
             )}
+          </TabsContent>
+
+          <TabsContent value="voice" className="mt-4">
+            <VoiceModeSection />
           </TabsContent>
         </Tabs>
       </div>

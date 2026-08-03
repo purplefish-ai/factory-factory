@@ -35,6 +35,7 @@ import {
   createSetupTerminalUpgradeHandler,
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
+  createVoiceUpgradeHandler,
   disposeChatTransportForApplication,
   disposeSnapshotsHandlerState,
 } from './routers/websocket';
@@ -104,6 +105,7 @@ export function createServer(application: Application, requestedPort?: number): 
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(application);
   const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(application);
   const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(application);
+  const voiceUpgradeHandler = createVoiceUpgradeHandler(application);
   const websocketUpgradeHandlers = new Map<string, typeof chatUpgradeHandler>([
     ['/chat', chatUpgradeHandler],
     ['/terminal', terminalUpgradeHandler],
@@ -111,6 +113,7 @@ export function createServer(application: Application, requestedPort?: number): 
     ['/dev-logs', devLogsUpgradeHandler],
     ['/post-run-logs', postRunLogsUpgradeHandler],
     ['/snapshots', snapshotsUpgradeHandler],
+    ['/voice', voiceUpgradeHandler],
   ]);
 
   const isAddressInUseError = (error: unknown): error is NodeJS.ErrnoException =>

@@ -41,6 +41,7 @@ export type { SessionPromptService } from './lifecycle/session-services';
 export {
   acpEventProcessor,
   sessionConfigService,
+  sessionLifecycleEventService,
   sessionLifecycleService,
   sessionPermissionService,
   sessionPromptTurnCompletionService,
@@ -70,3 +71,4 @@ export {
   SessionEventBus,
   sessionEventBus,
 } from './session-event-bus';
+export { voiceNarrationService } from './voice/voice-narration.service';

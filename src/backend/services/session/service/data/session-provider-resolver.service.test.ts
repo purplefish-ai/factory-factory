@@ -79,6 +79,10 @@ describe('sessionProviderResolverService', () => {
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
+      voiceModeEnabled: false,
+      deepgramApiKeyEncrypted: null,
+      voiceTtsModel: 'aura-2-thalia-en',
+      voiceTtsSpeed: 1,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });

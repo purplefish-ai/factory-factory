@@ -16,6 +16,7 @@ const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
     devLogs: vi.fn(),
     postRunLogs: vi.fn(),
     snapshots: vi.fn(),
+    voice: vi.fn(),
   };
 
   return {
@@ -27,6 +28,7 @@ const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
       devLogs: vi.fn(() => upgradeHandlers.devLogs),
       postRunLogs: vi.fn(() => upgradeHandlers.postRunLogs),
       snapshots: vi.fn(() => upgradeHandlers.snapshots),
+      voice: vi.fn(() => upgradeHandlers.voice),
     },
     transportDisposers: {
       chat: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock('@/backend/routers/websocket', () => ({
   createDevLogsUpgradeHandler: handlerFactories.devLogs,
   createPostRunLogsUpgradeHandler: handlerFactories.postRunLogs,
   createSnapshotsUpgradeHandler: handlerFactories.snapshots,
+  createVoiceUpgradeHandler: handlerFactories.voice,
   disposeChatTransportForApplication: transportDisposers.chat,
   disposeSnapshotsHandlerState: transportDisposers.snapshots,
 }));
@@ -323,6 +326,23 @@ describe('server websocket upgrade routing', () => {
     expect(handlerFactories.devLogs).toHaveBeenCalledWith(application);
     expect(handlerFactories.postRunLogs).toHaveBeenCalledWith(application);
     expect(handlerFactories.snapshots).toHaveBeenCalledWith(application);
+    expect(handlerFactories.voice).toHaveBeenCalledWith(application);
+  });
+
+  it('routes /voice upgrades to voice handler', () => {
+    const server = createTestServer();
+
+    const request = {
+      headers: { host: 'localhost:3001' },
+      url: '/voice?sessionId=s1',
+    };
+    const socket = { destroy: vi.fn() };
+
+    server.getHttpServer().emit('upgrade', request, socket, Buffer.alloc(0));
+
+    expect(handlers.voice).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+    expect(handlers.terminal).not.toHaveBeenCalled();
   });
 
   it('routes /terminal upgrades to terminal handler', () => {

@@ -947,17 +947,21 @@ export class AcpRuntimeManager {
     }
   }
 
-  async cancelPrompt(sessionId: string): Promise<void> {
+  /** Returns true when a prompt was actually in flight and got cancelled. */
+  async cancelPrompt(sessionId: string): Promise<boolean> {
     const handle = this.sessions.get(sessionId);
     if (!handle) {
-      return;
+      return false;
     }
 
-    if (handle.isPromptInFlight) {
-      await handle.connection.cancel({
-        sessionId: handle.providerSessionId,
-      });
+    if (!handle.isPromptInFlight) {
+      return false;
     }
+
+    await handle.connection.cancel({
+      sessionId: handle.providerSessionId,
+    });
+    return true;
   }
 
   async setConfigOption(

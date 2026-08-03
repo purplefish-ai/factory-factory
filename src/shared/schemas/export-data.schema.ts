@@ -24,6 +24,7 @@ import {
   WorkspaceProviderSelection as CoreWorkspaceProviderSelection,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
+import { DEFAULT_DEEPGRAM_TTS_MODEL, DEFAULT_DEEPGRAM_TTS_SPEED } from '@/shared/deepgram-voices';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
@@ -161,6 +162,14 @@ const exportedUserSettingsSchema = z.object({
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
   ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
+  // Voice mode: the Deepgram API key is intentionally excluded (secret, and
+  // scoped per-install), but the enabled toggle and selected voice/speed are
+  // just preferences. A restored install still needs its own key before
+  // voiceModeEnabled has any effect (getConfig/mintGrantToken both require
+  // deepgramApiKeyEncrypted), so restoring the toggle as-is is safe.
+  voiceModeEnabled: z.boolean().optional().default(false),
+  voiceTtsModel: z.string().optional().default(DEFAULT_DEEPGRAM_TTS_MODEL),
+  voiceTtsSpeed: z.number().optional().default(DEFAULT_DEEPGRAM_TTS_SPEED),
 });
 
 export const exportDataSchema = z.object({
