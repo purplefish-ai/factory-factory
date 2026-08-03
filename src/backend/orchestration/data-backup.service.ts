@@ -442,6 +442,7 @@ async function importUserSettings(
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
       ratchetPermissions: settings.ratchetPermissions,
+      voiceModeEnabled: settings.voiceModeEnabled,
       voiceTtsModel: settings.voiceTtsModel,
       voiceTtsSpeed: settings.voiceTtsSpeed,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
@@ -592,6 +593,7 @@ class DataBackupService {
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
               ratchetPermissions: userSettings.ratchetPermissions,
+              voiceModeEnabled: userSettings.voiceModeEnabled,
               voiceTtsModel: userSettings.voiceTtsModel,
               voiceTtsSpeed: userSettings.voiceTtsSpeed,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded

@@ -296,7 +296,7 @@ Backend:
 Frontend:
 ├── src/client/routes/admin/VoiceModeSection.tsx                 (NEW)
 ├── src/client/features/voice/                                   (NEW feature)
-│     use-mic-capture.ts       (MediaRecorder → direct Deepgram STT WS)
+│     use-mic-capture.ts       (AudioWorklet raw PCM → direct Deepgram STT WS)
 │     use-voice-playback.ts    (queued Web Audio API playback)
 │     use-barge-in.ts          (VAD-based playback pause)
 │     voice-mode-toggle.tsx

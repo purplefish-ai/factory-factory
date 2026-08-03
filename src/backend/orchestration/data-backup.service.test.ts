@@ -404,6 +404,7 @@ describe('DataBackupService', () => {
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          voiceModeEnabled: false,
           voiceTtsModel: 'aura-2-thalia-en',
           voiceTtsSpeed: 1,
         })
@@ -647,6 +648,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          voiceModeEnabled: false,
           voiceTtsModel: 'aura-2-thalia-en',
           voiceTtsSpeed: 1,
         }),

@@ -255,7 +255,12 @@ interface CaptureAttemptDeps
 async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptResult | null> {
   let socket: WebSocket | null = null;
   let stream: MediaStream | null = null;
-  let audioContext: AudioContext | null = null;
+  // Created and resumed before the first await, still inside the click
+  // gesture that triggered start() — otherwise the browser's autoplay
+  // policy can leave it suspended, and a worklet graph on a suspended
+  // context never runs: the mic silently produces no audio.
+  const audioContext: AudioContext = new AudioContext();
+  audioContext.resume().catch(() => undefined);
   let workletNode: AudioWorkletNode | null = null;
   let silentGain: GainNode | null = null;
 
@@ -284,7 +289,6 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
       return null;
     }
 
-    audioContext = new AudioContext();
     const graph = await setupAudioGraph(audioContext, stream);
     if (deps.isStale()) {
       disposeLocal();

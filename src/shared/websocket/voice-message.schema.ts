@@ -26,7 +26,6 @@ export type SoftStopMessage = Extract<VoiceClientMessage, { type: 'soft_stop' }>
 export interface VoiceAudioChunkMessage {
   type: 'audio_chunk';
   data: string;
-  seq: number;
 }
 
 export interface VoiceErrorMessage {

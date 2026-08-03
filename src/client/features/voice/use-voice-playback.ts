@@ -21,7 +21,6 @@ const JITTER_BUFFER_SECONDS = 0.3;
 interface AudioChunkMessage {
   type: 'audio_chunk';
   data: string;
-  seq: number;
 }
 
 interface ClearPlaybackMessage {

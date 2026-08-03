@@ -250,7 +250,6 @@ describe('voiceNarrationService', () => {
     expect(forwarded).toEqual({
       type: 'audio_chunk',
       data: audioBytes.toString('base64'),
-      seq: 1,
     });
 
     ttsSocket.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);

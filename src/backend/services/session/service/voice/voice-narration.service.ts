@@ -31,6 +31,7 @@
  * than missing some reasoning color commentary.
  */
 
+import type { UserSettings } from '@prisma-gen/client';
 import WebSocket from 'ws';
 import { safeSend } from '@/backend/lib/websocket-send';
 import { cryptoService } from '@/backend/services/crypto.service';
@@ -83,6 +84,14 @@ interface TurnState {
   /** True once this turn's final answer has started streaming. */
   suppressThinking: boolean;
   activeTts: ActiveNarration | null;
+  /**
+   * Fetched and decrypted once per turn, on the first clause, rather than
+   * once per clause — a long response can narrate a dozen-plus clauses, and
+   * re-reading + re-decrypting the same settings for each one adds latency
+   * and DB load for no benefit. Reset at the next turn's WORKING transition
+   * so a settings change takes effect from the following turn on.
+   */
+  voiceSettings: { settings: UserSettings; apiKey: string } | null;
 }
 
 function createTurnState(): TurnState {
@@ -92,6 +101,7 @@ function createTurnState(): TurnState {
     thinkingBuffer: '',
     suppressThinking: false,
     activeTts: null,
+    voiceSettings: null,
   };
 }
 
@@ -167,13 +177,11 @@ function extractThinkingDelta(payload: SessionOutboundEvent['payload']): string 
 class VoiceNarrationService {
   private readonly connections = new Map<string, WebSocket>();
   private readonly turns = new Map<string, TurnState>();
-  private readonly seqBySession = new Map<string, number>();
   private busListenerAttached = false;
 
   registerConnection(sessionId: string, ws: WebSocket): void {
     this.connections.set(sessionId, ws);
     this.turns.set(sessionId, createTurnState());
-    this.seqBySession.set(sessionId, 0);
     this.attachBusListener();
   }
 
@@ -189,7 +197,6 @@ class VoiceNarrationService {
     }
     this.connections.delete(sessionId);
     this.turns.delete(sessionId);
-    this.seqBySession.delete(sessionId);
   }
 
   private attachBusListener(): void {
@@ -247,6 +254,7 @@ class VoiceNarrationService {
       turn.finalClauseQueue = [];
       turn.thinkingBuffer = '';
       turn.suppressThinking = false;
+      turn.voiceSettings = null;
       return;
     }
 
@@ -410,26 +418,32 @@ class VoiceNarrationService {
     active: ActiveNarration
   ): Promise<void> {
     try {
-      const settings = await userSettingsService.get();
-      if (active.cancelled) {
-        this.settleNarration(sessionId, ws, turn, active);
-        return;
+      let cached = turn.voiceSettings;
+      if (!cached) {
+        const settings = await userSettingsService.get();
+        if (active.cancelled) {
+          this.settleNarration(sessionId, ws, turn, active);
+          return;
+        }
+        if (!(settings.voiceModeEnabled && settings.deepgramApiKeyEncrypted)) {
+          logger.info('Skipping narration — voice mode disabled or no key configured', {
+            sessionId,
+            voiceModeEnabled: settings.voiceModeEnabled,
+            hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
+          });
+          this.settleNarration(sessionId, ws, turn, active);
+          return;
+        }
+        cached = { settings, apiKey: cryptoService.decrypt(settings.deepgramApiKeyEncrypted) };
+        turn.voiceSettings = cached;
       }
-      if (!(settings.voiceModeEnabled && settings.deepgramApiKeyEncrypted)) {
-        logger.info('Skipping narration — voice mode disabled or no key configured', {
-          sessionId,
-          voiceModeEnabled: settings.voiceModeEnabled,
-          hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
-        });
-        this.settleNarration(sessionId, ws, turn, active);
-        return;
-      }
+      const { settings, apiKey } = cached;
+
       const text = stripMarkdownForSpeech(rawText);
       if (!text) {
         this.settleNarration(sessionId, ws, turn, active);
         return;
       }
-      const apiKey = cryptoService.decrypt(settings.deepgramApiKeyEncrypted);
 
       const params = new URLSearchParams({
         model: settings.voiceTtsModel,
@@ -496,7 +510,7 @@ class VoiceNarrationService {
           if (isBinary) {
             chunkCount += 1;
             byteCount += data.length;
-            this.forwardAudioChunk(sessionId, ws, data);
+            this.forwardAudioChunk(ws, data);
             return;
           }
           const message = this.parseControlMessage(data);
@@ -554,13 +568,10 @@ class VoiceNarrationService {
     }
   }
 
-  private forwardAudioChunk(sessionId: string, ws: WebSocket, data: Buffer): void {
-    const seq = (this.seqBySession.get(sessionId) ?? 0) + 1;
-    this.seqBySession.set(sessionId, seq);
+  private forwardAudioChunk(ws: WebSocket, data: Buffer): void {
     const message: VoiceServerMessage = {
       type: 'audio_chunk',
       data: data.toString('base64'),
-      seq,
     };
     safeSend(ws, JSON.stringify(message), logger, 'voice audio chunk');
   }
