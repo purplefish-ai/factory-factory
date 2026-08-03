@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCryptoService = vi.hoisted(() => ({
   encrypt: vi.fn((plaintext: string) => `encrypted:${plaintext}`),
@@ -27,6 +27,10 @@ describe('voiceRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe('getConfig', () => {
@@ -336,8 +340,9 @@ describe('voiceRouter', () => {
         text: () => Promise.resolve('{"err_code":"BAD_REQUEST","err_msg":"Invalid credentials."}'),
       } as Response);
 
-      await expect(createCaller().mintGrantToken()).rejects.toThrow(/whitespace|newline/i);
-      await expect(createCaller().mintGrantToken()).rejects.toThrow(/re-copy/i);
+      const rejection = createCaller().mintGrantToken();
+      await expect(rejection).rejects.toThrow(/whitespace|newline/i);
+      await expect(rejection).rejects.toThrow(/re-copy/i);
     });
   });
 });

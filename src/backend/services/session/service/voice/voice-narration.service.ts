@@ -49,6 +49,12 @@ const logger = createLogger('voice-narration');
 const DEEPGRAM_TTS_URL = 'wss://api.deepgram.com/v1/speak';
 const TTS_ENCODING = 'linear16';
 const TTS_SAMPLE_RATE = 24_000;
+// Deepgram's TTS handshake and Flush round-trip normally complete in well
+// under a second; the `ws` library applies no handshake timeout on its own.
+// Without a deadline here, a socket that lingers in CONNECTING or opens but
+// never emits Flushed/Cleared/close/error leaves turn.activeTts claimed
+// forever, which blocks all subsequent narration for the session.
+const TTS_SOCKET_DEADLINE_MS = 15_000;
 
 /** Sentence-ending punctuation followed by whitespace or end of buffer. */
 const CLAUSE_BOUNDARY_PATTERN = /[.!?](?:\s|$)/;
@@ -214,6 +220,15 @@ class VoiceNarrationService {
     this.connections.set(sessionId, ws);
     this.turns.set(sessionId, createTurnState());
     this.attachBusListener();
+    // Cancelling previousTurn above only stops server-side Deepgram
+    // synthesis — any AudioBufferSources the browser already scheduled from
+    // the old connection survive the reconnect since they live in the
+    // client's audio graph, not in this service. Tell the replacement
+    // connection to clear them so playback can't keep going after a
+    // reconnect. Harmless to send on every registration, including a first
+    // connection with nothing playing yet.
+    const clearMessage: VoiceServerMessage = { type: 'clear_playback' };
+    safeSend(ws, JSON.stringify(clearMessage), logger, 'voice clear_playback');
   }
 
   /**
@@ -593,7 +608,13 @@ class VoiceNarrationService {
       let byteCount = 0;
 
       await new Promise<void>((resolve) => {
+        const deadlineTimer = setTimeout(() => {
+          logger.error('Deepgram TTS connection timed out', { sessionId, kind: active.kind });
+          finish();
+        }, TTS_SOCKET_DEADLINE_MS);
+
         const finish = () => {
+          clearTimeout(deadlineTimer);
           logger.info('Finished Deepgram TTS narration', {
             sessionId,
             kind: active.kind,

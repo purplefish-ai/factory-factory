@@ -183,6 +183,10 @@ describe('voiceNarrationService', () => {
     const secondWs = createFakeClientWs();
     register('sess-reconnect', firstWs as never);
     register('sess-reconnect', secondWs as never);
+    // Both registrations sent their own clear_playback — clear that from the
+    // mocks so the assertions below only check the narration audio path.
+    firstWs.send.mockClear();
+    secondWs.send.mockClear();
 
     // The first connection's 'close' fires after it was already replaced by
     // a reconnect — this must not wipe the second connection's state.
@@ -245,6 +249,9 @@ describe('voiceNarrationService', () => {
   it('synthesizes and forwards audio for the final answer on turn-complete', async () => {
     const clientWs = createFakeClientWs();
     register('sess-speak', clientWs as never);
+    // Registration sends its own clear_playback — clear it so the assertion
+    // below counts only the forwarded audio chunk.
+    clientWs.send.mockClear();
 
     emitDelta('sess-speak', {
       type: 'session_delta',
@@ -386,6 +393,10 @@ describe('voiceNarrationService', () => {
   it('drops audio chunks once the client send buffer is backed up', async () => {
     const clientWs = createFakeClientWs(2_000_000);
     register('sess-backpressure', clientWs as never);
+    // Registration's clear_playback isn't congestion-controlled (safeSend,
+    // not sendStreamOutput) — clear it so the assertion below checks only
+    // the audio-forwarding path.
+    clientWs.send.mockClear();
 
     emitDelta('sess-backpressure', {
       type: 'session_delta',

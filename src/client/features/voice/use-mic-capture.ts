@@ -230,7 +230,11 @@ function handleTranscriptResult(
   // Checked against each incoming chunk, not the accumulated utterance: a
   // short phrase like "stop now" needs to react immediately, not wait out
   // the UtteranceEnd silence window like a normal dictated sentence would.
-  if (deps.runningRef.current && matchesStopPhrase(transcript)) {
+  // Gated on !discardingRef.current so this is one-shot per utterance:
+  // Deepgram can repeat the same interim transcript across successive
+  // Results messages, and without this guard each repeat would re-match and
+  // fire another onSoftStop for what is really a single spoken command.
+  if (!discardingRef.current && deps.runningRef.current && matchesStopPhrase(transcript)) {
     // Discard whatever had already settled before "stop" — otherwise it
     // would still be flushed as a new chat request once UtteranceEnd fires.
     buffer.flush();
@@ -295,10 +299,21 @@ interface PcmForwarderDeps {
   onSpeechEnded?: () => void;
 }
 
+// At 16kHz mono 16-bit PCM (32,000 bytes/sec), this is ~2 seconds of audio —
+// enough headroom to absorb a brief stall without queuing indefinitely. A
+// still-open but slow STT connection would otherwise buffer every mic frame
+// forever, growing memory and delaying transcripts/interrupts until the
+// backlog drains.
+const MAX_STT_SOCKET_BUFFERED_BYTES = 64 * 1024;
+
 function attachPcmForwarder(workletNode: AudioWorkletNode, deps: PcmForwarderDeps): void {
   workletNode.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-    if (deps.socketRef.current?.readyState === WebSocket.OPEN) {
-      deps.socketRef.current.send(event.data);
+    const socket = deps.socketRef.current;
+    if (
+      socket?.readyState === WebSocket.OPEN &&
+      socket.bufferedAmount <= MAX_STT_SOCKET_BUFFERED_BYTES
+    ) {
+      socket.send(event.data);
     }
     const detector = deps.speechDetectorRef.current;
     if (!detector) {

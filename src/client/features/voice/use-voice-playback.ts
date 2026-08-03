@@ -246,9 +246,12 @@ export function useVoicePlayback({
   // useWebSocketChannel (built on useWebSocketTransport) gives this
   // connection automatic reconnection with backoff — a transient drop no
   // longer permanently strands voice mode with narration silently
-  // discarded server-side and no way to hear it — and, via the default
-  // 'replay' queue policy, queues an outbound soft_stop sent while
-  // momentarily disconnected instead of dropping the interrupt.
+  // discarded server-side and no way to hear it. An outbound soft_stop sent
+  // while momentarily disconnected is deliberately dropped rather than
+  // replayed on reconnect (soft_stop is in STALE_MESSAGE_TYPES): by the time
+  // the socket comes back, the turn it was meant to interrupt may have
+  // already finished or moved on, so replaying it late could cancel the
+  // wrong thing.
   const url = enabled && sessionId ? buildWebSocketUrl('/voice', { sessionId }) : null;
   const { send } = useWebSocketChannel({
     url,

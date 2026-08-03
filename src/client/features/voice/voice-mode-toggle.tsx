@@ -1,5 +1,5 @@
 import { MicrophoneIcon, MicrophoneSlashIcon, SpinnerGapIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -126,6 +126,22 @@ export function VoiceModeToggle({
   useEffect(() => {
     return () => stop();
   }, [stop]);
+
+  // This component is mounted once per workspace and receives a new
+  // `sessionId` on tab switch rather than remounting, so the unmount cleanup
+  // above doesn't fire. Without this, switching tabs while voice mode is on
+  // leaves the old session's mic capture running and moves narration
+  // (playback wired to the new sessionId via useVoicePlayback) onto the
+  // newly selected session.
+  const previousSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    const previousSessionId = previousSessionIdRef.current;
+    previousSessionIdRef.current = sessionId;
+    if (previousSessionId !== null && sessionId !== previousSessionId) {
+      stop();
+      setVoiceModeOn(false);
+    }
+  }, [sessionId, stop]);
 
   // Lets WorkspaceNotificationManager (mounted once at the app root, with no
   // other view into this component) suppress the workspace-complete chime

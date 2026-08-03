@@ -49,7 +49,13 @@ describe('SpeechActivityDetector', () => {
     // Already flagged as speaking — no repeated trigger while still loud.
     expect(detector.observe(loudTone())).toBe(false);
 
+    // A brief below-threshold frame (an ordinary pause between words) does
+    // not immediately clear speaking — only sustained silence past the
+    // hangover window does.
     expect(detector.observe(silence())).toBe(false);
+    expect(detector.isSpeaking()).toBe(true);
+    expect(detector.observe(silence(4000))).toBe(false);
+    expect(detector.isSpeaking()).toBe(false);
 
     // A fresh burst of speech after silence triggers again.
     expect(detector.observe(loudTone())).toBe(false);
