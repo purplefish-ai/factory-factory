@@ -47,12 +47,20 @@ export function VoiceModeSection() {
         setValidatedKey(variables.apiKey);
         toast.success('Deepgram API key is valid');
       } else {
-        setValidatedKey(null);
+        // A validation call for a key the user has since edited away from
+        // must not clear the valid state of whatever they're validating
+        // now — only clobber if this failure is actually for the key still
+        // in the field.
+        if (variables.apiKey === apiKey) {
+          setValidatedKey(null);
+        }
         toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
       }
     },
-    onError: (error) => {
-      setValidatedKey(null);
+    onError: (error, variables) => {
+      if (variables.apiKey === apiKey) {
+        setValidatedKey(null);
+      }
       toast.error(`Validation failed: ${error.message}`);
     },
   });

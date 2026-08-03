@@ -3,25 +3,32 @@
  * PCM frames for Deepgram's streaming STT (encoding=linear16). Runs on the
  * audio rendering thread; posts each frame's buffer to the main thread.
  */
+// Cascading this many identical one-pole stages turns a single pole's ~3dB
+// rejection at the cutoff into ~4x that (plus a steeper post-cutoff
+// rolloff), which is what a brick-wall-ish anti-alias filter needs at the
+// Nyquist edge — a single pole alone still lets content just above the
+// target Nyquist fold back into the audible band post-decimation.
+const FILTER_STAGES = 4;
+
 class PCMCaptureProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const targetSampleRate = options.processorOptions?.targetSampleRate ?? 16_000;
     this.ratio = sampleRate / targetSampleRate;
     this.accumulator = 0;
-    // One-pole low-pass filter run over every raw sample before decimation.
-    // Dropping samples with no anti-alias filtering lets any input content
-    // above the target Nyquist frequency (common on hardware mic rates like
-    // 44.1/48kHz) fold back into the audible band post-downsample, which
-    // degrades Deepgram transcript accuracy. A single pole has a gentle
-    // rolloff rather than a brick-wall cutoff, but it's cheap enough to run
-    // per-sample on the audio thread and meaningfully attenuates the
-    // aliasing range.
+    // Cascaded one-pole low-pass filter run over every raw sample before
+    // decimation. Dropping samples with no anti-alias filtering lets any
+    // input content above the target Nyquist frequency (common on hardware
+    // mic rates like 44.1/48kHz) fold back into the audible band
+    // post-downsample, which degrades Deepgram transcript accuracy. Each
+    // stage is cheap (one multiply-add per sample), so cascading a handful
+    // of them for a steeper rolloff is still fine to run per-sample on the
+    // audio thread.
     const cutoffHz = (targetSampleRate / 2) * 0.9;
     const rc = 1 / (2 * Math.PI * cutoffHz);
     const dt = 1 / sampleRate;
     this.filterAlpha = dt / (rc + dt);
-    this.filterState = 0;
+    this.filterState = new Float32Array(FILTER_STAGES);
   }
 
   process(inputs) {
@@ -32,11 +39,15 @@ class PCMCaptureProcessor extends AudioWorkletProcessor {
 
     const kept = [];
     for (const rawSample of channelData) {
-      this.filterState += this.filterAlpha * (rawSample - this.filterState);
+      let filtered = rawSample;
+      for (let stage = 0; stage < FILTER_STAGES; stage++) {
+        this.filterState[stage] += this.filterAlpha * (filtered - this.filterState[stage]);
+        filtered = this.filterState[stage];
+      }
       this.accumulator += 1;
       if (this.accumulator >= this.ratio) {
         this.accumulator -= this.ratio;
-        kept.push(this.filterState);
+        kept.push(filtered);
       }
     }
 

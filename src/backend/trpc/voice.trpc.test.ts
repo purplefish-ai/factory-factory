@@ -169,6 +169,7 @@ describe('voiceRouter', () => {
 
       await expect(createCaller().mintGrantToken()).rejects.toThrow('Voice mode is disabled');
       expect(fetch).not.toHaveBeenCalled();
+      expect(mockCryptoService.decrypt).not.toHaveBeenCalled();
     });
 
     it('throws when no key is configured', async () => {

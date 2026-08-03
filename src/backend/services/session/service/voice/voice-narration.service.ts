@@ -92,6 +92,14 @@ interface TurnState {
    * so a settings change takes effect from the following turn on.
    */
   voiceSettings: { settings: UserSettings; apiKey: string } | null;
+  /**
+   * Bumped on every WORKING transition. `TurnState` is reused in place
+   * across turns (reset, not replaced), so a settings lookup started by one
+   * turn can still be in flight when the next turn begins — this lets
+   * `speakClause` detect that and discard the stale result instead of
+   * caching a superseded turn's credentials/preferences into the new turn.
+   */
+  generation: number;
 }
 
 function createTurnState(): TurnState {
@@ -102,6 +110,7 @@ function createTurnState(): TurnState {
     suppressThinking: false,
     activeTts: null,
     voiceSettings: null,
+    generation: 0,
   };
 }
 
@@ -255,6 +264,7 @@ class VoiceNarrationService {
       turn.thinkingBuffer = '';
       turn.suppressThinking = false;
       turn.voiceSettings = null;
+      turn.generation += 1;
       return;
     }
 
@@ -420,6 +430,7 @@ class VoiceNarrationService {
     try {
       let cached = turn.voiceSettings;
       if (!cached) {
+        const generation = turn.generation;
         const settings = await userSettingsService.get();
         if (active.cancelled) {
           this.settleNarration(sessionId, ws, turn, active);
@@ -435,7 +446,13 @@ class VoiceNarrationService {
           return;
         }
         cached = { settings, apiKey: cryptoService.decrypt(settings.deepgramApiKeyEncrypted) };
-        turn.voiceSettings = cached;
+        // Only cache onto `turn` if a newer WORKING transition hasn't
+        // already reused this TurnState — otherwise this clause's stale
+        // lookup would seed the next turn's settings instead of it doing
+        // its own fresh fetch.
+        if (turn.generation === generation) {
+          turn.voiceSettings = cached;
+        }
       }
       const { settings, apiKey } = cached;
 

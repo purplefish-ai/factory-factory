@@ -345,6 +345,17 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
       return null;
     }
 
+    // From here until attachDisconnectHandler is wired below, a server-side
+    // close wouldn't be observed by anything — the mic/worklet setup awaits
+    // below don't watch the socket, so a disconnect in this window would
+    // otherwise go unnoticed and audio would be committed as "capturing"
+    // against an already-dead socket. Track it so it can be turned into a
+    // real failure once the awaits finish, instead of silently succeeding.
+    const closedEarlyRef: { current: CloseEvent | null } = { current: null };
+    socket.addEventListener('close', (event) => {
+      closedEarlyRef.current = event;
+    });
+
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     if (deps.isStale()) {
       disposeLocal();
@@ -358,6 +369,12 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
     }
     workletNode = graph.workletNode;
     silentGain = graph.silentGain;
+
+    if (closedEarlyRef.current) {
+      throw new Error(
+        `Lost connection to Deepgram (code ${closedEarlyRef.current.code}) while starting capture. Tap the microphone to reconnect.`
+      );
+    }
 
     const speechDetector = new SpeechActivityDetector();
     attachPcmForwarder(workletNode, { ...deps, speechDetectorRef: { current: speechDetector } });
