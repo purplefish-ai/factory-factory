@@ -1,4 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
+import type { AcpProvider } from '@/backend/services/session/service/acp/types';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -11,7 +12,7 @@ const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
 const CODEX_TOOL_BACKFILL_RECHECK_COOLDOWN_MS = 5000;
 
 export type ProviderHistorySession = {
-  provider: 'CLAUDE' | 'CODEX';
+  provider: AcpProvider;
   providerSessionId: string | null;
   providerMetadata: unknown;
   workspace: { worktreePath: string | null };

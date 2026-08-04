@@ -214,7 +214,7 @@ export class AcpEventProcessor {
     return this.activePromptAttemptKeys.get(sessionId);
   }
 
-  getProvider(sessionId: string): 'CLAUDE' | 'CODEX' | undefined {
+  getProvider(sessionId: string): AcpProvider | undefined {
     return this.sessionToProvider.get(sessionId);
   }
 
