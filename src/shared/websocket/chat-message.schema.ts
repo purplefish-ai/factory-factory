@@ -58,6 +58,8 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     text: z.string().optional(),
     attachments: z.array(AttachmentSchema).optional(),
     settings: ChatSettingsSchema.optional(),
+    /** Set by voice mode so the dispatched prompt gets a brevity instruction appended. */
+    voiceMode: z.boolean().optional(),
   }),
 
   // Remove a queued message

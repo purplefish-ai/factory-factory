@@ -19,6 +19,8 @@ export interface QueuedMessage {
   text: string;
   timestamp: string;
   attachments?: MessageAttachment[];
+  /** Set when this message was sent via voice mode; the dispatched prompt gets a brevity instruction appended. */
+  voiceMode?: boolean;
   settings: {
     selectedModel: string | null;
     reasoningEffort: string | null;

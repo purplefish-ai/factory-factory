@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import { VOICE_MODE_BREVITY_INSTRUCTION } from '../voice/voice-mode-instructions';
 
 const {
   mockSessionDomainService,
@@ -859,6 +860,59 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.setSessionCollaborationMode).not.toHaveBeenCalled();
+  });
+
+  it('sends the plain text unchanged for a non-voice queued message', async () => {
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+  });
+
+  it('appends the brevity instruction as a second content block for a voice-flagged message', async () => {
+    const voiceMessage: QueuedMessage = { ...queuedMessage, voiceMode: true };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(voiceMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessage);
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', [
+      { type: 'text', text: 'hello' },
+      { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION },
+    ]);
+  });
+
+  it('appends the brevity instruction after attachment content for a voice-flagged message with attachments', async () => {
+    const voiceMessageWithImage: QueuedMessage = {
+      ...queuedMessage,
+      voiceMode: true,
+      attachments: [
+        {
+          id: 'att-1',
+          name: 'photo.png',
+          type: 'image/png',
+          size: 1024,
+          contentType: 'image' as const,
+          data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        },
+      ],
+    };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(voiceMessageWithImage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessageWithImage);
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    const call = mockSessionService.sendSessionMessage.mock.calls[0];
+    if (!call) {
+      throw new Error('sendSessionMessage was not called');
+    }
+    const [, content] = call;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content.at(-1)).toEqual({ type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION });
+    expect(content.some((block: { type: string }) => block.type === 'image')).toBe(true);
   });
 
   it('persists dispatched user message before turn completion', async () => {

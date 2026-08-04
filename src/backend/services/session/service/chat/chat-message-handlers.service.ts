@@ -31,6 +31,7 @@ import {
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
+import { VOICE_MODE_BREVITY_INSTRUCTION } from '../voice/voice-mode-instructions';
 import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
@@ -757,7 +758,13 @@ class ChatMessageHandlerService {
    * Image attachments are sent as separate image content blocks.
    */
   private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
-    return processAttachmentsAndBuildContent(msg.text, msg.attachments);
+    const content = processAttachmentsAndBuildContent(msg.text, msg.attachments);
+    if (!msg.voiceMode) {
+      return content;
+    }
+    const blocks: AgentContentItem[] =
+      typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+    return [...blocks, { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION }];
   }
 
   private handleBlockedDispatchGate(

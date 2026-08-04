@@ -59,8 +59,12 @@ export interface UseChatActionsOptions {
   onClearInput: () => void;
 }
 
+export interface SendMessageOptions {
+  voiceMode?: boolean;
+}
+
 export interface UseChatActionsReturn {
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
@@ -274,7 +278,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   } = options;
 
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, options?: SendMessageOptions) => {
       const trimmedText = text.trim();
       const attachments = inputAttachmentsRef.current;
       if (!trimmedText && attachments.length === 0) {
@@ -306,6 +310,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         id,
         text: trimmedText,
         attachments: attachments.length > 0 ? attachments : undefined,
+        voiceMode: options?.voiceMode,
         settings: clampChatSettingsForCapabilities(
           stateRef.current.chatSettings,
           stateRef.current.chatCapabilities

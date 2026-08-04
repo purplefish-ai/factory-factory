@@ -10,7 +10,7 @@ import { useVoicePlayback } from './use-voice-playback';
 export interface VoiceModeToggleProps {
   sessionId: string | null;
   /** Called with the final transcript of each spoken utterance. */
-  onFinalTranscript: (text: string) => void;
+  onFinalTranscript: (text: string, options?: { voiceMode?: boolean }) => void;
   /** Whether the agent turn is currently running — gates "please stop" detection. */
   running?: boolean;
   disabled?: boolean;
@@ -115,8 +115,13 @@ export function VoiceModeToggle({
       sessionId,
       enabled: voiceModeOn,
     });
+  const handleFinalTranscript = useCallback(
+    (text: string) => onFinalTranscript(text, { voiceMode: true }),
+    [onFinalTranscript]
+  );
+
   const { isCapturing, isConnecting, error, start, stop } = useMicCapture({
-    onFinalTranscript,
+    onFinalTranscript: handleFinalTranscript,
     running,
     onSoftStop: sendSoftStop,
     onSpeechDetected: beginBargeIn,

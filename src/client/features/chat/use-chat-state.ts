@@ -34,6 +34,7 @@ import {
 } from './chat-persistence';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import { createToolInputAccumulatorState } from './streaming-utils';
+import type { SendMessageOptions } from './use-chat-actions';
 import { useChatActions } from './use-chat-actions';
 import { useChatPersistence } from './use-chat-persistence';
 import { useChatSession } from './use-chat-session';
@@ -57,7 +58,7 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // (Internal state uses Map for O(1) lookups and automatic de-duplication)
   queuedMessages: QueuedMessage[];
   // Actions
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
