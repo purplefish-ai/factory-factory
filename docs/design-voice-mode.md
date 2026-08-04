@@ -584,3 +584,174 @@ Not phased like §8 — this is small enough to be one unit of work:
 - Tests: a handler-level test asserting the instruction block is present only when `voiceMode: true` and appended *after* any attachment content, absent for a normal typed/queued message, and still present alongside attachment blocks for a voice-flagged message that has them — the STT `UtteranceEnd` fix earlier in this work shipped a "looks right, isn't" bug (a side effect hidden inside an optional-call argument that never ran in production) past a test suite that happened to always provide the optional callback; don't repeat that mistake here by testing only the case where every optional field is populated.
 
 **Acceptance criteria:** a voice-mode turn produces a visibly shorter response than the same question asked via typed chat in the same session; the chat transcript shows only the user's actual spoken words, never the injected instruction; toggling voice mode off mid-session immediately returns to normal-length responses on the very next message.
+
+## 11. Verified Implementation Plan (Ready to Build)
+
+§10 was written from an end-to-end trace of the message-send path; this section re-verifies every call site named there against the code as it exists today and turns the plan into an exact, file-by-file diff. Two facts fell out of re-verification that §10 didn't have:
+
+- **`QueuedMessage` has exactly two producers.** `buildQueuedMessage` (`utils.ts:17`) is called from `queue-message.handler.ts:61` (the client-driven path `VoiceModeToggle` uses) and from `load-session.handler.ts:93` (auto-enqueuing a workspace's stored initial message on session load — unrelated to voice, and it constructs its input object inline without a `voiceMode` field, so it's provably unaffected: the field stays `undefined`).
+- **Queue state is never persisted.** `SessionStore.queue` (`session-store.types.ts:24`) is in-memory only — it isn't part of `export-data.schema.ts`'s backup format (checked: no `queue` field anywhere in that schema) and there's no outbound zod schema for `QueuedMessage` on the WS snapshot wire (`websocket.ts:41/72` type it as plain TS, not `z.object`). So `voiceMode` needs no migration, no export-format change, and no runtime validation beyond the one inbound zod schema in §11.1.
+
+### 11.1 File-by-file changes
+
+**1. `src/shared/websocket/chat-message.schema.ts`** — add the flag to both message types that can carry a prompt, mirroring how `settings` already rides along (line 60):
+
+```ts
+// queue_message (currently lines 55-61)
+z.object({
+  type: z.literal('queue_message'),
+  id: z.string().min(1),
+  text: z.string().optional(),
+  attachments: z.array(AttachmentSchema).optional(),
+  settings: ChatSettingsSchema.optional(),
+  voiceMode: z.boolean().optional(),          // new
+}),
+
+// user_input (currently lines 48-52)
+z.object({
+  type: z.literal('user_input'),
+  text: z.string().optional(),
+  content: z.union([z.string(), z.array(z.unknown())]).optional(),
+  voiceMode: z.boolean().optional(),          // new
+}),
+```
+
+**2. `src/shared/acp-protocol/protocol/queued.ts`** — add the field to the shared interface (currently lines 17-28):
+
+```ts
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  timestamp: string;
+  attachments?: MessageAttachment[];
+  voiceMode?: boolean;                        // new
+  settings: { ... };
+}
+```
+
+**3. `src/backend/services/session/service/chat/chat-message-handlers/utils.ts`** — `buildQueuedMessage` (lines 17-34) copies the flag through:
+
+```ts
+return {
+  id,
+  text,
+  attachments: message.attachments,
+  voiceMode: message.voiceMode,               // new
+  settings: ...,
+  timestamp: new Date().toISOString(),
+};
+```
+
+No change needed in `session-queue.ts` (`enqueueMessage`/`peekNext`/`dequeueNext`/`requeueFront`, lines 6-37) — they pass the whole `QueuedMessage` object by reference, so the flag survives every queue/retry path for free, exactly as §10.4 point 3 predicted.
+
+**4. `src/backend/services/session/service/store/session-store.types.ts`** — widen the retry-recovery `Pick` (line 11):
+
+```ts
+userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments' | 'voiceMode'> & {
+  sessionId?: string;
+};
+```
+
+**5. `src/backend/services/session/service/session-domain.service.ts`** — `failMessage` (lines 155-167) adds one field to the object it already builds:
+
+```ts
+failMessage(sessionId: string, message: QueuedMessage, errorMessage: string): void {
+  this.recordRecentMessageRejection(sessionId, {
+    id: message.id,
+    errorMessage,
+    state: MessageState.FAILED,
+    userMessage: {
+      text: message.text,
+      timestamp: message.timestamp,
+      attachments: message.attachments,
+      voiceMode: message.voiceMode,           // new
+      sessionId,
+    },
+  });
+}
+```
+
+**6. `src/backend/services/session/service/chat/chat-message-handlers.service.ts`** — `buildMessageContent` (line 759) is the actual injection point:
+
+```ts
+private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
+  const content = processAttachmentsAndBuildContent(msg.text, msg.attachments);
+  if (!msg.voiceMode) {
+    return content;                            // byte-identical to today
+  }
+  const blocks: AgentContentItem[] =
+    typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+  return [...blocks, { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION }];
+}
+```
+
+Called from `dispatchMessage` at line 612 (`const content = this.buildMessageContent(msg);`) — no other change needed there; `sendSessionMessage(dbSessionId, content)` at line 638 already accepts `string | AgentContentItem[]` unchanged.
+
+**7. `src/backend/services/session/service/chat/chat-message-handlers/handlers/user-input.handler.ts`** — same treatment for parity, even though the queued path is the only one `VoiceModeToggle` uses today (lines 18-30 build `messageContent` from `rawContent`; wrap it through the same helper before `sendSessionMessage`).
+
+**8. New constant** — `VOICE_MODE_BREVITY_INSTRUCTION`, colocated with `voice-narration.service.ts` (e.g. a new `src/backend/services/session/service/voice/voice-mode-instructions.ts`), holding the §10.4 point 5 wording. One file to tune later.
+
+**9. `src/client/features/chat/use-chat-actions.ts`** — `sendMessage` (line 276) grows an options param:
+
+```ts
+export interface UseChatActionsReturn {
+  sendMessage: (text: string, options?: { voiceMode?: boolean }) => void;
+  ...
+}
+
+const sendMessage = useCallback(
+  (text: string, options?: { voiceMode?: boolean }) => {
+    ...
+    const msg: QueueMessageRequest = {
+      type: 'queue_message',
+      id,
+      text: trimmedText,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      voiceMode: options?.voiceMode,          // new
+      settings: clampChatSettingsForCapabilities(...),
+    };
+    send(msg);
+  },
+  [...]
+);
+```
+
+Every other caller of `sendMessage` (composer, `queueAutomaticMessage`'s sibling call sites, retry flows) keeps calling it with one argument — `options` is `undefined`, `voiceMode` is `undefined`, wire payload is unchanged.
+
+**10. `src/client/features/voice/voice-mode-toggle.tsx`** — today `onFinalTranscript` is passed straight through as a prop and wired directly to `useMicCapture` (line 119); wrap it locally instead:
+
+```ts
+const handleFinalTranscript = useCallback(
+  (text: string) => onFinalTranscript(text, { voiceMode: true }),
+  [onFinalTranscript]
+);
+// pass handleFinalTranscript to useMicCapture instead of onFinalTranscript
+```
+
+This requires widening the `onFinalTranscript` prop type on `VoiceModeToggleProps` (line 13) to `(text: string, options?: { voiceMode?: boolean }) => void`, and its one call site, `workspace-detail-chat-content.tsx:313` (`onFinalTranscript={props.sendMessage}`), needs no change — `sendMessage`'s new signature already matches.
+
+### 11.2 Performance & cost impact on non-voice-mode operation
+
+This was the explicit question motivating this doc: **does building this measurably slow down, or add cost to, chat when voice mode is off (or on but for someone else's session)?** Walking every touch point above:
+
+| Layer | What changes for a non-voice message | Cost |
+|---|---|---|
+| Zod parse (`chat-message.schema.ts`) | One more `.optional()` key in a `z.object` | Same as the existing `settings` field — zod skips validation work entirely for an absent optional key. Unmeasurable. |
+| `QueuedMessage` construction (`utils.ts`) | One more property assignment, value `undefined` | A single property write on an object already being built. Unmeasurable. |
+| Queue lifecycle (`session-queue.ts`) | None — object passed by reference | Zero. |
+| Dispatch (`chat-message-handlers.service.ts`) | One `if (!msg.voiceMode)` boolean check, then early-return the *same* value `processAttachmentsAndBuildContent` already produced | One branch, no new allocation, no extra array iteration. The non-voice path returns the identical reference it returns today. |
+| `sendSessionMessage`/`toContentBlocks` (`session.service.ts`) | None — untouched, still receives `string \| AgentContentItem[]` | Zero. |
+| ACP call to Claude/Codex | None | Zero — no extra prompt, no extra turn, no extra tokens for a non-voice message. |
+| Persistence / export | None — `voiceMode` never reaches the DB or the backup format | Zero. |
+
+Net: for every message sent without voice mode on, the new code adds a handful of `undefined`/falsy checks on the hot path and **zero** new network calls, DB writes, allocations of consequence, or LLM tokens. The generated prompt content for a non-voice message is byte-for-byte identical to what `main` produces today — this is provable from the `buildMessageContent` diff above, since the `!msg.voiceMode` branch returns `processAttachmentsAndBuildContent`'s result unmodified, which is exactly what the function returns today.
+
+**Where cost is added, it's scoped to voice-mode messages only, and it's small even there:** one extra `{type: 'text'}` content block (~350 characters of instruction text) appended to a prompt that was already being sent for that turn — not an additional ACP call, not an additional turn, not additional latency before the existing call fires. The only place this could show up is a marginal increase in input tokens for voice-flagged turns specifically (§10.4 point 6 — sent every turn, not just the first), which is an intentional, scoped tradeoff for voice-mode users, not a regression for anyone else.
+
+### 11.3 Test plan
+
+- Schema: `queue_message`/`user_input` still parse correctly with `voiceMode` absent (existing tests must keep passing unmodified) and with `voiceMode: true`/`false`.
+- `buildQueuedMessage`: flag copied through when present, `undefined` when absent.
+- `buildMessageContent`/`dispatchMessage`: instruction block present only when `voiceMode: true`, appended after attachment content, absent for a plain queued message, present alongside attachment blocks for a voice-flagged message that has them (per §10.8's note on not repeating the `UtteranceEnd` optional-argument bug — test the flag both set and unset, not just the happy path).
+- `failMessage`/`RecentMessageRejection`: a failed voice-flagged message keeps `voiceMode: true` in `userMessage`.
+- End-to-end sanity via `pnpm typecheck` + `pnpm test`: assert no existing chat/queue test's expected payload changes (this is the regression check for the "non-voice path is untouched" claim in §11.2).

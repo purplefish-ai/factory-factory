@@ -21,6 +21,7 @@ import {
   sessionService,
 } from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import {
   type AgentContentItem,
@@ -757,7 +758,13 @@ class ChatMessageHandlerService {
    * Image attachments are sent as separate image content blocks.
    */
   private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
-    return processAttachmentsAndBuildContent(msg.text, msg.attachments);
+    const content = processAttachmentsAndBuildContent(msg.text, msg.attachments);
+    if (!msg.voiceMode) {
+      return content;
+    }
+    const blocks: AgentContentItem[] =
+      typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+    return [...blocks, { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION }];
   }
 
   private handleBlockedDispatchGate(

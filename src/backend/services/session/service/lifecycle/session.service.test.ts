@@ -2012,6 +2012,7 @@ describe('SessionService', () => {
             text: 'recover after crash',
             timestamp: '2026-07-29T12:00:00.000Z',
             attachments: undefined,
+            voiceMode: undefined,
             sessionId,
           },
         },

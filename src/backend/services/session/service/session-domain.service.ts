@@ -161,6 +161,7 @@ export class SessionDomainService extends EventEmitter {
         text: message.text,
         timestamp: message.timestamp,
         attachments: message.attachments,
+        voiceMode: message.voiceMode,
         sessionId,
       },
     });

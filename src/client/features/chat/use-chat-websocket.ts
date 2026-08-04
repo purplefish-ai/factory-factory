@@ -23,6 +23,7 @@ import type {
   SessionStatus,
   ToolProgressInfo,
 } from './reducer';
+import type { SendMessageOptions } from './use-chat-actions';
 import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
@@ -101,7 +102,7 @@ export interface UseChatWebSocketReturn {
   // Tool progress map (includes ACP locations for click-to-open)
   toolProgress: Map<string, ToolProgressInfo>;
   // Actions
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   restartSession: () => void;
   clearChat: () => void;

@@ -26,6 +26,7 @@ export function buildQueuedMessage(
     id,
     text,
     attachments: message.attachments,
+    voiceMode: message.voiceMode,
     settings: message.settings
       ? { ...message.settings, selectedModel, reasoningEffort }
       : { selectedModel, reasoningEffort, thinkingEnabled: false, planModeEnabled: false },

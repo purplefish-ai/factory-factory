@@ -95,5 +95,26 @@ describe('chat message handler utils', () => {
         planModeEnabled: false,
       });
     });
+
+    it('carries voiceMode through when set', () => {
+      const message: QueueMessageInput = {
+        type: 'queue_message',
+        id: 'msg-1',
+        text: 'hello',
+        voiceMode: true,
+      };
+
+      expect(buildQueuedMessage('queue-1', message, 'hello').voiceMode).toBe(true);
+    });
+
+    it('leaves voiceMode undefined when absent', () => {
+      const message: QueueMessageInput = {
+        type: 'queue_message',
+        id: 'msg-1',
+        text: 'hello',
+      };
+
+      expect(buildQueuedMessage('queue-1', message, 'hello').voiceMode).toBeUndefined();
+    });
   });
 });

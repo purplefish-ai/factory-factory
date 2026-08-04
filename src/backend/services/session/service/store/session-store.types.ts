@@ -8,7 +8,7 @@ export interface RecentMessageRejection {
   rejectedAt: string;
   expiresAt: number;
   state?: MessageState.REJECTED | MessageState.FAILED;
-  userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments'> & {
+  userMessage?: Pick<QueuedMessage, 'text' | 'timestamp' | 'attachments' | 'voiceMode'> & {
     sessionId?: string;
   };
 }
