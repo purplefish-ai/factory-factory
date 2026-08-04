@@ -49,6 +49,7 @@ interface WebSocketMessageCommon {
     attachments?: MessageAttachment[];
     settings?: ChatSettings;
     order?: number;
+    voiceMode?: boolean;
   };
   tool_use_id?: string;
   tool_name?: string;
@@ -156,6 +157,8 @@ interface WebSocketMessagePayloadByType {
       order?: number;
       /** Source session for restoring a failed message to the correct composer */
       sessionId?: string;
+      /** Set when the original message was sent via voice mode */
+      voiceMode?: boolean;
     };
   };
   session_replay_batch: {

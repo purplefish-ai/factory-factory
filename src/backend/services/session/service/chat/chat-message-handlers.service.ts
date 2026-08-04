@@ -21,6 +21,7 @@ import {
   sessionService,
 } from '@/backend/services/session/service/lifecycle/session-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import {
   type AgentContentItem,
@@ -31,7 +32,6 @@ import {
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
-import { VOICE_MODE_BREVITY_INSTRUCTION } from '../voice/voice-mode-instructions';
 import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,

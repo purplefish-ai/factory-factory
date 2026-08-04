@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
-import { VOICE_MODE_BREVITY_INSTRUCTION } from '../voice/voice-mode-instructions';
 
 const {
   mockSessionDomainService,
@@ -862,14 +862,6 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.setSessionCollaborationMode).not.toHaveBeenCalled();
   });
 
-  it('sends the plain text unchanged for a non-voice queued message', async () => {
-    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
-
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
-
-    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-  });
-
   it('appends the brevity instruction as a second content block for a voice-flagged message', async () => {
     const voiceMessage: QueuedMessage = { ...queuedMessage, voiceMode: true };
     mockSessionDomainService.peekNextMessage.mockReturnValue(voiceMessage);
@@ -913,6 +905,33 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(Array.isArray(content)).toBe(true);
     expect(content.at(-1)).toEqual({ type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION });
     expect(content.some((block: { type: string }) => block.type === 'image')).toBe(true);
+  });
+
+  it('appends the brevity instruction after pasted text content for a voice-flagged message with a text attachment', async () => {
+    const voiceMessageWithText: QueuedMessage = {
+      ...queuedMessage,
+      voiceMode: true,
+      attachments: [
+        {
+          id: 'text-1',
+          name: 'notes.txt',
+          type: 'text/plain',
+          size: 11,
+          contentType: 'text' as const,
+          data: 'pasted data',
+        },
+      ],
+    };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(voiceMessageWithText);
+    mockSessionDomainService.dequeueNext.mockReturnValue(voiceMessageWithText);
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', [
+      { type: 'text', text: 'hello\n\n[Pasted content: notes.txt]\npasted data' },
+      { type: 'text', text: VOICE_MODE_BREVITY_INSTRUCTION },
+    ]);
   });
 
   it('persists dispatched user message before turn completion', async () => {
