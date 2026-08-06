@@ -108,7 +108,7 @@ function hasValidSnapshotLifecycleMessages(data: object): boolean {
   }
   return messages.every((message) => {
     if (typeof message !== 'object' || message === null) {
-      return true;
+      return false;
     }
     const agentMessage = (message as { message?: unknown }).message;
     if (
