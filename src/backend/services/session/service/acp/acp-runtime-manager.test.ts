@@ -1001,7 +1001,7 @@ describe('AcpRuntimeManager', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
-    it('is idempotent - double stop is no-op', async () => {
+    it('waits for an existing stop when called concurrently', async () => {
       const child = setupSuccessfulSpawn();
 
       await manager.getOrCreateClient(
@@ -1011,22 +1011,26 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      // Make SIGTERM trigger exit with a delay to keep stop in progress
-      child.kill = vi.fn(() => {
-        setTimeout(() => {
-          child.exitCode = 0;
-          child.emit('exit', 0, null);
-        }, 10);
-        return true;
+      child.kill = vi.fn(() => true);
+
+      const firstStop = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(manager.isStopInProgress('session-1')).toBe(true);
       });
+      let secondStopSettled = false;
+      const secondStop = manager.stopClient('session-1').then(() => {
+        secondStopSettled = true;
+      });
+      await Promise.resolve();
 
-      // Call stop twice concurrently
-      const [, result2] = await Promise.all([
-        manager.stopClient('session-1'),
-        manager.stopClient('session-1'),
-      ]);
+      expect(secondStopSettled).toBe(false);
 
-      expect(result2).toBeUndefined();
+      child.exitCode = 0;
+      child.emit('exit', 0, null);
+      await Promise.all([firstStop, secondStop]);
+      expect(secondStopSettled).toBe(true);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
     it('aborts in-flight client creation and cleans up the spawned subprocess', async () => {

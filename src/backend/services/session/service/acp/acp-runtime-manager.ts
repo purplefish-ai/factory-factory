@@ -127,6 +127,7 @@ export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
+  private readonly stopOperations = new Map<string, Promise<void>>();
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
@@ -760,12 +761,24 @@ export class AcpRuntimeManager {
     };
   }
 
-  async stopClient(sessionId: string): Promise<void> {
-    if (this.stoppingInProgress.has(sessionId)) {
+  stopClient(sessionId: string): Promise<void> {
+    const existingStop = this.stopOperations.get(sessionId);
+    if (existingStop) {
       logger.debug('ACP session stop already in progress', { sessionId });
-      return;
+      return existingStop;
     }
 
+    let trackedStop: Promise<void>;
+    trackedStop = this.stopClientOnce(sessionId).finally(() => {
+      if (this.stopOperations.get(sessionId) === trackedStop) {
+        this.stopOperations.delete(sessionId);
+      }
+    });
+    this.stopOperations.set(sessionId, trackedStop);
+    return trackedStop;
+  }
+
+  private async stopClientOnce(sessionId: string): Promise<void> {
     const pendingCreation = this.pendingCreation.get(sessionId);
     const initialHandle = this.sessions.get(sessionId);
     if (!(initialHandle || pendingCreation)) {
