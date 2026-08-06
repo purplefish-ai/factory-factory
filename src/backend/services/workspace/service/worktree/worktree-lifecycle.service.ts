@@ -2,7 +2,6 @@ import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
-import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
 import { gitOpsService } from './git-ops.service';
 
 export class WorktreePathSafetyError extends Error {
@@ -149,17 +148,14 @@ class WorktreeLifecycleService {
     await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
 
     const worktreeExists = await pathExists(worktreePath);
-    if (!worktreeExists) {
-      workspaceGitStateService.remove(worktreePath);
-      return;
-    }
-
-    if (options.removeGitIndexLock) {
-      await gitOpsService.commitIfNeeded(worktreePath, workspace.name, {
-        removeGitIndexLock: true,
-      });
-    } else {
-      await gitOpsService.commitIfNeeded(worktreePath, workspace.name);
+    if (worktreeExists) {
+      if (options.removeGitIndexLock) {
+        await gitOpsService.commitIfNeeded(worktreePath, workspace.name, {
+          removeGitIndexLock: true,
+        });
+      } else {
+        await gitOpsService.commitIfNeeded(worktreePath, workspace.name);
+      }
     }
     await gitOpsService.removeWorktree(worktreePath, project);
   }
