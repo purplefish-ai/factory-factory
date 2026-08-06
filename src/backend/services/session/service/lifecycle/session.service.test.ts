@@ -1299,6 +1299,35 @@ describe('SessionService', () => {
     expect(clearSessionSpy).not.toHaveBeenCalled();
   });
 
+  it('clears the active prompt attempt after managed stop with a connected viewer', async () => {
+    const sessionId = 'session-stopped-with-active-prompt';
+    const prompt = createDeferred<{ stopReason: string }>();
+    vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    sessionEventBus.registerViewerCountProvider((viewedSessionId) =>
+      viewedSessionId === sessionId ? 1 : 0
+    );
+
+    try {
+      const sendPromise = sessionService.sendAcpMessage(sessionId, [
+        { type: 'text', text: 'hello' },
+      ]);
+      await vi.waitFor(() => {
+        expect(getAcpProcessorState().getActivePromptAttemptKey(sessionId)).toBeDefined();
+      });
+
+      await sessionLifecycleService.stopSession(sessionId);
+      const activeAttemptAfterStop = getAcpProcessorState().getActivePromptAttemptKey(sessionId);
+
+      prompt.reject(new Error('Prompt timed out'));
+      await expect(sendPromise).rejects.toThrow('Prompt timed out');
+      expect(activeAttemptAfterStop).toBeUndefined();
+    } finally {
+      getAcpProcessorState().clearSessionState(sessionId);
+      sessionEventBus.registerViewerCountProvider(null);
+    }
+  });
+
   it('marks workspace session idle during manual stop', async () => {
     const markSessionIdle = vi.fn();
     sessionLifecycleService.configure({

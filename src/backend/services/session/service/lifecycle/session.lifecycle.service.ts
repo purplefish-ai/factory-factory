@@ -327,7 +327,7 @@ export class SessionLifecycleService {
         updatedAt: new Date().toISOString(),
       });
       this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
-      this.acpEventProcessor.clearSessionContext(sessionId);
+      this.acpEventProcessor.clearSessionState(sessionId);
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
