@@ -108,6 +108,15 @@ describe('session lifecycle websocket validation', () => {
       })
     ).toBe(false);
   });
+
+  it.each([
+    ['null', null],
+    ['string', 'invalid'],
+    ['number', 42],
+    ['boolean', true],
+  ])('rejects %s entries in authoritative session snapshots', (_label, message) => {
+    expect(isWebSocketMessage({ type: 'session_snapshot', messages: [message] })).toBe(false);
+  });
 });
 
 function createToolUseMessage(params: {
