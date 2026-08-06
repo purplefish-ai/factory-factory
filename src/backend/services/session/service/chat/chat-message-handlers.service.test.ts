@@ -88,6 +88,20 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       planModeEnabled: false,
     },
   };
+  const queuedMessageWithAttachment: QueuedMessage = {
+    ...queuedMessage,
+    text: 'preserve this draft',
+    attachments: [
+      {
+        id: 'attachment-1',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 11,
+        data: 'draft notes',
+        contentType: 'text',
+      },
+    ],
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -206,11 +220,13 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
 
-  it('does not send or commit a dequeued message when stop begins during dispatch configuration', async () => {
+  it('fails a dequeued message for recovery when stop begins during dispatch configuration', async () => {
     let resolveModelUpdate!: () => void;
     const modelUpdate = new Promise<void>((resolve) => {
       resolveModelUpdate = resolve;
     });
+    mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessageWithAttachment);
+    mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessageWithAttachment);
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
 
@@ -227,9 +243,43 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
+      's1',
+      queuedMessageWithAttachment,
+      'Message was not sent because the session stopped during dispatch.'
+    );
   });
 
-  it('does not send or requeue a dequeued message when stop completes during configuration', async () => {
+  it('fails a dequeued message for recovery when configuration rejects after stop begins', async () => {
+    let rejectModelUpdate!: (error: Error) => void;
+    const modelUpdate = new Promise<void>((_resolve, reject) => {
+      rejectModelUpdate = reject;
+    });
+    mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessageWithAttachment);
+    mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessageWithAttachment);
+    mockSessionService.getSessionClient.mockReturnValue({});
+    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    rejectModelUpdate(new Error('session stopped'));
+    await dispatchPromise;
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
+      's1',
+      queuedMessageWithAttachment,
+      'Message was not sent because the session stopped during dispatch.'
+    );
+  });
+
+  it('fails a dequeued message for recovery when stop completes during configuration', async () => {
     let resolveModelUpdate!: () => void;
     const modelUpdate = new Promise<void>((resolve) => {
       resolveModelUpdate = resolve;
@@ -256,6 +306,39 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
+      's1',
+      queuedMessage,
+      'Message was not sent because the session stopped during dispatch.'
+    );
+  });
+
+  it('does not expose a stopped workspace notification as a recoverable user message', async () => {
+    const notificationMessage: QueuedMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
+    let resolveModelUpdate!: () => void;
+    const modelUpdate = new Promise<void>((resolve) => {
+      resolveModelUpdate = resolve;
+    });
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
+    mockSessionService.getSessionClient.mockReturnValue({});
+    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    });
+
+    mockSessionService.isSessionStopping.mockReturnValue(true);
+    resolveModelUpdate();
+    await dispatchPromise;
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockWorkspaceNotificationService.markDelivered).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
   });
 
   it('fails a message once when ACP reports an internal error', async () => {
