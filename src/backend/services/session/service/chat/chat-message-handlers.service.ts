@@ -582,28 +582,7 @@ class ChatMessageHandlerService {
     const isCompactCommand = this.isCompactCommand(msg.text);
     const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
-    if (msg.settings.planModeEnabled) {
-      await sessionConfigService.setSessionCollaborationMode(dbSessionId, 'plan');
-    }
-
-    // Only clients that expose thinking-budget controls support this feature.
-    // Keep this before state mutation so provider errors can be safely requeued.
-    if (isThinkingBudgetClient(client)) {
-      const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-      await sessionConfigService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
-    }
-    await sessionConfigService.setSessionModel(
-      dbSessionId,
-      msg.settings.selectedModel ?? undefined
-    );
-    await sessionConfigService.setSessionReasoningEffort(
-      dbSessionId,
-      msg.settings.reasoningEffort ?? null
-    );
-
-    // Configuration calls above yield. Re-check the lifecycle barrier before any
-    // dispatch state mutation so a stop cannot be crossed by this dequeued turn.
-    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+    if (!(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration))) {
       return;
     }
 
@@ -662,6 +641,60 @@ class ChatMessageHandlerService {
         remainingInQueue: sessionDomainService.getQueueLength(dbSessionId),
       });
     }
+  }
+
+  private async configureMessageForDispatch(
+    dbSessionId: string,
+    msg: QueuedMessage,
+    client: unknown,
+    stopGeneration: number
+  ): Promise<boolean> {
+    try {
+      if (msg.settings.planModeEnabled) {
+        await sessionConfigService.setSessionCollaborationMode(dbSessionId, 'plan');
+      }
+
+      // Only clients that expose thinking-budget controls support this feature.
+      // Keep this before state mutation so provider errors can be safely recovered.
+      if (isThinkingBudgetClient(client)) {
+        const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+        await sessionConfigService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
+      }
+      await sessionConfigService.setSessionModel(
+        dbSessionId,
+        msg.settings.selectedModel ?? undefined
+      );
+      await sessionConfigService.setSessionReasoningEffort(
+        dbSessionId,
+        msg.settings.reasoningEffort ?? null
+      );
+    } catch (error) {
+      if (this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+        throw error;
+      }
+      this.failStoppedUserMessage(dbSessionId, msg);
+      return false;
+    }
+
+    // Configuration calls above yield. Re-check the lifecycle barrier before any
+    // dispatch state mutation so a stop cannot be crossed by this dequeued turn.
+    if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+      this.failStoppedUserMessage(dbSessionId, msg);
+      return false;
+    }
+    return true;
+  }
+
+  private failStoppedUserMessage(dbSessionId: string, msg: QueuedMessage): void {
+    if (this.getWorkspaceNotificationId(msg.id)) {
+      sessionDomainService.emitSessionSnapshot(dbSessionId);
+      return;
+    }
+    sessionDomainService.failMessage(
+      dbSessionId,
+      msg,
+      'Message was not sent because the session stopped during dispatch.'
+    );
   }
 
   private getWorkspaceNotificationId(messageId: string): string | null {

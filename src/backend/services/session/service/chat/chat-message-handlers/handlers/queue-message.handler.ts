@@ -9,6 +9,7 @@ import {
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueueMessageInput } from '@/shared/websocket';
+import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -36,6 +37,10 @@ function validateQueueMessageInput(
 
   if (!message.id) {
     return 'Missing message id';
+  }
+
+  if (message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
+    return 'Reserved message id';
   }
 
   return validateAttachments(message.attachments);

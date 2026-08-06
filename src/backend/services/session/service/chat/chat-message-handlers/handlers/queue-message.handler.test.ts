@@ -63,6 +63,37 @@ describe('createQueueMessageHandler', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
+  it('rejects client messages that use the workspace notification id namespace', async () => {
+    mocks.enqueue.mockReturnValue({ position: 0 });
+    const ws = { send: vi.fn() };
+    const tryDispatchNextMessage = vi.fn();
+    const handler = createQueueMessageHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/work',
+      message: {
+        type: 'queue_message',
+        id: 'workspace-notification-user-controlled',
+        text: 'hello',
+      } as never,
+    });
+
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(mocks.rejectMessage).toHaveBeenCalledWith(
+      'session-1',
+      'workspace-notification-user-controlled',
+      'Reserved message id'
+    );
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
+
   it('emits rejected state for queue messages with invalid attachments', async () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
