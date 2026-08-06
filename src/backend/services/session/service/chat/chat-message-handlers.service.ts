@@ -687,6 +687,7 @@ class ChatMessageHandlerService {
 
   private failStoppedUserMessage(dbSessionId: string, msg: QueuedMessage): void {
     if (this.getWorkspaceNotificationId(msg.id)) {
+      sessionDomainService.emitSessionSnapshot(dbSessionId);
       return;
     }
     sessionDomainService.failMessage(

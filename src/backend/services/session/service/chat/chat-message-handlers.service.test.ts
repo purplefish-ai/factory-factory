@@ -17,6 +17,7 @@ const {
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
     emitDelta: vi.fn(),
+    emitSessionSnapshot: vi.fn(),
     failMessage: vi.fn(),
     commitSentUserMessageAtOrder: vi.fn(),
     removeTranscriptMessageById: vi.fn(),
@@ -339,6 +340,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
     expect(mockWorkspaceNotificationService.markDelivered).not.toHaveBeenCalled();
     expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitSessionSnapshot).toHaveBeenCalledWith('s1');
   });
 
   it('fails a message once when ACP reports an internal error', async () => {
