@@ -113,8 +113,9 @@ describe('worktreeLifecycleService cleanup', () => {
     }
   });
 
-  it('evicts Git state when the worktree is already missing', async () => {
+  it('delegates registered worktree cleanup when the directory is already missing', async () => {
     const worktreePath = '/tmp/worktrees/missing-workspace';
+    const project = { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' };
     vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
     vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
     const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
@@ -123,14 +124,14 @@ describe('worktreeLifecycleService cleanup', () => {
     >({
       name: 'Missing workspace',
       worktreePath,
-      project: { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' },
+      project,
     });
 
     await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
 
-    expect(removeStateSpy).toHaveBeenCalledWith(worktreePath);
     expect(gitOpsService.commitIfNeeded).not.toHaveBeenCalled();
-    expect(gitOpsService.removeWorktree).not.toHaveBeenCalled();
+    expect(gitOpsService.removeWorktree).toHaveBeenCalledWith(worktreePath, project);
+    expect(removeStateSpy).not.toHaveBeenCalled();
   });
 
   it('does not evict Git state when worktree removal fails', async () => {
