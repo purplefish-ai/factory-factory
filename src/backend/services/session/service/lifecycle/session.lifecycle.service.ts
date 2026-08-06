@@ -280,11 +280,6 @@ export class SessionLifecycleService {
     const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
     const reason = options?.reason ?? 'SYSTEM_STOP';
 
-    if (this.runtimeManager.isStopInProgress(sessionId)) {
-      logger.debug('Session stop already in progress', { sessionId });
-      return;
-    }
-
     if (workspaceId && options?.recordLifecycleEvent !== false) {
       await this.lifecycleEventService.record({
         workspaceId,
@@ -352,9 +347,7 @@ export class SessionLifecycleService {
   }
 
   private async stopRuntimeAndPendingCreation(sessionId: string): Promise<void> {
-    if (!this.runtimeManager.isStopInProgress(sessionId)) {
-      await this.runtimeManager.stopClient(sessionId);
-    }
+    await this.runtimeManager.stopClient(sessionId);
 
     const pendingCreations = this.clientCreationOperations.get(sessionId);
     if (!pendingCreations || pendingCreations.size === 0) {
@@ -362,9 +355,7 @@ export class SessionLifecycleService {
     }
 
     await Promise.allSettled([...pendingCreations]);
-    if (!this.runtimeManager.isStopInProgress(sessionId)) {
-      await this.runtimeManager.stopClient(sessionId);
-    }
+    await this.runtimeManager.stopClient(sessionId);
   }
 
   async stopWorkspaceSessions(

@@ -835,15 +835,28 @@ describe('SessionService', () => {
     );
   });
 
-  it('still clears lifecycle state when only the runtime is already stopping', async () => {
+  it('waits for an existing runtime stop before clearing lifecycle state', async () => {
+    const runtimeStop = createDeferred<void>();
+    const acpProcessor = getAcpProcessorState();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(true);
-    const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
+    vi.mocked(acpRuntimeManager.stopClient).mockReturnValue(runtimeStop.promise);
+    acpProcessor.beginPromptTurn('session-1');
 
-    await sessionLifecycleService.stopSession('session-1');
+    try {
+      const stopPromise = sessionLifecycleService.stopSession('session-1');
+      await vi.waitFor(() => {
+        expect(acpRuntimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      });
 
-    expect(acpRuntimeManager.stopClient).not.toHaveBeenCalled();
-    expect(sessionRepository.updateSessionIfStatus).not.toHaveBeenCalled();
-    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
+      expect(acpProcessor.getActivePromptAttemptKey('session-1')).toBeDefined();
+
+      runtimeStop.resolve();
+      await stopPromise;
+
+      expect(acpProcessor.getActivePromptAttemptKey('session-1')).toBeUndefined();
+    } finally {
+      acpProcessor.clearSessionState('session-1');
+    }
   });
 
   it('rejects startup and client acquisition after lifecycle stop is reserved', async () => {
@@ -1317,11 +1330,10 @@ describe('SessionService', () => {
       });
 
       await sessionLifecycleService.stopSession(sessionId);
-      const activeAttemptAfterStop = getAcpProcessorState().getActivePromptAttemptKey(sessionId);
 
       prompt.reject(new Error('Prompt timed out'));
       await expect(sendPromise).rejects.toThrow('Prompt timed out');
-      expect(activeAttemptAfterStop).toBeUndefined();
+      expect(getAcpProcessorState().getActivePromptAttemptKey(sessionId)).toBeUndefined();
     } finally {
       getAcpProcessorState().clearSessionState(sessionId);
       sessionEventBus.registerViewerCountProvider(null);
