@@ -59,6 +59,10 @@ describe('ReconciliationService', () => {
   });
 
   describe('reconcile', () => {
+    beforeEach(() => {
+      reconciliationService.startPeriodicCleanup();
+    });
+
     it('should initialize NEW workspaces', async () => {
       const newWorkspace = {
         id: 'ws-1',
@@ -328,6 +332,51 @@ describe('ReconciliationService', () => {
       await stopPromise;
       expect(stopped).toBe(true);
       expect(reconciliationSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not initialize another workspace after shutdown starts', async () => {
+      const releaseInitialization: { current: (() => void) | null } = { current: null };
+      mockFindMany.mockResolvedValue([
+        {
+          id: 'ws-1',
+          status: 'NEW',
+          branchName: 'feature/first',
+          project: { id: 'proj-1' },
+        },
+        {
+          id: 'ws-2',
+          status: 'NEW',
+          branchName: 'feature/second',
+          project: { id: 'proj-1' },
+        },
+      ]);
+      mockInitializeWorktree
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseInitialization.current = resolve;
+            })
+        )
+        .mockResolvedValue(undefined);
+      vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
+      expect(mockInitializeWorktree).toHaveBeenCalledWith('ws-1', {
+        branchName: 'feature/first',
+      });
+
+      const stopPromise = reconciliationService.stopPeriodicCleanup();
+      await Promise.resolve();
+
+      if (releaseInitialization.current) {
+        releaseInitialization.current();
+      }
+      await stopPromise;
+
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
     });
   });
 });

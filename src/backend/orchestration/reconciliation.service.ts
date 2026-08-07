@@ -154,6 +154,11 @@ class ReconciliationService {
     const workspacesNeedingWorktree = await this.workspace.findNeedingWorktree();
 
     for (const workspace of workspacesNeedingWorktree) {
+      if (this.isShuttingDown) {
+        logger.debug('Stopping reconciliation - shutdown in progress');
+        return;
+      }
+
       if (workspace.status === 'PROVISIONING') {
         await this.recoverStaleProvisioningWorkspace(workspace);
       } else {
