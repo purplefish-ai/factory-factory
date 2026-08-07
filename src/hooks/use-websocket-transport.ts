@@ -323,6 +323,7 @@ export function useWebSocketTransport(
 
     if (previousUrl !== null && url !== null && previousUrl !== url) {
       messageQueueRef.current = [];
+      reconnectAttemptsRef.current = 0;
     }
 
     if (url) {

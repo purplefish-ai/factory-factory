@@ -473,6 +473,50 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('starts a fresh reconnect budget when switching directly to a new url', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+    });
+    await flushEffects();
+
+    flushSync(() => {
+      getLastSocket().simulateOpen();
+    });
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      flushSync(() => {
+        getLastSocket().close();
+      });
+      await vi.advanceTimersByTimeAsync(40_000);
+      await flushEffects();
+    }
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(true);
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await vi.advanceTimersByTimeAsync(0);
+    await flushEffects();
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    // The replacement session's first failure must schedule a retry instead
+    // of inheriting the previous session's exhausted attempt budget.
+    const replacementSocket = getLastSocket();
+    flushSync(() => {
+      replacementSocket.close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+    await vi.advanceTimersByTimeAsync(40_000);
+    await flushEffects();
+    expect(getLastSocket()).not.toBe(replacementSocket);
+
+    harness.cleanup();
+  });
+
   it('ignores open events from sockets superseded by a URL change', async () => {
     let connectedCount = 0;
     const harness = createHarness({
