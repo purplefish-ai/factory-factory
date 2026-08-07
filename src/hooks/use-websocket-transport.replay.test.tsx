@@ -298,6 +298,41 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('clears queued messages when the WebSocket URL changes', async () => {
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+    });
+    await flushEffects();
+
+    const firstSocket = getLastSocket();
+    flushSync(() => {
+      firstSocket.simulateOpen();
+      firstSocket.close();
+    });
+
+    const firstTransport = harness.transportRef.current;
+    if (!firstTransport) {
+      throw new Error('Transport was not initialized');
+    }
+    expect(firstTransport.send({ id: 'session-one-1' })).toBe(false);
+    expect(firstTransport.send({ id: 'session-one-2' })).toBe(false);
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await flushEffects();
+
+    const secondSocket = getLastSocket();
+    expect(secondSocket).not.toBe(firstSocket);
+    flushSync(() => {
+      secondSocket.simulateOpen();
+    });
+
+    expect(extractMessageIds(secondSocket)).toEqual([]);
+    expect(harness.transportRef.current?.send({ id: 'session-two' })).toBe(true);
+    expect(extractMessageIds(secondSocket)).toEqual(['session-two']);
+
+    harness.cleanup();
+  });
+
   it('drops messages from sockets superseded by a URL change', async () => {
     const receivedMessages: unknown[] = [];
     const harness = createHarness({
@@ -434,6 +469,50 @@ describe('useWebSocketTransport replay queue', () => {
       getLastSocket().close();
     });
     expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    harness.cleanup();
+  });
+
+  it('starts a fresh reconnect budget when switching directly to a new url', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+    });
+    await flushEffects();
+
+    flushSync(() => {
+      getLastSocket().simulateOpen();
+    });
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      flushSync(() => {
+        getLastSocket().close();
+      });
+      await vi.advanceTimersByTimeAsync(40_000);
+      await flushEffects();
+    }
+    flushSync(() => {
+      getLastSocket().close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(true);
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await vi.advanceTimersByTimeAsync(0);
+    await flushEffects();
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+
+    // The replacement session's first failure must schedule a retry instead
+    // of inheriting the previous session's exhausted attempt budget.
+    const replacementSocket = getLastSocket();
+    flushSync(() => {
+      replacementSocket.close();
+    });
+    expect(harness.transportRef.current?.gaveUp).toBe(false);
+    await vi.advanceTimersByTimeAsync(40_000);
+    await flushEffects();
+    expect(getLastSocket()).not.toBe(replacementSocket);
 
     harness.cleanup();
   });

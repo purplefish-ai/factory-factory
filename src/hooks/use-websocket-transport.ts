@@ -154,6 +154,7 @@ export function useWebSocketTransport(
   const intentionalCloseRef = useRef(false);
   // Message queue for messages sent while disconnected
   const messageQueueRef = useRef<unknown[]>([]);
+  const previousUrlRef = useRef<string | null>(null);
 
   // Store callbacks in refs to avoid reconnection on callback changes
   const onMessageRef = useRef(onMessage);
@@ -317,6 +318,14 @@ export function useWebSocketTransport(
 
   // Connect when URL becomes available, disconnect when it becomes null
   useEffect(() => {
+    const previousUrl = previousUrlRef.current;
+    previousUrlRef.current = url;
+
+    if (previousUrl !== null && url !== null && previousUrl !== url) {
+      messageQueueRef.current = [];
+      reconnectAttemptsRef.current = 0;
+    }
+
     if (url) {
       connect();
     } else {
