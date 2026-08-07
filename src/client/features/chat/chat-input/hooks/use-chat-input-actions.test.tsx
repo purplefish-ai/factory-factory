@@ -118,6 +118,33 @@ afterEach(() => {
 });
 
 describe('useChatInputActions keyboard shortcuts', () => {
+  it('does not send when Enter confirms an IME composition', () => {
+    const onSend = vi.fn();
+    const capabilities = createClaudeChatBarCapabilities('sonnet');
+    const { root, container, textarea } = renderHarness({
+      capabilities,
+      onSend,
+      onSettingsChange: () => undefined,
+    });
+    textarea.value = 'テスト';
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+    });
+    flushSync(() => {
+      textarea.dispatchEvent(event);
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textarea.value).toBe('テスト');
+
+    root.unmount();
+    container.remove();
+  });
+
   it('does not dismiss the slash menu when a Mod+Enter send is skipped', () => {
     const onCloseSlashMenu = vi.fn();
     const onSend = vi.fn();

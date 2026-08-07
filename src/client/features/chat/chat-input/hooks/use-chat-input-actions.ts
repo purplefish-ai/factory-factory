@@ -264,6 +264,10 @@ export function useChatInputActions({
   // Handle key press shortcuts before and after slash/file menus.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+
       // Run pre-slash shortcuts first.
       if (runShortcuts(event, preSlashShortcuts)) {
         return;
