@@ -251,24 +251,8 @@ export class AcpRuntimeManager {
     }
 
     const isCodex = options.provider === 'CODEX';
-    const spawnCommand: SpawnCommand = options.adapterBinaryPath
-      ? {
-          command: options.adapterBinaryPath,
-          args: [],
-          commandLabel: options.adapterBinaryPath,
-        }
-      : isCodex
-        ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
-        : (() => {
-            const binaryName = 'claude-agent-acp';
-            const packageName = '@agentclientprotocol/claude-agent-acp';
-            const binaryPath = resolveAcpBinary(packageName, binaryName);
-            return {
-              command: binaryPath,
-              args: [],
-              commandLabel: binaryPath,
-            };
-          })();
+    const isOpenHands = options.provider === 'OPENHANDS';
+    const spawnCommand = this.resolveSpawnCommand(options, isCodex, isOpenHands);
 
     logger.info('Spawning ACP subprocess', {
       sessionId,
@@ -441,6 +425,41 @@ export class AcpRuntimeManager {
     await this.notifyClientCreated(sessionId, handle, context, handlers);
 
     return handle;
+  }
+
+  private resolveSpawnCommand(
+    options: AcpClientOptions,
+    isCodex: boolean,
+    isOpenHands: boolean
+  ): SpawnCommand {
+    if (options.adapterBinaryPath) {
+      return {
+        command: options.adapterBinaryPath,
+        args: [],
+        commandLabel: options.adapterBinaryPath,
+      };
+    }
+    if (isCodex) {
+      return resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint);
+    }
+    if (isOpenHands) {
+      // OpenHands is a native ACP binary (like Claude), installed outside npm
+      // (e.g. `uv tool install openhands`). It reads LLM config from the child
+      // env (LLM_MODEL/LLM_BASE_URL/LLM_API_KEY), inherited via the factory process.
+      return {
+        command: 'openhands',
+        args: ['acp', '--override-with-envs'],
+        commandLabel: 'openhands acp --override-with-envs',
+      };
+    }
+    const binaryName = 'claude-agent-acp';
+    const packageName = '@agentclientprotocol/claude-agent-acp';
+    const binaryPath = resolveAcpBinary(packageName, binaryName);
+    return {
+      command: binaryPath,
+      args: [],
+      commandLabel: binaryPath,
+    };
   }
 
   private async cleanupFailedClientCreation(child: ChildProcess, sessionId: string): Promise<void> {

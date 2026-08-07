@@ -240,6 +240,43 @@ describe('SessionConfigService', () => {
     ]);
   });
 
+  it('returns cached config options for OPENHANDS snapshot after reload', async () => {
+    repository.getSessionById.mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        provider: 'OPENHANDS',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'OPENHANDS',
+            providerSessionId: 'provider-session-1',
+            capturedAt: '2026-02-14T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                category: 'model',
+                currentValue: 'glm-4.6',
+                options: [{ value: 'glm-4.6', name: 'GLM-4.6' }],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    await expect(service.getSessionConfigOptionsWithFallback('session-1')).resolves.toEqual([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'glm-4.6',
+        options: [{ value: 'glm-4.6', name: 'GLM-4.6' }],
+      },
+    ]);
+  });
+
   it('returns empty config options when no ACP handle or cached snapshot exists', async () => {
     repository.getSessionById.mockResolvedValue(
       unsafeCoerce({
@@ -897,6 +934,56 @@ describe('SessionConfigService', () => {
         '["never","danger-full-access"]'
       )
     ).rejects.toThrow('Unsupported value');
+  });
+
+  it('updates cached config snapshot when setting config on inactive OPENHANDS session', async () => {
+    runtimeManager.getClient.mockReturnValue(undefined);
+    repository.getSessionById.mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        provider: 'OPENHANDS',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'OPENHANDS',
+            providerSessionId: 'provider-session-1',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                category: 'model',
+                currentValue: 'glm-4.6',
+                options: [
+                  { value: 'glm-4.6', name: 'GLM-4.6' },
+                  { value: 'glm-4.5', name: 'GLM-4.5' },
+                ],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    await service.setSessionConfigOption('session-1', 'model', 'glm-4.5');
+
+    expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
+    expect(repository.updateSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          acpConfigSnapshot: expect.objectContaining({
+            provider: 'OPENHANDS',
+            configOptions: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'model',
+                currentValue: 'glm-4.5',
+              }),
+            ]),
+          }),
+        }),
+      })
+    );
   });
 
   it('retries persisting ACP config snapshot metadata once when first write fails', async () => {

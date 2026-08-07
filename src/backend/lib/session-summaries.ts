@@ -1,4 +1,4 @@
-import type { SessionStatus as DbSessionStatus } from '@/shared/core';
+import type { SessionStatus as DbSessionStatus, SessionProvider } from '@/shared/core';
 import {
   hasWorkingSessionSummary as hasWorkingRuntimeSessionSummary,
   isSessionSummaryWorking as isRuntimeSessionSummaryWorking,
@@ -11,7 +11,7 @@ interface SessionLike {
   name: string | null;
   workflow: string | null;
   model: string | null;
-  provider?: 'CLAUDE' | 'CODEX';
+  provider?: SessionProvider;
   status: DbSessionStatus;
 }
 

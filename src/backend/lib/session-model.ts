@@ -5,6 +5,9 @@ const CLAUDE_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
 export const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
   CLAUDE: 'sonnet',
   CODEX: 'default',
+  // OpenHands resolves the actual model from the LLM_MODEL env var at spawn time;
+  // the stored value is a fallback label only.
+  OPENHANDS: 'env',
 };
 
 function isClaudeModel(model: string): boolean {
@@ -35,6 +38,12 @@ export function normalizeSessionModelForProvider(
   const normalized = model?.trim();
   if (!normalized) {
     return undefined;
+  }
+
+  if (provider === 'OPENHANDS') {
+    // OpenHands reads the authoritative model from LLM_MODEL at spawn time; any
+    // stored/selected model string is informational, so never reject it here.
+    return normalized;
   }
 
   if (provider === 'CODEX') {

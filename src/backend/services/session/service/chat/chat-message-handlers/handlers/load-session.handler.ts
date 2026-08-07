@@ -1,5 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import type { AcpProvider } from '@/backend/services/session/service/acp';
 import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
@@ -106,7 +107,7 @@ async function enqueueInitialMessageIfPresent(
 
 async function sendCachedSlashCommandsIfNeeded(
   sessionId: string,
-  provider: 'CLAUDE' | 'CODEX',
+  provider: AcpProvider,
   worktreePath: string | null
 ): Promise<void> {
   const cached = await slashCommandCacheService.getCachedCommands(provider);

@@ -13,8 +13,15 @@ class SessionProviderResolverService {
   }): Promise<{ provider: SessionProvider; model: string }> {
     const provider = await this.resolveSessionProvider(params);
     const settings = await userSettingsService.get();
+    // OpenHands resolves its model from the LLM_MODEL env var at spawn time;
+    // there is no per-provider configured model to fall back to, so it returns
+    // undefined and resolveSessionModelForProvider applies the 'env' sentinel.
     const configuredModel =
-      provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel;
+      provider === 'CLAUDE'
+        ? settings.defaultClaudeModel
+        : provider === 'CODEX'
+          ? settings.defaultCodexModel
+          : undefined;
 
     return {
       provider,

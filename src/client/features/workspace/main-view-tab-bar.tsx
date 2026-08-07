@@ -13,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getSessionProviderLabel,
+  resolveExplicitSessionProvider,
+  resolveProviderSelection,
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
@@ -37,7 +39,7 @@ interface Session {
   name: string | null;
   workflow?: string | null;
   status: DbSessionStatus;
-  provider?: 'CLAUDE' | 'CODEX';
+  provider?: SessionProviderValue;
 }
 
 // =============================================================================
@@ -270,7 +272,10 @@ export function MainViewTabBar({
             <Select
               value={selectedProvider}
               onValueChange={(value) => {
-                setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
+                const explicit = resolveExplicitSessionProvider(resolveProviderSelection(value));
+                if (explicit) {
+                  setSelectedProvider(explicit);
+                }
               }}
               disabled={isButtonDisabled}
             >

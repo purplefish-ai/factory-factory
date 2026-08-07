@@ -1,4 +1,4 @@
-export type AcpProvider = 'CLAUDE' | 'CODEX';
+export type AcpProvider = 'CLAUDE' | 'CODEX' | 'OPENHANDS';
 
 export type PermissionPreset = 'STRICT' | 'RELAXED' | 'YOLO';
 

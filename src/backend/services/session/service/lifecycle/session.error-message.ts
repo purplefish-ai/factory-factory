@@ -1,3 +1,5 @@
+import type { AcpProvider } from '@/backend/services/session/service/acp/types';
+
 const MAX_ERROR_MESSAGE_LENGTH = 4000;
 const GENERIC_PROVIDER_ERROR_MESSAGE = 'The provider returned an error.';
 
@@ -76,7 +78,7 @@ export function toPublicProviderErrorMessage(error: unknown): string {
 }
 
 export function toProviderFailureChatMessage(
-  provider: 'CLAUDE' | 'CODEX' | undefined,
+  provider: AcpProvider | undefined,
   error: unknown
 ): string {
   const message = toPublicProviderErrorMessage(error);

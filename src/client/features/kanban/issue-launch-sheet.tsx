@@ -23,6 +23,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 
 interface IssueLaunchSheetProps {
@@ -34,7 +35,6 @@ interface IssueLaunchSheetProps {
 }
 
 type LaunchMode = 'non_interactive' | 'plan';
-type AgentProvider = 'CLAUDE' | 'CODEX';
 type PromptProject = {
   githubOwner?: string | null;
   githubRepo?: string | null;
@@ -98,7 +98,7 @@ export function IssueLaunchSheet({
   const promptPreview = useMemo(() => buildPromptPreview(issue, project), [issue, project]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
-  const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
+  const [provider, setProvider] = useState<SessionProviderValue>('CLAUDE');
   const [promptText, setPromptText] = useState(promptPreview);
   const initializedProviderForOpenRef = useRef(false);
   const initializedPromptIssueKeyRef = useRef<string | null>(null);
@@ -257,7 +257,7 @@ export function IssueLaunchSheet({
               </Label>
               <Select
                 value={provider}
-                onValueChange={(value) => setProvider(value as AgentProvider)}
+                onValueChange={(value) => setProvider(value as SessionProviderValue)}
                 disabled={createWorkspaceMutation.isPending || isLoadingSettings}
               >
                 <SelectTrigger id={`issue-provider-${issue.id}`} className="h-8 text-xs">
@@ -266,6 +266,7 @@ export function IssueLaunchSheet({
                 <SelectContent>
                   <SelectItem value="CLAUDE">Claude</SelectItem>
                   <SelectItem value="CODEX">Codex</SelectItem>
+                  <SelectItem value="OPENHANDS">OpenHands</SelectItem>
                 </SelectContent>
               </Select>
             </div>

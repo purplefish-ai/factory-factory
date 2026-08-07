@@ -45,6 +45,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
 import { kanbanColumnForStatusReason } from '@/shared/kanban-column-projection';
 import {
@@ -401,7 +402,7 @@ export function InlineWorkspaceForm({
   const [initialPrompt, setInitialPrompt] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
-  const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
+  const [provider, setProvider] = useState<SessionProviderValue>('CLAUDE');
   const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
     'non_interactive'
   );
@@ -718,7 +719,7 @@ export function InlineWorkspaceForm({
                 </div>
                 <Select
                   value={provider}
-                  onValueChange={(v) => setProvider(v as 'CLAUDE' | 'CODEX')}
+                  onValueChange={(v) => setProvider(v as SessionProviderValue)}
                   disabled={isLoadingSettings || isCreating}
                 >
                   <SelectTrigger className="h-7 w-24 text-xs">
@@ -727,6 +728,7 @@ export function InlineWorkspaceForm({
                   <SelectContent>
                     <SelectItem value="CLAUDE">Claude</SelectItem>
                     <SelectItem value="CODEX">Codex</SelectItem>
+                    <SelectItem value="OPENHANDS">OpenHands</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select

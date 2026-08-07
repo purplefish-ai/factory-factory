@@ -18,6 +18,7 @@ import {
   buildCodexConfigOptionsWithModelCatalog,
   getConfigOptionValues,
   getSelectOptions,
+  isSessionProvider,
   type SessionProvider,
 } from './session-config-option-helpers';
 
@@ -1047,7 +1048,7 @@ export class SessionConfigService {
     const configOptions = candidate.configOptions;
     const observedModelId = candidate.observedModelId;
 
-    if (provider !== 'CLAUDE' && provider !== 'CODEX') {
+    if (!isSessionProvider(provider)) {
       return null;
     }
     if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {

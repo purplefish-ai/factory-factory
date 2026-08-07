@@ -56,7 +56,8 @@ export type SessionLifecycleEventReason = (typeof SessionLifecycleEventReason)[k
 
 export const SessionProvider = {
   CLAUDE: 'CLAUDE',
-  CODEX: 'CODEX'
+  CODEX: 'CODEX',
+  OPENHANDS: 'OPENHANDS'
 } as const
 
 export type SessionProvider = (typeof SessionProvider)[keyof typeof SessionProvider]
@@ -82,7 +83,8 @@ export type RatchetReviewTriggerMode = (typeof RatchetReviewTriggerMode)[keyof t
 export const WorkspaceProviderSelection = {
   WORKSPACE_DEFAULT: 'WORKSPACE_DEFAULT',
   CLAUDE: 'CLAUDE',
-  CODEX: 'CODEX'
+  CODEX: 'CODEX',
+  OPENHANDS: 'OPENHANDS'
 } as const
 
 export type WorkspaceProviderSelection = (typeof WorkspaceProviderSelection)[keyof typeof WorkspaceProviderSelection]
