@@ -243,6 +243,8 @@ const mockUserSettings: UserSettings = {
   deepgramApiKeyEncrypted: null,
   voiceTtsModel: 'aura-2-apollo-en',
   voiceTtsSpeed: 1.3,
+  voiceUtteranceEndMs: 1000,
+  voiceBargeInSustainedMs: 16,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };

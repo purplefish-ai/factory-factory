@@ -30,6 +30,8 @@ interface UpdateUserSettingsInput {
   deepgramApiKeyEncrypted?: string | null;
   voiceTtsModel?: string;
   voiceTtsSpeed?: number;
+  voiceUtteranceEndMs?: number;
+  voiceBargeInSustainedMs?: number;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }
@@ -140,13 +142,20 @@ function buildVoiceDefaults(
   data: UpdateUserSettingsInput
 ): Pick<
   Prisma.UserSettingsCreateInput,
-  'voiceModeEnabled' | 'deepgramApiKeyEncrypted' | 'voiceTtsModel' | 'voiceTtsSpeed'
+  | 'voiceModeEnabled'
+  | 'deepgramApiKeyEncrypted'
+  | 'voiceTtsModel'
+  | 'voiceTtsSpeed'
+  | 'voiceUtteranceEndMs'
+  | 'voiceBargeInSustainedMs'
 > {
   return {
     voiceModeEnabled: data.voiceModeEnabled ?? false,
     deepgramApiKeyEncrypted: data.deepgramApiKeyEncrypted ?? null,
     voiceTtsModel: data.voiceTtsModel ?? undefined,
     voiceTtsSpeed: data.voiceTtsSpeed ?? undefined,
+    voiceUtteranceEndMs: data.voiceUtteranceEndMs ?? undefined,
+    voiceBargeInSustainedMs: data.voiceBargeInSustainedMs ?? undefined,
   };
 }
 

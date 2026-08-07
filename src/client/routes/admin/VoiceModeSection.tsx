@@ -23,25 +23,75 @@ import {
   DEFAULT_DEEPGRAM_TTS_MODEL,
   DEFAULT_DEEPGRAM_TTS_SPEED,
 } from '@/shared/deepgram-voices';
+import {
+  DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
+  DEFAULT_VOICE_UTTERANCE_END_MS,
+  deriveAggressivenessLabel,
+  VOICE_BARGE_IN_SUSTAINED_MS_MAX,
+  VOICE_BARGE_IN_SUSTAINED_MS_MIN,
+  VOICE_BARGE_IN_SUSTAINED_MS_STEP,
+  VOICE_UTTERANCE_END_MS_MAX,
+  VOICE_UTTERANCE_END_MS_MIN,
+  VOICE_UTTERANCE_END_MS_STEP,
+} from '@/shared/voice-vad';
 
-export function VoiceModeSection() {
-  const { data: config, isLoading } = trpc.voice.getConfig.useQuery();
-  const utils = trpc.useUtils();
-  const [apiKey, setApiKey] = useState('');
-  // Tied to the exact key text that was validated, rather than a bare
-  // boolean, so a validation response that resolves after the user has
-  // already edited the field can't mark the new, unvalidated text as valid.
-  const [validatedKey, setValidatedKey] = useState<string | null>(null);
-  const validated = validatedKey !== null && validatedKey === apiKey;
-  const [speed, setSpeed] = useState(DEFAULT_DEEPGRAM_TTS_SPEED);
+type VoiceUpdateConfigMutation = ReturnType<typeof trpc.voice.updateConfig.useMutation>;
 
-  useEffect(() => {
-    if (config?.ttsSpeed !== undefined) {
-      setSpeed(config.ttsSpeed);
-    }
-  }, [config?.ttsSpeed]);
+interface AggressivenessSliderProps {
+  id: string;
+  label: string;
+  helpText: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  formatValue: (value: number) => string;
+  disabled: boolean;
+  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
+}
 
-  const validateApiKey = trpc.voice.validateApiKey.useMutation({
+/** Shared shape for the "stop-speaking" and "barge-in" sensitivity sliders — each shows a raw value plus a derived Aggressive/Balanced/Patient label. */
+function AggressivenessSlider({
+  id,
+  label,
+  helpText,
+  value,
+  min,
+  max,
+  step,
+  formatValue,
+  disabled,
+  onChange,
+  onCommit,
+}: AggressivenessSliderProps) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between w-[280px]">
+        <Label htmlFor={id}>{label}</Label>
+        <span className="text-xs text-muted-foreground font-mono">
+          {formatValue(value)} · {deriveAggressivenessLabel(value, min, max)}
+        </span>
+      </div>
+      <Slider
+        id={id}
+        className="w-[280px]"
+        value={[value]}
+        onValueChange={([v]) => onChange(v ?? value)}
+        onValueCommit={([v]) => onCommit(v ?? value)}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+      />
+      <p className="text-xs text-muted-foreground">{helpText}</p>
+    </div>
+  );
+}
+
+/** Split out of VoiceModeSection so its nested success/error branching doesn't count against that component's own complexity budget. */
+function useValidateApiKeyMutation(apiKey: string, setValidatedKey: (key: string | null) => void) {
+  return trpc.voice.validateApiKey.useMutation({
     onSuccess: (result, variables) => {
       if (result.valid) {
         setValidatedKey(variables.apiKey);
@@ -64,6 +114,167 @@ export function VoiceModeSection() {
       toast.error(`Validation failed: ${error.message}`);
     },
   });
+}
+
+interface DeepgramApiKeyFieldProps {
+  apiKey: string;
+  onApiKeyChange: (value: string) => void;
+  validated: boolean;
+  hasStoredKey: boolean;
+  validating: boolean;
+  saving: boolean;
+  onValidate: () => void;
+  onSave: () => void;
+}
+
+/** Split out of VoiceModeSection so its validity-badge/button-label branching doesn't count against that component's own complexity budget. */
+function DeepgramApiKeyField({
+  apiKey,
+  onApiKeyChange,
+  validated,
+  hasStoredKey,
+  validating,
+  saving,
+  onValidate,
+  onSave,
+}: DeepgramApiKeyFieldProps) {
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="deepgram-api-key">Deepgram API Key</Label>
+          {validated && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <CheckCircleIcon className="w-3 h-3" />
+              Valid
+            </span>
+          )}
+        </div>
+        <Input
+          id="deepgram-api-key"
+          type="password"
+          value={apiKey}
+          onChange={(e) => onApiKeyChange(e.target.value)}
+          placeholder={hasStoredKey ? '••••••••••••••••••••' : 'Enter your Deepgram API key'}
+          className="font-mono text-sm w-[280px]"
+        />
+      </div>
+      <Button variant="outline" onClick={onValidate} disabled={validating || !apiKey}>
+        {validating ? 'Validating...' : 'Validate'}
+      </Button>
+      {validated && (
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+interface VoiceSensitivitySlidersProps {
+  utteranceEndMs: number | undefined;
+  bargeInSustainedMs: number | undefined;
+  enabled: boolean;
+  disabled: boolean;
+  updateConfig: VoiceUpdateConfigMutation;
+}
+
+/**
+ * Owns local state and commit/revert handling for both aggressiveness
+ * sliders — split out from VoiceModeSection so this pair of settings has its
+ * own complexity budget rather than growing that component's.
+ */
+function VoiceSensitivitySliders({
+  utteranceEndMs: configUtteranceEndMs,
+  bargeInSustainedMs: configBargeInSustainedMs,
+  enabled,
+  disabled,
+  updateConfig,
+}: VoiceSensitivitySlidersProps) {
+  const [utteranceEndMs, setUtteranceEndMs] = useState(DEFAULT_VOICE_UTTERANCE_END_MS);
+  const [bargeInSustainedMs, setBargeInSustainedMs] = useState(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS);
+
+  useEffect(() => {
+    if (configUtteranceEndMs !== undefined) {
+      setUtteranceEndMs(configUtteranceEndMs);
+    }
+  }, [configUtteranceEndMs]);
+
+  useEffect(() => {
+    if (configBargeInSustainedMs !== undefined) {
+      setBargeInSustainedMs(configBargeInSustainedMs);
+    }
+  }, [configBargeInSustainedMs]);
+
+  return (
+    <>
+      <AggressivenessSlider
+        id="voice-utterance-end"
+        label="Stop-speaking sensitivity"
+        helpText="How long a pause before voice mode decides you've finished talking."
+        value={utteranceEndMs}
+        min={VOICE_UTTERANCE_END_MS_MIN}
+        max={VOICE_UTTERANCE_END_MS_MAX}
+        step={VOICE_UTTERANCE_END_MS_STEP}
+        formatValue={(value) => `${(value / 1000).toFixed(2)}s`}
+        disabled={disabled}
+        onChange={setUtteranceEndMs}
+        onCommit={(value) =>
+          updateConfig.mutate(
+            { enabled, utteranceEndMs: value },
+            {
+              onError: () =>
+                setUtteranceEndMs(configUtteranceEndMs ?? DEFAULT_VOICE_UTTERANCE_END_MS),
+            }
+          )
+        }
+      />
+
+      <AggressivenessSlider
+        id="voice-barge-in"
+        label="Barge-in sensitivity"
+        helpText="How quickly voice mode notices you've started talking over its spoken reply and stops to listen."
+        value={bargeInSustainedMs}
+        min={VOICE_BARGE_IN_SUSTAINED_MS_MIN}
+        max={VOICE_BARGE_IN_SUSTAINED_MS_MAX}
+        step={VOICE_BARGE_IN_SUSTAINED_MS_STEP}
+        formatValue={(value) => `${value}ms`}
+        disabled={disabled}
+        onChange={setBargeInSustainedMs}
+        onCommit={(value) =>
+          updateConfig.mutate(
+            { enabled, bargeInSustainedMs: value },
+            {
+              onError: () =>
+                setBargeInSustainedMs(
+                  configBargeInSustainedMs ?? DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS
+                ),
+            }
+          )
+        }
+      />
+    </>
+  );
+}
+
+export function VoiceModeSection() {
+  const { data: config, isLoading } = trpc.voice.getConfig.useQuery();
+  const utils = trpc.useUtils();
+  const [apiKey, setApiKey] = useState('');
+  // Tied to the exact key text that was validated, rather than a bare
+  // boolean, so a validation response that resolves after the user has
+  // already edited the field can't mark the new, unvalidated text as valid.
+  const [validatedKey, setValidatedKey] = useState<string | null>(null);
+  const validated = validatedKey !== null && validatedKey === apiKey;
+  const [speed, setSpeed] = useState(DEFAULT_DEEPGRAM_TTS_SPEED);
+
+  useEffect(() => {
+    if (config?.ttsSpeed !== undefined) {
+      setSpeed(config.ttsSpeed);
+    }
+  }, [config?.ttsSpeed]);
+
+  const validateApiKey = useValidateApiKeyMutation(apiKey, setValidatedKey);
 
   const updateConfig = trpc.voice.updateConfig.useMutation({
     onSuccess: (result) => {
@@ -149,42 +360,19 @@ export function VoiceModeSection() {
           />
         </div>
 
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="deepgram-api-key">Deepgram API Key</Label>
-              {validated && (
-                <span className="flex items-center gap-1 text-xs text-green-600">
-                  <CheckCircleIcon className="w-3 h-3" />
-                  Valid
-                </span>
-              )}
-            </div>
-            <Input
-              id="deepgram-api-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setValidatedKey(null);
-              }}
-              placeholder={hasStoredKey ? '••••••••••••••••••••' : 'Enter your Deepgram API key'}
-              className="font-mono text-sm w-[280px]"
-            />
-          </div>
-          <Button
-            variant="outline"
-            onClick={handleValidate}
-            disabled={validateApiKey.isPending || !apiKey}
-          >
-            {validateApiKey.isPending ? 'Validating...' : 'Validate'}
-          </Button>
-          {validated && (
-            <Button onClick={handleSaveKey} disabled={updateConfig.isPending}>
-              {updateConfig.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          )}
-        </div>
+        <DeepgramApiKeyField
+          apiKey={apiKey}
+          onApiKeyChange={(value) => {
+            setApiKey(value);
+            setValidatedKey(null);
+          }}
+          validated={validated}
+          hasStoredKey={hasStoredKey}
+          validating={validateApiKey.isPending}
+          saving={updateConfig.isPending}
+          onValidate={handleValidate}
+          onSave={handleSaveKey}
+        />
 
         <p className="text-xs text-muted-foreground">
           Create an API key at{' '}
@@ -248,6 +436,14 @@ export function VoiceModeSection() {
               disabled={updateConfig.isPending || !hasStoredKey}
             />
           </div>
+
+          <VoiceSensitivitySliders
+            utteranceEndMs={config?.utteranceEndMs}
+            bargeInSustainedMs={config?.bargeInSustainedMs}
+            enabled={enabled}
+            disabled={updateConfig.isPending || !hasStoredKey}
+            updateConfig={updateConfig}
+          />
         </div>
       </CardContent>
     </Card>

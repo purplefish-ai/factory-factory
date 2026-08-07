@@ -24,6 +24,8 @@ export interface UpdateUserSettingsInput {
   deepgramApiKeyEncrypted?: string | null;
   voiceTtsModel?: string;
   voiceTtsSpeed?: number;
+  voiceUtteranceEndMs?: number;
+  voiceBargeInSustainedMs?: number;
 }
 
 class UserSettingsService {

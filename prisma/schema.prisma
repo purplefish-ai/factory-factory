@@ -602,6 +602,8 @@ model UserSettings {
   deepgramApiKeyEncrypted   String?                    // AES-256-GCM encrypted, same scheme as Linear's apiKey
   voiceTtsModel             String   @default("aura-2-thalia-en")  // Deepgram Aura-2 voice, e.g. aura-2-thalia-en
   voiceTtsSpeed             Float    @default(1)  // Deepgram TTS speed multiplier (0.5-2.0)
+  voiceUtteranceEndMs       Int      @default(1000)  // Deepgram silence gap (ms) before a turn is considered done; lower = more aggressive
+  voiceBargeInSustainedMs   Int      @default(16)  // Sustained loud-frame duration (ms) before barge-in triggers; lower = more aggressive
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

@@ -196,6 +196,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       deepgramApiKeyEncrypted: null,
       voiceTtsModel: 'aura-2-thalia-en',
       voiceTtsSpeed: 1,
+      voiceUtteranceEndMs: 1000,
+      voiceBargeInSustainedMs: 16,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });

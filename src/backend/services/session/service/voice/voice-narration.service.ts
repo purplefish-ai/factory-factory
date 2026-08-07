@@ -249,6 +249,18 @@ class VoiceNarrationService {
   }
 
   /**
+   * True while a `/voice` connection is open for this session — i.e. voice
+   * mode is on. Used to suppress the workspace-complete chime, which would
+   * otherwise be a redundant, jarring second notification on top of the
+   * agent's spoken reply. Registered at connection-open time
+   * (`registerConnection`), which fires before Deepgram STT even begins
+   * connecting, so this is true as early as "voice mode is on" can be.
+   */
+  hasActiveConnection(sessionId: string): boolean {
+    return this.connections.has(sessionId);
+  }
+
+  /**
    * Immediately cancels and empties any in-flight or queued narration for a
    * session — called when a spoken "please stop" cancels the turn. Without
    * this, text already buffered/queued at the moment of cancellation would

@@ -295,6 +295,8 @@ export const UserSettingsScalarFieldEnum = {
   deepgramApiKeyEncrypted: 'deepgramApiKeyEncrypted',
   voiceTtsModel: 'voiceTtsModel',
   voiceTtsSpeed: 'voiceTtsSpeed',
+  voiceUtteranceEndMs: 'voiceUtteranceEndMs',
+  voiceBargeInSustainedMs: 'voiceBargeInSustainedMs',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

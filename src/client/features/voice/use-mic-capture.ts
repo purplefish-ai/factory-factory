@@ -1,10 +1,19 @@
 import { useCallback, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
+import {
+  DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
+  DEFAULT_VOICE_UTTERANCE_END_MS,
+} from '@/shared/voice-vad';
 import { SpeechActivityDetector } from './voice-activity';
 
 const DEEPGRAM_STT_URL = 'wss://api.deepgram.com/v1/listen';
 const TARGET_SAMPLE_RATE = 16_000;
 const WORKLET_MODULE_URL = `${import.meta.env.BASE_URL}audio-worklets/pcm-capture-processor.js`;
+/** pcm-capture-processor.js posts one message per Web Audio render quantum
+ * (128 samples, the browser-standard fixed size) at the capture
+ * AudioContext's rate, which is forced to TARGET_SAMPLE_RATE — so frame
+ * duration here is a known constant, not device/browser-variable. */
+const AUDIO_WORKLET_FRAME_MS = (128 / TARGET_SAMPLE_RATE) * 1000;
 
 /**
  * Only scanned while the agent turn is running (see `running` option), and
@@ -124,7 +133,7 @@ function waitForSocketOpen(socket: WebSocket): Promise<void> {
   });
 }
 
-function createDeepgramSocket(accessToken: string): WebSocket {
+function createDeepgramSocket(accessToken: string, utteranceEndMs: number): WebSocket {
   const params = new URLSearchParams({
     model: 'nova-3',
     // Required explicitly: Deepgram has reported project/model access
@@ -141,7 +150,8 @@ function createDeepgramSocket(accessToken: string): WebSocket {
     // on every short pause — including a mid-sentence breath — not just when
     // the user is actually done talking. UtteranceEnd is the separate event
     // that means "done"; it requires interim_results (above) plus this.
-    utterance_end_ms: '1000',
+    // Admin-configurable via Voice Mode settings ("stop-speaking sensitivity").
+    utterance_end_ms: String(utteranceEndMs),
   });
   // Grant tokens (JWTs from /v1/auth/grant) are rejected as INVALID_AUTH
   // when passed via an ?access_token= query param on this endpoint, despite
@@ -352,6 +362,10 @@ interface CaptureAttemptDeps
     Omit<DisconnectHandlerDeps, 'isStale'> {
   mintGrantToken: { mutateAsync: () => Promise<{ accessToken: string }> };
   isStale: () => boolean;
+  /** Deepgram silence gap (ms) before UtteranceEnd fires — admin "stop-speaking sensitivity" setting. */
+  utteranceEndMs: number;
+  /** Consecutive sustained-loud-frame duration (ms) before barge-in triggers — admin "barge-in sensitivity" setting. */
+  bargeInSustainedMs: number;
 }
 
 /**
@@ -394,7 +408,7 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
       return null;
     }
 
-    socket = createDeepgramSocket(accessToken);
+    socket = createDeepgramSocket(accessToken, deps.utteranceEndMs);
     attachTranscriptHandler(socket, deps);
 
     await waitForSocketOpen(socket);
@@ -434,7 +448,11 @@ async function attemptCapture(deps: CaptureAttemptDeps): Promise<CaptureAttemptR
       );
     }
 
-    const speechDetector = new SpeechActivityDetector();
+    const sustainedFramesToTrigger = Math.max(
+      1,
+      Math.round(deps.bargeInSustainedMs / AUDIO_WORKLET_FRAME_MS)
+    );
+    const speechDetector = new SpeechActivityDetector(sustainedFramesToTrigger);
     attachPcmForwarder(workletNode, { ...deps, speechDetectorRef: { current: speechDetector } });
     attachDisconnectHandler(socket, deps);
 
@@ -458,6 +476,10 @@ export interface UseMicCaptureOptions {
   onSpeechDetected?: () => void;
   /** Called the instant sustained speech ends (for resuming barge-in-suppressed playback). */
   onSpeechEnded?: () => void;
+  /** Admin "stop-speaking sensitivity" setting: Deepgram silence gap (ms) before a turn is considered done. */
+  utteranceEndMs?: number;
+  /** Admin "barge-in sensitivity" setting: sustained loud-frame duration (ms) before barge-in triggers. */
+  bargeInSustainedMs?: number;
 }
 
 export interface UseMicCaptureResult {
@@ -483,6 +505,8 @@ export function useMicCapture({
   onSoftStop,
   onSpeechDetected,
   onSpeechEnded,
+  utteranceEndMs = DEFAULT_VOICE_UTTERANCE_END_MS,
+  bargeInSustainedMs = DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
 }: UseMicCaptureOptions): UseMicCaptureResult {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -544,6 +568,8 @@ export function useMicCapture({
         socketRef,
         cleanup,
         setError,
+        utteranceEndMs,
+        bargeInSustainedMs,
       });
       if (!resources) {
         // Superseded mid-connect — attemptCapture already disposed of
@@ -574,6 +600,8 @@ export function useMicCapture({
     onSoftStop,
     onSpeechDetected,
     onSpeechEnded,
+    utteranceEndMs,
+    bargeInSustainedMs,
   ]);
 
   const stop = useCallback(() => {

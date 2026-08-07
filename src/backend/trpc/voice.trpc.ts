@@ -13,6 +13,12 @@ import {
   DEEPGRAM_TTS_SPEED_MIN,
   isKnownDeepgramVoiceModel,
 } from '@/shared/deepgram-voices';
+import {
+  VOICE_BARGE_IN_SUSTAINED_MS_MAX,
+  VOICE_BARGE_IN_SUSTAINED_MS_MIN,
+  VOICE_UTTERANCE_END_MS_MAX,
+  VOICE_UTTERANCE_END_MS_MIN,
+} from '@/shared/voice-vad';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant';
@@ -117,6 +123,8 @@ export const voiceRouter = router({
       hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
       ttsModel: settings.voiceTtsModel,
       ttsSpeed: settings.voiceTtsSpeed,
+      utteranceEndMs: settings.voiceUtteranceEndMs,
+      bargeInSustainedMs: settings.voiceBargeInSustainedMs,
     };
   }),
 
@@ -148,6 +156,18 @@ export const voiceRouter = router({
           .refine(isKnownDeepgramVoiceModel, 'Unknown Deepgram voice model')
           .optional(),
         ttsSpeed: z.number().min(DEEPGRAM_TTS_SPEED_MIN).max(DEEPGRAM_TTS_SPEED_MAX).optional(),
+        utteranceEndMs: z
+          .number()
+          .int()
+          .min(VOICE_UTTERANCE_END_MS_MIN)
+          .max(VOICE_UTTERANCE_END_MS_MAX)
+          .optional(),
+        bargeInSustainedMs: z
+          .number()
+          .int()
+          .min(VOICE_BARGE_IN_SUSTAINED_MS_MIN)
+          .max(VOICE_BARGE_IN_SUSTAINED_MS_MAX)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -157,6 +177,8 @@ export const voiceRouter = router({
         deepgramApiKeyEncrypted: input.apiKey ? cryptoService.encrypt(input.apiKey) : undefined,
         voiceTtsModel: input.ttsModel,
         voiceTtsSpeed: input.ttsSpeed,
+        voiceUtteranceEndMs: input.utteranceEndMs,
+        voiceBargeInSustainedMs: input.bargeInSustainedMs,
       });
       const settings = await userSettingsQueryService.get();
       return {
@@ -164,6 +186,8 @@ export const voiceRouter = router({
         hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
         ttsModel: settings.voiceTtsModel,
         ttsSpeed: settings.voiceTtsSpeed,
+        utteranceEndMs: settings.voiceUtteranceEndMs,
+        bargeInSustainedMs: settings.voiceBargeInSustainedMs,
       };
     }),
 

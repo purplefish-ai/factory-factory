@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 
 interface NotificationRequest {
@@ -76,24 +77,6 @@ export function WorkspaceNotificationManager() {
   return null; // No UI, just notification logic
 }
 
-/**
- * Plays the workspace completion sound.
- */
-function playNotificationSound(): void {
-  try {
-    const audio = new Audio(`${import.meta.env.BASE_URL}sounds/workspace-complete.mp3`);
-    // Set a reasonable volume
-    audio.volume = 0.5;
-    // Play the sound (browsers may block autoplay, so we catch errors)
-    audio.play().catch((_error) => {
-      // Silently fail if autoplay is blocked
-      // User can enable sound by interacting with the page first
-    });
-  } catch (_error) {
-    // Silently fail if audio doesn't load
-  }
-}
-
 function sendWorkspaceNotification(
   workspaceName: string,
   sessionCount: number,
@@ -101,7 +84,7 @@ function sendWorkspaceNotification(
 ): void {
   // Play sound notification if enabled
   if (playSoundOnComplete) {
-    playNotificationSound();
+    playSound('sounds/workspace-complete.mp3', { volume: 0.5 });
   }
 
   if (!('Notification' in window)) {

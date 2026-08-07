@@ -10,10 +10,13 @@
  * This service retains the workspace notification and pending request management responsibilities.
  */
 
+import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { voiceNarrationService } from '@/backend/services/session/service/voice/voice-narration.service';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 
 const logger = createLogger('chat-event-forwarder');
@@ -98,17 +101,46 @@ class ChatEventForwarderService {
     this.workspace.on('request_notification', (data) => {
       const { workspaceId, workspaceName, sessionCount, finishedAt } = data;
 
-      logger.debug('Broadcasting workspace notification request', { workspaceId });
+      const publish = () => {
+        logger.debug('Broadcasting workspace notification request', { workspaceId });
+        // Publish to all connected clients so any workspace can hear the
+        // notification; the WebSocket adapter owns delivery.
+        sessionEventBus.publishToAllClients({
+          type: 'workspace_notification_request',
+          workspaceId,
+          workspaceName,
+          sessionCount,
+          finishedAt: finishedAt.toISOString(),
+        });
+      };
 
-      // Publish to all connected clients so any workspace can hear the
-      // notification; the WebSocket adapter owns delivery.
-      sessionEventBus.publishToAllClients({
-        type: 'workspace_notification_request',
-        workspaceId,
-        workspaceName,
-        sessionCount,
-        finishedAt: finishedAt.toISOString(),
-      });
+      // Voice mode already speaks the agent's reply aloud, so the chime is a
+      // redundant, jarring second notification on top of it — suppress it
+      // here, centrally, rather than relying on each connected browser
+      // tab/window to independently know voice mode is active elsewhere.
+      sessionDataService
+        .findAgentSessionsByWorkspaceId(workspaceId)
+        .then((sessions) => {
+          if (sessions.some((session) => voiceNarrationService.hasActiveConnection(session.id))) {
+            logger.debug('Suppressing workspace notification: voice mode active', {
+              workspaceId,
+            });
+            return;
+          }
+          publish();
+        })
+        .catch((error) => {
+          // This lookup runs on every turn for every workspace, voice or
+          // not — a DB hiccup here must not silently swallow the
+          // notification for non-voice users just because the new
+          // voice-suppression check failed to resolve. Fail open.
+          logger.error(
+            'Failed to check voice-active state; publishing notification anyway',
+            toError(error),
+            { workspaceId }
+          );
+          publish();
+        });
     });
   }
 

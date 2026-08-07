@@ -28,10 +28,14 @@ export type AggregateUserSettings = {
 
 export type UserSettingsAvgAggregateOutputType = {
   voiceTtsSpeed: number | null
+  voiceUtteranceEndMs: number | null
+  voiceBargeInSustainedMs: number | null
 }
 
 export type UserSettingsSumAggregateOutputType = {
   voiceTtsSpeed: number | null
+  voiceUtteranceEndMs: number | null
+  voiceBargeInSustainedMs: number | null
 }
 
 export type UserSettingsMinAggregateOutputType = {
@@ -55,6 +59,8 @@ export type UserSettingsMinAggregateOutputType = {
   deepgramApiKeyEncrypted: string | null
   voiceTtsModel: string | null
   voiceTtsSpeed: number | null
+  voiceUtteranceEndMs: number | null
+  voiceBargeInSustainedMs: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -80,6 +86,8 @@ export type UserSettingsMaxAggregateOutputType = {
   deepgramApiKeyEncrypted: string | null
   voiceTtsModel: string | null
   voiceTtsSpeed: number | null
+  voiceUtteranceEndMs: number | null
+  voiceBargeInSustainedMs: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -107,6 +115,8 @@ export type UserSettingsCountAggregateOutputType = {
   deepgramApiKeyEncrypted: number
   voiceTtsModel: number
   voiceTtsSpeed: number
+  voiceUtteranceEndMs: number
+  voiceBargeInSustainedMs: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -115,10 +125,14 @@ export type UserSettingsCountAggregateOutputType = {
 
 export type UserSettingsAvgAggregateInputType = {
   voiceTtsSpeed?: true
+  voiceUtteranceEndMs?: true
+  voiceBargeInSustainedMs?: true
 }
 
 export type UserSettingsSumAggregateInputType = {
   voiceTtsSpeed?: true
+  voiceUtteranceEndMs?: true
+  voiceBargeInSustainedMs?: true
 }
 
 export type UserSettingsMinAggregateInputType = {
@@ -142,6 +156,8 @@ export type UserSettingsMinAggregateInputType = {
   deepgramApiKeyEncrypted?: true
   voiceTtsModel?: true
   voiceTtsSpeed?: true
+  voiceUtteranceEndMs?: true
+  voiceBargeInSustainedMs?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -167,6 +183,8 @@ export type UserSettingsMaxAggregateInputType = {
   deepgramApiKeyEncrypted?: true
   voiceTtsModel?: true
   voiceTtsSpeed?: true
+  voiceUtteranceEndMs?: true
+  voiceBargeInSustainedMs?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -194,6 +212,8 @@ export type UserSettingsCountAggregateInputType = {
   deepgramApiKeyEncrypted?: true
   voiceTtsModel?: true
   voiceTtsSpeed?: true
+  voiceUtteranceEndMs?: true
+  voiceBargeInSustainedMs?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -308,6 +328,8 @@ export type UserSettingsGroupByOutputType = {
   deepgramApiKeyEncrypted: string | null
   voiceTtsModel: string
   voiceTtsSpeed: number
+  voiceUtteranceEndMs: number
+  voiceBargeInSustainedMs: number
   createdAt: Date
   updatedAt: Date
   _count: UserSettingsCountAggregateOutputType | null
@@ -358,6 +380,8 @@ export type UserSettingsWhereInput = {
   deepgramApiKeyEncrypted?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   voiceTtsModel?: Prisma.StringFilter<"UserSettings"> | string
   voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
+  voiceUtteranceEndMs?: Prisma.IntFilter<"UserSettings"> | number
+  voiceBargeInSustainedMs?: Prisma.IntFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }
@@ -385,6 +409,8 @@ export type UserSettingsOrderByWithRelationInput = {
   deepgramApiKeyEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
   voiceTtsModel?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -415,6 +441,8 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   deepgramApiKeyEncrypted?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   voiceTtsModel?: Prisma.StringFilter<"UserSettings"> | string
   voiceTtsSpeed?: Prisma.FloatFilter<"UserSettings"> | number
+  voiceUtteranceEndMs?: Prisma.IntFilter<"UserSettings"> | number
+  voiceBargeInSustainedMs?: Prisma.IntFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"UserSettings"> | Date | string
 }, "id" | "userId">
@@ -442,6 +470,8 @@ export type UserSettingsOrderByWithAggregationInput = {
   deepgramApiKeyEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
   voiceTtsModel?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.UserSettingsCountOrderByAggregateInput
@@ -477,6 +507,8 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   deepgramApiKeyEncrypted?: Prisma.StringNullableWithAggregatesFilter<"UserSettings"> | string | null
   voiceTtsModel?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
   voiceTtsSpeed?: Prisma.FloatWithAggregatesFilter<"UserSettings"> | number
+  voiceUtteranceEndMs?: Prisma.IntWithAggregatesFilter<"UserSettings"> | number
+  voiceBargeInSustainedMs?: Prisma.IntWithAggregatesFilter<"UserSettings"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"UserSettings"> | Date | string
 }
@@ -504,6 +536,8 @@ export type UserSettingsCreateInput = {
   deepgramApiKeyEncrypted?: string | null
   voiceTtsModel?: string
   voiceTtsSpeed?: number
+  voiceUtteranceEndMs?: number
+  voiceBargeInSustainedMs?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -531,6 +565,8 @@ export type UserSettingsUncheckedCreateInput = {
   deepgramApiKeyEncrypted?: string | null
   voiceTtsModel?: string
   voiceTtsSpeed?: number
+  voiceUtteranceEndMs?: number
+  voiceBargeInSustainedMs?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -558,6 +594,8 @@ export type UserSettingsUpdateInput = {
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
+  voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
+  voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -585,6 +623,8 @@ export type UserSettingsUncheckedUpdateInput = {
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
+  voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
+  voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -612,6 +652,8 @@ export type UserSettingsCreateManyInput = {
   deepgramApiKeyEncrypted?: string | null
   voiceTtsModel?: string
   voiceTtsSpeed?: number
+  voiceUtteranceEndMs?: number
+  voiceBargeInSustainedMs?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -639,6 +681,8 @@ export type UserSettingsUpdateManyMutationInput = {
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
+  voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
+  voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -666,6 +710,8 @@ export type UserSettingsUncheckedUpdateManyInput = {
   deepgramApiKeyEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   voiceTtsModel?: Prisma.StringFieldUpdateOperationsInput | string
   voiceTtsSpeed?: Prisma.FloatFieldUpdateOperationsInput | number
+  voiceUtteranceEndMs?: Prisma.IntFieldUpdateOperationsInput | number
+  voiceBargeInSustainedMs?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -693,12 +739,16 @@ export type UserSettingsCountOrderByAggregateInput = {
   deepgramApiKeyEncrypted?: Prisma.SortOrder
   voiceTtsModel?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type UserSettingsAvgOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
 }
 
 export type UserSettingsMaxOrderByAggregateInput = {
@@ -722,6 +772,8 @@ export type UserSettingsMaxOrderByAggregateInput = {
   deepgramApiKeyEncrypted?: Prisma.SortOrder
   voiceTtsModel?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -747,12 +799,16 @@ export type UserSettingsMinOrderByAggregateInput = {
   deepgramApiKeyEncrypted?: Prisma.SortOrder
   voiceTtsModel?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type UserSettingsSumOrderByAggregateInput = {
   voiceTtsSpeed?: Prisma.SortOrder
+  voiceUtteranceEndMs?: Prisma.SortOrder
+  voiceBargeInSustainedMs?: Prisma.SortOrder
 }
 
 export type EnumRatchetReviewTriggerModeFieldUpdateOperationsInput = {
@@ -796,6 +852,8 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
   deepgramApiKeyEncrypted?: boolean
   voiceTtsModel?: boolean
   voiceTtsSpeed?: boolean
+  voiceUtteranceEndMs?: boolean
+  voiceBargeInSustainedMs?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -823,6 +881,8 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   deepgramApiKeyEncrypted?: boolean
   voiceTtsModel?: boolean
   voiceTtsSpeed?: boolean
+  voiceUtteranceEndMs?: boolean
+  voiceBargeInSustainedMs?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -850,6 +910,8 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   deepgramApiKeyEncrypted?: boolean
   voiceTtsModel?: boolean
   voiceTtsSpeed?: boolean
+  voiceUtteranceEndMs?: boolean
+  voiceBargeInSustainedMs?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["userSettings"]>
@@ -877,11 +939,13 @@ export type UserSettingsSelectScalar = {
   deepgramApiKeyEncrypted?: boolean
   voiceTtsModel?: boolean
   voiceTtsSpeed?: boolean
+  voiceUtteranceEndMs?: boolean
+  voiceBargeInSustainedMs?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "ratchetPermissions" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
@@ -909,6 +973,8 @@ export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.Intern
     deepgramApiKeyEncrypted: string | null
     voiceTtsModel: string
     voiceTtsSpeed: number
+    voiceUtteranceEndMs: number
+    voiceBargeInSustainedMs: number
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["userSettings"]>
@@ -1356,6 +1422,8 @@ export interface UserSettingsFieldRefs {
   readonly deepgramApiKeyEncrypted: Prisma.FieldRef<"UserSettings", 'String'>
   readonly voiceTtsModel: Prisma.FieldRef<"UserSettings", 'String'>
   readonly voiceTtsSpeed: Prisma.FieldRef<"UserSettings", 'Float'>
+  readonly voiceUtteranceEndMs: Prisma.FieldRef<"UserSettings", 'Int'>
+  readonly voiceBargeInSustainedMs: Prisma.FieldRef<"UserSettings", 'Int'>
   readonly createdAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"UserSettings", 'DateTime'>
 }
