@@ -375,6 +375,8 @@ function createImportData(
         voiceModeEnabled: true,
         voiceTtsModel: 'aura-2-apollo-en',
         voiceTtsSpeed: 1.3,
+        voiceUtteranceEndMs: 1000,
+        voiceBargeInSustainedMs: 16,
       },
       ...overrides,
     },
@@ -418,6 +420,8 @@ describe('DataBackupService', () => {
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 1.3,
+          voiceUtteranceEndMs: 1000,
+          voiceBargeInSustainedMs: 16,
         })
       );
       // The Deepgram API key is a secret, not a preference — it must never
@@ -662,6 +666,8 @@ describe('DataBackupService', () => {
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 1.3,
+          voiceUtteranceEndMs: 1000,
+          voiceBargeInSustainedMs: 16,
         }),
       });
       // The Deepgram API key is never part of the export, so a restore

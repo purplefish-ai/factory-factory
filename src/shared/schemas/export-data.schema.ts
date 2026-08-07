@@ -25,6 +25,10 @@ import {
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
 import { DEFAULT_DEEPGRAM_TTS_MODEL, DEFAULT_DEEPGRAM_TTS_SPEED } from '@/shared/deepgram-voices';
+import {
+  DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
+  DEFAULT_VOICE_UTTERANCE_END_MS,
+} from '@/shared/voice-vad';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
@@ -170,6 +174,8 @@ const exportedUserSettingsSchema = z.object({
   voiceModeEnabled: z.boolean().optional().default(false),
   voiceTtsModel: z.string().optional().default(DEFAULT_DEEPGRAM_TTS_MODEL),
   voiceTtsSpeed: z.number().optional().default(DEFAULT_DEEPGRAM_TTS_SPEED),
+  voiceUtteranceEndMs: z.number().optional().default(DEFAULT_VOICE_UTTERANCE_END_MS),
+  voiceBargeInSustainedMs: z.number().optional().default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
 });
 
 export const exportDataSchema = z.object({
