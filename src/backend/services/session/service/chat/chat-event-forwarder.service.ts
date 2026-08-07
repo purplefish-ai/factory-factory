@@ -135,10 +135,16 @@ class ChatEventForwarderService {
 
     this.workspace.on('request_notification', (data) => {
       // Chained (not fired independently) so a slower lookup for an earlier
-      // completion can't let a later one's notification arrive first.
-      this.notificationChain = this.notificationChain.then(() =>
-        this.publishWorkspaceNotification(data)
-      );
+      // completion can't let a later one's notification arrive first. Each
+      // link catches its own failure so a bad publish can't permanently
+      // reject the chain and silently drop every later notification too.
+      this.notificationChain = this.notificationChain
+        .then(() => this.publishWorkspaceNotification(data))
+        .catch((error) => {
+          logger.error('Failed to process workspace notification', toError(error), {
+            workspaceId: data.workspaceId,
+          });
+        });
     });
   }
 

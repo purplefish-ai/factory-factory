@@ -28,6 +28,10 @@ import { DEFAULT_DEEPGRAM_TTS_MODEL, DEFAULT_DEEPGRAM_TTS_SPEED } from '@/shared
 import {
   DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
   DEFAULT_VOICE_UTTERANCE_END_MS,
+  VOICE_BARGE_IN_SUSTAINED_MS_MAX,
+  VOICE_BARGE_IN_SUSTAINED_MS_MIN,
+  VOICE_UTTERANCE_END_MS_MAX,
+  VOICE_UTTERANCE_END_MS_MIN,
 } from '@/shared/voice-vad';
 import { autoIterationConfigSchema } from './auto-iteration.schema';
 
@@ -174,8 +178,20 @@ const exportedUserSettingsSchema = z.object({
   voiceModeEnabled: z.boolean().optional().default(false),
   voiceTtsModel: z.string().optional().default(DEFAULT_DEEPGRAM_TTS_MODEL),
   voiceTtsSpeed: z.number().optional().default(DEFAULT_DEEPGRAM_TTS_SPEED),
-  voiceUtteranceEndMs: z.number().optional().default(DEFAULT_VOICE_UTTERANCE_END_MS),
-  voiceBargeInSustainedMs: z.number().optional().default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
+  voiceUtteranceEndMs: z
+    .number()
+    .int()
+    .min(VOICE_UTTERANCE_END_MS_MIN)
+    .max(VOICE_UTTERANCE_END_MS_MAX)
+    .optional()
+    .default(DEFAULT_VOICE_UTTERANCE_END_MS),
+  voiceBargeInSustainedMs: z
+    .number()
+    .int()
+    .min(VOICE_BARGE_IN_SUSTAINED_MS_MIN)
+    .max(VOICE_BARGE_IN_SUSTAINED_MS_MAX)
+    .optional()
+    .default(DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS),
 });
 
 export const exportDataSchema = z.object({
