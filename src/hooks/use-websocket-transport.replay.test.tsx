@@ -298,6 +298,41 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
+  it('clears queued messages when the WebSocket URL changes', async () => {
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+    });
+    await flushEffects();
+
+    const firstSocket = getLastSocket();
+    flushSync(() => {
+      firstSocket.simulateOpen();
+      firstSocket.close();
+    });
+
+    const firstTransport = harness.transportRef.current;
+    if (!firstTransport) {
+      throw new Error('Transport was not initialized');
+    }
+    expect(firstTransport.send({ id: 'session-one-1' })).toBe(false);
+    expect(firstTransport.send({ id: 'session-one-2' })).toBe(false);
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await flushEffects();
+
+    const secondSocket = getLastSocket();
+    expect(secondSocket).not.toBe(firstSocket);
+    flushSync(() => {
+      secondSocket.simulateOpen();
+    });
+
+    expect(extractMessageIds(secondSocket)).toEqual([]);
+    expect(harness.transportRef.current?.send({ id: 'session-two' })).toBe(true);
+    expect(extractMessageIds(secondSocket)).toEqual(['session-two']);
+
+    harness.cleanup();
+  });
+
   it('drops messages from sockets superseded by a URL change', async () => {
     const receivedMessages: unknown[] = [];
     const harness = createHarness({
