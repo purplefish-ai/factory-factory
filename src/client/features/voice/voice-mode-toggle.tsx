@@ -1,11 +1,40 @@
 import { MicrophoneIcon, MicrophoneSlashIcon, SpinnerGapIcon } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useMicCapture } from './use-mic-capture';
 import { useVoicePlayback } from './use-voice-playback';
+
+/**
+ * Single source of truth for what voice mode is currently doing — both the
+ * status badge label/dot and the Listening→Thinking transition sound are
+ * derived from this, so they can never disagree about the current phase.
+ */
+type VoiceBadgePhase = 'off' | 'connecting' | 'speaking' | 'thinking' | 'listening';
+
+function derivePhase(
+  isConnecting: boolean,
+  isCapturing: boolean,
+  isSpeaking: boolean,
+  isThinking: boolean
+): VoiceBadgePhase {
+  if (!(isConnecting || isCapturing)) {
+    return 'off';
+  }
+  if (isConnecting) {
+    return 'connecting';
+  }
+  if (isSpeaking) {
+    return 'speaking';
+  }
+  if (isThinking) {
+    return 'thinking';
+  }
+  return 'listening';
+}
 
 export interface VoiceModeToggleProps {
   sessionId: string | null;
@@ -52,39 +81,30 @@ function getVoiceStatus(
  * that line: once it flips true, the badge switches to "Thinking" even
  * though capture never stopped.
  */
-function VoiceStatusBadge({
-  isConnecting,
-  isCapturing,
-  isSpeaking,
-  isThinking,
-}: {
-  isConnecting: boolean;
-  isCapturing: boolean;
-  isSpeaking: boolean;
-  isThinking: boolean;
-}) {
-  if (!(isConnecting || isCapturing)) {
+const VOICE_PHASE_LABELS: Record<VoiceBadgePhase, string> = {
+  off: '',
+  connecting: 'Connecting',
+  speaking: 'Speaking',
+  thinking: 'Thinking',
+  listening: 'Listening',
+};
+
+function VoiceStatusBadge({ phase }: { phase: VoiceBadgePhase }) {
+  if (phase === 'off') {
     return null;
   }
-  const label = isConnecting
-    ? 'Connecting'
-    : isSpeaking
-      ? 'Speaking'
-      : isThinking
-        ? 'Thinking'
-        : 'Listening';
   return (
     <output className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          isConnecting && 'animate-pulse bg-amber-500',
-          isCapturing && isSpeaking && 'animate-pulse bg-blue-500',
-          isCapturing && !isSpeaking && isThinking && 'animate-pulse bg-purple-500',
-          isCapturing && !isSpeaking && !isThinking && 'bg-green-500'
+          phase === 'connecting' && 'animate-pulse bg-amber-500',
+          phase === 'speaking' && 'animate-pulse bg-blue-500',
+          phase === 'thinking' && 'animate-pulse bg-purple-500',
+          phase === 'listening' && 'bg-green-500'
         )}
       />
-      {label}
+      {VOICE_PHASE_LABELS[phase]}
     </output>
   );
 }
@@ -126,11 +146,29 @@ export function VoiceModeToggle({
     onSoftStop: sendSoftStop,
     onSpeechDetected: beginBargeIn,
     onSpeechEnded: endBargeIn,
+    utteranceEndMs: config?.utteranceEndMs,
+    bargeInSustainedMs: config?.bargeInSustainedMs,
   });
 
   useEffect(() => {
     return () => stop();
   }, [stop]);
+
+  const isThinking = Boolean(running) && !isSpeaking;
+  const phase = derivePhase(isConnecting, isCapturing, isSpeaking, isThinking);
+
+  // Subtle cue the instant a captured utterance is sent and the agent starts
+  // working, for a user who's looked away from the screen — specifically the
+  // Listening→Thinking edge, not Connecting→Thinking or Speaking→Thinking,
+  // both of which are common and would make the cue noisy/meaningless.
+  // Always on whenever voice mode is on; no separate mute toggle.
+  const prevPhaseRef = useRef<VoiceBadgePhase>('off');
+  useEffect(() => {
+    if (prevPhaseRef.current === 'listening' && phase === 'thinking') {
+      playSound('sounds/voice-thinking-start.mp3', { volume: 0.3 });
+    }
+    prevPhaseRef.current = phase;
+  }, [phase]);
 
   // Lets WorkspaceNotificationManager (mounted once at the app root, with no
   // other view into this component) suppress the workspace-complete chime
@@ -214,12 +252,7 @@ export function VoiceModeToggle({
         )}
         {status.label}
       </Button>
-      <VoiceStatusBadge
-        isConnecting={isConnecting}
-        isCapturing={isCapturing}
-        isSpeaking={isSpeaking}
-        isThinking={Boolean(running) && !isSpeaking}
-      />
+      <VoiceStatusBadge phase={phase} />
     </div>
   );
 }

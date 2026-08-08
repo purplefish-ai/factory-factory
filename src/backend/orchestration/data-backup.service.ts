@@ -445,6 +445,8 @@ async function importUserSettings(
       voiceModeEnabled: settings.voiceModeEnabled,
       voiceTtsModel: settings.voiceTtsModel,
       voiceTtsSpeed: settings.voiceTtsSpeed,
+      voiceUtteranceEndMs: settings.voiceUtteranceEndMs,
+      voiceBargeInSustainedMs: settings.voiceBargeInSustainedMs,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
       // as they are rebuild-able cache data. deepgramApiKeyEncrypted is never
       // exported (secret), so it's left unset here too.
@@ -596,6 +598,8 @@ class DataBackupService {
               voiceModeEnabled: userSettings.voiceModeEnabled,
               voiceTtsModel: userSettings.voiceTtsModel,
               voiceTtsSpeed: userSettings.voiceTtsSpeed,
+              voiceUtteranceEndMs: userSettings.voiceUtteranceEndMs,
+              voiceBargeInSustainedMs: userSettings.voiceBargeInSustainedMs,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
               // as they are rebuild-able cache data (per design doc). The Deepgram
               // API key is excluded too — it's a secret, not a preference.

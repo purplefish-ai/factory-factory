@@ -6,7 +6,8 @@
  */
 
 const RMS_THRESHOLD = 0.02;
-const SUSTAINED_FRAMES_TO_TRIGGER = 2;
+/** Default consecutive loud frames required to trigger — overridable via the constructor (admin barge-in sensitivity setting). */
+const DEFAULT_SUSTAINED_FRAMES_TO_TRIGGER = 2;
 
 export function computeRms(samples: Int16Array): number {
   if (samples.length === 0) {
@@ -24,6 +25,8 @@ export class SpeechActivityDetector {
   private loudFrameStreak = 0;
   private speaking = false;
 
+  constructor(private sustainedFramesToTrigger = DEFAULT_SUSTAINED_FRAMES_TO_TRIGGER) {}
+
   /** Returns true the instant sustained speech is newly detected in this frame. */
   observe(samples: Int16Array): boolean {
     const rms = computeRms(samples);
@@ -33,7 +36,7 @@ export class SpeechActivityDetector {
       this.loudFrameStreak = 0;
       this.speaking = false;
     }
-    if (!this.speaking && this.loudFrameStreak >= SUSTAINED_FRAMES_TO_TRIGGER) {
+    if (!this.speaking && this.loudFrameStreak >= this.sustainedFramesToTrigger) {
       this.speaking = true;
       return true;
     }

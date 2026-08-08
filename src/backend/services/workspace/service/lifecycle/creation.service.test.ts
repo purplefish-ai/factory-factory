@@ -147,6 +147,8 @@ describe('WorkspaceCreationService', () => {
       deepgramApiKeyEncrypted: null,
       voiceTtsModel: 'aura-2-thalia-en',
       voiceTtsSpeed: 1,
+      voiceUtteranceEndMs: 1000,
+      voiceBargeInSustainedMs: 16,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -245,6 +247,8 @@ describe('WorkspaceCreationService', () => {
           deepgramApiKeyEncrypted: null,
           voiceTtsModel: 'aura-2-thalia-en',
           voiceTtsSpeed: 1,
+          voiceUtteranceEndMs: 1000,
+          voiceBargeInSustainedMs: 16,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
