@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isWebSocketMessage } from '@/lib/chat-protocol';
 import {
   AGENT_MESSAGE_TYPES,
   type AgentContentItem,
@@ -11,6 +12,20 @@ import {
   shouldSuppressDuplicateResultMessage,
   trimTranscriptForRenderer,
 } from './protocol';
+
+describe('sub-agent change websocket events', () => {
+  it('accepts direct and session-delta-wrapped invalidations', () => {
+    const invalidation = {
+      type: 'subagents_changed',
+      sessionId: 'db-session-1',
+      subagentId: 'child-1',
+      change: 'completed',
+    };
+
+    expect(isWebSocketMessage(invalidation)).toBe(true);
+    expect(isWebSocketMessage({ type: 'session_delta', data: invalidation })).toBe(true);
+  });
+});
 
 function rendererMessage(id: string, order: number): ChatMessage {
   return {

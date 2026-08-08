@@ -107,40 +107,55 @@ export class AcpEventProcessor {
     return {
       permissionBridge,
       onAcpEvent: (sid: string, event: AcpRuntimeEvent) => {
-        if (event.type === 'acp_session_update') {
-          const { update } = event;
-          if (
-            update.sessionUpdate === 'user_message_chunk' &&
-            'content' in update &&
-            update.content?.type === 'text' &&
-            typeof update.content.text === 'string'
-          ) {
-            this.handleAcpUserMessageChunk(sid, update.content.text);
-            return;
-          }
-          const deltas = this.acpEventTranslator.translateSessionUpdate(update);
-          if (deltas.length === 0) {
-            acpTraceLogger.log(sid, 'translated_delta', {
-              sessionUpdate: update.sessionUpdate,
-              deltaCount: 0,
-            });
-          }
-          for (const [index, delta] of deltas.entries()) {
-            acpTraceLogger.log(sid, 'translated_delta', {
-              sessionUpdate: update.sessionUpdate,
-              deltaIndex: index,
-              delta,
-            });
-            this.handleAcpDelta(sid, delta as SessionDeltaEvent);
-          }
+        if (event.type !== 'acp_session_update') {
+          this.handleNonSessionAcpEvent(sid, event);
           return;
         }
 
-        if (event.type === 'acp_permission_request') {
-          this.sessionPermissionService.handlePermissionRequest(sid, event);
+        const { update } = event;
+        if (
+          update.sessionUpdate === 'user_message_chunk' &&
+          'content' in update &&
+          update.content?.type === 'text' &&
+          typeof update.content.text === 'string'
+        ) {
+          this.handleAcpUserMessageChunk(sid, update.content.text);
+          return;
+        }
+        const deltas = this.acpEventTranslator.translateSessionUpdate(update);
+        if (deltas.length === 0) {
+          acpTraceLogger.log(sid, 'translated_delta', {
+            sessionUpdate: update.sessionUpdate,
+            deltaCount: 0,
+          });
+        }
+        for (const [index, delta] of deltas.entries()) {
+          acpTraceLogger.log(sid, 'translated_delta', {
+            sessionUpdate: update.sessionUpdate,
+            deltaIndex: index,
+            delta,
+          });
+          this.handleAcpDelta(sid, delta as SessionDeltaEvent);
         }
       },
     };
+  }
+
+  private handleNonSessionAcpEvent(
+    sid: string,
+    event: Exclude<AcpRuntimeEvent, { type: 'acp_session_update' }>
+  ): void {
+    if (event.type === 'acp_subagents_changed') {
+      this.sessionDomainService.emitDelta(sid, {
+        type: 'subagents_changed',
+        sessionId: sid,
+        subagentId: event.subagentId,
+        change: event.change,
+      });
+      return;
+    }
+
+    this.sessionPermissionService.handlePermissionRequest(sid, event);
   }
 
   handleAcpLog(sid: string, payload: Record<string, unknown>): void {

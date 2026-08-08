@@ -1,5 +1,6 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import { SessionStatus } from '@/shared/core';
 
@@ -34,6 +35,9 @@ import { sessionRouter } from './session.trpc';
 function createCaller() {
   const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
+    getSubagentBrowseCapability: vi.fn(),
+    listSubagents: vi.fn(),
+    readSubagentTranscript: vi.fn(),
   };
   const sessionLifecycleService = {
     startSession: vi.fn(async () => undefined),
@@ -93,6 +97,124 @@ describe('sessionRouter', () => {
     mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
       outcome: 'created',
       session: { id: 's-new', workspaceId: 'w1' },
+    });
+  });
+
+  describe('sub-agent browsing', () => {
+    it('returns unsupported without calling the adapter when no live capability exists', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue(null);
+
+      await expect(caller.listSubagents({ sessionId: 'session-1', limit: 50 })).resolves.toEqual({
+        supported: false,
+      });
+      expect(acpRuntimeManager.listSubagents).not.toHaveBeenCalled();
+    });
+
+    it('returns a supported empty list', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      acpRuntimeManager.listSubagents.mockResolvedValue({ subagents: [], nextCursor: null });
+
+      await expect(caller.listSubagents({ sessionId: 'session-1', limit: 50 })).resolves.toEqual({
+        supported: true,
+        subagents: [],
+        nextCursor: null,
+      });
+    });
+
+    it('forwards list cursors without exposing provider details', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      acpRuntimeManager.listSubagents.mockResolvedValue({
+        subagents: [],
+        nextCursor: 'list-cursor-8',
+      });
+
+      await caller.listSubagents({
+        sessionId: 'session-1',
+        cursor: 'list-cursor-7',
+        limit: 25,
+      });
+
+      expect(acpRuntimeManager.listSubagents).toHaveBeenCalledWith('session-1', {
+        cursor: 'list-cursor-7',
+        limit: 25,
+      });
+    });
+
+    it('forwards transcript reads', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      acpRuntimeManager.readSubagentTranscript.mockResolvedValue({
+        updates: [],
+        nextCursor: null,
+      });
+
+      await expect(
+        caller.readSubagentTranscript({
+          sessionId: 'session-1',
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).resolves.toEqual({ updates: [], nextCursor: null });
+      expect(acpRuntimeManager.readSubagentTranscript).toHaveBeenCalledWith('session-1', {
+        subagentId: 'child-1',
+        cursor: null,
+        limit: 10,
+      });
+    });
+
+    it('returns a typed precondition error when transcript browsing is unsupported', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue(null);
+
+      await expect(
+        caller.readSubagentTranscript({
+          sessionId: 'session-1',
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+      expect(acpRuntimeManager.readSubagentTranscript).not.toHaveBeenCalled();
+    });
+
+    it('preserves adapter response validation failures', async () => {
+      const { caller, acpRuntimeManager } = createCaller();
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      const parsed = z.object({ subagents: z.array(z.never()) }).safeParse({
+        subagents: ['invalid'],
+      });
+      if (parsed.success) {
+        throw new Error('Expected the adapter fixture to fail validation');
+      }
+      acpRuntimeManager.listSubagents.mockRejectedValue(parsed.error);
+
+      await expect(
+        caller.listSubagents({ sessionId: 'session-1', cursor: null, limit: 50 })
+      ).rejects.toThrow('expected never');
     });
   });
 
