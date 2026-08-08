@@ -76,6 +76,8 @@ describe('ACP sub-agent inspection contract', () => {
       })
     ).toMatchObject({ ...validSummary, providerHint: 'future-compatible' });
 
+    expect(subagentSummarySchema.parse({ ...validSummary, name: '' }).name).toBe('');
+
     expect(() => subagentSummarySchema.parse({ ...validSummary, id: '' })).toThrow();
     expect(() =>
       subagentSummarySchema.parse({ ...validSummary, createdAt: 'not-a-date' })

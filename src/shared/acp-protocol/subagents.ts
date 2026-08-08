@@ -220,7 +220,7 @@ export const subagentStatusSchema = z.enum([
 export const subagentSummarySchema = z
   .object({
     id: z.string().min(1),
-    name: z.string().min(1).nullable(),
+    name: z.string().nullable(),
     status: subagentStatusSchema,
     createdAt: z.string().datetime({ offset: true }).nullable(),
     updatedAt: z.string().datetime({ offset: true }).nullable(),
