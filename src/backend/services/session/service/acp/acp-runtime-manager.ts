@@ -10,6 +10,19 @@ import {
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import {
+  SUBAGENTS_LIST_METHOD,
+  SUBAGENTS_READ_METHOD,
+  type SubagentBrowseCapability,
+  type SubagentListParams,
+  type SubagentListResult,
+  type SubagentReadParams,
+  type SubagentReadResult,
+  subagentListParamsSchema,
+  subagentListResultSchema,
+  subagentReadParamsSchema,
+  subagentReadResultSchema,
+} from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
@@ -174,6 +187,47 @@ export class AcpRuntimeManager {
 
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
+  }
+
+  getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
+    return this.getClient(sessionId)?.getSubagentBrowseCapability() ?? null;
+  }
+
+  async listSubagents(
+    sessionId: string,
+    input: Omit<SubagentListParams, 'sessionId'>
+  ): Promise<SubagentListResult> {
+    const handle = this.requireSubagentBrowseHandle(sessionId);
+    const params = subagentListParamsSchema.parse({
+      ...input,
+      sessionId: handle.providerSessionId,
+    });
+    const response = await handle.connection.extMethod(SUBAGENTS_LIST_METHOD, params);
+    return subagentListResultSchema.parse(response);
+  }
+
+  async readSubagentTranscript(
+    sessionId: string,
+    input: Omit<SubagentReadParams, 'sessionId'>
+  ): Promise<SubagentReadResult> {
+    const handle = this.requireSubagentBrowseHandle(sessionId);
+    const params = subagentReadParamsSchema.parse({
+      ...input,
+      sessionId: handle.providerSessionId,
+    });
+    const response = await handle.connection.extMethod(SUBAGENTS_READ_METHOD, params);
+    return subagentReadResultSchema.parse(response);
+  }
+
+  private requireSubagentBrowseHandle(sessionId: string): AcpProcessHandle {
+    const handle = this.getClient(sessionId);
+    if (!handle) {
+      throw new Error(`No running ACP session found for sessionId: ${sessionId}`);
+    }
+    if (!handle.getSubagentBrowseCapability()) {
+      throw new Error(`ACP session ${sessionId} does not support sub-agent browsing`);
+    }
+    return handle;
   }
 
   getOrCreateClient(

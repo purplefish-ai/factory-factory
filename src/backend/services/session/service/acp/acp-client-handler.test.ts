@@ -1,5 +1,6 @@
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SUBAGENTS_CHANGED_METHOD } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AcpEventCallback, type AcpLogCallback } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 
@@ -303,6 +304,75 @@ describe('AcpClientHandler', () => {
         outcome: 'selected',
         optionId: 'reject_once',
       });
+    });
+  });
+
+  describe('extension notifications', () => {
+    it('logs then dispatches a valid sub-agent change under the DB session ID', async () => {
+      const eventFn = vi.fn();
+      const logFn = vi.fn();
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+
+      await handler.extNotification(SUBAGENTS_CHANGED_METHOD, {
+        sessionId: 'provider-session-123',
+        subagentId: 'child-1',
+        change: 'updated',
+      });
+
+      expect(logFn).toHaveBeenCalledWith('db-session-1', {
+        eventType: 'acp_extension_notification',
+        method: SUBAGENTS_CHANGED_METHOD,
+        data: {
+          sessionId: 'provider-session-123',
+          subagentId: 'child-1',
+          change: 'updated',
+        },
+      });
+      expect(eventFn).toHaveBeenCalledWith('db-session-1', {
+        type: 'acp_subagents_changed',
+        subagentId: 'child-1',
+        change: 'updated',
+      });
+      expect(logFn.mock.invocationCallOrder[0]).toBeLessThan(eventFn.mock.invocationCallOrder[0]!);
+    });
+
+    it('logs and ignores unknown extension notifications', async () => {
+      const eventFn = vi.fn();
+      const logFn = vi.fn();
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+
+      await expect(
+        handler.extNotification('example.invalid/changed', { value: 1 })
+      ).resolves.toBeUndefined();
+
+      expect(logFn).toHaveBeenCalledWith('db-session-1', {
+        eventType: 'acp_extension_notification',
+        method: 'example.invalid/changed',
+        data: { value: 1 },
+      });
+      expect(eventFn).not.toHaveBeenCalled();
+    });
+
+    it('logs and ignores malformed known extension notifications', async () => {
+      const eventFn = vi.fn();
+      const logFn = vi.fn();
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, logFn, 'all');
+      const malformed = {
+        sessionId: 'provider-session-123',
+        subagentId: '',
+        change: 'invalid',
+      };
+
+      await expect(
+        handler.extNotification(SUBAGENTS_CHANGED_METHOD, malformed)
+      ).resolves.toBeUndefined();
+
+      expect(logFn).toHaveBeenCalledWith('db-session-1', {
+        eventType: 'acp_extension_notification',
+        method: SUBAGENTS_CHANGED_METHOD,
+        data: malformed,
+      });
+      expect(eventFn).not.toHaveBeenCalled();
     });
   });
 });

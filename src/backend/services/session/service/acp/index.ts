@@ -7,6 +7,7 @@ export type {
   AcpPermissionRequestEvent,
   AcpRuntimeEvent,
   AcpSessionUpdateEvent,
+  AcpSubagentsChangedEvent,
 } from './acp-runtime-events';
 export type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 export {

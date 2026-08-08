@@ -6,6 +6,10 @@ import type {
   SessionNotification,
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
+import {
+  SUBAGENTS_CHANGED_METHOD,
+  subagentsChangedParamsSchema,
+} from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
 
@@ -192,6 +196,39 @@ export class AcpClientHandler implements Client {
     // Forward the raw update to session service for translation via AcpEventTranslator
     // This replaces the Phase 19 inline switch that only handled 3 event types
     this.onEvent(this.sessionId, { type: 'acp_session_update', update });
+    return Promise.resolve();
+  }
+
+  extNotification(method: string, params: Record<string, unknown>): Promise<void> {
+    this.onLog?.(this.sessionId, {
+      eventType: 'acp_extension_notification',
+      method,
+      data: params,
+    });
+
+    if (method !== SUBAGENTS_CHANGED_METHOD) {
+      logger.debug('Ignoring unknown ACP extension notification', {
+        sessionId: this.sessionId,
+        method,
+      });
+      return Promise.resolve();
+    }
+
+    const parsed = subagentsChangedParamsSchema.safeParse(params);
+    if (!parsed.success) {
+      logger.warn('Ignoring malformed ACP sub-agent change notification', {
+        sessionId: this.sessionId,
+        method,
+        issues: parsed.error.issues,
+      });
+      return Promise.resolve();
+    }
+
+    this.onEvent(this.sessionId, {
+      type: 'acp_subagents_changed',
+      subagentId: parsed.data.subagentId,
+      change: parsed.data.change,
+    });
     return Promise.resolve();
   }
 
