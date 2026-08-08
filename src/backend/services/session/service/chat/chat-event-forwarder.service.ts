@@ -24,7 +24,8 @@ const logger = createLogger('chat-event-forwarder');
 // A completed turn's voice-suppression check must not block workspace
 // notifications indefinitely if the DB lookup stalls (pool exhaustion, a
 // lock) rather than rejecting outright — bound it and fail open on timeout.
-const VOICE_ACTIVE_CHECK_TIMEOUT_MS = 2000;
+// Exported so tests can advance fake timers by exactly this much.
+export const VOICE_ACTIVE_CHECK_TIMEOUT_MS = 2000;
 
 // ============================================================================
 // Types
