@@ -7,7 +7,9 @@ import {
   knownCodexServerRequestSchema,
   modelListResponseSchema,
   subAgentActivityItemSchema,
+  threadListResponseSchema,
   threadReadResponseSchema,
+  threadStatusChangedNotificationSchema,
 } from './codex-zod';
 
 describe('codex-zod', () => {
@@ -185,6 +187,49 @@ describe('codex-zod', () => {
     });
 
     expect(parsed.thread.turns[0]?.items).toHaveLength(3);
+  });
+
+  it('parses parent-scoped thread/list fields while preserving additive fields', () => {
+    const parsed = threadListResponseSchema.parse({
+      data: [
+        {
+          id: 'child-thread-1',
+          parentThreadId: 'parent-thread-1',
+          name: 'reviewer',
+          agentNickname: 'swift-otter',
+          preview: 'Review the change',
+          createdAt: 1_786_089_600,
+          updatedAt: 1_786_093_200,
+          status: { type: 'active', activeFlags: ['waitingOnApproval'] },
+          turns: [],
+          futureThreadField: 'retained',
+        },
+      ],
+      nextCursor: null,
+      futureResponseField: 'retained',
+    });
+
+    expect(parsed.data[0]).toMatchObject({
+      id: 'child-thread-1',
+      parentThreadId: 'parent-thread-1',
+      futureThreadField: 'retained',
+    });
+    expect(parsed.futureResponseField).toBe('retained');
+  });
+
+  it('parses thread status changes used for sub-agent invalidation', () => {
+    const parsed = threadStatusChangedNotificationSchema.parse({
+      method: 'thread/status/changed',
+      params: {
+        threadId: 'child-thread-1',
+        status: { type: 'systemError', futureStatusField: true },
+      },
+    });
+
+    expect(parsed.params).toMatchObject({
+      threadId: 'child-thread-1',
+      status: { type: 'systemError', futureStatusField: true },
+    });
   });
 
   it('parses sub-agent activity items while preserving unknown fields', () => {

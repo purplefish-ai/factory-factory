@@ -30,6 +30,95 @@ function createSession(): AdapterSession {
 }
 
 describe('stream-event-handler', () => {
+  it('projects replay turns into updates without emitting them', async () => {
+    const session = createSession();
+    const emitSessionUpdate = vi.fn(async () => undefined);
+    const recordSubagentActivity = vi.fn(async () => undefined);
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate,
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn((_session, item) =>
+        item.type === 'subAgentActivity'
+          ? ({
+              toolCallId: item.id,
+              kind: 'other',
+              title: 'Start subagent nested',
+              locations: [],
+              affectedSubagentIds: ['nested-child'],
+            } satisfies ToolCallState)
+          : null
+      ),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      recordSubagentActivity,
+    });
+
+    const updates = await handler.projectThreadTurns(session, [
+      {
+        id: 'turn-1',
+        status: 'completed',
+        items: [
+          {
+            type: 'userMessage',
+            id: 'user-1',
+            content: [{ type: 'text', text: 'Question' }],
+          },
+          { type: 'agentMessage', id: 'agent-1', text: 'Answer' },
+          {
+            type: 'subAgentActivity',
+            id: 'subagent-1',
+            agentThreadId: 'nested-child',
+            agentPath: 'review/nested',
+            kind: 'started',
+          },
+        ],
+      },
+    ]);
+
+    expect(updates).toEqual([
+      {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: 'Question' },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Answer' },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'subagent-1',
+        title: 'Start subagent nested',
+        kind: 'other',
+        status: 'completed',
+        rawInput: {
+          type: 'subAgentActivity',
+          id: 'subagent-1',
+          agentThreadId: 'nested-child',
+          agentPath: 'review/nested',
+          kind: 'started',
+        },
+        rawOutput: {
+          type: 'subAgentActivity',
+          id: 'subagent-1',
+          agentThreadId: 'nested-child',
+          agentPath: 'review/nested',
+          kind: 'started',
+        },
+      },
+    ]);
+    expect(emitSessionUpdate).not.toHaveBeenCalled();
+    expect(recordSubagentActivity).not.toHaveBeenCalled();
+  });
+
   it('reports shape drift for malformed notifications', async () => {
     const reportShapeDrift = vi.fn();
     const handler = new CodexStreamEventHandler({
@@ -201,6 +290,54 @@ describe('stream-event-handler', () => {
         }),
       ])
     );
+  });
+
+  it('correlates and invalidates a live sub-agent activity item exactly once', async () => {
+    const session = createSession();
+    const recordSubagentActivity = vi.fn(async () => undefined);
+    const toolState: ToolCallState = {
+      toolCallId: 'call_subagent_1',
+      kind: 'other',
+      title: 'Start subagent security',
+      locations: [],
+      affectedSubagentIds: ['child_1'],
+    };
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
+      sessions: new Map([['sess_thread_1', session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => toolState),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      recordSubagentActivity,
+    });
+    const item = {
+      type: 'subAgentActivity',
+      id: 'item_subagent_1',
+      agentThreadId: 'child_1',
+      agentPath: 'review/security',
+      kind: 'started',
+    };
+
+    await handler.handleCodexNotification({
+      method: 'item/started',
+      params: { threadId: 'thread_1', turnId: 'turn_1', item },
+    });
+    await handler.handleCodexNotification({
+      method: 'item/completed',
+      params: { threadId: 'thread_1', turnId: 'turn_1', item },
+    });
+
+    expect(recordSubagentActivity).toHaveBeenCalledTimes(1);
+    expect(recordSubagentActivity).toHaveBeenCalledWith('sess_thread_1', ['child_1'], 'created');
   });
 
   it('retains tool metadata when replaying history', async () => {

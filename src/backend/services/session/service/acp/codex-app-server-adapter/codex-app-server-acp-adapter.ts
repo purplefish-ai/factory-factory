@@ -25,6 +25,15 @@ import {
   type SetSessionModeResponse,
   type StopReason,
 } from '@agentclientprotocol/sdk';
+import {
+  SUBAGENTS_CAPABILITY_META_KEY,
+  SUBAGENTS_LIST_METHOD,
+  SUBAGENTS_READ_METHOD,
+  subagentListParamsSchema,
+  subagentListResultSchema,
+  subagentReadParamsSchema,
+  subagentReadResultSchema,
+} from '@/shared/acp-protocol/subagents';
 import { asString, extractLocations, isRecord, resolveToolCallId } from './acp-adapter-utils';
 import type {
   AdapterSession,
@@ -44,6 +53,7 @@ import {
   toCodexMcpConfigMap,
 } from './codex-adapter-parsing';
 import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
+import { CodexSubagentController } from './codex-subagent-controller';
 import { mapCodexSubagentToolItem } from './codex-subagent-mapper';
 import { turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
@@ -94,6 +104,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private collaborationModes: CollaborationModeEntry[] = [];
   private readonly shapeDriftReporter: ShapeDriftReporter;
   private readonly streamEventHandler: CodexStreamEventHandler;
+  private readonly subagentController: CodexSubagentController;
 
   private get sessions(): Map<string, AdapterSession> {
     return this.stateContainer.sessions;
@@ -151,6 +162,21 @@ export class CodexAppServerAcpAdapter implements Agent {
         },
       });
 
+    this.subagentController = new CodexSubagentController({
+      codex: this.codex,
+      requireSession: (sessionId) => this.requireSession(sessionId),
+      createProjectionSession: (parent, threadId) =>
+        this.stateContainer.createSession({
+          sessionId: `${parent.sessionId}:subagent:${threadId}`,
+          threadId,
+          cwd: parent.cwd,
+          defaults: { ...parent.defaults },
+        }),
+      projectThreadTurns: (session, turns) =>
+        this.streamEventHandler.projectThreadTurns(session, turns),
+      extNotification: (method, params) => this.connection.extNotification(method, params),
+    });
+
     this.streamEventHandler = new CodexStreamEventHandler({
       codex: this.codex,
       sessionIdByThreadId: this.sessionIdByThreadId,
@@ -171,6 +197,10 @@ export class CodexAppServerAcpAdapter implements Agent {
       settleTurn: (session, stopReason) => this.settleTurn(session, stopReason),
       emitTurnFailureMessage: (sessionId, errorMessage) =>
         this.emitTurnFailureMessage(sessionId, errorMessage),
+      recordSubagentActivity: (parentSessionId, subagentIds, change) =>
+        this.subagentController.recordActivity(parentSessionId, subagentIds, change),
+      handleSubagentStatusChanged: (subagentId, runtimeType) =>
+        this.subagentController.handleThreadStatusChanged(subagentId, runtimeType),
     });
 
     this.monitorConnectionClose();
@@ -220,6 +250,14 @@ export class CodexAppServerAcpAdapter implements Agent {
         promptCapabilities: {
           image: false,
           embeddedContext: true,
+        },
+        _meta: {
+          [SUBAGENTS_CAPABILITY_META_KEY]: {
+            version: 1,
+            list: true,
+            read: true,
+            notifications: true,
+          },
         },
       },
       authMethods: [],
@@ -289,6 +327,31 @@ export class CodexAppServerAcpAdapter implements Agent {
   async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
     await Promise.resolve();
     return {};
+  }
+
+  async extMethod(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    if (method === SUBAGENTS_LIST_METHOD) {
+      const parsedParams = subagentListParamsSchema.safeParse(params);
+      if (!parsedParams.success) {
+        throw RequestError.invalidParams({ method, issues: parsedParams.error.issues });
+      }
+      const result = await this.subagentController.list(parsedParams.data);
+      return subagentListResultSchema.parse(result);
+    }
+
+    if (method === SUBAGENTS_READ_METHOD) {
+      const parsedParams = subagentReadParamsSchema.safeParse(params);
+      if (!parsedParams.success) {
+        throw RequestError.invalidParams({ method, issues: parsedParams.error.issues });
+      }
+      const result = await this.subagentController.read(parsedParams.data);
+      return subagentReadResultSchema.parse(result);
+    }
+
+    throw RequestError.methodNotFound(method);
   }
 
   async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
