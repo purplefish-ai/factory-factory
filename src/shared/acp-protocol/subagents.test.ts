@@ -13,6 +13,7 @@ import {
   subagentStatusSchema,
   subagentSummarySchema,
   subagentsChangedParamsSchema,
+  subagentToolMetadataSchema,
   subagentTranscriptUpdateSchema,
 } from './index';
 
@@ -34,6 +35,26 @@ describe('ACP sub-agent inspection contract', () => {
     expect(SUBAGENTS_LIST_METHOD).toBe('factoryfactory.ai/subagents/list');
     expect(SUBAGENTS_READ_METHOD).toBe('factoryfactory.ai/subagents/read');
     expect(SUBAGENTS_CHANGED_METHOD).toBe('factoryfactory.ai/subagents/changed');
+  });
+
+  it('validates singular tool metadata and preserves additive fields', () => {
+    expect(
+      subagentToolMetadataSchema.parse({
+        id: 'subagent-1',
+        parentSessionId: 'session-1',
+        providerHint: 'future-compatible',
+      })
+    ).toEqual({
+      id: 'subagent-1',
+      parentSessionId: 'session-1',
+      providerHint: 'future-compatible',
+    });
+    expect(() =>
+      subagentToolMetadataSchema.parse({ id: '', parentSessionId: 'session-1' })
+    ).toThrow();
+    expect(() =>
+      subagentToolMetadataSchema.parse({ id: 'subagent-1', parentSessionId: '' })
+    ).toThrow();
   });
 
   it('accepts only capability version one with every browse operation enabled', () => {

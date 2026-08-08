@@ -1,4 +1,7 @@
-import { SUBAGENT_TOOL_META_KEY } from '@/shared/acp-protocol/subagents';
+import {
+  SUBAGENT_TOOL_META_KEY,
+  subagentToolMetadataSchema,
+} from '@/shared/acp-protocol/subagents';
 import { collabAgentToolCallItemSchema, subAgentActivityItemSchema } from './codex-zod';
 
 export type SubagentToolMapping = {
@@ -60,10 +63,12 @@ function formatSubagentActivityTitle(
 }
 
 function createSubagentMeta(childId: string, parentSessionId: string): Record<string, unknown> {
+  const metadata = subagentToolMetadataSchema.parse({
+    id: childId,
+    parentSessionId,
+  });
+
   return {
-    [SUBAGENT_TOOL_META_KEY]: {
-      id: childId,
-      parentSessionId,
-    },
+    [SUBAGENT_TOOL_META_KEY]: metadata,
   };
 }

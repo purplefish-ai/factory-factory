@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SUBAGENT_TOOL_META_KEY } from '@/shared/acp-protocol';
+import { SUBAGENT_TOOL_META_KEY, subagentToolMetadataSchema } from '@/shared/acp-protocol';
 import { mapCodexSubagentToolItem } from './codex-subagent-mapper';
 
 describe('mapCodexSubagentToolItem', () => {
@@ -8,18 +8,18 @@ describe('mapCodexSubagentToolItem', () => {
     ['interacted', 'Interact with subagent security'],
     ['interrupted', 'Interrupt subagent security'],
   ] as const)('maps %s activity with a stable title', (activityKind, title) => {
-    expect(
-      mapCodexSubagentToolItem(
-        {
-          type: 'subAgentActivity',
-          id: `item-${activityKind}`,
-          agentThreadId: 'child-1',
-          agentPath: 'review/security',
-          kind: activityKind,
-        },
-        'parent-1'
-      )
-    ).toMatchObject({
+    const mapping = mapCodexSubagentToolItem(
+      {
+        type: 'subAgentActivity',
+        id: `item-${activityKind}`,
+        agentThreadId: 'child-1',
+        agentPath: 'review/security',
+        kind: activityKind,
+      },
+      'parent-1'
+    );
+
+    expect(mapping).toMatchObject({
       title,
       kind: 'other',
       locations: [],
@@ -31,6 +31,12 @@ describe('mapCodexSubagentToolItem', () => {
         },
       },
     });
+    expect(mapping?.meta?.[SUBAGENT_TOOL_META_KEY]).toEqual(
+      subagentToolMetadataSchema.parse({
+        id: 'child-1',
+        parentSessionId: 'parent-1',
+      })
+    );
   });
 
   it('maps a collab call with one receiver to the provider-neutral child metadata', () => {
@@ -58,6 +64,21 @@ describe('mapCodexSubagentToolItem', () => {
         },
       },
     });
+  });
+
+  it('rejects invalid singular metadata before emitting it', () => {
+    expect(() =>
+      mapCodexSubagentToolItem(
+        {
+          type: 'subAgentActivity',
+          id: 'item-invalid-parent',
+          agentThreadId: 'child-1',
+          agentPath: 'review/security',
+          kind: 'started',
+        },
+        ''
+      )
+    ).toThrow();
   });
 
   it('maps every collab receiver without inventing singular metadata', () => {

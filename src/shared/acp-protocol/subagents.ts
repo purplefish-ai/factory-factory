@@ -6,6 +6,13 @@ export const SUBAGENTS_LIST_METHOD = 'factoryfactory.ai/subagents/list';
 export const SUBAGENTS_READ_METHOD = 'factoryfactory.ai/subagents/read';
 export const SUBAGENTS_CHANGED_METHOD = 'factoryfactory.ai/subagents/changed';
 
+export const subagentToolMetadataSchema = z
+  .object({
+    id: z.string().min(1),
+    parentSessionId: z.string().min(1),
+  })
+  .passthrough();
+
 const metaSchema = z.record(z.string(), z.unknown()).nullable().optional();
 
 const annotationsSchema = z
@@ -273,6 +280,7 @@ export const subagentsChangedParamsSchema = z
   .passthrough();
 
 export type SubagentBrowseCapability = z.infer<typeof subagentBrowseCapabilitySchema>;
+export type SubagentToolMetadata = z.infer<typeof subagentToolMetadataSchema>;
 export type SubagentStatus = z.infer<typeof subagentStatusSchema>;
 export type SubagentSummary = z.infer<typeof subagentSummarySchema>;
 export type SubagentTranscriptUpdate = z.infer<typeof subagentTranscriptUpdateSchema>;
