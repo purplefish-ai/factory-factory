@@ -263,7 +263,7 @@ module.exports = {
       name: 'acp-no-external-imports',
       severity: 'error',
       comment:
-        'ACP internals must stay isolated from app code; only ACP internals, the logger service, and the provider-neutral sub-agent wire contract are allowed.',
+        'ACP internals must stay isolated from app code; only ACP internals, the logger service, the provider-neutral sub-agent wire contract, and the shared session-update translator are allowed.',
       from: {
         path: '^src/backend/services/session/service/acp/',
         pathNot: '^src/backend/services/session/service/acp/.*\\.test\\.ts$',
@@ -271,7 +271,7 @@ module.exports = {
       to: {
         path: '^src/',
         pathNot:
-          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/shared/acp-protocol/subagents.ts$',
+          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/shared/acp-protocol/subagents.ts$|^src/shared/acp-protocol/session-update-translator\\.ts$',
       },
     },
     {
