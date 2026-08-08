@@ -26,6 +26,10 @@ type CodexNotificationPayload = {
   params?: unknown;
 };
 
+function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
+  return meta ? { _meta: meta } : {};
+}
+
 type StreamEventHandlerDeps = {
   codex: Pick<CodexClient, 'request'>;
   sessionIdByThreadId: Map<string, string>;
@@ -285,6 +289,7 @@ export class CodexStreamEventHandler {
       title: toolInfo.title,
       kind: toolInfo.kind,
       status: 'completed',
+      ...metaUpdate(toolInfo.meta),
       rawInput: item,
       rawOutput: item,
     });
@@ -396,6 +401,7 @@ export class CodexStreamEventHandler {
         status: 'completed',
         kind: toolCall.kind,
         title: toolCall.title,
+        ...metaUpdate(toolCall.meta),
         ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
         rawOutput: output,
       });
@@ -406,6 +412,7 @@ export class CodexStreamEventHandler {
       sessionUpdate: 'tool_call_update',
       toolCallId: toolCall.toolCallId,
       status: 'in_progress',
+      ...metaUpdate(toolCall.meta),
       ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
       rawOutput: output,
     });
@@ -540,6 +547,7 @@ export class CodexStreamEventHandler {
       title: toolInfo.title,
       kind: toolInfo.kind,
       status: 'pending',
+      ...metaUpdate(toolInfo.meta),
       ...(toolInfo.locations.length > 0 ? { locations: toolInfo.locations } : {}),
       rawInput: item,
     });
@@ -550,6 +558,7 @@ export class CodexStreamEventHandler {
         sessionUpdate: 'tool_call_update',
         toolCallId: toolInfo.toolCallId,
         status: 'in_progress',
+        ...metaUpdate(toolInfo.meta),
       });
     }
   }
@@ -623,6 +632,7 @@ export class CodexStreamEventHandler {
       status,
       kind: existing.kind,
       title: existing.title,
+      ...metaUpdate(existing.meta),
       ...(locations.length > 0 ? { locations } : {}),
       rawOutput: item,
     });
@@ -650,6 +660,7 @@ export class CodexStreamEventHandler {
         status: toToolStatus(item.status) ?? 'completed',
         kind: recovered.kind,
         title: recovered.title,
+        ...metaUpdate(recovered.meta),
         ...(recovered.locations.length > 0 ? { locations: recovered.locations } : {}),
         rawInput: item,
         rawOutput: item,

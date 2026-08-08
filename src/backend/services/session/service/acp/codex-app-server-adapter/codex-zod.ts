@@ -63,6 +63,25 @@ const agentMessageThreadItemSchema = z
   })
   .passthrough();
 
+export const subAgentActivityItemSchema = threadItemSchema
+  .extend({
+    type: z.literal('subAgentActivity'),
+    agentThreadId: z.string().min(1),
+    agentPath: z.string(),
+    kind: z.enum(['started', 'interacted', 'interrupted']),
+  })
+  .passthrough();
+
+export const collabAgentToolCallItemSchema = threadItemSchema
+  .extend({
+    type: z.literal('collabAgentToolCall'),
+    tool: z.string(),
+    senderThreadId: z.string(),
+    receiverThreadIds: z.array(z.string()),
+    status: z.string(),
+  })
+  .passthrough();
+
 const turnSchema = z
   .object({
     id: z.string(),
@@ -281,7 +300,13 @@ const threadReadTurnSchema = z
   .object({
     id: z.string(),
     items: z.array(
-      z.union([userMessageThreadItemSchema, agentMessageThreadItemSchema, threadItemSchema])
+      z.union([
+        userMessageThreadItemSchema,
+        agentMessageThreadItemSchema,
+        subAgentActivityItemSchema,
+        collabAgentToolCallItemSchema,
+        threadItemSchema,
+      ])
     ),
   })
   .passthrough();

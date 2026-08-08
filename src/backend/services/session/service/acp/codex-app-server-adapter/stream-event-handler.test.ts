@@ -1,4 +1,6 @@
+import type { SessionUpdate } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
+import { SUBAGENT_TOOL_META_KEY } from '@/shared/acp-protocol';
 import type { AdapterSession, ToolCallState } from './adapter-state';
 import { CodexStreamEventHandler } from './stream-event-handler';
 
@@ -103,6 +105,165 @@ describe('stream-event-handler', () => {
         toolCallId: 'call_1',
         title: 'Read README.md',
         status: 'pending',
+      })
+    );
+  });
+
+  it('retains tool metadata through started, progress, and completed updates', async () => {
+    const session = createSession();
+    const updates: SessionUpdate[] = [];
+    const emitSessionUpdate = vi.fn((_sessionId: string, update: SessionUpdate) => {
+      updates.push(update);
+      return Promise.resolve();
+    });
+    const toolState: ToolCallState = {
+      toolCallId: 'call_subagent_1',
+      kind: 'other',
+      title: 'Start subagent security',
+      locations: [],
+      meta: {
+        [SUBAGENT_TOOL_META_KEY]: {
+          id: 'child_1',
+          parentSessionId: 'sess_thread_1',
+        },
+      },
+    };
+
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
+      sessions: new Map([['sess_thread_1', session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate,
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => toolState),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await handler.handleCodexNotification({
+      method: 'item/started',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        item: {
+          type: 'subAgentActivity',
+          id: 'item_subagent_1',
+          status: 'inProgress',
+        },
+      },
+    });
+    await handler.handleCodexNotification({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'item_subagent_1',
+        delta: 'working',
+      },
+    });
+    await handler.handleCodexNotification({
+      method: 'item/completed',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        item: {
+          type: 'subAgentActivity',
+          id: 'item_subagent_1',
+          status: 'completed',
+        },
+      },
+    });
+
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionUpdate: 'tool_call',
+          toolCallId: 'call_subagent_1',
+          _meta: toolState.meta,
+        }),
+        expect.objectContaining({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_subagent_1',
+          status: 'in_progress',
+          _meta: toolState.meta,
+        }),
+        expect.objectContaining({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_subagent_1',
+          status: 'completed',
+          _meta: toolState.meta,
+        }),
+      ])
+    );
+  });
+
+  it('retains tool metadata when replaying history', async () => {
+    const session = createSession();
+    const emitSessionUpdate = vi.fn(async () => undefined);
+    const request = vi.fn();
+    request.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        turns: [
+          {
+            id: 'turn_1',
+            items: [
+              {
+                type: 'subAgentActivity',
+                id: 'item_subagent_1',
+                agentThreadId: 'child_1',
+                agentPath: 'review/security',
+                kind: 'started',
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const toolState: ToolCallState = {
+      toolCallId: 'call_subagent_replayed',
+      kind: 'other',
+      title: 'Start subagent security',
+      locations: [],
+      meta: {
+        [SUBAGENT_TOOL_META_KEY]: {
+          id: 'child_1',
+          parentSessionId: 'sess_thread_1',
+        },
+      },
+    };
+    const handler = new CodexStreamEventHandler({
+      codex: { request },
+      sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
+      sessions: new Map([['sess_thread_1', session]]),
+      requireSession: vi.fn(() => session),
+      emitSessionUpdate,
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => toolState),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await handler.replayThreadHistory('sess_thread_1', 'thread_1');
+
+    expect(emitSessionUpdate).toHaveBeenCalledWith(
+      'sess_thread_1',
+      expect.objectContaining({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'call_subagent_replayed',
+        status: 'completed',
+        _meta: toolState.meta,
       })
     );
   });

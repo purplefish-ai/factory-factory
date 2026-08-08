@@ -263,7 +263,7 @@ module.exports = {
       name: 'acp-no-external-imports',
       severity: 'error',
       comment:
-        'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
+        'ACP internals must stay isolated from app code; only ACP internals, the logger service, and the provider-neutral sub-agent wire contract are allowed.',
       from: {
         path: '^src/backend/services/session/service/acp/',
         pathNot: '^src/backend/services/session/service/acp/.*\\.test\\.ts$',
@@ -271,14 +271,14 @@ module.exports = {
       to: {
         path: '^src/',
         pathNot:
-          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$',
+          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/shared/acp-protocol/subagents.ts$',
       },
     },
     {
       name: 'codex-app-server-adapter-self-contained',
       severity: 'error',
       comment:
-        'Codex app-server ACP adapter must be self-contained and must not import from outside its own directory.',
+        'Codex app-server ACP adapter must be self-contained except for the provider-neutral sub-agent wire contract.',
       from: {
         path: '^src/backend/services/session/service/acp/codex-app-server-adapter/',
         pathNot:
@@ -286,7 +286,8 @@ module.exports = {
       },
       to: {
         path: '^src/',
-        pathNot: '^src/backend/services/session/service/acp/codex-app-server-adapter/',
+        pathNot:
+          '^src/backend/services/session/service/acp/codex-app-server-adapter/|^src/shared/acp-protocol/subagents.ts$',
       },
     },
     {

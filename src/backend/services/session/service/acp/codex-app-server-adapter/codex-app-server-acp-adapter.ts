@@ -44,6 +44,7 @@ import {
   toCodexMcpConfigMap,
 } from './codex-adapter-parsing';
 import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
+import { mapCodexSubagentToolItem } from './codex-subagent-mapper';
 import { turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
 import {
@@ -734,6 +735,17 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     _turnId: string
   ): ToolCallState | null {
+    const subagentMapping = mapCodexSubagentToolItem(item, session.sessionId);
+    if (subagentMapping) {
+      return {
+        toolCallId: resolveToolCallId({
+          itemId: item.id,
+          source: item,
+        }),
+        ...subagentMapping,
+      };
+    }
+
     const kindByType: Record<string, ToolCallState['kind']> = {
       commandExecution: 'execute',
       custom_tool_call: 'execute',

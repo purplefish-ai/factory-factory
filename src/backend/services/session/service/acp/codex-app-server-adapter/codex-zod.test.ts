@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collabAgentToolCallItemSchema,
   collaborationModeListResponseSchema,
   configRequirementsReadResponseSchema,
   knownCodexNotificationSchema,
   knownCodexServerRequestSchema,
   modelListResponseSchema,
+  subAgentActivityItemSchema,
   threadReadResponseSchema,
 } from './codex-zod';
 
@@ -183,6 +185,35 @@ describe('codex-zod', () => {
     });
 
     expect(parsed.thread.turns[0]?.items).toHaveLength(3);
+  });
+
+  it('parses sub-agent activity items while preserving unknown fields', () => {
+    const parsed = subAgentActivityItemSchema.parse({
+      type: 'subAgentActivity',
+      id: 'item_subagent_1',
+      agentThreadId: 'child_1',
+      agentPath: 'review/security',
+      kind: 'started',
+      futureField: 'retained',
+    });
+
+    expect(parsed.agentThreadId).toBe('child_1');
+    expect(parsed.futureField).toBe('retained');
+  });
+
+  it('parses collaboration tool calls while preserving unknown fields', () => {
+    const parsed = collabAgentToolCallItemSchema.parse({
+      type: 'collabAgentToolCall',
+      id: 'item_collab_1',
+      tool: 'spawnAgent',
+      senderThreadId: 'parent_thread_1',
+      receiverThreadIds: ['child_1'],
+      status: 'inProgress',
+      futureField: 'retained',
+    });
+
+    expect(parsed.receiverThreadIds).toEqual(['child_1']);
+    expect(parsed.futureField).toBe('retained');
   });
 
   it('parses configRequirements/read responses', () => {

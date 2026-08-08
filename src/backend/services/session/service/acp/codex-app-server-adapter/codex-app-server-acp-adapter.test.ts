@@ -4,6 +4,7 @@ import type {
   RequestPermissionResponse,
 } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
+import { SUBAGENT_TOOL_META_KEY } from '@/shared/acp-protocol';
 import { CodexAppServerAcpAdapter } from './codex-app-server-acp-adapter';
 import { CodexRequestError } from './codex-rpc-client';
 
@@ -3109,5 +3110,41 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(functionCallOutput).toBeNull();
     expect(customToolCallOutput).toBeNull();
     expect(unknown).toBeNull();
+  });
+
+  it('builds provider-neutral tool state for Codex sub-agent items', () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    const toolState = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      { sessionId: 'parent-session', cwd: '/tmp/workspace' },
+      {
+        type: 'subAgentActivity',
+        id: 'item_subagent_1',
+        agentThreadId: 'child_1',
+        agentPath: 'review/security',
+        kind: 'started',
+      },
+      'turn_1'
+    );
+
+    expect(toolState).toMatchObject({
+      toolCallId: 'item_subagent_1',
+      title: 'Start subagent security',
+      kind: 'other',
+      locations: [],
+      affectedSubagentIds: ['child_1'],
+      meta: {
+        [SUBAGENT_TOOL_META_KEY]: {
+          id: 'child_1',
+          parentSessionId: 'parent-session',
+        },
+      },
+    });
   });
 });
