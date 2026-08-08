@@ -28,6 +28,7 @@ import {
   SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
   WEBSOCKET_MESSAGE_TYPES,
 } from '@/shared/acp-protocol';
+import { subagentsChangedParamsSchema } from '@/shared/acp-protocol/subagents';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 
 // =============================================================================
@@ -174,6 +175,10 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
   // session_delta must wrap another websocket event object.
   if (obj.type === 'session_delta') {
     return isSessionDeltaMessage(data);
+  }
+
+  if (obj.type === 'subagents_changed') {
+    return subagentsChangedParamsSchema.safeParse(data).success;
   }
 
   // agent_message must include a minimally shaped Claude payload to avoid runtime crashes.

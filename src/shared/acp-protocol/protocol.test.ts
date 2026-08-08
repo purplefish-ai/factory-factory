@@ -25,6 +25,34 @@ describe('sub-agent change websocket events', () => {
     expect(isWebSocketMessage(invalidation)).toBe(true);
     expect(isWebSocketMessage({ type: 'session_delta', data: invalidation })).toBe(true);
   });
+
+  it.each([
+    ['missing sessionId', { type: 'subagents_changed', subagentId: 'child-1', change: 'updated' }],
+    [
+      'empty sessionId',
+      { type: 'subagents_changed', sessionId: '', subagentId: 'child-1', change: 'updated' },
+    ],
+    [
+      'missing subagentId',
+      { type: 'subagents_changed', sessionId: 'db-session-1', change: 'updated' },
+    ],
+    [
+      'empty subagentId',
+      { type: 'subagents_changed', sessionId: 'db-session-1', subagentId: '', change: 'updated' },
+    ],
+    [
+      'invalid change',
+      {
+        type: 'subagents_changed',
+        sessionId: 'db-session-1',
+        subagentId: 'child-1',
+        change: 'deleted',
+      },
+    ],
+  ])('rejects direct and session-delta-wrapped invalidations with %s', (_label, invalidation) => {
+    expect(isWebSocketMessage(invalidation)).toBe(false);
+    expect(isWebSocketMessage({ type: 'session_delta', data: invalidation })).toBe(false);
+  });
 });
 
 function rendererMessage(id: string, order: number): ChatMessage {

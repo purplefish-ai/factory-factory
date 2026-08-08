@@ -62,6 +62,46 @@ describe('sub-agent invalidation transport', () => {
     unsubscribe();
     transport.cleanup();
   });
+
+  it.each([
+    ['missing sessionId', { type: 'subagents_changed', subagentId: 'child-1', change: 'updated' }],
+    [
+      'empty sessionId',
+      { type: 'subagents_changed', sessionId: '', subagentId: 'child-1', change: 'updated' },
+    ],
+    [
+      'missing subagentId',
+      { type: 'subagents_changed', sessionId: 'db-session-1', change: 'updated' },
+    ],
+    [
+      'empty subagentId',
+      { type: 'subagents_changed', sessionId: 'db-session-1', subagentId: '', change: 'updated' },
+    ],
+    [
+      'invalid change',
+      {
+        type: 'subagents_changed',
+        sessionId: 'db-session-1',
+        subagentId: 'child-1',
+        change: 'deleted',
+      },
+    ],
+  ])('does not deliver a wrapped invalidation with %s', (_label, invalidation) => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToSubagentChanges(listener);
+    const dispatch = vi.fn<(action: ChatAction) => void>();
+    const transport = renderTransport(dispatch);
+
+    try {
+      transport.handleMessage({ type: 'session_delta', data: invalidation });
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+      transport.cleanup();
+    }
+  });
 });
 
 describe('handleToolInputStreaming', () => {
