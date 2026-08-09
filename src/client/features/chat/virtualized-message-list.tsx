@@ -1,6 +1,6 @@
 import { SpinnerGapIcon } from '@phosphor-icons/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
@@ -34,6 +34,8 @@ interface VirtualizedMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   /** Whether user is near bottom of scroll - used to gate auto-scroll */
   isNearBottom?: boolean;
+  /** Keep the visible keyed row anchored when older messages are prepended. */
+  preserveScrollAnchorOnPrepend?: boolean;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
@@ -179,6 +181,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onScroll,
   messagesEndRef,
   isNearBottom = true,
+  preserveScrollAnchorOnPrepend = false,
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
@@ -197,7 +200,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const newMessagePinRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
-  isNearBottomRef.current = isNearBottom;
+  useLayoutEffect(() => {
+    isNearBottomRef.current = isNearBottom;
+  }, [isNearBottom]);
   loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
@@ -259,6 +264,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       const message = messages[index];
       return message ? message.id : `missing-message-${index}`;
     },
+    anchorTo: preserveScrollAnchorOnPrepend ? 'end' : 'start',
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -378,13 +384,25 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
+      const wasFollowingBeforeResize = isNearBottomRef.current;
+      const wasNearBottomBeforeResize = grew
+        ? distanceFromBottom - growthAmount <= STICK_TO_BOTTOM_THRESHOLD
+        : distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD;
+      if (grew && preserveScrollAnchorOnPrepend && !wasFollowingBeforeResize) {
+        return;
+      }
+      isNearBottomRef.current = wasNearBottomBeforeResize;
       if (!grew) {
         return;
       }
+      // A prepend-aware virtualizer already preserves the visible keyed row
+      // while estimates settle. Treating that same growth as bottom-pinning
+      // would apply a second, conflicting scroll correction.
+      if (preserveScrollAnchorOnPrepend && !isNearBottomRef.current) {
+        return;
+      }
 
-      const wasNearBottomBeforeGrowth =
-        distanceFromBottom - growthAmount <= STICK_TO_BOTTOM_THRESHOLD;
-      if (!wasNearBottomBeforeGrowth) {
+      if (!wasNearBottomBeforeResize) {
         return;
       }
       if (resizeStickRafRef.current !== null) {
@@ -411,7 +429,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         resizeStickRafRef.current = null;
       }
     };
-  }, [hasScrollableContent, loadingSession, scrollContainerRef, stickToBottom]);
+  }, [
+    hasScrollableContent,
+    loadingSession,
+    preserveScrollAnchorOnPrepend,
+    scrollContainerRef,
+    stickToBottom,
+  ]);
 
   useEffect(() => {
     if (!loadingSession) {
@@ -437,8 +461,14 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      isNearBottomRef.current = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD;
+    }
     onScroll?.();
-  }, [onScroll]);
+  }, [onScroll, scrollContainerRef]);
 
   // Attach scroll listener
   useEffect(() => {

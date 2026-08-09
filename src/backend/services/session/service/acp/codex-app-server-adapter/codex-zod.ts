@@ -63,10 +63,46 @@ const agentMessageThreadItemSchema = z
   })
   .passthrough();
 
+const codexThreadStatusSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
+
+const codexTurnStatusSchema = z.string().min(1);
+
+export function isKnownCodexTurnStatus(status: string): boolean {
+  return (
+    status === 'completed' ||
+    status === 'interrupted' ||
+    status === 'failed' ||
+    status === 'inProgress'
+  );
+}
+
+export const subAgentActivityItemSchema = threadItemSchema
+  .extend({
+    type: z.literal('subAgentActivity'),
+    agentThreadId: z.string().min(1),
+    agentPath: z.string(),
+    kind: z.enum(['started', 'interacted', 'interrupted']),
+  })
+  .passthrough();
+
+export const collabAgentToolCallItemSchema = threadItemSchema
+  .extend({
+    type: z.literal('collabAgentToolCall'),
+    tool: z.string(),
+    senderThreadId: z.string(),
+    receiverThreadIds: z.array(z.string()),
+    status: z.string(),
+  })
+  .passthrough();
+
 const turnSchema = z
   .object({
     id: z.string(),
-    status: z.enum(['completed', 'interrupted', 'failed', 'inProgress']),
+    status: codexTurnStatusSchema,
     error: z
       .object({
         message: z.string(),
@@ -180,6 +216,18 @@ const errorNotificationSchema = z.object({
     .passthrough(),
 });
 
+export const threadStatusChangedNotificationSchema = z
+  .object({
+    method: z.literal('thread/status/changed'),
+    params: z
+      .object({
+        threadId: z.string(),
+        status: codexThreadStatusSchema,
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
 export const knownCodexNotificationSchema = z.union([
   itemStartedNotificationSchema,
   itemCompletedNotificationSchema,
@@ -192,6 +240,7 @@ export const knownCodexNotificationSchema = z.union([
   turnCompletedNotificationSchema,
   turnStartedNotificationSchema,
   errorNotificationSchema,
+  threadStatusChangedNotificationSchema,
 ]);
 
 export const commandExecutionApprovalRequestSchema = z.object({
@@ -277,12 +326,42 @@ export const threadStartResponseSchema = z
 
 export const threadResumeResponseSchema = threadStartResponseSchema;
 
-const threadReadTurnSchema = z
+export const threadReadTurnSchema = z
   .object({
     id: z.string(),
+    status: codexTurnStatusSchema.optional(),
+    startedAt: z.number().nullable().optional(),
+    completedAt: z.number().nullable().optional(),
     items: z.array(
-      z.union([userMessageThreadItemSchema, agentMessageThreadItemSchema, threadItemSchema])
+      z.union([
+        userMessageThreadItemSchema,
+        agentMessageThreadItemSchema,
+        subAgentActivityItemSchema,
+        collabAgentToolCallItemSchema,
+        threadItemSchema,
+      ])
     ),
+  })
+  .passthrough();
+
+const threadListItemSchema = z
+  .object({
+    id: z.string(),
+    parentThreadId: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    agentNickname: z.string().nullable().optional(),
+    preview: z.string().optional(),
+    createdAt: z.number().nullable().optional(),
+    updatedAt: z.number().nullable().optional(),
+    status: codexThreadStatusSchema.optional(),
+    turns: z.array(threadReadTurnSchema).optional(),
+  })
+  .passthrough();
+
+export const threadListResponseSchema = z
+  .object({
+    data: z.array(threadListItemSchema),
+    nextCursor: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -302,7 +381,7 @@ export const turnStartResponseSchema = z
     turn: z
       .object({
         id: z.string(),
-        status: z.enum(['completed', 'interrupted', 'failed', 'inProgress']).optional(),
+        status: codexTurnStatusSchema.optional(),
       })
       .passthrough(),
   })
@@ -375,6 +454,8 @@ export type CodexKnownServerRequest = z.infer<typeof knownCodexServerRequestSche
 export type ThreadStartResponse = z.infer<typeof threadStartResponseSchema>;
 export type ThreadResumeResponse = z.infer<typeof threadResumeResponseSchema>;
 export type ThreadReadResponse = z.infer<typeof threadReadResponseSchema>;
+export type ThreadReadTurn = z.infer<typeof threadReadTurnSchema>;
+export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
 export type TurnStartResponse = z.infer<typeof turnStartResponseSchema>;
 export type ModelListResponse = z.infer<typeof modelListResponseSchema>;
 export type CollaborationModeListResponse = z.infer<typeof collaborationModeListResponseSchema>;

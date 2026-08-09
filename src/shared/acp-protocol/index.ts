@@ -6,7 +6,8 @@
  */
 export * from '@/shared/session-runtime';
 export * from './protocol/index';
-
 // Optional aliases for clearer ACP-oriented call sites.
 export type { ChatMessage as AgentChatMessage } from './protocol/messages';
 export type { SessionDeltaEvent as AgentSessionDeltaEvent } from './protocol/websocket';
+export * from './session-update-translator';
+export * from './subagents';

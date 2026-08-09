@@ -4,7 +4,12 @@
 
 export type { AgentSessionRecord } from '@/backend/services/session/types';
 // ACP runtime (Phase 19+)
-export type { AcpClientOptions, AcpRuntimeEventHandlers, AcpSessionState } from './acp';
+export type {
+  AcpClientOptions,
+  AcpRuntimeEventHandlers,
+  AcpSessionState,
+  AcpSubagentsChangedEvent,
+} from './acp';
 export {
   AcpClientHandler,
   AcpProcessHandle,

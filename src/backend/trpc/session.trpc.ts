@@ -1,7 +1,12 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
+import {
+  subagentListParamsSchema,
+  subagentReadParamsSchema,
+} from '@/shared/acp-protocol/subagents';
 import { SessionStatus } from '@/shared/core';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -13,6 +18,32 @@ const createSessionInputSchema = z.object({
   provider: z.nativeEnum(SessionProvider).optional(),
   initialMessage: z.string().optional(),
 });
+
+const SUBAGENT_APPLICATION_ERROR_CODES = [
+  'INVALID_INPUT',
+  'NOT_FOUND',
+  'PRECONDITION_FAILED',
+  'INTERNAL_ERROR',
+] as const;
+
+type SubagentApplicationErrorCode = (typeof SUBAGENT_APPLICATION_ERROR_CODES)[number];
+
+function isAcpSubagentBrowseError(
+  error: unknown
+): error is Error & { code: SubagentApplicationErrorCode } {
+  return (
+    error instanceof Error &&
+    error.name === 'AcpSubagentBrowseError' &&
+    SUBAGENT_APPLICATION_ERROR_CODES.some((code) => code === (error as { code?: unknown }).code)
+  );
+}
+
+function toSubagentApplicationError(error: unknown): unknown {
+  if (isAcpSubagentBrowseError(error)) {
+    return new ApplicationError(error.code, error.message, { cause: error });
+  }
+  return error;
+}
 
 async function createAgentSessionFromInput(
   ctx: Context,
@@ -138,6 +169,40 @@ export const sessionRouter = router({
     }
     return session;
   }),
+
+  listSubagents: publicProcedure.input(subagentListParamsSchema).query(async ({ ctx, input }) => {
+    const { acpRuntimeManager } = ctx.appContext.services;
+    if (!acpRuntimeManager.getSubagentBrowseCapability(input.sessionId)) {
+      return { supported: false as const };
+    }
+
+    const { sessionId, ...browseInput } = input;
+    try {
+      const result = await acpRuntimeManager.listSubagents(sessionId, browseInput);
+      return { supported: true as const, ...result };
+    } catch (error) {
+      throw toSubagentApplicationError(error);
+    }
+  }),
+
+  readSubagentTranscript: publicProcedure
+    .input(subagentReadParamsSchema)
+    .query(async ({ ctx, input }) => {
+      const { acpRuntimeManager } = ctx.appContext.services;
+      if (!acpRuntimeManager.getSubagentBrowseCapability(input.sessionId)) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Sub-agent browsing is unavailable for session ${input.sessionId}`,
+        });
+      }
+
+      const { sessionId, ...readInput } = input;
+      try {
+        return await acpRuntimeManager.readSubagentTranscript(sessionId, readInput);
+      } catch (error) {
+        throw toSubagentApplicationError(error);
+      }
+    }),
 
   // Create a new session
   createSession: publicProcedure.input(createSessionInputSchema).mutation(({ ctx, input }) => {

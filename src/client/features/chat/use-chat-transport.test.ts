@@ -1,6 +1,93 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
+import { describe, expect, it, vi } from 'vitest';
+import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { type AgentMessage, isWebSocketMessage } from '@/lib/chat-protocol';
+import type { ChatAction } from './reducer';
 import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
+import { useChatTransport } from './use-chat-transport';
+
+function renderTransport(dispatch: (action: ChatAction) => void) {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  let handleMessage: ((data: unknown) => void) | undefined;
+
+  function Harness() {
+    handleMessage = useChatTransport({
+      dispatch,
+      stateRef: { current: {} } as never,
+      toolInputAccumulatorRef: { current: createToolInputAccumulatorState() },
+    }).handleMessage;
+    return null;
+  }
+
+  flushSync(() => root.render(createElement(Harness)));
+  if (!handleMessage) {
+    throw new Error('Expected the hook harness to expose handleMessage');
+  }
+  return {
+    handleMessage,
+    cleanup: () => flushSync(() => root.unmount()),
+  };
+}
+
+describe('sub-agent invalidation transport', () => {
+  it('dispatches one typed browser event and no chat reducer action', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToSubagentChanges(listener);
+    const dispatch = vi.fn<(action: ChatAction) => void>();
+    const transport = renderTransport(dispatch);
+
+    transport.handleMessage({
+      type: 'session_delta',
+      data: {
+        type: 'subagents_changed',
+        sessionId: 'db-session-1',
+        subagentId: 'child-1',
+        change: 'updated',
+      },
+    });
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith({
+      sessionId: 'db-session-1',
+      subagentId: 'child-1',
+      change: 'updated',
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+
+    unsubscribe();
+    transport.cleanup();
+  });
+
+  it('does not deliver a malformed wrapped invalidation', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToSubagentChanges(listener);
+    const dispatch = vi.fn<(action: ChatAction) => void>();
+    const transport = renderTransport(dispatch);
+
+    try {
+      transport.handleMessage({
+        type: 'session_delta',
+        data: {
+          type: 'subagents_changed',
+          sessionId: 'db-session-1',
+          subagentId: 'child-1',
+          change: 'deleted',
+        },
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+      transport.cleanup();
+    }
+  });
+});
 
 describe('handleToolInputStreaming', () => {
   it('accumulates input_json_delta and returns TOOL_INPUT_UPDATE when JSON is complete', () => {

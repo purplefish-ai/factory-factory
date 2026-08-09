@@ -51,6 +51,8 @@ export type ToolCallState = {
   kind: NonNullable<ToolCallUpdate['kind']>;
   title: string;
   locations: Array<{ path: string; line?: number | null }>;
+  meta?: Record<string, unknown>;
+  affectedSubagentIds?: string[];
 };
 
 export type ActiveTurnState = {

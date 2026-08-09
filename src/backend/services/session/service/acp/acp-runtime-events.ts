@@ -1,4 +1,5 @@
 import type { RequestPermissionRequest, SessionNotification } from '@agentclientprotocol/sdk';
+import type { SubagentsChangedParams } from '@/shared/acp-protocol/subagents';
 
 export type AcpSessionUpdateEvent = {
   type: 'acp_session_update';
@@ -11,4 +12,13 @@ export type AcpPermissionRequestEvent = {
   params: RequestPermissionRequest;
 };
 
-export type AcpRuntimeEvent = AcpSessionUpdateEvent | AcpPermissionRequestEvent;
+export type AcpSubagentsChangedEvent = {
+  type: 'acp_subagents_changed';
+  subagentId: string;
+  change: SubagentsChangedParams['change'];
+};
+
+export type AcpRuntimeEvent =
+  | AcpSessionUpdateEvent
+  | AcpPermissionRequestEvent
+  | AcpSubagentsChangedEvent;

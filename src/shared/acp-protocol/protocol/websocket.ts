@@ -78,6 +78,11 @@ interface WebSocketMessagePayloadByType {
   session_delta: {
     data: SessionDeltaEvent;
   };
+  subagents_changed: {
+    sessionId: string;
+    subagentId: string;
+    change: 'created' | 'updated' | 'completed';
+  };
   session_runtime_snapshot: {
     sessionRuntime: SessionRuntimeState;
   };
@@ -277,6 +282,7 @@ export type WebSocketMessage = {
 const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   session_snapshot: true,
   session_delta: true,
+  subagents_changed: true,
   session_runtime_snapshot: true,
   session_runtime_updated: true,
   agent_message: true,

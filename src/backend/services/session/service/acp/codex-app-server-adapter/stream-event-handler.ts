@@ -1,4 +1,5 @@
 import type { SessionUpdate, StopReason } from '@agentclientprotocol/sdk';
+import type { SubagentTranscriptUpdate } from '@/shared/acp-protocol/subagents';
 import {
   asString,
   dedupeLocations,
@@ -15,7 +16,13 @@ import type {
   PendingTurnCompletion,
   ToolCallState,
 } from './adapter-state';
-import { knownCodexNotificationSchema, threadReadResponseSchema } from './codex-zod';
+import { extractReasoningText } from './codex-adapter-parsing';
+import {
+  isKnownCodexTurnStatus,
+  knownCodexNotificationSchema,
+  type ThreadReadTurn,
+  threadReadResponseSchema,
+} from './codex-zod';
 
 type ThreadReadItem = ReturnType<
   typeof threadReadResponseSchema.parse
@@ -25,6 +32,10 @@ type CodexNotificationPayload = {
   method: string;
   params?: unknown;
 };
+
+function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
+  return meta ? { _meta: meta } : {};
+}
 
 type StreamEventHandlerDeps = {
   codex: Pick<CodexClient, 'request'>;
@@ -57,6 +68,13 @@ type StreamEventHandlerDeps = {
   hasPendingPlanApprovals: (session: AdapterSession, turnId: string) => boolean;
   settleTurn: (session: AdapterSession, stopReason: StopReason) => void;
   emitTurnFailureMessage: (sessionId: string, errorMessage: string) => Promise<void>;
+  recordSubagentActivity?: (
+    parentSessionId: string,
+    subagentIds: readonly string[],
+    change: 'created' | 'updated' | 'completed'
+  ) => Promise<void>;
+  handleSubagentStatusChanged?: (subagentId: string, runtimeType: string) => Promise<void>;
+  handleSubagentTranscriptActivity?: (subagentId: string) => Promise<void>;
 };
 
 export class CodexStreamEventHandler {
@@ -70,11 +88,33 @@ export class CodexStreamEventHandler {
     });
     const threadRead = threadReadResponseSchema.parse(threadReadRaw);
 
-    for (const turn of threadRead.thread.turns) {
+    const updates = await this.projectThreadTurns(session, threadRead.thread.turns);
+    for (const update of updates) {
+      await this.deps.emitSessionUpdate(sessionId, update);
+    }
+  }
+
+  async projectThreadTurns(
+    session: AdapterSession,
+    turns: ThreadReadTurn[]
+  ): Promise<SubagentTranscriptUpdate[]> {
+    const updates: SubagentTranscriptUpdate[] = [];
+    const collect = (update: SubagentTranscriptUpdate): Promise<void> => {
+      updates.push(update);
+      return Promise.resolve();
+    };
+    for (const turn of turns) {
+      if (turn.status && !isKnownCodexTurnStatus(turn.status)) {
+        this.deps.reportShapeDrift('unknown_turn_status', {
+          source: 'thread/history',
+          status: turn.status,
+        });
+      }
       for (const item of turn.items) {
-        await this.replayThreadHistoryItem(session, sessionId, turn.id, item);
+        await this.replayThreadHistoryItem(session, turn.id, item, collect);
       }
     }
+    return updates;
   }
 
   async handleCodexNotification(notification: CodexNotificationPayload): Promise<void> {
@@ -91,6 +131,16 @@ export class CodexStreamEventHandler {
     if (typedNotification.method === 'error' || typedNotification.method === 'turn/started') {
       return;
     }
+
+    if (typedNotification.method === 'thread/status/changed') {
+      await this.deps.handleSubagentStatusChanged?.(
+        typedNotification.params.threadId,
+        typedNotification.params.status.type
+      );
+      return;
+    }
+
+    await this.deps.handleSubagentTranscriptActivity?.(typedNotification.params.threadId);
 
     const sessionId = this.deps.sessionIdByThreadId.get(typedNotification.params.threadId);
     if (!sessionId) {
@@ -200,33 +250,33 @@ export class CodexStreamEventHandler {
 
   private async replayThreadHistoryItem(
     session: AdapterSession,
-    sessionId: string,
     turnId: string,
-    item: ThreadReadItem
+    item: ThreadReadItem,
+    emitUpdate: (update: SubagentTranscriptUpdate) => Promise<void>
   ): Promise<void> {
     if (item.type === 'userMessage') {
-      await this.replayUserMessageHistoryItem(sessionId, item as Record<string, unknown>);
+      await this.replayUserMessageHistoryItem(item as Record<string, unknown>, emitUpdate);
       return;
     }
 
     if (item.type === 'agentMessage') {
-      await this.replayAgentMessageHistoryItem(sessionId, item as Record<string, unknown>);
+      await this.replayAgentMessageHistoryItem(item as Record<string, unknown>, emitUpdate);
       return;
     }
 
-    await this.replayToolLikeHistoryItem(session, sessionId, turnId, item);
+    await this.replayToolLikeHistoryItem(session, turnId, item, emitUpdate);
   }
 
   private async replayUserMessageHistoryItem(
-    sessionId: string,
-    item: Record<string, unknown>
+    item: Record<string, unknown>,
+    emitUpdate: (update: SubagentTranscriptUpdate) => Promise<void>
   ): Promise<void> {
     const contentBlocks = Array.isArray(item.content) ? item.content : [];
     for (const content of contentBlocks) {
       if (!isRecord(content) || content.type !== 'text' || typeof content.text !== 'string') {
         continue;
       }
-      await this.deps.emitSessionUpdate(sessionId, {
+      await emitUpdate({
         sessionUpdate: 'user_message_chunk',
         content: { type: 'text', text: content.text },
       });
@@ -234,15 +284,15 @@ export class CodexStreamEventHandler {
   }
 
   private async replayAgentMessageHistoryItem(
-    sessionId: string,
-    item: Record<string, unknown>
+    item: Record<string, unknown>,
+    emitUpdate: (update: SubagentTranscriptUpdate) => Promise<void>
   ): Promise<void> {
     const text = asString(item.text);
     if (!text) {
       return;
     }
 
-    await this.deps.emitSessionUpdate(sessionId, {
+    await emitUpdate({
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'text', text },
     });
@@ -250,12 +300,12 @@ export class CodexStreamEventHandler {
 
   private async replayToolLikeHistoryItem(
     session: AdapterSession,
-    sessionId: string,
     turnId: string,
-    item: { type: string; id: string } & Record<string, unknown>
+    item: { type: string; id: string } & Record<string, unknown>,
+    emitUpdate: (update: SubagentTranscriptUpdate) => Promise<void>
   ): Promise<void> {
     if (item.type === 'reasoning') {
-      await this.deps.emitSessionUpdate(sessionId, {
+      await emitUpdate({
         sessionUpdate: 'tool_call',
         toolCallId: resolveToolCallId({ itemId: item.id, source: item }),
         title: 'reasoning',
@@ -264,7 +314,13 @@ export class CodexStreamEventHandler {
         rawInput: item,
         rawOutput: item,
       });
-      await this.deps.emitReasoningThoughtChunkFromItem(sessionId, item);
+      const text = extractReasoningText(item);
+      if (text) {
+        await emitUpdate({
+          sessionUpdate: 'agent_thought_chunk',
+          content: { type: 'text', text },
+        });
+      }
       session.replayedTurnItemKeys.add(toTurnItemKey(turnId, item.id));
       return;
     }
@@ -279,12 +335,13 @@ export class CodexStreamEventHandler {
       return;
     }
 
-    await this.deps.emitSessionUpdate(sessionId, {
+    await emitUpdate({
       sessionUpdate: 'tool_call',
       toolCallId: toolInfo.toolCallId,
       title: toolInfo.title,
       kind: toolInfo.kind,
       status: 'completed',
+      ...metaUpdate(toolInfo.meta),
       rawInput: item,
       rawOutput: item,
     });
@@ -396,6 +453,7 @@ export class CodexStreamEventHandler {
         status: 'completed',
         kind: toolCall.kind,
         title: toolCall.title,
+        ...metaUpdate(toolCall.meta),
         ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
         rawOutput: output,
       });
@@ -406,6 +464,7 @@ export class CodexStreamEventHandler {
       sessionUpdate: 'tool_call_update',
       toolCallId: toolCall.toolCallId,
       status: 'in_progress',
+      ...metaUpdate(toolCall.meta),
       ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
       rawOutput: output,
     });
@@ -414,14 +473,23 @@ export class CodexStreamEventHandler {
   private async handleTurnCompletedNotification(
     session: AdapterSession,
     turnId: string,
-    status: 'completed' | 'interrupted' | 'failed' | 'inProgress',
+    status: string,
     errorMessage?: string
   ): Promise<void> {
     if (status === 'inProgress') {
       return;
     }
 
-    const completionStatus = status;
+    let completionStatus: 'completed' | 'interrupted' | 'failed';
+    if (status === 'completed' || status === 'interrupted' || status === 'failed') {
+      completionStatus = status;
+    } else {
+      this.deps.reportShapeDrift('unknown_turn_status', {
+        source: 'turn/completed',
+        status,
+      });
+      completionStatus = 'completed';
+    }
     if (this.shouldDeferTurnCompletion(session, turnId, completionStatus)) {
       session.pendingTurnCompletionsByTurnId.set(
         turnId,
@@ -533,6 +601,7 @@ export class CodexStreamEventHandler {
 
     session.syntheticallyCompletedToolItemIds.delete(item.id);
     session.toolCallsByItemId.set(item.id, toolInfo);
+    await this.recordSubagentActivity(session, item, toolInfo);
 
     await this.deps.emitSessionUpdate(session.sessionId, {
       sessionUpdate: 'tool_call',
@@ -540,6 +609,7 @@ export class CodexStreamEventHandler {
       title: toolInfo.title,
       kind: toolInfo.kind,
       status: 'pending',
+      ...metaUpdate(toolInfo.meta),
       ...(toolInfo.locations.length > 0 ? { locations: toolInfo.locations } : {}),
       rawInput: item,
     });
@@ -550,6 +620,7 @@ export class CodexStreamEventHandler {
         sessionUpdate: 'tool_call_update',
         toolCallId: toolInfo.toolCallId,
         status: 'in_progress',
+        ...metaUpdate(toolInfo.meta),
       });
     }
   }
@@ -623,6 +694,7 @@ export class CodexStreamEventHandler {
       status,
       kind: existing.kind,
       title: existing.title,
+      ...metaUpdate(existing.meta),
       ...(locations.length > 0 ? { locations } : {}),
       rawOutput: item,
     });
@@ -644,12 +716,15 @@ export class CodexStreamEventHandler {
         this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
       }
 
+      await this.recordSubagentActivity(session, item, recovered);
+
       await this.deps.emitSessionUpdate(session.sessionId, {
         sessionUpdate: 'tool_call',
         toolCallId: recovered.toolCallId,
         status: toToolStatus(item.status) ?? 'completed',
         kind: recovered.kind,
         title: recovered.title,
+        ...metaUpdate(recovered.meta),
         ...(recovered.locations.length > 0 ? { locations: recovered.locations } : {}),
         rawInput: item,
         rawOutput: item,
@@ -665,4 +740,31 @@ export class CodexStreamEventHandler {
       itemId: item.id,
     });
   }
+
+  private async recordSubagentActivity(
+    session: AdapterSession,
+    item: Record<string, unknown>,
+    toolInfo: ToolCallState
+  ): Promise<void> {
+    if (!toolInfo.affectedSubagentIds || toolInfo.affectedSubagentIds.length === 0) {
+      return;
+    }
+    await this.deps.recordSubagentActivity?.(
+      session.sessionId,
+      toolInfo.affectedSubagentIds,
+      subagentChangeForItem(item)
+    );
+  }
+}
+
+function subagentChangeForItem(item: Record<string, unknown>): 'created' | 'updated' | 'completed' {
+  if (item.type === 'subAgentActivity') {
+    if (item.kind === 'started') {
+      return 'created';
+    }
+    if (item.kind === 'interrupted') {
+      return 'completed';
+    }
+  }
+  return 'updated';
 }

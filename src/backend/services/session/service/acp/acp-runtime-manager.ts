@@ -9,7 +9,21 @@ import {
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
+import { z } from 'zod';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import {
+  SUBAGENTS_LIST_METHOD,
+  SUBAGENTS_READ_METHOD,
+  type SubagentBrowseCapability,
+  type SubagentListParams,
+  type SubagentListResult,
+  type SubagentReadParams,
+  type SubagentReadResult,
+  subagentListParamsSchema,
+  subagentListResultSchema,
+  subagentReadParamsSchema,
+  subagentReadResultSchema,
+} from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
@@ -36,6 +50,23 @@ export class PromptTimeoutError extends Error {
   ) {
     super(`ACP prompt timed out after ${timeoutMs}ms for session ${sessionId}`);
     this.name = 'PromptTimeoutError';
+  }
+}
+
+type AcpSubagentBrowseErrorCode =
+  | 'INVALID_INPUT'
+  | 'NOT_FOUND'
+  | 'PRECONDITION_FAILED'
+  | 'INTERNAL_ERROR';
+
+class AcpSubagentBrowseError extends Error {
+  constructor(
+    public readonly code: AcpSubagentBrowseErrorCode,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = 'AcpSubagentBrowseError';
   }
 }
 
@@ -70,9 +101,25 @@ type AcpErrorLogDetails = {
   data?: unknown;
 };
 
+function getAcpErrorMetadata(error: {
+  code?: unknown;
+  data?: unknown;
+}): Omit<AcpErrorLogDetails, 'message'> {
+  const code =
+    typeof error.code === 'number' || typeof error.code === 'string' ? error.code : undefined;
+  return {
+    ...(code !== undefined ? { code } : {}),
+    ...(typeof error.data !== 'undefined' ? { data: error.data } : {}),
+  };
+}
+
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   if (error instanceof Error) {
-    return { message: error.message };
+    const maybe = error as Error & { code?: unknown; data?: unknown };
+    return {
+      message: error.message,
+      ...getAcpErrorMetadata(maybe),
+    };
   }
 
   if (typeof error === 'object' && error !== null) {
@@ -87,12 +134,9 @@ function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
               return String(error);
             }
           })();
-    const code =
-      typeof maybe.code === 'number' || typeof maybe.code === 'string' ? maybe.code : undefined;
     return {
       message,
-      ...(code !== undefined ? { code } : {}),
-      ...(typeof maybe.data !== 'undefined' ? { data: maybe.data } : {}),
+      ...getAcpErrorMetadata(maybe),
     };
   }
 
@@ -102,6 +146,79 @@ function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
 function isMethodNotFoundError(error: unknown): boolean {
   const details = getAcpErrorLogDetails(error);
   return details.code === -32_601 || details.message.includes('Method not found');
+}
+
+type SubagentBrowseOperation = 'list' | 'transcript';
+
+function subagentBrowseMessage(
+  operation: SubagentBrowseOperation,
+  kind: 'invalid' | 'not_found' | 'protocol' | 'failed'
+): string {
+  const subject = operation === 'list' ? 'Sub-agent list' : 'Sub-agent transcript';
+  if (kind === 'invalid') {
+    return `Invalid ${subject.toLowerCase()} request.`;
+  }
+  if (kind === 'not_found') {
+    return `${subject} not found for this session.`;
+  }
+  if (kind === 'protocol') {
+    return `${subject} is unavailable because the provider returned an invalid response.`;
+  }
+  return `${subject} request failed.`;
+}
+
+function normalizeSubagentBrowseError(
+  error: unknown,
+  operation: SubagentBrowseOperation
+): AcpSubagentBrowseError {
+  if (error instanceof AcpSubagentBrowseError) {
+    return error;
+  }
+  if (error instanceof z.ZodError) {
+    return new AcpSubagentBrowseError(
+      'PRECONDITION_FAILED',
+      subagentBrowseMessage(operation, 'protocol'),
+      { cause: error }
+    );
+  }
+
+  const details = getAcpErrorLogDetails(error);
+  if (details.code === -32_602) {
+    return new AcpSubagentBrowseError(
+      'INVALID_INPUT',
+      subagentBrowseMessage(operation, 'invalid'),
+      { cause: error }
+    );
+  }
+  if (details.code === -32_002) {
+    return new AcpSubagentBrowseError('NOT_FOUND', subagentBrowseMessage(operation, 'not_found'), {
+      cause: error,
+    });
+  }
+  if (details.code === -32_601) {
+    return new AcpSubagentBrowseError(
+      'PRECONDITION_FAILED',
+      'Sub-agent browsing is unavailable for this session.',
+      { cause: error }
+    );
+  }
+  if (details.code === -32_000) {
+    return new AcpSubagentBrowseError(
+      'PRECONDITION_FAILED',
+      'Provider authentication is required for sub-agent browsing.',
+      { cause: error }
+    );
+  }
+  if (details.code === -32_603 || details.code === -32_600 || details.code === -32_700) {
+    return new AcpSubagentBrowseError(
+      'PRECONDITION_FAILED',
+      subagentBrowseMessage(operation, 'protocol'),
+      { cause: error }
+    );
+  }
+  return new AcpSubagentBrowseError('INTERNAL_ERROR', subagentBrowseMessage(operation, 'failed'), {
+    cause: error,
+  });
 }
 
 async function raceWithSoftTimeout<T>(
@@ -174,6 +291,73 @@ export class AcpRuntimeManager {
 
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
+  }
+
+  getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
+    return this.getClient(sessionId)?.getSubagentBrowseCapability() ?? null;
+  }
+
+  async listSubagents(
+    sessionId: string,
+    input: Omit<SubagentListParams, 'sessionId'>
+  ): Promise<SubagentListResult> {
+    const handle = this.requireSubagentBrowseHandle(sessionId);
+    const parsedParams = subagentListParamsSchema.safeParse({
+      ...input,
+      sessionId: handle.providerSessionId,
+    });
+    if (!parsedParams.success) {
+      throw new AcpSubagentBrowseError('INVALID_INPUT', subagentBrowseMessage('list', 'invalid'), {
+        cause: parsedParams.error,
+      });
+    }
+    try {
+      const response = await handle.connection.extMethod(SUBAGENTS_LIST_METHOD, parsedParams.data);
+      return subagentListResultSchema.parse(response);
+    } catch (error) {
+      throw normalizeSubagentBrowseError(error, 'list');
+    }
+  }
+
+  async readSubagentTranscript(
+    sessionId: string,
+    input: Omit<SubagentReadParams, 'sessionId'>
+  ): Promise<SubagentReadResult> {
+    const handle = this.requireSubagentBrowseHandle(sessionId);
+    const parsedParams = subagentReadParamsSchema.safeParse({
+      ...input,
+      sessionId: handle.providerSessionId,
+    });
+    if (!parsedParams.success) {
+      throw new AcpSubagentBrowseError(
+        'INVALID_INPUT',
+        subagentBrowseMessage('transcript', 'invalid'),
+        { cause: parsedParams.error }
+      );
+    }
+    try {
+      const response = await handle.connection.extMethod(SUBAGENTS_READ_METHOD, parsedParams.data);
+      return subagentReadResultSchema.parse(response);
+    } catch (error) {
+      throw normalizeSubagentBrowseError(error, 'transcript');
+    }
+  }
+
+  private requireSubagentBrowseHandle(sessionId: string): AcpProcessHandle {
+    const handle = this.getClient(sessionId);
+    if (!handle) {
+      throw new AcpSubagentBrowseError(
+        'PRECONDITION_FAILED',
+        'Sub-agent browsing requires a running parent session.'
+      );
+    }
+    if (!handle.getSubagentBrowseCapability()) {
+      throw new AcpSubagentBrowseError(
+        'PRECONDITION_FAILED',
+        'Sub-agent browsing is unavailable for this session.'
+      );
+    }
+    return handle;
   }
 
   getOrCreateClient(

@@ -4,10 +4,20 @@ import type {
   RequestPermissionResponse,
 } from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  SUBAGENT_TOOL_META_KEY,
+  SUBAGENTS_CAPABILITY_META_KEY,
+  SUBAGENTS_CHANGED_METHOD,
+  SUBAGENTS_LIST_METHOD,
+  SUBAGENTS_READ_METHOD,
+} from '@/shared/acp-protocol/subagents';
 import { CodexAppServerAcpAdapter } from './codex-app-server-acp-adapter';
 import { CodexRequestError } from './codex-rpc-client';
 
-type MockConnection = Pick<AgentSideConnection, 'closed' | 'sessionUpdate' | 'requestPermission'>;
+type MockConnection = Pick<
+  AgentSideConnection,
+  'closed' | 'sessionUpdate' | 'requestPermission' | 'extNotification'
+>;
 type InjectedCodexClient = NonNullable<ConstructorParameters<typeof CodexAppServerAcpAdapter>[1]>;
 type CodexMocks = {
   start: ReturnType<typeof vi.fn>;
@@ -31,6 +41,7 @@ function createMockConnection(): {
     connection: {
       closed,
       sessionUpdate: vi.fn(async () => undefined),
+      extNotification: vi.fn(async () => undefined),
       requestPermission: vi.fn(() => {
         return Promise.resolve({
           outcome: { outcome: 'selected', optionId: 'allow_once' },
@@ -117,6 +128,225 @@ async function initializeAdapterWithDefaultModel(
 }
 
 describe('CodexAppServerAcpAdapter', () => {
+  it('advertises the versioned sub-agent browse capability', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({ requirements: {} });
+    codex.request.mockResolvedValueOnce({ data: DEFAULT_COLLABORATION_MODES, nextCursor: null });
+    codex.request.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'gpt-5',
+          displayName: 'GPT-5',
+          description: 'Default model',
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const result = await adapter.initialize({
+      protocolVersion: 1,
+      clientCapabilities: {},
+      clientInfo: { name: 'test-client', version: '0.0.1' },
+    });
+
+    expect(result.agentCapabilities?._meta).toEqual({
+      [SUBAGENTS_CAPABILITY_META_KEY]: {
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      },
+    });
+  });
+
+  it('routes validated sub-agent extension methods and rejects unknown methods', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'parent-thread-1', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
+
+    codex.request.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'child-thread-1',
+          parentThreadId: 'parent-thread-1',
+          name: 'reviewer',
+          preview: 'Review the change',
+          createdAt: 1_786_089_600,
+          updatedAt: 1_786_093_200,
+          status: { type: 'active', activeFlags: [] },
+          turns: [],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await expect(
+      adapter.extMethod(SUBAGENTS_LIST_METHOD, {
+        sessionId: 'sess_parent-thread-1',
+        cursor: null,
+        limit: 50,
+      })
+    ).resolves.toMatchObject({
+      subagents: [{ id: 'child-thread-1', status: 'running' }],
+      nextCursor: null,
+    });
+    await expect(adapter.extMethod('example.invalid/method', {})).rejects.toMatchObject({
+      code: -32_601,
+    });
+    await expect(
+      adapter.extMethod(SUBAGENTS_READ_METHOD, {
+        sessionId: 'sess_parent-thread-1',
+        subagentId: '',
+      })
+    ).rejects.toMatchObject({ code: -32_602 });
+  });
+
+  it('invalidates one correlated child for terminal status changes and ignores unrelated threads', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'parent-thread-1', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
+    codex.request.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'child-thread-1',
+          parentThreadId: 'parent-thread-1',
+          name: 'reviewer',
+          preview: 'Review the change',
+          createdAt: 1_786_089_600,
+          updatedAt: 1_786_093_200,
+          status: { type: 'active', activeFlags: [] },
+          turns: [],
+        },
+      ],
+      nextCursor: null,
+    });
+    await adapter.extMethod(SUBAGENTS_LIST_METHOD, {
+      sessionId: 'sess_parent-thread-1',
+      cursor: null,
+      limit: 50,
+    });
+
+    const handleCodexNotification = (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification.bind(adapter);
+    await handleCodexNotification('thread/status/changed', {
+      threadId: 'child-thread-1',
+      status: { type: 'idle' },
+    });
+    await handleCodexNotification('thread/status/changed', {
+      threadId: 'unrelated-thread-1',
+      status: { type: 'systemError' },
+    });
+
+    expect(connection.extNotification).toHaveBeenCalledTimes(1);
+    expect(connection.extNotification).toHaveBeenCalledWith(SUBAGENTS_CHANGED_METHOD, {
+      sessionId: 'sess_parent-thread-1',
+      subagentId: 'child-thread-1',
+      change: 'completed',
+    });
+  });
+
+  it('throttles live transcript invalidations per remembered direct child', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-08T12:00:00.000Z'));
+    try {
+      const { connection } = createMockConnection();
+      const { client: codexClient, mocks: codex } = createMockCodexClient();
+      const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+      await initializeAdapterWithDefaultModel(adapter, codex);
+      codex.request.mockResolvedValueOnce({
+        thread: { id: 'parent-thread-1', cwd: '/tmp/workspace' },
+        approvalPolicy: DEFAULT_APPROVAL_POLICY,
+        reasoningEffort: 'medium',
+      });
+      await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
+      codex.request.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'child-thread-1',
+            parentThreadId: 'parent-thread-1',
+            name: 'reviewer',
+            preview: 'Review the change',
+            status: { type: 'active', activeFlags: [] },
+            turns: [],
+          },
+        ],
+        nextCursor: null,
+      });
+      await adapter.extMethod(SUBAGENTS_LIST_METHOD, {
+        sessionId: 'sess_parent-thread-1',
+        cursor: null,
+        limit: 50,
+      });
+
+      const handleCodexNotification = (
+        adapter as unknown as {
+          handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+        }
+      ).handleCodexNotification.bind(adapter);
+      await handleCodexNotification('item/agentMessage/delta', {
+        threadId: 'child-thread-1',
+        turnId: 'child-turn-1',
+        itemId: 'child-item-1',
+        delta: 'first',
+      });
+      await handleCodexNotification('item/reasoning/summaryTextDelta', {
+        threadId: 'child-thread-1',
+        turnId: 'child-turn-1',
+        itemId: 'child-item-2',
+        delta: 'second',
+      });
+      await handleCodexNotification('item/agentMessage/delta', {
+        threadId: 'unrelated-thread-1',
+        turnId: 'foreign-turn-1',
+        itemId: 'foreign-item-1',
+        delta: 'ignore',
+      });
+
+      expect(connection.extNotification).toHaveBeenCalledTimes(1);
+      expect(connection.extNotification).toHaveBeenLastCalledWith(SUBAGENTS_CHANGED_METHOD, {
+        sessionId: 'sess_parent-thread-1',
+        subagentId: 'child-thread-1',
+        change: 'updated',
+      });
+
+      vi.advanceTimersByTime(1000);
+      await handleCodexNotification('item/commandExecution/outputDelta', {
+        threadId: 'child-thread-1',
+        turnId: 'child-turn-1',
+        itemId: 'child-item-3',
+        delta: 'later',
+      });
+      expect(connection.extNotification).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('paginates model/list during initialize', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -2163,6 +2393,50 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('keeps an additive turn/start status live and reports shape drift', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const shapeDriftWarn = vi.fn();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient, {
+      shapeDriftWarn,
+    });
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_future_status', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_future_status', status: 'queuedByProvider' },
+    });
+
+    const promptPromise = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'hello' }],
+    });
+    await vi.waitFor(() => {
+      expect(shapeDriftWarn).toHaveBeenCalledWith(
+        'Codex app-server shape drift detected',
+        expect.objectContaining({
+          event: 'unknown_turn_status',
+          details: expect.stringContaining('queuedByProvider'),
+        })
+      );
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('turn/completed', {
+      threadId: 'thread_future_status',
+      turn: { id: 'turn_future_status', status: 'completed', items: [] },
+    });
+    await expect(promptPromise).resolves.toEqual({ stopReason: 'end_turn' });
+  });
+
   it('queues early cancel until turn id is known, then interrupts the turn', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -3109,5 +3383,41 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(functionCallOutput).toBeNull();
     expect(customToolCallOutput).toBeNull();
     expect(unknown).toBeNull();
+  });
+
+  it('builds provider-neutral tool state for Codex sub-agent items', () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    const toolState = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      { sessionId: 'parent-session', cwd: '/tmp/workspace' },
+      {
+        type: 'subAgentActivity',
+        id: 'item_subagent_1',
+        agentThreadId: 'child_1',
+        agentPath: 'review/security',
+        kind: 'started',
+      },
+      'turn_1'
+    );
+
+    expect(toolState).toMatchObject({
+      toolCallId: 'item_subagent_1',
+      title: 'Start subagent security',
+      kind: 'other',
+      locations: [],
+      affectedSubagentIds: ['child_1'],
+      meta: {
+        [SUBAGENT_TOOL_META_KEY]: {
+          id: 'child_1',
+          parentSessionId: 'parent-session',
+        },
+      },
+    });
   });
 });

@@ -1,5 +1,14 @@
-import { type Dispatch, type SetStateAction, useCallback, useState } from 'react';
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Loading } from '@/client/components/loading';
+import { type SubagentSelection, SubagentTranscriptView } from '@/client/features/subagents';
 import {
   ArchiveWorkspaceDialog,
   RightPanel,
@@ -17,6 +26,7 @@ import {
 } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
+import { cn } from '@/lib/utils';
 import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
@@ -53,6 +63,7 @@ interface HeaderProps {
 interface SessionTabsProps {
   sessions: ReturnType<typeof useWorkspaceData>['sessions'];
   selectedDbSessionId: string | null;
+  selectedSessionReady: boolean;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
@@ -126,6 +137,44 @@ export function WorkspaceDetailView({
 }: WorkspaceDetailViewProps) {
   const isMobile = useIsMobile();
   const [isTakingScreenshots, setIsTakingScreenshots] = useState(false);
+  const [subagentDrillIn, setSubagentDrillIn] = useState<{
+    scope: string;
+    selection: SubagentSelection;
+  } | null>(null);
+  const parentChatScrollTopRef = useRef<number | null>(null);
+  const restoreParentScrollRef = useRef(false);
+  const selectedSessionIndex =
+    sessionTabs.sessions?.findIndex((session) => session.id === sessionTabs.selectedDbSessionId) ??
+    -1;
+  const selectedSession =
+    selectedSessionIndex >= 0 ? sessionTabs.sessions?.[selectedSessionIndex] : undefined;
+  const selectedSessionName = selectedSession
+    ? selectedSession.name?.trim() || `Session ${selectedSessionIndex + 1}`
+    : null;
+  const drillInScope = `${workspaceState.workspaceId}:${sessionTabs.selectedDbSessionId ?? ''}`;
+  const selectedSubagent =
+    subagentDrillIn?.scope === drillInScope ? subagentDrillIn.selection : null;
+
+  useEffect(() => {
+    parentChatScrollTopRef.current = null;
+    restoreParentScrollRef.current = false;
+    setSubagentDrillIn((current) => (current?.scope === drillInScope ? current : null));
+  }, [drillInScope]);
+
+  useLayoutEffect(() => {
+    if (selectedSubagent || !restoreParentScrollRef.current) {
+      return;
+    }
+    restoreParentScrollRef.current = false;
+    const scrollTop = parentChatScrollTopRef.current;
+    parentChatScrollTopRef.current = null;
+    const viewport = chat.viewportRef.current;
+    if (scrollTop === null || !viewport) {
+      return;
+    }
+    viewport.scrollTop = scrollTop;
+    chat.onScroll();
+  }, [chat.onScroll, chat.viewportRef, selectedSubagent]);
 
   const handleTakeScreenshots = useCallback(async () => {
     setIsTakingScreenshots(true);
@@ -137,6 +186,42 @@ export function WorkspaceDetailView({
       setIsTakingScreenshots(false);
     }
   }, [header.handleQuickAction]);
+
+  const handleOpenSubagent = useCallback(
+    (selection: SubagentSelection) => {
+      if (
+        !(selectedSessionName && sessionTabs.selectedDbSessionId) ||
+        selection.parentSessionId !== sessionTabs.selectedDbSessionId
+      ) {
+        return;
+      }
+      if (!selectedSubagent) {
+        parentChatScrollTopRef.current = chat.viewportRef.current?.scrollTop ?? null;
+      }
+      restoreParentScrollRef.current = false;
+      setSubagentDrillIn({
+        scope: drillInScope,
+        selection: { ...selection, parentSessionName: selectedSessionName },
+      });
+      if (isMobile) {
+        setRightPanelVisible(false);
+      }
+    },
+    [
+      chat.viewportRef,
+      drillInScope,
+      isMobile,
+      selectedSessionName,
+      selectedSubagent,
+      setRightPanelVisible,
+      sessionTabs.selectedDbSessionId,
+    ]
+  );
+
+  const handleBackFromSubagent = useCallback(() => {
+    restoreParentScrollRef.current = true;
+    setSubagentDrillIn(null);
+  }, []);
 
   if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
@@ -172,7 +257,17 @@ export function WorkspaceDetailView({
         selectedProvider={sessionTabs.selectedProvider}
         setSelectedProvider={sessionTabs.setSelectedProvider}
       >
-        <ChatContent {...chat} />
+        <div className={cn('h-full', selectedSubagent && 'hidden')}>
+          <ChatContent {...chat} />
+        </div>
+        {selectedSubagent && (
+          <SubagentTranscriptView
+            key={`${selectedSubagent.parentSessionId}:${selectedSubagent.subagent.id}`}
+            workspaceId={workspaceState.workspaceId}
+            selection={selectedSubagent}
+            onBack={handleBackFromSubagent}
+          />
+        )}
       </WorkspaceContentView>
     </div>
   );
@@ -183,6 +278,10 @@ export function WorkspaceDetailView({
       messages={chat.messages}
       isTakingScreenshots={isTakingScreenshots}
       onTakeScreenshots={handleTakeScreenshots}
+      selectedSessionId={sessionTabs.selectedDbSessionId}
+      selectedSessionName={selectedSessionName}
+      selectedSessionReady={sessionTabs.selectedSessionReady}
+      onOpenSubagent={handleOpenSubagent}
     />
   );
 

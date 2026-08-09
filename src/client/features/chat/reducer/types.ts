@@ -155,6 +155,8 @@ export interface RewindPreviewState {
 export interface ChatState {
   /** Chat messages in the conversation */
   messages: ChatMessage[];
+  /** Override the live renderer window; null keeps provider history uncapped. */
+  rendererTranscriptLimit?: number | null;
   /**
    * Session lifecycle status - a discriminated union that makes invalid states unrepresentable.
    * Replaces separate running, stopping, loadingSession, and startingSession booleans.

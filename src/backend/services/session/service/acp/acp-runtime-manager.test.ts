@@ -14,6 +14,7 @@ const {
   mockSetSessionConfigOption,
   mockSetSessionMode,
   mockSetSessionModel,
+  mockExtMethod,
   mockNdJsonStream,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
@@ -24,6 +25,7 @@ const {
   mockSetSessionConfigOption: vi.fn(),
   mockSetSessionMode: vi.fn(),
   mockSetSessionModel: vi.fn(),
+  mockExtMethod: vi.fn(),
   mockNdJsonStream: vi
     .fn()
     .mockReturnValue({ writable: {}, readable: { pipeThrough: () => ({}) } }),
@@ -45,6 +47,7 @@ vi.mock('@agentclientprotocol/sdk', () => {
     setSessionConfigOption = mockSetSessionConfigOption;
     setSessionMode = mockSetSessionMode;
     unstable_setSessionModel = mockSetSessionModel;
+    extMethod = mockExtMethod;
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
       this.toClient = toClient;
@@ -70,6 +73,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // ---- Imports (after mocks) ----
 
+import {
+  SUBAGENTS_CAPABILITY_META_KEY,
+  SUBAGENTS_LIST_METHOD,
+  SUBAGENTS_READ_METHOD,
+} from '@/shared/acp-protocol/subagents';
 import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
@@ -195,12 +203,12 @@ function defaultConfigOptions() {
   ];
 }
 
-function setupSuccessfulSpawn() {
+function setupSuccessfulSpawn(agentCapabilities: Record<string, unknown> = { loadSession: {} }) {
   const child = createMockChildProcess();
   mockSpawn.mockReturnValue(child);
   mockInitialize.mockResolvedValue({
     protocolVersion: 1,
-    agentCapabilities: { loadSession: {} },
+    agentCapabilities,
     agentInfo: { name: 'claude-agent-acp' },
   });
   mockNewSession.mockResolvedValue({
@@ -213,6 +221,20 @@ function setupSuccessfulSpawn() {
   mockSetSessionMode.mockResolvedValue({});
   mockSetSessionModel.mockResolvedValue({});
   return child;
+}
+
+function subagentBrowseCapabilities(): Record<string, unknown> {
+  return {
+    loadSession: {},
+    _meta: {
+      [SUBAGENTS_CAPABILITY_META_KEY]: {
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      },
+    },
+  };
 }
 
 function createDeferred<T>(): {
@@ -842,6 +864,255 @@ describe('AcpRuntimeManager', () => {
       );
 
       expect(defaultEntry).toMatchObject({ value: 'default', name: 'Opus 4.6' });
+    });
+  });
+
+  describe('sub-agent browsing extensions', () => {
+    it('returns the negotiated capability only for a live handle', async () => {
+      expect(manager.getSubagentBrowseCapability('session-1')).toBeNull();
+
+      const child = setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(manager.getSubagentBrowseCapability('session-1')).toEqual({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+
+      child.killed = true;
+      expect(manager.getSubagentBrowseCapability('session-1')).toBeNull();
+    });
+
+    it('lists sub-agents with the provider session ID and unchanged cursor', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      mockExtMethod.mockResolvedValueOnce({ subagents: [], nextCursor: null });
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const result = await manager.listSubagents('db-session-1', {
+        cursor: 'list-cursor-7',
+        limit: 50,
+      });
+
+      expect(result).toEqual({ subagents: [], nextCursor: null });
+      expect(mockExtMethod).toHaveBeenCalledWith(SUBAGENTS_LIST_METHOD, {
+        sessionId: 'provider-session-123',
+        cursor: 'list-cursor-7',
+        limit: 50,
+      });
+    });
+
+    it('reads a transcript with the provider session ID and unchanged cursor', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      mockExtMethod.mockResolvedValueOnce({
+        projectionBoundary: 'turn',
+        updates: [],
+        nextCursor: 'read-cursor-9',
+      });
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const result = await manager.readSubagentTranscript('db-session-1', {
+        subagentId: 'child-1',
+        cursor: 'read-cursor-8',
+        limit: 10,
+      });
+
+      expect(result).toEqual({
+        projectionBoundary: 'turn',
+        updates: [],
+        nextCursor: 'read-cursor-9',
+      });
+      expect(mockExtMethod).toHaveBeenCalledWith(SUBAGENTS_READ_METHOD, {
+        sessionId: 'provider-session-123',
+        subagentId: 'child-1',
+        cursor: 'read-cursor-8',
+        limit: 10,
+      });
+    });
+
+    it('rejects malformed extension inputs before calling the provider', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await expect(
+        manager.listSubagents('db-session-1', { cursor: null, limit: 101 })
+      ).rejects.toThrow();
+      expect(mockExtMethod).not.toHaveBeenCalled();
+    });
+
+    it('normalizes malformed list and transcript responses as provider precondition errors', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      mockExtMethod.mockResolvedValueOnce({ subagents: 'invalid', nextCursor: null });
+      await expect(
+        manager.listSubagents('db-session-1', { cursor: null, limit: 50 })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent list is unavailable because the provider returned an invalid response.',
+      });
+
+      mockExtMethod.mockResolvedValueOnce({
+        projectionBoundary: 'turn',
+        updates: [{ sessionUpdate: 'unknown' }],
+        nextCursor: null,
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Sub-agent transcript is unavailable because the provider returned an invalid response.',
+      });
+    });
+
+    it('normalizes provider extension errors into safe application errors', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_602,
+        message: 'Invalid params: secret provider detail',
+        data: { cursor: 'invalid' },
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: 'invalid',
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'INVALID_INPUT',
+        message: 'Invalid sub-agent transcript request.',
+      });
+
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_002,
+        message: 'Resource not found: secret provider thread',
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'foreign-child',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'NOT_FOUND',
+        message: 'Sub-agent transcript not found for this session.',
+      });
+
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_603,
+        message: 'Internal error: mismatched provider thread IDs',
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Sub-agent transcript is unavailable because the provider returned an invalid response.',
+      });
+    });
+
+    it('preserves JSON-RPC codes carried by Error subclasses', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const providerError = Object.assign(new Error('Resource not found: provider thread'), {
+        code: -32_002,
+        data: { threadId: 'missing-child' },
+      });
+      mockExtMethod.mockRejectedValueOnce(providerError);
+
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'missing-child',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'NOT_FOUND',
+        message: 'Sub-agent transcript not found for this session.',
+      });
+    });
+
+    it('rejects extension requests without a live handle or negotiated capability', async () => {
+      await expect(
+        manager.listSubagents('missing-session', { cursor: null, limit: 50 })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent browsing requires a running parent session.',
+      });
+
+      setupSuccessfulSpawn();
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent browsing is unavailable for this session.',
+      });
+      expect(mockExtMethod).not.toHaveBeenCalled();
     });
   });
 
@@ -2116,8 +2387,13 @@ describe('AcpClientHandler', () => {
         return;
       }
 
-      expect(event.type).toBe('acp_permission_request');
-      expect(event.params.toolCall.toolCallId).toBe('tc-1');
+      if (event.type === 'acp_permission_request') {
+        expect(event.params.toolCall.toolCallId).toBe('tc-1');
+        return;
+      }
+
+      expect(event.subagentId).toBe('child-1');
+      expect(event.change).toBe('updated');
     };
 
     onEvent('test-session', {
@@ -2136,6 +2412,12 @@ describe('AcpClientHandler', () => {
         toolCall: { toolCallId: 'tc-1', title: 'Write file' },
         options: [{ optionId: 'allow-1', kind: 'allow_once', name: 'Allow once' }],
       },
+    });
+
+    onEvent('test-session', {
+      type: 'acp_subagents_changed',
+      subagentId: 'child-1',
+      change: 'updated',
     });
   });
 

@@ -11,18 +11,23 @@ import {
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '@/client/features/chat';
+import type { SubagentSelection } from '@/client/features/subagents';
 import { trpc } from '@/client/lib/trpc';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-
+import { AgentsPanel } from './agents-panel';
 import { AutoIterationPanel } from './auto-iteration-panel';
-import { ChildWorkspacesPanel } from './child-workspaces-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { PeriodicTaskPanel } from './periodic-task-panel';
+import {
+  loadPersistedTopPanelState,
+  STORAGE_KEY_TOP_TAB_PREFIX,
+  type TopPanelTab,
+} from './right-panel-state';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
@@ -32,75 +37,13 @@ import { useLogStream } from './use-log-stream';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
-
-// =============================================================================
 // Types
 // =============================================================================
 
-type TopPanelTab =
-  | 'changes'
-  | 'files'
-  | 'tasks'
-  | 'screenshots'
-  | 'auto-iteration'
-  | 'periodic-task'
-  | 'child-workspaces';
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
-
-interface PersistedTopPanelState {
-  topTab: TopPanelTab;
-}
 
 function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
   return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
-}
-
-function parseStoredTopTab(value: string | null): TopPanelTab | null {
-  if (
-    value === 'changes' ||
-    value === 'files' ||
-    value === 'tasks' ||
-    value === 'screenshots' ||
-    value === 'auto-iteration' ||
-    value === 'periodic-task' ||
-    value === 'child-workspaces'
-  ) {
-    return value;
-  }
-  // Legacy migration: old values were direct changes sub-views.
-  if (value === 'unstaged' || value === 'diff-vs-main') {
-    return 'changes';
-  }
-  return null;
-}
-
-function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState {
-  const defaultState: PersistedTopPanelState = { topTab: 'changes' };
-
-  if (typeof window === 'undefined') {
-    return defaultState;
-  }
-
-  try {
-    const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
-    const topTab = parseStoredTopTab(storedTop);
-    if (topTab) {
-      // Migrate legacy top-level tab values to the new "changes" tab key.
-      if (storedTop === 'unstaged' || storedTop === 'diff-vs-main') {
-        localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, 'changes');
-        return { topTab: 'changes' };
-      }
-      return { topTab };
-    }
-  } catch {
-    // Ignore storage errors
-  }
-
-  return defaultState;
 }
 
 // =============================================================================
@@ -113,6 +56,10 @@ interface RightPanelProps {
   messages?: ChatMessage[];
   isTakingScreenshots?: boolean;
   onTakeScreenshots?: () => Promise<void>;
+  selectedSessionId?: string | null;
+  selectedSessionName?: string | null;
+  selectedSessionReady?: boolean;
+  onOpenSubagent?: (selection: SubagentSelection) => void;
 }
 
 interface TopPanelAreaProps {
@@ -125,6 +72,10 @@ interface TopPanelAreaProps {
   isAutoIteration: boolean;
   periodicTaskId: string | null;
   isParentWorkspace: boolean;
+  selectedSessionId: string | null;
+  selectedSessionName: string | null;
+  selectedSessionReady: boolean;
+  onOpenSubagent: (selection: SubagentSelection) => void;
 }
 
 function TopPanelArea({
@@ -137,6 +88,10 @@ function TopPanelArea({
   isAutoIteration,
   periodicTaskId,
   isParentWorkspace,
+  selectedSessionId,
+  selectedSessionName,
+  selectedSessionReady,
+  onOpenSubagent,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
@@ -144,7 +99,7 @@ function TopPanelArea({
   const showScreenshots = activeTopTab === 'screenshots';
   const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
   const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
-  const showChildWorkspaces = isParentWorkspace && activeTopTab === 'child-workspaces';
+  const showAgents = activeTopTab === 'agents';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
@@ -191,14 +146,12 @@ function TopPanelArea({
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
-        {isParentWorkspace && (
-          <TabButton
-            label="Children"
-            icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
-            isActive={showChildWorkspaces}
-            onSelect={() => onTopTabChange('child-workspaces')}
-          />
-        )}
+        <TabButton
+          label="Agents"
+          icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
+          isActive={showAgents}
+          onSelect={() => onTopTabChange('agents')}
+        />
 
         <div className="flex-1" />
 
@@ -237,7 +190,16 @@ function TopPanelArea({
         {showPeriodicTask && periodicTaskId && (
           <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
         )}
-        {showChildWorkspaces && <ChildWorkspacesPanel workspaceId={workspaceId} />}
+        {showAgents && (
+          <AgentsPanel
+            workspaceId={workspaceId}
+            sessionId={selectedSessionId}
+            sessionName={selectedSessionName}
+            sessionReady={selectedSessionReady}
+            isParentWorkspace={isParentWorkspace}
+            onOpenSubagent={onOpenSubagent}
+          />
+        )}
       </div>
     </div>
   );
@@ -249,6 +211,10 @@ export function RightPanel({
   messages = [],
   isTakingScreenshots = false,
   onTakeScreenshots,
+  selectedSessionId = null,
+  selectedSessionName = null,
+  selectedSessionReady = false,
+  onOpenSubagent = () => undefined,
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
@@ -283,8 +249,8 @@ export function RightPanel({
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
   const creationSource =
     (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
-  // Show children tab for all workspaces that are not themselves children
-  const isParentWorkspace = creationSource !== 'CHILD_WORKSPACE';
+  // Child-workspace eligibility is unknown until the workspace query resolves.
+  const isParentWorkspace = workspace !== undefined && creationSource !== 'CHILD_WORKSPACE';
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -314,7 +280,13 @@ export function RightPanel({
     // Reset logs subtab selection to default when workspace changes
     setLastLogsTab('setup-logs');
 
-    const persisted = loadPersistedTopPanelState(workspaceId);
+    let storage: Storage | null = null;
+    try {
+      storage = typeof window === 'undefined' ? null : window.localStorage;
+    } catch {
+      // Ignore storage errors
+    }
+    const persisted = loadPersistedTopPanelState(storage, workspaceId);
     setActiveTopTab(persisted.topTab);
   }, [workspaceId]);
 
@@ -439,6 +411,10 @@ export function RightPanel({
           isAutoIteration={isAutoIteration}
           periodicTaskId={periodicTaskId}
           isParentWorkspace={isParentWorkspace}
+          selectedSessionId={selectedSessionId}
+          selectedSessionName={selectedSessionName}
+          selectedSessionReady={selectedSessionReady}
+          onOpenSubagent={onOpenSubagent}
         />
       </ResizablePanel>
 

@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import type { WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
@@ -50,6 +51,33 @@ function handleClaudeMessageWithStreaming(
   }
 }
 
+function dispatchEphemeralBrowserEvent(wsMessage: WebSocketMessage): boolean {
+  if (wsMessage.type === 'subagents_changed') {
+    dispatchSubagentChange({
+      sessionId: wsMessage.sessionId,
+      subagentId: wsMessage.subagentId,
+      change: wsMessage.change,
+    });
+    return true;
+  }
+
+  if (wsMessage.type === 'workspace_notification_request') {
+    window.dispatchEvent(
+      new CustomEvent('workspace-notification-request', {
+        detail: {
+          workspaceId: wsMessage.workspaceId,
+          workspaceName: wsMessage.workspaceName,
+          sessionCount: wsMessage.sessionCount,
+          finishedAt: wsMessage.finishedAt,
+        },
+      })
+    );
+    return true;
+  }
+
+  return false;
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -76,19 +104,7 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
         clearToolInputAccumulator(toolInputAccumulatorRef.current);
       }
 
-      // Handle workspace notification requests
-      if (wsMessage.type === 'workspace_notification_request') {
-        // Dispatch custom event for WorkspaceNotificationManager
-        window.dispatchEvent(
-          new CustomEvent('workspace-notification-request', {
-            detail: {
-              workspaceId: wsMessage.workspaceId,
-              workspaceName: wsMessage.workspaceName,
-              sessionCount: wsMessage.sessionCount,
-              finishedAt: wsMessage.finishedAt,
-            },
-          })
-        );
+      if (dispatchEphemeralBrowserEvent(wsMessage)) {
         return;
       }
 
