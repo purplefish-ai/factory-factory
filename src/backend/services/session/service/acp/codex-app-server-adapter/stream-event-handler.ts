@@ -18,6 +18,7 @@ import type {
 } from './adapter-state';
 import { extractReasoningText } from './codex-adapter-parsing';
 import {
+  isKnownCodexTurnStatus,
   knownCodexNotificationSchema,
   type ThreadReadTurn,
   threadReadResponseSchema,
@@ -73,6 +74,7 @@ type StreamEventHandlerDeps = {
     change: 'created' | 'updated' | 'completed'
   ) => Promise<void>;
   handleSubagentStatusChanged?: (subagentId: string, runtimeType: string) => Promise<void>;
+  handleSubagentTranscriptActivity?: (subagentId: string) => Promise<void>;
 };
 
 export class CodexStreamEventHandler {
@@ -102,6 +104,12 @@ export class CodexStreamEventHandler {
       return Promise.resolve();
     };
     for (const turn of turns) {
+      if (turn.status && !isKnownCodexTurnStatus(turn.status)) {
+        this.deps.reportShapeDrift('unknown_turn_status', {
+          source: 'thread/history',
+          status: turn.status,
+        });
+      }
       for (const item of turn.items) {
         await this.replayThreadHistoryItem(session, turn.id, item, collect);
       }
@@ -131,6 +139,8 @@ export class CodexStreamEventHandler {
       );
       return;
     }
+
+    await this.deps.handleSubagentTranscriptActivity?.(typedNotification.params.threadId);
 
     const sessionId = this.deps.sessionIdByThreadId.get(typedNotification.params.threadId);
     if (!sessionId) {
@@ -463,14 +473,23 @@ export class CodexStreamEventHandler {
   private async handleTurnCompletedNotification(
     session: AdapterSession,
     turnId: string,
-    status: 'completed' | 'interrupted' | 'failed' | 'inProgress',
+    status: string,
     errorMessage?: string
   ): Promise<void> {
     if (status === 'inProgress') {
       return;
     }
 
-    const completionStatus = status;
+    let completionStatus: 'completed' | 'interrupted' | 'failed';
+    if (status === 'completed' || status === 'interrupted' || status === 'failed') {
+      completionStatus = status;
+    } else {
+      this.deps.reportShapeDrift('unknown_turn_status', {
+        source: 'turn/completed',
+        status,
+      });
+      completionStatus = 'completed';
+    }
     if (this.shouldDeferTurnCompletion(session, turnId, completionStatus)) {
       session.pendingTurnCompletionsByTurnId.set(
         turnId,

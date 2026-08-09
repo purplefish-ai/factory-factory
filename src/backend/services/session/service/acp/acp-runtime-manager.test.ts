@@ -953,7 +953,7 @@ describe('AcpRuntimeManager', () => {
       expect(mockExtMethod).not.toHaveBeenCalled();
     });
 
-    it('rejects malformed list and transcript responses', async () => {
+    it('normalizes malformed list and transcript responses as provider precondition errors', async () => {
       setupSuccessfulSpawn(subagentBrowseCapabilities());
       await manager.getOrCreateClient(
         'db-session-1',
@@ -965,7 +965,11 @@ describe('AcpRuntimeManager', () => {
       mockExtMethod.mockResolvedValueOnce({ subagents: 'invalid', nextCursor: null });
       await expect(
         manager.listSubagents('db-session-1', { cursor: null, limit: 50 })
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent list is unavailable because the provider returned an invalid response.',
+      });
 
       mockExtMethod.mockResolvedValueOnce({
         updates: [{ sessionUpdate: 'unknown' }],
@@ -977,10 +981,15 @@ describe('AcpRuntimeManager', () => {
           cursor: null,
           limit: 10,
         })
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Sub-agent transcript is unavailable because the provider returned an invalid response.',
+      });
     });
 
-    it('preserves typed provider extension errors', async () => {
+    it('normalizes provider extension errors into safe application errors', async () => {
       setupSuccessfulSpawn(subagentBrowseCapabilities());
       await manager.getOrCreateClient(
         'db-session-1',
@@ -988,22 +997,65 @@ describe('AcpRuntimeManager', () => {
         defaultHandlers(),
         defaultContext()
       );
-      const providerError = {
-        code: -32_601,
-        message: 'Method not found',
-        data: { method: SUBAGENTS_LIST_METHOD },
-      };
-      mockExtMethod.mockRejectedValueOnce(providerError);
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_602,
+        message: 'Invalid params: secret provider detail',
+        data: { cursor: 'invalid' },
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: 'invalid',
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'INVALID_INPUT',
+        message: 'Invalid sub-agent transcript request.',
+      });
 
-      await expect(manager.listSubagents('db-session-1', { cursor: null, limit: 50 })).rejects.toBe(
-        providerError
-      );
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_002,
+        message: 'Resource not found: secret provider thread',
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'foreign-child',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'NOT_FOUND',
+        message: 'Sub-agent transcript not found for this session.',
+      });
+
+      mockExtMethod.mockRejectedValueOnce({
+        code: -32_603,
+        message: 'Internal error: mismatched provider thread IDs',
+      });
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Sub-agent transcript is unavailable because the provider returned an invalid response.',
+      });
     });
 
     it('rejects extension requests without a live handle or negotiated capability', async () => {
       await expect(
         manager.listSubagents('missing-session', { cursor: null, limit: 50 })
-      ).rejects.toThrow('No running ACP session found');
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent browsing requires a running parent session.',
+      });
 
       setupSuccessfulSpawn();
       await manager.getOrCreateClient(
@@ -1019,7 +1071,11 @@ describe('AcpRuntimeManager', () => {
           cursor: null,
           limit: 10,
         })
-      ).rejects.toThrow('does not support sub-agent browsing');
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'PRECONDITION_FAILED',
+        message: 'Sub-agent browsing is unavailable for this session.',
+      });
       expect(mockExtMethod).not.toHaveBeenCalled();
     });
   });

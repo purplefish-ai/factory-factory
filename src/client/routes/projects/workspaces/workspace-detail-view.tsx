@@ -203,12 +203,17 @@ export function WorkspaceDetailView({
         scope: drillInScope,
         selection: { ...selection, parentSessionName: selectedSessionName },
       });
+      if (isMobile) {
+        setRightPanelVisible(false);
+      }
     },
     [
       chat.viewportRef,
       drillInScope,
+      isMobile,
       selectedSessionName,
       selectedSubagent,
+      setRightPanelVisible,
       sessionTabs.selectedDbSessionId,
     ]
   );
@@ -257,6 +262,7 @@ export function WorkspaceDetailView({
         </div>
         {selectedSubagent && (
           <SubagentTranscriptView
+            key={`${selectedSubagent.parentSessionId}:${selectedSubagent.subagent.id}`}
             workspaceId={workspaceState.workspaceId}
             selection={selectedSubagent}
             onBack={handleBackFromSubagent}

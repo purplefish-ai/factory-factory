@@ -55,7 +55,7 @@ import {
 import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
 import { CodexSubagentController } from './codex-subagent-controller';
 import { mapCodexSubagentToolItem } from './codex-subagent-mapper';
-import { turnStartResponseSchema } from './codex-zod';
+import { isKnownCodexTurnStatus, turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
 import {
   hasPendingPlanApprovals,
@@ -175,6 +175,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       projectThreadTurns: (session, turns) =>
         this.streamEventHandler.projectThreadTurns(session, turns),
       extNotification: (method, params) => this.connection.extNotification(method, params),
+      reportShapeDrift: (event, details) => this.reportShapeDrift(event, details),
     });
 
     this.streamEventHandler = new CodexStreamEventHandler({
@@ -201,6 +202,8 @@ export class CodexAppServerAcpAdapter implements Agent {
         this.subagentController.recordActivity(parentSessionId, subagentIds, change),
       handleSubagentStatusChanged: (subagentId, runtimeType) =>
         this.subagentController.handleThreadStatusChanged(subagentId, runtimeType),
+      handleSubagentTranscriptActivity: (subagentId) =>
+        this.subagentController.handleTranscriptActivity(subagentId),
     });
 
     this.monitorConnectionClose();
@@ -514,6 +517,12 @@ export class CodexAppServerAcpAdapter implements Agent {
     turnStart: TurnStartResponse
   ): Promise<StopReason | null> {
     const status = turnStart.turn.status;
+    if (status !== undefined && !isKnownCodexTurnStatus(status)) {
+      this.reportShapeDrift('unknown_turn_status', {
+        source: 'turn/start',
+        status,
+      });
+    }
     if (status === 'interrupted') {
       return 'cancelled';
     }

@@ -229,7 +229,172 @@ describe('CodexSubagentController', () => {
     expect(maxActiveReads).toBe(4);
   });
 
-  it('reads newest complete turns first and pages older turns with an opaque cursor', async () => {
+  it('keeps terminal summaries when one transcript enrichment fails', async () => {
+    const parent = createSession();
+    const request = vi.fn((method: string, params: Record<string, unknown>) => {
+      if (method === 'thread/list') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'missing-child',
+              parentThreadId: parent.threadId,
+              name: 'Missing transcript',
+              preview: 'Last known activity',
+              status: { type: 'idle' },
+              turns: [],
+            },
+            {
+              id: 'healthy-child',
+              parentThreadId: parent.threadId,
+              name: 'Healthy transcript',
+              preview: 'Finished normally',
+              status: { type: 'idle' },
+              turns: [],
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      if (method === 'thread/read' && params.threadId === 'missing-child') {
+        return Promise.reject(new Error('provider log expired'));
+      }
+      if (method === 'thread/read' && params.threadId === 'healthy-child') {
+        return Promise.resolve({
+          thread: {
+            id: 'healthy-child',
+            turns: [
+              {
+                id: 'healthy-turn',
+                status: 'completed',
+                completedAt: 1_786_150_800,
+                items: [{ type: 'agentMessage', id: 'answer', text: 'Healthy result' }],
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`unexpected request: ${method}`);
+    });
+    const controller = new CodexSubagentController({
+      codex: { request },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.list({ sessionId: parent.sessionId, cursor: null, limit: 50 })
+    ).resolves.toMatchObject({
+      subagents: [
+        {
+          id: 'missing-child',
+          status: 'completed',
+          latestActivity: 'Last known activity',
+          completedAt: null,
+          resultPreview: null,
+        },
+        {
+          id: 'healthy-child',
+          status: 'completed',
+          resultPreview: 'Healthy result',
+        },
+      ],
+    });
+  });
+
+  it('does not enrich a summary from a mismatched thread response', async () => {
+    const parent = createSession();
+    const request = vi.fn((method: string) => {
+      if (method === 'thread/list') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'requested-child',
+              parentThreadId: parent.threadId,
+              name: 'Requested child',
+              preview: 'Last known activity',
+              status: { type: 'idle' },
+              turns: [],
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      if (method === 'thread/read') {
+        return Promise.resolve({
+          thread: {
+            id: 'different-child',
+            turns: [
+              {
+                id: 'foreign-turn',
+                status: 'completed',
+                items: [{ type: 'agentMessage', id: 'foreign-answer', text: 'Do not expose me' }],
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`unexpected request: ${method}`);
+    });
+    const controller = new CodexSubagentController({
+      codex: { request },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.list({ sessionId: parent.sessionId, cursor: null, limit: 50 })
+    ).resolves.toMatchObject({
+      subagents: [{ id: 'requested-child', resultPreview: null, completedAt: null }],
+    });
+  });
+
+  it('normalizes an unknown terminal turn status and reports shape drift', async () => {
+    const parent = createSession();
+    const reportShapeDrift = vi.fn();
+    const controller = new CodexSubagentController({
+      codex: {
+        request: vi.fn(() =>
+          Promise.resolve({
+            data: [
+              {
+                id: 'future-status-child',
+                parentThreadId: parent.threadId,
+                status: { type: 'idle' },
+                turns: [
+                  {
+                    id: 'future-turn',
+                    status: 'supersededByProvider',
+                    items: [],
+                  },
+                ],
+              },
+            ],
+            nextCursor: null,
+          })
+        ),
+      },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+      reportShapeDrift,
+    });
+
+    await expect(
+      controller.list({ sessionId: parent.sessionId, cursor: null, limit: 50 })
+    ).resolves.toMatchObject({
+      subagents: [{ id: 'future-status-child', status: 'completed' }],
+    });
+    expect(reportShapeDrift).toHaveBeenCalledWith('unknown_subagent_turn_status', {
+      status: 'supersededByProvider',
+    });
+  });
+
+  it('includes the live turn only on the newest page while paging completed turns', async () => {
     const parent = createSession();
     const projectedTurnPages: string[][] = [];
     const request = vi.fn((method: string, params: Record<string, unknown>) => {
@@ -277,14 +442,14 @@ describe('CodexSubagentController', () => {
                 items: [{ type: 'agentMessage', id: 'agent-2', text: 'middle' }],
               },
               {
-                id: 'turn-live',
-                status: 'inProgress',
-                items: [{ type: 'agentMessage', id: 'agent-live', text: 'exclude me' }],
-              },
-              {
                 id: 'turn-3',
                 status: 'completed',
                 items: [{ type: 'agentMessage', id: 'agent-3', text: 'newest' }],
+              },
+              {
+                id: 'turn-live',
+                status: 'inProgress',
+                items: [{ type: 'agentMessage', id: 'agent-live', text: 'working now' }],
               },
             ],
           },
@@ -324,10 +489,10 @@ describe('CodexSubagentController', () => {
 
     expect(first.updates.at(-1)).toMatchObject({
       sessionUpdate: 'agent_message_chunk',
-      content: { text: 'newest' },
+      content: { text: 'working now' },
     });
     expect(first.nextCursor).toEqual(expect.any(String));
-    expect(projectedTurnPages[0]).toEqual(['turn-2', 'turn-3']);
+    expect(projectedTurnPages[0]).toEqual(['turn-2', 'turn-3', 'turn-live']);
 
     const second = await controller.read({
       sessionId: 'parent-session-1',
@@ -379,10 +544,133 @@ describe('CodexSubagentController', () => {
         cursor: null,
         limit: 10,
       })
-    ).rejects.toMatchObject({ code: -32_602 });
+    ).rejects.toMatchObject({ code: -32_002 });
     expect(request).not.toHaveBeenCalledWith(
       'thread/read',
       expect.objectContaining({ threadId: 'foreign-thread-1' })
     );
+  });
+
+  it('rejects a mismatched transcript response before projection', async () => {
+    const parent = createSession();
+    const projectThreadTurns = vi.fn(() => Promise.resolve([]));
+    const request = vi.fn((method: string) => {
+      if (method === 'thread/list') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'requested-child',
+              parentThreadId: parent.threadId,
+              status: { type: 'active', activeFlags: [] },
+              turns: [],
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      if (method === 'thread/read') {
+        return Promise.resolve({
+          thread: {
+            id: 'different-child',
+            turns: [
+              {
+                id: 'foreign-turn',
+                status: 'completed',
+                items: [{ type: 'agentMessage', id: 'foreign-answer', text: 'Do not project me' }],
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`unexpected request: ${method}`);
+    });
+    const controller = new CodexSubagentController({
+      codex: { request },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns,
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.read({
+        sessionId: parent.sessionId,
+        subagentId: 'requested-child',
+        cursor: null,
+        limit: 10,
+      })
+    ).rejects.toMatchObject({ code: -32_603 });
+    expect(projectThreadTurns).not.toHaveBeenCalled();
+  });
+
+  it('rejects a repeated ownership cursor without requesting the page again', async () => {
+    const parent = createSession();
+    let listCalls = 0;
+    const request = vi.fn((method: string) => {
+      if (method !== 'thread/list') {
+        throw new Error(`unexpected request: ${method}`);
+      }
+      listCalls += 1;
+      if (listCalls > 2) {
+        throw new Error('ownership pagination did not terminate');
+      }
+      return Promise.resolve({ data: [], nextCursor: 'repeated-cursor' });
+    });
+    const controller = new CodexSubagentController({
+      codex: { request },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.read({
+        sessionId: parent.sessionId,
+        subagentId: 'missing-child',
+        cursor: null,
+        limit: 10,
+      })
+    ).rejects.toMatchObject({ code: -32_603 });
+    expect(listCalls).toBe(2);
+  });
+
+  it('classifies malformed provider thread responses as protocol errors', async () => {
+    const parent = createSession();
+    const request = vi.fn((method: string) => {
+      if (method === 'thread/list') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'child-thread-1',
+              parentThreadId: parent.threadId,
+              status: { type: 'active', activeFlags: [] },
+              turns: [],
+            },
+          ],
+          nextCursor: null,
+        });
+      }
+      if (method === 'thread/read') {
+        return Promise.resolve({ thread: { id: 'child-thread-1', turns: 'malformed' } });
+      }
+      throw new Error(`unexpected request: ${method}`);
+    });
+    const controller = new CodexSubagentController({
+      codex: { request },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.read({
+        sessionId: parent.sessionId,
+        subagentId: 'child-thread-1',
+        cursor: null,
+        limit: 10,
+      })
+    ).rejects.toMatchObject({ code: -32_603 });
   });
 });

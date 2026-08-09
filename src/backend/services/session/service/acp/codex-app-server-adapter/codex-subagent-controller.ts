@@ -12,7 +12,9 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import type { AdapterSession } from './adapter-state';
 import {
+  isKnownCodexTurnStatus,
   type ThreadListResponse,
+  type ThreadReadResponse,
   type ThreadReadTurn,
   threadListResponseSchema,
   threadReadResponseSchema,
@@ -21,6 +23,7 @@ import {
 const TERMINAL_SUMMARY_CONCURRENCY = 4;
 const RESULT_PREVIEW_MAX_LENGTH = 240;
 const OWNERSHIP_PAGE_LIMIT = 100;
+const LIVE_INVALIDATION_THROTTLE_MS = 250;
 
 type ThreadListItem = ThreadListResponse['data'][number];
 
@@ -35,10 +38,12 @@ type CodexSubagentControllerDeps = {
     turns: ThreadReadTurn[]
   ) => Promise<SubagentTranscriptUpdate[]>;
   extNotification: (method: string, params: Record<string, unknown>) => Promise<void>;
+  reportShapeDrift?: (event: string, details?: unknown) => void;
 };
 
 export class CodexSubagentController {
   private readonly parentSessionIdBySubagentId = new Map<string, string>();
+  private readonly lastLiveInvalidationAtBySubagentId = new Map<string, number>();
 
   constructor(private readonly deps: CodexSubagentControllerDeps) {}
 
@@ -69,28 +74,32 @@ export class CodexSubagentController {
     const parent = this.deps.requireSession(params.sessionId);
     const ownedChild = await this.findOwnedChild(parent, params.subagentId);
     if (!ownedChild) {
-      throw RequestError.invalidParams({
-        sessionId: params.sessionId,
-        subagentId: params.subagentId,
-      });
+      throw RequestError.resourceNotFound();
     }
 
     this.rememberSubagents(parent.sessionId, [params.subagentId]);
-    const raw = await this.deps.codex.request('thread/read', {
-      threadId: params.subagentId,
-      includeTurns: true,
-    });
-    const thread = threadReadResponseSchema.parse(raw).thread;
+    const thread = await this.readThread(params.subagentId);
     const completeTurns = thread.turns.filter((turn) => turn.status !== 'inProgress');
     const endExclusive = this.resolveReadEnd(completeTurns, params.cursor ?? null, params);
     const start = Math.max(0, endExclusive - params.limit);
-    const selectedTurns = completeTurns.slice(start, endExclusive);
+    const selectedCompleteTurns = completeTurns.slice(start, endExclusive);
+    const currentTurn = params.cursor
+      ? undefined
+      : [...thread.turns].reverse().find((turn) => turn.status === 'inProgress');
+    const selectedTurnIds = new Set(selectedCompleteTurns.map((turn) => turn.id));
+    if (currentTurn) {
+      selectedTurnIds.add(currentTurn.id);
+    }
+    const selectedTurns = thread.turns.filter((turn) => selectedTurnIds.has(turn.id));
     const projectionSession = this.deps.createProjectionSession(parent, params.subagentId);
     const updates = await this.deps.projectThreadTurns(projectionSession, selectedTurns);
 
     return {
       updates,
-      nextCursor: start > 0 && selectedTurns[0] ? encodeTurnCursor(selectedTurns[0].id) : null,
+      nextCursor:
+        start > 0 && selectedCompleteTurns[0]
+          ? encodeTurnCursor(selectedCompleteTurns[0].id)
+          : null,
     };
   }
 
@@ -123,6 +132,23 @@ export class CodexSubagentController {
     );
   }
 
+  async handleTranscriptActivity(subagentId: string): Promise<void> {
+    const parentSessionId = this.parentSessionIdBySubagentId.get(subagentId);
+    if (!parentSessionId) {
+      return;
+    }
+    const now = Date.now();
+    const lastInvalidationAt = this.lastLiveInvalidationAtBySubagentId.get(subagentId);
+    if (
+      lastInvalidationAt !== undefined &&
+      now - lastInvalidationAt < LIVE_INVALIDATION_THROTTLE_MS
+    ) {
+      return;
+    }
+    this.lastLiveInvalidationAtBySubagentId.set(subagentId, now);
+    await this.notifyChanged(parentSessionId, subagentId, 'updated');
+  }
+
   async notifyChanged(
     parentSessionId: string,
     subagentId: string,
@@ -152,7 +178,17 @@ export class CodexSubagentController {
       sortKey: 'created_at',
       sortDirection: 'asc',
     });
-    return threadListResponseSchema.parse(raw);
+    const parsed = threadListResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      this.deps.reportShapeDrift?.('malformed_subagent_thread_list', {
+        issues: parsed.error.issues.slice(0, 3).map((issue) => issue.message),
+      });
+      throw RequestError.internalError(
+        { reason: 'subagent_protocol_error' },
+        'Malformed sub-agent list response'
+      );
+    }
+    return parsed.data;
   }
 
   private async findOwnedChild(
@@ -160,6 +196,7 @@ export class CodexSubagentController {
     subagentId: string
   ): Promise<ThreadListItem | null> {
     let cursor: string | null = null;
+    const visitedCursors = new Set<string>();
     do {
       const response = await this.listPage(parent, cursor, OWNERSHIP_PAGE_LIMIT);
       const directChildren = response.data.filter(
@@ -173,7 +210,18 @@ export class CodexSubagentController {
       if (match) {
         return match;
       }
-      cursor = response.nextCursor ?? null;
+      const nextCursor = response.nextCursor ?? null;
+      if (nextCursor && visitedCursors.has(nextCursor)) {
+        this.deps.reportShapeDrift?.('repeated_subagent_ownership_cursor');
+        throw RequestError.internalError(
+          { reason: 'subagent_protocol_error' },
+          'Sub-agent ownership pagination repeated a cursor'
+        );
+      }
+      if (nextCursor) {
+        visitedCursors.add(nextCursor);
+      }
+      cursor = nextCursor;
     } while (cursor);
     return null;
   }
@@ -184,11 +232,16 @@ export class CodexSubagentController {
     const runtimeType = thread.status?.type;
     let lastTurn = thread.turns?.at(-1);
     if (runtimeType !== 'active' && !lastTurn) {
-      const raw = await this.deps.codex.request('thread/read', {
-        threadId: thread.id,
-        includeTurns: true,
+      try {
+        lastTurn = (await this.readThread(thread.id)).turns.at(-1);
+      } catch {
+        lastTurn = undefined;
+      }
+    }
+    if (lastTurn?.status && !isKnownCodexTurnStatus(lastTurn.status)) {
+      this.deps.reportShapeDrift?.('unknown_subagent_turn_status', {
+        status: lastTurn.status,
       });
-      lastTurn = threadReadResponseSchema.parse(raw).thread.turns.at(-1);
     }
 
     return {
@@ -224,6 +277,32 @@ export class CodexSubagentController {
       });
     }
     return index;
+  }
+
+  private async readThread(threadId: string): Promise<ThreadReadResponse['thread']> {
+    const raw = await this.deps.codex.request('thread/read', {
+      threadId,
+      includeTurns: true,
+    });
+    const parsed = threadReadResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      this.deps.reportShapeDrift?.('malformed_subagent_thread_read', {
+        issues: parsed.error.issues.slice(0, 3).map((issue) => issue.message),
+      });
+      throw RequestError.internalError(
+        { reason: 'subagent_protocol_error' },
+        'Malformed sub-agent transcript response'
+      );
+    }
+    const thread = parsed.data.thread;
+    if (thread.id !== threadId) {
+      this.deps.reportShapeDrift?.('mismatched_subagent_thread_read');
+      throw RequestError.internalError(
+        { reason: 'subagent_protocol_error' },
+        'Sub-agent transcript identity mismatch'
+      );
+    }
+    return thread;
   }
 }
 

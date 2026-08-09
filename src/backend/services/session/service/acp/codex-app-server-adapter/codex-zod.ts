@@ -69,6 +69,17 @@ const codexThreadStatusSchema = z
   })
   .passthrough();
 
+const codexTurnStatusSchema = z.string().min(1);
+
+export function isKnownCodexTurnStatus(status: string): boolean {
+  return (
+    status === 'completed' ||
+    status === 'interrupted' ||
+    status === 'failed' ||
+    status === 'inProgress'
+  );
+}
+
 export const subAgentActivityItemSchema = threadItemSchema
   .extend({
     type: z.literal('subAgentActivity'),
@@ -91,7 +102,7 @@ export const collabAgentToolCallItemSchema = threadItemSchema
 const turnSchema = z
   .object({
     id: z.string(),
-    status: z.enum(['completed', 'interrupted', 'failed', 'inProgress']),
+    status: codexTurnStatusSchema,
     error: z
       .object({
         message: z.string(),
@@ -318,7 +329,7 @@ export const threadResumeResponseSchema = threadStartResponseSchema;
 export const threadReadTurnSchema = z
   .object({
     id: z.string(),
-    status: z.enum(['completed', 'interrupted', 'failed', 'inProgress']).optional(),
+    status: codexTurnStatusSchema.optional(),
     startedAt: z.number().nullable().optional(),
     completedAt: z.number().nullable().optional(),
     items: z.array(
@@ -370,7 +381,7 @@ export const turnStartResponseSchema = z
     turn: z
       .object({
         id: z.string(),
-        status: z.enum(['completed', 'interrupted', 'failed', 'inProgress']).optional(),
+        status: codexTurnStatusSchema.optional(),
       })
       .passthrough(),
   })

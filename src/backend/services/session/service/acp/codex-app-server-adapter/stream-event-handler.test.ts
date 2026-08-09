@@ -119,6 +119,46 @@ describe('stream-event-handler', () => {
     expect(recordSubagentActivity).not.toHaveBeenCalled();
   });
 
+  it('projects recovery turns with an unknown status and reports shape drift', async () => {
+    const session = createSession();
+    const reportShapeDrift = vi.fn();
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift,
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await expect(
+      handler.projectThreadTurns(session, [
+        {
+          id: 'future-turn',
+          status: 'pausedByProvider',
+          items: [{ type: 'agentMessage', id: 'answer', text: 'Still readable' }],
+        },
+      ])
+    ).resolves.toEqual([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Still readable' },
+      },
+    ]);
+    expect(reportShapeDrift).toHaveBeenCalledWith('unknown_turn_status', {
+      source: 'thread/history',
+      status: 'pausedByProvider',
+    });
+  });
+
   it('reports shape drift for malformed notifications', async () => {
     const reportShapeDrift = vi.fn();
     const handler = new CodexStreamEventHandler({
@@ -144,6 +184,52 @@ describe('stream-event-handler', () => {
       'malformed_notification',
       expect.objectContaining({ method: 'invalid/notification' })
     );
+  });
+
+  it('settles an unknown completed-turn status and reports shape drift', async () => {
+    const session = createSession();
+    session.activeTurn = {
+      turnId: 'turn_1',
+      cancelRequested: false,
+      settled: false,
+      resolve: vi.fn(),
+    };
+    const reportShapeDrift = vi.fn();
+    const settleTurn = vi.fn();
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map([['thread_1', session.sessionId]]),
+      sessions: new Map([[session.sessionId, session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift,
+      buildToolCallState: vi.fn(),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn,
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await handler.handleCodexNotification({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread_1',
+        turn: {
+          id: 'turn_1',
+          status: 'supersededByProvider',
+          items: [],
+        },
+      },
+    });
+
+    expect(reportShapeDrift).toHaveBeenCalledWith('unknown_turn_status', {
+      source: 'turn/completed',
+      status: 'supersededByProvider',
+    });
+    expect(settleTurn).toHaveBeenCalledWith(session, 'end_turn');
   });
 
   it('emits tool_call update for started command execution item', async () => {

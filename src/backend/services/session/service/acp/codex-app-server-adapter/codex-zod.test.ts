@@ -10,6 +10,7 @@ import {
   threadListResponseSchema,
   threadReadResponseSchema,
   threadStatusChangedNotificationSchema,
+  turnStartResponseSchema,
 } from './codex-zod';
 
 describe('codex-zod', () => {
@@ -187,6 +188,29 @@ describe('codex-zod', () => {
     });
 
     expect(parsed.thread.turns[0]?.items).toHaveLength(3);
+  });
+
+  it('accepts additive provider turn statuses at read and live boundaries', () => {
+    const read = threadReadResponseSchema.parse({
+      thread: {
+        id: 'thread_1',
+        turns: [{ id: 'turn_1', status: 'pausedByProvider', items: [] }],
+      },
+    });
+    const started = turnStartResponseSchema.parse({
+      turn: { id: 'turn_2', status: 'queuedByProvider' },
+    });
+    const completed = knownCodexNotificationSchema.parse({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thread_1',
+        turn: { id: 'turn_3', status: 'supersededByProvider', items: [] },
+      },
+    });
+
+    expect(read.thread.turns[0]?.status).toBe('pausedByProvider');
+    expect(started.turn.status).toBe('queuedByProvider');
+    expect(completed.method).toBe('turn/completed');
   });
 
   it('parses parent-scoped thread/list fields while preserving additive fields', () => {

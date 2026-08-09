@@ -95,9 +95,10 @@ const rightPanelMock = vi.hoisted(() =>
 
 const workspaceContentViewMock = vi.hoisted(() => vi.fn());
 const subagentTranscriptViewMock = vi.hoisted(() => vi.fn());
+const useIsMobileMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('@/hooks/use-mobile', () => ({
-  useIsMobile: () => false,
+  useIsMobile: useIsMobileMock,
 }));
 
 vi.mock('@/client/components/loading', () => ({
@@ -280,6 +281,7 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
+  useIsMobileMock.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -409,6 +411,22 @@ describe('WorkspaceDetailView', () => {
     void act(() => root.unmount());
   });
 
+  it('closes the mobile right-panel sheet after opening a sub-agent', () => {
+    useIsMobileMock.mockReturnValue(true);
+    const props = createViewProps(0);
+    props.rightPanelVisible = true;
+    const { container, root } = renderView(props);
+
+    void act(() => {
+      container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
+    });
+
+    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBeNull();
+    expect(props.setRightPanelVisible).toHaveBeenCalledWith(false);
+
+    void act(() => root.unmount());
+  });
+
   it('clears the child drill-in when the selected parent session changes', () => {
     const props = createViewProps(0);
     props.rightPanelVisible = true;
@@ -450,10 +468,14 @@ describe('WorkspaceDetailView', () => {
     void act(() => {
       container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
     });
+    const firstTranscript = container.querySelector('[data-testid="subagent-transcript"]');
     parentChat.scrollTop = 0;
     void act(() => {
       container.querySelector<HTMLButtonElement>('[data-testid="open-subagent-2"]')?.click();
     });
+    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBe(
+      firstTranscript
+    );
     expect(container.querySelector('[data-testid="subagent-transcript"]')?.textContent).toContain(
       'Test review'
     );

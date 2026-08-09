@@ -1,7 +1,7 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
+import { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 
 const mockSessionDataService = vi.hoisted(() => ({
@@ -32,7 +32,7 @@ const mockGetQuickAction = vi.hoisted(() => vi.fn());
 
 import { sessionRouter } from './session.trpc';
 
-function createCaller() {
+function createCaller(options?: { acpRuntimeManager?: AcpRuntimeManager }) {
   const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
     getSubagentBrowseCapability: vi.fn(),
@@ -66,7 +66,7 @@ function createCaller() {
           configService: {
             getMaxSessionsPerWorkspace: () => 2,
           },
-          acpRuntimeManager,
+          acpRuntimeManager: options?.acpRuntimeManager ?? acpRuntimeManager,
           sessionLifecycleService,
           sessionDomainService,
           sessionDataService: mockSessionDataService,
@@ -89,6 +89,29 @@ function createCaller() {
     sessionDomainService,
     cliHealthService,
   };
+}
+
+function createSubagentRuntimeManager(
+  extMethod: (method: string, params: Record<string, unknown>) => Promise<unknown>
+): AcpRuntimeManager {
+  const manager = new AcpRuntimeManager();
+  const handle = {
+    providerSessionId: 'provider-session-1',
+    connection: { extMethod: vi.fn(extMethod) },
+    isRunning: () => true,
+    getSubagentBrowseCapability: () => ({
+      version: 1 as const,
+      list: true as const,
+      read: true as const,
+      notifications: true as const,
+    }),
+  };
+  (
+    manager as unknown as {
+      sessions: Map<string, typeof handle>;
+    }
+  ).sessions.set('session-1', handle);
+  return manager;
 }
 
 describe('sessionRouter', () => {
@@ -196,25 +219,80 @@ describe('sessionRouter', () => {
       expect(acpRuntimeManager.readSubagentTranscript).not.toHaveBeenCalled();
     });
 
-    it('preserves adapter response validation failures', async () => {
-      const { caller, acpRuntimeManager } = createCaller();
-      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
-        version: 1,
-        list: true,
-        read: true,
-        notifications: true,
-      });
-      const parsed = z.object({ subagents: z.array(z.never()) }).safeParse({
-        subagents: ['invalid'],
-      });
-      if (parsed.success) {
-        throw new Error('Expected the adapter fixture to fail validation');
-      }
-      acpRuntimeManager.listSubagents.mockRejectedValue(parsed.error);
+    it('maps an invalid transcript cursor to a safe BAD_REQUEST', async () => {
+      const runtime = createSubagentRuntimeManager(() =>
+        Promise.reject({
+          code: -32_602,
+          message: 'Invalid params: provider cursor parser secret',
+          data: { cursor: 'invalid' },
+        })
+      );
+      const { caller } = createCaller({ acpRuntimeManager: runtime });
 
       await expect(
-        caller.listSubagents({ sessionId: 'session-1', cursor: null, limit: 50 })
-      ).rejects.toThrow('expected never');
+        caller.readSubagentTranscript({
+          sessionId: 'session-1',
+          subagentId: 'child-1',
+          cursor: 'invalid',
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: 'Invalid sub-agent transcript request.',
+      });
+    });
+
+    it('maps a foreign child to a safe NOT_FOUND', async () => {
+      const runtime = createSubagentRuntimeManager(() =>
+        Promise.reject({
+          code: -32_002,
+          message: 'Resource not found: provider thread secret',
+        })
+      );
+      const { caller } = createCaller({ acpRuntimeManager: runtime });
+
+      await expect(
+        caller.readSubagentTranscript({
+          sessionId: 'session-1',
+          subagentId: 'foreign-child',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'Sub-agent transcript not found for this session.',
+      });
+    });
+
+    it.each([
+      {
+        label: 'malformed provider response',
+        extMethod: () => Promise.resolve({ updates: [{ sessionUpdate: 'unknown' }] }),
+      },
+      {
+        label: 'provider protocol error',
+        extMethod: () =>
+          Promise.reject({
+            code: -32_603,
+            message: 'Internal error: provider response IDs did not match',
+          }),
+      },
+    ])('maps a $label to a safe PRECONDITION_FAILED', async ({ extMethod }) => {
+      const runtime = createSubagentRuntimeManager(extMethod);
+      const { caller } = createCaller({ acpRuntimeManager: runtime });
+
+      await expect(
+        caller.readSubagentTranscript({
+          sessionId: 'session-1',
+          subagentId: 'child-1',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Sub-agent transcript is unavailable because the provider returned an invalid response.',
+      });
     });
   });
 
