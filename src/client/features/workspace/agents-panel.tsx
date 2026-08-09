@@ -19,6 +19,7 @@ export function AgentsPanel({
   return (
     <div className="h-full overflow-y-auto">
       <ProviderSubagentsSection
+        key={sessionId ?? 'no-session'}
         sessionId={sessionId}
         enabled={sessionReady}
         onSelect={onOpenSubagent}

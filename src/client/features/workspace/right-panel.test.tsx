@@ -7,7 +7,9 @@ import { RightPanel } from './right-panel';
 
 const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
-  creationSource: 'MANUAL' as string,
+  workspaceData: undefined as
+    | undefined
+    | { mode: string; periodicTaskId: null; creationSource: string },
 }));
 
 vi.mock('@phosphor-icons/react', () => ({
@@ -28,11 +30,7 @@ vi.mock('@/client/lib/trpc', () => ({
     workspace: {
       get: {
         useQuery: () => ({
-          data: {
-            mode: 'STANDARD',
-            periodicTaskId: null,
-            creationSource: mocks.creationSource,
-          },
+          data: mocks.workspaceData,
         }),
       },
       getInitStatus: { useQuery: () => ({ data: { status: 'READY' } }) },
@@ -87,12 +85,21 @@ vi.mock('./agents-panel', () => ({
     isParentWorkspace: boolean;
   }) => {
     mocks.agentsProps(props);
-    return createElement('div', {
-      'data-testid': 'agents-panel',
-      'data-session': props.sessionId,
-      'data-ready': props.sessionReady,
-      'data-parent': props.isParentWorkspace,
-    });
+    return createElement(
+      'div',
+      {
+        'data-testid': 'agents-panel',
+        'data-session': props.sessionId,
+        'data-ready': props.sessionReady,
+        'data-parent': props.isParentWorkspace,
+      },
+      [
+        createElement('section', { key: 'provider', 'data-testid': 'provider-subagents' }),
+        props.isParentWorkspace
+          ? createElement('section', { key: 'children', 'data-testid': 'child-workspaces' })
+          : null,
+      ]
+    );
   },
 }));
 
@@ -124,6 +131,11 @@ describe('RightPanel Agents tab', () => {
       value: true,
     });
     localStorage.clear();
+    mocks.workspaceData = {
+      mode: 'STANDARD',
+      periodicTaskId: null,
+      creationSource: 'MANUAL',
+    };
     mocks.agentsProps.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -153,7 +165,7 @@ describe('RightPanel Agents tab', () => {
     ['parent', 'MANUAL', 'true'],
     ['child', 'CHILD_WORKSPACE', 'false'],
   ])('always labels the tab Agents for a %s workspace', (_kind, creationSource, isParent) => {
-    mocks.creationSource = creationSource;
+    mocks.workspaceData = { mode: 'STANDARD', periodicTaskId: null, creationSource };
     render();
 
     const agentsTab = [...container.querySelectorAll('button')].find(
@@ -167,5 +179,30 @@ describe('RightPanel Agents tab', () => {
     expect(agentsPanel?.getAttribute('data-session')).toBe('session-1');
     expect(agentsPanel?.getAttribute('data-ready')).toBe('true');
     expect(agentsPanel?.getAttribute('data-parent')).toBe(isParent);
+  });
+
+  it('keeps child workspaces ineligible while workspace data loads and after it resolves as child', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'agents');
+    mocks.workspaceData = undefined;
+    render();
+
+    expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="child-workspaces"]')).toBeNull();
+    expect(mocks.agentsProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isParentWorkspace: false })
+    );
+
+    mocks.workspaceData = {
+      mode: 'STANDARD',
+      periodicTaskId: null,
+      creationSource: 'CHILD_WORKSPACE',
+    };
+    render();
+
+    expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="child-workspaces"]')).toBeNull();
+    expect(mocks.agentsProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isParentWorkspace: false })
+    );
   });
 });

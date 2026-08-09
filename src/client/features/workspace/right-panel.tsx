@@ -244,8 +244,8 @@ export function RightPanel({
     (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
   const creationSource =
     (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
-  // Show children tab for all workspaces that are not themselves children
-  const isParentWorkspace = creationSource !== 'CHILD_WORKSPACE';
+  // Child-workspace eligibility is unknown until the workspace query resolves.
+  const isParentWorkspace = workspace !== undefined && creationSource !== 'CHILD_WORKSPACE';
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
