@@ -184,6 +184,10 @@ describe('RightPanel Agents tab', () => {
     expect(mocks.agentsProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ sessionName: 'Session 1' })
     );
+    if (creationSource === 'MANUAL') {
+      expect(container.querySelector('[data-testid="provider-subagents"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="child-workspaces"]')).not.toBeNull();
+    }
   });
 
   it('keeps child workspaces ineligible while workspace data loads and after it resolves as child', () => {

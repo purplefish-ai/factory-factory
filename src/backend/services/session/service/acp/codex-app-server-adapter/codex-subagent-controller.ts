@@ -176,7 +176,7 @@ export class CodexSubagentController {
       cursor,
       limit,
       sortKey: 'created_at',
-      sortDirection: 'asc',
+      sortDirection: 'desc',
     });
     const parsed = threadListResponseSchema.safeParse(raw);
     if (!parsed.success) {
@@ -249,6 +249,7 @@ export class CodexSubagentController {
       name: normalizeOptionalText(thread.name) ?? normalizeOptionalText(thread.agentNickname),
       status: normalizeCodexSubagentStatus({
         runtimeType,
+        activeFlags: normalizeStringArray(thread.status?.activeFlags),
         lastTurnStatus: lastTurn?.status,
       }),
       createdAt: toIsoTimestamp(thread.createdAt),
@@ -308,9 +309,16 @@ export class CodexSubagentController {
 
 export function normalizeCodexSubagentStatus(input: {
   runtimeType?: string;
+  activeFlags?: readonly string[];
   lastTurnStatus?: string;
 }): SubagentStatus {
   if (input.runtimeType === 'active') {
+    if (
+      input.activeFlags?.includes('waitingOnApproval') ||
+      input.activeFlags?.includes('waitingOnUserInput')
+    ) {
+      return 'waiting';
+    }
     return 'running';
   }
   if (input.runtimeType === 'systemError' || input.lastTurnStatus === 'failed') {
@@ -320,6 +328,13 @@ export function normalizeCodexSubagentStatus(input: {
     return 'interrupted';
   }
   return 'completed';
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.filter((item): item is string => typeof item === 'string');
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

@@ -176,7 +176,10 @@ function filterSetByIds(set: Set<string>, retainedIds: Set<string>): Set<string>
 }
 
 export function applyRendererMessages(state: ChatState, messages: ChatMessage[]): ChatState {
-  const retainedMessages = trimMessagesForRenderer(messages);
+  const retainedMessages =
+    state.rendererTranscriptLimit === null
+      ? messages
+      : trimMessagesForRenderer(messages, state.rendererTranscriptLimit);
   const retainedIds = new Set(retainedMessages.map((message) => message.id));
   const hasUnmappedLocalUserMessage = retainedMessages.some(
     (message) =>

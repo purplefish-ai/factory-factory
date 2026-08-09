@@ -101,9 +101,25 @@ type AcpErrorLogDetails = {
   data?: unknown;
 };
 
+function getAcpErrorMetadata(error: {
+  code?: unknown;
+  data?: unknown;
+}): Omit<AcpErrorLogDetails, 'message'> {
+  const code =
+    typeof error.code === 'number' || typeof error.code === 'string' ? error.code : undefined;
+  return {
+    ...(code !== undefined ? { code } : {}),
+    ...(typeof error.data !== 'undefined' ? { data: error.data } : {}),
+  };
+}
+
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   if (error instanceof Error) {
-    return { message: error.message };
+    const maybe = error as Error & { code?: unknown; data?: unknown };
+    return {
+      message: error.message,
+      ...getAcpErrorMetadata(maybe),
+    };
   }
 
   if (typeof error === 'object' && error !== null) {
@@ -118,12 +134,9 @@ function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
               return String(error);
             }
           })();
-    const code =
-      typeof maybe.code === 'number' || typeof maybe.code === 'string' ? maybe.code : undefined;
     return {
       message,
-      ...(code !== undefined ? { code } : {}),
-      ...(typeof maybe.data !== 'undefined' ? { data: maybe.data } : {}),
+      ...getAcpErrorMetadata(maybe),
     };
   }
 

@@ -317,9 +317,30 @@ export class AcpEventTranslator {
     }
     if (Array.isArray(content)) {
       return content
-        .filter((c): c is { type: 'text'; text: string } => c?.type === 'text')
-        .map((c) => c.text)
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return '';
+          }
+          const block = entry as { type?: unknown; text?: unknown; content?: unknown };
+          if (block.type === 'text' && typeof block.text === 'string') {
+            return block.text;
+          }
+          if (block.type === 'content') {
+            return this.extractContentText(block.content);
+          }
+          return '';
+        })
+        .filter((text) => text.length > 0)
         .join('\n');
+    }
+    if (typeof content === 'object') {
+      const block = content as { type?: unknown; text?: unknown; content?: unknown };
+      if (block.type === 'text' && typeof block.text === 'string') {
+        return block.text;
+      }
+      if (block.type === 'content') {
+        return this.extractContentText(block.content);
+      }
     }
     return JSON.stringify(content);
   }

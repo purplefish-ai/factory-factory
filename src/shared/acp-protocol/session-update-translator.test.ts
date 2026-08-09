@@ -163,6 +163,32 @@ describe('AcpEventTranslator', () => {
       ]);
     });
 
+    it('prefers the Claude tool name metadata over the display title', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-meta',
+        title: 'Terminal',
+        status: 'pending',
+        _meta: { claudeCode: { toolName: 'Bash' } },
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events[0]).toMatchObject({
+        data: {
+          event: {
+            content_block: { type: 'tool_use', id: 'tc-meta', name: 'Bash' },
+          },
+        },
+      });
+      expect(events[1]).toMatchObject({
+        type: 'tool_progress',
+        tool_use_id: 'tc-meta',
+        tool_name: 'Bash',
+      });
+    });
+
     it('returns empty array for missing toolCallId without throwing', () => {
       const { translator, logger } = createTranslator();
       const update = {
@@ -309,6 +335,32 @@ describe('AcpEventTranslator', () => {
           message: {
             role: 'user',
             content: [{ type: 'tool_result', tool_use_id: 'tc-001', content: 'done' }],
+          },
+        },
+      });
+    });
+
+    it('unwraps ACP content entries for terminal tool results', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'tc-wrapped',
+        status: 'completed',
+        content: [{ type: 'content', content: { type: 'text', text: 'wrapped output' } }],
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events[1]).toMatchObject({
+        data: {
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tc-wrapped',
+                content: 'wrapped output',
+              },
+            ],
           },
         },
       });
@@ -502,6 +554,29 @@ describe('AcpEventTranslator', () => {
     });
   });
 
+  describe('config_option_update', () => {
+    it('maps provider configuration options to the chat update event', () => {
+      const { translator } = createTranslator();
+      const configOptions = [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'select',
+          category: 'model',
+          currentValue: 'gpt-5',
+          options: [{ value: 'gpt-5', name: 'GPT-5' }],
+        },
+      ];
+
+      expect(
+        translator.translateSessionUpdate({
+          sessionUpdate: 'config_option_update',
+          configOptions,
+        } as unknown as SessionUpdate)
+      ).toEqual([{ type: 'config_options_update', configOptions }]);
+    });
+  });
+
   describe('context_compaction', () => {
     it('emits compacting_start for active state strings', () => {
       const { translator } = createTranslator();
@@ -558,7 +633,6 @@ describe('AcpEventTranslator', () => {
 
   describe('deferred types', () => {
     it.each([
-      'config_option_update',
       'current_mode_update',
       'session_info_update',
       'user_message_chunk',

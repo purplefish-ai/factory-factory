@@ -223,9 +223,9 @@ function ReadyState({
             </Button>
           </div>
         )}
-        {groupedMessages.map((item, index) => (
+        {groupedMessages.map((item) => (
           <GroupedMessageItemRenderer
-            key={`${item.id}-${index}`}
+            key={item.id}
             item={item}
             getToolExpansionState={undefined}
             setToolExpansionState={undefined}

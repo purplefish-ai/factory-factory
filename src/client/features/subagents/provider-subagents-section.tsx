@@ -1,5 +1,5 @@
 import { RobotIcon } from '@phosphor-icons/react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { SubagentList, type SubagentListState } from './subagent-list';
 import type { SubagentListItem, SubagentSelection } from './types';
@@ -21,21 +21,42 @@ export function ProviderSubagentsSection({
   const requestedQuery = Boolean(sessionId && enabled);
   const queryEnabled = useSubagentInvalidation(sessionId, requestedQuery);
   const input = { sessionId: sessionId ?? '', cursor: null, limit: 100 } as const;
-  const query = trpc.session.listSubagents.useQuery(input, {
+  const query = trpc.session.listSubagents.useInfiniteQuery(input, {
     enabled: queryEnabled,
     refetchOnMount: 'always',
+    getNextPageParam: (lastPage) =>
+      lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
   });
+  const supportedPages = useMemo(
+    () => query.data?.pages.filter((page) => page.supported) ?? [],
+    [query.data?.pages]
+  );
+  const subagents = useMemo(() => {
+    const byId = new Map<string, SubagentListItem>();
+    for (const page of supportedPages) {
+      for (const subagent of page.subagents) {
+        if (!byId.has(subagent.id)) {
+          byId.set(subagent.id, subagent);
+        }
+      }
+    }
+    return [...byId.values()];
+  }, [supportedPages]);
 
   const handleSelect = useCallback(
     (subagent: SubagentListItem) => {
-      if (sessionId && parentSessionName) {
-        onSelect({ parentSessionId: sessionId, parentSessionName, subagent });
+      if (sessionId) {
+        onSelect({
+          parentSessionId: sessionId,
+          parentSessionName: parentSessionName?.trim() || 'Untitled session',
+          subagent,
+        });
       }
     },
     [onSelect, parentSessionName, sessionId]
   );
 
-  if (!queryEnabled || query.data?.supported === false) {
+  if (!queryEnabled || query.data?.pages.some((page) => page.supported === false)) {
     return null;
   }
 
@@ -51,7 +72,15 @@ export function ProviderSubagentsSection({
   } else if (!query.data || query.isLoading) {
     state = { kind: 'loading' };
   } else {
-    state = { kind: 'ready', subagents: query.data.subagents };
+    state = {
+      kind: 'ready',
+      subagents,
+      hasMore: Boolean(query.hasNextPage),
+      loadingMore: query.isFetchingNextPage,
+      onLoadMore: () => {
+        void query.fetchNextPage();
+      },
+    };
   }
 
   return (

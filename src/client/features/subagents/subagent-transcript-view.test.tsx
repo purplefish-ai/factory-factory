@@ -436,4 +436,19 @@ describe('SubagentTranscriptView', () => {
     expect(mocks.refetch).toHaveBeenCalledOnce();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
   });
+
+  it('refetches the initial transcript when the unavailable state is retried', () => {
+    mocks.queryResult.error = new Error('Provider history expired');
+    mocks.queryResult.data = undefined;
+    render();
+
+    expect(container.textContent).toContain('Transcript unavailable');
+    const retry = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry'
+    );
+    void act(() => retry?.click());
+
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
 });

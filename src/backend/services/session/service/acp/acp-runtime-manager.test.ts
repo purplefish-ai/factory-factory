@@ -1048,6 +1048,33 @@ describe('AcpRuntimeManager', () => {
       });
     });
 
+    it('preserves JSON-RPC codes carried by Error subclasses', async () => {
+      setupSuccessfulSpawn(subagentBrowseCapabilities());
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      const providerError = Object.assign(new Error('Resource not found: provider thread'), {
+        code: -32_002,
+        data: { threadId: 'missing-child' },
+      });
+      mockExtMethod.mockRejectedValueOnce(providerError);
+
+      await expect(
+        manager.readSubagentTranscript('db-session-1', {
+          subagentId: 'missing-child',
+          cursor: null,
+          limit: 10,
+        })
+      ).rejects.toMatchObject({
+        name: 'AcpSubagentBrowseError',
+        code: 'NOT_FOUND',
+        message: 'Sub-agent transcript not found for this session.',
+      });
+    });
+
     it('rejects extension requests without a live handle or negotiated capability', async () => {
       await expect(
         manager.listSubagents('missing-session', { cursor: null, limit: 50 })

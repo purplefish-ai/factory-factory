@@ -111,7 +111,10 @@ function seedThinkingSequence(
 
 export function projectAcpTranscriptUpdates(updates: SubagentTranscriptUpdate[]): ChatMessage[] {
   const translator = new AcpEventTranslator(transcriptLogger);
-  let state = createInitialChatState({ sessionStatus: { phase: 'ready' } });
+  let state = createInitialChatState({
+    sessionStatus: { phase: 'ready' },
+    rendererTranscriptLimit: null,
+  });
   let order = 0;
   let reasoningSequenceOpen = false;
 

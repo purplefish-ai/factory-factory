@@ -1,5 +1,5 @@
 import { CaretDownIcon, CaretRightIcon, RobotIcon, WarningCircleIcon } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SubagentListItem } from './types';
@@ -10,7 +10,13 @@ export type SubagentListState =
   | { kind: 'loading' }
   | { kind: 'unsupported' }
   | { kind: 'error'; message: string; onRetry: () => void }
-  | { kind: 'ready'; subagents: SubagentListItem[] };
+  | {
+      kind: 'ready';
+      subagents: SubagentListItem[];
+      hasMore?: boolean;
+      loadingMore?: boolean;
+      onLoadMore?: () => void;
+    };
 
 export interface SubagentListProps {
   state: SubagentListState;
@@ -157,6 +163,7 @@ function compareTerminal(left: SubagentListItem, right: SubagentListItem): numbe
 
 export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentListProps) {
   const [completedExpanded, setCompletedExpanded] = useState(false);
+  const [, setElapsedTick] = useState(0);
   const groups = useMemo(() => {
     if (state.kind !== 'ready') {
       return { active: [], terminal: [] };
@@ -170,6 +177,14 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
         .sort(compareTerminal),
     };
   }, [state]);
+
+  useEffect(() => {
+    if (groups.active.length === 0) {
+      return;
+    }
+    const interval = setInterval(() => setElapsedTick((tick) => tick + 1), 1000);
+    return () => clearInterval(interval);
+  }, [groups.active.length]);
 
   if (state.kind === 'unsupported') {
     return null;
@@ -201,9 +216,22 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
 
   if (state.subagents.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-        <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">No sub-agents for this session.</p>
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+        <div className="flex flex-col items-center gap-2">
+          <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No sub-agents for this session.</p>
+        </div>
+        {state.hasMore && state.onLoadMore && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={state.loadingMore}
+            onClick={state.onLoadMore}
+          >
+            {state.loadingMore ? 'Loading more…' : 'Load more'}
+          </Button>
+        )}
       </div>
     );
   }
@@ -250,6 +278,19 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
               ))}
             </ul>
           )}
+        </div>
+      )}
+      {state.hasMore && state.onLoadMore && (
+        <div className="flex justify-center border-t px-3 py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={state.loadingMore}
+            onClick={state.onLoadMore}
+          >
+            {state.loadingMore ? 'Loading more…' : 'Load more'}
+          </Button>
         </div>
       )}
     </div>

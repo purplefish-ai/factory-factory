@@ -165,6 +165,27 @@ describe('SubagentList', () => {
     expect(container.textContent).not.toContain('elapsed');
   });
 
+  it('keeps active elapsed time current without provider notifications', () => {
+    render({
+      state: {
+        kind: 'ready',
+        subagents: [
+          subagent({
+            id: 'active-timer',
+            name: 'Long-running review',
+            createdAt: '2026-08-08T11:59:50.000Z',
+          }),
+        ],
+      },
+      onSelect: vi.fn(),
+    });
+    expect(container.textContent).toContain('10s elapsed');
+
+    void act(() => vi.advanceTimersByTime(5000));
+
+    expect(container.textContent).toContain('15s elapsed');
+  });
+
   it.each<[string, SubagentListState, string]>([
     ['loading', { kind: 'loading' }, 'Loading sub-agents…'],
     ['empty', { kind: 'ready', subagents: [] }, 'No sub-agents for this session.'],

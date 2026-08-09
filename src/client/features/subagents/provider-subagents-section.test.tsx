@@ -7,10 +7,14 @@ import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import { ProviderSubagentsSection } from './provider-subagents-section';
 
 const mocks = vi.hoisted(() => ({
+  fetchNextPage: vi.fn(() => Promise.resolve()),
+  infinitePages: undefined as unknown[] | undefined,
   invalidate: vi.fn(() => Promise.resolve()),
   queryResult: {
     data: undefined as unknown,
     error: null as Error | null,
+    hasNextPage: false,
+    isFetchingNextPage: false,
     isLoading: false,
     refetch: vi.fn(() => Promise.resolve()),
   },
@@ -23,7 +27,20 @@ vi.mock('@/client/lib/trpc', () => ({
       listSubagents: {
         useQuery: (...args: unknown[]) => {
           mocks.useQuery(...args);
-          return mocks.queryResult;
+          return { ...mocks.queryResult, fetchNextPage: mocks.fetchNextPage };
+        },
+        useInfiniteQuery: (...args: unknown[]) => {
+          mocks.useQuery(...args);
+          return {
+            ...mocks.queryResult,
+            data:
+              mocks.infinitePages !== undefined
+                ? { pages: mocks.infinitePages }
+                : mocks.queryResult.data === undefined
+                  ? undefined
+                  : { pages: [mocks.queryResult.data] },
+            fetchNextPage: mocks.fetchNextPage,
+          };
         },
       },
     },
@@ -44,8 +61,12 @@ describe('ProviderSubagentsSection', () => {
       value: true,
     });
     mocks.queryResult.data = undefined;
+    mocks.infinitePages = undefined;
     mocks.queryResult.error = null;
+    mocks.queryResult.hasNextPage = false;
+    mocks.queryResult.isFetchingNextPage = false;
     mocks.queryResult.isLoading = false;
+    mocks.fetchNextPage.mockClear();
     mocks.queryResult.refetch.mockClear();
     mocks.invalidate.mockClear();
     mocks.useQuery.mockClear();
@@ -202,6 +223,105 @@ describe('ProviderSubagentsSection', () => {
       parentSessionName: 'Session 1',
       subagent: item,
     });
+  });
+
+  it('selects sub-agents from unnamed sessions with a breadcrumb fallback', () => {
+    const onSelect = vi.fn();
+    const item = {
+      id: 'child-unnamed',
+      name: 'Inspect cache',
+      status: 'running' as const,
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+    };
+    mocks.queryResult.data = { supported: true, subagents: [item], nextCursor: null };
+    render({ sessionId: 'session-1', parentSessionName: null, enabled: true, onSelect });
+
+    const row = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Inspect cache')
+    );
+    void act(() => row?.click());
+
+    expect(onSelect).toHaveBeenCalledWith({
+      parentSessionId: 'session-1',
+      parentSessionName: 'Untitled session',
+      subagent: item,
+    });
+  });
+
+  it('loads later provider pages without discarding already visible sub-agents', () => {
+    const first = {
+      id: 'child-first-page',
+      name: 'First page agent',
+      status: 'completed' as const,
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+    };
+    mocks.queryResult.data = {
+      supported: true,
+      subagents: [first],
+      nextCursor: 'second-page',
+    };
+    mocks.queryResult.hasNextPage = true;
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
+
+    const loadMore = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Load more'
+    );
+    expect(loadMore).toBeDefined();
+    void act(() => loadMore?.click());
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it('combines loaded provider pages into one deduplicated list', () => {
+    const item = (id: string, name: string) => ({
+      id,
+      name,
+      status: 'running' as const,
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+    });
+    mocks.infinitePages = [
+      {
+        supported: true,
+        subagents: [item('newest-child', 'Newest agent')],
+        nextCursor: 'older-page',
+      },
+      {
+        supported: true,
+        subagents: [
+          item('newest-child', 'Newest agent refreshed'),
+          item('older-child', 'Older agent'),
+        ],
+        nextCursor: null,
+      },
+    ];
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
+
+    expect(container.textContent).toContain('Newest agent');
+    expect(container.textContent).not.toContain('Newest agent refreshed');
+    expect(container.textContent).toContain('Older agent');
+    expect(container.querySelectorAll('button[aria-pressed]').length).toBe(2);
   });
 
   it('collapses completed sub-agents again when the selected session changes', () => {

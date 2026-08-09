@@ -148,7 +148,7 @@ describe('CodexSubagentController', () => {
       cursor: null,
       limit: 50,
       sortKey: 'created_at',
-      sortDirection: 'asc',
+      sortDirection: 'desc',
     });
     expect(result.subagents.map((item) => item.id)).toEqual(['child-thread-1']);
     expect(result).toEqual({
@@ -172,6 +172,41 @@ describe('CodexSubagentController', () => {
       sessionId: 'parent-session-1',
       subagentId: 'child-thread-1',
       change: 'completed',
+    });
+  });
+
+  it('maps active provider wait flags to a non-terminal waiting status', async () => {
+    const parent = createSession();
+    const controller = new CodexSubagentController({
+      codex: {
+        request: vi.fn((method: string) => {
+          if (method === 'thread/list') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'waiting-child',
+                  parentThreadId: parent.threadId,
+                  name: 'Waiting for approval',
+                  status: { type: 'active', activeFlags: ['waitingOnApproval'] },
+                  turns: [],
+                },
+              ],
+              nextCursor: null,
+            });
+          }
+          throw new Error(`unexpected method: ${method}`);
+        }),
+      },
+      requireSession: () => parent,
+      createProjectionSession,
+      projectThreadTurns: vi.fn(() => Promise.resolve([])),
+      extNotification: vi.fn(() => Promise.resolve()),
+    });
+
+    await expect(
+      controller.list({ sessionId: parent.sessionId, cursor: null, limit: 50 })
+    ).resolves.toMatchObject({
+      subagents: [{ id: 'waiting-child', status: 'waiting', completedAt: null }],
     });
   });
 

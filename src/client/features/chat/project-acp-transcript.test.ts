@@ -161,4 +161,17 @@ describe('projectAcpTranscriptUpdates', () => {
 
     expect(projectAcpTranscriptUpdates(updates)).toEqual([]);
   });
+
+  it('projects every requested historical message beyond the live renderer window', () => {
+    const updates: SubagentTranscriptUpdate[] = Array.from({ length: 1001 }, (_, index) => ({
+      sessionUpdate: 'user_message_chunk',
+      content: { type: 'text', text: `Historical message ${index}` },
+    }));
+
+    const messages = projectAcpTranscriptUpdates(updates);
+
+    expect(messages).toHaveLength(1001);
+    expect(messages[0]?.text).toBe('Historical message 0');
+    expect(messages.at(-1)?.text).toBe('Historical message 1000');
+  });
 });

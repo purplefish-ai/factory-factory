@@ -342,14 +342,27 @@ Parse only required thread fields and retain additive fields. Map runtime and la
 ```typescript
 function normalizeCodexSubagentStatus(input: {
   runtimeType?: string;
+  activeFlags?: readonly string[];
   lastTurnStatus?: string;
 }): SubagentStatus {
-  if (input.runtimeType === 'active') return 'running';
+  if (input.runtimeType === 'active') {
+    if (
+      input.activeFlags?.includes('waitingOnApproval') ||
+      input.activeFlags?.includes('waitingOnUserInput')
+    ) {
+      return 'waiting';
+    }
+    return 'running';
+  }
   if (input.runtimeType === 'systemError' || input.lastTurnStatus === 'failed') return 'failed';
   if (input.lastTurnStatus === 'interrupted') return 'interrupted';
   return 'completed';
 }
 ```
+
+Codex does not expose distinct thread or turn states for the provider-neutral `starting` and
+`cancelled` values. Preserve its explicit `interrupted` outcome instead of inventing a cancellation
+state, and use the active wait flags for the observable `waiting` state.
 
 For terminal threads, inspect the last turn returned by `thread/read` when the list response does not contain enough outcome data. Use the last agent message as `resultPreview`, trim whitespace, and cap it at 240 characters. Limit concurrent terminal-summary reads to four.
 
