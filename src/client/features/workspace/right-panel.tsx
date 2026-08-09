@@ -57,6 +57,7 @@ interface RightPanelProps {
   isTakingScreenshots?: boolean;
   onTakeScreenshots?: () => Promise<void>;
   selectedSessionId?: string | null;
+  selectedSessionName?: string | null;
   selectedSessionReady?: boolean;
   onOpenSubagent?: (selection: SubagentSelection) => void;
 }
@@ -72,6 +73,7 @@ interface TopPanelAreaProps {
   periodicTaskId: string | null;
   isParentWorkspace: boolean;
   selectedSessionId: string | null;
+  selectedSessionName: string | null;
   selectedSessionReady: boolean;
   onOpenSubagent: (selection: SubagentSelection) => void;
 }
@@ -87,6 +89,7 @@ function TopPanelArea({
   periodicTaskId,
   isParentWorkspace,
   selectedSessionId,
+  selectedSessionName,
   selectedSessionReady,
   onOpenSubagent,
 }: TopPanelAreaProps) {
@@ -191,6 +194,7 @@ function TopPanelArea({
           <AgentsPanel
             workspaceId={workspaceId}
             sessionId={selectedSessionId}
+            sessionName={selectedSessionName}
             sessionReady={selectedSessionReady}
             isParentWorkspace={isParentWorkspace}
             onOpenSubagent={onOpenSubagent}
@@ -208,6 +212,7 @@ export function RightPanel({
   isTakingScreenshots = false,
   onTakeScreenshots,
   selectedSessionId = null,
+  selectedSessionName = null,
   selectedSessionReady = false,
   onOpenSubagent = () => undefined,
 }: RightPanelProps) {
@@ -407,6 +412,7 @@ export function RightPanel({
           periodicTaskId={periodicTaskId}
           isParentWorkspace={isParentWorkspace}
           selectedSessionId={selectedSessionId}
+          selectedSessionName={selectedSessionName}
           selectedSessionReady={selectedSessionReady}
           onOpenSubagent={onOpenSubagent}
         />

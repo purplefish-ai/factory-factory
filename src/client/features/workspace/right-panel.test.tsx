@@ -81,6 +81,7 @@ vi.mock('./agents-panel', () => ({
   AgentsPanel: (props: {
     workspaceId: string;
     sessionId: string | null;
+    sessionName: string | null;
     sessionReady: boolean;
     isParentWorkspace: boolean;
   }) => {
@@ -154,6 +155,7 @@ describe('RightPanel Agents tab', () => {
         createElement(RightPanel, {
           workspaceId: 'workspace-1',
           selectedSessionId: 'session-1',
+          selectedSessionName: 'Session 1',
           selectedSessionReady: true,
           onOpenSubagent: vi.fn(),
         })
@@ -179,6 +181,9 @@ describe('RightPanel Agents tab', () => {
     expect(agentsPanel?.getAttribute('data-session')).toBe('session-1');
     expect(agentsPanel?.getAttribute('data-ready')).toBe('true');
     expect(agentsPanel?.getAttribute('data-parent')).toBe(isParent);
+    expect(mocks.agentsProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sessionName: 'Session 1' })
+    );
   });
 
   it('keeps child workspaces ineligible while workspace data loads and after it resolves as child', () => {

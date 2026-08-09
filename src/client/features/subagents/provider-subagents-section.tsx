@@ -7,12 +7,14 @@ import { useSubagentInvalidation } from './use-subagent-invalidation';
 
 export interface ProviderSubagentsSectionProps {
   sessionId: string | null;
+  parentSessionName: string | null;
   enabled: boolean;
   onSelect: (selection: SubagentSelection) => void;
 }
 
 export function ProviderSubagentsSection({
   sessionId,
+  parentSessionName,
   enabled,
   onSelect,
 }: ProviderSubagentsSectionProps) {
@@ -26,11 +28,11 @@ export function ProviderSubagentsSection({
 
   const handleSelect = useCallback(
     (subagent: SubagentListItem) => {
-      if (sessionId) {
-        onSelect({ parentSessionId: sessionId, subagent });
+      if (sessionId && parentSessionName) {
+        onSelect({ parentSessionId: sessionId, parentSessionName, subagent });
       }
     },
-    [onSelect, sessionId]
+    [onSelect, parentSessionName, sessionId]
   );
 
   if (!queryEnabled || query.data?.supported === false) {

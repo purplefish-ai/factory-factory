@@ -365,6 +365,7 @@ export function WorkspaceDetailContainer() {
         sessionTabs={{
           sessions,
           selectedDbSessionId,
+          selectedSessionReady: runtimeSessionId === selectedDbSessionId && connected,
           sessionSummariesById,
           isDeletingSession: deleteSession.isPending,
           handleSelectSession,

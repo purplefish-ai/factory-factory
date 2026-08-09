@@ -4,6 +4,7 @@ import { ChildWorkspacesPanel } from './child-workspaces-panel';
 export interface AgentsPanelProps {
   workspaceId: string;
   sessionId: string | null;
+  sessionName: string | null;
   sessionReady: boolean;
   isParentWorkspace: boolean;
   onOpenSubagent: (selection: SubagentSelection) => void;
@@ -12,6 +13,7 @@ export interface AgentsPanelProps {
 export function AgentsPanel({
   workspaceId,
   sessionId,
+  sessionName,
   sessionReady,
   isParentWorkspace,
   onOpenSubagent,
@@ -21,6 +23,7 @@ export function AgentsPanel({
       <ProviderSubagentsSection
         key={sessionId ?? 'no-session'}
         sessionId={sessionId}
+        parentSessionName={sessionName}
         enabled={sessionReady}
         onSelect={onOpenSubagent}
       />

@@ -9,5 +9,6 @@ export type SubagentListItem = SupportedSubagentListResult['subagents'][number];
 
 export interface SubagentSelection {
   parentSessionId: string;
+  parentSessionName: string;
   subagent: SubagentListItem;
 }

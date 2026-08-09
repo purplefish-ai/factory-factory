@@ -65,7 +65,12 @@ describe('ProviderSubagentsSection', () => {
   }
 
   it('keeps the parent-scoped query disabled until the selected session is hydrated', () => {
-    render({ sessionId: 'session-1', enabled: false, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: false,
+      onSelect: vi.fn(),
+    });
 
     expect(mocks.useQuery).toHaveBeenLastCalledWith(
       { sessionId: 'session-1', cursor: null, limit: 100 },
@@ -76,7 +81,12 @@ describe('ProviderSubagentsSection', () => {
 
   it('queries exactly the selected ready parent session', () => {
     mocks.queryResult.isLoading = true;
-    render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
 
     expect(mocks.useQuery).toHaveBeenLastCalledWith(
       { sessionId: 'session-1', cursor: null, limit: 100 },
@@ -93,8 +103,18 @@ describe('ProviderSubagentsSection', () => {
           finishInvalidation = resolve;
         })
     );
-    render({ sessionId: 'session-1', enabled: false, onSelect: vi.fn() });
-    render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: false,
+      onSelect: vi.fn(),
+    });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
 
     expect(mocks.invalidate).toHaveBeenCalledOnce();
     expect(mocks.invalidate).toHaveBeenCalledWith({
@@ -116,7 +136,12 @@ describe('ProviderSubagentsSection', () => {
   });
 
   it('invalidates only browser events for the selected parent session', () => {
-    render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
 
     void act(() => {
       dispatchSubagentChange({
@@ -144,7 +169,12 @@ describe('ProviderSubagentsSection', () => {
 
   it('omits the entire section for unsupported providers', () => {
     mocks.queryResult.data = { supported: false };
-    render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
     expect(container.innerHTML).toBe('');
   });
 
@@ -161,13 +191,17 @@ describe('ProviderSubagentsSection', () => {
       resultPreview: null,
     };
     mocks.queryResult.data = { supported: true, subagents: [item], nextCursor: null };
-    render({ sessionId: 'session-1', enabled: true, onSelect });
+    render({ sessionId: 'session-1', parentSessionName: 'Session 1', enabled: true, onSelect });
 
     const row = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Security review')
     );
     void act(() => row?.click());
-    expect(onSelect).toHaveBeenCalledWith({ parentSessionId: 'session-1', subagent: item });
+    expect(onSelect).toHaveBeenCalledWith({
+      parentSessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      subagent: item,
+    });
   });
 
   it('collapses completed sub-agents again when the selected session changes', () => {
@@ -182,7 +216,12 @@ describe('ProviderSubagentsSection', () => {
       resultPreview: 'Audit complete',
     };
     mocks.queryResult.data = { supported: true, subagents: [completed], nextCursor: null };
-    render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
 
     const completedButton = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Completed · 1')
@@ -190,7 +229,12 @@ describe('ProviderSubagentsSection', () => {
     void act(() => completedButton?.click());
     expect(container.textContent).toContain('Finished audit');
 
-    render({ sessionId: 'session-2', enabled: true, onSelect: vi.fn() });
+    render({
+      sessionId: 'session-2',
+      parentSessionName: 'Session 2',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
     expect(container.textContent).not.toContain('Finished audit');
   });
 });

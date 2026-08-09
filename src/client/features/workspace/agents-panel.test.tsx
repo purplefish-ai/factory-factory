@@ -16,12 +16,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/client/features/subagents', () => ({
   ProviderSubagentsSection: (props: {
     sessionId: string | null;
+    parentSessionName: string | null;
     enabled: boolean;
     onSelect: (selection: unknown) => void;
   }) => {
-    mocks.providerProps(props);
+    const providerProps = {
+      sessionId: props.sessionId,
+      parentSessionName: props.parentSessionName,
+      enabled: props.enabled,
+      onSelect: props.onSelect,
+    };
+    mocks.providerProps(providerProps);
     if (mocks.queryBacked) {
-      return createElement(QueryBackedProviderSection, props);
+      return createElement(QueryBackedProviderSection, providerProps);
     }
     return createElement('section', { 'data-testid': 'provider-subagents' }, props.sessionId);
   },
@@ -82,6 +89,7 @@ describe('AgentsPanel', () => {
     render({
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
+      sessionName: 'Session 1',
       sessionReady: true,
       isParentWorkspace: true,
       onOpenSubagent,
@@ -89,6 +97,7 @@ describe('AgentsPanel', () => {
 
     expect(mocks.providerProps).toHaveBeenLastCalledWith({
       sessionId: 'session-1',
+      parentSessionName: 'Session 1',
       enabled: true,
       onSelect: onOpenSubagent,
     });
@@ -104,15 +113,16 @@ describe('AgentsPanel', () => {
     const props = {
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
+      sessionName: 'Session 1',
       sessionReady: true,
       isParentWorkspace: true,
       onOpenSubagent: vi.fn(),
     };
     render(props);
-    render({ ...props, sessionId: 'session-2' });
+    render({ ...props, sessionId: 'session-2', sessionName: 'Session 2' });
 
     expect(mocks.providerProps).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sessionId: 'session-2' })
+      expect.objectContaining({ sessionId: 'session-2', parentSessionName: 'Session 2' })
     );
     expect(
       mocks.childProps.mock.calls.every(([childProps]) => childProps.workspaceId === 'workspace-1')
@@ -126,6 +136,7 @@ describe('AgentsPanel', () => {
     render({
       workspaceId: 'child-workspace',
       sessionId: 'session-child',
+      sessionName: 'Session 1',
       sessionReady: true,
       isParentWorkspace: false,
       onOpenSubagent: vi.fn(),
@@ -150,6 +161,7 @@ describe('AgentsPanel', () => {
     });
     const commonProps = {
       workspaceId: 'workspace-1',
+      sessionName: 'Session A',
       sessionReady: true,
       isParentWorkspace: false,
       onOpenSubagent: vi.fn(),
