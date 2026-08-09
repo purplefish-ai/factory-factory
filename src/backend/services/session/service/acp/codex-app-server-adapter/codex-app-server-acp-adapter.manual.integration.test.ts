@@ -7,6 +7,7 @@ import {
   SUBAGENTS_READ_METHOD,
   subagentListResultSchema,
   subagentReadResultSchema,
+  subagentsChangedParamsSchema,
   subagentToolMetadataSchema,
 } from '@/shared/acp-protocol/subagents';
 import { CodexAppServerAcpAdapter } from './codex-app-server-acp-adapter';
@@ -70,12 +71,35 @@ function createManualConnection(): {
   };
 }
 
-function hasFactoryFactorySubagentMeta(recorded: RecordedUpdate): boolean {
-  if (!(isRecord(recorded.update) && isRecord(recorded.update._meta))) {
+function extractFactoryFactorySubagentMeta(recorded: RecordedUpdate) {
+  if (
+    !isRecord(recorded.update) ||
+    (recorded.update.sessionUpdate !== 'tool_call' &&
+      recorded.update.sessionUpdate !== 'tool_call_update') ||
+    !isRecord(recorded.update._meta)
+  ) {
+    return null;
+  }
+  const parsed = subagentToolMetadataSchema.safeParse(
+    recorded.update._meta[SUBAGENT_TOOL_META_KEY]
+  );
+  return parsed.success ? parsed.data : null;
+}
+
+function isSubagentsChangedNotification(
+  notification: RecordedExtNotification,
+  parentSessionId: string,
+  subagentId: string
+): boolean {
+  if (notification.method !== SUBAGENTS_CHANGED_METHOD) {
     return false;
   }
-  return subagentToolMetadataSchema.safeParse(recorded.update._meta[SUBAGENT_TOOL_META_KEY])
-    .success;
+  const parsed = subagentsChangedParamsSchema.safeParse(notification.params);
+  return (
+    parsed.success &&
+    parsed.data.sessionId === parentSessionId &&
+    parsed.data.subagentId === subagentId
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,6 +112,68 @@ async function settleAdapterClose(): Promise<void> {
 
 const describeIfRealCodex = RUN_REAL_CODEX_APP_SERVER_TESTS ? describe : describe.skip;
 const promptItIfEnabled = RUN_REAL_CODEX_PROMPT_TESTS ? it : it.skip;
+
+describe('manual Codex sub-agent correlation assertions', () => {
+  it('extracts validated metadata only from ACP tool updates', () => {
+    const meta = {
+      [SUBAGENT_TOOL_META_KEY]: {
+        id: 'child-1',
+        parentSessionId: 'session-1',
+      },
+    };
+
+    expect(
+      extractFactoryFactorySubagentMeta({
+        sessionId: 'session-1',
+        update: { sessionUpdate: 'agent_message_chunk', _meta: meta },
+      })
+    ).toBeNull();
+    expect(
+      extractFactoryFactorySubagentMeta({
+        sessionId: 'session-1',
+        update: { sessionUpdate: 'tool_call', _meta: meta },
+      })
+    ).toEqual({ id: 'child-1', parentSessionId: 'session-1' });
+    expect(
+      extractFactoryFactorySubagentMeta({
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          _meta: { [SUBAGENT_TOOL_META_KEY]: { id: '', parentSessionId: 'session-1' } },
+        },
+      })
+    ).toBeNull();
+  });
+
+  it('matches only validated change notifications for the correlated parent and child', () => {
+    const notification: RecordedExtNotification = {
+      method: SUBAGENTS_CHANGED_METHOD,
+      params: {
+        sessionId: 'session-1',
+        subagentId: 'child-1',
+        change: 'completed',
+      },
+    };
+
+    expect(isSubagentsChangedNotification(notification, 'session-1', 'child-1')).toBe(true);
+    expect(isSubagentsChangedNotification(notification, 'session-2', 'child-1')).toBe(false);
+    expect(isSubagentsChangedNotification(notification, 'session-1', 'child-2')).toBe(false);
+    expect(
+      isSubagentsChangedNotification(
+        { ...notification, method: 'factoryfactory.ai/subagents/unrelated' },
+        'session-1',
+        'child-1'
+      )
+    ).toBe(false);
+    expect(
+      isSubagentsChangedNotification(
+        { ...notification, params: { ...notification.params, change: 'removed' } },
+        'session-1',
+        'child-1'
+      )
+    ).toBe(false);
+  });
+});
 
 describeIfRealCodex('CodexAppServerAcpAdapter (manual real app-server)', () => {
   it('initializes and creates a session with real codex app-server', async () => {
@@ -193,12 +279,15 @@ describeIfRealCodex('CodexAppServerAcpAdapter (manual real app-server)', () => {
         });
 
         expect(result.stopReason).toBe('end_turn');
-        expect(fixture.updates.some(hasFactoryFactorySubagentMeta)).toBe(true);
-        expect(
-          fixture.extNotifications.some(
-            (notification) => notification.method === SUBAGENTS_CHANGED_METHOD
-          )
-        ).toBe(true);
+        const subagentMeta =
+          fixture.updates
+            .map(extractFactoryFactorySubagentMeta)
+            .find((metadata) => metadata !== null) ?? null;
+        expect(subagentMeta).not.toBeNull();
+        if (!subagentMeta) {
+          throw new Error('Expected a namespaced sub-agent tool update');
+        }
+        expect(subagentMeta.parentSessionId).toBe(session.sessionId);
 
         const list = subagentListResultSchema.parse(
           await adapter.extMethod(SUBAGENTS_LIST_METHOD, {
@@ -207,8 +296,17 @@ describeIfRealCodex('CodexAppServerAcpAdapter (manual real app-server)', () => {
             limit: 50,
           })
         );
-        expect(list.subagents.length).toBeGreaterThan(0);
-        const childId = list.subagents[0]!.id;
+        const listedSubagent = list.subagents.find((item) => item.id === subagentMeta.id);
+        expect(listedSubagent).toBeDefined();
+        if (!listedSubagent) {
+          throw new Error('Expected the metadata child in the parent-filtered list');
+        }
+        const childId = listedSubagent.id;
+        expect(
+          fixture.extNotifications.some((notification) =>
+            isSubagentsChangedNotification(notification, session.sessionId, childId)
+          )
+        ).toBe(true);
         const read = subagentReadResultSchema.parse(
           await adapter.extMethod(SUBAGENTS_READ_METHOD, {
             sessionId: session.sessionId,
