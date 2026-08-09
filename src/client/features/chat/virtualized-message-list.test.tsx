@@ -771,6 +771,41 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('does not auto-pin an append after resize detects stale bottom proximity', async () => {
+    const firstMessage = makeMessage('m-1', 0);
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [firstMessage],
+      isNearBottom: true,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 200;
+
+    await flushEffects();
+    triggerResize(100);
+    virtualizerMocks.scrollToIndex.mockClear();
+
+    harness.render({
+      loadingSession: false,
+      messages: [firstMessage, makeMessage('m-2', 1)],
+      isNearBottom: true,
+    });
+    await flushEffects();
+
+    expect(virtualizerMocks.scrollToIndex).not.toHaveBeenCalled();
+    expect(harness.viewport.scrollTop).toBe(200);
+
+    harness.cleanup();
+  });
+
   it('does not pin on content growth when user is away from bottom', async () => {
     const harness = createHarness({
       loadingSession: false,
