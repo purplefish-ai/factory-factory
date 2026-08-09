@@ -185,6 +185,7 @@ describe('sessionRouter', () => {
         notifications: true,
       });
       acpRuntimeManager.readSubagentTranscript.mockResolvedValue({
+        projectionBoundary: 'turn',
         updates: [],
         nextCursor: null,
       });
@@ -196,7 +197,7 @@ describe('sessionRouter', () => {
           cursor: null,
           limit: 10,
         })
-      ).resolves.toEqual({ updates: [], nextCursor: null });
+      ).resolves.toEqual({ projectionBoundary: 'turn', updates: [], nextCursor: null });
       expect(acpRuntimeManager.readSubagentTranscript).toHaveBeenCalledWith('session-1', {
         subagentId: 'child-1',
         cursor: null,
@@ -267,7 +268,12 @@ describe('sessionRouter', () => {
     it.each([
       {
         label: 'malformed provider response',
-        extMethod: () => Promise.resolve({ updates: [{ sessionUpdate: 'unknown' }] }),
+        extMethod: () =>
+          Promise.resolve({
+            projectionBoundary: 'turn',
+            updates: [{ sessionUpdate: 'unknown' }],
+            nextCursor: null,
+          }),
       },
       {
         label: 'provider protocol error',

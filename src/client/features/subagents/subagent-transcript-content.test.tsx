@@ -7,16 +7,25 @@ import type { ChatMessage } from '@/lib/chat-protocol';
 import { SubagentTranscriptContent } from './subagent-transcript-content';
 import type { SubagentSelection } from './types';
 
+const chatMocks = vi.hoisted(() => ({
+  virtualizedMessageList: vi.fn(),
+}));
+
 vi.mock('@/client/features/chat', async () => {
   const { createElement: createMockElement } =
     await vi.importActual<typeof import('react')>('react');
+  const renderItem = (item: { id: string }) =>
+    createMockElement(
+      'details',
+      { key: item.id, 'data-message-id': item.id },
+      createMockElement('summary', null, item.id)
+    );
   return {
-    GroupedMessageItemRenderer: ({ item }: { item: { id: string } }) =>
-      createMockElement(
-        'details',
-        { 'data-message-id': item.id },
-        createMockElement('summary', null, item.id)
-      ),
+    GroupedMessageItemRenderer: ({ item }: { item: { id: string } }) => renderItem(item),
+    VirtualizedMessageList: (props: { messages: Array<{ id: string }> }) => {
+      chatMocks.virtualizedMessageList(props);
+      return createMockElement('div', null, props.messages.map(renderItem));
+    },
   };
 });
 
@@ -58,6 +67,7 @@ describe('SubagentTranscriptContent row identity', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    chatMocks.virtualizedMessageList.mockClear();
   });
 
   afterEach(() => {
@@ -97,5 +107,21 @@ describe('SubagentTranscriptContent row identity', () => {
     const retained = container.querySelector<HTMLDetailsElement>('[data-message-id="newest"]');
     expect(retained).toBe(existing);
     expect(retained?.open).toBe(true);
+  });
+
+  it('routes the complete transcript through the virtualized renderer', () => {
+    render([message('older', 0), message('newest', 1)]);
+
+    expect(chatMocks.virtualizedMessageList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({ id: 'older' }),
+          expect.objectContaining({ id: 'newest' }),
+        ],
+        running: false,
+        startingSession: false,
+        loadingSession: false,
+      })
+    );
   });
 });

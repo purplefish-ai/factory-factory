@@ -266,6 +266,7 @@ export const subagentReadParamsSchema = z
 
 export const subagentReadResultSchema = z
   .object({
+    projectionBoundary: z.literal('turn'),
     updates: z.array(subagentTranscriptUpdateSchema),
     nextCursor: nextCursorSchema,
   })

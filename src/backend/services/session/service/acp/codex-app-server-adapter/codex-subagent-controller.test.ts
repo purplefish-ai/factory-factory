@@ -526,6 +526,7 @@ describe('CodexSubagentController', () => {
       sessionUpdate: 'agent_message_chunk',
       content: { text: 'working now' },
     });
+    expect(first.projectionBoundary).toBe('turn');
     expect(first.nextCursor).toEqual(expect.any(String));
     expect(projectedTurnPages[0]).toEqual(['turn-2', 'turn-3', 'turn-live']);
 
@@ -542,6 +543,7 @@ describe('CodexSubagentController', () => {
       },
     ]);
     expect(second.nextCursor).toBeNull();
+    expect(second.projectionBoundary).toBe('turn');
     expect(projectedTurnPages[1]).toEqual(['turn-1']);
   });
 

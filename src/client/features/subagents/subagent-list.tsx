@@ -16,6 +16,7 @@ export type SubagentListState =
       hasMore?: boolean;
       loadingMore?: boolean;
       onLoadMore?: () => void;
+      error?: { message: string; onRetry: () => void };
     };
 
 export interface SubagentListProps {
@@ -147,6 +148,47 @@ function SubagentRow({
   );
 }
 
+function PaginationError({ error }: { error: { message: string; onRetry: () => void } }) {
+  return (
+    <div className="mx-3 my-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+      <div className="flex items-start gap-2">
+        <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+        <div className="min-w-0 space-y-2">
+          <p className="break-words text-xs text-destructive">{error.message}</p>
+          <Button type="button" variant="outline" size="sm" onClick={error.onRetry}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 'ready' }> }) {
+  return (
+    <div>
+      {state.error && <PaginationError error={state.error} />}
+      <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+        <div className="flex flex-col items-center gap-2">
+          <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No sub-agents for this session.</p>
+        </div>
+        {state.hasMore && state.onLoadMore && !state.error && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={state.loadingMore}
+            onClick={state.onLoadMore}
+          >
+            {state.loadingMore ? 'Loading more…' : 'Load more'}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function compareActive(left: SubagentListItem, right: SubagentListItem): number {
   const leftTime = timestamp(left.createdAt) ?? Number.MAX_SAFE_INTEGER;
   const rightTime = timestamp(right.createdAt) ?? Number.MAX_SAFE_INTEGER;
@@ -215,29 +257,12 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
   }
 
   if (state.subagents.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No sub-agents for this session.</p>
-        </div>
-        {state.hasMore && state.onLoadMore && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={state.loadingMore}
-            onClick={state.onLoadMore}
-          >
-            {state.loadingMore ? 'Loading more…' : 'Load more'}
-          </Button>
-        )}
-      </div>
-    );
+    return <EmptyReadyState state={state} />;
   }
 
   return (
     <div>
+      {state.error && <PaginationError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
           {groups.active.map((subagent) => (
@@ -280,7 +305,7 @@ export function SubagentList({ state, selectedSubagentId, onSelect }: SubagentLi
           )}
         </div>
       )}
-      {state.hasMore && state.onLoadMore && (
+      {state.hasMore && state.onLoadMore && !state.error && (
         <div className="flex justify-center border-t px-3 py-2">
           <Button
             type="button"

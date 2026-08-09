@@ -312,7 +312,7 @@ expect(result.subagents.map((item) => item.id)).toEqual(['child-thread-1']);
 
 - [ ] **Step 2: Write failing read and cursor tests**
 
-Use a parent with two children and a foreign thread. Require `read` to re-list/verify direct ownership before `thread/read`, reject the foreign ID with `RequestError.invalidParams`, select the newest `limit` complete turns initially, return updates in chronological order, and encode the first selected turn ID into an opaque cursor for older pages.
+Use a parent with two children and a foreign thread. Require `read` to re-list/verify direct ownership before `thread/read`, reject the foreign ID with `RequestError.invalidParams`, select the newest `limit` complete turns initially, return updates in chronological order with `projectionBoundary: 'turn'`, and encode the first selected turn ID into an opaque cursor for older pages.
 
 ```typescript
 const first = await controller.read({
@@ -322,6 +322,7 @@ const first = await controller.read({
   limit: 2,
 });
 expect(first.updates.at(-1)).toMatchObject({ sessionUpdate: 'agent_message_chunk' });
+expect(first.projectionBoundary).toBe('turn');
 expect(first.nextCursor).toEqual(expect.any(String));
 ```
 
@@ -929,17 +930,24 @@ Expected: FAIL because no transcript component or drill-in selection state exist
 Use `session.readSubagentTranscript.useInfiniteQuery` with `limit: 10`. The first page contains newest turns; subsequent pages are older. Reverse page order before flattening updates, then call `projectAcpTranscriptUpdates`.
 
 ```typescript
-const updates = [...query.data.pages]
-  .reverse()
-  .flatMap((page) => page.updates);
-const messages = projectAcpTranscriptUpdates(updates);
+const projectedPages = query.data.pages.map((page, pageIndex) => {
+  const cached = projectedPageCacheRef.current.get(page.updates);
+  if (cached?.pageIndex === pageIndex) return cached.messages;
+  const messages = projectAcpTranscriptUpdates(page.updates).map((message) => ({
+    ...message,
+    id: `subagent-page-${pageIndex}-${message.id}`,
+  }));
+  projectedPageCacheRef.current.set(page.updates, { pageIndex, messages });
+  return messages;
+});
+const messages = projectedPages.reverse().flat();
 ```
 
 Subscribe to matching sub-agent invalidations and refetch active transcript pages. Preserve scroll position when older pages prepend by recording `scrollHeight - scrollTop` before fetch and restoring that distance after render.
 
 - [ ] **Step 5: Implement the read-only presentation and stories**
 
-Render the breadcrumb, status badge, result preview fallback, Back button, grouped existing message renderers, Load older control, and contained error/retry states. Stories must cover active/live, completed, failed, empty, loading, and transcript unavailable at desktop and narrow widths.
+Render the breadcrumb, status badge, result preview fallback, Back button, virtualized grouped message renderers, Load older control, and contained error/retry states. Stories must cover active/live, completed, failed, empty, loading, and transcript unavailable at desktop and narrow widths.
 
 - [ ] **Step 6: Keep the parent chat mounted during route-level drill-in**
 

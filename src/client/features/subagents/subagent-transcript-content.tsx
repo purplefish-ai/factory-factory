@@ -5,8 +5,8 @@ import {
   SpinnerGapIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
-import type { RefObject } from 'react';
-import { GroupedMessageItemRenderer } from '@/client/features/chat';
+import { type RefObject, useRef } from 'react';
+import { VirtualizedMessageList } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
@@ -176,15 +176,17 @@ function ReadyState({
   state: Extract<SubagentTranscriptState, { kind: 'ready' }>;
   viewportRef?: RefObject<HTMLDivElement | null>;
 }) {
+  const localViewportRef = useRef<HTMLDivElement>(null);
+  const resolvedViewportRef = viewportRef ?? localViewportRef;
   const groupedMessages = groupAdjacentToolCalls(state.messages);
   return (
     <div
-      ref={viewportRef}
+      ref={resolvedViewportRef}
       role="log"
       aria-label="Sub-agent transcript"
       className="h-full overflow-y-auto"
     >
-      <div className="mx-auto w-full max-w-4xl space-y-4 p-3 sm:p-4">
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-3 pt-3 sm:px-4 sm:pt-4">
         {state.error && (
           <div
             role="alert"
@@ -223,15 +225,17 @@ function ReadyState({
             </Button>
           </div>
         )}
-        {groupedMessages.map((item) => (
-          <GroupedMessageItemRenderer
-            key={item.id}
-            item={item}
-            getToolExpansionState={undefined}
-            setToolExpansionState={undefined}
-            toolExpansionToken={workspaceId}
-          />
-        ))}
+      </div>
+      <div className="mx-auto w-full max-w-4xl">
+        <VirtualizedMessageList
+          workspaceId={workspaceId}
+          messages={groupedMessages}
+          running={false}
+          startingSession={false}
+          loadingSession={false}
+          scrollContainerRef={resolvedViewportRef}
+          isNearBottom={false}
+        />
       </div>
     </div>
   );

@@ -915,7 +915,11 @@ describe('AcpRuntimeManager', () => {
 
     it('reads a transcript with the provider session ID and unchanged cursor', async () => {
       setupSuccessfulSpawn(subagentBrowseCapabilities());
-      mockExtMethod.mockResolvedValueOnce({ updates: [], nextCursor: 'read-cursor-9' });
+      mockExtMethod.mockResolvedValueOnce({
+        projectionBoundary: 'turn',
+        updates: [],
+        nextCursor: 'read-cursor-9',
+      });
       await manager.getOrCreateClient(
         'db-session-1',
         defaultOptions(),
@@ -929,7 +933,11 @@ describe('AcpRuntimeManager', () => {
         limit: 10,
       });
 
-      expect(result).toEqual({ updates: [], nextCursor: 'read-cursor-9' });
+      expect(result).toEqual({
+        projectionBoundary: 'turn',
+        updates: [],
+        nextCursor: 'read-cursor-9',
+      });
       expect(mockExtMethod).toHaveBeenCalledWith(SUBAGENTS_READ_METHOD, {
         sessionId: 'provider-session-123',
         subagentId: 'child-1',
@@ -972,6 +980,7 @@ describe('AcpRuntimeManager', () => {
       });
 
       mockExtMethod.mockResolvedValueOnce({
+        projectionBoundary: 'turn',
         updates: [{ sessionUpdate: 'unknown' }],
         nextCursor: null,
       });

@@ -139,17 +139,35 @@ describe('ACP sub-agent inspection contract', () => {
 
     expect(
       subagentReadResultSchema.parse({
+        projectionBoundary: 'turn',
         updates: [
           { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Investigate' } },
         ],
         nextCursor: null,
       })
     ).toEqual({
+      projectionBoundary: 'turn',
       updates: [
         { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Investigate' } },
       ],
       nextCursor: null,
     });
+  });
+
+  it('requires transcript pages to end on complete-turn projection boundaries', () => {
+    expect(() =>
+      subagentReadResultSchema.parse({
+        updates: [],
+        nextCursor: null,
+      })
+    ).toThrow();
+    expect(() =>
+      subagentReadResultSchema.parse({
+        projectionBoundary: 'update',
+        updates: [],
+        nextCursor: null,
+      })
+    ).toThrow();
   });
 
   it('accepts every supported ACP transcript update and passthrough fields', () => {

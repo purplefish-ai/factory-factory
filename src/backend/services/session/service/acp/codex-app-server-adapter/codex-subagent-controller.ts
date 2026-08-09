@@ -95,6 +95,7 @@ export class CodexSubagentController {
     const updates = await this.deps.projectThreadTurns(projectionSession, selectedTurns);
 
     return {
+      projectionBoundary: 'turn',
       updates,
       nextCursor:
         start > 0 && selectedCompleteTurns[0]

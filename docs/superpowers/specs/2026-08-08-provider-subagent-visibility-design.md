@@ -183,9 +183,12 @@ type SubagentSummary = {
 ```
 
 `read` accepts `{ sessionId, subagentId, cursor?, limit? }` and returns
-`{ updates, nextCursor }`. The updates are chronologically ordered ACP session
-updates. Reusing ACP update shapes lets the existing transcript normalization and
-renderers process provider history without a second provider-specific chat model.
+`{ projectionBoundary: 'turn', updates, nextCursor }`. The updates are
+chronologically ordered ACP session updates, and every page contains only whole
+provider turns. The required boundary marker is validated at the ACP boundary so
+the client can safely cache projection per page. Reusing ACP update shapes lets
+the existing transcript normalization and renderers process provider history
+without a second provider-specific chat model.
 
 The adapter emits `factoryfactory.ai/subagents/changed` when a child is created,
 its activity or status changes, or it reaches a terminal outcome. The

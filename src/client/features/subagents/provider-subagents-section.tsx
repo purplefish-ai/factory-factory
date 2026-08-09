@@ -61,7 +61,7 @@ export function ProviderSubagentsSection({
   }
 
   let state: SubagentListState;
-  if (query.error) {
+  if (query.error && !query.data) {
     state = {
       kind: 'error',
       message: query.error.message,
@@ -80,6 +80,18 @@ export function ProviderSubagentsSection({
       onLoadMore: () => {
         void query.fetchNextPage();
       },
+      error: query.error
+        ? {
+            message: query.error.message,
+            onRetry: query.isFetchNextPageError
+              ? () => {
+                  void query.fetchNextPage();
+                }
+              : () => {
+                  void query.refetch();
+                },
+          }
+        : undefined,
     };
   }
 

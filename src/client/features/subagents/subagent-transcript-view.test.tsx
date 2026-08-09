@@ -15,6 +15,27 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(() => Promise.resolve()),
   useInfiniteQuery: vi.fn(),
   useListQuery: vi.fn(),
+  projectAcpTranscriptUpdates: vi.fn(
+    (
+      updates: Array<{
+        sessionUpdate: string;
+        content?: { type?: string; text?: string };
+      }>
+    ): ChatMessage[] =>
+      updates.flatMap((update, index) =>
+        update.sessionUpdate === 'user_message_chunk' && update.content?.type === 'text'
+          ? [
+              {
+                id: `projected-${update.content.text}-${index}`,
+                source: 'user' as const,
+                text: update.content.text ?? '',
+                timestamp: '1970-01-01T00:00:00.000Z',
+                order: index,
+              },
+            ]
+          : []
+      )
+  ),
   listQueryResult: {
     data: undefined as unknown,
   },
@@ -23,6 +44,7 @@ const mocks = vi.hoisted(() => ({
       | undefined
       | {
           pages: Array<{
+            projectionBoundary: 'turn';
             updates: Array<{
               sessionUpdate: 'user_message_chunk';
               content: { type: 'text'; text: string };
@@ -38,6 +60,20 @@ const mocks = vi.hoisted(() => ({
     hasNextPage: false,
   },
 }));
+
+vi.mock('@/client/features/chat', async () => {
+  const { createElement: createMockElement } =
+    await vi.importActual<typeof import('react')>('react');
+  const renderItem = (item: { id: string; text?: string }) =>
+    createMockElement('div', { key: item.id, 'data-message-id': item.id }, item.text ?? item.id);
+  return {
+    GroupedMessageItemRenderer: ({ item }: { item: { id: string; text?: string } }) =>
+      renderItem(item),
+    projectAcpTranscriptUpdates: mocks.projectAcpTranscriptUpdates,
+    VirtualizedMessageList: ({ messages }: { messages: Array<{ id: string; text?: string }> }) =>
+      createMockElement('div', null, messages.map(renderItem)),
+  };
+});
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -211,6 +247,7 @@ describe('SubagentTranscriptView', () => {
     mocks.listQueryResult.data = undefined;
     mocks.listRefetch.mockClear();
     mocks.refetch.mockClear();
+    mocks.projectAcpTranscriptUpdates.mockClear();
     mocks.useInfiniteQuery.mockClear();
     mocks.useListQuery.mockClear();
     container = document.createElement('div');
@@ -240,6 +277,7 @@ describe('SubagentTranscriptView', () => {
     mocks.queryResult.data = {
       pages: [
         {
+          projectionBoundary: 'turn',
           updates: [
             {
               sessionUpdate: 'user_message_chunk',
@@ -264,6 +302,7 @@ describe('SubagentTranscriptView', () => {
 
   it('prepends older pages without losing the current viewport', async () => {
     const newestPage = {
+      projectionBoundary: 'turn' as const,
       updates: [
         {
           sessionUpdate: 'user_message_chunk' as const,
@@ -273,6 +312,7 @@ describe('SubagentTranscriptView', () => {
       nextCursor: 'older-page',
     };
     const olderPage = {
+      projectionBoundary: 'turn' as const,
       updates: [
         {
           sessionUpdate: 'user_message_chunk' as const,
@@ -314,8 +354,42 @@ describe('SubagentTranscriptView', () => {
     expect(viewport.scrollTop).toBe(700);
   });
 
+  it('projects only the newly loaded provider page when older history is appended', () => {
+    const newestPage = {
+      projectionBoundary: 'turn' as const,
+      updates: [
+        {
+          sessionUpdate: 'user_message_chunk' as const,
+          content: { type: 'text' as const, text: 'Newest transcript turn' },
+        },
+      ],
+      nextCursor: 'older-page',
+    };
+    const olderPage = {
+      projectionBoundary: 'turn' as const,
+      updates: [
+        {
+          sessionUpdate: 'user_message_chunk' as const,
+          content: { type: 'text' as const, text: 'Older transcript turn' },
+        },
+      ],
+      nextCursor: null,
+    };
+    mocks.queryResult.data = { pages: [newestPage] };
+    render();
+
+    mocks.queryResult.data = { pages: [newestPage, olderPage] };
+    render();
+
+    expect(mocks.projectAcpTranscriptUpdates).toHaveBeenCalledTimes(2);
+    expect(mocks.projectAcpTranscriptUpdates).toHaveBeenNthCalledWith(1, newestPage.updates);
+    expect(mocks.projectAcpTranscriptUpdates).toHaveBeenNthCalledWith(2, olderPage.updates);
+  });
+
   it('refetches only matching live sub-agent transcript changes', () => {
-    mocks.queryResult.data = { pages: [{ updates: [], nextCursor: null }] };
+    mocks.queryResult.data = {
+      pages: [{ projectionBoundary: 'turn', updates: [], nextCursor: null }],
+    };
     render();
 
     void act(() => {
@@ -339,7 +413,9 @@ describe('SubagentTranscriptView', () => {
 
   it('refreshes the open sub-agent summary to show its exact terminal status', () => {
     const running = selection().subagent;
-    mocks.queryResult.data = { pages: [{ updates: [], nextCursor: null }] };
+    mocks.queryResult.data = {
+      pages: [{ projectionBoundary: 'turn', updates: [], nextCursor: null }],
+    };
     mocks.listQueryResult.data = {
       supported: true,
       subagents: [running],
@@ -380,6 +456,7 @@ describe('SubagentTranscriptView', () => {
     mocks.queryResult.data = {
       pages: [
         {
+          projectionBoundary: 'turn',
           updates: [
             {
               sessionUpdate: 'user_message_chunk',
@@ -411,6 +488,7 @@ describe('SubagentTranscriptView', () => {
     mocks.queryResult.data = {
       pages: [
         {
+          projectionBoundary: 'turn',
           updates: [
             {
               sessionUpdate: 'user_message_chunk',

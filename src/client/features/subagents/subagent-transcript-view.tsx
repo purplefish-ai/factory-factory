@@ -39,12 +39,33 @@ export function SubagentTranscriptView({
 
   const pageCount = query.data?.pages.length ?? 0;
   const previousPageCountRef = useRef(pageCount);
+  const projectedPageCacheRef = useRef(
+    new WeakMap<
+      object,
+      { pageIndex: number; messages: ReturnType<typeof projectAcpTranscriptUpdates> }
+    >()
+  );
   const messages = useMemo(() => {
     if (!query.data) {
       return [];
     }
-    const updates = [...query.data.pages].reverse().flatMap((page) => page.updates);
-    return projectAcpTranscriptUpdates(updates);
+    // The validated subagents/read contract guarantees complete-turn page
+    // boundaries, so projection state cannot cross between pages. Cache each
+    // page independently to avoid rebuilding every already-loaded message index
+    // when an older page is appended.
+    const projectedPages = query.data.pages.map((page, pageIndex) => {
+      const cached = projectedPageCacheRef.current.get(page.updates);
+      if (cached?.pageIndex === pageIndex) {
+        return cached.messages;
+      }
+      const projected = projectAcpTranscriptUpdates(page.updates).map((message) => ({
+        ...message,
+        id: `subagent-page-${pageIndex}-${message.id}`,
+      }));
+      projectedPageCacheRef.current.set(page.updates, { pageIndex, messages: projected });
+      return projected;
+    });
+    return projectedPages.reverse().flat();
   }, [query.data]);
 
   useEffect(() => {

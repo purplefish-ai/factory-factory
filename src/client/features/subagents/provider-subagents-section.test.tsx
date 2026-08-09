@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     data: undefined as unknown,
     error: null as Error | null,
     hasNextPage: false,
+    isFetchNextPageError: false,
     isFetchingNextPage: false,
     isLoading: false,
     refetch: vi.fn(() => Promise.resolve()),
@@ -64,6 +65,7 @@ describe('ProviderSubagentsSection', () => {
     mocks.infinitePages = undefined;
     mocks.queryResult.error = null;
     mocks.queryResult.hasNextPage = false;
+    mocks.queryResult.isFetchNextPageError = false;
     mocks.queryResult.isFetchingNextPage = false;
     mocks.queryResult.isLoading = false;
     mocks.fetchNextPage.mockClear();
@@ -283,6 +285,44 @@ describe('ProviderSubagentsSection', () => {
     void act(() => loadMore?.click());
 
     expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it('keeps loaded sub-agents visible and retries only the failed next page', () => {
+    const first = {
+      id: 'child-first-page',
+      name: 'Keep this loaded agent',
+      status: 'running' as const,
+      createdAt: null,
+      updatedAt: null,
+      completedAt: null,
+      latestActivity: null,
+      resultPreview: null,
+    };
+    mocks.queryResult.data = {
+      supported: true,
+      subagents: [first],
+      nextCursor: 'second-page',
+    };
+    mocks.queryResult.error = new Error('Older sub-agent page failed');
+    mocks.queryResult.hasNextPage = true;
+    mocks.queryResult.isFetchNextPageError = true;
+
+    render({
+      sessionId: 'session-1',
+      parentSessionName: 'Session 1',
+      enabled: true,
+      onSelect: vi.fn(),
+    });
+
+    expect(container.textContent).toContain('Keep this loaded agent');
+    expect(container.textContent).toContain('Older sub-agent page failed');
+    const retry = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry'
+    );
+    void act(() => retry?.click());
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+    expect(mocks.queryResult.refetch).not.toHaveBeenCalled();
   });
 
   it('combines loaded provider pages into one deduplicated list', () => {
