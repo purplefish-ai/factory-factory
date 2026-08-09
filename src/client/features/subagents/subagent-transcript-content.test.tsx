@@ -125,4 +125,30 @@ describe('SubagentTranscriptContent row identity', () => {
       })
     );
   });
+
+  it('reports the actual bottom proximity for live transcript updates', () => {
+    render([message('newest', 1)]);
+    const viewport = container.querySelector<HTMLElement>('[role="log"]');
+    if (!viewport) {
+      throw new Error('Expected transcript viewport');
+    }
+    Object.defineProperty(viewport, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    viewport.scrollTop = 500;
+
+    const props = chatMocks.virtualizedMessageList.mock.lastCall?.[0] as
+      | { onScroll?: () => void }
+      | undefined;
+    void act(() => props?.onScroll?.());
+
+    expect(chatMocks.virtualizedMessageList).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isNearBottom: true })
+    );
+  });
 });

@@ -5,7 +5,7 @@ import {
   SpinnerGapIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react';
-import { type RefObject, useRef } from 'react';
+import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { VirtualizedMessageList } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
@@ -178,6 +178,16 @@ function ReadyState({
 }) {
   const localViewportRef = useRef<HTMLDivElement>(null);
   const resolvedViewportRef = viewportRef ?? localViewportRef;
+  const [isNearBottom, setIsNearBottom] = useState(false);
+  const updateBottomProximity = useCallback(() => {
+    const viewport = resolvedViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    setIsNearBottom(distanceFromBottom <= 48);
+  }, [resolvedViewportRef]);
+  useLayoutEffect(updateBottomProximity, [updateBottomProximity]);
   const groupedMessages = groupAdjacentToolCalls(state.messages);
   return (
     <div
@@ -234,7 +244,8 @@ function ReadyState({
           startingSession={false}
           loadingSession={false}
           scrollContainerRef={resolvedViewportRef}
-          isNearBottom={false}
+          onScroll={updateBottomProximity}
+          isNearBottom={isNearBottom}
           preserveScrollAnchorOnPrepend
         />
       </div>

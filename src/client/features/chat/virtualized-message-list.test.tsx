@@ -236,6 +236,39 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('keeps bottom-pinning live growth when prepend anchoring is enabled', async () => {
+    const harness = createHarness({
+      messages: [makeMessage('newest', 0)],
+      preserveScrollAnchorOnPrepend: true,
+      isNearBottom: true,
+    });
+    let scrollHeight = 1000;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 500;
+    await flushEffects();
+    triggerResize(100);
+
+    harness.render({
+      messages: [makeMessage('newest', 0), makeMessage('live-update', 1)],
+      preserveScrollAnchorOnPrepend: true,
+      isNearBottom: true,
+    });
+    scrollHeight = 1300;
+    triggerResize(400);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(1300);
+
+    harness.cleanup();
+  });
+
   it('does not auto-scroll while session hydration is loading', async () => {
     const harness = createHarness({
       loadingSession: true,
