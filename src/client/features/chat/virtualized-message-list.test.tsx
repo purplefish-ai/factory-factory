@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { type ComponentProps, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -154,6 +155,7 @@ function triggerResize(
 }
 
 afterEach(() => {
+  vi.mocked(useVirtualizer).mockClear();
   virtualizerMocks.getVirtualItems.mockClear();
   virtualizerMocks.getTotalSize.mockClear();
   virtualizerMocks.measureElement.mockClear();
@@ -187,6 +189,53 @@ function makeToolSequence(id: string): GroupedMessageItem {
 }
 
 describe('VirtualizedMessageList auto-scroll behavior', () => {
+  it('delegates prepend scroll anchoring to the virtualizer', () => {
+    const harness = createHarness({
+      messages: [makeMessage('m-1', 0)],
+      preserveScrollAnchorOnPrepend: true,
+      isNearBottom: false,
+    });
+
+    expect(useVirtualizer).toHaveBeenLastCalledWith(expect.objectContaining({ anchorTo: 'end' }));
+
+    harness.cleanup();
+  });
+
+  it('does not bottom-pin asynchronous measurements after an anchored prepend', async () => {
+    const newest = makeMessage('newest', 1);
+    const harness = createHarness({
+      messages: [newest],
+      preserveScrollAnchorOnPrepend: true,
+      isNearBottom: false,
+    });
+    let scrollHeight = 1000;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 200;
+    await flushEffects();
+    triggerResize(100);
+
+    harness.render({
+      messages: [makeMessage('older', 0), newest],
+      preserveScrollAnchorOnPrepend: true,
+      isNearBottom: false,
+    });
+    scrollHeight = 1300;
+    harness.viewport.scrollTop = 500;
+    triggerResize(400);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(500);
+
+    harness.cleanup();
+  });
+
   it('does not auto-scroll while session hydration is loading', async () => {
     const harness = createHarness({
       loadingSession: true,

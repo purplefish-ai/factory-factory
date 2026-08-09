@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { projectAcpTranscriptUpdates } from '@/client/features/chat';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
@@ -19,8 +19,6 @@ export function SubagentTranscriptView({
   onBack,
   workspaceId,
 }: SubagentTranscriptViewProps) {
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const retainedBottomDistanceRef = useRef<number | null>(null);
   const summaryQuery = trpc.session.listSubagents.useQuery(
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
     { refetchOnMount: false }
@@ -37,8 +35,6 @@ export function SubagentTranscriptView({
     }
   );
 
-  const pageCount = query.data?.pages.length ?? 0;
-  const previousPageCountRef = useRef(pageCount);
   const projectedPageCacheRef = useRef(
     new WeakMap<
       object,
@@ -80,35 +76,8 @@ export function SubagentTranscriptView({
     });
   }, [query.refetch, selection.parentSessionId, selection.subagent.id, summaryQuery.refetch]);
 
-  useLayoutEffect(() => {
-    if (pageCount === previousPageCountRef.current) {
-      return;
-    }
-    previousPageCountRef.current = pageCount;
-    const retainedDistance = retainedBottomDistanceRef.current;
-    const viewport = viewportRef.current;
-    if (retainedDistance === null || !viewport) {
-      return;
-    }
-    viewport.scrollTop = Math.max(0, viewport.scrollHeight - retainedDistance);
-    retainedBottomDistanceRef.current = null;
-  }, [pageCount]);
-
   const handleLoadOlder = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (viewport) {
-      retainedBottomDistanceRef.current = viewport.scrollHeight - viewport.scrollTop;
-    }
-    void query.fetchNextPage().then(
-      (result) => {
-        if (result.isFetchNextPageError) {
-          retainedBottomDistanceRef.current = null;
-        }
-      },
-      () => {
-        retainedBottomDistanceRef.current = null;
-      }
-    );
+    void query.fetchNextPage();
   }, [query.fetchNextPage]);
 
   let state: SubagentTranscriptState;
@@ -158,7 +127,6 @@ export function SubagentTranscriptView({
       selection={currentSelection}
       onBack={onBack}
       state={state}
-      viewportRef={viewportRef}
     />
   );
 }

@@ -300,7 +300,7 @@ describe('SubagentTranscriptView', () => {
     expect(container.textContent).toContain('Load older');
   });
 
-  it('prepends older pages without losing the current viewport', async () => {
+  it('prepends older pages in transcript order', async () => {
     const newestPage = {
       projectionBoundary: 'turn' as const,
       updates: [
@@ -325,16 +325,6 @@ describe('SubagentTranscriptView', () => {
     mocks.queryResult.hasNextPage = true;
     render();
 
-    const viewport = container.querySelector<HTMLElement>('[role="log"]');
-    if (!viewport) {
-      throw new Error('Expected transcript viewport');
-    }
-    let scrollHeight = 1000;
-    Object.defineProperty(viewport, 'scrollHeight', {
-      configurable: true,
-      get: () => scrollHeight,
-    });
-    viewport.scrollTop = 300;
     const loadOlder = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Load older'
     );
@@ -344,14 +334,12 @@ describe('SubagentTranscriptView', () => {
 
     mocks.queryResult.data = { pages: [newestPage, olderPage] };
     mocks.queryResult.hasNextPage = false;
-    scrollHeight = 1400;
     render();
 
     const text = container.textContent ?? '';
     expect(text.indexOf('Older transcript turn')).toBeLessThan(
       text.indexOf('Newest transcript turn')
     );
-    expect(viewport.scrollTop).toBe(700);
   });
 
   it('projects only the newly loaded provider page when older history is appended', () => {

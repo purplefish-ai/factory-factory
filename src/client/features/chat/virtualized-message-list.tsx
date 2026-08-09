@@ -34,6 +34,8 @@ interface VirtualizedMessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   /** Whether user is near bottom of scroll - used to gate auto-scroll */
   isNearBottom?: boolean;
+  /** Keep the visible keyed row anchored when older messages are prepended. */
+  preserveScrollAnchorOnPrepend?: boolean;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
   /** Callback to remove/cancel a queued message */
@@ -179,6 +181,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onScroll,
   messagesEndRef,
   isNearBottom = true,
+  preserveScrollAnchorOnPrepend = false,
   queuedMessageIds,
   onRemoveQueuedMessage,
   isCompacting = false,
@@ -259,6 +262,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       const message = messages[index];
       return message ? message.id : `missing-message-${index}`;
     },
+    anchorTo: preserveScrollAnchorOnPrepend ? 'end' : 'start',
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -381,6 +385,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       if (!grew) {
         return;
       }
+      // A prepend-aware virtualizer already preserves the visible keyed row
+      // while estimates settle. Treating that same growth as bottom-pinning
+      // would apply a second, conflicting scroll correction.
+      if (preserveScrollAnchorOnPrepend && !isNearBottomRef.current) {
+        return;
+      }
 
       const wasNearBottomBeforeGrowth =
         distanceFromBottom - growthAmount <= STICK_TO_BOTTOM_THRESHOLD;
@@ -411,7 +421,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         resizeStickRafRef.current = null;
       }
     };
-  }, [hasScrollableContent, loadingSession, scrollContainerRef, stickToBottom]);
+  }, [
+    hasScrollableContent,
+    loadingSession,
+    preserveScrollAnchorOnPrepend,
+    scrollContainerRef,
+    stickToBottom,
+  ]);
 
   useEffect(() => {
     if (!loadingSession) {

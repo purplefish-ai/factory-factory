@@ -235,6 +235,7 @@ function ReadyState({
           loadingSession={false}
           scrollContainerRef={resolvedViewportRef}
           isNearBottom={false}
+          preserveScrollAnchorOnPrepend
         />
       </div>
     </div>

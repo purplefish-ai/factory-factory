@@ -121,6 +121,7 @@ describe('SubagentTranscriptContent row identity', () => {
         running: false,
         startingSession: false,
         loadingSession: false,
+        preserveScrollAnchorOnPrepend: true,
       })
     );
   });
