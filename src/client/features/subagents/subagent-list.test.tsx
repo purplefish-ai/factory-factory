@@ -134,6 +134,37 @@ describe('SubagentList', () => {
     expect(onSelect).toHaveBeenCalledWith(item);
   });
 
+  it('does not invent an increasing elapsed time for terminal rows without an end timestamp', () => {
+    const props = {
+      state: {
+        kind: 'ready' as const,
+        subagents: [
+          subagent({
+            id: 'terminal-without-end',
+            name: 'Finished without timestamps',
+            status: 'completed',
+            updatedAt: null,
+            completedAt: null,
+          }),
+        ],
+      },
+      onSelect: vi.fn(),
+    };
+    render(props);
+
+    const completedButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Completed · 1'
+    );
+    void act(() => completedButton?.click());
+
+    expect(container.textContent).toContain('Finished without timestamps');
+    expect(container.textContent).not.toContain('elapsed');
+
+    vi.advanceTimersByTime(5 * 60 * 1000);
+    render(props);
+    expect(container.textContent).not.toContain('elapsed');
+  });
+
   it.each<[string, SubagentListState, string]>([
     ['loading', { kind: 'loading' }, 'Loading sub-agents…'],
     ['empty', { kind: 'ready', subagents: [] }, 'No sub-agents for this session.'],

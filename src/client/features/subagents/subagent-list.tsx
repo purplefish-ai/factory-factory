@@ -34,8 +34,11 @@ function formatElapsed(subagent: SubagentListItem): string | null {
 
   const terminal = !ACTIVE_STATUSES.has(subagent.status);
   const finishedAt = terminal
-    ? (timestamp(subagent.completedAt) ?? timestamp(subagent.updatedAt) ?? Date.now())
+    ? (timestamp(subagent.completedAt) ?? timestamp(subagent.updatedAt))
     : Date.now();
+  if (finishedAt === null) {
+    return null;
+  }
   const elapsedSeconds = Math.max(0, Math.floor((finishedAt - startedAt) / 1000));
   if (elapsedSeconds < 60) {
     return `${elapsedSeconds}s elapsed`;
