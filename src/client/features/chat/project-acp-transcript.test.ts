@@ -20,6 +20,10 @@ function createTranscript(): SubagentTranscriptUpdate[] {
       content: { type: 'text', text: 'Checking the focused failure first.' },
     },
     {
+      sessionUpdate: 'agent_thought_chunk',
+      content: { type: 'text', text: ' Then I will inspect the reducer path.' },
+    },
+    {
       sessionUpdate: 'tool_call',
       toolCallId: 'command-1',
       title: 'Terminal',
@@ -54,14 +58,16 @@ describe('projectAcpTranscriptUpdates', () => {
       'agent',
       'agent',
       'agent',
+      'agent',
     ]);
-    expect(messages.map((message) => message.order)).toEqual([0, 1, 3, 6, 7]);
+    expect(messages.map((message) => message.order)).toEqual([0, 1, 2, 4, 7, 8]);
     expect(messages.map((message) => message.id)).toEqual([
       'subagent-message-0-0',
       'subagent-message-1-1',
-      'subagent-message-3-2',
-      'subagent-message-6-3',
+      'subagent-message-2-2',
+      'subagent-message-4-3',
       'subagent-message-7-4',
+      'subagent-message-8-5',
     ]);
     expect(messages.every((message) => message.timestamp === FALLBACK_TIMESTAMP)).toBe(true);
     expect(messages[0]).toEqual({
@@ -70,6 +76,22 @@ describe('projectAcpTranscriptUpdates', () => {
       text: 'Inspect the failing tests',
       timestamp: FALLBACK_TIMESTAMP,
       order: 0,
+    });
+
+    const reasoningMessages = messages.filter(
+      (message) =>
+        message.message?.type === 'stream_event' &&
+        message.message.event?.type === 'content_block_start' &&
+        message.message.event.content_block.type === 'thinking'
+    );
+    expect(reasoningMessages).toHaveLength(1);
+    expect(reasoningMessages[0]?.message?.event).toEqual({
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'thinking',
+        thinking: 'Checking the focused failure first. Then I will inspect the reducer path.',
+      },
     });
 
     const grouped = groupAdjacentToolCalls(messages);
@@ -127,5 +149,16 @@ describe('projectAcpTranscriptUpdates', () => {
         order: 2,
       },
     ]);
+  });
+
+  it('does not seed a reasoning message for an empty thought chunk', () => {
+    const updates: SubagentTranscriptUpdate[] = [
+      {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: '' },
+      },
+    ];
+
+    expect(projectAcpTranscriptUpdates(updates)).toEqual([]);
   });
 });
