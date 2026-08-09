@@ -16,10 +16,13 @@ export function ProviderSubagentsSection({
   enabled,
   onSelect,
 }: ProviderSubagentsSectionProps) {
-  const queryEnabled = Boolean(sessionId && enabled);
+  const requestedQuery = Boolean(sessionId && enabled);
+  const queryEnabled = useSubagentInvalidation(sessionId, requestedQuery);
   const input = { sessionId: sessionId ?? '', cursor: null, limit: 100 } as const;
-  const query = trpc.session.listSubagents.useQuery(input, { enabled: queryEnabled });
-  useSubagentInvalidation(sessionId, queryEnabled);
+  const query = trpc.session.listSubagents.useQuery(input, {
+    enabled: queryEnabled,
+    refetchOnMount: 'always',
+  });
 
   const handleSelect = useCallback(
     (subagent: SubagentListItem) => {

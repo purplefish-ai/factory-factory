@@ -32,6 +32,17 @@ describe('right panel persisted state', () => {
     expect(setItem).toHaveBeenCalledWith('workspace-right-panel-tab-workspace-1', 'agents');
   });
 
+  it('uses a parsed legacy tab when the best-effort migration write fails', () => {
+    const storage = memoryStorage({
+      'workspace-right-panel-tab-workspace-1': 'child-workspaces',
+    });
+    vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('write blocked');
+    });
+
+    expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
+  });
+
   it.each(['unstaged', 'diff-vs-main'])('keeps the existing %s migration', (legacyTab) => {
     const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': legacyTab });
     const setItem = vi.spyOn(storage, 'setItem');

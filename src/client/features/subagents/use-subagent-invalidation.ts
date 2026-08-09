@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
 
@@ -6,18 +6,36 @@ function listInput(sessionId: string) {
   return { sessionId, cursor: null, limit: 100 } as const;
 }
 
-export function useSubagentInvalidation(sessionId: string | null, enabled: boolean): void {
+export function useSubagentInvalidation(sessionId: string | null, enabled: boolean): boolean {
   const utils = trpc.useUtils();
+  const invalidateList = utils.session.listSubagents.invalidate;
   const previousStateRef = useRef({ sessionId, enabled });
+  const [, finishReconnect] = useReducer((version: number) => version + 1, 0);
+  const previous = previousStateRef.current;
+  const reconnecting = Boolean(
+    sessionId && enabled && previous.sessionId === sessionId && !previous.enabled
+  );
 
   useEffect(() => {
     const previous = previousStateRef.current;
-    previousStateRef.current = { sessionId, enabled };
-
-    if (sessionId && enabled && previous.sessionId === sessionId && !previous.enabled) {
-      void utils.session.listSubagents.invalidate(listInput(sessionId));
+    if (!(sessionId && enabled && previous.sessionId === sessionId && !previous.enabled)) {
+      previousStateRef.current = { sessionId, enabled };
+      return;
     }
-  }, [enabled, sessionId, utils.session.listSubagents]);
+
+    let active = true;
+    const complete = () => {
+      if (!active) {
+        return;
+      }
+      previousStateRef.current = { sessionId, enabled: true };
+      finishReconnect();
+    };
+    void invalidateList(listInput(sessionId)).then(complete, complete);
+    return () => {
+      active = false;
+    };
+  }, [enabled, invalidateList, sessionId]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -26,8 +44,10 @@ export function useSubagentInvalidation(sessionId: string | null, enabled: boole
 
     return subscribeToSubagentChanges((detail) => {
       if (detail.sessionId === sessionId) {
-        void utils.session.listSubagents.invalidate(listInput(sessionId));
+        void invalidateList(listInput(sessionId));
       }
     });
-  }, [sessionId, utils.session.listSubagents]);
+  }, [invalidateList, sessionId]);
+
+  return enabled && !reconnecting;
 }

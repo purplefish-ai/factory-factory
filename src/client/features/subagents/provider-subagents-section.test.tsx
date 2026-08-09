@@ -80,12 +80,19 @@ describe('ProviderSubagentsSection', () => {
 
     expect(mocks.useQuery).toHaveBeenLastCalledWith(
       { sessionId: 'session-1', cursor: null, limit: 100 },
-      expect.objectContaining({ enabled: true })
+      expect.objectContaining({ enabled: true, refetchOnMount: 'always' })
     );
     expect(container.textContent).toContain('Sub-agents');
   });
 
-  it('invalidates the selected session when it reconnects', () => {
+  it('invalidates the selected session before enabling its query on reconnect', async () => {
+    let finishInvalidation: (() => void) | undefined;
+    mocks.invalidate.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishInvalidation = resolve;
+        })
+    );
     render({ sessionId: 'session-1', enabled: false, onSelect: vi.fn() });
     render({ sessionId: 'session-1', enabled: true, onSelect: vi.fn() });
 
@@ -95,6 +102,17 @@ describe('ProviderSubagentsSection', () => {
       cursor: null,
       limit: 100,
     });
+    expect(mocks.useQuery).toHaveBeenLastCalledWith(
+      { sessionId: 'session-1', cursor: null, limit: 100 },
+      expect.objectContaining({ enabled: false })
+    );
+
+    await act(async () => finishInvalidation?.());
+
+    expect(mocks.useQuery).toHaveBeenLastCalledWith(
+      { sessionId: 'session-1', cursor: null, limit: 100 },
+      expect.objectContaining({ enabled: true })
+    );
   });
 
   it('invalidates only browser events for the selected parent session', () => {

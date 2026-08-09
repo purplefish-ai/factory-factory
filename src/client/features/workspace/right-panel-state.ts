@@ -43,18 +43,24 @@ export function loadPersistedTopPanelState(
     return defaultState;
   }
 
+  const key = `${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`;
+  let storedTop: string | null;
   try {
-    const key = `${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`;
-    const storedTop = storage.getItem(key);
-    const topTab = parseStoredTopTab(storedTop);
-    if (!topTab) {
-      return defaultState;
-    }
-    if (storedTop !== topTab) {
-      storage.setItem(key, topTab);
-    }
-    return { topTab };
+    storedTop = storage.getItem(key);
   } catch {
     return defaultState;
   }
+
+  const topTab = parseStoredTopTab(storedTop);
+  if (!topTab) {
+    return defaultState;
+  }
+  if (storedTop !== topTab) {
+    try {
+      storage.setItem(key, topTab);
+    } catch {
+      // A parsed preference is still usable when a best-effort migration write fails.
+    }
+  }
+  return { topTab };
 }
