@@ -67,13 +67,22 @@ function setCurrentMarker(target) {
   writeFileSync(MARKER_FILE, getMarkerValue(target));
 }
 
+function getElectronVersion() {
+  const packageJson = JSON.parse(
+    readFileSync(join(ROOT, 'node_modules', 'electron', 'package.json'), 'utf-8')
+  );
+  if (typeof packageJson.version !== 'string' || packageJson.version.length === 0) {
+    throw new Error('Could not determine the installed Electron version');
+  }
+  return packageJson.version;
+}
+
 function getCacheKey(target) {
-  // For Node.js, include the ABI version since binaries are version-specific
-  // For Electron, electron-rebuild handles the correct Electron ABI
+  // Native binaries are ABI-specific, so changing either runtime must invalidate the cache.
   if (target === 'node') {
     return `node-abi${NODE_ABI_VERSION}`;
   }
-  return target;
+  return `electron-v${getElectronVersion()}`;
 }
 
 function getCachePath(target, moduleName) {
@@ -206,7 +215,7 @@ function main() {
   if (currentMarker && !cacheExists(target)) {
     // Only cache if current binaries match the current marker's target type
     const currentIsNode = currentMarker.startsWith('node');
-    const currentIsElectron = currentMarker === 'electron';
+    const currentIsElectron = currentMarker === 'electron' || currentMarker.startsWith('electron-v');
     if ((currentIsNode || currentIsElectron) && !cacheExistsForMarker(currentMarker)) {
       copyToCacheWithMarker(currentMarker);
     }
