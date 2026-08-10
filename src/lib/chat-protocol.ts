@@ -687,6 +687,14 @@ export function filterDuplicateResultMessages(messages: ChatMessage[]): ChatMess
   });
 }
 
+function isRenderableGroupedMessage(message: ChatMessage): boolean {
+  return (
+    message.source !== 'agent' ||
+    message.message?.type !== 'result' ||
+    (typeof message.message.result === 'string' && message.message.result.trim().length > 0)
+  );
+}
+
 /**
  * Groups adjacent tool_use and tool_result messages together.
  * Returns a mixed array of regular messages and tool sequences.
@@ -727,7 +735,7 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     currentToolSequence = [];
   };
 
-  for (const message of messages) {
+  for (const message of messages.filter(isRenderableGroupedMessage)) {
     const lateToolResultInfo =
       message.message && isToolResultMessage(message.message)
         ? extractToolResultInfo(message.message)
