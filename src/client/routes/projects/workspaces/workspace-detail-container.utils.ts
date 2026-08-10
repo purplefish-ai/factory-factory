@@ -8,22 +8,8 @@ interface DismissibleInitBanner {
   showDismiss?: boolean;
 }
 
-export interface ProviderSubagentSessionReadyOptions {
-  selectedSessionId: string | null;
-  runtimeSessionId: string | null;
-  chatConnected: boolean;
-  processState: SessionRuntimeState['processState'];
-}
-
-export function isProviderSubagentSessionReady(
-  options: ProviderSubagentSessionReadyOptions
-): boolean {
-  return Boolean(
-    options.selectedSessionId &&
-      options.runtimeSessionId === options.selectedSessionId &&
-      options.chatConnected &&
-      options.processState === 'alive'
-  );
+export function isProviderSubagentSessionReady(selectedSessionId: string | null): boolean {
+  return Boolean(selectedSessionId);
 }
 
 export function getVisibleInitBanner<T extends DismissibleInitBanner>(

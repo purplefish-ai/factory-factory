@@ -173,12 +173,7 @@ export function WorkspaceDetailContainer() {
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
-  const selectedSessionReady = isProviderSubagentSessionReady({
-    selectedSessionId: selectedDbSessionId,
-    runtimeSessionId,
-    chatConnected: connected,
-    processState: sessionRuntime.processState,
-  });
+  const selectedSessionReady = isProviderSubagentSessionReady(selectedDbSessionId);
   const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
   const {
