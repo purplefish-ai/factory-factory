@@ -229,7 +229,56 @@ function createAssistantTextMessage(order: number): ChatMessage {
   };
 }
 
+function createResultMessage(result: unknown, order: number): ChatMessage {
+  return {
+    id: `msg-${order}`,
+    source: 'agent',
+    message: { type: 'result', result },
+    timestamp: '2026-02-16T00:00:00.000Z',
+    order,
+  };
+}
+
 describe('groupAdjacentToolCalls', () => {
+  it.each([
+    ['object-valued usage', { sessionUpdate: 'usage_update', used: 15_000 }],
+    ['empty string', ''],
+    ['whitespace-only string', '   '],
+  ])('omits %s results from rendering output', (_label, result) => {
+    const assistant = createAssistantTextMessage(2);
+    const grouped = groupAdjacentToolCalls([
+      createAssistantTextMessage(0),
+      createResultMessage(result, 1),
+      assistant,
+    ]);
+
+    expect(grouped).toEqual([createAssistantTextMessage(0), assistant]);
+  });
+
+  it('keeps non-empty string result messages in rendering output', () => {
+    const result = createResultMessage('Completed successfully', 0);
+
+    expect(groupAdjacentToolCalls([result])).toEqual([result]);
+  });
+
+  it('does not let usage results split matching tool calls and results', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({ id: 'call-1', name: 'Read', input: {}, order: 0 }),
+      createResultMessage({ sessionUpdate: 'usage_update', used: 15_000 }, 1),
+      createToolResultMessage('call-1', 2),
+    ]);
+
+    expect(grouped).toHaveLength(1);
+    expect(isToolSequence(grouped[0]!)).toBe(true);
+    if (isToolSequence(grouped[0]!)) {
+      expect(grouped[0].pairedCalls[0]).toMatchObject({
+        id: 'call-1',
+        status: 'success',
+        result: { content: 'ok', isError: false },
+      });
+    }
+  });
+
   it('filters reasoning tool calls from grouped tool sequences', () => {
     const grouped = groupAdjacentToolCalls([
       createToolUseMessage({
