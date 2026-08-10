@@ -56,7 +56,7 @@ describe('SessionLifecycleMessageRenderer', () => {
     root.unmount();
   });
 
-  it('keeps the timestamp visible while the single-line message truncates', () => {
+  it('keeps the timestamp visible and exposes the full copy while the message truncates', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -80,6 +80,9 @@ describe('SessionLifecycleMessageRenderer', () => {
     expect(message?.classList.contains('min-w-0')).toBe(true);
     expect(message?.classList.contains('flex-1')).toBe(true);
     expect(message?.classList.contains('truncate')).toBe(true);
+    expect(message?.getAttribute('title')).toBe(
+      'Session stopped because the available horizontal space is intentionally very narrow.'
+    );
     expect(time?.classList.contains('shrink-0')).toBe(true);
     expect(time?.classList.contains('whitespace-nowrap')).toBe(true);
     expect(message?.nextElementSibling).toBe(time);
