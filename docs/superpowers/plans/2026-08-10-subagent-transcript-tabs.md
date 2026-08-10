@@ -17,6 +17,8 @@
 - `starting` and `running` are blue and gently pulsing; `waiting` is amber; `completed` is green; `failed` is red; `cancelled` and `interrupted` are muted.
 - Remove the Back button, breadcrumb, `Read only` pill, and status pill from the transcript content.
 - Preserve existing loading, empty, pagination, invalidation, retry, unavailable, scroll, and read-only behavior.
+- Keep provider sub-agent browsing disabled when no parent session is selected or its ACP process is stopped.
+- When the selected parent ACP process becomes alive, invalidate the cached unsupported result and reveal recovered sub-agents without a page refresh.
 - This is client-only: do not change ACP, tRPC, provider retention, or mutation controls.
 
 ---
@@ -1001,3 +1003,138 @@ git commit -m "Polish sub-agent transcript tabs"
 ```
 
 If the worktree is already clean, do not create an empty commit.
+
+---
+
+### Task 6: Refresh provider sub-agents when a stopped parent starts
+
+**Files:**
+- Modify: `src/client/routes/projects/workspaces/workspace-detail-container.utils.ts`
+- Test: `src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts`
+- Modify: `src/client/routes/projects/workspaces/workspace-detail-container.tsx`
+- Verify: `src/client/features/subagents/provider-subagents-section.test.tsx`
+
+**Interfaces:**
+- Consumes: `selectedDbSessionId`, `runtimeSessionId`, WebSocket `connected`, and `sessionRuntime.processState` from `useChatWebSocket`.
+- Produces: `isProviderSubagentSessionReady(options): boolean`, passed to `WorkspaceDetailView` as `selectedSessionReady`; the existing `useSubagentInvalidation` false-to-true path invalidates `listSubagents` before enabling it.
+
+- [ ] **Step 1: Write the failing readiness tests**
+
+Import `isProviderSubagentSessionReady` into
+`workspace-detail-container.utils.test.ts` and add the exact stopped, absent,
+and alive cases:
+
+```ts
+describe('isProviderSubagentSessionReady', () => {
+  const readyInput = {
+    selectedSessionId: 'session-1',
+    runtimeSessionId: 'session-1',
+    chatConnected: true,
+    processState: 'alive' as const,
+  };
+
+  it.each([
+    ['has no selected session', { selectedSessionId: null }],
+    ['has not hydrated the selected session', { runtimeSessionId: null }],
+    ['still describes another session', { runtimeSessionId: 'session-2' }],
+    ['has a disconnected chat socket', { chatConnected: false }],
+    ['has a stopped ACP process', { processState: 'stopped' as const }],
+  ])('returns false when the parent %s', (_description, override) => {
+    expect(isProviderSubagentSessionReady({ ...readyInput, ...override })).toBe(false);
+  });
+
+  it('returns true when the selected parent runtime becomes alive', () => {
+    expect(isProviderSubagentSessionReady(readyInput)).toBe(true);
+  });
+});
+```
+
+- [ ] **Step 2: Run the utility suite and verify RED**
+
+Run:
+
+```bash
+pnpm test src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts
+```
+
+Expected: FAIL because `isProviderSubagentSessionReady` is not exported.
+
+- [ ] **Step 3: Implement the readiness predicate and wire it into the container**
+
+Add this focused contract to `workspace-detail-container.utils.ts`:
+
+```ts
+export interface ProviderSubagentSessionReadyOptions {
+  selectedSessionId: string | null;
+  runtimeSessionId: string | null;
+  chatConnected: boolean;
+  processState: SessionRuntimeState['processState'];
+}
+
+export function isProviderSubagentSessionReady(
+  options: ProviderSubagentSessionReadyOptions
+): boolean {
+  return Boolean(
+    options.selectedSessionId &&
+      options.runtimeSessionId === options.selectedSessionId &&
+      options.chatConnected &&
+      options.processState === 'alive'
+  );
+}
+```
+
+Import it in `workspace-detail-container.tsx`, compute it beside the other
+session-derived values, and replace the current connection-only expression:
+
+```ts
+const selectedSessionReady = isProviderSubagentSessionReady({
+  selectedSessionId: selectedDbSessionId,
+  runtimeSessionId,
+  chatConnected: connected,
+  processState: sessionRuntime.processState,
+});
+
+// WorkspaceDetailView props
+sessionTabs={{
+  // retain existing fields
+  selectedSessionReady,
+}}
+```
+
+Do not initialize the ACP runtime during passive page load. With no selected
+session or a stopped process the value stays false; the existing
+`ProviderSubagentsSection` transition test proves that false-to-true readiness
+invalidates the cached query before enabling it.
+
+- [ ] **Step 4: Run the focused readiness and invalidation suites and verify GREEN**
+
+Run:
+
+```bash
+pnpm test src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts src/client/features/subagents/provider-subagents-section.test.tsx
+```
+
+Expected: both suites PASS, including stopped/absent readiness and the existing
+`invalidates the selected session before enabling its query on reconnect` case.
+
+- [ ] **Step 5: Run affected regression suites and guardrails**
+
+Run:
+
+```bash
+pnpm test src/client/routes/projects/workspaces/workspace-detail-view.test.tsx src/client/features/workspace/agents-panel.test.tsx src/client/features/subagents/use-live-subagent-selection.test.tsx
+pnpm typecheck
+pnpm check
+git diff --check
+```
+
+Expected: all tests and commands exit 0 with no new warnings or formatting
+changes.
+
+- [ ] **Step 6: Commit and push the lifecycle fix**
+
+```bash
+git add src/client/routes/projects/workspaces/workspace-detail-container.utils.ts src/client/routes/projects/workspaces/workspace-detail-container.utils.test.ts src/client/routes/projects/workspaces/workspace-detail-container.tsx docs/superpowers/plans/2026-08-10-subagent-transcript-tabs.md
+git commit -m "Refresh sub-agents when parent session starts"
+git push
+```
