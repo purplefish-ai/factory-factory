@@ -11,10 +11,8 @@ import type { SubagentSelection } from './types';
 
 const mocks = vi.hoisted(() => ({
   fetchNextPage: vi.fn(() => Promise.resolve({ isFetchNextPageError: false })),
-  listRefetch: vi.fn(() => Promise.resolve()),
   refetch: vi.fn(() => Promise.resolve()),
   useInfiniteQuery: vi.fn(),
-  useListQuery: vi.fn(),
   projectAcpTranscriptUpdates: vi.fn(
     (
       updates: Array<{
@@ -36,9 +34,6 @@ const mocks = vi.hoisted(() => ({
           : []
       )
   ),
-  listQueryResult: {
-    data: undefined as unknown,
-  },
   queryResult: {
     data: undefined as
       | undefined
@@ -78,12 +73,6 @@ vi.mock('@/client/features/chat', async () => {
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
-      listSubagents: {
-        useQuery: (...args: unknown[]) => {
-          mocks.useListQuery(...args);
-          return { ...mocks.listQueryResult, refetch: mocks.listRefetch };
-        },
-      },
       readSubagentTranscript: {
         useInfiniteQuery: (...args: unknown[]) => {
           mocks.useInfiniteQuery(...args);
@@ -146,51 +135,40 @@ describe('SubagentTranscriptContent', () => {
 
   function render(
     state: Parameters<typeof SubagentTranscriptContent>[0]['state'],
-    options: {
-      selected?: SubagentSelection;
-      onBack?: () => void;
-    } = {}
+    options: { selected?: SubagentSelection } = {}
   ) {
     void act(() =>
       root.render(
         createElement(SubagentTranscriptContent, {
           workspaceId: 'workspace-1',
           selection: options.selected ?? selection(),
-          onBack: options.onBack ?? vi.fn(),
           state,
         })
       )
     );
   }
 
-  it('renders a named read-only breadcrumb and exact terminal status without mutation controls', () => {
-    const onBack = vi.fn();
-    render(
-      {
-        kind: 'ready',
-        messages: [message('message-1', 'Review complete', 0)],
-        hasOlder: false,
-        loadingOlder: false,
-        onLoadOlder: vi.fn(),
-      },
-      { selected: selection({ status: 'failed' }), onBack }
-    );
+  it('renders transcript content without breadcrumb, back action, or status pills', () => {
+    render({
+      kind: 'ready',
+      messages: [message('message-1', 'Review complete', 0)],
+      hasOlder: false,
+      loadingOlder: false,
+      onLoadOlder: vi.fn(),
+    });
 
-    expect(container.textContent).toContain('Session 1');
-    expect(container.textContent).toContain('Security review');
-    expect(container.textContent).toContain('Read only');
-    expect(container.textContent).toContain('Failed');
     expect(container.textContent).toContain('Review complete');
+    expect(container.textContent).not.toContain('Session 1');
+    expect(container.textContent).not.toContain('Security review');
+    expect(container.textContent).not.toContain('Read only');
+    expect(container.textContent).not.toContain('Running');
+    expect(
+      [...container.querySelectorAll('button')].some((button) => button.textContent === 'Back')
+    ).toBe(false);
     expect(document.querySelector('textarea')).toBeNull();
     for (const forbidden of ['Composer', 'Permission', 'Stop', 'Steer', 'Close', 'Archive']) {
       expect(container.textContent).not.toContain(forbidden);
     }
-
-    const back = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Back')
-    );
-    void act(() => back?.click());
-    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -217,7 +195,6 @@ describe('SubagentTranscriptContent', () => {
     expect(container.textContent).toContain('Transcript unavailable');
     expect(container.textContent).toContain('Provider history expired');
     expect(container.textContent).toContain('Static analysis stopped after an invalid response.');
-    expect(container.textContent).toContain('Failed');
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
     );
@@ -244,12 +221,9 @@ describe('SubagentTranscriptView', () => {
     mocks.queryResult.isRefetchError = false;
     mocks.queryResult.hasNextPage = false;
     mocks.fetchNextPage.mockClear();
-    mocks.listQueryResult.data = undefined;
-    mocks.listRefetch.mockClear();
     mocks.refetch.mockClear();
     mocks.projectAcpTranscriptUpdates.mockClear();
     mocks.useInfiniteQuery.mockClear();
-    mocks.useListQuery.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -267,7 +241,6 @@ describe('SubagentTranscriptView', () => {
         createElement(SubagentTranscriptView, {
           workspaceId: 'workspace-1',
           selection: selection(),
-          onBack: vi.fn(),
         })
       )
     );
@@ -397,47 +370,6 @@ describe('SubagentTranscriptView', () => {
       });
     });
     expect(mocks.refetch).toHaveBeenCalledOnce();
-  });
-
-  it('refreshes the open sub-agent summary to show its exact terminal status', () => {
-    const running = selection().subagent;
-    mocks.queryResult.data = {
-      pages: [{ projectionBoundary: 'turn', updates: [], nextCursor: null }],
-    };
-    mocks.listQueryResult.data = {
-      supported: true,
-      subagents: [running],
-      nextCursor: null,
-    };
-    render();
-    expect(container.textContent).toContain('Running');
-
-    mocks.listQueryResult.data = {
-      supported: true,
-      subagents: [
-        {
-          ...running,
-          name: 'Completed security review',
-          status: 'completed',
-          completedAt: '2026-08-08T12:00:00.000Z',
-          resultPreview: 'No privilege leak found.',
-        },
-      ],
-      nextCursor: null,
-    };
-    void act(() => {
-      dispatchSubagentChange({
-        sessionId: 'session-1',
-        subagentId: 'child-1',
-        change: 'completed',
-      });
-    });
-    render();
-
-    expect(mocks.listRefetch).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain('Completed security review');
-    expect(container.textContent).toContain('Completed');
-    expect(container.textContent).not.toContain('Running');
   });
 
   it('keeps loaded messages visible and retries the older page after pagination fails', () => {
