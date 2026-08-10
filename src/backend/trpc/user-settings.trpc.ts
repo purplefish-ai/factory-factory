@@ -56,6 +56,28 @@ function formatEffortLabel(value: string): string {
     .join(' ');
 }
 
+async function getClaudeProviderOptions(
+  fetchClaudeModelCatalogFromAcp: ApplicationServices['fetchClaudeModelCatalogFromAcp']
+): Promise<ProviderOptions> {
+  try {
+    const catalog = await fetchClaudeModelCatalogFromAcp();
+    return {
+      source: 'cli',
+      models: catalog.map((model) => ({
+        value: model.id,
+        label: model.displayName,
+        description: model.description,
+      })),
+      efforts: CLAUDE_FALLBACK_OPTIONS.efforts,
+    };
+  } catch (error) {
+    return {
+      ...CLAUDE_FALLBACK_OPTIONS,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function getCodexProviderOptions(
   fetchCodexModelCatalogFromAppServer: ApplicationServices['fetchCodexModelCatalogFromAppServer']
 ): Promise<ProviderOptions> {
@@ -109,11 +131,12 @@ export const userSettingsRouter = router({
   }),
 
   getProviderOptions: publicProcedure.query(async ({ ctx }) => {
-    const codex = await getCodexProviderOptions(
-      ctx.appContext.services.fetchCodexModelCatalogFromAppServer
-    );
+    const [claude, codex] = await Promise.all([
+      getClaudeProviderOptions(ctx.appContext.services.fetchClaudeModelCatalogFromAcp),
+      getCodexProviderOptions(ctx.appContext.services.fetchCodexModelCatalogFromAppServer),
+    ]);
     return {
-      CLAUDE: CLAUDE_FALLBACK_OPTIONS,
+      CLAUDE: claude,
       CODEX: codex,
     };
   }),
