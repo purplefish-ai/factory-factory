@@ -146,6 +146,7 @@ export class SessionLifecycleService {
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly stoppingSessions = new Set<string>();
   private readonly shutdownSessions = new Set<string>();
+  private readonly passivelyRestoredSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, number>();
@@ -439,6 +440,45 @@ export class SessionLifecycleService {
     });
   }
 
+  async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
+    if (this.runtimeManager.getSubagentBrowseCapability(sessionId)) {
+      return true;
+    }
+
+    const pendingClient = this.runtimeManager.getPendingClient(sessionId);
+    if (pendingClient) {
+      await pendingClient;
+      return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
+    }
+
+    return await this.runStartupOperation(sessionId, async (stopGeneration) => {
+      const session = await this.repository.getSessionById(sessionId);
+      if (!(session?.provider === 'CODEX' && session.providerSessionId)) {
+        return false;
+      }
+      this.assertStartupAllowed(sessionId, stopGeneration);
+
+      this.passivelyRestoredSessions.add(sessionId);
+      try {
+        await this.createAcpClient(
+          sessionId,
+          { purpose: 'browse' },
+          session,
+          undefined,
+          stopGeneration
+        );
+      } catch (error) {
+        this.passivelyRestoredSessions.delete(sessionId);
+        throw error;
+      }
+
+      if (this.runtimeManager.getClient(sessionId)) {
+        this.passivelyRestoredSessions.delete(sessionId);
+      }
+      return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
+    });
+  }
+
   getSessionClient(sessionId: string): unknown | undefined {
     return this.runtimeManager.getClient(sessionId);
   }
@@ -667,6 +707,11 @@ export class SessionLifecycleService {
       },
       onExit: async (sid: string, exitCode: number | null) => {
         this.stopGenerations.delete(sid);
+        if (this.passivelyRestoredSessions.delete(sid)) {
+          this.acpEventProcessor.clearSessionState(sid);
+          acpTraceLogger.closeSession(sid);
+          return;
+        }
         const wasDeliberateStop =
           this.stoppingSessions.has(sid) ||
           this.shutdownSessions.has(sid) ||
@@ -679,7 +724,9 @@ export class SessionLifecycleService {
           message: error.message,
           stack: error.stack,
         });
-        this.sessionDomainService.markError(sid, error.message);
+        if (!this.passivelyRestoredSessions.has(sid)) {
+          this.sessionDomainService.markError(sid, error.message);
+        }
         logger.error('ACP client error', {
           sessionId: sid,
           error: error.message,
@@ -803,6 +850,7 @@ export class SessionLifecycleService {
     sessionId: string,
     options?: {
       model?: string;
+      purpose?: 'active' | 'browse';
     },
     session?: AgentSessionRecord,
     permissionPreset?: PermissionPreset,
@@ -814,8 +862,11 @@ export class SessionLifecycleService {
     }
     this.assertStartupAllowed(sessionId, stopGeneration);
 
-    await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
-    this.assertStartupAllowed(sessionId, stopGeneration);
+    const browseOnly = options?.purpose === 'browse';
+    if (!browseOnly) {
+      await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
+      this.assertStartupAllowed(sessionId, stopGeneration);
+    }
     this.acpEventProcessor.registerSessionContext(sessionId, {
       workspaceId: sessionContext.workspaceId,
       workingDir: sessionContext.workingDir,
@@ -835,6 +886,7 @@ export class SessionLifecycleService {
 
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
+      purpose: options?.purpose,
       workingDir: sessionContext.workingDir,
       model: options?.model ?? sessionContext.model,
       systemPrompt: sessionContext.systemPrompt,
@@ -862,6 +914,12 @@ export class SessionLifecycleService {
     try {
       handle = await creationPromise;
       this.assertStartupAllowed(sessionId, stopGeneration);
+      if (!browseOnly) {
+        this.passivelyRestoredSessions.delete(sessionId);
+      }
+      if (browseOnly) {
+        return { handle, dispatchableNotificationCount: 0 };
+      }
       await this.sessionConfigService.applyConfiguredReasoningEffort(sessionId, handle, {
         persistSnapshot: false,
         emitUpdates: false,

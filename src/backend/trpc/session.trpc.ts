@@ -171,7 +171,8 @@ export const sessionRouter = router({
   }),
 
   listSubagents: publicProcedure.input(subagentListParamsSchema).query(async ({ ctx, input }) => {
-    const { acpRuntimeManager } = ctx.appContext.services;
+    const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;
+    await sessionLifecycleService.ensureSubagentBrowseSession(input.sessionId);
     if (!acpRuntimeManager.getSubagentBrowseCapability(input.sessionId)) {
       return { supported: false as const };
     }
@@ -188,7 +189,8 @@ export const sessionRouter = router({
   readSubagentTranscript: publicProcedure
     .input(subagentReadParamsSchema)
     .query(async ({ ctx, input }) => {
-      const { acpRuntimeManager } = ctx.appContext.services;
+      const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;
+      await sessionLifecycleService.ensureSubagentBrowseSession(input.sessionId);
       if (!acpRuntimeManager.getSubagentBrowseCapability(input.sessionId)) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
