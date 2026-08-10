@@ -39,4 +39,14 @@ describe('formatClaudeModelOptionName', () => {
   ])('formats $value as an explicit concise label', (option, expected) => {
     expect(formatClaudeModelOptionName(option)).toBe(expected);
   });
+
+  it('keeps the provider name when the leading description segment is capability prose', () => {
+    expect(
+      formatClaudeModelOptionName({
+        value: 'sonnet',
+        name: 'Sonnet',
+        description: 'Fast responses with 1M context · Efficient for routine tasks',
+      })
+    ).toBe('Sonnet');
+  });
 });

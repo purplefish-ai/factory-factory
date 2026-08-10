@@ -294,8 +294,9 @@ describe('AdminDashboardPage settings tabs', () => {
     root.unmount();
   });
 
-  it('keeps a saved Claude model absent from the discovered catalog', () => {
-    mocks.userSettings.defaultClaudeModel = 'claude-legacy';
+  it('keeps a saved Claude model absent from the catalog without displaying its raw ID', () => {
+    const savedModel = 'claude-sonnet-4-5-20250929';
+    mocks.userSettings.defaultClaudeModel = savedModel;
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -305,13 +306,16 @@ describe('AdminDashboardPage settings tabs', () => {
     });
 
     const trigger = container.querySelector<HTMLElement>('#default-claude-model');
+    expect(trigger?.textContent).toContain('Saved model (not in current catalog)');
+    expect(trigger?.textContent).not.toContain(savedModel);
     flushSync(() => {
       trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
       trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
-    expect(listbox?.textContent).toContain('claude-legacy');
+    expect(listbox?.textContent).toContain('Saved model (not in current catalog)');
+    expect(listbox?.textContent).not.toContain(savedModel);
     expect(listbox?.textContent).toContain('Default — Opus 4.8 (1M)');
     expect(listbox?.textContent).toContain('Fable 5');
     expect(listbox?.textContent).toContain('Sonnet 5');

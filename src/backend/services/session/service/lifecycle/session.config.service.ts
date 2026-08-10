@@ -1064,7 +1064,10 @@ export class SessionConfigService {
       providerSessionId,
       capturedAt:
         typeof candidate.capturedAt === 'string' ? candidate.capturedAt : new Date(0).toISOString(),
-      configOptions: configOptions as SessionConfigOption[],
+      configOptions:
+        provider === 'CLAUDE'
+          ? normalizeSessionConfigOptions(provider, configOptions as SessionConfigOption[])
+          : (configOptions as SessionConfigOption[]),
       ...(typeof observedModelId === 'string' ? { observedModelId } : {}),
     };
   }
