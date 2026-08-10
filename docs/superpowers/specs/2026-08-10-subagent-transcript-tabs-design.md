@@ -117,6 +117,26 @@ transcript or duplicating summary observers for the active tab.
 `SubagentTranscriptContent` becomes transcript-only. It retains the message
 viewport and all state renderers but no longer accepts or renders `onBack`.
 
+## Parent Runtime Readiness
+
+Provider sub-agent browsing depends on a live ACP handle for the parent
+session. A workspace may load with no selected session or with a stopped parent
+session; in either case the provider sub-agent query stays disabled and child
+workspace content in the Agents panel remains unaffected.
+
+The client treats the selected parent as ready for provider sub-agent browsing
+only when the chat WebSocket is connected to that selected database session and
+its runtime process state is `alive`. When a stopped session auto-starts after
+the user sends a message, readiness changes from false to true. The existing
+sub-agent invalidation hook consumes that transition, invalidates the initial
+cached `supported: false` result, and refetches the provider list without a page
+refresh.
+
+This uses the existing runtime snapshot instead of polling or adding a new
+backend event. It also preserves passive session loading: merely opening a
+stopped session does not spawn a provider process. Restarting or auto-starting
+the parent is what makes provider-owned sub-agent history browseable again.
+
 ## Error and Restoration Behavior
 
 Persistence does not imply Factory Factory owns the provider transcript. If the
@@ -144,6 +164,10 @@ Tests will cover:
 - refreshed provider summaries update the persisted label and icon status;
 - the transcript renders without the former Back/breadcrumb/status header;
 - mobile selection still closes the right-panel sheet;
+- a stopped parent initially suppresses provider browsing, then becoming alive
+  invalidates and reveals its recovered sub-agents without a page refresh;
+- no selected session leaves provider browsing disabled without affecting child
+  workspace content;
 - existing loading, pagination, invalidation, unavailable, and scroll behavior
   remains covered by the sub-agent transcript tests.
 
