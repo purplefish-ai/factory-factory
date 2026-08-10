@@ -965,6 +965,25 @@ describe('AcpRuntimeManager', () => {
       expect(mockNewSession).not.toHaveBeenCalled();
     });
 
+    it('classifies a provider without loadSession as unsupported for browse restoration', async () => {
+      const child = setupSuccessfulSpawn(subagentBrowseCapabilities());
+      exitChildAfterSigterm(child);
+
+      await expect(
+        manager.getOrCreateClient(
+          'db-session-1',
+          {
+            ...codexOptions(),
+            purpose: 'browse',
+            resumeProviderSessionId: 'provider-session-existing',
+          },
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toMatchObject({ name: 'AcpBrowseSessionUnavailableError' });
+      expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
     it('returns the negotiated capability only for a live handle', async () => {
       expect(manager.getSubagentBrowseCapability('session-1')).toBeNull();
 

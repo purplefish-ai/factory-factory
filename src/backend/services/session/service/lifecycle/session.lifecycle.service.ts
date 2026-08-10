@@ -9,6 +9,7 @@ import type {
   AcpRuntimeManager,
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
+import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
   RatchetSessionEndOutcome,
@@ -146,7 +147,6 @@ export class SessionLifecycleService {
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly stoppingSessions = new Set<string>();
   private readonly shutdownSessions = new Set<string>();
-  private readonly passivelyRestoredSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, number>();
@@ -264,7 +264,6 @@ export class SessionLifecycleService {
     try {
       await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
     } finally {
-      this.passivelyRestoredSessions.delete(sessionId);
       this.stoppingSessions.delete(sessionId);
       this.stopGenerations.delete(sessionId);
     }
@@ -400,7 +399,7 @@ export class SessionLifecycleService {
     session: { id: string; status: SessionStatus },
     reason: SessionStopReason
   ): StopSessionOptions | null {
-    const browseOnlyClient = this.runtimeManager.getBrowseClient(session.id);
+    const browseOnlyClient = this.runtimeManager.isBrowseOnlySession(session.id);
     const activeClient = this.runtimeManager.isSessionRunning(session.id);
     if (!(session.status === SessionStatus.RUNNING || activeClient || browseOnlyClient)) {
       return null;
@@ -465,7 +464,14 @@ export class SessionLifecycleService {
 
     const pendingClient = this.runtimeManager.getPendingClient(sessionId);
     if (pendingClient) {
-      await pendingClient;
+      try {
+        await pendingClient;
+      } catch (error) {
+        if (error instanceof AcpBrowseSessionUnavailableError) {
+          return false;
+        }
+        throw error;
+      }
       return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
     }
 
@@ -476,7 +482,16 @@ export class SessionLifecycleService {
       }
       this.assertStartupAllowed(sessionId, stopGeneration);
 
-      this.passivelyRestoredSessions.add(sessionId);
+      const workspace = await this.repository.getWorkspaceById(session.workspaceId);
+      if (
+        !workspace?.worktreePath ||
+        workspace.status === 'ARCHIVING' ||
+        workspace.status === 'ARCHIVED'
+      ) {
+        return false;
+      }
+      this.assertStartupAllowed(sessionId, stopGeneration);
+
       try {
         await this.createAcpClient(
           sessionId,
@@ -486,13 +501,12 @@ export class SessionLifecycleService {
           stopGeneration
         );
       } catch (error) {
-        this.passivelyRestoredSessions.delete(sessionId);
+        if (error instanceof AcpBrowseSessionUnavailableError) {
+          return false;
+        }
         throw error;
       }
 
-      if (this.runtimeManager.getClient(sessionId)) {
-        this.passivelyRestoredSessions.delete(sessionId);
-      }
       return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
     });
   }
@@ -701,34 +715,43 @@ export class SessionLifecycleService {
     }
   }
 
-  private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
+  private setupAcpEventHandler(
+    sessionId: string,
+    options?: { persistProviderSessionId?: boolean }
+  ): AcpRuntimeEventHandlers {
     const runtimeEventHandler = this.acpEventProcessor.createRuntimeEventHandler(sessionId);
     const runtimeIncarnationId = randomUUID();
+    const providerSessionIdHandler =
+      options?.persistProviderSessionId === false
+        ? {}
+        : {
+            onSessionId: async (sid: string, providerSessionId: string) => {
+              try {
+                await this.repository.updateSession(sid, { providerSessionId });
+                acpTraceLogger.log(sid, 'runtime_metadata', {
+                  type: 'provider_session_id',
+                  providerSessionId,
+                });
+                logger.debug('Updated session with ACP providerSessionId', {
+                  sessionId: sid,
+                  providerSessionId,
+                });
+              } catch (error) {
+                logger.warn('Failed to update session with ACP providerSessionId', {
+                  sessionId: sid,
+                  providerSessionId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            },
+          };
 
     return {
       ...runtimeEventHandler,
-      onSessionId: async (sid: string, providerSessionId: string) => {
-        try {
-          await this.repository.updateSession(sid, { providerSessionId });
-          acpTraceLogger.log(sid, 'runtime_metadata', {
-            type: 'provider_session_id',
-            providerSessionId,
-          });
-          logger.debug('Updated session with ACP providerSessionId', {
-            sessionId: sid,
-            providerSessionId,
-          });
-        } catch (error) {
-          logger.warn('Failed to update session with ACP providerSessionId', {
-            sessionId: sid,
-            providerSessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      },
+      ...providerSessionIdHandler,
       onExit: async (sid: string, exitCode: number | null) => {
         this.stopGenerations.delete(sid);
-        if (this.passivelyRestoredSessions.delete(sid)) {
+        if (this.runtimeManager.isBrowseOnlySession(sid)) {
           this.acpEventProcessor.clearSessionState(sid);
           acpTraceLogger.closeSession(sid);
           return;
@@ -745,7 +768,7 @@ export class SessionLifecycleService {
           message: error.message,
           stack: error.stack,
         });
-        if (!this.passivelyRestoredSessions.has(sid)) {
+        if (!this.runtimeManager.isBrowseOnlySession(sid)) {
           this.sessionDomainService.markError(sid, error.message);
         }
         logger.error('ACP client error', {
@@ -894,7 +917,9 @@ export class SessionLifecycleService {
       provider: session?.provider ?? 'CLAUDE',
     });
 
-    const handlers = this.setupAcpEventHandler(sessionId);
+    const handlers = this.setupAcpEventHandler(sessionId, {
+      persistProviderSessionId: !browseOnly,
+    });
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
     this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
 
@@ -935,9 +960,6 @@ export class SessionLifecycleService {
     try {
       handle = await creationPromise;
       this.assertStartupAllowed(sessionId, stopGeneration);
-      if (!browseOnly) {
-        this.passivelyRestoredSessions.delete(sessionId);
-      }
       if (browseOnly) {
         return { handle, dispatchableNotificationCount: 0 };
       }
@@ -946,7 +968,7 @@ export class SessionLifecycleService {
         emitUpdates: false,
       });
     } catch (error) {
-      this.acpEventProcessor.clearSessionState(sessionId);
+      this.clearAcpSessionStateAfterFailedCreation(sessionId, sessionCreations);
       throw error;
     } finally {
       sessionCreations.delete(creationPromise);
@@ -986,6 +1008,15 @@ export class SessionLifecycleService {
     );
 
     return { handle, dispatchableNotificationCount };
+  }
+
+  private clearAcpSessionStateAfterFailedCreation(
+    sessionId: string,
+    sessionCreations: Set<Promise<AcpProcessHandle>>
+  ): void {
+    if (sessionCreations.size === 1) {
+      this.acpEventProcessor.clearSessionState(sessionId);
+    }
   }
 
   private shouldSuppressReplayDuringAcpResume(

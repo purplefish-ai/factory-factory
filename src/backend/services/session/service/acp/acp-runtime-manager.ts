@@ -53,6 +53,13 @@ export class PromptTimeoutError extends Error {
   }
 }
 
+export class AcpBrowseSessionUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AcpBrowseSessionUnavailableError';
+  }
+}
+
 type AcpSubagentBrowseErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_FOUND'
@@ -815,20 +822,25 @@ export class AcpRuntimeManager {
   ): void {
     child.on('exit', async (code) => {
       if (this.shouldSkipChildExitHandler(sessionId, child, code)) {
+        if (!this.sessions.has(sessionId)) {
+          this.browseOnlySessions.delete(sessionId);
+        }
         return;
       }
 
       this.pendingCreation.delete(sessionId);
 
-      if (handlers.onExit) {
-        try {
+      try {
+        if (handlers.onExit) {
           await handlers.onExit(sessionId, code);
-        } catch (error) {
-          logger.warn('Failed to handle ACP exit event', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
+      } catch (error) {
+        logger.warn('Failed to handle ACP exit event', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        this.browseOnlySessions.delete(sessionId);
       }
     });
   }
@@ -844,7 +856,6 @@ export class AcpRuntimeManager {
 
     if (isCurrentProcess) {
       this.sessions.delete(sessionId);
-      this.browseOnlySessions.delete(sessionId);
     }
 
     if (current && !isCurrentProcess) {
@@ -946,7 +957,7 @@ export class AcpRuntimeManager {
     }
 
     if (browseOnly) {
-      throw new Error(
+      throw new AcpBrowseSessionUnavailableError(
         storedId
           ? 'Provider does not support restoring this session for sub-agent browsing.'
           : 'Stored provider session is required for sub-agent browsing.'
