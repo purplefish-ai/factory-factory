@@ -956,8 +956,13 @@ pnpm build
 pnpm build:storybook
 ```
 
-Expected: every command exits successfully with no new warnings or dependency
-boundary violations.
+Expected: typecheck, guardrails, application build, and Storybook build exit
+successfully with no new warnings or dependency-boundary violations. The full
+suite must introduce no failures beyond the pre-existing timing-sensitive
+`src/backend/lib/shell.test.ts` failures tracked in
+https://github.com/purplefish-ai/factory-factory/issues/2150. Record the exact
+full-suite result; any other failure is a regression to investigate before
+completion.
 
 - [ ] **Step 4: Review the complete diff and defaults**
 
