@@ -874,6 +874,43 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('sub-agent browsing extensions', () => {
+    it('classifies a browse-only client before provider restoration completes', async () => {
+      const child = setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
+      const initialization = createDeferred<{
+        protocolVersion: number;
+        agentCapabilities: Record<string, unknown>;
+        agentInfo: { name: string };
+      }>();
+      mockInitialize.mockReturnValueOnce(initialization.promise);
+
+      const creation = manager.getOrCreateClient(
+        'db-session-1',
+        {
+          ...codexOptions(),
+          purpose: 'browse',
+          resumeProviderSessionId: 'provider-session-existing',
+        },
+        defaultHandlers(),
+        defaultContext()
+      );
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalled();
+      });
+
+      expect(manager.isBrowseOnlySession('db-session-1')).toBe(true);
+
+      initialization.resolve({
+        protocolVersion: 1,
+        agentCapabilities: { ...subagentBrowseCapabilities(), loadSession: true },
+        agentInfo: { name: 'codex-app-server-acp' },
+      });
+      await creation;
+      expect(manager.isBrowseOnlySession('db-session-1')).toBe(true);
+
+      exitChildAfterSigterm(child);
+      await manager.stopClient('db-session-1');
+    });
+
     it('keeps a browse-only restored client stopped until active startup promotes it', async () => {
       setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
       mockExtMethod.mockResolvedValueOnce({ subagents: [], nextCursor: null });

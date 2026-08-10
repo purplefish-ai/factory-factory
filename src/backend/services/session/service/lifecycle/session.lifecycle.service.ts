@@ -264,6 +264,7 @@ export class SessionLifecycleService {
     try {
       await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
     } finally {
+      this.passivelyRestoredSessions.delete(sessionId);
       this.stoppingSessions.delete(sessionId);
       this.stopGenerations.delete(sessionId);
     }
@@ -367,20 +368,22 @@ export class SessionLifecycleService {
     const stopErrors: unknown[] = [];
 
     for (const session of sessions) {
-      if (
-        session.status === SessionStatus.RUNNING ||
-        this.runtimeManager.isSessionRunning(session.id)
-      ) {
-        try {
-          await this.stopSession(session.id, { reason: options?.reason ?? 'SYSTEM_STOP' });
-        } catch (error) {
-          logger.error('Failed to stop workspace session', {
-            sessionId: session.id,
-            workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          stopErrors.push(error);
-        }
+      const stopOptions = this.getWorkspaceSessionStopOptions(
+        session,
+        options?.reason ?? 'SYSTEM_STOP'
+      );
+      if (!stopOptions) {
+        continue;
+      }
+      try {
+        await this.stopSession(session.id, stopOptions);
+      } catch (error) {
+        logger.error('Failed to stop workspace session', {
+          sessionId: session.id,
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        stopErrors.push(error);
       }
     }
 
@@ -391,6 +394,21 @@ export class SessionLifecycleService {
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
+  }
+
+  private getWorkspaceSessionStopOptions(
+    session: { id: string; status: SessionStatus },
+    reason: SessionStopReason
+  ): StopSessionOptions | null {
+    const browseOnlyClient = this.runtimeManager.getBrowseClient(session.id);
+    const activeClient = this.runtimeManager.isSessionRunning(session.id);
+    if (!(session.status === SessionStatus.RUNNING || activeClient || browseOnlyClient)) {
+      return null;
+    }
+    return {
+      reason,
+      ...(browseOnlyClient && !activeClient ? { recordLifecycleEvent: false } : {}),
+    };
   }
 
   async getOrCreateSessionClient(
@@ -617,11 +635,14 @@ export class SessionLifecycleService {
   async stopAllClients(timeoutMs = 5000): Promise<void> {
     this.promptTurnCompletionService.clearAll();
     const shutdownSessionIds = this.runtimeManager.beginShutdown();
-    for (const sessionId of shutdownSessionIds) {
+    const activeShutdownSessionIds = shutdownSessionIds.filter(
+      (sessionId) => !this.runtimeManager.isBrowseOnlySession(sessionId)
+    );
+    for (const sessionId of activeShutdownSessionIds) {
       this.shutdownSessions.add(sessionId);
     }
 
-    await this.recordShutdownLifecycleEvents(shutdownSessionIds);
+    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
 
     try {
       await this.runtimeManager.stopAllClients(timeoutMs);

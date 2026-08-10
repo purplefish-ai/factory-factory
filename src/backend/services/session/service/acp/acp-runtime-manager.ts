@@ -297,6 +297,10 @@ export class AcpRuntimeManager {
     return handle?.isRunning() ? handle : undefined;
   }
 
+  isBrowseOnlySession(sessionId: string): boolean {
+    return this.browseOnlySessions.has(sessionId);
+  }
+
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
   }
@@ -410,6 +414,7 @@ export class AcpRuntimeManager {
         }
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
+        this.recordClientPurpose(sessionId, options);
         const createPromise = this.createClient(sessionId, options, handlers, context);
         this.pendingCreation.set(sessionId, createPromise);
 
@@ -417,6 +422,9 @@ export class AcpRuntimeManager {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
+          if (!this.sessions.has(sessionId)) {
+            this.browseOnlySessions.delete(sessionId);
+          }
         }
       } finally {
         const refCount = this.lockRefCounts.get(sessionId) ?? 1;

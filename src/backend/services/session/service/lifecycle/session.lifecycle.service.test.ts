@@ -113,11 +113,15 @@ function createStoppableLifecycleService() {
     getSessionsByWorkspaceId: vi.fn(async () => [
       { id: 'session-running', status: SessionStatus.RUNNING },
       { id: 'session-runtime-only', status: SessionStatus.COMPLETED },
+      { id: 'session-browse-only', status: SessionStatus.IDLE },
       { id: 'session-idle', status: SessionStatus.IDLE },
     ]),
   };
   const runtimeManager = {
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    getBrowseClient: vi.fn((sessionId: string) =>
+      sessionId === 'session-browse-only' ? { providerSessionId: 'provider-browse' } : undefined
+    ),
   };
   const service = new SessionLifecycleService({
     repository: repository as never,
@@ -237,6 +241,10 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-idle');
     expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
     expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
+    expect(stopSession).toHaveBeenCalledWith('session-browse-only', {
+      reason: 'SYSTEM_STOP',
+      recordLifecycleEvent: false,
+    });
     expect(stopSession).not.toHaveBeenCalledWith('session-idle');
   });
 
@@ -474,9 +482,10 @@ describe('SessionLifecycleService closed transcript persistence', () => {
 describe('SessionLifecycleService graceful shutdown', () => {
   it('records SYSTEM_STOP for active and pending runtimes before bounded shutdown', async () => {
     const runtimeManager = {
-      beginShutdown: vi.fn(() => ['session-active', 'session-pending']),
+      beginShutdown: vi.fn(() => ['session-active', 'session-pending', 'session-browse-only']),
       stopAllClients: vi.fn(async () => undefined),
       isStopInProgress: vi.fn(() => false),
+      isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     };
     const repository = {
       getSessionById: vi.fn(async (sessionId: string) => ({
@@ -521,6 +530,9 @@ describe('SessionLifecycleService graceful shutdown', () => {
         reason: 'SYSTEM_STOP',
       })
     );
+    expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-browse-only' })
+    );
     expect(lifecycleEventService.record).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-pending',
@@ -543,6 +555,7 @@ describe('SessionLifecycleService graceful shutdown', () => {
         beginShutdown: vi.fn(() => ['session-active']),
         stopAllClients: vi.fn(async () => undefined),
         isStopInProgress: vi.fn(() => false),
+        isBrowseOnlySession: vi.fn(() => false),
       };
       const service = new SessionLifecycleService(
         unsafeCoerce({
