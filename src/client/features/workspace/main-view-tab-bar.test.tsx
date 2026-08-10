@@ -120,6 +120,7 @@ async function renderTabBar(workspaceId: string) {
 
 beforeEach(() => {
   localStorage.clear();
+  mocks.summary = { ...runningSelection.subagent };
   vi.stubGlobal('matchMedia', () => ({
     matches: false,
     addEventListener: vi.fn(),

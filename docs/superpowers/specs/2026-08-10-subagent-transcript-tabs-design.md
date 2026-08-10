@@ -74,11 +74,18 @@ their fields. The persisted Zod schema validates the new type and requires all
 three sub-agent fields. Tabs with incomplete or invalid persisted data are
 discarded through the panel's existing safe fallback behavior.
 
+`subagentSelection.subagent.name` is the authoritative provider name. The
+top-level `label` remains part of the generic tab contract, so every sub-agent
+open or summary-refresh write derives it from that same summary using
+`getSubagentTabLabel`. Callers never update `label` independently. This keeps
+the generic tab renderer compatible without creating an independent naming
+source of truth.
+
 The tab ID is deterministic from the parent session ID and sub-agent ID. The
 panel exposes an explicit sub-agent opening operation, or an equivalent typed
 input, so callers do not overload the existing path argument with structured
-metadata. Opening updates the stored label and status from the newest selection
-and activates the tab.
+metadata. Opening and live refresh both update the stored selection and its
+derived label atomically, then opening activates the tab.
 
 ## Component Responsibilities and Data Flow
 

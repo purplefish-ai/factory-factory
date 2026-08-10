@@ -418,15 +418,22 @@ export function SubagentTranscriptContent({
 }
 ```
 
-Move the existing `listSubagents.useQuery` and matching summary lookup into the
-new hook. It remains inside the subagents feature and listens for matching
-browser invalidations:
+Move the matching summary lookup into a new hook. It remains inside the
+subagents feature, uses the same infinite-query shape as the Agents panel,
+always refreshes restored tabs on mount, walks later pages until the child is
+found or pagination is exhausted, and listens for matching browser
+invalidations. It accepts only summaries proven at least as fresh as the stored
+snapshot and never regresses a terminal status to a non-terminal one:
 
 ```ts
 export function useLiveSubagentSelection(selection: SubagentSelection): SubagentSelection {
-  const query = trpc.session.listSubagents.useQuery(
+  const query = trpc.session.listSubagents.useInfiniteQuery(
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
-    { refetchOnMount: false }
+    {
+      refetchOnMount: 'always',
+      getNextPageParam: (lastPage) =>
+        lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
+    }
   );
 
   useEffect(() =>
@@ -441,12 +448,46 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     [query.refetch, selection.parentSessionId, selection.subagent.id]
   );
 
-  const refreshed = query.data?.supported
-    ? query.data.subagents.find((candidate) => candidate.id === selection.subagent.id)
-    : undefined;
-  return refreshed ? { ...selection, subagent: refreshed } : selection;
+  const refreshed = query.data?.pages
+    .filter((page) => page.supported)
+    .flatMap((page) => page.subagents)
+    .find((candidate) => candidate.id === selection.subagent.id);
+  const loadedPageCount = query.data?.pages.length ?? 0;
+
+  useEffect(() => {
+    if (
+      loadedPageCount === 0 ||
+      refreshed ||
+      !query.hasNextPage ||
+      query.isFetching ||
+      query.isFetchNextPageError
+    ) {
+      return;
+    }
+    void query.fetchNextPage();
+  }, [
+    loadedPageCount,
+    query.fetchNextPage,
+    query.hasNextPage,
+    query.isFetchNextPageError,
+    query.isFetching,
+    refreshed,
+  ]);
+
+  return refreshed &&
+    isProvenAtLeastAsFresh(
+      selection.subagent,
+      refreshed,
+      query.isFetchedAfterMount && query.isSuccess
+    )
+    ? { ...selection, subagent: refreshed }
+    : selection;
 }
 ```
+
+The omitted `TERMINAL_STATUSES`, timestamp-validation, and
+`isProvenAtLeastAsFresh` helpers are the focused freshness policy implemented
+alongside this hook; see the production file for their full definitions.
 
 Export the hook from `src/client/features/subagents/index.ts`. Remove the summary
 query and summary refetch from `SubagentTranscriptView`; keep its transcript
@@ -491,11 +532,13 @@ git commit -m "Simplify sub-agent transcript view"
 
 Mount the real `WorkspacePanelProvider` and `MainViewTabBar`, seeding local storage with a sub-agent tab. Use a table of literal expected classes:
 
-Mock only `trpc.session.listSubagents.useQuery` in this test file. Back it with
-`mocks.summary`, return `{ supported: true, subagents: [mocks.summary],
-nextCursor: null }`, and return a stable `mocks.listRefetch` function. Each table
-row assigns a complete matching summary with that row's literal status before
-rendering, so the real `useLiveSubagentSelection` hook remains under test.
+Mock only `trpc.session.listSubagents.useInfiniteQuery` in this test file. Back
+it with `mocks.summary`, return one supported page containing
+`mocks.summary`, and return stable `mocks.listRefetch` and pagination functions.
+Reset `mocks.summary` in `beforeEach`; each table row then assigns a complete
+matching summary with that row's literal status before rendering, so the real
+`useLiveSubagentSelection` hook remains under test without order-dependent
+fixture state.
 
 ```tsx
 it.each([
@@ -541,7 +584,16 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
       listSubagents: {
-        useQuery: () => ({ data: undefined, refetch: vi.fn(() => Promise.resolve()) }),
+        useInfiniteQuery: () => ({
+          data: undefined,
+          fetchNextPage: vi.fn(() => Promise.resolve()),
+          hasNextPage: false,
+          isFetching: false,
+          isFetchNextPageError: false,
+          isFetchedAfterMount: false,
+          isSuccess: false,
+          refetch: vi.fn(() => Promise.resolve()),
+        }),
       },
       readSubagentTranscript: {
         useInfiniteQuery: () => ({
