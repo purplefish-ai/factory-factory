@@ -12,6 +12,8 @@ export interface AcpMcpServerConfig {
 
 export interface AcpClientOptions {
   provider: AcpProvider;
+  /** Whether the adapter is serving an active turn or read-only history browsing. */
+  purpose?: 'active' | 'browse';
   workingDir: string;
   /** Optional test hook to override the ACP adapter binary path. */
   adapterBinaryPath?: string;

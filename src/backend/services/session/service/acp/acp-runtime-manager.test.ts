@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockSpawn,
   mockInitialize,
+  mockLoadSession,
   mockNewSession,
   mockPrompt,
   mockCancel,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockInitialize: vi.fn(),
+  mockLoadSession: vi.fn(),
   mockNewSession: vi.fn(),
   mockPrompt: vi.fn(),
   mockCancel: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('@agentclientprotocol/sdk', () => {
   class MockCSC {
     toClient: (agent: unknown) => unknown;
     initialize = mockInitialize;
+    loadSession = mockLoadSession;
     newSession = mockNewSession;
     prompt = mockPrompt;
     cancel = mockCancel;
@@ -213,6 +216,9 @@ function setupSuccessfulSpawn(agentCapabilities: Record<string, unknown> = { loa
   });
   mockNewSession.mockResolvedValue({
     sessionId: 'provider-session-123',
+    configOptions: defaultConfigOptions(),
+  });
+  mockLoadSession.mockResolvedValue({
     configOptions: defaultConfigOptions(),
   });
   mockSetSessionConfigOption.mockResolvedValue({
@@ -868,6 +874,60 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('sub-agent browsing extensions', () => {
+    it('keeps a browse-only restored client stopped until active startup promotes it', async () => {
+      setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
+      mockExtMethod.mockResolvedValueOnce({ subagents: [], nextCursor: null });
+
+      const browseHandle = await manager.getOrCreateClient(
+        'db-session-1',
+        {
+          ...codexOptions(),
+          purpose: 'browse',
+          resumeProviderSessionId: 'provider-session-existing',
+        },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await expect(
+        manager.listSubagents('db-session-1', { cursor: null, limit: 50 })
+      ).resolves.toEqual({ subagents: [], nextCursor: null });
+      expect(manager.getClient('db-session-1')).toBeUndefined();
+      expect(manager.isSessionRunning('db-session-1')).toBe(false);
+
+      const activeHandle = await manager.getOrCreateClient(
+        'db-session-1',
+        { ...codexOptions(), purpose: 'active' },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(activeHandle).toBe(browseHandle);
+      expect(manager.getClient('db-session-1')).toBe(browseHandle);
+      expect(manager.isSessionRunning('db-session-1')).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not replace a missing browse-only provider session with a new session', async () => {
+      const child = setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
+      exitChildAfterSigterm(child);
+      mockLoadSession.mockRejectedValueOnce(new Error('stored provider session missing'));
+
+      await expect(
+        manager.getOrCreateClient(
+          'db-session-1',
+          {
+            ...codexOptions(),
+            purpose: 'browse',
+            resumeProviderSessionId: 'provider-session-missing',
+          },
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('stored provider session missing');
+      expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
     it('returns the negotiated capability only for a live handle', async () => {
       expect(manager.getSubagentBrowseCapability('session-1')).toBeNull();
 
