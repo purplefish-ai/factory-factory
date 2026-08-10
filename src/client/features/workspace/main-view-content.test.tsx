@@ -4,8 +4,18 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
+import {
+  cleanupSubagentTabTestEnvironment,
+  createLoadingSubagentTranscriptQuery,
+  seedSubagentTab,
+  setupSubagentTabTestEnvironment,
+} from '@/test-utils/subagent-tabs';
 import { MainViewContent } from './main-view-content';
 import { WorkspacePanelProvider } from './workspace-panel-context';
+
+const mocks = vi.hoisted(() => ({
+  readSubagentTranscript: vi.fn(),
+}));
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -14,26 +24,11 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => ({ data: undefined, refetch: vi.fn(() => Promise.resolve()) }),
       },
       readSubagentTranscript: {
-        useInfiniteQuery: () => ({
-          data: undefined,
-          error: null,
-          isLoading: true,
-          isFetchingNextPage: false,
-          isFetchNextPageError: false,
-          hasNextPage: false,
-          fetchNextPage: vi.fn(() => Promise.resolve()),
-          refetch: vi.fn(() => Promise.resolve()),
-        }),
+        useInfiniteQuery: mocks.readSubagentTranscript,
       },
     },
   },
 }));
-
-Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
-  configurable: true,
-  writable: true,
-  value: true,
-});
 
 const WORKSPACE_ID = 'workspace-content-subagent';
 const runningSelection: SubagentSelection = {
@@ -50,23 +45,6 @@ const runningSelection: SubagentSelection = {
     resultPreview: null,
   },
 };
-
-function seedSubagentTab(selection: SubagentSelection) {
-  const tabId = `subagent-${selection.parentSessionId}-${selection.subagent.id}`;
-  localStorage.setItem(
-    `workspace-panel-tabs-${WORKSPACE_ID}`,
-    JSON.stringify([
-      { id: 'chat', type: 'chat', label: 'Chat' },
-      {
-        id: tabId,
-        type: 'subagent',
-        label: selection.subagent.name,
-        subagentSelection: selection,
-      },
-    ])
-  );
-  localStorage.setItem(`workspace-panel-active-tab-${WORKSPACE_ID}`, tabId);
-}
 
 async function renderContent() {
   const container = document.createElement('div');
@@ -85,22 +63,18 @@ async function renderContent() {
 }
 
 beforeEach(() => {
-  localStorage.clear();
-  vi.stubGlobal('matchMedia', () => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }));
+  setupSubagentTabTestEnvironment();
+  mocks.readSubagentTranscript.mockReturnValue(createLoadingSubagentTranscriptQuery());
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
-  document.body.innerHTML = '';
+  cleanupSubagentTabTestEnvironment();
+  vi.clearAllMocks();
 });
 
 describe('MainViewContent sub-agent tabs', () => {
   it('renders a persisted active sub-agent tab while keeping chat mounted and hidden', async () => {
-    seedSubagentTab(runningSelection);
+    seedSubagentTab(WORKSPACE_ID, runningSelection);
     const { container, root } = await renderContent();
 
     await vi.waitFor(() => expect(container.textContent).toContain('Loading transcript…'));

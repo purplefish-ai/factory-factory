@@ -7,6 +7,12 @@ import { createMemoryRouter, RouterProvider, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { MainViewContent } from '@/client/features/workspace';
+import {
+  cleanupSubagentTabTestEnvironment,
+  createLoadingSubagentTranscriptQuery,
+  seedSubagentTab,
+  setupSubagentTabTestEnvironment,
+} from '@/test-utils/subagent-tabs';
 
 const mocks = vi.hoisted(() => ({
   readSubagentTranscript: vi.fn(),
@@ -35,12 +41,6 @@ vi.mock('./workspace-detail-container', () => ({
 
 import WorkspaceDetailPage from './detail';
 
-Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
-  configurable: true,
-  writable: true,
-  value: true,
-});
-
 const FIRST_WORKSPACE_ID = 'workspace-first';
 const SECOND_WORKSPACE_ID = 'workspace-second';
 const firstWorkspaceSelection: SubagentSelection = {
@@ -58,51 +58,19 @@ const firstWorkspaceSelection: SubagentSelection = {
   },
 };
 
-function seedActiveSubagentTab(workspaceId: string, selection: SubagentSelection) {
-  const tabId = `subagent-${selection.parentSessionId}-${selection.subagent.id}`;
-  localStorage.setItem(
-    `workspace-panel-tabs-${workspaceId}`,
-    JSON.stringify([
-      { id: 'chat', type: 'chat', label: 'Chat' },
-      {
-        id: tabId,
-        type: 'subagent',
-        label: selection.subagent.name,
-        subagentSelection: selection,
-      },
-    ])
-  );
-  localStorage.setItem(`workspace-panel-active-tab-${workspaceId}`, tabId);
-}
-
 beforeEach(() => {
-  localStorage.clear();
-  vi.stubGlobal('matchMedia', () => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }));
-  mocks.readSubagentTranscript.mockReturnValue({
-    data: undefined,
-    error: null,
-    isLoading: true,
-    isFetchingNextPage: false,
-    isFetchNextPageError: false,
-    hasNextPage: false,
-    fetchNextPage: vi.fn(() => Promise.resolve()),
-    refetch: vi.fn(() => Promise.resolve()),
-  });
+  setupSubagentTabTestEnvironment();
+  mocks.readSubagentTranscript.mockReturnValue(createLoadingSubagentTranscriptQuery());
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  cleanupSubagentTabTestEnvironment();
   vi.clearAllMocks();
-  document.body.innerHTML = '';
 });
 
 describe('WorkspaceDetailPage', () => {
   it('does not render or query a persisted sub-agent tab from the previous workspace', async () => {
-    seedActiveSubagentTab(FIRST_WORKSPACE_ID, firstWorkspaceSelection);
+    seedSubagentTab(FIRST_WORKSPACE_ID, firstWorkspaceSelection);
     const router = createMemoryRouter(
       [
         {

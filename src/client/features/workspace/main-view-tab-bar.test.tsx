@@ -5,6 +5,11 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
+import {
+  cleanupSubagentTabTestEnvironment,
+  seedSubagentTab,
+  setupSubagentTabTestEnvironment,
+} from '@/test-utils/subagent-tabs';
 import { MainViewTabBar } from './main-view-tab-bar';
 import * as tabBarStories from './main-view-tab-bar.stories';
 import { WorkspacePanelProvider } from './workspace-panel-context';
@@ -54,12 +59,6 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 
-Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
-  configurable: true,
-  writable: true,
-  value: true,
-});
-
 const runningSelection: SubagentSelection = {
   parentSessionId: 'session-1',
   parentSessionName: 'Chat 1',
@@ -74,30 +73,6 @@ const runningSelection: SubagentSelection = {
     resultPreview: null,
   },
 };
-
-function subagentTabId(selection: SubagentSelection): string {
-  return `subagent-${selection.parentSessionId}-${selection.subagent.id}`;
-}
-
-function seedSubagentTab(
-  workspaceId: string,
-  selection: SubagentSelection,
-  activeTabId = subagentTabId(selection)
-) {
-  localStorage.setItem(
-    `workspace-panel-tabs-${workspaceId}`,
-    JSON.stringify([
-      { id: 'chat', type: 'chat', label: 'Chat' },
-      {
-        id: subagentTabId(selection),
-        type: 'subagent',
-        label: selection.subagent.name,
-        subagentSelection: selection,
-      },
-    ])
-  );
-  localStorage.setItem(`workspace-panel-active-tab-${workspaceId}`, activeTabId);
-}
 
 async function renderTabBar(workspaceId: string) {
   const container = document.createElement('div');
@@ -119,19 +94,13 @@ async function renderTabBar(workspaceId: string) {
 }
 
 beforeEach(() => {
-  localStorage.clear();
+  setupSubagentTabTestEnvironment();
   mocks.summary = { ...runningSelection.subagent };
-  vi.stubGlobal('matchMedia', () => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }));
   mocks.listRefetch.mockClear();
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
-  document.body.innerHTML = '';
+  cleanupSubagentTabTestEnvironment();
 });
 
 describe('MainViewTabBar sub-agent tabs', () => {
