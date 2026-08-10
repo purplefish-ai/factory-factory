@@ -519,6 +519,7 @@ export class SessionLifecycleService {
       return false;
     }
 
+    this.advanceStopGeneration(sessionId);
     try {
       await this.runtimeManager.stopClient(sessionId);
     } finally {
