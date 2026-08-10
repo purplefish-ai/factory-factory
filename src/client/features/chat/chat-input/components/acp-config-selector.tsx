@@ -58,13 +58,13 @@ export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfi
           variant="ghost"
           size="sm"
           disabled={disabled}
-          className="h-6 max-w-[12rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          className="h-6 max-w-[14rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
           <span className="truncate">{displayName}</span>
           <CaretDownIcon className="h-3 w-3 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
+      <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup
           value={configOption.currentValue}
           onValueChange={(value) => onSelect(configOption.id, value)}
