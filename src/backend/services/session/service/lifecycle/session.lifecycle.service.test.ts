@@ -1465,6 +1465,39 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
   });
 
+  it('returns unsupported when concurrent browse cleanup invalidates its startup', async () => {
+    const { service, session, repository, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    const firstSessionLookup = createDeferred<typeof session>();
+    const secondSessionLookup = createDeferred<typeof session>();
+    const browseStop = createDeferred<undefined>();
+    repository.getSessionById
+      .mockReturnValueOnce(firstSessionLookup.promise)
+      .mockReturnValueOnce(secondSessionLookup.promise);
+    runtimeManager.isBrowseOnlySession.mockReturnValue(true);
+    runtimeManager.stopClient.mockReturnValueOnce(browseStop.promise);
+
+    const firstBrowse = service.ensureSubagentBrowseSession('session-1');
+    const secondBrowse = service.ensureSubagentBrowseSession('session-1');
+    await vi.waitFor(() => {
+      expect(repository.getSessionById).toHaveBeenCalledTimes(2);
+    });
+
+    firstSessionLookup.resolve(session);
+    await vi.waitFor(() => {
+      expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+
+    secondSessionLookup.resolve(session);
+    await expect(secondBrowse).resolves.toBe(false);
+
+    browseStop.resolve(undefined);
+    await expect(firstBrowse).resolves.toBe(false);
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
+  });
+
   it('does not let a failed browse creation clear a concurrent active startup context', async () => {
     const { service, handle, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
       provider: 'CODEX',

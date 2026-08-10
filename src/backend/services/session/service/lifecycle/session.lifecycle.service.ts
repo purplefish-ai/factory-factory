@@ -57,6 +57,13 @@ import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
 const logger = createLogger('session');
 
+class SessionStartupCancelledError extends Error {
+  constructor() {
+    super('Session is currently being stopped');
+    this.name = 'SessionStartupCancelledError';
+  }
+}
+
 function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
   return exitCode === 0 ? SessionStatus.COMPLETED : SessionStatus.FAILED;
 }
@@ -508,6 +515,11 @@ export class SessionLifecycleService {
       }
 
       return await this.resolveSubagentBrowseSupport(sessionId);
+    }).catch((error: unknown) => {
+      if (error instanceof SessionStartupCancelledError) {
+        return false;
+      }
+      throw error;
     });
   }
 
@@ -638,7 +650,7 @@ export class SessionLifecycleService {
       this.isSessionStopping(sessionId) ||
       !this.isStopGenerationCurrent(sessionId, stopGeneration)
     ) {
-      throw new Error('Session is currently being stopped');
+      throw new SessionStartupCancelledError();
     }
   }
 
