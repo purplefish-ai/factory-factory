@@ -56,6 +56,39 @@ describe('SessionLifecycleMessageRenderer', () => {
     root.unmount();
   });
 
+  it('keeps the timestamp visible and exposes the full copy while the message truncates', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(SessionLifecycleMessageRenderer, {
+          message: lifecycleMessage(
+            'SYSTEM_STOP',
+            'Session stopped because the available horizontal space is intentionally very narrow.'
+          ),
+        })
+      );
+    });
+
+    const row = container.querySelector('[data-testid="session-lifecycle-message"]');
+    const message = row?.querySelector('p');
+    const time = row?.querySelector('time');
+
+    expect(row?.classList.contains('items-center')).toBe(true);
+    expect(message?.classList.contains('min-w-0')).toBe(true);
+    expect(message?.classList.contains('flex-1')).toBe(true);
+    expect(message?.classList.contains('truncate')).toBe(true);
+    expect(message?.getAttribute('title')).toBe(
+      'Session stopped because the available horizontal space is intentionally very narrow.'
+    );
+    expect(time?.classList.contains('shrink-0')).toBe(true);
+    expect(time?.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(message?.nextElementSibling).toBe(time);
+    root.unmount();
+  });
+
   it('marks the severity icon as decorative', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
