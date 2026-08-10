@@ -7,6 +7,7 @@ import {
   type AcpRuntimeManager,
   fetchCodexModelCatalogFromAppServer,
 } from '@/backend/services/session/service/acp';
+import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
@@ -69,16 +70,17 @@ export class SessionConfigService {
     handle: AcpProcessHandle,
     configOptions: SessionConfigOption[]
   ): void {
-    handle.configOptions = configOptions;
+    const normalizedConfigOptions = normalizeSessionConfigOptions(handle.provider, configOptions);
+    handle.configOptions = normalizedConfigOptions;
     void this.persistAcpConfigSnapshot(sessionId, {
       provider: handle.provider as SessionProvider,
       providerSessionId: handle.providerSessionId,
-      configOptions: handle.configOptions,
+      configOptions: normalizedConfigOptions,
     });
 
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
-      configOptions,
+      configOptions: normalizedConfigOptions,
     } as SessionDeltaEvent);
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',

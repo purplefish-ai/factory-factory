@@ -863,7 +863,7 @@ describe('AcpRuntimeManager', () => {
         (option) => 'value' in option && option.value === 'default'
       );
 
-      expect(defaultEntry).toMatchObject({ value: 'default', name: 'Opus 4.6' });
+      expect(defaultEntry).toMatchObject({ value: 'default', name: 'Default — Opus 4.6' });
     });
   });
 
@@ -2155,7 +2155,7 @@ describe('AcpRuntimeManager', () => {
         ?.options.find((option) => 'value' in option && option.value === 'default');
       expect(defaultModelOption).toMatchObject({
         value: 'default',
-        name: 'Opus 4.6',
+        name: 'Default — Opus 4.6',
       });
       expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
         'plan'
