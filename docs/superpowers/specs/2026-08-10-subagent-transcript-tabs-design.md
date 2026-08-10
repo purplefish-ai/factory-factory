@@ -52,16 +52,20 @@ The alternatives were rejected:
 
 ## Tab Model
 
-A sub-agent tab stores the data needed to render before and after reload:
+A sub-agent tab stores the data needed to render before and after reload. The
+full last-known selection snapshot retains the unavailable-state preview as
+well as the identity, label, and lifecycle fields:
 
 ```ts
 interface MainViewTab {
   id: string;
   type: 'subagent';
   label: string;
-  parentSessionId: string;
-  subagentId: string;
-  subagentStatus: SubagentStatus;
+  subagentSelection: {
+    parentSessionId: string;
+    parentSessionName: string;
+    subagent: SubagentSummary;
+  };
 }
 ```
 
@@ -87,18 +91,21 @@ chat mounted while non-chat tabs are active.
 
 `MainViewTabBar` renders sub-agent tabs with the shared `TabButton`. A dedicated
 sub-agent tab item chooses the robot icon color and animation from the persisted
-status. Sub-agent tabs appear in the same closable group as file-like tabs, after
-the separator from permanent chat/session tabs.
+status. It uses a subagents-feature hook to observe the authoritative parent
+summary query and matching invalidation events even while another main-view tab
+is active. When the provider returns a fresher summary, the item updates its
+persisted selection snapshot. Sub-agent tabs appear in the same closable group
+as file-like tabs, after the separator from permanent chat/session tabs.
 
 `MainViewContent` recognizes the active sub-agent tab, reconstructs a
 `SubagentSelection` from its stored metadata, and renders
 `SubagentTranscriptView`. The transcript view already re-reads the authoritative
 summary and transcript using the parent session ID and sub-agent ID.
 
-When `SubagentTranscriptView` receives a fresher summary after initial load or a
-live invalidation, it reports the current name and status back to the panel. The
-panel updates only the matching persisted tab. This keeps the tab label and icon
-current without duplicating the provider query in the tab bar.
+`SubagentTranscriptView` remains responsible for transcript pages and matching
+transcript invalidations. The tab item's live-summary hook owns name and status
+refresh, so inactive sub-agent tabs continue to update without mounting every
+transcript or duplicating summary observers for the active tab.
 
 `SubagentTranscriptContent` becomes transcript-only. It retains the message
 viewport and all state renderers but no longer accepts or renders `onBack`.
