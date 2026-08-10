@@ -45,6 +45,7 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
       isSessionRunning: vi.fn().mockReturnValue(false),
       isSessionWorking: vi.fn().mockReturnValue(false),
       isAnySessionWorking: vi.fn().mockReturnValue(false),
+      isBrowseOnlySession: vi.fn().mockReturnValue(false),
       isStopInProgress: vi.fn().mockReturnValue(false),
       setConfigOption: vi.fn(),
       setSessionMode: vi.fn(),
@@ -156,6 +157,7 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isAnySessionWorking).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.isBrowseOnlySession).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(workspaceDataService.findById).mockResolvedValue(
       unsafeCoerce({
