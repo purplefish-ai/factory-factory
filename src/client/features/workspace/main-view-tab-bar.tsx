@@ -66,7 +66,7 @@ function getSubagentIconClass(status: SubagentSelection['subagent']['status']): 
   switch (status) {
     case 'starting':
     case 'running':
-      return 'text-blue-500 animate-pulse';
+      return 'text-blue-500 animate-pulse motion-reduce:animate-none';
     case 'waiting':
       return 'text-amber-500';
     case 'completed':

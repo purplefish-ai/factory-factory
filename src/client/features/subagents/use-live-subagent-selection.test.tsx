@@ -8,25 +8,37 @@ import type { SubagentSelection } from './types';
 import { useLiveSubagentSelection } from './use-live-subagent-selection';
 
 const mocks = vi.hoisted(() => ({
+  fetchNextPage: vi.fn(() => Promise.resolve()),
   listRefetch: vi.fn(() => Promise.resolve()),
-  listQueryResult: { data: undefined as unknown },
-  useListQuery: vi.fn(),
+  listInfiniteQueryResult: {
+    data: undefined as unknown,
+    hasNextPage: false,
+    isFetchedAfterMount: false,
+    isFetching: false,
+    isFetchNextPageError: false,
+    isSuccess: true,
+  },
+  useListInfiniteQuery: vi.fn(),
 }));
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
       listSubagents: {
-        useQuery: (...args: unknown[]) => {
-          mocks.useListQuery(...args);
-          return { ...mocks.listQueryResult, refetch: mocks.listRefetch };
+        useInfiniteQuery: (...args: unknown[]) => {
+          mocks.useListInfiniteQuery(...args);
+          return {
+            ...mocks.listInfiniteQueryResult,
+            fetchNextPage: mocks.fetchNextPage,
+            refetch: mocks.listRefetch,
+          };
         },
       },
     },
   },
 }));
 
-function selection(): SubagentSelection {
+function selection(overrides: Partial<SubagentSelection['subagent']> = {}): SubagentSelection {
   return {
     parentSessionId: 'session-1',
     parentSessionName: 'Session 1',
@@ -39,12 +51,13 @@ function selection(): SubagentSelection {
       completedAt: null,
       latestActivity: 'Checking authentication boundaries',
       resultPreview: null,
+      ...overrides,
     },
   };
 }
 
-function LiveSelectionProbe() {
-  const current = useLiveSubagentSelection(selection());
+function LiveSelectionProbe({ selected }: { selected: SubagentSelection }) {
+  const current = useLiveSubagentSelection(selected);
   return createElement('output', null, JSON.stringify(current));
 }
 
@@ -58,9 +71,15 @@ describe('useLiveSubagentSelection', () => {
       writable: true,
       value: true,
     });
-    mocks.listQueryResult.data = undefined;
+    mocks.listInfiniteQueryResult.data = undefined;
+    mocks.listInfiniteQueryResult.hasNextPage = false;
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = false;
+    mocks.listInfiniteQueryResult.isFetching = false;
+    mocks.listInfiniteQueryResult.isFetchNextPageError = false;
+    mocks.listInfiniteQueryResult.isSuccess = true;
+    mocks.fetchNextPage.mockClear();
     mocks.listRefetch.mockClear();
-    mocks.useListQuery.mockClear();
+    mocks.useListInfiniteQuery.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -72,8 +91,18 @@ describe('useLiveSubagentSelection', () => {
     vi.clearAllMocks();
   });
 
-  function renderHookProbe() {
-    void act(() => root.render(createElement(LiveSelectionProbe)));
+  function setPages(
+    pages: Array<{
+      supported: true;
+      subagents: SubagentSelection['subagent'][];
+      nextCursor: string | null;
+    }>
+  ) {
+    mocks.listInfiniteQueryResult.data = { pages, pageParams: pages.map(() => null) };
+  }
+
+  function renderHookProbe(selected = selection()) {
+    void act(() => root.render(createElement(LiveSelectionProbe, { selected })));
   }
 
   it('returns the authoritative provider summary and refetches only matching invalidations', () => {
@@ -83,11 +112,7 @@ describe('useLiveSubagentSelection', () => {
       status: 'completed' as const,
       completedAt: '2026-08-10T10:05:00.000Z',
     };
-    mocks.listQueryResult.data = {
-      supported: true,
-      subagents: [completed],
-      nextCursor: null,
-    };
+    setPages([{ supported: true, subagents: [completed], nextCursor: null }]);
     renderHookProbe();
     expect(JSON.parse(container.textContent ?? '')).toEqual({
       ...selection(),
@@ -111,5 +136,146 @@ describe('useLiveSubagentSelection', () => {
       })
     );
     expect(mocks.listRefetch).toHaveBeenCalledOnce();
+  });
+
+  it('does not replace a reopened tab selection with an older cached summary', () => {
+    const reopened = selection({
+      status: 'completed',
+      updatedAt: '2026-08-10T10:05:00.000Z',
+      completedAt: '2026-08-10T10:05:00.000Z',
+      resultPreview: 'Review complete',
+    });
+    setPages([
+      {
+        supported: true,
+        subagents: [
+          selection({
+            status: 'running',
+            updatedAt: '2026-08-10T10:01:00.000Z',
+            latestActivity: 'Still checking authentication boundaries',
+          }).subagent,
+        ],
+        nextCursor: null,
+      },
+    ]);
+
+    renderHookProbe(reopened);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual(reopened);
+  });
+
+  it('does not regress a terminal selection at an equal timestamp', () => {
+    const terminal = selection({
+      status: 'completed',
+      updatedAt: '2026-08-10T10:05:00.000Z',
+      completedAt: '2026-08-10T10:05:00.000Z',
+    });
+    setPages([
+      {
+        supported: true,
+        subagents: [
+          selection({
+            status: 'running',
+            updatedAt: '2026-08-10T10:05:00.000Z',
+          }).subagent,
+        ],
+        nextCursor: null,
+      },
+    ]);
+
+    renderHookProbe(terminal);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual(terminal);
+  });
+
+  it.each([
+    ['an unknown stored timestamp', null, '2026-08-10T10:05:00.000Z'],
+    ['an invalid stored timestamp', 'not-a-date', '2026-08-10T10:05:00.000Z'],
+    ['an unknown cached timestamp', '2026-08-10T10:00:00.000Z', null],
+    ['an invalid cached timestamp', '2026-08-10T10:00:00.000Z', 'not-a-date'],
+  ] as const)('keeps the stored selection from initial cache when freshness is unprovable from %s', (_case, storedUpdatedAt, cachedUpdatedAt) => {
+    const stored = selection({ updatedAt: storedUpdatedAt });
+    setPages([
+      {
+        supported: true,
+        subagents: [
+          selection({
+            status: 'completed',
+            updatedAt: cachedUpdatedAt,
+            completedAt: '2026-08-10T10:05:00.000Z',
+          }).subagent,
+        ],
+        nextCursor: null,
+      },
+    ]);
+
+    renderHookProbe(stored);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+  });
+
+  it('accepts a terminal-safe null-timestamp summary after a successful post-mount fetch', () => {
+    const stored = selection({
+      name: 'Restored security review',
+      status: 'running',
+      updatedAt: null,
+    });
+    const fetched = selection({
+      name: 'Provider-completed security review',
+      status: 'completed',
+      updatedAt: null,
+      completedAt: '2026-08-10T10:05:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [fetched], nextCursor: null }]);
+
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
+  });
+
+  it('fetches successive pages until it refreshes a restored later-page child', () => {
+    const stored = selection();
+    const completed = selection({
+      status: 'completed',
+      updatedAt: '2026-08-10T10:05:00.000Z',
+      completedAt: '2026-08-10T10:05:00.000Z',
+      resultPreview: 'Review complete',
+    }).subagent;
+    const firstPage = {
+      supported: true as const,
+      subagents: [selection({ id: 'child-100' }).subagent],
+      nextCursor: 'page-2',
+    };
+    const secondPage = {
+      supported: true as const,
+      subagents: [selection({ id: 'child-200' }).subagent],
+      nextCursor: 'page-3',
+    };
+    setPages([firstPage]);
+    mocks.listInfiniteQueryResult.hasNextPage = true;
+
+    renderHookProbe(stored);
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+
+    setPages([firstPage, secondPage]);
+    renderHookProbe(stored);
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
+
+    setPages([
+      firstPage,
+      secondPage,
+      { supported: true, subagents: [completed], nextCursor: null },
+    ]);
+    mocks.listInfiniteQueryResult.hasNextPage = false;
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+    renderHookProbe(stored);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual({
+      ...stored,
+      subagent: completed,
+    });
   });
 });

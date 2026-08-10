@@ -32,12 +32,21 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     session: {
       listSubagents: {
-        useQuery: () => ({
+        useInfiniteQuery: () => ({
           data: {
-            supported: true,
-            subagents: [mocks.summary],
-            nextCursor: null,
+            pages: [
+              {
+                supported: true,
+                subagents: [mocks.summary],
+                nextCursor: null,
+              },
+            ],
+            pageParams: [null],
           },
+          fetchNextPage: vi.fn(() => Promise.resolve()),
+          hasNextPage: false,
+          isFetchingNextPage: false,
+          isFetchNextPageError: false,
           refetch: mocks.listRefetch,
         }),
       },
@@ -150,6 +159,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
       const robot = tab?.querySelector<SVGElement>(`svg[aria-label="${status} sub-agent"]`);
       expect(robot?.classList.contains(color)).toBe(true);
       expect(robot?.classList.contains('animate-pulse')).toBe(pulses);
+      expect(robot?.classList.contains('motion-reduce:animate-none')).toBe(pulses);
       expect(tab?.querySelector('button[aria-label="Close Security review"]')).not.toBeNull();
     });
 

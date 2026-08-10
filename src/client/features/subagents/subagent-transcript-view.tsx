@@ -10,7 +10,6 @@ import type { SubagentSelection } from './types';
 
 export interface SubagentTranscriptViewProps {
   selection: SubagentSelection;
-  onBack?: () => void;
   workspaceId: string;
 }
 
