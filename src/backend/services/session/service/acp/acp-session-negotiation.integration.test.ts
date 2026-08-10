@@ -275,7 +275,7 @@ describe('ACP session negotiation integration', () => {
     expect(handle.configOptions.length).toBe(2);
 
     const defaultModel = getOptionByValue(modelOption, 'default');
-    expect(defaultModel).toEqual({ value: 'default', name: 'Opus 4.6' });
+    expect(defaultModel).toEqual({ value: 'default', name: 'Default — Opus 4.6' });
   });
 
   it('negotiates initial CODEX session config options and modes', async () => {
