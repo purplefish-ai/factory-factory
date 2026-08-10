@@ -121,8 +121,8 @@ viewport and all state renderers but no longer accepts or renders `onBack`.
 
 Provider sub-agent browsing requires the provider to restore the parent ACP
 session, but it does not require an agent turn to be running. Opening an old,
-stopped Factory Factory session must therefore restore its provider session on
-demand before listing or reading its historical sub-agents.
+stopped session in Factory Factory must therefore restore its provider session
+on demand before listing or reading its historical sub-agents.
 
 The backend owns this readiness boundary. A sub-agent list or transcript read
 ensures that the stored provider session has completed ACP `loadSession`, then
@@ -187,6 +187,6 @@ repository's typecheck and standard guardrails.
 ## Scope
 
 The tab presentation remains client-owned, while stopped-session restoration is
-implemented at the backend ACP lifecycle boundary. It does not add Factory
-Factory transcript persistence, parse provider-private history files, alter the
-ACP extension contract, or add mutation controls for sub-agents.
+implemented at the backend ACP lifecycle boundary. It does not make Factory
+Factory persist provider transcripts, parse provider-private history files,
+alter the ACP extension contract, or add mutation controls for sub-agents.
