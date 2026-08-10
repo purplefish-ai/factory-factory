@@ -9,6 +9,7 @@ export type {
   AcpRuntimeEventHandlers,
   AcpSessionState,
   AcpSubagentsChangedEvent,
+  ClaudeModelCatalogEntry,
 } from './acp';
 export {
   AcpClientHandler,
@@ -16,6 +17,7 @@ export {
   AcpRuntimeManager,
   acpRuntimeManager,
   CodexAppServerAcpAdapter,
+  fetchClaudeModelCatalogFromAcp,
   fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,
 } from './acp';
