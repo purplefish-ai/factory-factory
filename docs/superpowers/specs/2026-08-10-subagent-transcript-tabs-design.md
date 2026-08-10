@@ -117,25 +117,30 @@ transcript or duplicating summary observers for the active tab.
 `SubagentTranscriptContent` becomes transcript-only. It retains the message
 viewport and all state renderers but no longer accepts or renders `onBack`.
 
-## Parent Runtime Readiness
+## Parent Session Restoration
 
-Provider sub-agent browsing depends on a live ACP handle for the parent
-session. A workspace may load with no selected session or with a stopped parent
-session; in either case the provider sub-agent query stays disabled and child
-workspace content in the Agents panel remains unaffected.
+Provider sub-agent browsing requires the provider to restore the parent ACP
+session, but it does not require an agent turn to be running. Opening an old,
+stopped Factory Factory session must therefore restore its provider session on
+demand before listing or reading its historical sub-agents.
 
-The client treats the selected parent as ready for provider sub-agent browsing
-only when the chat WebSocket is connected to that selected database session and
-its runtime process state is `alive`. When a stopped session auto-starts after
-the user sends a message, readiness changes from false to true. The existing
-sub-agent invalidation hook consumes that transition, invalidates the initial
-cached `supported: false` result, and refetches the provider list without a page
-refresh.
+The backend owns this readiness boundary. A sub-agent list or transcript read
+ensures that the stored provider session has completed ACP `loadSession`, then
+uses the negotiated browse capability. The endpoint does not return and cache
+an early `supported: false` result merely because adapter startup or capability
+negotiation is still in progress.
 
-This uses the existing runtime snapshot instead of polling or adding a new
-backend event. It also preserves passive session loading: merely opening a
-stopped session does not spawn a provider process. Restarting or auto-starting
-the parent is what makes provider-owned sub-agent history browseable again.
+Restoration is passive: it does not send the default continuation prompt,
+dispatch queued messages or notifications, resume a child, mark the database
+session `RUNNING`, or make the UI present the stopped session as active. An idle
+provider adapter may remain available to serve history. If the user later sends
+a message, normal session startup reuses or promotes that restored connection
+and performs the usual active-session side effects exactly once.
+
+This backend-owned restoration also removes the client startup race. Starting a
+previously stopped session does not depend on a page refresh or on observing the
+intermediate runtime state where the process is alive but ACP capabilities have
+not yet been negotiated.
 
 ## Error and Restoration Behavior
 
@@ -164,8 +169,13 @@ Tests will cover:
 - refreshed provider summaries update the persisted label and icon status;
 - the transcript renders without the former Back/breadcrumb/status header;
 - mobile selection still closes the right-panel sheet;
-- a stopped parent initially suppresses provider browsing, then becoming alive
-  invalidates and reveals its recovered sub-agents without a page refresh;
+- opening an old stopped parent passively restores its provider session and
+  reveals its historical sub-agents without sending a prompt or changing the
+  persisted session status;
+- requesting sub-agents while an active session is still negotiating waits for
+  capability readiness rather than caching `supported: false` until refresh;
+- sending a message after passive restoration performs the normal active-start
+  side effects once and keeps the recovered sub-agents visible;
 - no selected session leaves provider browsing disabled without affecting child
   workspace content;
 - existing loading, pagination, invalidation, unavailable, and scroll behavior
@@ -176,7 +186,7 @@ repository's typecheck and standard guardrails.
 
 ## Scope
 
-This change is client-only. It does not alter the ACP browse contract, tRPC
-procedures, provider transcript retention, Agents panel grouping, or read-only
-semantics. It does not add tab reordering, pinning, or mutation controls for
-sub-agents.
+The tab presentation remains client-owned, while stopped-session restoration is
+implemented at the backend ACP lifecycle boundary. It does not add Factory
+Factory transcript persistence, parse provider-private history files, alter the
+ACP extension contract, or add mutation controls for sub-agents.
