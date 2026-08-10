@@ -53,8 +53,14 @@ export function WorkspaceDetailContainer() {
     void navigate('/projects', { replace: true });
   }, [workspace?.status, slug, navigate]);
 
-  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState, openTab } =
-    useWorkspacePanel();
+  const {
+    rightPanelVisible,
+    setRightPanelVisible,
+    activeTabId,
+    clearScrollState,
+    openTab,
+    openSubagentTab,
+  } = useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
 
   const { workspaceInitStatus, isScriptFailed, setupWarningDismissed, dismissSetupWarning } =
@@ -373,6 +379,7 @@ export function WorkspaceDetailContainer() {
           handleCloseChatSession,
           handleQuickAction,
           handleRestartSession: restartSession,
+          handleOpenSubagentTab: openSubagentTab,
           maxSessions,
           hasWorktreePath: !!workspace?.worktreePath,
           selectedProvider,
