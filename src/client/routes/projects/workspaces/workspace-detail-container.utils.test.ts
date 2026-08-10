@@ -5,8 +5,32 @@ import {
   buildSessionSummariesById,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
+  isProviderSubagentSessionReady,
   type SessionForRuntimeOverlay,
 } from './workspace-detail-container.utils';
+
+describe('isProviderSubagentSessionReady', () => {
+  const readyInput = {
+    selectedSessionId: 'session-1',
+    runtimeSessionId: 'session-1',
+    chatConnected: true,
+    processState: 'alive' as const,
+  };
+
+  it.each([
+    ['has no selected session', { selectedSessionId: null }],
+    ['has not hydrated the selected session', { runtimeSessionId: null }],
+    ['still describes another session', { runtimeSessionId: 'session-2' }],
+    ['has a disconnected chat socket', { chatConnected: false }],
+    ['has a stopped ACP process', { processState: 'stopped' as const }],
+  ])('returns false when the parent %s', (_description, override) => {
+    expect(isProviderSubagentSessionReady({ ...readyInput, ...override })).toBe(false);
+  });
+
+  it('returns true when the selected parent runtime becomes alive', () => {
+    expect(isProviderSubagentSessionReady(readyInput)).toBe(true);
+  });
+});
 
 describe('getVisibleInitBanner', () => {
   const dismissibleBanner = { message: 'Setup failed', showDismiss: true };

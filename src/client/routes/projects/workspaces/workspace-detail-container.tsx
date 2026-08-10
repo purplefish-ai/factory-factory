@@ -29,6 +29,7 @@ import {
   buildSessionSummariesById,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
+  isProviderSubagentSessionReady,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
@@ -172,6 +173,12 @@ export function WorkspaceDetailContainer() {
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
+  const selectedSessionReady = isProviderSubagentSessionReady({
+    selectedSessionId: selectedDbSessionId,
+    runtimeSessionId,
+    chatConnected: connected,
+    processState: sessionRuntime.processState,
+  });
   const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
   const {
@@ -371,7 +378,7 @@ export function WorkspaceDetailContainer() {
         sessionTabs={{
           sessions,
           selectedDbSessionId,
-          selectedSessionReady: runtimeSessionId === selectedDbSessionId && connected,
+          selectedSessionReady,
           sessionSummariesById,
           isDeletingSession: deleteSession.isPending,
           handleSelectSession,
