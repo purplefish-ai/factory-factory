@@ -8,7 +8,9 @@ import {
   useState,
 } from 'react';
 import { z } from 'zod';
+import type { SubagentSelection } from '@/client/features/subagents';
 import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
+import { subagentSummarySchema } from '@/shared/acp-protocol';
 
 import {
   getScrollStateFromRecord,
@@ -28,9 +30,10 @@ export type BottomPanelTab = 'terminal' | 'dev-logs' | 'post-run-logs' | 'setup-
 
 export interface MainViewTab {
   id: string;
-  type: 'chat' | 'file' | 'diff' | 'screenshot' | 'closed-session';
+  type: 'chat' | 'file' | 'diff' | 'screenshot' | 'closed-session' | 'subagent';
   path?: string; // for file/diff tabs
   closedSessionId?: string; // for closed-session tabs
+  subagentSelection?: SubagentSelection;
   label: string;
 }
 
@@ -42,7 +45,9 @@ export interface WorkspacePanelState {
 }
 
 interface WorkspacePanelContextValue extends WorkspacePanelState {
-  openTab: (type: MainViewTab['type'], path?: string, label?: string) => void;
+  openTab: (type: Exclude<MainViewTab['type'], 'subagent'>, path?: string, label?: string) => void;
+  openSubagentTab: (selection: SubagentSelection) => void;
+  updateSubagentTab: (selection: SubagentSelection) => void;
   closeTab: (id: string) => void;
   selectTab: (id: string) => void;
   toggleRightPanel: () => void;
@@ -69,12 +74,19 @@ const CHAT_TAB: MainViewTab = {
   label: 'Chat',
 };
 
+const SubagentSelectionSchema = z.object({
+  parentSessionId: z.string().min(1),
+  parentSessionName: z.string(),
+  subagent: subagentSummarySchema,
+});
+
 const MainViewTabSchema = z
   .object({
     id: z.string(),
-    type: z.enum(['chat', 'file', 'diff', 'screenshot', 'closed-session']),
+    type: z.enum(['chat', 'file', 'diff', 'screenshot', 'closed-session', 'subagent']),
     path: z.string().optional(),
     closedSessionId: z.string().optional(),
+    subagentSelection: SubagentSelectionSchema.optional(),
     label: z.string(),
   })
   .superRefine((tab, context) => {
@@ -83,6 +95,13 @@ const MainViewTabSchema = z
         code: z.ZodIssueCode.custom,
         message: 'File and diff tabs require a path',
         path: ['path'],
+      });
+    }
+    if (tab.type === 'subagent' && !tab.subagentSelection) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Sub-agent tabs require a selection snapshot',
+        path: ['subagentSelection'],
       });
     }
   });
@@ -94,6 +113,14 @@ const SCROLL_STATE_PERSIST_DEBOUNCE_MS = 120;
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function getSubagentTabLabel(selection: SubagentSelection): string {
+  return selection.subagent.name?.trim() || `Sub-agent ${selection.subagent.id.slice(0, 8)}`;
+}
+
+function getSubagentTabId(selection: SubagentSelection): string {
+  return `subagent-${selection.parentSessionId}-${selection.subagent.id}`;
+}
 
 function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
   if (typeof window === 'undefined') {
@@ -416,7 +443,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   );
 
   const openTab = useCallback(
-    (type: MainViewTab['type'], path?: string, label?: string) => {
+    (type: Exclude<MainViewTab['type'], 'subagent'>, path?: string, label?: string) => {
       // Check for existing tab
       const existing = tabs.find((tab) => {
         if (type === 'closed-session' && path) {
@@ -450,6 +477,41 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     },
     [tabs]
   );
+
+  const openSubagentTab = useCallback((selection: SubagentSelection) => {
+    const id = getSubagentTabId(selection);
+    setTabs((current) => {
+      const existing = current.some((tab) => tab.id === id && tab.type === 'subagent');
+      const refreshed = current.map((tab) =>
+        tab.id === id
+          ? { ...tab, label: getSubagentTabLabel(selection), subagentSelection: selection }
+          : tab
+      );
+      return existing
+        ? refreshed
+        : [
+            ...current,
+            {
+              id,
+              type: 'subagent',
+              label: getSubagentTabLabel(selection),
+              subagentSelection: selection,
+            },
+          ];
+    });
+    setActiveTabId(id);
+  }, []);
+
+  const updateSubagentTab = useCallback((selection: SubagentSelection) => {
+    const id = getSubagentTabId(selection);
+    setTabs((current) =>
+      current.map((tab) =>
+        tab.id === id && tab.type === 'subagent'
+          ? { ...tab, label: getSubagentTabLabel(selection), subagentSelection: selection }
+          : tab
+      )
+    );
+  }, []);
 
   const closeTab = useCallback(
     (id: string) => {
@@ -491,6 +553,8 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       rightPanelVisible,
       activeBottomTab,
       openTab,
+      openSubagentTab,
+      updateSubagentTab,
       closeTab,
       selectTab,
       toggleRightPanel,
@@ -506,6 +570,8 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       rightPanelVisible,
       activeBottomTab,
       openTab,
+      openSubagentTab,
+      updateSubagentTab,
       closeTab,
       selectTab,
       toggleRightPanel,

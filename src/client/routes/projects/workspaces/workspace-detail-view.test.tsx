@@ -94,7 +94,6 @@ const rightPanelMock = vi.hoisted(() =>
 );
 
 const workspaceContentViewMock = vi.hoisted(() => vi.fn());
-const subagentTranscriptViewMock = vi.hoisted(() => vi.fn());
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('@/hooks/use-mobile', () => ({
@@ -131,20 +130,6 @@ vi.mock('@/client/features/workspace', () => ({
   WorkspaceContentView: (props: { children: ReactNode; selectedSessionId: string | null }) => {
     workspaceContentViewMock(props);
     return createElement('main', null, props.children);
-  },
-}));
-
-vi.mock('@/client/features/subagents', () => ({
-  SubagentTranscriptView: (props: {
-    selection: SubagentSelection;
-    onBack: () => void;
-    workspaceId: string;
-  }) => {
-    subagentTranscriptViewMock(props);
-    return createElement('section', { 'data-testid': 'subagent-transcript' }, [
-      createElement('span', { key: 'name' }, props.selection.subagent.name),
-      createElement('button', { key: 'back', onClick: props.onBack, type: 'button' }, 'Back'),
-    ]);
   },
 }));
 
@@ -243,6 +228,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       handleCloseChatSession: vi.fn(),
       handleQuickAction: vi.fn(),
       handleRestartSession: vi.fn(),
+      handleOpenSubagentTab: vi.fn(),
       maxSessions: 5,
       hasWorktreePath: true,
       selectedProvider: 'CLAUDE',
@@ -363,52 +349,27 @@ describe('WorkspaceDetailView', () => {
     root.unmount();
   });
 
-  it('drills into a sub-agent without replacing or unmounting the parent session', () => {
+  it('opens a sub-agent tab without replacing or selecting the parent chat', () => {
     const props = createViewProps(0);
     props.rightPanelVisible = true;
     const { container, root } = renderView(props);
-    const parentChat = container.querySelector<HTMLElement>('[data-testid="parent-chat"]');
-    if (!parentChat) {
-      throw new Error('Expected parent chat viewport');
-    }
-    parentChat.scrollTop = 420;
-
-    expect(rightPanelMock.mock.calls.at(-1)?.[0]).toEqual(
-      expect.objectContaining({
-        selectedSessionId: 'session-1',
-        selectedSessionName: 'Session 1',
-        selectedSessionReady: true,
-      })
-    );
+    const parentChat = container.querySelector('[data-testid="parent-chat"]');
 
     void act(() => {
       container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
     });
 
-    expect(container.querySelector('[data-testid="subagent-transcript"]')?.textContent).toContain(
-      'Security review'
+    expect(props.sessionTabs.handleOpenSubagentTab).toHaveBeenCalledOnce();
+    expect(props.sessionTabs.handleOpenSubagentTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentSessionId: 'session-1',
+        parentSessionName: 'Session 1',
+        subagent: expect.objectContaining({ id: 'child-1', name: 'Security review' }),
+      })
     );
     expect(container.querySelector('[data-testid="parent-chat"]')).toBe(parentChat);
-    expect(parentChat?.parentElement?.classList.contains('hidden')).toBe(true);
-    parentChat.scrollTop = 0;
-    expect(workspaceContentViewMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedSessionId: 'session-1' })
-    );
     expect(props.sessionTabs.handleSelectSession).not.toHaveBeenCalled();
-
-    void act(() => {
-      [...container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Back')
-        ?.click();
-    });
-
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).toBeNull();
-    expect(container.querySelector('[data-testid="parent-chat"]')).toBe(parentChat);
-    expect(parentChat?.parentElement?.classList.contains('hidden')).toBe(false);
-    expect(parentChat.scrollTop).toBe(420);
-    expect(props.chat.onScroll).toHaveBeenCalledOnce();
-
-    void act(() => root.unmount());
+    root.unmount();
   });
 
   it('closes the mobile right-panel sheet after opening a sub-agent', () => {
@@ -421,104 +382,35 @@ describe('WorkspaceDetailView', () => {
       container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
     });
 
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBeNull();
+    expect(props.sessionTabs.handleOpenSubagentTab).toHaveBeenCalledOnce();
     expect(props.setRightPanelVisible).toHaveBeenCalledWith(false);
 
     void act(() => root.unmount());
   });
 
-  it('clears the child drill-in when the selected parent session changes', () => {
+  it('ignores a sub-agent selection owned by another parent session', () => {
     const props = createViewProps(0);
     props.rightPanelVisible = true;
-    const { container, root } = renderView(props);
+    const { root } = renderView(props);
+    const onOpenSubagent = rightPanelMock.mock.calls.at(-1)?.[0].onOpenSubagent;
 
     void act(() => {
-      container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
+      onOpenSubagent?.({
+        parentSessionId: 'session-2',
+        parentSessionName: 'Named session',
+        subagent: {
+          id: 'foreign-child',
+          name: 'Foreign review',
+          status: 'running',
+          createdAt: null,
+          updatedAt: null,
+          completedAt: null,
+          latestActivity: null,
+          resultPreview: null,
+        },
+      });
     });
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBeNull();
-
-    const changedProps: WorkspaceDetailViewProps = {
-      ...props,
-      sessionTabs: {
-        ...props.sessionTabs,
-        selectedDbSessionId: 'session-2',
-      },
-    };
-    void act(() => root.render(createElement(WorkspaceDetailView, changedProps)));
-
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).toBeNull();
-    expect(container.querySelector('[data-testid="parent-chat"]')).not.toBeNull();
-    expect(workspaceContentViewMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedSessionId: 'session-2' })
-    );
-
-    void act(() => root.unmount());
-  });
-
-  it('restores the original parent scroll after switching between drilled-in children', () => {
-    const props = createViewProps(0);
-    props.rightPanelVisible = true;
-    const { container, root } = renderView(props);
-    const parentChat = container.querySelector<HTMLElement>('[data-testid="parent-chat"]');
-    if (!parentChat) {
-      throw new Error('Expected parent chat viewport');
-    }
-    parentChat.scrollTop = 420;
-
-    void act(() => {
-      container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
-    });
-    const firstTranscript = container.querySelector('[data-testid="subagent-transcript"]');
-    parentChat.scrollTop = 0;
-    void act(() => {
-      container.querySelector<HTMLButtonElement>('[data-testid="open-subagent-2"]')?.click();
-    });
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBe(
-      firstTranscript
-    );
-    expect(container.querySelector('[data-testid="subagent-transcript"]')?.textContent).toContain(
-      'Test review'
-    );
-
-    void act(() => {
-      [...container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Back')
-        ?.click();
-    });
-
-    expect(parentChat.scrollTop).toBe(420);
-    expect(props.chat.onScroll).toHaveBeenCalledOnce();
-
-    void act(() => root.unmount());
-  });
-
-  it('does not render a stale child transcript after the workspace scope changes', () => {
-    const props = createViewProps(0);
-    props.rightPanelVisible = true;
-    const { container, root } = renderView(props);
-
-    void act(() => {
-      container.querySelector<HTMLButtonElement>('[data-testid="open-subagent"]')?.click();
-    });
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).not.toBeNull();
-    subagentTranscriptViewMock.mockClear();
-
-    const changedProps: WorkspaceDetailViewProps = {
-      ...props,
-      workspaceState: {
-        ...props.workspaceState,
-        workspaceId: 'workspace-2',
-        workspace: {
-          ...props.workspaceState.workspace,
-          id: 'workspace-2',
-        } as WorkspaceDetailViewProps['workspaceState']['workspace'],
-      },
-    };
-    void act(() => root.render(createElement(WorkspaceDetailView, changedProps)));
-
-    expect(container.querySelector('[data-testid="subagent-transcript"]')).toBeNull();
-    expect(subagentTranscriptViewMock).not.toHaveBeenCalled();
-
-    void act(() => root.unmount());
+    expect(props.sessionTabs.handleOpenSubagentTab).not.toHaveBeenCalled();
+    root.unmount();
   });
 });

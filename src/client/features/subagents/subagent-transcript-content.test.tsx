@@ -81,7 +81,6 @@ describe('SubagentTranscriptContent row identity', () => {
         createElement(SubagentTranscriptContent, {
           workspaceId: 'workspace-1',
           selection,
-          onBack: vi.fn(),
           state: {
             kind: 'ready',
             messages,

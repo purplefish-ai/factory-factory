@@ -1,16 +1,9 @@
-import {
-  ArrowLeftIcon,
-  CaretRightIcon,
-  RobotIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react';
+import { RobotIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { VirtualizedMessageList } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
-import { cn } from '@/lib/utils';
 import type { SubagentSelection } from './types';
 
 export type SubagentTranscriptState =
@@ -29,86 +22,8 @@ export type SubagentTranscriptState =
 export interface SubagentTranscriptContentProps {
   workspaceId: string;
   selection: SubagentSelection;
-  onBack: () => void;
   state: SubagentTranscriptState;
   viewportRef?: RefObject<HTMLDivElement | null>;
-}
-
-function statusLabel(status: SubagentSelection['subagent']['status']): string {
-  return `${status.slice(0, 1).toUpperCase()}${status.slice(1)}`;
-}
-
-function statusClassName(status: SubagentSelection['subagent']['status']): string {
-  switch (status) {
-    case 'starting':
-      return 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300';
-    case 'running':
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300';
-    case 'waiting':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
-    case 'completed':
-      return 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300';
-    case 'failed':
-      return 'border-destructive/30 bg-destructive/10 text-destructive';
-    case 'cancelled':
-    case 'interrupted':
-      return 'border-border bg-muted text-muted-foreground';
-  }
-}
-
-function subagentName(selection: SubagentSelection): string {
-  return selection.subagent.name?.trim() || `Sub-agent ${selection.subagent.id.slice(0, 8)}`;
-}
-
-function TranscriptHeader({
-  selection,
-  onBack,
-}: {
-  selection: SubagentSelection;
-  onBack: () => void;
-}) {
-  const childName = subagentName(selection);
-  return (
-    <header className="shrink-0 border-b bg-background px-3 py-2 sm:px-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 shrink-0 gap-1 px-2"
-          onClick={onBack}
-          aria-label={`Back to ${selection.parentSessionName}`}
-        >
-          <ArrowLeftIcon className="h-3.5 w-3.5" />
-          Back
-        </Button>
-        <nav
-          aria-label="Sub-agent transcript breadcrumb"
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-sm"
-        >
-          <span className="shrink-0 text-muted-foreground">{selection.parentSessionName}</span>
-          <CaretRightIcon
-            aria-hidden="true"
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-          />
-          <span className="truncate font-medium">{childName}</span>
-        </nav>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-            Read only
-          </span>
-          <span
-            className={cn(
-              'rounded-full border px-2 py-0.5 text-[11px] font-medium',
-              statusClassName(selection.subagent.status)
-            )}
-          >
-            {statusLabel(selection.subagent.status)}
-          </span>
-        </div>
-      </div>
-    </header>
-  );
 }
 
 function LoadingState() {
@@ -256,13 +171,11 @@ function ReadyState({
 export function SubagentTranscriptContent({
   workspaceId,
   selection,
-  onBack,
   state,
   viewportRef,
 }: SubagentTranscriptContentProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <TranscriptHeader selection={selection} onBack={onBack} />
       <div className="min-h-0 flex-1">
         {state.kind === 'loading' && <LoadingState />}
         {state.kind === 'empty' && <EmptyState />}

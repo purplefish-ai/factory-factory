@@ -9,7 +9,7 @@ export default function WorkspaceDetailPage() {
   const { id: workspaceId = '' } = useParams<{ id: string }>();
 
   return (
-    <WorkspacePanelProvider workspaceId={workspaceId}>
+    <WorkspacePanelProvider key={workspaceId} workspaceId={workspaceId}>
       <Suspense fallback={<Loading message="Loading chat..." />}>
         {/* Key by workspaceId to reset all state when switching workspaces.
             Without this, selectedDbSessionId would persist from the previous

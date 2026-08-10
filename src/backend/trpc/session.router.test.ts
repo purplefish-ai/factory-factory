@@ -43,6 +43,7 @@ function createCaller(options?: { acpRuntimeManager?: AcpRuntimeManager }) {
     startSession: vi.fn(async () => undefined),
     stopSession: vi.fn(async () => undefined),
     persistClosedSession: vi.fn(async () => undefined),
+    ensureSubagentBrowseSession: vi.fn(async () => false),
   };
   const sessionDomainService = {
     clearSession: vi.fn(),
@@ -124,6 +125,38 @@ describe('sessionRouter', () => {
   });
 
   describe('sub-agent browsing', () => {
+    it('waits for parent restoration before checking negotiated browse capability', async () => {
+      const { caller, acpRuntimeManager, sessionLifecycleService } = createCaller();
+      let resolveRestoration!: (restored: boolean) => void;
+      sessionLifecycleService.ensureSubagentBrowseSession.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          resolveRestoration = resolve;
+        })
+      );
+      acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      acpRuntimeManager.listSubagents.mockResolvedValue({ subagents: [], nextCursor: null });
+
+      const result = caller.listSubagents({ sessionId: 'session-1', limit: 50 });
+      await vi.waitFor(() => {
+        expect(sessionLifecycleService.ensureSubagentBrowseSession).toHaveBeenCalledWith(
+          'session-1'
+        );
+      });
+      expect(acpRuntimeManager.getSubagentBrowseCapability).not.toHaveBeenCalled();
+
+      resolveRestoration(true);
+      await expect(result).resolves.toEqual({
+        supported: true,
+        subagents: [],
+        nextCursor: null,
+      });
+    });
+
     it('returns unsupported without calling the adapter when no live capability exists', async () => {
       const { caller, acpRuntimeManager } = createCaller();
       acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue(null);

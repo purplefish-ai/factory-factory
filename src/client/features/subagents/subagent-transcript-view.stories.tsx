@@ -73,7 +73,6 @@ const meta = {
   args: {
     workspaceId: 'workspace-1',
     selection: selection('running'),
-    onBack: fn(),
     state: readyState,
   },
   parameters: { layout: 'centered' },

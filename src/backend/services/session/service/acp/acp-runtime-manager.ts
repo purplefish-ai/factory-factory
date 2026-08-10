@@ -53,6 +53,13 @@ export class PromptTimeoutError extends Error {
   }
 }
 
+export class AcpBrowseSessionUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'AcpBrowseSessionUnavailableError';
+  }
+}
+
 type AcpSubagentBrowseErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_FOUND'
@@ -242,6 +249,7 @@ async function raceWithSoftTimeout<T>(
 
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
+  private readonly browseOnlySessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
@@ -285,8 +293,19 @@ export class AcpRuntimeManager {
   }
 
   getClient(sessionId: string): AcpProcessHandle | undefined {
+    if (this.browseOnlySessions.has(sessionId)) {
+      return undefined;
+    }
+    return this.getBrowseClient(sessionId);
+  }
+
+  getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
     return handle?.isRunning() ? handle : undefined;
+  }
+
+  isBrowseOnlySession(sessionId: string): boolean {
+    return this.browseOnlySessions.has(sessionId);
   }
 
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
@@ -294,7 +313,7 @@ export class AcpRuntimeManager {
   }
 
   getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
-    return this.getClient(sessionId)?.getSubagentBrowseCapability() ?? null;
+    return this.getBrowseClient(sessionId)?.getSubagentBrowseCapability() ?? null;
   }
 
   async listSubagents(
@@ -344,7 +363,7 @@ export class AcpRuntimeManager {
   }
 
   private requireSubagentBrowseHandle(sessionId: string): AcpProcessHandle {
-    const handle = this.getClient(sessionId);
+    const handle = this.getBrowseClient(sessionId);
     if (!handle) {
       throw new AcpSubagentBrowseError(
         'PRECONDITION_FAILED',
@@ -386,8 +405,9 @@ export class AcpRuntimeManager {
           throw this.createShutdownError(sessionId);
         }
 
-        const existing = this.sessions.get(sessionId);
+        const existing = this.getBrowseClient(sessionId);
         if (existing?.isRunning()) {
+          this.promoteForActiveUse(sessionId, options);
           logger.debug('Returning existing running ACP client', { sessionId });
           return existing;
         }
@@ -395,10 +415,13 @@ export class AcpRuntimeManager {
         const pending = this.pendingCreation.get(sessionId);
         if (pending) {
           logger.debug('Waiting for pending ACP client creation', { sessionId });
-          return await pending;
+          const handle = await pending;
+          this.promoteForActiveUse(sessionId, options);
+          return handle;
         }
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
+        this.recordClientPurpose(sessionId, options);
         const createPromise = this.createClient(sessionId, options, handlers, context);
         this.pendingCreation.set(sessionId, createPromise);
 
@@ -406,6 +429,7 @@ export class AcpRuntimeManager {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
+          this.clearBrowseOnlyPurposeIfUnused(sessionId);
         }
       } finally {
         const refCount = this.lockRefCounts.get(sessionId) ?? 1;
@@ -418,6 +442,26 @@ export class AcpRuntimeManager {
         }
       }
     });
+  }
+
+  private promoteForActiveUse(sessionId: string, options: AcpClientOptions): void {
+    if (options.purpose !== 'browse') {
+      this.browseOnlySessions.delete(sessionId);
+    }
+  }
+
+  private recordClientPurpose(sessionId: string, options: AcpClientOptions): void {
+    if (options.purpose === 'browse') {
+      this.browseOnlySessions.add(sessionId);
+      return;
+    }
+    this.browseOnlySessions.delete(sessionId);
+  }
+
+  private clearBrowseOnlyPurposeIfUnused(sessionId: string): void {
+    if (!(this.sessions.has(sessionId) || this.pendingCreation.has(sessionId))) {
+      this.browseOnlySessions.delete(sessionId);
+    }
   }
 
   private async createClient(
@@ -620,6 +664,7 @@ export class AcpRuntimeManager {
 
     // Store in sessions map
     this.sessions.set(sessionId, handle);
+    this.recordClientPurpose(sessionId, options);
 
     this.wireChildExitHandler(sessionId, child, handlers);
     await this.notifyClientCreated(sessionId, handle, context, handlers);
@@ -781,20 +826,23 @@ export class AcpRuntimeManager {
   ): void {
     child.on('exit', async (code) => {
       if (this.shouldSkipChildExitHandler(sessionId, child, code)) {
+        this.clearBrowseOnlyPurposeIfUnused(sessionId);
         return;
       }
 
       this.pendingCreation.delete(sessionId);
 
-      if (handlers.onExit) {
-        try {
+      try {
+        if (handlers.onExit) {
           await handlers.onExit(sessionId, code);
-        } catch (error) {
-          logger.warn('Failed to handle ACP exit event', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
+      } catch (error) {
+        logger.warn('Failed to handle ACP exit event', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        this.clearBrowseOnlyPurposeIfUnused(sessionId);
       }
     });
   }
@@ -891,7 +939,7 @@ export class AcpRuntimeManager {
     configOptions: SessionConfigOption[];
   }> {
     const storedId = options.resumeProviderSessionId;
-    const canResume = agentCapabilities.loadSession === true && !!storedId;
+    const browseOnly = options.purpose === 'browse';
 
     const mcpServers = (options.mcpServers ?? []).map((s) => ({
       name: s.name,
@@ -899,36 +947,23 @@ export class AcpRuntimeManager {
       args: s.args,
       env: Object.entries(s.env).map(([name, value]) => ({ name, value })),
     }));
-    if (canResume && storedId) {
-      let loadResult: LoadSessionResponse | null = null;
-      try {
-        loadResult = await connection.loadSession({
-          sessionId: storedId,
-          cwd: options.workingDir,
-          mcpServers,
-        });
-      } catch (error) {
-        const details = getAcpErrorLogDetails(error);
-        logger.warn('loadSession failed, falling back to newSession', {
-          sessionId,
-          storedProviderSessionId: storedId,
-          error: details.message,
-          ...(details.code !== undefined ? { errorCode: details.code } : {}),
-          ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
-        });
-      }
+    const resumed = await this.tryLoadStoredSession(
+      connection,
+      sessionId,
+      options,
+      agentCapabilities,
+      mcpServers
+    );
+    if (resumed) {
+      return resumed;
+    }
 
-      if (loadResult !== null) {
-        logger.info('ACP session resumed via loadSession', {
-          sessionId,
-          providerSessionId: storedId,
-        });
-
-        return {
-          providerSessionId: storedId,
-          configOptions: requireSessionConfigOptions(options.provider, 'loadSession', loadResult),
-        };
-      }
+    if (browseOnly) {
+      throw new AcpBrowseSessionUnavailableError(
+        storedId
+          ? 'Provider does not support restoring this session for sub-agent browsing.'
+          : 'Stored provider session is required for sub-agent browsing.'
+      );
     }
 
     const sessionResult = await connection.newSession({
@@ -943,6 +978,68 @@ export class AcpRuntimeManager {
       providerSessionId: sessionResult.sessionId,
       configOptions: requireSessionConfigOptions(options.provider, 'newSession', sessionResult),
     };
+  }
+
+  private async tryLoadStoredSession(
+    connection: ClientSideConnection,
+    sessionId: string,
+    options: AcpClientOptions,
+    agentCapabilities: Record<string, unknown>,
+    mcpServers: Array<{
+      name: string;
+      command: string;
+      args: string[];
+      env: Array<{ name: string; value: string }>;
+    }>
+  ): Promise<{ providerSessionId: string; configOptions: SessionConfigOption[] } | null> {
+    const storedId = options.resumeProviderSessionId;
+    if (!(agentCapabilities.loadSession === true && storedId)) {
+      return null;
+    }
+
+    let loadResult: LoadSessionResponse;
+    try {
+      loadResult = await connection.loadSession({
+        sessionId: storedId,
+        cwd: options.workingDir,
+        mcpServers,
+      });
+    } catch (error) {
+      this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
+      if (options.purpose === 'browse') {
+        throw new AcpBrowseSessionUnavailableError(
+          'Provider failed to restore this session for sub-agent browsing.',
+          { cause: error }
+        );
+      }
+      return null;
+    }
+
+    logger.info('ACP session resumed via loadSession', {
+      sessionId,
+      providerSessionId: storedId,
+    });
+    return {
+      providerSessionId: storedId,
+      configOptions: requireSessionConfigOptions(options.provider, 'loadSession', loadResult),
+    };
+  }
+
+  private logLoadSessionFailure(
+    sessionId: string,
+    storedProviderSessionId: string,
+    error: unknown,
+    browseOnly: boolean
+  ): void {
+    const details = getAcpErrorLogDetails(error);
+    logger.warn(browseOnly ? 'Browse-only loadSession failed' : 'loadSession failed', {
+      sessionId,
+      storedProviderSessionId,
+      error: details.message,
+      ...(details.code !== undefined ? { errorCode: details.code } : {}),
+      ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
+      ...(!browseOnly ? { fallback: 'newSession' } : {}),
+    });
   }
 
   stopClient(sessionId: string): Promise<void> {
@@ -1028,6 +1125,7 @@ export class AcpRuntimeManager {
       const current = this.sessions.get(sessionId);
       if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
+        this.browseOnlySessions.delete(sessionId);
       }
     }
   }
@@ -1309,8 +1407,7 @@ export class AcpRuntimeManager {
   }
 
   isSessionRunning(sessionId: string): boolean {
-    const handle = this.sessions.get(sessionId);
-    return handle?.isRunning() ?? false;
+    return this.getClient(sessionId) !== undefined;
   }
 
   isSessionWorking(sessionId: string): boolean {
