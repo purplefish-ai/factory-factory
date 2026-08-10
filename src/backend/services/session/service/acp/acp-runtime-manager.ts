@@ -54,8 +54,8 @@ export class PromptTimeoutError extends Error {
 }
 
 export class AcpBrowseSessionUnavailableError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'AcpBrowseSessionUnavailableError';
   }
 }
@@ -429,9 +429,7 @@ export class AcpRuntimeManager {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
-          if (!this.sessions.has(sessionId)) {
-            this.browseOnlySessions.delete(sessionId);
-          }
+          this.clearBrowseOnlyPurposeIfUnused(sessionId);
         }
       } finally {
         const refCount = this.lockRefCounts.get(sessionId) ?? 1;
@@ -458,6 +456,12 @@ export class AcpRuntimeManager {
       return;
     }
     this.browseOnlySessions.delete(sessionId);
+  }
+
+  private clearBrowseOnlyPurposeIfUnused(sessionId: string): void {
+    if (!(this.sessions.has(sessionId) || this.pendingCreation.has(sessionId))) {
+      this.browseOnlySessions.delete(sessionId);
+    }
   }
 
   private async createClient(
@@ -822,9 +826,7 @@ export class AcpRuntimeManager {
   ): void {
     child.on('exit', async (code) => {
       if (this.shouldSkipChildExitHandler(sessionId, child, code)) {
-        if (!this.sessions.has(sessionId)) {
-          this.browseOnlySessions.delete(sessionId);
-        }
+        this.clearBrowseOnlyPurposeIfUnused(sessionId);
         return;
       }
 
@@ -840,7 +842,7 @@ export class AcpRuntimeManager {
           error: error instanceof Error ? error.message : String(error),
         });
       } finally {
-        this.browseOnlySessions.delete(sessionId);
+        this.clearBrowseOnlyPurposeIfUnused(sessionId);
       }
     });
   }
@@ -1005,7 +1007,10 @@ export class AcpRuntimeManager {
     } catch (error) {
       this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
       if (options.purpose === 'browse') {
-        throw error;
+        throw new AcpBrowseSessionUnavailableError(
+          'Provider failed to restore this session for sub-agent browsing.',
+          { cause: error }
+        );
       }
       return null;
     }

@@ -1423,6 +1423,19 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
   });
 
+  it('stops a browse-only client when the provider lacks sub-agent browsing', async () => {
+    const { service, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    runtimeManager.isBrowseOnlySession.mockReturnValue(true);
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+
+    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    expect(acpEventProcessor.clearSessionState).toHaveBeenCalledWith('session-1');
+  });
+
   it('does not let a failed browse creation clear a concurrent active startup context', async () => {
     const { service, handle, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
       provider: 'CODEX',

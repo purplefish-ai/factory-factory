@@ -472,7 +472,7 @@ export class SessionLifecycleService {
         }
         throw error;
       }
-      return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
+      return await this.resolveSubagentBrowseSupport(sessionId);
     }
 
     return await this.runStartupOperation(sessionId, async (stopGeneration) => {
@@ -507,8 +507,24 @@ export class SessionLifecycleService {
         throw error;
       }
 
-      return this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null;
+      return await this.resolveSubagentBrowseSupport(sessionId);
     });
+  }
+
+  private async resolveSubagentBrowseSupport(sessionId: string): Promise<boolean> {
+    if (this.runtimeManager.getSubagentBrowseCapability(sessionId) !== null) {
+      return true;
+    }
+    if (!this.runtimeManager.isBrowseOnlySession(sessionId)) {
+      return false;
+    }
+
+    try {
+      await this.runtimeManager.stopClient(sessionId);
+    } finally {
+      this.acpEventProcessor.clearSessionState(sessionId);
+    }
+    return false;
   }
 
   getSessionClient(sessionId: string): unknown | undefined {

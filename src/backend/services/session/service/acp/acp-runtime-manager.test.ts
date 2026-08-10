@@ -961,8 +961,58 @@ describe('AcpRuntimeManager', () => {
           defaultHandlers(),
           defaultContext()
         )
-      ).rejects.toThrow('stored provider session missing');
+      ).rejects.toMatchObject({
+        name: 'AcpBrowseSessionUnavailableError',
+        cause: { message: 'stored provider session missing' },
+      });
       expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
+    it('preserves browse-only state when an older process finishes exit handling', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      const exitHandling = createDeferred<void>();
+      const firstHandlers = {
+        ...defaultHandlers(),
+        onExit: vi.fn(() => exitHandling.promise),
+      };
+
+      await manager.getOrCreateClient(
+        'db-session-1',
+        defaultOptions(),
+        firstHandlers,
+        defaultContext()
+      );
+
+      firstChild.exitCode = 1;
+      firstChild.emit('exit', 1, null);
+      await vi.waitFor(() => {
+        expect(firstHandlers.onExit).toHaveBeenCalledWith('db-session-1', 1);
+      });
+
+      const replacementChild = setupSuccessfulSpawn({
+        ...subagentBrowseCapabilities(),
+        loadSession: true,
+      });
+      const replacementHandle = await manager.getOrCreateClient(
+        'db-session-1',
+        {
+          ...codexOptions(),
+          purpose: 'browse',
+          resumeProviderSessionId: 'provider-session-existing',
+        },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      exitHandling.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(manager.getBrowseClient('db-session-1')).toBe(replacementHandle);
+      expect(manager.isBrowseOnlySession('db-session-1')).toBe(true);
+      expect(manager.getClient('db-session-1')).toBeUndefined();
+
+      exitChildAfterSigterm(replacementChild);
+      await manager.stopClient('db-session-1');
     });
 
     it('classifies a provider without loadSession as unsupported for browse restoration', async () => {
