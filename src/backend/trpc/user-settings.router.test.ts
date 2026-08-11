@@ -5,6 +5,7 @@ const mockUpdate = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
+const mockFetchClaudeModelCatalogFromAcp = vi.hoisted(() => vi.fn());
 const mockFetchCodexModelCatalogFromAppServer = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/lib/shell', () => ({
@@ -17,6 +18,8 @@ function createCaller() {
   return userSettingsRouter.createCaller({
     appContext: {
       services: {
+        fetchClaudeModelCatalogFromAcp: (...args: unknown[]) =>
+          mockFetchClaudeModelCatalogFromAcp(...args),
         fetchCodexModelCatalogFromAppServer: (...args: unknown[]) =>
           mockFetchCodexModelCatalogFromAppServer(...args),
         userSettingsQueryService: {
@@ -33,6 +36,19 @@ function createCaller() {
 describe('userSettingsRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchClaudeModelCatalogFromAcp.mockReset();
+    mockFetchCodexModelCatalogFromAppServer.mockReset();
+    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+      { id: 'default', displayName: 'Default', description: null },
+    ]);
+    mockFetchCodexModelCatalogFromAppServer.mockResolvedValue([
+      {
+        id: 'gpt-5-codex',
+        displayName: 'GPT-5 Codex',
+        description: null,
+        supportedReasoningEfforts: [],
+      },
+    ]);
   });
 
   it('gets and updates settings', async () => {
@@ -151,7 +167,24 @@ describe('userSettingsRouter', () => {
     });
   });
 
-  it('returns provider options from the Codex model catalog', async () => {
+  it('returns provider options from dynamic Claude and Codex catalogs', async () => {
+    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+      {
+        id: 'default',
+        displayName: 'Default — Opus 4.8 (1M)',
+        description: 'Opus 4.8 with 1M context · Best for everyday tasks',
+      },
+      {
+        id: 'claude-fable-5[1m]',
+        displayName: 'Fable 5',
+        description: 'Fable 5 · Most capable for hard tasks',
+      },
+      {
+        id: 'sonnet',
+        displayName: 'Sonnet 5',
+        description: 'Sonnet 5 · Efficient for routine tasks',
+      },
+    ]);
     mockFetchCodexModelCatalogFromAppServer.mockResolvedValue([
       {
         id: 'gpt-5-codex',
@@ -175,12 +208,23 @@ describe('userSettingsRouter', () => {
 
     await expect(createCaller().getProviderOptions()).resolves.toEqual({
       CLAUDE: {
-        source: 'fallback',
+        source: 'cli',
         models: [
-          { value: 'sonnet', label: 'Sonnet' },
-          { value: 'opus', label: 'Opus' },
-          { value: 'haiku', label: 'Haiku' },
-          { value: 'fable', label: 'Fable' },
+          {
+            value: 'default',
+            label: 'Default — Opus 4.8 (1M)',
+            description: 'Opus 4.8 with 1M context · Best for everyday tasks',
+          },
+          {
+            value: 'claude-fable-5[1m]',
+            label: 'Fable 5',
+            description: 'Fable 5 · Most capable for hard tasks',
+          },
+          {
+            value: 'sonnet',
+            label: 'Sonnet 5',
+            description: 'Sonnet 5 · Efficient for routine tasks',
+          },
         ],
         efforts: [
           { value: 'low', label: 'Low' },
@@ -221,6 +265,82 @@ describe('userSettingsRouter', () => {
         ],
       },
     });
+  });
+
+  it('falls back to static Claude options without affecting dynamic Codex options', async () => {
+    mockFetchClaudeModelCatalogFromAcp.mockRejectedValue(new Error('claude unavailable'));
+
+    await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
+      CLAUDE: {
+        source: 'fallback',
+        error: 'claude unavailable',
+        models: [
+          { value: 'sonnet', label: 'Sonnet' },
+          { value: 'opus', label: 'Opus' },
+          { value: 'haiku', label: 'Haiku' },
+          { value: 'fable', label: 'Fable' },
+        ],
+      },
+      CODEX: { source: 'cli' },
+    });
+  });
+
+  it('keeps dynamic Claude options when Codex catalog loading fails', async () => {
+    mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
+      {
+        id: 'claude-fable-5[1m]',
+        displayName: 'Fable 5',
+        description: 'Fable 5 · Most capable for hard tasks',
+      },
+    ]);
+    mockFetchCodexModelCatalogFromAppServer.mockRejectedValue(new Error('codex unavailable'));
+
+    await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
+      CLAUDE: {
+        source: 'cli',
+        models: [
+          {
+            value: 'claude-fable-5[1m]',
+            label: 'Fable 5',
+            description: 'Fable 5 · Most capable for hard tasks',
+          },
+        ],
+      },
+      CODEX: {
+        source: 'fallback',
+        error: 'codex unavailable',
+      },
+    });
+  });
+
+  it('starts both provider catalog discoveries concurrently', async () => {
+    let resolveClaude: (value: unknown) => void;
+    let resolveCodex: (value: unknown) => void;
+    const claudeCatalog = new Promise((resolve) => {
+      resolveClaude = resolve;
+    });
+    const codexCatalog = new Promise((resolve) => {
+      resolveCodex = resolve;
+    });
+    mockFetchClaudeModelCatalogFromAcp.mockReturnValue(claudeCatalog);
+    mockFetchCodexModelCatalogFromAppServer.mockReturnValue(codexCatalog);
+
+    const providerOptions = createCaller().getProviderOptions();
+    await Promise.resolve();
+
+    expect(mockFetchClaudeModelCatalogFromAcp).toHaveBeenCalledTimes(1);
+    expect(mockFetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+
+    resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
+    resolveCodex!([
+      {
+        id: 'gpt-5-codex',
+        displayName: 'GPT-5 Codex',
+        description: null,
+        supportedReasoningEfforts: [],
+      },
+    ]);
+    await providerOptions;
   });
 
   it('tests custom command and validates command format', async () => {

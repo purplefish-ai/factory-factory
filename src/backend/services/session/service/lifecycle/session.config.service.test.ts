@@ -72,6 +72,51 @@ describe('SessionConfigService', () => {
     });
   });
 
+  it('normalizes Claude model labels in asynchronous config option updates', () => {
+    const handle = unsafeCoerce<AcpProcessHandle>({
+      provider: 'CLAUDE',
+      providerSessionId: 'provider-session-1',
+      configOptions: [],
+    });
+    const incoming = [
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'sonnet',
+        options: [
+          {
+            value: 'sonnet',
+            name: 'Sonnet',
+            description: 'Sonnet 5 · Efficient for routine tasks',
+          },
+        ],
+      },
+      {
+        id: 'mode',
+        name: 'Mode',
+        type: 'select',
+        category: 'mode',
+        currentValue: 'default',
+        options: [{ value: 'default', name: 'Default' }],
+      },
+    ];
+
+    service.applyConfigOptionsUpdateDelta('session-1', handle, unsafeCoerce(incoming));
+
+    expect(handle.configOptions[0]?.options).toEqual([
+      expect.objectContaining({ value: 'sonnet', name: 'Sonnet 5' }),
+    ]);
+    expect(sessionDomain.emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'config_options_update',
+        configOptions: handle.configOptions,
+      })
+    );
+  });
+
   it('applies Claude non-interactive startup mode preset when bypassPermissions is available', async () => {
     const modeConfig = {
       id: 'mode',
@@ -203,7 +248,7 @@ describe('SessionConfigService', () => {
     expect(handle.configOptions[0]?.currentValue).toBe('bypassPermissions');
   });
 
-  it('returns cached config options when no ACP handle is active', async () => {
+  it('normalizes legacy Claude snapshot labels before passive options and capabilities', async () => {
     repository.getSessionById.mockResolvedValue(
       unsafeCoerce({
         id: 'session-1',
@@ -219,8 +264,14 @@ describe('SessionConfigService', () => {
                 name: 'Model',
                 type: 'select',
                 category: 'model',
-                currentValue: 'claude-sonnet-4-5',
-                options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+                currentValue: 'sonnet',
+                options: [
+                  {
+                    value: 'sonnet',
+                    name: 'Sonnet',
+                    description: 'Sonnet 5 · Efficient for routine tasks',
+                  },
+                ],
               },
             ],
           },
@@ -234,10 +285,19 @@ describe('SessionConfigService', () => {
         name: 'Model',
         type: 'select',
         category: 'model',
-        currentValue: 'claude-sonnet-4-5',
-        options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+        currentValue: 'sonnet',
+        options: [
+          {
+            value: 'sonnet',
+            name: 'Sonnet 5',
+            description: 'Sonnet 5 · Efficient for routine tasks',
+          },
+        ],
       },
     ]);
+
+    const capabilities = await service.getChatBarCapabilities('session-1');
+    expect(capabilities.model.options).toEqual([{ value: 'sonnet', label: 'Sonnet 5' }]);
   });
 
   it('returns empty config options when no ACP handle or cached snapshot exists', async () => {

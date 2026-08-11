@@ -520,7 +520,11 @@ function ChatProviderDefaultsSection() {
     if (options.some((option) => option.value === currentValue)) {
       return options;
     }
-    return [{ value: currentValue, label: currentValue }, ...options];
+    const savedModelLabel =
+      provider === 'CLAUDE'
+        ? `Saved model — ${currentValue} (not in current catalog)`
+        : currentValue;
+    return [{ value: currentValue, label: savedModelLabel }, ...options];
   };
   const getEffortOptions = (provider: 'CLAUDE' | 'CODEX', currentValue: string | null) => {
     const options = providerOptions?.[provider]?.efforts ?? [];

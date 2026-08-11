@@ -10,6 +10,22 @@ import AdminDashboardPage from './admin-page';
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
   testCustomCommandMutate: vi.fn(),
+  providerOptions: {
+    CLAUDE: {
+      source: 'cli',
+      models: [
+        { value: 'default', label: 'Default — Opus 4.8 (1M)' },
+        { value: 'claude-fable-5[1m]', label: 'Fable 5' },
+        { value: 'sonnet', label: 'Sonnet 5' },
+      ],
+      efforts: [{ value: 'medium', label: 'Medium' }],
+    },
+    CODEX: {
+      source: 'fallback',
+      models: [{ value: 'default', label: 'Default' }],
+      efforts: [{ value: 'medium', label: 'Medium' }],
+    },
+  },
   userSettings: {
     playSoundOnComplete: true,
     preferredIde: 'cursor' as 'cursor' | 'vscode' | 'custom',
@@ -132,18 +148,7 @@ vi.mock('@/client/lib/trpc', () => {
         get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
         getProviderOptions: {
           useQuery: () => ({
-            data: {
-              CLAUDE: {
-                source: 'fallback',
-                models: [{ value: 'sonnet', label: 'Sonnet' }],
-                efforts: [{ value: 'medium', label: 'Medium' }],
-              },
-              CODEX: {
-                source: 'fallback',
-                models: [{ value: 'default', label: 'Default' }],
-                efforts: [{ value: 'medium', label: 'Medium' }],
-              },
-            },
+            data: mocks.providerOptions,
           }),
         },
         update: {
@@ -219,8 +224,25 @@ function createStorageStub(): Storage {
 beforeEach(() => {
   mocks.updateSettingsMutate.mockReset();
   mocks.testCustomCommandMutate.mockReset();
+  mocks.providerOptions = {
+    CLAUDE: {
+      source: 'cli',
+      models: [
+        { value: 'default', label: 'Default — Opus 4.8 (1M)' },
+        { value: 'claude-fable-5[1m]', label: 'Fable 5' },
+        { value: 'sonnet', label: 'Sonnet 5' },
+      ],
+      efforts: [{ value: 'medium', label: 'Medium' }],
+    },
+    CODEX: {
+      source: 'fallback',
+      models: [{ value: 'default', label: 'Default' }],
+      efforts: [{ value: 'medium', label: 'Medium' }],
+    },
+  };
   mocks.userSettings.preferredIde = 'cursor';
   mocks.userSettings.customIdeCommand = null;
+  mocks.userSettings.defaultClaudeModel = 'sonnet';
   mocks.userSettings.ratchetReviewTriggerMode = 'CHANGES_REQUESTED';
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
@@ -236,6 +258,69 @@ afterEach(() => {
 });
 
 describe('AdminDashboardPage settings tabs', () => {
+  it('renders Claude model labels and saves the selected raw value', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
+    flushSync(() => {
+      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
+    expect(listbox?.textContent).toContain('Default — Opus 4.8 (1M)');
+    expect(listbox?.textContent).toContain('Fable 5');
+    expect(listbox?.textContent).toContain('Sonnet 5');
+    const fableOption = Array.from(
+      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
+    ).find((option) => option.textContent === 'Fable 5');
+    expect(fableOption).toBeDefined();
+
+    flushSync(() => {
+      fableOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      fableOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      defaultClaudeModel: 'claude-fable-5[1m]',
+    });
+
+    root.unmount();
+  });
+
+  it('identifies a saved Claude model absent from the catalog', () => {
+    const savedModel = 'claude-sonnet-4-5-20250929';
+    mocks.userSettings.defaultClaudeModel = savedModel;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
+    expect(trigger?.textContent).toContain(`Saved model — ${savedModel} (not in current catalog)`);
+    flushSync(() => {
+      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
+    expect(listbox?.textContent).toContain(`Saved model — ${savedModel} (not in current catalog)`);
+    expect(listbox?.textContent).toContain('Default — Opus 4.8 (1M)');
+    expect(listbox?.textContent).toContain('Fable 5');
+    expect(listbox?.textContent).toContain('Sonnet 5');
+
+    root.unmount();
+  });
+
   it('updates the Ratchet review feedback trigger mode', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

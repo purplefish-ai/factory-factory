@@ -16,6 +16,10 @@ export {
   PromptTimeoutError,
 } from './acp-runtime-manager';
 export {
+  type ClaudeModelCatalogEntry,
+  fetchClaudeModelCatalogFromAcp,
+} from './claude-model-catalog-loader';
+export {
   CodexAppServerAcpAdapter,
   fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,

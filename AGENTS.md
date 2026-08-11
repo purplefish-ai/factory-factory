@@ -109,3 +109,8 @@ Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record
 distinct typed reasons.
+Admin Claude model options come from an ephemeral, non-persisted Claude ACP
+session with tools disabled; discovery failure falls back to static aliases.
+Claude model names are normalized from provider descriptions at every ACP config
+ingress so Admin and in-chat selectors show explicit family versions while
+preserving raw provider values and configured defaults.

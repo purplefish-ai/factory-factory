@@ -6,6 +6,7 @@ import type {
   SessionModeState,
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
+import { formatClaudeModelOptionName } from './claude-model-options';
 
 const logger = createLogger('acp-session-config-options');
 const REQUIRED_CONFIG_CATEGORIES = ['model', 'mode'] as const;
@@ -20,25 +21,10 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-function resolveModelFamilyName(description: string | null | undefined): string | null {
-  if (!isNonEmptyString(description)) {
-    return null;
-  }
-  const familyName = description.split('·')[0]?.trim();
-  return familyName && familyName.length > 0 ? familyName : null;
-}
-
 function normalizeClaudeModelOption(option: SessionConfigSelectOption): SessionConfigSelectOption {
-  if (option.value !== 'default') {
-    return option;
-  }
-  const modelFamilyName = resolveModelFamilyName(option.description);
-  if (!modelFamilyName) {
-    return option;
-  }
   return {
     ...option,
-    name: modelFamilyName,
+    name: formatClaudeModelOptionName(option),
   };
 }
 
@@ -57,7 +43,7 @@ function isOptionGroupArray(
 
 function normalizeClaudeConfigOptions(configOptions: SessionConfigOption[]): SessionConfigOption[] {
   return configOptions.map((configOption) => {
-    if (configOption.category !== 'model') {
+    if (configOption.category !== 'model' && configOption.id !== 'model') {
       return configOption;
     }
 
@@ -82,7 +68,7 @@ function normalizeClaudeConfigOptions(configOptions: SessionConfigOption[]): Ses
   });
 }
 
-function normalizeSessionConfigOptions(
+export function normalizeSessionConfigOptions(
   provider: string,
   configOptions: SessionConfigOption[]
 ): SessionConfigOption[] {
