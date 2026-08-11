@@ -115,8 +115,10 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
       killed: false,
       kill: vi.fn((signal: NodeJS.Signals) => {
         child.killed = true;
-        child.signalCode = signal;
-        queueMicrotask(() => child.emit('exit', null, signal));
+        queueMicrotask(() => {
+          child.signalCode = signal;
+          child.emit('exit', null, signal);
+        });
         return true;
       }),
     });
@@ -183,6 +185,67 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
       sessionId: 'catalog-session',
     });
     expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('flattens grouped model options identified by a category-less model id', async () => {
+    mocks.newSession.mockResolvedValue({
+      sessionId: 'catalog-session',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'select',
+          currentValue: 'sonnet',
+          options: [
+            {
+              group: 'latest',
+              name: 'Latest models',
+              options: [
+                {
+                  value: 'sonnet',
+                  name: 'Sonnet',
+                  description: 'Sonnet 5 · Efficient for routine tasks',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(fetchClaudeModelCatalogFromAcp()).resolves.toEqual([
+      {
+        id: 'sonnet',
+        displayName: 'Sonnet 5',
+        description: 'Sonnet 5 · Efficient for routine tasks',
+      },
+    ]);
+  });
+
+  it('keeps the error listener through SIGKILL escalation', async () => {
+    vi.useFakeTimers();
+    try {
+      const catalogPromise = fetchClaudeModelCatalogFromAcp();
+      const child = mocks.spawn.mock.results[0]?.value;
+      const errorListenerCounts: number[] = [];
+      child.kill.mockImplementation((_signal: NodeJS.Signals) => {
+        child.killed = true;
+        errorListenerCounts.push(child.listenerCount('error'));
+        return true;
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(mocks.spawn.mock.results[0]?.value.kill).not.toHaveBeenCalledWith('SIGKILL');
+
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(catalogPromise).resolves.toHaveLength(3);
+      expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(errorListenerCounts).toEqual([1, 1]);
+      expect(mocks.spawn.mock.results[0]?.value.listenerCount('error')).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('closes and terminates when the session has no model config option', async () => {

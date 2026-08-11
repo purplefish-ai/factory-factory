@@ -521,7 +521,9 @@ function ChatProviderDefaultsSection() {
       return options;
     }
     const savedModelLabel =
-      provider === 'CLAUDE' ? 'Saved model (not in current catalog)' : currentValue;
+      provider === 'CLAUDE'
+        ? `Saved model — ${currentValue} (not in current catalog)`
+        : currentValue;
     return [{ value: currentValue, label: savedModelLabel }, ...options];
   };
   const getEffortOptions = (provider: 'CLAUDE' | 'CODEX', currentValue: string | null) => {

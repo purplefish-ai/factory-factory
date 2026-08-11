@@ -110,10 +110,35 @@ type ClaudeModelOptionLabelInput = Pick<
 >;
 
 const CONTEXT_SUFFIX = /\s+with\s+(\d+(?:\.\d+)?[KMG]?)\s+context$/i;
+const MODEL_VERSION_TOKEN = /\bv?\d+(?:[.-]\d+)*\b/i;
+const GENERIC_MODEL_TOKENS = new Set(['claude', 'default', 'model', 'recommended']);
+
+function modelNameTokens(value: string): string[] {
+  return (value.toLowerCase().match(/[a-z][a-z0-9]*/g) ?? []).filter(
+    (token) => token.length > 1 && !GENERIC_MODEL_TOKENS.has(token)
+  );
+}
+
+function isPlausibleModelIdentity(
+  identity: string,
+  option: ClaudeModelOptionLabelInput
+): boolean {
+  if (!MODEL_VERSION_TOKEN.test(identity)) {
+    return false;
+  }
+  if (option.value === 'default') {
+    return true;
+  }
+
+  const identityTokens = new Set(modelNameTokens(identity));
+  return modelNameTokens(`${option.name} ${option.value}`).some((token) =>
+    identityTokens.has(token)
+  );
+}
 
 export function formatClaudeModelOptionName(option: ClaudeModelOptionLabelInput): string {
   const identity = option.description?.split('·')[0]?.trim();
-  if (!identity) {
+  if (!(identity && isPlausibleModelIdentity(identity, option))) {
     return option.name;
   }
 
@@ -501,13 +526,15 @@ try {
   });
   providerSessionId = result.sessionId;
 
-  const modelOption = result.configOptions.find((option) => option.category === 'model');
+  const modelOption = result.configOptions
+    .filter((option) => option.type === 'select')
+    .find((option) => option.category === 'model' || option.id === 'model');
   if (!modelOption) {
     throw new Error('Claude ACP session did not provide model options');
   }
 
-  const options = modelOption.options.filter(
-    (option): option is SessionConfigSelectOption => 'value' in option
+  const options = modelOption.options.flatMap((option): SessionConfigSelectOption[] =>
+    'group' in option ? option.options : [option]
   );
   if (options.length === 0) {
     throw new Error('Claude ACP session did not provide model options');

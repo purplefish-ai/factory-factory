@@ -156,13 +156,13 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
 
     const modelOption = result.configOptions
       ?.filter((option) => option.type === 'select')
-      .find((option) => option.category === 'model');
+      .find((option) => option.category === 'model' || option.id === 'model');
     if (!modelOption) {
       throw new Error('Claude ACP session did not provide model options');
     }
 
-    const options = modelOption.options.filter(
-      (option): option is SessionConfigSelectOption => 'value' in option
+    const options = modelOption.options.flatMap((option): SessionConfigSelectOption[] =>
+      'group' in option ? option.options : [option]
     );
     if (options.length === 0) {
       throw new Error('Claude ACP session did not provide model options');
@@ -182,10 +182,13 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
         );
       }
     } finally {
-      if (spawnErrorListener) {
-        child.removeListener('error', spawnErrorListener);
+      try {
+        await terminateCatalogProcess(child);
+      } finally {
+        if (spawnErrorListener) {
+          child.removeListener('error', spawnErrorListener);
+        }
       }
-      await terminateCatalogProcess(child);
     }
   }
 }
