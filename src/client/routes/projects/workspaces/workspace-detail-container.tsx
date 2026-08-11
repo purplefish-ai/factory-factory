@@ -29,6 +29,7 @@ import {
   buildSessionSummariesById,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
+  isProviderSubagentSessionReady,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
@@ -53,8 +54,14 @@ export function WorkspaceDetailContainer() {
     void navigate('/projects', { replace: true });
   }, [workspace?.status, slug, navigate]);
 
-  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState, openTab } =
-    useWorkspacePanel();
+  const {
+    rightPanelVisible,
+    setRightPanelVisible,
+    activeTabId,
+    clearScrollState,
+    openTab,
+    openSubagentTab,
+  } = useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
 
   const { workspaceInitStatus, isScriptFailed, setupWarningDismissed, dismissSetupWarning } =
@@ -166,6 +173,7 @@ export function WorkspaceDetailContainer() {
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
+  const selectedSessionReady = isProviderSubagentSessionReady(selectedDbSessionId);
   const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
   const {
@@ -365,7 +373,7 @@ export function WorkspaceDetailContainer() {
         sessionTabs={{
           sessions,
           selectedDbSessionId,
-          selectedSessionReady: runtimeSessionId === selectedDbSessionId && connected,
+          selectedSessionReady,
           sessionSummariesById,
           isDeletingSession: deleteSession.isPending,
           handleSelectSession,
@@ -373,6 +381,7 @@ export function WorkspaceDetailContainer() {
           handleCloseChatSession,
           handleQuickAction,
           handleRestartSession: restartSession,
+          handleOpenSubagentTab: openSubagentTab,
           maxSessions,
           hasWorktreePath: !!workspace?.worktreePath,
           selectedProvider,

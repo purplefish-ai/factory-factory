@@ -10,19 +10,10 @@ import type { SubagentSelection } from './types';
 
 export interface SubagentTranscriptViewProps {
   selection: SubagentSelection;
-  onBack: () => void;
   workspaceId: string;
 }
 
-export function SubagentTranscriptView({
-  selection,
-  onBack,
-  workspaceId,
-}: SubagentTranscriptViewProps) {
-  const summaryQuery = trpc.session.listSubagents.useQuery(
-    { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
-    { refetchOnMount: false }
-  );
+export function SubagentTranscriptView({ selection, workspaceId }: SubagentTranscriptViewProps) {
   const query = trpc.session.readSubagentTranscript.useInfiniteQuery(
     {
       sessionId: selection.parentSessionId,
@@ -71,10 +62,9 @@ export function SubagentTranscriptView({
         detail.subagentId === selection.subagent.id
       ) {
         void query.refetch();
-        void summaryQuery.refetch();
       }
     });
-  }, [query.refetch, selection.parentSessionId, selection.subagent.id, summaryQuery.refetch]);
+  }, [query.refetch, selection.parentSessionId, selection.subagent.id]);
 
   const handleLoadOlder = useCallback(() => {
     void query.fetchNextPage();
@@ -113,20 +103,7 @@ export function SubagentTranscriptView({
     };
   }
 
-  const refreshedSubagent =
-    summaryQuery.data?.supported === true
-      ? summaryQuery.data.subagents.find((subagent) => subagent.id === selection.subagent.id)
-      : undefined;
-  const currentSelection = refreshedSubagent
-    ? { ...selection, subagent: refreshedSubagent }
-    : selection;
-
   return (
-    <SubagentTranscriptContent
-      workspaceId={workspaceId}
-      selection={currentSelection}
-      onBack={onBack}
-      state={state}
-    />
+    <SubagentTranscriptContent workspaceId={workspaceId} selection={selection} state={state} />
   );
 }

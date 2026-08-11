@@ -5,8 +5,19 @@ import {
   buildSessionSummariesById,
   getVisibleInitBanner,
   hasUserMessageWithoutAgentMessage,
+  isProviderSubagentSessionReady,
   type SessionForRuntimeOverlay,
 } from './workspace-detail-container.utils';
+
+describe('isProviderSubagentSessionReady', () => {
+  it('returns false when there is no selected parent session', () => {
+    expect(isProviderSubagentSessionReady(null)).toBe(false);
+  });
+
+  it('returns true for a selected stopped session before chat hydration', () => {
+    expect(isProviderSubagentSessionReady('session-1')).toBe(true);
+  });
+});
 
 describe('getVisibleInitBanner', () => {
   const dismissibleBanner = { message: 'Setup failed', showDismiss: true };

@@ -8,6 +8,10 @@ interface DismissibleInitBanner {
   showDismiss?: boolean;
 }
 
+export function isProviderSubagentSessionReady(selectedSessionId: string | null): boolean {
+  return Boolean(selectedSessionId);
+}
+
 export function getVisibleInitBanner<T extends DismissibleInitBanner>(
   banner: T | null | undefined,
   setupWarningDismissed: boolean | null

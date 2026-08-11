@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AcpClientOptions } from '@/backend/services/session/service/acp';
+import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
@@ -24,6 +26,7 @@ vi.mock('@/backend/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   }),
+  getCurrentProcessEnv: () => ({ ...process.env }),
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
@@ -107,16 +110,33 @@ function getStopGenerations(service: SessionLifecycleService): Map<string, numbe
   ).stopGenerations;
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 function createStoppableLifecycleService() {
   const repository = {
     getSessionsByWorkspaceId: vi.fn(async () => [
       { id: 'session-running', status: SessionStatus.RUNNING },
       { id: 'session-runtime-only', status: SessionStatus.COMPLETED },
+      { id: 'session-browse-only', status: SessionStatus.IDLE },
       { id: 'session-idle', status: SessionStatus.IDLE },
     ]),
   };
   const runtimeManager = {
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    getBrowseClient: vi.fn(() => undefined),
+    isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
   };
   const service = new SessionLifecycleService({
     repository: repository as never,
@@ -154,6 +174,7 @@ function createStopReasonLifecycleService(options?: { providerProcessPid?: numbe
   const runtimeManager = {
     isStopInProgress: vi.fn(() => false),
     isSessionRunning: vi.fn(() => false),
+    isBrowseOnlySession: vi.fn(() => false),
     isSessionWorking: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
     stopClient: vi.fn(async () => undefined),
@@ -236,6 +257,10 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-idle');
     expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
     expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
+    expect(stopSession).toHaveBeenCalledWith('session-browse-only', {
+      reason: 'SYSTEM_STOP',
+      recordLifecycleEvent: false,
+    });
     expect(stopSession).not.toHaveBeenCalledWith('session-idle');
   });
 
@@ -473,9 +498,10 @@ describe('SessionLifecycleService closed transcript persistence', () => {
 describe('SessionLifecycleService graceful shutdown', () => {
   it('records SYSTEM_STOP for active and pending runtimes before bounded shutdown', async () => {
     const runtimeManager = {
-      beginShutdown: vi.fn(() => ['session-active', 'session-pending']),
+      beginShutdown: vi.fn(() => ['session-active', 'session-pending', 'session-browse-only']),
       stopAllClients: vi.fn(async () => undefined),
       isStopInProgress: vi.fn(() => false),
+      isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     };
     const repository = {
       getSessionById: vi.fn(async (sessionId: string) => ({
@@ -520,6 +546,9 @@ describe('SessionLifecycleService graceful shutdown', () => {
         reason: 'SYSTEM_STOP',
       })
     );
+    expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-browse-only' })
+    );
     expect(lifecycleEventService.record).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-pending',
@@ -542,6 +571,7 @@ describe('SessionLifecycleService graceful shutdown', () => {
         beginShutdown: vi.fn(() => ['session-active']),
         stopAllClients: vi.fn(async () => undefined),
         isStopInProgress: vi.fn(() => false),
+        isBrowseOnlySession: vi.fn(() => false),
       };
       const service = new SessionLifecycleService(
         unsafeCoerce({
@@ -1164,13 +1194,16 @@ describe('SessionLifecycleService pending workspace notifications', () => {
 function createStartableLifecycleService(options?: {
   pendingNotificationCount?: number;
   tryDispatchNextMessage?: () => Promise<void>;
+  provider?: 'CLAUDE' | 'CODEX';
+  providerSessionId?: string | null;
+  worktreePath?: string | null;
 }) {
   const session = {
     id: 'session-1',
     workspaceId: 'workspace-1',
     workflow: 'code',
-    provider: 'CLAUDE',
-    providerSessionId: null,
+    provider: options?.provider ?? 'CLAUDE',
+    providerSessionId: options?.providerSessionId ?? null,
     providerMetadata: null,
     model: 'claude-sonnet',
   };
@@ -1179,7 +1212,7 @@ function createStartableLifecycleService(options?: {
     name: 'Workspace',
     description: null,
     projectId: 'project-1',
-    worktreePath: '/tmp/workspace',
+    worktreePath: options?.worktreePath === undefined ? '/tmp/workspace' : options.worktreePath,
     branchName: 'feature/test',
     isAutoGeneratedBranch: false,
     hasHadSessions: false,
@@ -1188,10 +1221,16 @@ function createStartableLifecycleService(options?: {
     creationMetadata: null,
   };
   const handle = {
-    provider: 'CLAUDE',
-    providerSessionId: 'provider-session-1',
+    provider: options?.provider ?? 'CLAUDE',
+    providerSessionId: options?.providerSessionId ?? 'provider-session-1',
     configOptions: [],
     isPromptInFlight: false,
+    getSubagentBrowseCapability: vi.fn(() => ({
+      version: 1 as const,
+      list: true as const,
+      read: true as const,
+      notifications: true as const,
+    })),
   };
   const repository = {
     getSessionById: vi.fn(async (): Promise<typeof session | null> => session),
@@ -1212,8 +1251,14 @@ function createStartableLifecycleService(options?: {
   const runtimeManager = {
     isStopInProgress: vi.fn(() => false),
     isSessionRunning: vi.fn(() => false),
+    isBrowseOnlySession: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
-    getOrCreateClient: vi.fn(async () => handle),
+    getBrowseClient: vi.fn(() => undefined),
+    getPendingClient: vi.fn(() => undefined),
+    getSubagentBrowseCapability: vi.fn<
+      (sessionId: string) => ReturnType<typeof handle.getSubagentBrowseCapability> | null
+    >(() => null),
+    getOrCreateClient: vi.fn(async (_sessionId: string, _options: AcpClientOptions) => handle),
     stopClient: vi.fn(async () => undefined),
     isSessionWorking: vi.fn(() => false),
   };
@@ -1276,27 +1321,270 @@ function createStartableLifecycleService(options?: {
     },
     messageQueue: { tryDispatchNextMessage },
   });
+  const deliverPendingChildNotifications = vi.fn(
+    async () => options?.pendingNotificationCount ?? 0
+  );
   (
     service as unknown as {
       deliverPendingChildNotifications(sessionId: string, workspaceId: string): Promise<number>;
     }
-  ).deliverPendingChildNotifications = vi.fn(async () => options?.pendingNotificationCount ?? 0);
+  ).deliverPendingChildNotifications = deliverPendingChildNotifications;
 
   return {
     service,
     session,
+    handle,
     repository,
     sendSessionMessage,
     tryDispatchNextMessage,
     sessionConfigService,
     runtimeManager,
     sessionDomainService,
+    acpEventProcessor,
+    deliverPendingChildNotifications,
   };
 }
 
 describe('SessionLifecycleService startSession pending workspace notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('restores a stopped Codex session for browsing without activating it', async () => {
+    const {
+      service,
+      repository,
+      runtimeManager,
+      handle,
+      sessionDomainService,
+      deliverPendingChildNotifications,
+    } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+      pendingNotificationCount: 2,
+    });
+    runtimeManager.getOrCreateClient.mockImplementationOnce((_id, options) => {
+      expect(options).toMatchObject({
+        purpose: 'browse',
+        resumeProviderSessionId: 'provider-session-existing',
+      });
+      runtimeManager.getSubagentBrowseCapability.mockReturnValue({
+        version: 1,
+        list: true,
+        read: true,
+        notifications: true,
+      });
+      return Promise.resolve(handle);
+    });
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(true);
+
+    expect(repository.markWorkspaceHasHadSessions).not.toHaveBeenCalled();
+    expect(repository.updateSession).not.toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ status: SessionStatus.RUNNING })
+    );
+    expect(deliverPendingChildNotifications).not.toHaveBeenCalled();
+    expect(sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('does not spawn a browse client without a stored provider session', async () => {
+    const { service, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: null,
+    });
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+
+    expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  });
+
+  it('returns unsupported when the stopped session has no usable worktree', async () => {
+    const { service, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+      worktreePath: null,
+    });
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+
+    expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  });
+
+  it('returns unsupported when the provider cannot restore the stored session', async () => {
+    const { service, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(
+      new AcpBrowseSessionUnavailableError('loadSession unsupported')
+    );
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+  });
+
+  it('stops a browse-only client when the provider lacks sub-agent browsing', async () => {
+    const { service, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    runtimeManager.isBrowseOnlySession.mockReturnValue(true);
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+
+    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    expect(acpEventProcessor.clearSessionState).toHaveBeenCalledWith('session-1');
+  });
+
+  it('cancels an active startup that began before unsupported browse cleanup', async () => {
+    const { service, session, repository, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    const activeSessionLookup = createDeferred<typeof session>();
+    const browseStop = createDeferred<undefined>();
+    repository.getSessionById.mockReturnValueOnce(activeSessionLookup.promise);
+    runtimeManager.isBrowseOnlySession.mockReturnValue(true);
+    runtimeManager.stopClient.mockReturnValueOnce(browseStop.promise);
+
+    const activeStartup = service.getOrCreateSessionClient('session-1');
+    await vi.waitFor(() => {
+      expect(repository.getSessionById).toHaveBeenCalledTimes(1);
+    });
+
+    const browseResult = service.ensureSubagentBrowseSession('session-1');
+    await vi.waitFor(() => {
+      expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+
+    activeSessionLookup.resolve(session);
+    await expect(activeStartup).rejects.toThrow();
+
+    browseStop.resolve(undefined);
+    await expect(browseResult).resolves.toBe(false);
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns unsupported when concurrent browse cleanup invalidates its startup', async () => {
+    const { service, session, repository, runtimeManager } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    const firstSessionLookup = createDeferred<typeof session>();
+    const secondSessionLookup = createDeferred<typeof session>();
+    const browseStop = createDeferred<undefined>();
+    repository.getSessionById
+      .mockReturnValueOnce(firstSessionLookup.promise)
+      .mockReturnValueOnce(secondSessionLookup.promise);
+    runtimeManager.isBrowseOnlySession.mockReturnValue(true);
+    runtimeManager.stopClient.mockReturnValueOnce(browseStop.promise);
+
+    const firstBrowse = service.ensureSubagentBrowseSession('session-1');
+    const secondBrowse = service.ensureSubagentBrowseSession('session-1');
+    await vi.waitFor(() => {
+      expect(repository.getSessionById).toHaveBeenCalledTimes(2);
+    });
+
+    firstSessionLookup.resolve(session);
+    await vi.waitFor(() => {
+      expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+
+    secondSessionLookup.resolve(session);
+    await expect(secondBrowse).resolves.toBe(false);
+
+    browseStop.resolve(undefined);
+    await expect(firstBrowse).resolves.toBe(false);
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let a failed browse creation clear a concurrent active startup context', async () => {
+    const { service, handle, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    const browseCreation = createDeferred<typeof handle>();
+    const activeCreation = createDeferred<typeof handle>();
+    runtimeManager.getOrCreateClient
+      .mockReturnValueOnce(browseCreation.promise)
+      .mockReturnValueOnce(activeCreation.promise);
+
+    const browseResult = service
+      .ensureSubagentBrowseSession('session-1')
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
+    });
+    const activeResult = service.getOrCreateSessionClient('session-1');
+    await vi.waitFor(() => {
+      expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2);
+    });
+
+    browseCreation.reject(new Error('browse restore failed'));
+    await expect(browseResult).resolves.toEqual(
+      expect.objectContaining({ message: 'browse restore failed' })
+    );
+    expect(acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
+
+    activeCreation.resolve(handle);
+    await expect(activeResult).resolves.toBe(handle);
+  });
+
+  it('omits provider-session persistence from browse-only runtime handlers', () => {
+    const { service } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+    });
+    const handlers = (
+      service as unknown as {
+        setupAcpEventHandler(
+          sessionId: string,
+          options: { persistProviderSessionId: boolean }
+        ): { onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void> };
+      }
+    ).setupAcpEventHandler('session-1', { persistProviderSessionId: false });
+
+    expect(handlers.onSessionId).toBeUndefined();
+  });
+
+  it('promotes a restored browse client through the normal active startup path', async () => {
+    const {
+      service,
+      repository,
+      runtimeManager,
+      handle,
+      deliverPendingChildNotifications,
+      sessionConfigService,
+    } = createStartableLifecycleService({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-existing',
+      pendingNotificationCount: 1,
+    });
+    runtimeManager.getOrCreateClient.mockImplementation((_id, options) => {
+      if (options.purpose === 'browse') {
+        runtimeManager.getSubagentBrowseCapability.mockReturnValue({
+          version: 1,
+          list: true,
+          read: true,
+          notifications: true,
+        });
+      }
+      return Promise.resolve(handle);
+    });
+
+    await service.ensureSubagentBrowseSession('session-1');
+    await expect(service.getOrCreateSessionClient('session-1')).resolves.toBe(handle);
+
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2);
+    expect(runtimeManager.getOrCreateClient.mock.calls[0]?.[1]).toMatchObject({
+      purpose: 'browse',
+    });
+    expect(runtimeManager.getOrCreateClient.mock.calls[1]?.[1].purpose).toBeUndefined();
+    expect(repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.RUNNING,
+    });
+    expect(sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalledTimes(1);
+    expect(deliverPendingChildNotifications).toHaveBeenCalledTimes(1);
   });
 
   it('does not retain a stop generation for a missing session', async () => {

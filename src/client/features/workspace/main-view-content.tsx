@@ -1,3 +1,4 @@
+import { SubagentTranscriptView } from '@/client/features/subagents';
 import { cn } from '@/lib/utils';
 
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
@@ -28,6 +29,8 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
   const screenshotPath = activeTab?.type === 'screenshot' ? activeTab.path : undefined;
   const closedSessionId =
     activeTab?.type === 'closed-session' ? activeTab.closedSessionId : undefined;
+  const subagentSelection =
+    activeTab?.type === 'subagent' ? activeTab.subagentSelection : undefined;
   const activeTabKey = activeTab?.id;
 
   return (
@@ -59,6 +62,13 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
         />
       )}
       {closedSessionId && <ClosedSessionTranscriptView sessionId={closedSessionId} />}
+      {subagentSelection && activeTabKey && (
+        <SubagentTranscriptView
+          key={activeTabKey}
+          workspaceId={workspaceId}
+          selection={subagentSelection}
+        />
+      )}
     </div>
   );
 }

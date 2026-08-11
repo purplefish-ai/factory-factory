@@ -5,8 +5,10 @@ import {
   FileCodeIcon,
   GitDiffIcon,
   PlusIcon,
+  RobotIcon,
 } from '@phosphor-icons/react';
-import type { Dispatch, SetStateAction } from 'react';
+import { type Dispatch, type SetStateAction, useEffect } from 'react';
+import { type SubagentSelection, useLiveSubagentSelection } from '@/client/features/subagents';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -55,6 +57,25 @@ function getTabIcon(type: MainViewTab['type']) {
       return CameraIcon;
     case 'closed-session':
       return ArchiveIcon;
+    case 'subagent':
+      return RobotIcon;
+  }
+}
+
+function getSubagentIconClass(status: SubagentSelection['subagent']['status']): string {
+  switch (status) {
+    case 'starting':
+    case 'running':
+      return 'text-blue-500 animate-pulse motion-reduce:animate-none';
+    case 'waiting':
+      return 'text-amber-500';
+    case 'completed':
+      return 'text-green-500';
+    case 'failed':
+      return 'text-destructive';
+    case 'cancelled':
+    case 'interrupted':
+      return 'text-muted-foreground';
   }
 }
 
@@ -132,10 +153,63 @@ interface TabItemProps {
 
 function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
   const Icon = getTabIcon(tab.type);
+  const subagentStatus =
+    tab.type === 'subagent' ? tab.subagentSelection?.subagent.status : undefined;
+  const icon = subagentStatus ? (
+    <RobotIcon
+      aria-label={`${subagentStatus} sub-agent`}
+      className={cn('h-3.5 w-3.5 shrink-0', getSubagentIconClass(subagentStatus))}
+    />
+  ) : (
+    <Icon className="h-3.5 w-3.5 shrink-0" />
+  );
   return (
     <TabButton
-      icon={<Icon className="h-3.5 w-3.5 shrink-0" />}
+      icon={icon}
       label={tab.label}
+      isActive={isActive}
+      onSelect={onSelect}
+      onClose={onClose}
+      truncate
+    />
+  );
+}
+
+interface SubagentTabItemProps {
+  selection: SubagentSelection;
+  label: string;
+  isActive: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+  onRefresh: (selection: SubagentSelection) => void;
+}
+
+function SubagentTabItem({
+  selection,
+  label,
+  isActive,
+  onSelect,
+  onClose,
+  onRefresh,
+}: SubagentTabItemProps) {
+  const current = useLiveSubagentSelection(selection);
+  const { parentSessionId, parentSessionName, subagent } = current;
+
+  useEffect(() => {
+    if (subagent !== selection.subagent) {
+      onRefresh({ parentSessionId, parentSessionName, subagent });
+    }
+  }, [parentSessionId, parentSessionName, subagent, onRefresh, selection.subagent]);
+
+  return (
+    <TabButton
+      icon={
+        <RobotIcon
+          aria-label={`${current.subagent.status} sub-agent`}
+          className={cn('h-3.5 w-3.5 shrink-0', getSubagentIconClass(current.subagent.status))}
+        />
+      }
+      label={label}
       isActive={isActive}
       onSelect={onSelect}
       onClose={onClose}
@@ -225,7 +299,7 @@ export function MainViewTabBar({
   selectedProvider,
   setSelectedProvider,
 }: MainViewTabBarProps) {
-  const { tabs, activeTabId, selectTab, closeTab } = useWorkspacePanel();
+  const { tabs, activeTabId, selectTab, closeTab, updateSubagentTab } = useWorkspacePanel();
 
   // Filter out the default 'chat' tab since we're showing sessions instead
   const nonChatTabs = tabs.filter((tab) => tab.type !== 'chat');
@@ -341,15 +415,27 @@ export function MainViewTabBar({
         {nonChatTabs.length > 0 && <div className="h-4 w-px bg-border mx-1" />}
 
         {/* File/diff tabs */}
-        {nonChatTabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            onSelect={() => selectTab(tab.id)}
-            onClose={() => closeTab(tab.id)}
-          />
-        ))}
+        {nonChatTabs.map((tab) =>
+          tab.type === 'subagent' && tab.subagentSelection ? (
+            <SubagentTabItem
+              key={tab.id}
+              selection={tab.subagentSelection}
+              label={tab.label}
+              isActive={tab.id === activeTabId}
+              onSelect={() => selectTab(tab.id)}
+              onClose={() => closeTab(tab.id)}
+              onRefresh={updateSubagentTab}
+            />
+          ) : (
+            <TabItem
+              key={tab.id}
+              tab={tab}
+              isActive={tab.id === activeTabId}
+              onSelect={() => selectTab(tab.id)}
+              onClose={() => closeTab(tab.id)}
+            />
+          )
+        )}
       </div>
 
       {/* Restart button — pinned to the right, outside the scrollable area */}
