@@ -176,10 +176,14 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
   } finally {
     try {
       if (providerSessionId) {
-        await runOperation(
-          connection.extMethod('session/close', { sessionId: providerSessionId }),
-          'Claude catalog session close'
-        );
+        try {
+          await runOperation(
+            connection.extMethod('session/close', { sessionId: providerSessionId }),
+            'Claude catalog session close'
+          );
+        } catch (error) {
+          appLogger.warn('Failed to close Claude ACP catalog session', { error });
+        }
       }
     } finally {
       try {

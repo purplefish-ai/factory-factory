@@ -279,10 +279,10 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
     expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGTERM');
   });
 
-  it('terminates and surfaces the error when closing the catalog session fails', async () => {
+  it('terminates and preserves the catalog when closing the session fails', async () => {
     mocks.extMethod.mockRejectedValue(new Error('close failed'));
 
-    await expect(fetchClaudeModelCatalogFromAcp()).rejects.toThrow('close failed');
+    await expect(fetchClaudeModelCatalogFromAcp()).resolves.toHaveLength(3);
     expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGTERM');
   });
 });

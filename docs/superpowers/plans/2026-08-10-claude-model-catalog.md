@@ -455,7 +455,8 @@ Add failure tests:
 - a rejected `initialize` disposes the agent and never calls `closeSession`;
 - a rejected `newSession` still disposes the agent and does not call
   `closeSession` without a returned session ID;
-- a rejected `closeSession` still calls `dispose` and surfaces the close error.
+- a rejected `closeSession` still calls `dispose`, logs the cleanup error, and
+  preserves an already-discovered catalog or the original discovery error.
 
 - [ ] **Step 2: Run the loader test to verify RED**
 
@@ -548,7 +549,11 @@ try {
 } finally {
   try {
     if (providerSessionId) {
-      await agent.closeSession({ sessionId: providerSessionId });
+      try {
+        await agent.closeSession({ sessionId: providerSessionId });
+      } catch (error) {
+        appLogger.warn('Failed to close Claude ACP catalog session', { error });
+      }
     }
   } finally {
     await agent.dispose();
