@@ -5,6 +5,29 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2026-08-11
+
+### Added
+
+- Add optional BYOK Deepgram voice mode for workspace sessions, with spoken replies and reasoning, voice interruption and barge-in, conversational response shaping, configurable voices, speed and speech sensitivity, and coordinated audio cues (#2126, #2127, #2144)
+- Show session-scoped provider sub-agents alongside child workspaces in the Agents panel, with live status and read-only transcripts that open in persisted workspace tabs (#2145, #2147)
+- Discover available Claude models dynamically, label their resolved family and version in selectors, and update the bundled Claude ACP to expose Opus 5 (#2152, #2153)
+
+### Changed
+
+- Render session lifecycle notices as compact single-line rows with right-aligned timestamps (#2148)
+
+### Fixed
+
+- Harden chat and session lifecycle by rejecting malformed snapshots, clearing ACP state after managed stops, recovering messages interrupted during dispatch, and preventing queued WebSocket messages from replaying into another session (#2137, #2138, #2140, #2143)
+- Prevent chat shortcuts from firing while IME text composition is active (#2141)
+- Clean stale Git worktree registrations when workspace directories are missing and stop reconciliation from starting another workspace during shutdown (#2139, #2142)
+- Hide non-renderable Claude usage telemetry that produced blank transcript rows while preserving usage data and tool pairing (#2149)
+
+### Security
+
+- Upgrade Electron, Mermaid, PostCSS, and transitive dependency overrides to patched releases (#2151)
+
 ## [0.4.5] - 2026-07-30
 
 ### Added
