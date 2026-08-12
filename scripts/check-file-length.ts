@@ -175,17 +175,29 @@ export function discoverCandidatePaths(repositoryRoot: string): string[] {
     .toSorted((left, right) => left.localeCompare(right));
 }
 
+function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
 export function readFileLengths(repositoryRoot: string, paths: readonly string[]): FileLength[] {
   const resolvedRepositoryRoot = resolve(repositoryRoot);
   const realRepositoryRoot = realpathSync(resolvedRepositoryRoot);
 
-  return paths.map((relativePath) => {
+  return paths.flatMap((relativePath) => {
     if (!isSafeRepositoryRelativeCandidatePath(relativePath)) {
       throw new Error(`Unsafe file length candidate path: ${relativePath}`);
     }
 
     const absolutePath = resolve(resolvedRepositoryRoot, relativePath);
-    const realPath = realpathSync(absolutePath);
+    let realPath: string;
+    try {
+      realPath = realpathSync(absolutePath);
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return [];
+      }
+      throw error;
+    }
     const pathFromRepositoryRoot = relative(realRepositoryRoot, realPath);
     if (
       pathFromRepositoryRoot === '..' ||
@@ -198,7 +210,7 @@ export function readFileLengths(repositoryRoot: string, paths: readonly string[]
       throw new Error(`File length candidate path is not a regular file: ${relativePath}`);
     }
 
-    return { path: relativePath, lines: countPhysicalLines(readFileSync(realPath, 'utf8')) };
+    return [{ path: relativePath, lines: countPhysicalLines(readFileSync(realPath, 'utf8')) }];
   });
 }
 

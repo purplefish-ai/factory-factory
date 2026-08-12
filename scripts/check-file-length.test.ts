@@ -285,6 +285,34 @@ describe('repository discovery and CLI', () => {
     expect(stderr.join('')).toContain('reduce');
   });
 
+  test('reports and removes a baseline entry for a tracked file deleted from the working tree', () => {
+    const repositoryRoot = createTemporaryRepository();
+    const deletedPath = join(repositoryRoot, 'src/deleted.ts');
+    writeLines(deletedPath, 1200);
+    execFileSync('git', ['add', 'src/deleted.ts'], { cwd: repositoryRoot });
+    rmSync(deletedPath);
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{\n  "src/deleted.ts": 1200\n}\n');
+    const stderr: string[] = [];
+
+    const normalExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      stderr: (message) => stderr.push(message),
+    });
+    const updateExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: ['--update'],
+      stdout: () => undefined,
+    });
+
+    expect(normalExitCode).toBe(1);
+    expect(stderr.join('')).toContain('src/deleted.ts: no longer exists');
+    expect(updateExitCode).toBe(0);
+    expect(readFileSync(baselinePath, 'utf8')).toBe('{}\n');
+  });
+
   test('does not write an update when a growth violation blocks it', () => {
     const repositoryRoot = createTemporaryRepository();
     writeLines(join(repositoryRoot, 'src/legacy.ts'), 1201);
