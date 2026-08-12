@@ -26,7 +26,16 @@ const infrastructureServiceNames = new Set(Object.keys(infrastructureServiceRegi
 function readPrismaModelNames(schemaFilePath: string): Set<string> {
   const schema = readFileSync(schemaFilePath, 'utf8');
   const modelNameMatches = schema.matchAll(/^model\s+([A-Za-z_][A-Za-z0-9_]*)\s+\{/gm);
-  return new Set(Array.from(modelNameMatches, (match) => match[1]));
+  const modelNames = new Set<string>();
+
+  for (const match of modelNameMatches) {
+    const modelName = match[1];
+    if (modelName !== undefined) {
+      modelNames.add(modelName);
+    }
+  }
+
+  return modelNames;
 }
 
 function listTypeScriptFiles(dirPath: string, includeTests = false): string[] {
@@ -174,6 +183,9 @@ function getFromService(relativePath: string): ServiceName | null {
   }
 
   const serviceName = fromMatch[1];
+  if (serviceName === undefined) {
+    return null;
+  }
   if (!isRegisteredServiceName(serviceName)) {
     return null;
   }
@@ -188,8 +200,13 @@ function parseServiceImport(
   if (!toMatch) {
     return null;
   }
+  const toServiceName = toMatch[1];
+  if (toServiceName === undefined) {
+    return null;
+  }
+
   return {
-    toServiceName: toMatch[1],
+    toServiceName,
     toSubpath: toMatch[2] ?? '',
   };
 }
@@ -248,6 +265,9 @@ function checkCrossServiceImports(errors: string[]): void {
       continue;
     }
     const rawServiceDirectory = rawMatch[1];
+    if (rawServiceDirectory === undefined) {
+      continue;
+    }
 
     if (!isRegisteredServiceName(rawServiceDirectory)) {
       errors.push(
