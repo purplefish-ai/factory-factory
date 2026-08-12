@@ -8,7 +8,12 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
     },
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'electron/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'electron/**/*.test.ts',
+      'scripts/**/*.test.ts',
+    ],
     exclude: ['node_modules', 'dist', '.next'],
     coverage: {
       provider: 'v8',

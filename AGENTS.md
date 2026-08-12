@@ -18,15 +18,20 @@ Requires Node `^22.22 || >=24` and pnpm (see `packageManager` in
 | One test by name | `pnpm test -t "partial name"` |
 | Types only | `pnpm typecheck` |
 | Lint + format, writing fixes | `pnpm check:fix` |
+| File length check | `pnpm check:file-length` |
 | All guardrails | `pnpm check` |
 | Prisma after schema edits | `pnpm check:prisma-schema` |
 | Storybook | `pnpm storybook` |
 
-`pnpm check` runs Biome, then `check:env`, `check:ownership` (accessor
-boundaries + single-writer + service registry), `check:fk-indexes`,
-`deps:check` (dependency-cruiser), and `check:codex-schema`. The Codex schema
-check is skipped locally unless the pinned Codex CLI is installed; force it with
-`CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema`.
+`pnpm check` runs Biome, then `check:file-length`, `check:env`,
+`check:ownership` (accessor boundaries + single-writer + service registry),
+`check:fk-indexes`, `deps:check` (dependency-cruiser), and `check:codex-schema`.
+The Codex schema check is skipped locally unless the pinned Codex CLI is
+installed; force it with `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema`.
+
+Oversized legacy files have exact ceilings. After intentional reductions, run
+`pnpm check:file-length:update` to lower the baseline; the update command never
+blesses growth.
 
 ## Before you hand work back
 

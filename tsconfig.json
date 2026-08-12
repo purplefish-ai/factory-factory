@@ -40,6 +40,6 @@
       "@prisma-gen/*": ["./prisma/generated/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "prisma/generated/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "prisma/generated/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
