@@ -8,7 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
@@ -202,6 +202,7 @@ export function readFileLengths(repositoryRoot: string, paths: readonly string[]
     if (
       pathFromRepositoryRoot === '..' ||
       pathFromRepositoryRoot.startsWith(`..${sep}`) ||
+      isAbsolute(pathFromRepositoryRoot) ||
       pathFromRepositoryRoot.startsWith('/')
     ) {
       throw new Error(`File length candidate path escapes repository root: ${relativePath}`);

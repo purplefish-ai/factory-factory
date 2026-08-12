@@ -1,8 +1,16 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
   countPhysicalLines,
@@ -17,6 +25,16 @@ import {
 } from './check-file-length';
 
 const temporaryDirectories: string[] = [];
+const pathMock = vi.hoisted(() => ({ relativeResult: undefined as string | undefined }));
+
+vi.mock('node:path', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:path')>();
+  return {
+    ...actual,
+    isAbsolute: (path: string) => actual.isAbsolute(path) || actual.win32.isAbsolute(path),
+    relative: (from: string, to: string) => pathMock.relativeResult ?? actual.relative(from, to),
+  };
+});
 
 const packageJsonSchema = z.object({
   scripts: z.object({
@@ -38,6 +56,7 @@ test('wires the file length commands into package guardrails', () => {
 });
 
 afterEach(() => {
+  pathMock.relativeResult = undefined;
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -77,6 +96,10 @@ describe('isFileLengthCandidate', () => {
     'src/a.test.tsx',
     'electron/main.mts',
     'scripts/check.mjs',
+    'src/script.js',
+    'src/component.jsx',
+    'electron/main.cjs',
+    'scripts/check.cts',
   ])('includes %s', (file) => expect(isFileLengthCandidate(file)).toBe(true));
 
   test.each([
@@ -281,6 +304,25 @@ describe('repository discovery and CLI', () => {
     );
   });
 
+  test.each([
+    ['cross-drive', 'D:\\outside.ts'],
+    ['UNC', '\\\\server\\share\\outside.ts'],
+  ])('refuses a Windows %s real path that path.relative returns as absolute', (_kind, pathFromRoot) => {
+    const repositoryRoot = createTemporaryRepository();
+    const outsideDirectory = mkdtempSync(join(tmpdir(), 'file-length-outside-'));
+    temporaryDirectories.push(outsideDirectory);
+    const outsideFile = join(outsideDirectory, 'outside.ts');
+    writeFileSync(outsideFile, 'outside\n');
+    symlinkSync(outsideFile, join(repositoryRoot, 'src/cross-drive.ts'));
+    execFileSync('git', ['add', 'src/cross-drive.ts'], { cwd: repositoryRoot });
+
+    pathMock.relativeResult = pathFromRoot;
+
+    expect(() => readFileLengths(repositoryRoot, ['src/cross-drive.ts'])).toThrow(
+      'escapes repository root'
+    );
+  });
+
   test('reports normal-mode violations through injected diagnostics', () => {
     const repositoryRoot = createTemporaryRepository();
     writeLines(join(repositoryRoot, 'src/legacy.ts'), 1201);
@@ -331,6 +373,97 @@ describe('repository discovery and CLI', () => {
     expect(stderr.join('')).toContain('src/deleted.ts: no longer exists');
     expect(updateExitCode).toBe(0);
     expect(readFileSync(baselinePath, 'utf8')).toBe('{}\n');
+  });
+
+  test('removes a baseline entry after a staged rename', () => {
+    const repositoryRoot = createTemporaryRepository();
+    const oldPath = join(repositoryRoot, 'src/old.ts');
+    const newPath = join(repositoryRoot, 'src/new.ts');
+    writeLines(oldPath, 1000);
+    execFileSync('git', ['add', 'src/old.ts'], { cwd: repositoryRoot });
+    renameSync(oldPath, newPath);
+    execFileSync('git', ['add', '-A'], { cwd: repositoryRoot });
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{\n  "src/old.ts": 1200\n}\n');
+    const stderr: string[] = [];
+
+    const normalExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      stderr: (message) => stderr.push(message),
+    });
+    const updateExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: ['--update'],
+      stdout: () => undefined,
+    });
+
+    expect(normalExitCode).toBe(1);
+    expect(stderr.join('')).toContain('src/old.ts: no longer exists');
+    expect(updateExitCode).toBe(0);
+    expect(readFileSync(baselinePath, 'utf8')).toBe('{}\n');
+  });
+
+  test('removes a baseline entry after an unstaged rename', () => {
+    const repositoryRoot = createTemporaryRepository();
+    const oldPath = join(repositoryRoot, 'src/old.ts');
+    const newPath = join(repositoryRoot, 'src/new.ts');
+    writeLines(oldPath, 1000);
+    execFileSync('git', ['add', 'src/old.ts'], { cwd: repositoryRoot });
+    renameSync(oldPath, newPath);
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{\n  "src/old.ts": 1200\n}\n');
+    const stderr: string[] = [];
+
+    const normalExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      stderr: (message) => stderr.push(message),
+    });
+    const updateExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: ['--update'],
+      stdout: () => undefined,
+    });
+
+    expect(normalExitCode).toBe(1);
+    expect(stderr.join('')).toContain('src/old.ts: no longer exists');
+    expect(updateExitCode).toBe(0);
+    expect(readFileSync(baselinePath, 'utf8')).toBe('{}\n');
+  });
+
+  test('refuses to update a renamed oversized file as new debt', () => {
+    const repositoryRoot = createTemporaryRepository();
+    const oldPath = join(repositoryRoot, 'src/old.ts');
+    const newPath = join(repositoryRoot, 'src/new.ts');
+    writeLines(oldPath, 1200);
+    execFileSync('git', ['add', 'src/old.ts'], { cwd: repositoryRoot });
+    renameSync(oldPath, newPath);
+    execFileSync('git', ['add', '-A'], { cwd: repositoryRoot });
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    const originalBaseline = '{\n  "src/old.ts": 1200\n}\n';
+    writeFileSync(baselinePath, originalBaseline);
+    const stderr: string[] = [];
+
+    const normalExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      stderr: (message) => stderr.push(message),
+    });
+    const updateExitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: ['--update'],
+      stderr: (message) => stderr.push(message),
+    });
+
+    expect(normalExitCode).toBe(1);
+    expect(stderr.join('')).toContain('src/old.ts: no longer exists');
+    expect(stderr.join('')).toContain('src/new.ts: 1200 lines exceeds the allowed 1000');
+    expect(updateExitCode).toBe(1);
+    expect(readFileSync(baselinePath, 'utf8')).toBe(originalBaseline);
   });
 
   test('does not write an update when a growth violation blocks it', () => {
