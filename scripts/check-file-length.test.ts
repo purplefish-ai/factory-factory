@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import {
   countPhysicalLines,
   discoverCandidatePaths,
@@ -16,6 +17,25 @@ import {
 } from './check-file-length';
 
 const temporaryDirectories: string[] = [];
+
+const packageJsonSchema = z.object({
+  scripts: z.object({
+    'check:file-length': z.string(),
+    'check:file-length:update': z.string(),
+    check: z.string(),
+  }),
+});
+
+test('wires the file length commands into package guardrails', () => {
+  const packageJson = packageJsonSchema.parse(
+    JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
+  );
+  const { scripts } = packageJson;
+
+  expect(scripts['check:file-length']).toBe('tsx scripts/check-file-length.ts');
+  expect(scripts['check:file-length:update']).toBe('tsx scripts/check-file-length.ts --update');
+  expect(scripts.check).toContain('pnpm check:file-length');
+});
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
