@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
+  lstatSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -179,6 +180,30 @@ function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }
 
+function resolveCandidateRealPath(absolutePath: string, relativePath: string): string | null {
+  let candidateStats: ReturnType<typeof lstatSync>;
+  try {
+    candidateStats = lstatSync(absolutePath);
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return null;
+    }
+    throw error;
+  }
+
+  try {
+    return realpathSync(absolutePath);
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      if (candidateStats.isSymbolicLink()) {
+        throw new Error(`File length candidate path is a dangling symbolic link: ${relativePath}`);
+      }
+      return null;
+    }
+    throw error;
+  }
+}
+
 export function readFileLengths(repositoryRoot: string, paths: readonly string[]): FileLength[] {
   const resolvedRepositoryRoot = resolve(repositoryRoot);
   const realRepositoryRoot = realpathSync(resolvedRepositoryRoot);
@@ -189,14 +214,9 @@ export function readFileLengths(repositoryRoot: string, paths: readonly string[]
     }
 
     const absolutePath = resolve(resolvedRepositoryRoot, relativePath);
-    let realPath: string;
-    try {
-      realPath = realpathSync(absolutePath);
-    } catch (error) {
-      if (isMissingPathError(error)) {
-        return [];
-      }
-      throw error;
+    const realPath = resolveCandidateRealPath(absolutePath, relativePath);
+    if (realPath === null) {
+      return [];
     }
     const pathFromRepositoryRoot = relative(realRepositoryRoot, realPath);
     if (

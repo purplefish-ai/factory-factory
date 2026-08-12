@@ -304,6 +304,16 @@ describe('repository discovery and CLI', () => {
     );
   });
 
+  test('refuses a Git-listed dangling symlink instead of treating it as deleted', () => {
+    const repositoryRoot = createTemporaryRepository();
+    symlinkSync('missing.ts', join(repositoryRoot, 'src/dangling.ts'));
+    execFileSync('git', ['add', 'src/dangling.ts'], { cwd: repositoryRoot });
+
+    expect(() => readFileLengths(repositoryRoot, discoverCandidatePaths(repositoryRoot))).toThrow(
+      'dangling symbolic link'
+    );
+  });
+
   test.each([
     ['cross-drive', 'D:\\outside.ts'],
     ['UNC', '\\\\server\\share\\outside.ts'],
