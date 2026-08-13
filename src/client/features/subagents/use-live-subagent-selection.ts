@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
 import type { SubagentSelection } from './types';
@@ -51,6 +51,7 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
         lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
     }
   );
+  const mountDataUpdatedAt = useRef(query.dataUpdatedAt);
 
   useEffect(
     () =>
@@ -70,7 +71,8 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     .flatMap((page) => page.subagents)
     .find((candidate) => candidate.id === selection.subagent.id);
   const loadedPageCount = query.data?.pages.length ?? 0;
-  const hasSuccessfulPostMountFetch = query.dataUpdatedAt > 0 && query.isFetchedAfterMount;
+  const hasSuccessfulPostMountFetch =
+    query.isFetchedAfterMount && query.dataUpdatedAt > mountDataUpdatedAt.current;
 
   useEffect(() => {
     if (

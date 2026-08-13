@@ -252,9 +252,13 @@ describe('useLiveSubagentSelection', () => {
       completedAt: '2026-08-10T10:05:00.000Z',
     }).subagent;
     setPages([{ supported: true, subagents: [fetched], nextCursor: null }]);
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:01:00.000Z');
+
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+
     mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:05:00.000Z');
     mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
-
     renderHookProbe(stored);
     expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
 
@@ -262,6 +266,31 @@ describe('useLiveSubagentSelection', () => {
     renderHookProbe(stored);
 
     expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
+  });
+
+  it('keeps a null-timestamp selection when the mount refetch fails', () => {
+    const stored = selection({
+      name: 'Restored security review',
+      status: 'running',
+      updatedAt: null,
+    });
+    const cached = selection({
+      name: 'Cached completed security review',
+      status: 'completed',
+      updatedAt: null,
+      completedAt: '2026-08-10T10:05:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [cached], nextCursor: null }]);
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:01:00.000Z');
+
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+    mocks.listInfiniteQueryResult.isSuccess = false;
+    renderHookProbe(stored);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
   });
 
   it('fetches successive pages until it refreshes a restored later-page child', () => {
