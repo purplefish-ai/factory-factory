@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AcpClientOptions } from '@/backend/services/session/service/acp';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
-import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionLifecycleService } from './session.lifecycle.service';
+import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 vi.mock('./closed-session-persistence.service', () => ({
@@ -46,49 +45,12 @@ vi.mock('@/backend/services/settings', () => ({
   },
 }));
 
-function createLifecycleService(options?: {
-  enqueue?: SessionDomainService['enqueue'];
-  transcript?: ChatMessage[];
-  historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
-  tryDispatchNextMessage?: (sessionId: string) => Promise<void>;
-}) {
-  const sessionDomainService = {
-    appendClaudeEvent: vi.fn((_sessionId: string, _message: unknown) => 1),
-    emitDelta: vi.fn(),
-    hasQueuedMessage: vi.fn((_sessionId: string, _messageId: string) => false),
-    enqueue:
-      options?.enqueue ??
-      vi.fn((_sessionId: string, _message: unknown) => ({ position: 0 }) as const),
-    getTranscriptSnapshot: vi.fn(() => options?.transcript ?? []),
-    getHistoryHydrationSource: vi.fn(() => options?.historyHydrationSource ?? 'none'),
-  };
-  const tryDispatchNextMessage = options?.tryDispatchNextMessage ?? vi.fn(async () => undefined);
-
-  const service = new SessionLifecycleService({
-    repository: {} as never,
-    promptBuilder: {} as never,
-    runtimeManager: { isStopInProgress: vi.fn(() => false) } as never,
-    sessionDomainService: sessionDomainService as unknown as SessionDomainService,
-    sessionPermissionService: {} as never,
-    sessionConfigService: {} as never,
-    acpEventProcessor: {} as never,
-    promptTurnCompletionService: {} as never,
-    retryService: {} as never,
-    sendSessionMessage: vi.fn(async () => undefined),
-    lifecycleEventService: { hydrate: vi.fn(async () => undefined) } as never,
-  });
-  service.configure({
-    workspace: {
-      markSessionRunning: vi.fn(),
-      markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: vi.fn(async () => undefined),
-      resetPRDiscoveryBackoff: vi.fn(async () => true),
-    },
-    messageQueue: { tryDispatchNextMessage },
-  });
-
-  return { service, sessionDomainService, tryDispatchNextMessage };
-}
+it('creates isolated lifecycle harness state', () => {
+  const first = createLifecycleHarness();
+  const second = createLifecycleHarness();
+  expect(first.repository.getSessionById).not.toBe(second.repository.getSessionById);
+  expect(first.runtimeManager.getClient).not.toBe(second.runtimeManager.getClient);
+});
 
 async function deliverPendingChildNotifications(
   service: SessionLifecycleService,
@@ -110,137 +72,16 @@ function getStopGenerations(service: SessionLifecycleService): Map<string, numbe
   ).stopGenerations;
 }
 
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolvePromise!: (value: T) => void;
-  let rejectPromise!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return { promise, resolve: resolvePromise, reject: rejectPromise };
-}
-
-function createStoppableLifecycleService() {
-  const repository = {
-    getSessionsByWorkspaceId: vi.fn(async () => [
-      { id: 'session-running', status: SessionStatus.RUNNING },
-      { id: 'session-runtime-only', status: SessionStatus.COMPLETED },
-      { id: 'session-browse-only', status: SessionStatus.IDLE },
-      { id: 'session-idle', status: SessionStatus.IDLE },
-    ]),
-  };
-  const runtimeManager = {
-    isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
-    getBrowseClient: vi.fn(() => undefined),
-    isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
-  };
-  const service = new SessionLifecycleService({
-    repository: repository as never,
-    promptBuilder: {} as never,
-    runtimeManager: runtimeManager as never,
-    sessionDomainService: {} as never,
-    sessionPermissionService: {} as never,
-    sessionConfigService: {} as never,
-    acpEventProcessor: {} as never,
-    promptTurnCompletionService: {} as never,
-    retryService: {} as never,
-    sendSessionMessage: vi.fn(async () => undefined),
-    lifecycleEventService: { hydrate: vi.fn(async () => undefined) } as never,
-  });
-  const stopSession = vi.fn(
-    (_sessionId: string, _options?: unknown): Promise<void> => Promise.resolve()
-  );
-  (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
-
-  return { service, repository, runtimeManager, stopSession };
-}
-
-function createStopReasonLifecycleService(options?: { providerProcessPid?: number | null }) {
-  const session = {
-    id: 'session-1',
-    workspaceId: 'workspace-1',
-    workflow: 'code',
-    providerProcessPid: options?.providerProcessPid ?? 4242,
-  };
-  const repository = {
-    getSessionById: vi.fn(async () => session),
-    updateSessionIfStatus: vi.fn(async () => session),
-    updateSession: vi.fn(async () => session),
-  };
-  const runtimeManager = {
-    isStopInProgress: vi.fn(() => false),
-    isSessionRunning: vi.fn(() => false),
-    isBrowseOnlySession: vi.fn(() => false),
-    isSessionWorking: vi.fn(() => false),
-    getClient: vi.fn(() => undefined),
-    stopClient: vi.fn(async () => undefined),
-  };
-  const lifecycleEventService = {
-    record: vi.fn(
-      async (_input: {
-        workspaceId: string;
-        sessionId: string;
-        kind: string;
-        reason: string;
-        message: string;
-        dedupeKey: string;
-      }) => null
-    ),
-    hydrate: vi.fn(),
-  };
-  const service = new SessionLifecycleService(
-    unsafeCoerce({
-      repository,
-      promptBuilder: {},
-      runtimeManager,
-      sessionDomainService: {
-        clearQueuedWork: vi.fn(),
-        getRuntimeSnapshot: vi.fn(() => ({
-          phase: 'idle',
-          processState: 'stopped',
-          activity: 'IDLE',
-          updatedAt: '2026-07-30T00:00:00.000Z',
-        })),
-        setRuntimeSnapshot: vi.fn(),
-        markProcessExit: vi.fn(),
-        clearSession: vi.fn(),
-      },
-      sessionPermissionService: { cancelPendingRequests: vi.fn() },
-      sessionConfigService: {},
-      acpEventProcessor: {
-        createRuntimeEventHandler: vi.fn(() => ({})),
-        clearStreamingState: vi.fn(),
-        clearReplaySuppression: vi.fn(),
-        clearSessionContext: vi.fn(),
-        clearSessionState: vi.fn(),
-        finalizeOrphanedToolCalls: vi.fn(),
-      },
-      promptTurnCompletionService: { clearSession: vi.fn() },
-      retryService: { run: vi.fn(async (operation: () => Promise<unknown>) => await operation()) },
-      lifecycleEventService,
-      sendSessionMessage: vi.fn(),
-    })
-  );
-  const createRuntimeHandlers = () =>
+function getRuntimeHandlers(service: SessionLifecycleService) {
+  return (
     service as unknown as {
       setupAcpEventHandler(sessionId: string): {
         onExit?: (sessionId: string, exitCode: number | null) => Promise<void>;
       };
-    };
-  const runtimeHandlers = createRuntimeHandlers().setupAcpEventHandler('session-1');
-  return {
-    service,
-    repository,
-    lifecycleEventService,
-    runtimeManager,
-    runtimeHandlers,
-    createRuntimeHandlers: () => createRuntimeHandlers().setupAcpEventHandler('session-1'),
-  };
+    }
+  ).setupAcpEventHandler('session-1');
 }
+type StopSession = (sessionId: string, options?: unknown) => Promise<void>;
 
 describe('SessionLifecycleService stopWorkspaceSessions', () => {
   beforeEach(() => {
@@ -248,7 +89,9 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
   });
 
   it('stops running sessions and runtime-only sessions', async () => {
-    const { service, repository, runtimeManager, stopSession } = createStoppableLifecycleService();
+    const { service, repository, runtimeManager } = createLifecycleHarness();
+    const stopSession = vi.fn<StopSession>(async () => undefined);
+    (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
 
     await service.stopWorkspaceSessions('workspace-1');
 
@@ -265,7 +108,9 @@ describe('SessionLifecycleService stopWorkspaceSessions', () => {
   });
 
   it('attempts every running session and throws when any stop fails', async () => {
-    const { service, stopSession } = createStoppableLifecycleService();
+    const { service } = createLifecycleHarness();
+    const stopSession = vi.fn<StopSession>(async () => undefined);
+    (service as unknown as { stopSession: typeof stopSession }).stopSession = stopSession;
     stopSession.mockImplementation((sessionId: string) => {
       if (sessionId === 'session-running') {
         return Promise.reject(new Error('stop failed'));
@@ -292,7 +137,7 @@ describe('SessionLifecycleService stop causes', () => {
     ['WORKSPACE_ARCHIVED', 'Session stopped because the workspace was archived.'],
     ['SYSTEM_STOP', 'Session stopped by the system.'],
   ] as const)('records %s before stopping the runtime', async (reason, message) => {
-    const { service, lifecycleEventService, runtimeManager } = createStopReasonLifecycleService();
+    const { service, lifecycleEventService, runtimeManager } = createLifecycleHarness();
 
     await service.stopSession('session-1', { reason });
 
@@ -314,8 +159,8 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('uses a new durable stop identity after lifecycle-service reconstruction', async () => {
-    const first = createStopReasonLifecycleService();
-    const reconstructed = createStopReasonLifecycleService();
+    const first = createLifecycleHarness();
+    const reconstructed = createLifecycleHarness();
 
     await first.service.stopSession('session-1', { reason: 'USER_STOP' });
     await reconstructed.service.stopSession('session-1', { reason: 'USER_STOP' });
@@ -329,7 +174,8 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('records an unexpected process exit once with its runtime incarnation and exit code', async () => {
-    const { lifecycleEventService, runtimeHandlers } = createStopReasonLifecycleService();
+    const { service, lifecycleEventService } = createLifecycleHarness();
+    const runtimeHandlers = getRuntimeHandlers(service);
 
     await runtimeHandlers.onExit?.('session-1', 1);
 
@@ -346,8 +192,8 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('records an unexpected process exit when the status update fails', async () => {
-    const { lifecycleEventService, repository, runtimeHandlers } =
-      createStopReasonLifecycleService();
+    const { service, lifecycleEventService, repository } = createLifecycleHarness();
+    const runtimeHandlers = getRuntimeHandlers(service);
     repository.updateSession.mockRejectedValueOnce(new Error('database write failed'));
 
     await runtimeHandlers.onExit?.('session-1', 1);
@@ -361,12 +207,12 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('does not collapse repeated null-PID exits from separate runtime incarnations', async () => {
-    const { lifecycleEventService, createRuntimeHandlers } = createStopReasonLifecycleService({
+    const { service, lifecycleEventService } = createLifecycleHarness({
       providerProcessPid: null,
     });
 
-    await createRuntimeHandlers().onExit?.('session-1', 1);
-    await createRuntimeHandlers().onExit?.('session-1', 1);
+    await getRuntimeHandlers(service).onExit?.('session-1', 1);
+    await getRuntimeHandlers(service).onExit?.('session-1', 1);
 
     const dedupeKeys = lifecycleEventService.record.mock.calls.map(
       ([recordInput]) => recordInput.dedupeKey
@@ -380,8 +226,8 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('does not label a deliberate stop as an unexpected exit', async () => {
-    const { lifecycleEventService, runtimeManager, runtimeHandlers } =
-      createStopReasonLifecycleService();
+    const { service, lifecycleEventService, runtimeManager } = createLifecycleHarness();
+    const runtimeHandlers = getRuntimeHandlers(service);
     runtimeManager.isStopInProgress.mockReturnValue(true);
 
     await runtimeHandlers.onExit?.('session-1', 0);
@@ -392,7 +238,7 @@ describe('SessionLifecycleService stop causes', () => {
   });
 
   it('can clean up a failed startup without recording a stop event', async () => {
-    const { service, lifecycleEventService, runtimeManager } = createStopReasonLifecycleService();
+    const { service, lifecycleEventService, runtimeManager } = createLifecycleHarness();
 
     await service.stopSession('session-1', { recordLifecycleEvent: false });
 
@@ -647,7 +493,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
+    });
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
 
@@ -710,7 +558,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         resolvePending = resolve;
       }) as never
     );
-    const { service, sessionDomainService } = createLifecycleService();
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
+    });
 
     const deliveryPromise = deliverPendingChildNotifications(service);
     await vi.waitFor(() => {
@@ -754,7 +604,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: new Date('2026-06-22T10:30:00.000Z'),
       },
     ] as never);
-    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       enqueue: vi.fn(() => ({ error: 'Queue full' })),
     });
 
@@ -782,7 +633,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
+    });
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
 
@@ -811,7 +664,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: new Date('2026-06-22T10:30:00.000Z'),
       },
     ] as never);
-    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService();
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
+    });
     sessionDomainService.hasQueuedMessage.mockReturnValue(true);
 
     const enqueuedCount = await deliverPendingChildNotifications(service);
@@ -838,7 +693,9 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt: new Date('2026-06-22T10:30:00.000Z'),
       },
     ] as never);
-    const { service, sessionDomainService } = createLifecycleService();
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
+    });
     let queuedByLiveDelivery = false;
     sessionDomainService.hasQueuedMessage.mockImplementation(() => queuedByLiveDelivery);
     sessionDomainService.getTranscriptSnapshot.mockImplementation(() => {
@@ -871,7 +728,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleService({
+    const { service, sessionDomainService, tryDispatchNextMessage } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       transcript: [
         {
           id: 'workspace-notification-notif-parent',
@@ -909,7 +767,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       historyHydrationSource: 'jsonl',
       transcript: [
         {
@@ -946,7 +805,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       historyHydrationSource: 'jsonl',
       transcript: [
         {
@@ -994,7 +854,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       historyHydrationSource: 'jsonl',
       transcript: [
         {
@@ -1045,7 +906,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       historyHydrationSource: 'jsonl',
       transcript: [
         {
@@ -1085,7 +947,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
         createdAt,
       },
     ] as never);
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       transcript: [
         {
           id: 'session-1-42',
@@ -1122,7 +985,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
     vi.mocked(workspaceNotificationService.markDelivered).mockRejectedValue(
       new Error('database unavailable')
     );
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       transcript: [
         {
           id: 'workspace-notification-notif-parent',
@@ -1159,7 +1023,8 @@ describe('SessionLifecycleService pending workspace notifications', () => {
       },
     ] as never);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
-    const { service, sessionDomainService } = createLifecycleService({
+    const { service, sessionDomainService } = createLifecycleHarness({
+      useRealNotificationDelivery: true,
       transcript: [
         {
           id: 'session-1-1',
@@ -1191,160 +1056,6 @@ describe('SessionLifecycleService pending workspace notifications', () => {
   });
 });
 
-function createStartableLifecycleService(options?: {
-  pendingNotificationCount?: number;
-  tryDispatchNextMessage?: () => Promise<void>;
-  provider?: 'CLAUDE' | 'CODEX';
-  providerSessionId?: string | null;
-  worktreePath?: string | null;
-}) {
-  const session = {
-    id: 'session-1',
-    workspaceId: 'workspace-1',
-    workflow: 'code',
-    provider: options?.provider ?? 'CLAUDE',
-    providerSessionId: options?.providerSessionId ?? null,
-    providerMetadata: null,
-    model: 'claude-sonnet',
-  };
-  const workspace = {
-    id: 'workspace-1',
-    name: 'Workspace',
-    description: null,
-    projectId: 'project-1',
-    worktreePath: options?.worktreePath === undefined ? '/tmp/workspace' : options.worktreePath,
-    branchName: 'feature/test',
-    isAutoGeneratedBranch: false,
-    hasHadSessions: false,
-    runScriptPort: null,
-    parentWorkspaceId: null,
-    creationMetadata: null,
-  };
-  const handle = {
-    provider: options?.provider ?? 'CLAUDE',
-    providerSessionId: options?.providerSessionId ?? 'provider-session-1',
-    configOptions: [],
-    isPromptInFlight: false,
-    getSubagentBrowseCapability: vi.fn(() => ({
-      version: 1 as const,
-      list: true as const,
-      read: true as const,
-      notifications: true as const,
-    })),
-  };
-  const repository = {
-    getSessionById: vi.fn(async (): Promise<typeof session | null> => session),
-    getWorkspaceById: vi.fn(async () => workspace),
-    getProjectById: vi.fn(),
-    markWorkspaceHasHadSessions: vi.fn(async () => undefined),
-    updateSession: vi.fn(async () => session),
-    updateSessionIfStatus: vi.fn(async () => null),
-  };
-  const promptBuilder = {
-    shouldInjectBranchRename: vi.fn(() => false),
-    buildSystemPrompt: vi.fn(() => ({
-      workflowPrompt: undefined,
-      systemPrompt: 'system prompt',
-      injectedBranchRename: false,
-    })),
-  };
-  const runtimeManager = {
-    isStopInProgress: vi.fn(() => false),
-    isSessionRunning: vi.fn(() => false),
-    isBrowseOnlySession: vi.fn(() => false),
-    getClient: vi.fn(() => undefined),
-    getBrowseClient: vi.fn(() => undefined),
-    getPendingClient: vi.fn(() => undefined),
-    getSubagentBrowseCapability: vi.fn<
-      (sessionId: string) => ReturnType<typeof handle.getSubagentBrowseCapability> | null
-    >(() => null),
-    getOrCreateClient: vi.fn(async (_sessionId: string, _options: AcpClientOptions) => handle),
-    stopClient: vi.fn(async () => undefined),
-    isSessionWorking: vi.fn(() => false),
-  };
-  const sessionDomainService = {
-    setRuntimeSnapshot: vi.fn(),
-    emitDelta: vi.fn(),
-    isHistoryHydrated: vi.fn(() => false),
-    getTranscriptSnapshot: vi.fn(() => []),
-    getRuntimeSnapshot: vi.fn(() => ({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-07-15T00:00:00.000Z',
-    })),
-    clearQueuedWork: vi.fn(),
-    clearSession: vi.fn(),
-    markProcessExit: vi.fn(),
-  };
-  const sessionConfigService = {
-    applyConfiguredReasoningEffort: vi.fn(async () => undefined),
-    applyStartupModePreset: vi.fn(async () => undefined),
-    applyConfiguredPermissionPreset: vi.fn(async () => undefined),
-    persistAcpConfigSnapshot: vi.fn(async () => undefined),
-    buildAcpChatBarCapabilities: vi.fn(() => ({})),
-  };
-  const acpEventProcessor = {
-    createRuntimeEventHandler: vi.fn(() => ({})),
-    registerSessionContext: vi.fn(),
-    setReplaySuppression: vi.fn(),
-    clearSessionState: vi.fn(),
-    clearStreamingState: vi.fn(),
-    clearReplaySuppression: vi.fn(),
-    finalizeOrphanedToolCalls: vi.fn(),
-    clearSessionContext: vi.fn(),
-  };
-  const tryDispatchNextMessage = vi.fn(options?.tryDispatchNextMessage ?? (async () => undefined));
-  const sendSessionMessage = vi.fn(async () => undefined);
-
-  const service = new SessionLifecycleService({
-    repository: repository as never,
-    promptBuilder: promptBuilder as never,
-    runtimeManager: runtimeManager as never,
-    sessionDomainService: sessionDomainService as never,
-    sessionPermissionService: { cancelPendingRequests: vi.fn() } as never,
-    sessionConfigService: sessionConfigService as never,
-    acpEventProcessor: acpEventProcessor as never,
-    promptTurnCompletionService: { clearSession: vi.fn() } as never,
-    retryService: {
-      run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
-    } as never,
-    sendSessionMessage,
-    lifecycleEventService: { hydrate: vi.fn(async () => undefined), record: vi.fn() } as never,
-  });
-  service.configure({
-    workspace: {
-      markSessionRunning: vi.fn(),
-      markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: vi.fn(async () => undefined),
-      resetPRDiscoveryBackoff: vi.fn(async () => true),
-    },
-    messageQueue: { tryDispatchNextMessage },
-  });
-  const deliverPendingChildNotifications = vi.fn(
-    async () => options?.pendingNotificationCount ?? 0
-  );
-  (
-    service as unknown as {
-      deliverPendingChildNotifications(sessionId: string, workspaceId: string): Promise<number>;
-    }
-  ).deliverPendingChildNotifications = deliverPendingChildNotifications;
-
-  return {
-    service,
-    session,
-    handle,
-    repository,
-    sendSessionMessage,
-    tryDispatchNextMessage,
-    sessionConfigService,
-    runtimeManager,
-    sessionDomainService,
-    acpEventProcessor,
-    deliverPendingChildNotifications,
-  };
-}
-
 describe('SessionLifecycleService startSession pending workspace notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1358,7 +1069,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       handle,
       sessionDomainService,
       deliverPendingChildNotifications,
-    } = createStartableLifecycleService({
+    } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
       pendingNotificationCount: 2,
@@ -1389,7 +1100,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not spawn a browse client without a stored provider session', async () => {
-    const { service, runtimeManager } = createStartableLifecycleService({
+    const { service, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: null,
     });
@@ -1400,7 +1111,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('returns unsupported when the stopped session has no usable worktree', async () => {
-    const { service, runtimeManager } = createStartableLifecycleService({
+    const { service, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
       worktreePath: null,
@@ -1412,7 +1123,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('returns unsupported when the provider cannot restore the stored session', async () => {
-    const { service, runtimeManager } = createStartableLifecycleService({
+    const { service, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1424,7 +1135,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('stops a browse-only client when the provider lacks sub-agent browsing', async () => {
-    const { service, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
+    const { service, runtimeManager, acpEventProcessor } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1437,7 +1148,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('cancels an active startup that began before unsupported browse cleanup', async () => {
-    const { service, session, repository, runtimeManager } = createStartableLifecycleService({
+    const { service, session, repository, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1466,7 +1177,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('returns unsupported when concurrent browse cleanup invalidates its startup', async () => {
-    const { service, session, repository, runtimeManager } = createStartableLifecycleService({
+    const { service, session, repository, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1499,7 +1210,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not let a failed browse creation clear a concurrent active startup context', async () => {
-    const { service, handle, runtimeManager, acpEventProcessor } = createStartableLifecycleService({
+    const { service, handle, runtimeManager, acpEventProcessor } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1531,7 +1242,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('omits provider-session persistence from browse-only runtime handlers', () => {
-    const { service } = createStartableLifecycleService({
+    const { service } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
@@ -1555,7 +1266,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       handle,
       deliverPendingChildNotifications,
       sessionConfigService,
-    } = createStartableLifecycleService({
+    } = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
       pendingNotificationCount: 1,
@@ -1588,7 +1299,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not retain a stop generation for a missing session', async () => {
-    const { service, repository } = createStartableLifecycleService();
+    const { service, repository } = createLifecycleHarness();
     repository.getSessionById.mockResolvedValueOnce(null);
 
     await expect(service.startSession('missing-session')).rejects.toThrow(
@@ -1599,7 +1310,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not create a client when stop completes during the initial session lookup', async () => {
-    const { service, session, repository, runtimeManager } = createStartableLifecycleService();
+    const { service, session, repository, runtimeManager } = createLifecycleHarness();
     let resolveSession!: (value: typeof session) => void;
     repository.getSessionById.mockReturnValueOnce(
       new Promise<typeof session>((resolve) => {
@@ -1623,7 +1334,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('releases the stop generation when startup fails before creating a runtime', async () => {
-    const { service, runtimeManager } = createStartableLifecycleService();
+    const { service, runtimeManager } = createLifecycleHarness();
     runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
 
     await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
@@ -1632,7 +1343,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not retain a stop generation when client lookup cannot find the session', async () => {
-    const { service, repository } = createStartableLifecycleService();
+    const { service, repository } = createLifecycleHarness();
     repository.getSessionById.mockResolvedValueOnce(null);
 
     await expect(service.getOrCreateSessionClient('missing-session')).rejects.toThrow(
@@ -1643,7 +1354,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('releases the stop generation when record-based client creation fails', async () => {
-    const { service, session, runtimeManager } = createStartableLifecycleService();
+    const { service, session, runtimeManager } = createLifecycleHarness();
     runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
 
     await expect(service.getOrCreateSessionClientFromRecord(session as never)).rejects.toThrow(
@@ -1667,7 +1378,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
           ratchetPermissions: 'YOLO',
         })
       );
-    const { service, runtimeManager } = createStartableLifecycleService();
+    const { service, runtimeManager } = createLifecycleHarness();
 
     const firstStart = service.startSession('session-1');
     await vi.waitFor(() => {
@@ -1690,7 +1401,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
 
   it('dispatches queued notifications after startup presets and skips the default continue prompt', async () => {
     const { service, sendSessionMessage, tryDispatchNextMessage, sessionConfigService } =
-      createStartableLifecycleService({ pendingNotificationCount: 2 });
+      createLifecycleHarness({ pendingNotificationCount: 2 });
 
     await service.startSession('session-1');
 
@@ -1709,11 +1420,9 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('still sends an explicit initial prompt after queued notification dispatch starts', async () => {
-    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
-      {
-        pendingNotificationCount: 1,
-      }
-    );
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness({
+      pendingNotificationCount: 1,
+    });
 
     await service.startSession('session-1', { initialPrompt: 'Follow up' });
 
@@ -1731,7 +1440,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
     const pendingPrompt = new Promise<undefined>((resolve) => {
       resolvePrompt = resolve;
     });
-    const { service, sendSessionMessage } = createStartableLifecycleService();
+    const { service, sendSessionMessage } = createLifecycleHarness();
     sendSessionMessage.mockReturnValueOnce(pendingPrompt);
 
     const startResult = service.startSession('session-1').catch((error) => error);
@@ -1755,7 +1464,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
       resolveSettings = resolve;
     });
     vi.mocked(userSettingsService.get).mockReturnValueOnce(pendingSettings);
-    const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
+    const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness();
 
     const startResult = service.startSession('session-1').catch((error) => error);
     await vi.waitFor(() => {
@@ -1780,7 +1489,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('releases the stop generation after a session stops', async () => {
-    const { service } = createStartableLifecycleService();
+    const { service } = createLifecycleHarness();
 
     await service.stopSession('session-1');
 
@@ -1788,7 +1497,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('releases the stop generation when viewers retain inactive session state', async () => {
-    const { service, sessionDomainService } = createStartableLifecycleService();
+    const { service, sessionDomainService } = createLifecycleHarness();
     sessionEventBus.registerViewerCountProvider((sessionId) => (sessionId === 'session-1' ? 1 : 0));
 
     try {
@@ -1802,7 +1511,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not clear a restarted generation when an old runtime exit finishes', async () => {
-    const { service, session, repository } = createStartableLifecycleService();
+    const { service, session, repository } = createLifecycleHarness();
     let resolveUpdate!: (value: typeof session) => void;
     repository.updateSession.mockReturnValueOnce(
       new Promise<typeof session>((resolve) => {
@@ -1833,7 +1542,7 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('waits for a registered client creation and stops the resulting runtime', async () => {
-    const { service, sendSessionMessage, runtimeManager } = createStartableLifecycleService();
+    const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness();
     type RuntimeHandle = Awaited<ReturnType<typeof runtimeManager.getOrCreateClient>>;
     let resolveClient!: (handle: RuntimeHandle) => void;
     const pendingClient = new Promise<RuntimeHandle>((resolve) => {
@@ -1868,11 +1577,9 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {
-    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
-      {
-        pendingNotificationCount: 1,
-      }
-    );
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness({
+      pendingNotificationCount: 1,
+    });
 
     await service.restartSession('session-1');
 
@@ -1881,11 +1588,9 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('sends an explicit restart prompt after queued notification dispatch starts', async () => {
-    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
-      {
-        pendingNotificationCount: 1,
-      }
-    );
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness({
+      pendingNotificationCount: 1,
+    });
 
     await service.restartSession('session-1', {
       initialPrompt: 'Fix the failing checks',
@@ -1902,12 +1607,10 @@ describe('SessionLifecycleService startSession pending workspace notifications',
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {
-    const { service, sendSessionMessage, tryDispatchNextMessage } = createStartableLifecycleService(
-      {
-        pendingNotificationCount: 1,
-        tryDispatchNextMessage: () => Promise.reject(new Error('dispatch failed')),
-      }
-    );
+    const { service, sendSessionMessage, tryDispatchNextMessage } = createLifecycleHarness({
+      pendingNotificationCount: 1,
+      tryDispatchNextMessage: () => Promise.reject(new Error('dispatch failed')),
+    });
 
     await expect(service.startSession('session-1')).resolves.toBeUndefined();
 
