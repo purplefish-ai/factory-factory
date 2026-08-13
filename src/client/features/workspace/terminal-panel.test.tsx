@@ -5,11 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
-import {
-  TerminalPanel,
-  type TerminalPanelRef,
-  type TerminalTabState,
-} from './terminal-panel';
+import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
