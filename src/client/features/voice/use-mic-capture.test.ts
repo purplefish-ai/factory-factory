@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { attachTranscriptHandler, matchesStopPhrase } from './use-mic-capture';
+import {
+  attachTranscriptHandler,
+  disposeCaptureResources,
+  matchesStopPhrase,
+} from './use-mic-capture';
 
 describe('matchesStopPhrase', () => {
   it('matches common stop phrases regardless of case', () => {
@@ -173,5 +177,35 @@ describe('attachTranscriptHandler', () => {
 
     expect(onSoftStop).not.toHaveBeenCalled();
     expect(onFinalTranscript).toHaveBeenCalledWith('please stop');
+  });
+});
+
+describe('disposeCaptureResources', () => {
+  it('detaches queued worklet messages before closing capture resources', () => {
+    const onSpeechDetected = vi.fn();
+    const queuedMessage = { data: new ArrayBuffer(0) } as MessageEvent<ArrayBuffer>;
+    const port = {
+      onmessage: onSpeechDetected as ((event: MessageEvent<ArrayBuffer>) => void) | null,
+      close: vi.fn(),
+    };
+    port.close.mockImplementation(() => port.onmessage?.(queuedMessage));
+    const disconnect = vi.fn(() => port.onmessage?.(queuedMessage));
+    const workletNode = {
+      port,
+      disconnect,
+    } as unknown as AudioWorkletNode;
+
+    disposeCaptureResources({
+      workletNode,
+      silentGain: null,
+      audioContext: null,
+      mediaStream: null,
+      socket: null,
+    });
+    port.onmessage?.(queuedMessage);
+
+    expect(onSpeechDetected).not.toHaveBeenCalled();
+    expect(port.close).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledOnce();
   });
 });
