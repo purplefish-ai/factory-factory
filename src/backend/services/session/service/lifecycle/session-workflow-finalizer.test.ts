@@ -21,7 +21,7 @@ vi.mock('@/backend/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   }),
-  getCurrentProcessEnv: () => ({ ...process.env }),
+  getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
