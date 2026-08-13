@@ -22,6 +22,7 @@ export class SessionLifecycleGate {
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, StartupGenerationReferences>();
+  private readonly establishedGenerations = new Set<number>();
 
   constructor(private readonly dependencies: SessionLifecycleGateDependencies) {}
 
@@ -70,7 +71,7 @@ export class SessionLifecycleGate {
         }
         released = true;
         this.stoppingSessions.delete(sessionId);
-        this.stopGenerations.delete(sessionId);
+        this.deleteGeneration(sessionId);
       },
     };
   }
@@ -87,7 +88,7 @@ export class SessionLifecycleGate {
 
   releaseShutdown(sessionId: string): void {
     this.shutdownSessions.delete(sessionId);
-    this.stopGenerations.delete(sessionId);
+    this.deleteGeneration(sessionId);
   }
 
   isSessionStopping(sessionId: string): boolean {
@@ -111,7 +112,11 @@ export class SessionLifecycleGate {
     if (!references) {
       return;
     }
-    const hasSucceeded = references.hasSucceeded || succeeded;
+    if (succeeded && this.isGenerationCurrent(lease.sessionId, lease.generation)) {
+      this.establishedGenerations.add(lease.generation);
+    }
+    const hasSucceeded =
+      references.hasSucceeded || succeeded || this.establishedGenerations.has(lease.generation);
     if (references.count > 1) {
       this.startupGenerationReferences.set(lease.generation, {
         count: references.count - 1,
@@ -125,13 +130,23 @@ export class SessionLifecycleGate {
       !(hasSucceeded || this.isSessionStopping(lease.sessionId)) &&
       this.isGenerationCurrent(lease.sessionId, lease.generation)
     ) {
-      this.stopGenerations.delete(lease.sessionId);
+      this.deleteGeneration(lease.sessionId);
     }
   }
 
   private advanceGeneration(sessionId: string): number {
+    this.deleteGeneration(sessionId);
     this.stopGenerationCounter += 1;
     this.stopGenerations.set(sessionId, this.stopGenerationCounter);
     return this.stopGenerationCounter;
+  }
+
+  private deleteGeneration(sessionId: string): void {
+    const generation = this.stopGenerations.get(sessionId);
+    if (generation === undefined) {
+      return;
+    }
+    this.stopGenerations.delete(sessionId);
+    this.establishedGenerations.delete(generation);
   }
 }

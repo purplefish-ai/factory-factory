@@ -147,6 +147,21 @@ describe('SessionLifecycleGate', () => {
     expect(gate.isGenerationCurrent('session-1', successfulLease.generation)).toBe(true);
   });
 
+  it('retains an established generation when a later startup fails', async () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    let establishedLease!: SessionStartupLease;
+
+    await gate.runStartup('session-1', (lease) => {
+      establishedLease = lease;
+      return Promise.resolve();
+    });
+    await expect(
+      gate.runStartup('session-1', () => Promise.reject(new Error('duplicate startup')))
+    ).rejects.toThrow('duplicate startup');
+
+    expect(gate.isGenerationCurrent('session-1', establishedLease.generation)).toBe(true);
+  });
+
   it('reserves shutdown sessions instead of allowing their startup leases to continue', async () => {
     const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
     let firstLease!: SessionStartupLease;
