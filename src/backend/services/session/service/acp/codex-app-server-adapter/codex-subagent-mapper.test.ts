@@ -103,6 +103,22 @@ describe('mapCodexSubagentToolItem', () => {
     expect(mapping?.meta).toBeUndefined();
   });
 
+  it('ignores collab calls with empty receiver thread IDs', () => {
+    expect(
+      mapCodexSubagentToolItem(
+        {
+          type: 'collabAgentToolCall',
+          id: 'item-collab-empty-receiver',
+          tool: 'spawnAgent',
+          senderThreadId: 'parent-thread-1',
+          receiverThreadIds: [''],
+          status: 'inProgress',
+        },
+        'parent-1'
+      )
+    ).toBeNull();
+  });
+
   it('ignores non-subagent items', () => {
     expect(
       mapCodexSubagentToolItem(

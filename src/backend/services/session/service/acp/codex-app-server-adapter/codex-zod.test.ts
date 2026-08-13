@@ -285,6 +285,22 @@ describe('codex-zod', () => {
     expect(parsed.futureField).toBe('retained');
   });
 
+  it.each([
+    [['']],
+    [['child_1', '']],
+  ])('rejects collaboration tool calls with empty receiver thread IDs: %j', (receiverThreadIds) => {
+    const parsed = collabAgentToolCallItemSchema.safeParse({
+      type: 'collabAgentToolCall',
+      id: 'item_collab_1',
+      tool: 'spawnAgent',
+      senderThreadId: 'parent_thread_1',
+      receiverThreadIds,
+      status: 'inProgress',
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
   it('parses configRequirements/read responses', () => {
     const parsed = configRequirementsReadResponseSchema.parse({
       requirements: {
