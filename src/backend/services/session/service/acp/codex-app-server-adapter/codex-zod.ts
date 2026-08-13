@@ -94,7 +94,7 @@ export const collabAgentToolCallItemSchema = threadItemSchema
     type: z.literal('collabAgentToolCall'),
     tool: z.string(),
     senderThreadId: z.string(),
-    receiverThreadIds: z.array(z.string()),
+    receiverThreadIds: z.array(z.string().min(1)),
     status: z.string(),
   })
   .passthrough();
