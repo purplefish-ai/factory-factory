@@ -7,6 +7,8 @@ import { sessionRepository } from './session.repository';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 
+const ALL_INTERFACES_HOSTS = new Set(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0']);
+
 export const sessionContextService = new SessionContextService({
   repository: sessionRepository,
   promptBuilder: sessionPromptBuilder,
@@ -25,7 +27,9 @@ const getBackendPort = (): number =>
 
 function getBackendBaseUrl(): string {
   const host = configService.getBackendHost() ?? 'localhost';
-  const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  const connectHost = ALL_INTERFACES_HOSTS.has(host) ? 'localhost' : host;
+  const urlHost =
+    connectHost.includes(':') && !connectHost.startsWith('[') ? `[${connectHost}]` : connectHost;
   return `http://${urlHost}:${getBackendPort()}`;
 }
 
