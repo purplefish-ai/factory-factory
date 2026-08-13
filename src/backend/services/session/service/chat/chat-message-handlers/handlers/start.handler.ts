@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   ChatMessageHandler,
-  HandlerRegistryDependencies,
+  ChatMessageHandlerStartupService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import {
   getValidModel,
@@ -14,15 +14,10 @@ import type { StartMessageInput } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createStartHandler(
-  deps: HandlerRegistryDependencies
-): ChatMessageHandler<StartMessageInput> {
+export function createStartHandler(deps: {
+  startupService: ChatMessageHandlerStartupService;
+}): ChatMessageHandler<StartMessageInput> {
   return async ({ ws, sessionId, message }) => {
-    const clientCreator = deps.getClientCreator();
-    if (!clientCreator) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Client creator not configured' }));
-      return;
-    }
     const sessionOpts = await sessionLifecycleService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
@@ -44,7 +39,7 @@ export function createStartHandler(
     }
 
     try {
-      await clientCreator.getOrCreate(sessionId, {
+      await deps.startupService.getOrCreateSessionClient(sessionId, {
         thinkingEnabled: message.thinkingEnabled,
         planModeEnabled: message.planModeEnabled,
         model: getValidModel(message),

@@ -28,14 +28,15 @@ export function createChatMessageHandlerRegistry(
       deps.acpRuntimeManager &&
       deps.sessionConfigService &&
       deps.sessionPermissionService &&
-      deps.sessionService
+      deps.sessionService &&
+      deps.startupService
     )
   ) {
     throw new Error('focused session dependencies are required for chat message handlers');
   }
 
   return {
-    start: createStartHandler(deps),
+    start: createStartHandler({ startupService: deps.startupService }),
     user_input: createUserInputHandler({
       acpRuntimeManager: deps.acpRuntimeManager,
       sessionService: deps.sessionService,

@@ -28,11 +28,10 @@ describe('createStartHandler', () => {
     mocks.getSessionOptions.mockResolvedValue(null);
     const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
     const handler = createStartHandler({
-      getClientCreator: () => ({
-        getOrCreate: vi.fn(),
-      }),
-      tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
+      startupService: {
+        getSessionClient: vi.fn(),
+        getOrCreateSessionClient: vi.fn(),
+      },
     });
 
     await handler({
@@ -64,11 +63,10 @@ describe('createStartHandler', () => {
     const getOrCreate = vi.fn();
     const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
     const handler = createStartHandler({
-      getClientCreator: () => ({
-        getOrCreate,
-      }),
-      tryDispatchNextMessage: vi.fn(),
-      setManualDispatchResume: vi.fn(),
+      startupService: {
+        getSessionClient: vi.fn(),
+        getOrCreateSessionClient: getOrCreate,
+      },
     });
 
     await handler({

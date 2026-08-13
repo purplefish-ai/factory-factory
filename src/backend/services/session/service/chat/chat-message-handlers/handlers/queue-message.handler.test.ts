@@ -25,7 +25,6 @@ describe('createQueueMessageHandler', () => {
   it('emits rejected state for empty queue messages with an id', async () => {
     const ws = { send: vi.fn() };
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: vi.fn(),
       setManualDispatchResume: vi.fn(),
     });
@@ -45,7 +44,6 @@ describe('createQueueMessageHandler', () => {
   it('rejects queue messages without an id', async () => {
     const ws = { send: vi.fn() };
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: vi.fn(),
       setManualDispatchResume: vi.fn(),
     });
@@ -68,7 +66,6 @@ describe('createQueueMessageHandler', () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -98,7 +95,6 @@ describe('createQueueMessageHandler', () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -138,7 +134,6 @@ describe('createQueueMessageHandler', () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -159,7 +154,6 @@ describe('createQueueMessageHandler', () => {
     const ws = { send: vi.fn() };
     const tryDispatchNextMessage = vi.fn(async () => undefined);
     const handler = createQueueMessageHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });

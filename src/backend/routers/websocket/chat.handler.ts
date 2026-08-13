@@ -40,46 +40,12 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     sessionFileLogger,
     sessionEventBus,
     sessionDomainService,
-    sessionLifecycleService,
   } = appContext.services;
   const chatConnectionRegistry = getChatConnectionRegistryForApplication(appContext);
 
   const logger = createLogger('chat-handler');
   const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
   let isInitialized = false;
-
-  // ==========================================================================
-  // Client Creation
-  // ==========================================================================
-
-  /**
-   * Get or create a session client through the lifecycle service.
-   * All sessions use ACP runtime; event forwarding is handled by AcpClientHandler.
-   */
-  async function getOrCreateChatClient(
-    dbSessionId: string,
-    options: {
-      thinkingEnabled?: boolean;
-      planModeEnabled?: boolean;
-      model?: string;
-      reasoningEffort?: string;
-    }
-  ): Promise<unknown> {
-    if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Getting or creating client via sessionLifecycleService', {
-        dbSessionId,
-      });
-    }
-
-    // Delegate client lifecycle to the focused lifecycle service.
-    const client = await sessionLifecycleService.getOrCreateSessionClient(dbSessionId, {
-      thinkingEnabled: options.thinkingEnabled,
-      model: options.model,
-      reasoningEffort: options.reasoningEffort,
-    });
-
-    return client;
-  }
 
   function ensureInitialized(): void {
     if (isInitialized) {
@@ -92,11 +58,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       { configService, createLogger, sessionEventBus, sessionFileLogger },
       chatConnectionRegistry
     );
-
-    // Initialize client creator for message handler service
-    chatMessageHandlerService.setClientCreator({
-      getOrCreate: getOrCreateChatClient,
-    });
   }
 
   // ==========================================================================

@@ -1,6 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
+import type {
+  ChatMessageHandlerLifecycleGate,
+  ChatMessageHandlerStartupService,
+} from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
@@ -110,3 +114,23 @@ export const sessionLifecycleService: SessionLifecycleService = new SessionLifec
     sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId);
   },
 });
+
+export function configureChatMessageHandlerLifecycle(service: {
+  configureLifecycle(dependencies: {
+    gate: ChatMessageHandlerLifecycleGate;
+    startup: ChatMessageHandlerStartupService;
+  }): void;
+}): void {
+  service.configureLifecycle({
+    gate: sessionLifecycleGate,
+    startup: {
+      getSessionClient: (sessionId) => sessionLifecycleService.getSessionClient(sessionId),
+      getOrCreateSessionClient: (sessionId, options) =>
+        sessionLifecycleService.getOrCreateSessionClient(sessionId, {
+          thinkingEnabled: options.thinkingEnabled,
+          model: options.model,
+          reasoningEffort: options.reasoningEffort,
+        }),
+    },
+  });
+}

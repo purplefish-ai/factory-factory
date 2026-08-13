@@ -28,9 +28,10 @@ const {
   mockSessionService: {
     getClient: vi.fn(),
     getSessionClient: vi.fn(),
+    getOrCreateSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
-    getStopGeneration: vi.fn(),
-    isStopGenerationCurrent: vi.fn(),
+    getGeneration: vi.fn(),
+    isGenerationCurrent: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     setSessionModel: vi.fn(),
@@ -57,6 +58,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
 }));
 
 vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+  configureChatMessageHandlerLifecycle: vi.fn(),
   sessionConfigService: mockSessionService,
   sessionLifecycleService: mockSessionService,
   sessionPermissionService: {},
@@ -75,9 +77,17 @@ vi.mock('./chat-message-handlers/registry', () => ({
   createChatMessageHandlerRegistry: () => ({}),
 }));
 
-import { chatMessageHandlerService } from './chat-message-handlers.service';
+import {
+  ChatMessageHandlerService,
+  chatMessageHandlerService,
+} from './chat-message-handlers.service';
 
 describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
+  it('fails fast when dispatch occurs before lifecycle configuration', async () => {
+    await expect(new ChatMessageHandlerService().tryDispatchNextMessage('s1')).rejects.toThrow(
+      'ChatMessageHandlerService not configured: lifecycle gate/startup missing'
+    );
+  });
   const queuedMessage: QueuedMessage = {
     id: 'm1',
     text: 'hello',
@@ -113,6 +123,10 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }),
       },
     });
+    chatMessageHandlerService.configureLifecycle({
+      gate: mockSessionService,
+      startup: mockSessionService,
+    });
     mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
@@ -128,8 +142,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
-    mockSessionService.getStopGeneration.mockReturnValue(0);
-    mockSessionService.isStopGenerationCurrent.mockReturnValue(true);
+    mockSessionService.getGeneration.mockReturnValue(0);
+    mockSessionService.isGenerationCurrent.mockReturnValue(true);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -286,8 +300,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       resolveModelUpdate = resolve;
     });
     let stopGeneration = 0;
-    mockSessionService.getStopGeneration.mockImplementation(() => stopGeneration);
-    mockSessionService.isStopGenerationCurrent.mockImplementation(
+    mockSessionService.getGeneration.mockImplementation(() => stopGeneration);
+    mockSessionService.isGenerationCurrent.mockImplementation(
       (_sessionId: string, generation: number) => generation === stopGeneration
     );
     mockSessionService.getSessionClient.mockReturnValue({});
@@ -872,20 +886,6 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     }
   });
 
-  it('marks runtime as error when auto-start cannot run because client creator is missing', async () => {
-    mockSessionService.getSessionClient.mockReturnValue(undefined);
-    mockSessionService.isSessionRunning.mockReturnValue(false);
-
-    await chatMessageHandlerService.tryDispatchNextMessage('s1');
-
-    expect(mockSessionDomainService.markError).toHaveBeenCalledWith(
-      's1',
-      'Failed to start agent: client creator not configured'
-    );
-    // Message was never dequeued — stays in queue
-    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
-  });
-
   it('skips thinking budget updates for non-Claude clients', async () => {
     const codexMessage: QueuedMessage = {
       ...queuedMessage,
@@ -1196,21 +1196,20 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       },
     };
     const client = { sessionId: 's1', threadId: 't1' };
-    const getOrCreate = vi.fn(async () => client);
-    chatMessageHandlerService.setClientCreator({ getOrCreate });
+    mockSessionService.getOrCreateSessionClient.mockResolvedValue(client);
     mockSessionDomainService.peekNextMessage.mockReturnValue(planMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(planMessage);
     mockSessionService.getSessionClient.mockReturnValueOnce(undefined).mockReturnValue(client);
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    expect(getOrCreate).toHaveBeenCalledWith('s1', {
+    expect(mockSessionService.getOrCreateSessionClient).toHaveBeenCalledWith('s1', {
       thinkingEnabled: false,
       planModeEnabled: true,
       model: undefined,
       reasoningEffort: undefined,
     });
-    expect(getOrCreate.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockSessionService.getOrCreateSessionClient.mock.invocationCallOrder[0]).toBeLessThan(
       mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0] ?? 0
     );
     expect(mockSessionService.setSessionCollaborationMode.mock.invocationCallOrder[0]).toBeLessThan(
