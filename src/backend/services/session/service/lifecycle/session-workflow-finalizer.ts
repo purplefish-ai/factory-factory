@@ -40,6 +40,8 @@ type WorkflowFinalizerDependencies = {
 export class SessionWorkflowFinalizer {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
+  private readonly persistedTransientSessionIds = new Set<string>();
+  private readonly transientSessionPersistenceOperations = new Map<string, Promise<void>>();
 
   constructor(private readonly dependencies: WorkflowFinalizerDependencies) {}
 
@@ -104,10 +106,14 @@ export class SessionWorkflowFinalizer {
   }
 
   async persistClosedSession(sessionId: string): Promise<void> {
+    await this.persistClosedSessionIfAvailable(sessionId);
+  }
+
+  private async persistClosedSessionIfAvailable(sessionId: string): Promise<boolean> {
     const session = await this.dependencies.repository.getSessionById(sessionId);
     if (!session) {
       logger.warn('Cannot persist closed session: session not found', { sessionId });
-      return;
+      return false;
     }
 
     const workspace = await this.dependencies.workspaceLookup.findById(session.workspaceId);
@@ -116,7 +122,7 @@ export class SessionWorkflowFinalizer {
         sessionId,
         workspaceId: session.workspaceId,
       });
-      return;
+      return false;
     }
 
     await this.dependencies.hydrateProviderHistory(sessionId, {
@@ -136,6 +142,7 @@ export class SessionWorkflowFinalizer {
       startedAt: session.createdAt,
       messages: this.dependencies.sessionDomainService.getTranscriptSnapshot(sessionId),
     });
+    return true;
   }
 
   clearInactiveSession(sessionId: string, reason: 'manual_stop' | 'runtime_exit'): void {
@@ -166,8 +173,9 @@ export class SessionWorkflowFinalizer {
     trigger: 'stop' | 'exit'
   ): Promise<void> {
     try {
-      await this.persistClosedSession(sessionId);
+      await this.persistTransientRatchetSessionOnce(sessionId);
       await this.dependencies.repository.deleteSession(sessionId);
+      this.persistedTransientSessionIds.delete(sessionId);
       this.dependencies.sessionDomainService.clearSession(sessionId);
       logger.debug('Deleted transient ratchet session', { sessionId, trigger });
     } catch (error) {
@@ -176,6 +184,28 @@ export class SessionWorkflowFinalizer {
         trigger,
         error: toErrorMessage(error),
       });
+    }
+  }
+
+  private async persistTransientRatchetSessionOnce(sessionId: string): Promise<void> {
+    if (this.persistedTransientSessionIds.has(sessionId)) {
+      return;
+    }
+
+    let persistence = this.transientSessionPersistenceOperations.get(sessionId);
+    if (!persistence) {
+      persistence = this.persistClosedSessionIfAvailable(sessionId).then((persisted) => {
+        if (persisted) {
+          this.persistedTransientSessionIds.add(sessionId);
+        }
+      });
+      this.transientSessionPersistenceOperations.set(sessionId, persistence);
+    }
+
+    try {
+      await persistence;
+    } finally {
+      this.transientSessionPersistenceOperations.delete(sessionId);
     }
   }
 }

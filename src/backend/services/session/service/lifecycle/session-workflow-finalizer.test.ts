@@ -184,6 +184,7 @@ describe('SessionWorkflowFinalizer', () => {
         cleanupTransientRatchetSession: true,
       })
     ).resolves.toBeUndefined();
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledTimes(2);
     expect(harness.domain.clearSession).not.toHaveBeenCalled();
   });
 
@@ -256,29 +257,26 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.domain.clearSession).not.toHaveBeenCalled();
   });
 
-  it('repeats finalization safely through conditional persistence and bridge operations', async () => {
+  it('persists a transient ratchet session once when deliberate finalization retries deletion', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
     });
+    harness.repository.deleteSession.mockRejectedValueOnce(new Error('delete failed'));
 
-    await harness.finalizer.finalizeRuntimeExit({
-      session: harness.session!,
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
       sessionId: 'session-1',
-      exitCode: 0,
-      deliberate: false,
+      cleanupTransientRatchetSession: true,
     });
-    harness.repository.deleteSession.mockRejectedValueOnce(new Error('already deleted'));
-    await expect(
-      harness.finalizer.finalizeRuntimeExit({
-        session: harness.session!,
-        sessionId: 'session-1',
-        exitCode: 0,
-        deliberate: false,
-      })
-    ).resolves.toBeUndefined();
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
 
     expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledTimes(2);
-    expect(harness.persistence.persistClosedSession).toHaveBeenCalledTimes(2);
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
+    expect(harness.repository.deleteSession).toHaveBeenCalledTimes(2);
     expect(harness.domain.clearSession).toHaveBeenCalledOnce();
   });
 
