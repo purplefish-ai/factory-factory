@@ -183,10 +183,16 @@ describe('attachTranscriptHandler', () => {
 describe('disposeCaptureResources', () => {
   it('detaches queued worklet messages before closing capture resources', () => {
     const onSpeechDetected = vi.fn();
-    const port = { onmessage: onSpeechDetected, close: vi.fn() };
+    const queuedMessage = { data: new ArrayBuffer(0) } as MessageEvent<ArrayBuffer>;
+    const port = {
+      onmessage: onSpeechDetected as ((event: MessageEvent<ArrayBuffer>) => void) | null,
+      close: vi.fn(),
+    };
+    port.close.mockImplementation(() => port.onmessage?.(queuedMessage));
+    const disconnect = vi.fn(() => port.onmessage?.(queuedMessage));
     const workletNode = {
       port,
-      disconnect: vi.fn(),
+      disconnect,
     } as unknown as AudioWorkletNode;
 
     disposeCaptureResources({
@@ -196,10 +202,10 @@ describe('disposeCaptureResources', () => {
       mediaStream: null,
       socket: null,
     });
-    port.onmessage?.({ data: new ArrayBuffer(0) } as MessageEvent<ArrayBuffer>);
+    port.onmessage?.(queuedMessage);
 
     expect(onSpeechDetected).not.toHaveBeenCalled();
     expect(port.close).toHaveBeenCalledOnce();
-    expect(workletNode.disconnect).toHaveBeenCalledOnce();
+    expect(disconnect).toHaveBeenCalledOnce();
   });
 });
