@@ -46,7 +46,7 @@ vi.mock('@/backend/services/session/service/data/codex-session-history-loader.se
   },
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
   sessionLifecycleService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
   },

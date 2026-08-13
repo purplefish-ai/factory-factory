@@ -57,8 +57,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
   acpRuntimeManager: mockSessionService,
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
-  configureChatMessageHandlerLifecycle: vi.fn(),
+vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
   sessionConfigService: mockSessionService,
   sessionLifecycleService: mockSessionService,
   sessionPermissionService: {},
@@ -77,10 +76,9 @@ vi.mock('./chat-message-handlers/registry', () => ({
   createChatMessageHandlerRegistry: () => ({}),
 }));
 
-import {
-  ChatMessageHandlerService,
-  chatMessageHandlerService,
-} from './chat-message-handlers.service';
+import { ChatMessageHandlerService } from './chat-message-handlers.service';
+
+const chatMessageHandlerService = new ChatMessageHandlerService();
 
 describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {

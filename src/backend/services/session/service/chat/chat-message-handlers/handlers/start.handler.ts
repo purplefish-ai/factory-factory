@@ -7,7 +7,7 @@ import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
-import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-services';
+import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-core-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { WorkspaceStatus } from '@/shared/core';
 import type { StartMessageInput } from '@/shared/websocket';

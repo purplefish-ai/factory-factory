@@ -3,7 +3,7 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-services';
+import { sessionLifecycleService } from '@/backend/services/session/service/lifecycle/session-core-services';
 import type { StopMessage } from '@/shared/websocket';
 
 export function createStopHandler(
