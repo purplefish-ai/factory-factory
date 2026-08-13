@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
+import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { SessionService } from './session.service';
 import {
   createDeferred,
   createLifecycleHarness,
@@ -87,6 +89,23 @@ describe('SessionStartupCoordinator', () => {
     await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
 
     expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
+  });
+
+  it('cleans a failed initial startup after an unsupported browse probe', async () => {
+    const { service, runtimeManager } = createLifecycleHarness({
+      provider: 'CODEX',
+      providerSessionId: null,
+    });
+    const generationBeforeBrowse = service.getStopGeneration('session-1');
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
+    await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
+
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    const generationAfterFailure = service.getStopGeneration('session-1');
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeBrowse);
+    expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
   });
 
   it('returns unsupported when the stopped session has no usable worktree', async () => {
@@ -392,6 +411,55 @@ describe('SessionStartupCoordinator', () => {
 
     await expect(firstStart).resolves.toBeUndefined();
     expect(service.isStopGenerationCurrent('session-1', startupGeneration)).toBe(true);
+  });
+
+  it('finalizes an in-flight prompt after a duplicate running-session start is rejected', async () => {
+    const harness = createLifecycleHarness();
+    await harness.service.startSession('session-1', { initialPrompt: '' });
+    harness.runtimeManager.getClient.mockReturnValue(harness.handle);
+    const promptResult = createDeferred<{ stopReason: string }>();
+    const promptRuntimeManager = {
+      sendPrompt: vi.fn(() => promptResult.promise),
+    };
+    const promptDomainService = new SessionDomainService();
+    const promptService = new SessionService({
+      runtimeManager: promptRuntimeManager as never,
+      sessionDomainService: promptDomainService,
+      acpEventProcessor: {
+        getWorkspaceId: vi.fn(() => undefined),
+        beginPromptTurn: vi.fn(() => 'attempt-1'),
+        finishPromptTurn: vi.fn(),
+        finalizeOrphanedToolCalls: vi.fn(),
+      } as never,
+      promptTurnCompletionService: { schedule: vi.fn() } as never,
+      lifecycleEventService: { record: vi.fn() } as never,
+      lifecycleGate: {
+        getGeneration: (sessionId) => harness.service.getStopGeneration(sessionId),
+        isGenerationCurrent: (sessionId, generation) =>
+          harness.service.isStopGenerationCurrent(sessionId, generation),
+        isSessionStopping: (sessionId) => harness.service.isSessionStopping(sessionId),
+      },
+    });
+
+    const prompt = promptService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
+    await vi.waitFor(() => {
+      expect(promptRuntimeManager.sendPrompt).toHaveBeenCalledOnce();
+    });
+    expect(promptDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
+      phase: 'running',
+      activity: 'WORKING',
+    });
+
+    await expect(harness.service.startSession('session-1', { initialPrompt: '' })).rejects.toThrow(
+      'Session is already running'
+    );
+    promptResult.resolve({ stopReason: 'end_turn' });
+    await prompt;
+
+    expect(promptDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
+      phase: 'idle',
+      activity: 'IDLE',
+    });
   });
 
   it('dispatches queued notifications after startup presets and skips the default continue prompt', async () => {

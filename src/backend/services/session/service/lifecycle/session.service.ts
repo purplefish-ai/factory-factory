@@ -11,6 +11,7 @@ import type { AcpEventProcessor } from './acp-event-processor';
 import { toErrorMessage, toProviderFailureChatMessage } from './session.error-message';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import type { SessionLifecycleGate } from './session-lifecycle-gate';
 
 const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
@@ -46,9 +47,10 @@ export type SessionServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  getStopGeneration: (sessionId: string) => number;
-  isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
-  isSessionStopping: (sessionId: string) => boolean;
+  lifecycleGate: Pick<
+    SessionLifecycleGate,
+    'getGeneration' | 'isGenerationCurrent' | 'isSessionStopping'
+  >;
 };
 
 export class SessionService {
@@ -57,9 +59,10 @@ export class SessionService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  private readonly getStopGeneration: (sessionId: string) => number;
-  private readonly isStopGenerationCurrent: (sessionId: string, stopGeneration: number) => boolean;
-  private readonly isSessionStopping: (sessionId: string) => boolean;
+  private readonly lifecycleGate: Pick<
+    SessionLifecycleGate,
+    'getGeneration' | 'isGenerationCurrent' | 'isSessionStopping'
+  >;
   private readonly acpPromptLimiters = new Map<string, LimitFunction>();
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
@@ -70,9 +73,7 @@ export class SessionService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.lifecycleEventService = options.lifecycleEventService;
-    this.getStopGeneration = options.getStopGeneration;
-    this.isStopGenerationCurrent = options.isStopGenerationCurrent;
-    this.isSessionStopping = options.isSessionStopping;
+    this.lifecycleGate = options.lifecycleGate;
   }
 
   /**
@@ -215,7 +216,7 @@ export class SessionService {
     timeoutMs: number | undefined,
     timeoutKind: PromptTimeoutKind
   ): Promise<string> {
-    const stopGeneration = this.getStopGeneration(sessionId);
+    const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
@@ -274,8 +275,8 @@ export class SessionService {
       }
       if (
         (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) &&
-        !this.isSessionStopping(sessionId) &&
-        this.isStopGenerationCurrent(sessionId, stopGeneration)
+        !this.lifecycleGate.isSessionStopping(sessionId) &&
+        this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)
       ) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
@@ -343,10 +344,13 @@ export class SessionService {
     stopGeneration: number,
     error: unknown
   ): boolean {
-    if (this.isTurnAlreadyInProgressError(error) || this.isSessionStopping(sessionId)) {
+    if (
+      this.isTurnAlreadyInProgressError(error) ||
+      this.lifecycleGate.isSessionStopping(sessionId)
+    ) {
       return false;
     }
-    return this.getStopGeneration(sessionId) === stopGeneration;
+    return this.lifecycleGate.getGeneration(sessionId) === stopGeneration;
   }
 
   private completePromptTurnIfCurrent(
@@ -355,7 +359,7 @@ export class SessionService {
     orphanedToolCallReason: string,
     runtime: SessionRuntimeState
   ): void {
-    if (!this.isStopGenerationCurrent(sessionId, stopGeneration)) {
+    if (!this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)) {
       return;
     }
     this.acpEventProcessor.finishPromptTurn(sessionId);

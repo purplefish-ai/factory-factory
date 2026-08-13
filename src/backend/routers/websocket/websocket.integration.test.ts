@@ -235,7 +235,6 @@ function createChatAppContext(worktreeBaseDir: string) {
       },
       chatMessageHandlerService: {
         handleMessage: vi.fn(),
-        setClientCreator: vi.fn(),
         tryDispatchNextMessage: vi.fn(),
       },
       configService: {
@@ -252,9 +251,6 @@ function createChatAppContext(worktreeBaseDir: string) {
       sessionEventBus,
       acpRuntimeManager: {
         isSessionRunning: vi.fn(),
-      },
-      sessionLifecycleService: {
-        getOrCreateSessionClient: vi.fn(),
       },
     },
   });
