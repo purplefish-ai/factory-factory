@@ -33,7 +33,7 @@ type WorkflowFinalizerDependencies = {
   };
   lifecycleEventService: Pick<SessionLifecycleEventService, 'hydrate'>;
   hydrateProviderHistory: HydrateProviderHistory;
-  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning'>;
+  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning' | 'isStopInProgress'>;
   countViewers(sessionId: string): number;
 };
 
@@ -88,7 +88,10 @@ export class SessionWorkflowFinalizer {
   }): Promise<void> {
     const { session, sessionId, exitCode, deliberate } = input;
     if (session.workflow === 'ratchet') {
-      const outcome: RatchetSessionEndOutcome = exitCode === 0 || deliberate ? 'COMPLETED' : 'DIED';
+      const outcome: RatchetSessionEndOutcome =
+        exitCode === 0 || this.dependencies.runtimeManager.isStopInProgress(sessionId)
+          ? 'COMPLETED'
+          : 'DIED';
       await this.recordRatchetSessionEnd(session.workspaceId, sessionId, outcome);
     }
 
@@ -174,17 +177,39 @@ export class SessionWorkflowFinalizer {
   ): Promise<void> {
     try {
       await this.persistTransientRatchetSessionOnce(sessionId);
-      await this.dependencies.repository.deleteSession(sessionId);
-      this.persistedTransientSessionIds.delete(sessionId);
-      this.dependencies.sessionDomainService.clearSession(sessionId);
-      logger.debug('Deleted transient ratchet session', { sessionId, trigger });
     } catch (error) {
-      logger.warn('Failed persisting or deleting transient ratchet session', {
-        sessionId,
-        trigger,
-        error: toErrorMessage(error),
-      });
+      this.logTransientSessionCleanupFailure(sessionId, trigger, error);
+      return;
     }
+
+    try {
+      await this.dependencies.repository.deleteSession(sessionId);
+      this.clearDeletedTransientSession(sessionId, trigger);
+    } catch (error) {
+      if (isMissingSessionError(error)) {
+        this.clearDeletedTransientSession(sessionId, trigger);
+        return;
+      }
+      this.logTransientSessionCleanupFailure(sessionId, trigger, error);
+    }
+  }
+
+  private logTransientSessionCleanupFailure(
+    sessionId: string,
+    trigger: 'stop' | 'exit',
+    error: unknown
+  ): void {
+    logger.warn('Failed persisting or deleting transient ratchet session', {
+      sessionId,
+      trigger,
+      error: toErrorMessage(error),
+    });
+  }
+
+  private clearDeletedTransientSession(sessionId: string, trigger: 'stop' | 'exit'): void {
+    this.persistedTransientSessionIds.delete(sessionId);
+    this.dependencies.sessionDomainService.clearSession(sessionId);
+    logger.debug('Deleted transient ratchet session', { sessionId, trigger });
   }
 
   private async persistTransientRatchetSessionOnce(sessionId: string): Promise<void> {
@@ -212,4 +237,15 @@ export class SessionWorkflowFinalizer {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isMissingSessionError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const code = 'code' in error ? error.code : undefined;
+  return (
+    code === 'P2025' ||
+    /already deleted|record to delete does not exist|session not found/i.test(toErrorMessage(error))
+  );
 }

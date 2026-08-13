@@ -176,7 +176,7 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.repository.deleteSession).not.toHaveBeenCalled();
 
     harness.persistence.persistClosedSession.mockResolvedValueOnce(undefined);
-    harness.repository.deleteSession.mockRejectedValueOnce(new Error('already deleted'));
+    harness.repository.deleteSession.mockRejectedValueOnce(new Error('database unavailable'));
     await expect(
       harness.finalizer.finalizeDeliberateStop({
         session: harness.session,
@@ -191,7 +191,7 @@ describe('SessionWorkflowFinalizer', () => {
   it.each([
     [0, false, 'COMPLETED'],
     [1, false, 'DIED'],
-    [null, true, 'COMPLETED'],
+    [null, false, 'DIED'],
   ] as const)('settles ratchet runtime exit code %s as %s', async (exitCode, deliberate, outcome) => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
@@ -208,6 +208,26 @@ describe('SessionWorkflowFinalizer', () => {
       'workspace-1',
       'session-1',
       outcome
+    );
+  });
+
+  it('settles a runtime-managed ratchet stop as completed without a lifecycle stop', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+    harness.runtime.isStopInProgress.mockReturnValue(true);
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 1,
+      deliberate: false,
+    });
+
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1',
+      'COMPLETED'
     );
   });
 
@@ -277,6 +297,47 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledTimes(2);
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledTimes(2);
+    expect(harness.domain.clearSession).toHaveBeenCalledOnce();
+  });
+
+  it('clears transient state when ratchet deletion reports an externally missing session', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+    harness.repository.deleteSession.mockRejectedValueOnce(
+      Object.assign(new Error('Record to delete does not exist.'), { code: 'P2025' })
+    );
+
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
+
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
+    expect(harness.repository.deleteSession).toHaveBeenCalledOnce();
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('keeps a transient ratchet session retryable when persistence reports it missing', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+    harness.persistence.persistClosedSession.mockRejectedValueOnce(new Error('Session not found'));
+
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
+
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledTimes(2);
+    expect(harness.repository.deleteSession).toHaveBeenCalledOnce();
     expect(harness.domain.clearSession).toHaveBeenCalledOnce();
   });
 
