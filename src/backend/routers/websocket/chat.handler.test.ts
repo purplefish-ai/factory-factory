@@ -48,7 +48,6 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
         isSessionRunning: vi.fn(() => false),
       },
       chatMessageHandlerService: {
-        setClientCreator: vi.fn(),
         tryDispatchNextMessage: vi.fn(),
         handleMessage: vi.fn(async () => undefined),
       },
@@ -64,9 +63,6 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
         closeSession: vi.fn(),
       },
       sessionEventBus: eventBus,
-      sessionLifecycleService: {
-        getOrCreateSessionClient: vi.fn(async () => ({})),
-      },
       sessionDomainService: {
         clearSession: vi.fn(),
       },
@@ -102,7 +98,7 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('rejects invalid workingDir with 400 response before upgrade', () => {
-    const { appContext, chatMessageHandlerService } = createTestContext(tempRootDir);
+    const { appContext } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const request = {
@@ -119,7 +115,6 @@ describe('createChatUpgradeHandler', () => {
     expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
     expect(socket.destroy).toHaveBeenCalledTimes(1);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
-    expect(chatMessageHandlerService.setClientCreator).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unauthorized origins before validating workingDir', () => {
@@ -486,8 +481,7 @@ describe('createChatUpgradeHandler', () => {
   });
 
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {
-    const { appContext, chatMessageHandlerService, sessionFileLogger } =
-      createTestContext(tempRootDir);
+    const { appContext, sessionFileLogger } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const existingWs = new MockWebSocket();
@@ -523,7 +517,6 @@ describe('createChatUpgradeHandler', () => {
     expect(existingWs.close).toHaveBeenCalledWith(1000, 'New connection replacing old one');
     expect(chatConnectionRegistry.get('conn-1')?.ws).toBe(ws as unknown as WebSocket);
     expect(chatConnectionRegistry.countViewers('old')).toBe(0);
-    expect(chatMessageHandlerService.setClientCreator).toHaveBeenCalledTimes(1);
 
     // Simulate a newer connection replacing this one before close event fires.
     chatConnectionRegistry.register('conn-1', {

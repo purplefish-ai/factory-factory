@@ -16,10 +16,9 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import {
   sessionConfigService,
-  sessionLifecycleService,
   sessionPermissionService,
   sessionService,
-} from '@/backend/services/session/service/lifecycle/session-services';
+} from '@/backend/services/session/service/lifecycle/session-core-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import { workspaceNotificationService } from '@/backend/services/workspace';
@@ -37,8 +36,14 @@ import {
   processAttachmentsAndBuildContent,
 } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
-import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
-import type { ClientCreator } from './chat-message-handlers/types';
+import {
+  type ChatMessageHandlerRegistry,
+  createChatMessageHandlerRegistry,
+} from './chat-message-handlers/registry';
+import type {
+  ChatMessageHandlerLifecycleGate,
+  ChatMessageHandlerStartupService,
+} from './chat-message-handlers/types';
 
 const logger = createLogger('chat-message-handlers');
 const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
@@ -47,8 +52,6 @@ const TURN_IN_PROGRESS_RETRY_MAX_MS = 30_000;
 // ============================================================================
 // Types
 // ============================================================================
-
-export type { ClientCreator } from './chat-message-handlers/types';
 
 interface ClaudeCompactionClient {
   isCompactingActive: () => boolean;
@@ -93,7 +96,7 @@ function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetClient {
 // Service
 // ============================================================================
 
-class ChatMessageHandlerService {
+export class ChatMessageHandlerService {
   /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
   private dispatchInProgress = new Map<string, number>();
   /** Monotonic token to invalidate stale dispatch completions. */
@@ -111,8 +114,9 @@ class ChatMessageHandlerService {
    */
   private inFlightNotificationDeliveries = new Map<string, string>();
 
-  /** Client creator function - injected to avoid circular dependencies */
-  private clientCreator: ClientCreator | null = null;
+  private lifecycleGate: ChatMessageHandlerLifecycleGate | null = null;
+  private startupService: ChatMessageHandlerStartupService | null = null;
+  private handlerRegistry: ChatMessageHandlerRegistry | null = null;
   /** Per-session override to allow dispatch under manual_resume policy. */
   private manualDispatchResumed = new Map<string, boolean>();
 
@@ -126,6 +130,24 @@ class ChatMessageHandlerService {
     this.initPolicyBridge = bridges.initPolicy;
   }
 
+  configureLifecycle(dependencies: {
+    gate: ChatMessageHandlerLifecycleGate;
+    startup: ChatMessageHandlerStartupService;
+  }): void {
+    this.lifecycleGate = dependencies.gate;
+    this.startupService = dependencies.startup;
+    this.handlerRegistry = createChatMessageHandlerRegistry({
+      acpRuntimeManager,
+      sessionConfigService,
+      sessionPermissionService,
+      sessionService,
+      startupService: dependencies.startup,
+      tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
+      setManualDispatchResume: this.setManualDispatchResume.bind(this),
+      resetDispatchState: this.resetDispatchState.bind(this),
+    });
+  }
+
   private get initPolicy(): SessionInitPolicyBridge {
     if (!this.initPolicyBridge) {
       throw new Error(
@@ -135,22 +157,14 @@ class ChatMessageHandlerService {
     return this.initPolicyBridge;
   }
 
-  private handlerRegistry = createChatMessageHandlerRegistry({
-    acpRuntimeManager,
-    sessionConfigService,
-    sessionPermissionService,
-    sessionService,
-    getClientCreator: () => this.clientCreator,
-    tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
-    setManualDispatchResume: this.setManualDispatchResume.bind(this),
-    resetDispatchState: this.resetDispatchState.bind(this),
-  });
-
-  /**
-   * Set the client creator (called during initialization).
-   */
-  setClientCreator(creator: ClientCreator): void {
-    this.clientCreator = creator;
+  private get lifecycle(): {
+    gate: ChatMessageHandlerLifecycleGate;
+    startup: ChatMessageHandlerStartupService;
+  } {
+    if (!(this.lifecycleGate && this.startupService)) {
+      throw new Error('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
+    }
+    return { gate: this.lifecycleGate, startup: this.startupService };
   }
 
   setManualDispatchResume(sessionId: string, resumed: boolean): void {
@@ -204,7 +218,7 @@ class ChatMessageHandlerService {
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
-    const stopGeneration = sessionLifecycleService.getStopGeneration(dbSessionId);
+    const stopGeneration = this.lifecycle.gate.getGeneration(dbSessionId);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       return;
     }
@@ -353,7 +367,7 @@ class ChatMessageHandlerService {
     workingDir: string,
     message: ChatMessageInput
   ): Promise<void> {
-    const handler = this.handlerRegistry[message.type] as
+    const handler = this.lifecycleHandlerRegistry[message.type] as
       | ((context: {
           ws: WebSocket;
           sessionId: string;
@@ -379,6 +393,13 @@ class ChatMessageHandlerService {
     }
 
     await handler({ ws, sessionId: dbSessionId, workingDir, message });
+  }
+
+  private get lifecycleHandlerRegistry(): ChatMessageHandlerRegistry {
+    if (!this.handlerRegistry) {
+      throw new Error('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
+    }
+    return this.handlerRegistry;
   }
 
   // ============================================================================
@@ -504,7 +525,7 @@ class ChatMessageHandlerService {
     dbSessionId: string,
     msg: QueuedMessage
   ): Promise<{ client: unknown } | null> {
-    let client = sessionLifecycleService.getSessionClient(dbSessionId);
+    let client = this.lifecycle.startup.getSessionClient(dbSessionId);
 
     let justAutoStarted = false;
     if (!client) {
@@ -512,7 +533,7 @@ class ChatMessageHandlerService {
       if (!started) {
         return null;
       }
-      client = sessionLifecycleService.getSessionClient(dbSessionId);
+      client = this.lifecycle.startup.getSessionClient(dbSessionId);
       justAutoStarted = true;
     }
 
@@ -532,23 +553,12 @@ class ChatMessageHandlerService {
    * Auto-start a client for queue dispatch using settings from the provided message.
    */
   private async autoStartClientForQueue(dbSessionId: string, msg: QueuedMessage): Promise<boolean> {
-    if (!this.clientCreator) {
-      logger.error('[Chat WS] Client creator not set');
-      const errorMessage = 'Failed to start agent: client creator not configured';
-      sessionDomainService.markError(dbSessionId, errorMessage);
-      sessionDomainService.emitDelta(dbSessionId, {
-        type: 'error',
-        message: errorMessage,
-      });
-      return false;
-    }
-
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Auto-starting client for queued message', { dbSessionId });
     }
 
     try {
-      await this.clientCreator.getOrCreate(dbSessionId, {
+      await this.lifecycle.startup.getOrCreateSessionClient(dbSessionId, {
         thinkingEnabled: msg.settings.thinkingEnabled,
         planModeEnabled: msg.settings.planModeEnabled,
         model: msg.settings.selectedModel ?? undefined,
@@ -757,8 +767,8 @@ class ChatMessageHandlerService {
 
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
     return (
-      !sessionLifecycleService.isSessionStopping(dbSessionId) &&
-      sessionLifecycleService.isStopGenerationCurrent(dbSessionId, stopGeneration)
+      !this.lifecycle.gate.isSessionStopping(dbSessionId) &&
+      this.lifecycle.gate.isGenerationCurrent(dbSessionId, stopGeneration)
     );
   }
 
@@ -892,5 +902,3 @@ class ChatMessageHandlerService {
   // Private: Message handlers now live in chat-message-handlers/handlers
   // ============================================================================
 }
-
-export const chatMessageHandlerService = new ChatMessageHandlerService();

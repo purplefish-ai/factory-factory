@@ -46,7 +46,7 @@ vi.mock('@/backend/services/session/service/data/codex-session-history-loader.se
   },
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
   sessionLifecycleService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
   },
@@ -201,7 +201,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -246,7 +245,6 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -290,7 +288,6 @@ describe('createLoadSessionHandler', () => {
     mocks.loadClaudeSessionHistory.mockReturnValue(historyLoadPromise);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -347,7 +344,6 @@ describe('createLoadSessionHandler', () => {
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -382,7 +378,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -459,7 +454,6 @@ describe('createLoadSessionHandler', () => {
       });
 
       const handler = createLoadSessionHandler({
-        getClientCreator: () => null,
         tryDispatchNextMessage: mocks.tryDispatchNextMessage,
         setManualDispatchResume: vi.fn(),
       });
@@ -509,7 +503,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -548,7 +541,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -592,7 +584,6 @@ describe('createLoadSessionHandler', () => {
       });
 
       const handler = createLoadSessionHandler({
-        getClientCreator: () => null,
         tryDispatchNextMessage: mocks.tryDispatchNextMessage,
         setManualDispatchResume: vi.fn(),
       });
@@ -646,7 +637,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -694,7 +684,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -743,7 +732,6 @@ describe('createLoadSessionHandler', () => {
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -781,7 +769,6 @@ describe('createLoadSessionHandler', () => {
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -818,7 +805,6 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -860,7 +846,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -984,7 +969,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1128,7 +1112,6 @@ describe('createLoadSessionHandler', () => {
     });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1250,7 +1233,6 @@ describe('createLoadSessionHandler', () => {
     mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad).mockReturnValueOnce(secondLoad);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1391,7 +1373,6 @@ describe('createLoadSessionHandler', () => {
       });
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1483,7 +1464,6 @@ describe('createLoadSessionHandler', () => {
     ]);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1538,7 +1518,6 @@ describe('createLoadSessionHandler', () => {
     ]);
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });
@@ -1572,7 +1551,6 @@ describe('createLoadSessionHandler', () => {
     mocks.consumeInitialMessage.mockReturnValue('Take a screenshot of the app');
 
     const handler = createLoadSessionHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
     });

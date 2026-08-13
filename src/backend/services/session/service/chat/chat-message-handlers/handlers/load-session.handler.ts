@@ -8,12 +8,12 @@ import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
-import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import {
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleService,
-} from '@/backend/services/session/service/lifecycle/session-services';
+} from '@/backend/services/session/service/lifecycle/session-core-services';
+import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import {

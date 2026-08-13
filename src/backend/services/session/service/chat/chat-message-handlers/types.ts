@@ -28,16 +28,22 @@ export interface ChatMessageHandlerConfigService {
   getChatBarCapabilities: (sessionId: string) => Promise<unknown>;
 }
 
-export interface ClientCreator {
-  getOrCreate(
-    dbSessionId: string,
-    options: {
-      thinkingEnabled?: boolean;
-      planModeEnabled?: boolean;
-      model?: string;
-      reasoningEffort?: string;
-    }
-  ): Promise<unknown>;
+export interface ChatClientStartOptions {
+  thinkingEnabled?: boolean;
+  planModeEnabled?: boolean;
+  model?: string;
+  reasoningEffort?: string;
+}
+
+export interface ChatMessageHandlerLifecycleGate {
+  getGeneration(sessionId: string): number;
+  isGenerationCurrent(sessionId: string, generation: number): boolean;
+  isSessionStopping(sessionId: string): boolean;
+}
+
+export interface ChatMessageHandlerStartupService {
+  getSessionClient(sessionId: string): unknown | undefined;
+  getOrCreateSessionClient(sessionId: string, options: ChatClientStartOptions): Promise<unknown>;
 }
 
 export interface HandlerContext<T extends ChatMessageInput = ChatMessageInput> {
@@ -56,7 +62,7 @@ export interface HandlerRegistryDependencies {
   sessionConfigService?: ChatMessageHandlerConfigService;
   sessionPermissionService?: ChatMessageHandlerPermissionService;
   sessionService?: ChatMessageHandlerPromptService;
-  getClientCreator: () => ClientCreator | null;
+  startupService?: ChatMessageHandlerStartupService;
   tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   setManualDispatchResume: (sessionId: string, resumed: boolean) => void;
   resetDispatchState?: (sessionId: string) => void;

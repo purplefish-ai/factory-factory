@@ -27,15 +27,18 @@ function createPromptService() {
     schedule: vi.fn(),
   };
   const isSessionStopping = vi.fn().mockReturnValue(false);
+  const lifecycleGate = {
+    getGeneration: () => 0,
+    isGenerationCurrent: (_sessionId: string, stopGeneration: number) => stopGeneration === 0,
+    isSessionStopping,
+  };
   const service = new SessionService({
     runtimeManager: runtimeManager as never,
     sessionDomainService: sessionDomainService as never,
     acpEventProcessor: acpEventProcessor as never,
     promptTurnCompletionService: promptTurnCompletionService as never,
     lifecycleEventService: lifecycleEventService as never,
-    getStopGeneration: () => 0,
-    isStopGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
-    isSessionStopping,
+    lifecycleGate,
   });
 
   return {
@@ -103,9 +106,11 @@ function createLifecyclePromptHarness() {
     acpEventProcessor,
     promptTurnCompletionService: { schedule: vi.fn() } as never,
     lifecycleEventService,
-    getStopGeneration: () => 0,
-    isStopGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
-    isSessionStopping: () => false,
+    lifecycleGate: {
+      getGeneration: () => 0,
+      isGenerationCurrent: (_sessionId, stopGeneration) => stopGeneration === 0,
+      isSessionStopping: () => false,
+    },
   });
 
   return {

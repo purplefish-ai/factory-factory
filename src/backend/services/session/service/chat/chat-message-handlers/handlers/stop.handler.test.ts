@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   resetDispatchState: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
   sessionLifecycleService: {
     stopSession: mocks.stopSession,
   },
@@ -29,7 +29,6 @@ describe('createStopHandler', () => {
   it('stops via provider-neutral lifecycle API and clears pending request', async () => {
     mocks.stopSession.mockResolvedValue(undefined);
     const handler = createStopHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
       resetDispatchState: mocks.resetDispatchState,
@@ -56,7 +55,6 @@ describe('createStopHandler', () => {
       })
     );
     const handler = createStopHandler({
-      getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
       resetDispatchState: mocks.resetDispatchState,

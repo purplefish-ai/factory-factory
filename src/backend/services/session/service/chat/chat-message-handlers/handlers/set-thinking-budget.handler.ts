@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { sessionConfigService } from '@/backend/services/session/service/lifecycle/session-services';
+import { sessionConfigService } from '@/backend/services/session/service/lifecycle/session-core-services';
 import type { SetThinkingBudgetMessage } from '@/shared/websocket';
 import { sendWebSocketError } from './utils';
 
