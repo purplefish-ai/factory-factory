@@ -30,7 +30,6 @@ export type LifecycleTestWorkspace = NonNullable<
 export type LifecycleHarnessOverrides = {
   session?: Partial<AgentSessionRecord>;
   workspace?: Partial<LifecycleTestWorkspace>;
-  sessions?: AgentSessionRecord[];
   getSessionById?: SessionRepository['getSessionById'];
   getSessionsByWorkspaceId?: SessionRepository['getSessionsByWorkspaceId'];
   getOrCreateClient?: AcpRuntimeManager['getOrCreateClient'];
@@ -251,16 +250,15 @@ export function createLifecycleHarness(
     ),
     getSessionsByWorkspaceId: vi.fn<SessionRepository['getSessionsByWorkspaceId']>(
       overrides.getSessionsByWorkspaceId ??
-        (async () =>
-          overrides.sessions ?? [
-            createLifecycleTestSession({ id: 'session-running', status: SessionStatus.RUNNING }),
-            createLifecycleTestSession({
-              id: 'session-runtime-only',
-              status: SessionStatus.COMPLETED,
-            }),
-            createLifecycleTestSession({ id: 'session-browse-only', status: SessionStatus.IDLE }),
-            createLifecycleTestSession({ id: 'session-idle', status: SessionStatus.IDLE }),
-          ])
+        (async () => [
+          createLifecycleTestSession({ id: 'session-running', status: SessionStatus.RUNNING }),
+          createLifecycleTestSession({
+            id: 'session-runtime-only',
+            status: SessionStatus.COMPLETED,
+          }),
+          createLifecycleTestSession({ id: 'session-browse-only', status: SessionStatus.IDLE }),
+          createLifecycleTestSession({ id: 'session-idle', status: SessionStatus.IDLE }),
+        ])
     ),
     getWorkspaceById: vi.fn<SessionRepository['getWorkspaceById']>(async () => workspace),
     getProjectById: vi.fn<SessionRepository['getProjectById']>(async () => null),

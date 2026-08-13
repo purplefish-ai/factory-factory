@@ -309,7 +309,7 @@ describe('SessionTerminationCoordinator races', () => {
     expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
-  it('coalesces a duplicate stop behind the active stop barrier', async () => {
+  it('returns a duplicate stop early while preserving the active stop barrier', async () => {
     const harness = createLifecycleHarness();
     const stopEvent = createDeferred<null>();
     harness.lifecycleEventService.record.mockReturnValueOnce(stopEvent.promise);
@@ -320,13 +320,19 @@ describe('SessionTerminationCoordinator races', () => {
     });
 
     await expect(harness.service.stopSession('session-1')).resolves.toBeUndefined();
+    expect(harness.service.isSessionStopping('session-1')).toBe(true);
+    await expect(harness.service.getOrCreateSessionClient('session-1')).rejects.toThrow(
+      'Session is currently being stopped'
+    );
     expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(1);
+    expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
     expect(harness.runtimeManager.stopClient).not.toHaveBeenCalled();
     expect(harness.sessionDomainService.clearQueuedWork).toHaveBeenCalledTimes(1);
 
     stopEvent.resolve(null);
     await firstStop;
 
+    expect(harness.service.isSessionStopping('session-1')).toBe(false);
     expect(harness.runtimeManager.stopClient).toHaveBeenCalledTimes(1);
     expect(harness.repository.updateSessionIfStatus).toHaveBeenCalledTimes(1);
     expect(harness.sessionDomainService.clearSession).toHaveBeenCalledTimes(1);
