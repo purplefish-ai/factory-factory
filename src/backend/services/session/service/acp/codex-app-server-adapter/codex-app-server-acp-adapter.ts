@@ -52,6 +52,7 @@ import {
   parseTextFromPromptBlock,
   toCodexMcpConfigMap,
 } from './codex-adapter-parsing';
+import { CodexNotificationQueue } from './codex-notification-queue';
 import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
 import { CodexSubagentController } from './codex-subagent-controller';
 import { mapCodexSubagentToolItem } from './codex-subagent-mapper';
@@ -105,6 +106,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private readonly shapeDriftReporter: ShapeDriftReporter;
   private readonly streamEventHandler: CodexStreamEventHandler;
   private readonly subagentController: CodexSubagentController;
+  private readonly codexNotificationQueue = new CodexNotificationQueue();
 
   private get sessions(): Map<string, AdapterSession> {
     return this.stateContainer.sessions;
@@ -746,8 +748,17 @@ export class CodexAppServerAcpAdapter implements Agent {
     await this.streamEventHandler.replayThreadHistory(sessionId, threadId);
   }
 
-  private async handleCodexNotification(method: string, params: unknown): Promise<void> {
-    await this.streamEventHandler.handleCodexNotification({ method, params });
+  private handleCodexNotification(method: string, params: unknown): Promise<void> {
+    return this.codexNotificationQueue.enqueue(
+      params,
+      () => this.streamEventHandler.handleCodexNotification({ method, params }),
+      (error) => {
+        this.reportShapeDrift('notification_handler_error', {
+          method,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    );
   }
 
   private async emitReasoningThoughtChunkFromItem(
