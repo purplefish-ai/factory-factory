@@ -20,7 +20,9 @@ const mocks = vi.hoisted<{
   listRefetch: ReturnType<typeof vi.fn>;
   summary: SubagentSelection['subagent'];
 }>(() => ({
-  listRefetch: vi.fn(() => Promise.resolve()),
+  listRefetch: vi.fn(() =>
+    Promise.resolve({ data: undefined, dataUpdatedAt: 0, isSuccess: false })
+  ),
   summary: {
     id: 'child-1',
     name: 'Security review',
