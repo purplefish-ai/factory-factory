@@ -57,7 +57,7 @@ export class SessionLifecycleGate {
   }
 
   reserveStop(sessionId: string): { generation: number; release(): void } | null {
-    if (this.stoppingSessions.has(sessionId)) {
+    if (this.stoppingSessions.has(sessionId) || this.shutdownSessions.has(sessionId)) {
       return null;
     }
 

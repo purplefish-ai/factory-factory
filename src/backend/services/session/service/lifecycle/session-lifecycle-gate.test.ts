@@ -71,6 +71,26 @@ describe('SessionLifecycleGate', () => {
     expect(gate.isSessionStopping('session-1')).toBe(false);
   });
 
+  it('rejects an explicit stop while shutdown owns the session', () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    gate.reserveShutdown(['session-1']);
+
+    expect(gate.reserveStop('session-1')).toBeNull();
+
+    gate.releaseShutdown('session-1');
+  });
+
+  it('allows lifecycle cleanup to join a runtime-owned stop operation', () => {
+    const gate = new SessionLifecycleGate({
+      isRuntimeStopInProgress: (sessionId) => sessionId === 'session-1',
+    });
+
+    const stop = gate.reserveStop('session-1');
+
+    expect(stop).not.toBeNull();
+    stop?.release();
+  });
+
   it('keeps a stop reservation released when its finally cleanup runs twice', () => {
     const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
     const stop = gate.reserveStop('session-1');

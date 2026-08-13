@@ -396,7 +396,6 @@ export class ChatMessageHandlerService {
   }
 
   private get lifecycleHandlerRegistry(): ChatMessageHandlerRegistry {
-    this.lifecycle;
     if (!this.handlerRegistry) {
       throw new Error('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
     }
