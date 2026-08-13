@@ -91,6 +91,23 @@ describe('SessionStartupCoordinator', () => {
     expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
   });
 
+  it('cleans a failed initial startup after an unsupported browse probe', async () => {
+    const { service, runtimeManager } = createLifecycleHarness({
+      provider: 'CODEX',
+      providerSessionId: null,
+    });
+    const generationBeforeBrowse = service.getStopGeneration('session-1');
+
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+    runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('spawn failed'));
+    await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
+
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    const generationAfterFailure = service.getStopGeneration('session-1');
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeBrowse);
+    expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
+  });
+
   it('returns unsupported when the stopped session has no usable worktree', async () => {
     const { service, runtimeManager } = createLifecycleHarness({
       provider: 'CODEX',

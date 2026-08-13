@@ -6,7 +6,6 @@ type SessionLifecycleGateDependencies = {
 
 type StartupGenerationReferences = {
   count: number;
-  hasSucceeded: boolean;
 };
 
 export class SessionStartupCancelledError extends Error {
@@ -34,15 +33,17 @@ export class SessionLifecycleGate {
     const currentReferences = this.startupGenerationReferences.get(lease.generation);
     this.startupGenerationReferences.set(lease.generation, {
       count: (currentReferences?.count ?? 0) + 1,
-      hasSucceeded: currentReferences?.hasSucceeded ?? false,
     });
-    let succeeded = false;
     try {
-      const result = await operation(lease);
-      succeeded = true;
-      return result;
+      return await operation(lease);
     } finally {
-      this.releaseStartupLease(lease, succeeded);
+      this.releaseStartupLease(lease);
+    }
+  }
+
+  establishStartup(lease: SessionStartupLease): void {
+    if (this.isGenerationCurrent(lease.sessionId, lease.generation)) {
+      this.establishedGenerations.add(lease.generation);
     }
   }
 
@@ -107,27 +108,23 @@ export class SessionLifecycleGate {
     return this.stopGenerations.get(sessionId) === generation;
   }
 
-  private releaseStartupLease(lease: SessionStartupLease, succeeded: boolean): void {
+  private releaseStartupLease(lease: SessionStartupLease): void {
     const references = this.startupGenerationReferences.get(lease.generation);
     if (!references) {
       return;
     }
-    if (succeeded && this.isGenerationCurrent(lease.sessionId, lease.generation)) {
-      this.establishedGenerations.add(lease.generation);
-    }
-    const hasSucceeded =
-      references.hasSucceeded || succeeded || this.establishedGenerations.has(lease.generation);
     if (references.count > 1) {
       this.startupGenerationReferences.set(lease.generation, {
         count: references.count - 1,
-        hasSucceeded,
       });
       return;
     }
 
     this.startupGenerationReferences.delete(lease.generation);
     if (
-      !(hasSucceeded || this.isSessionStopping(lease.sessionId)) &&
+      !(
+        this.establishedGenerations.has(lease.generation) || this.isSessionStopping(lease.sessionId)
+      ) &&
       this.isGenerationCurrent(lease.sessionId, lease.generation)
     ) {
       this.deleteGeneration(lease.sessionId);

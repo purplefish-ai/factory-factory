@@ -183,7 +183,8 @@ export class SessionLifecycleService {
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
-    await this.lifecycleGate.runStartup(sessionId, async ({ generation: stopGeneration }) => {
+    await this.lifecycleGate.runStartup(sessionId, async (lease) => {
+      const stopGeneration = lease.generation;
       const session = await this.repository.getSessionById(sessionId);
       if (!session) {
         throw new Error(`Session not found: ${sessionId}`);
@@ -192,6 +193,7 @@ export class SessionLifecycleService {
 
       const existingClient = this.runtimeManager.getClient(sessionId);
       if (existingClient) {
+        this.lifecycleGate.establishStartup(lease);
         throw new Error('Session is already running');
       }
 
@@ -199,6 +201,7 @@ export class SessionLifecycleService {
 
       const { handle, resolvedPreset, dispatchableNotificationCount } =
         await this.getOrCreateAcpSessionClient(sessionId, {}, session, stopGeneration);
+      this.lifecycleGate.establishStartup(lease);
       this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
       await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
       this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
@@ -411,70 +414,63 @@ export class SessionLifecycleService {
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
-    return await this.lifecycleGate.runStartup(
-      sessionId,
-      async ({ generation: stopGeneration }) => {
-        const session = await this.repository.getSessionById(sessionId);
-        if (!session) {
-          throw new Error(`Session not found: ${sessionId}`);
-        }
-        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-
-        const hadClient = !!this.runtimeManager.getClient(sessionId);
-        const { handle, resolvedPreset, dispatchableNotificationCount } =
-          await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session, stopGeneration);
-        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-        if (!hadClient) {
-          await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
-          this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-          await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
-          this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-        }
-
-        return handle;
+    return await this.lifecycleGate.runStartup(sessionId, async (lease) => {
+      const stopGeneration = lease.generation;
+      const session = await this.repository.getSessionById(sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
       }
-    );
+      this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
+
+      const hadClient = !!this.runtimeManager.getClient(sessionId);
+      const { handle, resolvedPreset, dispatchableNotificationCount } =
+        await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session, stopGeneration);
+      this.lifecycleGate.establishStartup(lease);
+      this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
+      if (!hadClient) {
+        await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
+        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
+        await this.dispatchQueuedNotificationsIfNeeded(sessionId, dispatchableNotificationCount);
+        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
+      }
+
+      return handle;
+    });
   }
 
   async getOrCreateSessionClientFromRecord(
     session: AgentSessionRecord,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
-    return await this.lifecycleGate.runStartup(
-      session.id,
-      async ({ generation: stopGeneration }) => {
+    return await this.lifecycleGate.runStartup(session.id, async (lease) => {
+      const stopGeneration = lease.generation;
+      this.lifecycleGate.assertStartupAllowed({
+        sessionId: session.id,
+        generation: stopGeneration,
+      });
+      const hadClient = !!this.runtimeManager.getClient(session.id);
+      const { handle, resolvedPreset, dispatchableNotificationCount } =
+        await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session, stopGeneration);
+      this.lifecycleGate.establishStartup(lease);
+      this.lifecycleGate.assertStartupAllowed({
+        sessionId: session.id,
+        generation: stopGeneration,
+      });
+      if (!hadClient) {
+        await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
         this.lifecycleGate.assertStartupAllowed({
           sessionId: session.id,
           generation: stopGeneration,
         });
-        const hadClient = !!this.runtimeManager.getClient(session.id);
-        const { handle, resolvedPreset, dispatchableNotificationCount } =
-          await this.getOrCreateAcpSessionClient(
-            session.id,
-            options ?? {},
-            session,
-            stopGeneration
-          );
+        await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
         this.lifecycleGate.assertStartupAllowed({
           sessionId: session.id,
           generation: stopGeneration,
         });
-        if (!hadClient) {
-          await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
-          this.lifecycleGate.assertStartupAllowed({
-            sessionId: session.id,
-            generation: stopGeneration,
-          });
-          await this.dispatchQueuedNotificationsIfNeeded(session.id, dispatchableNotificationCount);
-          this.lifecycleGate.assertStartupAllowed({
-            sessionId: session.id,
-            generation: stopGeneration,
-          });
-        }
-
-        return handle;
       }
-    );
+
+      return handle;
+    });
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
@@ -496,7 +492,8 @@ export class SessionLifecycleService {
     }
 
     return await this.lifecycleGate
-      .runStartup(sessionId, async ({ generation: stopGeneration }) => {
+      .runStartup(sessionId, async (lease) => {
+        const stopGeneration = lease.generation;
         const session = await this.repository.getSessionById(sessionId);
         if (!(session?.provider === 'CODEX' && session.providerSessionId)) {
           return false;
@@ -521,6 +518,7 @@ export class SessionLifecycleService {
             undefined,
             stopGeneration
           );
+          this.lifecycleGate.establishStartup(lease);
         } catch (error) {
           if (error instanceof AcpBrowseSessionUnavailableError) {
             return false;

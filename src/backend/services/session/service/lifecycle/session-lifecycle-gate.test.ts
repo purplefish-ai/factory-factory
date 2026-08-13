@@ -132,6 +132,7 @@ describe('SessionLifecycleGate', () => {
     const successfulStartup = gate.runStartup('session-1', async (lease) => {
       successfulLease = lease;
       await successfulDeferred.promise;
+      gate.establishStartup(lease);
     });
     const failingStartup = gate.runStartup('session-1', async (lease) => {
       failingLease = lease;
@@ -153,6 +154,7 @@ describe('SessionLifecycleGate', () => {
 
     await gate.runStartup('session-1', (lease) => {
       establishedLease = lease;
+      gate.establishStartup(lease);
       return Promise.resolve();
     });
     await expect(
