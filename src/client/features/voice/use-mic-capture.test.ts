@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { attachTranscriptHandler, matchesStopPhrase } from './use-mic-capture';
+import {
+  attachTranscriptHandler,
+  disposeCaptureResources,
+  matchesStopPhrase,
+} from './use-mic-capture';
 
 describe('matchesStopPhrase', () => {
   it('matches common stop phrases regardless of case', () => {
@@ -173,5 +177,29 @@ describe('attachTranscriptHandler', () => {
 
     expect(onSoftStop).not.toHaveBeenCalled();
     expect(onFinalTranscript).toHaveBeenCalledWith('please stop');
+  });
+});
+
+describe('disposeCaptureResources', () => {
+  it('detaches queued worklet messages before closing capture resources', () => {
+    const onSpeechDetected = vi.fn();
+    const port = { onmessage: onSpeechDetected, close: vi.fn() };
+    const workletNode = {
+      port,
+      disconnect: vi.fn(),
+    } as unknown as AudioWorkletNode;
+
+    disposeCaptureResources({
+      workletNode,
+      silentGain: null,
+      audioContext: null,
+      mediaStream: null,
+      socket: null,
+    });
+    port.onmessage?.({ data: new ArrayBuffer(0) } as MessageEvent<ArrayBuffer>);
+
+    expect(onSpeechDetected).not.toHaveBeenCalled();
+    expect(port.close).toHaveBeenCalledOnce();
+    expect(workletNode.disconnect).toHaveBeenCalledOnce();
   });
 });

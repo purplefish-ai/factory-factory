@@ -78,15 +78,20 @@ interface CaptureResources {
 }
 
 /** Tears down every resource a capture attempt may have created. */
-function disposeCaptureResources({
+export function disposeCaptureResources({
   workletNode,
   silentGain,
   audioContext,
   mediaStream,
   socket,
 }: CaptureResources): void {
-  workletNode?.port.close();
-  workletNode?.disconnect();
+  if (workletNode) {
+    // Detach before closing: messages already queued on the port can still be
+    // delivered afterward and must not escape this capture lifecycle.
+    workletNode.port.onmessage = null;
+    workletNode.port.close();
+    workletNode.disconnect();
+  }
   silentGain?.disconnect();
   audioContext?.close().catch(() => undefined);
   for (const track of mediaStream?.getTracks() ?? []) {
