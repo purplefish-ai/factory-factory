@@ -66,12 +66,16 @@ type CommittedNotificationMatch = {
   matchedByContent: boolean;
 };
 
+type ActiveDispatchClaim = {
+  sessionId: string;
+};
+
 export class SessionNotificationDeliveryService {
   private readonly notificationPort: NotificationPersistencePort;
   private readonly queuePort: NotificationQueuePort;
   private readonly transcriptPort: NotificationTranscriptPort;
   private readonly deltaPort: NotificationDeltaPort;
-  private readonly dispatchClaims = new Map<string, string>();
+  private readonly dispatchClaims = new Map<string, ActiveDispatchClaim>();
 
   constructor(dependencies: SessionNotificationDeliveryServiceDependencies) {
     this.notificationPort = dependencies.notificationPort;
@@ -178,12 +182,13 @@ export class SessionNotificationDeliveryService {
       return { status: 'duplicate' };
     }
 
-    this.dispatchClaims.set(notificationId, sessionId);
+    const claim = { sessionId };
+    this.dispatchClaims.set(notificationId, claim);
     return {
       status: 'claimed',
       notificationId,
       release: () => {
-        if (this.dispatchClaims.get(notificationId) === sessionId) {
+        if (this.dispatchClaims.get(notificationId) === claim) {
           this.dispatchClaims.delete(notificationId);
         }
       },
@@ -229,8 +234,8 @@ export class SessionNotificationDeliveryService {
   }
 
   resetSession(sessionId: string): void {
-    for (const [notificationId, ownerSessionId] of this.dispatchClaims) {
-      if (ownerSessionId === sessionId) {
+    for (const [notificationId, claim] of this.dispatchClaims) {
+      if (claim.sessionId === sessionId) {
         this.dispatchClaims.delete(notificationId);
       }
     }

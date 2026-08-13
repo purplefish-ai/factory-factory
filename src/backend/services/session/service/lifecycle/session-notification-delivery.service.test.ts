@@ -564,6 +564,24 @@ describe('SessionNotificationDeliveryService', () => {
     });
   });
 
+  it('does not let a stale release clear a reclaimed notification for the same session', () => {
+    const { service } = createHarness();
+    const staleClaim = service.claimForDispatch('session-1', 'workspace-notification-notif-1');
+    service.resetSession('session-1');
+    expect(service.claimForDispatch('session-1', 'workspace-notification-notif-1')).toMatchObject({
+      status: 'claimed',
+    });
+
+    if (staleClaim.status !== 'claimed') {
+      throw new Error('Expected notification claim');
+    }
+    staleClaim.release();
+
+    expect(service.claimForDispatch('session-2', 'workspace-notification-notif-1')).toEqual({
+      status: 'duplicate',
+    });
+  });
+
   it('reports delivered rows and pending rows through the durable notification port', async () => {
     const { service, notificationPort } = createHarness();
     notificationPort.findForDelivery
