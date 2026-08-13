@@ -6,7 +6,6 @@ import type {
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
@@ -17,7 +16,7 @@ import type { SessionConfigService } from './session.config.service';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
-import { SessionContextService } from './session-context.service';
+import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
@@ -43,6 +42,7 @@ export type LifecycleHarnessOverrides = {
   transcript?: ChatMessage[];
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   tryDispatchNextMessage?: SessionLifecycleMessageQueueBridge['tryDispatchNextMessage'];
+  getPermissionPreset?: SessionPermissionPresetPort['getPermissionPreset'];
   provider?: AgentSessionRecord['provider'];
   providerSessionId?: string | null;
   providerProcessPid?: number | null;
@@ -425,12 +425,9 @@ export function createLifecycleHarness(
     repository,
     promptBuilder,
     permissionPresetPort: {
-      async getPermissionPreset(workflow) {
-        const settings = await userSettingsService.get();
-        return workflow === 'ratchet'
-          ? settings.ratchetPermissions
-          : settings.defaultWorkspacePermissions;
-      },
+      getPermissionPreset:
+        overrides.getPermissionPreset ??
+        ((workflow) => Promise.resolve(workflow === 'ratchet' ? 'YOLO' : 'STRICT')),
     },
   });
   const acpEnvironment = {

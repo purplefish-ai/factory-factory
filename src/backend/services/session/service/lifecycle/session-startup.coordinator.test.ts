@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionService } from './session.service';
 import {
   createDeferred,
@@ -27,15 +25,6 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceNotificationService: {
     listPendingForDelivery: vi.fn(),
     markDelivered: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: {
-    get: vi.fn(async () => ({
-      defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
-    })),
   },
 }));
 
@@ -406,36 +395,25 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not release a stop generation still owned by a concurrent startup', async () => {
-    type UserSettings = Awaited<ReturnType<typeof userSettingsService.get>>;
-    let resolveFirstSettings!: (settings: UserSettings) => void;
-    const firstSettings = new Promise<UserSettings>((resolve) => {
-      resolveFirstSettings = resolve;
+    let resolveFirstPreset!: (preset: 'STRICT') => void;
+    const firstPreset = new Promise<'STRICT'>((resolve) => {
+      resolveFirstPreset = resolve;
     });
-    vi.mocked(userSettingsService.get)
-      .mockReturnValueOnce(firstSettings)
-      .mockResolvedValueOnce(
-        unsafeCoerce<UserSettings>({
-          defaultWorkspacePermissions: 'STRICT',
-          ratchetPermissions: 'YOLO',
-        })
-      );
-    const { service, runtimeManager } = createLifecycleHarness();
+    const getPermissionPreset = vi
+      .fn(() => Promise.resolve<'STRICT'>('STRICT'))
+      .mockReturnValueOnce(firstPreset);
+    const { service, runtimeManager } = createLifecycleHarness({ getPermissionPreset });
     const startupGeneration = service.getStopGeneration('session-1');
 
     const firstStart = service.startSession('session-1');
     await vi.waitFor(() => {
-      expect(userSettingsService.get).toHaveBeenCalledTimes(1);
+      expect(getPermissionPreset).toHaveBeenCalledTimes(1);
     });
 
     runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('second spawn failed'));
     await expect(service.startSession('session-1')).rejects.toThrow('second spawn failed');
 
-    resolveFirstSettings(
-      unsafeCoerce<UserSettings>({
-        defaultWorkspacePermissions: 'STRICT',
-        ratchetPermissions: 'YOLO',
-      })
-    );
+    resolveFirstPreset('STRICT');
 
     await expect(firstStart).resolves.toBeUndefined();
     expect(service.isStopGenerationCurrent('session-1', startupGeneration)).toBe(true);
@@ -555,27 +533,23 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not create a client after stop completes during permission resolution', async () => {
-    type UserSettings = Awaited<ReturnType<typeof userSettingsService.get>>;
-    let resolveSettings!: (settings: UserSettings) => void;
-    const pendingSettings = new Promise<UserSettings>((resolve) => {
-      resolveSettings = resolve;
+    let resolvePreset!: (preset: 'STRICT') => void;
+    const pendingPreset = new Promise<'STRICT'>((resolve) => {
+      resolvePreset = resolve;
     });
-    vi.mocked(userSettingsService.get).mockReturnValueOnce(pendingSettings);
-    const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness();
+    const getPermissionPreset = vi.fn(() => pendingPreset);
+    const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness({
+      getPermissionPreset,
+    });
     const startupGeneration = service.getStopGeneration('session-1');
 
     const startResult = service.startSession('session-1').catch((error) => error);
     await vi.waitFor(() => {
-      expect(userSettingsService.get).toHaveBeenCalled();
+      expect(getPermissionPreset).toHaveBeenCalled();
     });
 
     await service.stopSession('session-1');
-    resolveSettings(
-      unsafeCoerce<UserSettings>({
-        defaultWorkspacePermissions: 'STRICT',
-        ratchetPermissions: 'YOLO',
-      })
-    );
+    resolvePreset('STRICT');
 
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })

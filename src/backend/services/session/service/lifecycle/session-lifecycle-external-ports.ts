@@ -1,4 +1,5 @@
 import { configService } from '@/backend/services/config.service';
+import { serverInstanceService } from '@/backend/services/server-instance.service';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import { userSettingsService } from '@/backend/services/settings';
 import { sessionPromptBuilder } from './session.prompt-builder';
@@ -19,7 +20,14 @@ export const sessionContextService = new SessionContextService({
   },
 });
 
-const getBackendPort = (): number => configService.getBackendPort();
+const getBackendPort = (): number =>
+  serverInstanceService.getPort() ?? configService.getBackendPort();
+
+function getBackendBaseUrl(): string {
+  const host = configService.getBackendHost() ?? 'localhost';
+  const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return `http://${urlHost}:${getBackendPort()}`;
+}
 
 export const sessionAcpEnvironment: SessionAcpEnvironmentPort = {
   getBackendPort,
@@ -27,7 +35,7 @@ export const sessionAcpEnvironment: SessionAcpEnvironmentPort = {
     getChildWorkspaceMcpServerConfig({
       workspaceId,
       parentWorkspaceId,
-      apiBaseUrl: `http://localhost:${getBackendPort()}`,
+      apiBaseUrl: getBackendBaseUrl(),
     }),
   ],
 };

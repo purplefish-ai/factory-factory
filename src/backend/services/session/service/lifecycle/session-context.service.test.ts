@@ -18,6 +18,14 @@ vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
 }));
 
+vi.mock('@/backend/services/settings', () => {
+  throw new Error('Session context unit tests must not load the settings capsule');
+});
+
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceNotificationService: {},
+}));
+
 function createHarness() {
   const session = createLifecycleTestSession();
   const workspace = createLifecycleTestWorkspace({ worktreePath: '/worktree' });

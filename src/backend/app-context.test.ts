@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
-import { createApplication, disposeApplication } from './app-context';
+import {
+  createApplication,
+  createDefaultApplicationDependencies,
+  disposeApplication,
+} from './app-context';
+import { serverInstanceService } from './services/server-instance.service';
 
 describe('createApplication', () => {
+  it('shares the runtime server endpoint with lifecycle composition', () => {
+    const dependencies = createDefaultApplicationDependencies();
+
+    expect(dependencies.services.serverInstanceService).toBe(serverInstanceService);
+  });
+
   it('keeps two complete fake graphs isolated', () => {
     const firstDependencies = createFakeApplicationGraph('first');
     const secondDependencies = createFakeApplicationGraph('second');
