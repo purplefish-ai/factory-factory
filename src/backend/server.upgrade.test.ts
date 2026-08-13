@@ -130,10 +130,8 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       cleanupOldLogs: vi.fn(),
     },
     sessionLifecycleService: {
+      recoverStaleRunningSessions: vi.fn(async () => 0),
       stopAllClients: vi.fn(async () => undefined),
-    },
-    sessionRepository: {
-      recoverStaleSessionStates: vi.fn(async () => 0),
     },
     terminalService: {
       cleanup: vi.fn(),
@@ -524,9 +522,9 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(harness.services.reconciliationService.cleanupOrphans).mockRejectedValueOnce(
       new Error('cleanup failed')
     );
-    vi.mocked(harness.services.sessionRepository.recoverStaleSessionStates).mockRejectedValueOnce(
-      new Error('session recovery failed')
-    );
+    vi.mocked(
+      harness.services.sessionLifecycleService.recoverStaleRunningSessions
+    ).mockRejectedValueOnce(new Error('session recovery failed'));
     vi.mocked(harness.services.reconciliationService.reconcile).mockRejectedValueOnce(
       new Error('reconcile failed')
     );
@@ -559,6 +557,24 @@ describe('server websocket upgrade routing', () => {
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to recover stale archiving workspaces on startup',
       expect.any(Object)
+    );
+  });
+
+  it('recovers stale agent session states through the lifecycle service at startup', async () => {
+    const harness = createTestHarness();
+    vi.mocked(
+      harness.services.sessionLifecycleService.recoverStaleRunningSessions
+    ).mockResolvedValueOnce(3);
+    const server = createTestServer(harness.application, 0);
+
+    await expect(server.start()).resolves.toBe('http://localhost:0');
+
+    expect(
+      harness.services.sessionLifecycleService.recoverStaleRunningSessions
+    ).toHaveBeenCalledOnce();
+    expect(harness.logger.info).toHaveBeenCalledWith(
+      'Recovered stale agent session states on startup',
+      { recoveredCount: 3 }
     );
   });
 

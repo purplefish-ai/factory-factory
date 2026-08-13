@@ -150,10 +150,6 @@ class SessionDataService {
       .then((sessions) => sessions.map(toAgentSessionRecord));
   }
 
-  recoverStaleRunningAgentSessions(): Promise<number> {
-    return agentSessionAccessor.recoverStaleRunning();
-  }
-
   // Closed sessions
 
   findClosedSessionsByWorkspaceId(
