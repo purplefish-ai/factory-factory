@@ -6,12 +6,12 @@ import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import { SessionPermissionService } from './session.permission.service';
-import { sessionPromptBuilder } from './session.prompt-builder';
 import { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 import { SessionService } from './session.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { sessionAcpEnvironment, sessionContextService } from './session-lifecycle-external-ports';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
 
@@ -88,9 +88,10 @@ const sessionPromptCoordinator = new SessionService({
 
 export const sessionService: SessionPromptService = sessionPromptCoordinator;
 
-export const sessionLifecycleService: SessionLifecycleService = new SessionLifecycleService({
+export const sessionLifecycleService = new SessionLifecycleService({
   repository: sessionRepository,
-  promptBuilder: sessionPromptBuilder,
+  contextService: sessionContextService,
+  acpEnvironment: sessionAcpEnvironment,
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
   sessionPermissionService,

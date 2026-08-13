@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -10,7 +9,6 @@ import type {
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
-import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
 import type {
   RatchetSessionEndOutcome,
   SessionAutoIterationExitBridge,
@@ -20,7 +18,6 @@ import type {
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
-import { userSettingsService } from '@/backend/services/settings';
 import { workspaceDataService } from '@/backend/services/workspace';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
@@ -42,10 +39,11 @@ import type {
 } from './session.config.service';
 import { toErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
-import type { SessionPromptBuilder } from './session.prompt-builder';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
+import type { SessionContextService } from './session-context.service';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
@@ -59,16 +57,6 @@ function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
 }
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-
-type SessionContext = {
-  workingDir: string;
-  resumeProviderSessionId: string | undefined;
-  systemPrompt: string | undefined;
-  model: string;
-  workspaceId: string;
-  workspaceStatus: WorkspaceStatus;
-  parentWorkspaceId?: string | null;
-};
 
 type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
@@ -112,7 +100,8 @@ type HydrateProviderHistory = (
 
 export type SessionLifecycleServiceDependencies = {
   repository: SessionRepository;
-  promptBuilder: SessionPromptBuilder;
+  contextService: SessionContextService;
+  acpEnvironment: SessionAcpEnvironmentPort;
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   sessionPermissionService: SessionPermissionService;
@@ -130,7 +119,8 @@ export type SessionLifecycleServiceDependencies = {
 
 export class SessionLifecycleService {
   private readonly repository: SessionRepository;
-  private readonly promptBuilder: SessionPromptBuilder;
+  private readonly contextService: SessionContextService;
+  private readonly acpEnvironment: SessionAcpEnvironmentPort;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
   private readonly sessionPermissionService: SessionPermissionService;
@@ -151,8 +141,12 @@ export class SessionLifecycleService {
   private notificationDeliveryService: SessionNotificationDeliveryService | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
+    if (!(options.contextService && options.acpEnvironment)) {
+      throw new Error('SessionLifecycleService requires context and ACP environment ports');
+    }
     this.repository = options.repository;
-    this.promptBuilder = options.promptBuilder;
+    this.contextService = options.contextService;
+    this.acpEnvironment = options.acpEnvironment;
     this.runtimeManager = options.runtimeManager;
     this.sessionDomainService = options.sessionDomainService;
     this.sessionPermissionService = options.sessionPermissionService;
@@ -617,25 +611,14 @@ export class SessionLifecycleService {
     return this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration);
   }
 
-  async getSessionOptions(sessionId: string): Promise<{
+  getSessionOptions(sessionId: string): Promise<{
     workingDir: string;
     resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
     workspaceStatus: WorkspaceStatus;
   } | null> {
-    const sessionContext = await this.loadSessionContext(sessionId);
-    if (!sessionContext) {
-      return null;
-    }
-
-    return {
-      workingDir: sessionContext.workingDir,
-      resumeProviderSessionId: sessionContext.resumeProviderSessionId,
-      systemPrompt: sessionContext.systemPrompt,
-      model: sessionContext.model,
-      workspaceStatus: sessionContext.workspaceStatus,
-    };
+    return this.contextService.getOptions(sessionId);
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
@@ -887,7 +870,7 @@ export class SessionLifecycleService {
     permissionPreset?: PermissionPreset,
     stopGeneration = this.lifecycleGate.getGeneration(sessionId)
   ): Promise<{ handle: AcpProcessHandle; dispatchableNotificationCount: number }> {
-    const sessionContext = await this.loadSessionContext(sessionId, session);
+    const sessionContext = await this.contextService.load(sessionId, session);
     if (!sessionContext) {
       throw new Error(`Session context not ready: ${sessionId}`);
     }
@@ -910,11 +893,9 @@ export class SessionLifecycleService {
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
     this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
 
-    const apiPort = String(configService.getBackendPort());
-    const mcpServerConfig = getChildWorkspaceMcpServerConfig({
+    const mcpServers = this.acpEnvironment.getMcpServers({
       workspaceId: sessionContext.workspaceId,
-      parentWorkspaceId: sessionContext.parentWorkspaceId ?? null,
-      apiBaseUrl: `http://localhost:${apiPort}`,
+      parentWorkspaceId: sessionContext.parentWorkspaceId,
     });
 
     const clientOptions: AcpClientOptions = {
@@ -926,7 +907,7 @@ export class SessionLifecycleService {
       permissionPreset,
       sessionId,
       resumeProviderSessionId: session?.providerSessionId ?? undefined,
-      mcpServers: [mcpServerConfig],
+      mcpServers,
     };
 
     let handle: AcpProcessHandle;
@@ -1285,7 +1266,7 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
-    const resolvedPreset = await this.resolvePermissionPreset(session);
+    const resolvedPreset = await this.contextService.resolvePermissionPreset(session);
     this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
 
     let handle: AcpProcessHandle;
@@ -1353,124 +1334,5 @@ export class SessionLifecycleService {
 
   private buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
     return this.sessionConfigService.buildAcpChatBarCapabilities(handle);
-  }
-
-  private async loadSessionContext(
-    sessionId: string,
-    preloadedSession?: AgentSessionRecord
-  ): Promise<SessionContext | null> {
-    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
-    if (!session) {
-      logger.warn('Session not found when getting options', { sessionId });
-      return null;
-    }
-
-    const workspace = await this.repository.getWorkspaceById(session.workspaceId);
-    if (!workspace?.worktreePath) {
-      logger.warn('Workspace or worktree not found', {
-        sessionId,
-        workspaceId: session.workspaceId,
-      });
-      return null;
-    }
-
-    const shouldInjectBranchRename = this.promptBuilder.shouldInjectBranchRename({
-      branchName: workspace.branchName,
-      isAutoGeneratedBranch: workspace.isAutoGeneratedBranch,
-      hasHadSessions: workspace.hasHadSessions,
-    });
-    const project = shouldInjectBranchRename
-      ? await this.repository.getProjectById(workspace.projectId)
-      : null;
-    if (shouldInjectBranchRename && !project) {
-      logger.warn('Project not found when building branch rename instruction', {
-        sessionId,
-        projectId: workspace.projectId,
-      });
-    }
-
-    // Resolve parent workspace context for child workspace system prompt injection
-    const parentCtx = await this.resolveParentWorkspaceContext(workspace);
-
-    const { workflowPrompt, systemPrompt, injectedBranchRename } =
-      this.promptBuilder.buildSystemPrompt({
-        workflow: session.workflow,
-        workspace: {
-          branchName: workspace.branchName,
-          isAutoGeneratedBranch: workspace.isAutoGeneratedBranch,
-          hasHadSessions: workspace.hasHadSessions,
-          name: workspace.name,
-          description: workspace.description ?? undefined,
-          runScriptPort: workspace.runScriptPort,
-          parentWorkspaceId: workspace.parentWorkspaceId,
-          parentWorkspaceName: parentCtx.parentWorkspaceName,
-          parentProjectName: parentCtx.parentProjectName,
-          reportBackOn: parentCtx.reportBackOn,
-        },
-        project,
-      });
-
-    logger.info('Loaded workflow prompt for session options', {
-      sessionId,
-      workflow: session.workflow,
-      hasPrompt: !!workflowPrompt,
-      promptLength: workflowPrompt?.length ?? 0,
-    });
-    if (injectedBranchRename) {
-      logger.info('Injected branch rename instruction', {
-        sessionId,
-        branchName: workspace.branchName,
-        branchPrefix: project?.githubOwner,
-      });
-    }
-
-    return {
-      workingDir: workspace.worktreePath,
-      resumeProviderSessionId: session.providerSessionId ?? undefined,
-      systemPrompt,
-      model: session.model,
-      workspaceId: workspace.id,
-      workspaceStatus: workspace.status,
-      parentWorkspaceId: workspace.parentWorkspaceId,
-    };
-  }
-
-  private async resolveParentWorkspaceContext(workspace: {
-    parentWorkspaceId: string | null;
-    creationMetadata: unknown;
-  }): Promise<{ parentWorkspaceName?: string; parentProjectName?: string; reportBackOn?: string }> {
-    if (!workspace.parentWorkspaceId) {
-      return {};
-    }
-    let parentWorkspaceName: string | undefined;
-    let parentProjectName: string | undefined;
-    const parentWorkspace = await this.repository.getWorkspaceById(workspace.parentWorkspaceId);
-    if (parentWorkspace) {
-      parentWorkspaceName = parentWorkspace.name;
-      const parentProject = await this.repository.getProjectById(parentWorkspace.projectId);
-      parentProjectName = parentProject?.name;
-    }
-    const metadata = workspace.creationMetadata as Record<string, unknown> | null;
-    const reportBackOn =
-      typeof metadata?.reportBackOn === 'string' ? metadata.reportBackOn : undefined;
-    return { parentWorkspaceName, parentProjectName, reportBackOn };
-  }
-
-  private async resolvePermissionPreset(
-    session: AgentSessionRecord | undefined
-  ): Promise<PermissionPreset> {
-    const fallback: PermissionPreset = session?.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
-    try {
-      const settings = await userSettingsService.get();
-      return session?.workflow === 'ratchet'
-        ? settings.ratchetPermissions
-        : settings.defaultWorkspacePermissions;
-    } catch (error) {
-      logger.warn('Failed loading user permission preset; using default', {
-        workflow: session?.workflow,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return fallback;
-    }
   }
 }

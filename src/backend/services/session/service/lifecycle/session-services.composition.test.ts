@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatMessageHandlerService as publicChatMessageHandlerService } from '@/backend/services/session';
+import {
+  chatMessageHandlerService as publicChatMessageHandlerService,
+  sessionLifecycleService as publicSessionLifecycleService,
+} from '@/backend/services/session';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { sessionLifecycleService as coreSessionLifecycleService } from './session-core-services';
 import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
 
 describe('session services composition', () => {
@@ -11,6 +15,8 @@ describe('session services composition', () => {
 
   it('exports one configured chat singleton whose startup adapter filters chat-only options', async () => {
     expect(publicChatMessageHandlerService).toBe(chatMessageHandlerService);
+    expect(publicSessionLifecycleService).toBe(sessionLifecycleService);
+    expect(coreSessionLifecycleService).toBe(sessionLifecycleService);
     vi.spyOn(sessionLifecycleService, 'getSessionOptions').mockResolvedValue({
       workingDir: '/tmp/worktree',
       resumeProviderSessionId: undefined,

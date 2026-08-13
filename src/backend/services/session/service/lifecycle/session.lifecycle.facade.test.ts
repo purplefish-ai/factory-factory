@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { workspaceNotificationService } from '@/backend/services/workspace';
+import { WorkspaceStatus } from '@/shared/core';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { SessionLifecycleService } from './session.lifecycle.service';
 import {
   createLifecycleHarness,
   createPendingWorkspaceNotification,
@@ -50,6 +53,33 @@ describe('SessionLifecycleFacade', () => {
     vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([
       createPendingWorkspaceNotification(),
     ] as never);
+  });
+
+  it('fails during construction when required external ports are missing', () => {
+    expect(
+      () =>
+        new SessionLifecycleService(
+          unsafeCoerce({
+            repository: {},
+          })
+        )
+    ).toThrow('SessionLifecycleService requires context and ACP environment ports');
+  });
+
+  it('delegates session option reads to the injected context service', async () => {
+    const { service, contextService } = createLifecycleHarness();
+    const options = {
+      workingDir: '/delegated/worktree',
+      resumeProviderSessionId: 'provider-session-1',
+      systemPrompt: 'delegated prompt',
+      model: 'delegated-model',
+      workspaceStatus: WorkspaceStatus.READY,
+    };
+    const getOptions = vi.spyOn(contextService, 'getOptions').mockResolvedValueOnce(options);
+
+    await expect(service.getSessionOptions('session-1')).resolves.toEqual(options);
+
+    expect(getOptions).toHaveBeenCalledWith('session-1');
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {

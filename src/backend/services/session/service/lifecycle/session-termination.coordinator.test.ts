@@ -155,6 +155,8 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
     const service = new SessionLifecycleService(
       unsafeCoerce({
         repository,
+        contextService: {},
+        acpEnvironment: {},
         promptBuilder: {},
         runtimeManager,
         sessionDomainService: {},
@@ -220,6 +222,8 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
               workflow: 'code',
             })),
           },
+          contextService: {},
+          acpEnvironment: {},
           promptBuilder: {},
           runtimeManager,
           sessionDomainService: {},

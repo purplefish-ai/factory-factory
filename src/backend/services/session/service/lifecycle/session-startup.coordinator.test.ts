@@ -46,6 +46,34 @@ describe('SessionStartupCoordinator', () => {
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
 
+  it('builds ACP startup options through the injected environment port', async () => {
+    const { service, runtimeManager, acpEnvironment } = createLifecycleHarness({
+      workspace: { parentWorkspaceId: 'parent-workspace' },
+    });
+    const mcpServers = [
+      {
+        name: 'child-workspace-tools',
+        command: 'child-workspace-server',
+        args: ['--stdio'],
+        env: { FF_WORKSPACE_ID: 'workspace-1' },
+      },
+    ];
+    acpEnvironment.getMcpServers.mockReturnValueOnce(mcpServers);
+
+    await service.getOrCreateSessionClient('session-1');
+
+    expect(acpEnvironment.getMcpServers).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      parentWorkspaceId: 'parent-workspace',
+    });
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ mcpServers }),
+      expect.any(Object),
+      expect.any(Object)
+    );
+  });
+
   it('restores a stopped Codex session for browsing without activating it', async () => {
     const { service, repository, runtimeManager, handle, sessionDomainService } =
       createLifecycleHarness({
