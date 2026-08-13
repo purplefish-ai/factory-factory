@@ -4,6 +4,11 @@ type SessionLifecycleGateDependencies = {
   isRuntimeStopInProgress(sessionId: string): boolean;
 };
 
+type StartupGenerationReferences = {
+  count: number;
+  hasSucceeded: boolean;
+};
+
 export class SessionStartupCancelledError extends Error {
   constructor() {
     super('Session is currently being stopped');
@@ -16,7 +21,7 @@ export class SessionLifecycleGate {
   private readonly shutdownSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
-  private readonly startupGenerationReferences = new Map<number, number>();
+  private readonly startupGenerationReferences = new Map<number, StartupGenerationReferences>();
 
   constructor(private readonly dependencies: SessionLifecycleGateDependencies) {}
 
@@ -25,10 +30,11 @@ export class SessionLifecycleGate {
     operation: (lease: SessionStartupLease) => Promise<T>
   ): Promise<T> {
     const lease = { sessionId, generation: this.getGeneration(sessionId) };
-    this.startupGenerationReferences.set(
-      lease.generation,
-      (this.startupGenerationReferences.get(lease.generation) ?? 0) + 1
-    );
+    const currentReferences = this.startupGenerationReferences.get(lease.generation);
+    this.startupGenerationReferences.set(lease.generation, {
+      count: (currentReferences?.count ?? 0) + 1,
+      hasSucceeded: currentReferences?.hasSucceeded ?? false,
+    });
     let succeeded = false;
     try {
       const result = await operation(lease);
@@ -101,18 +107,22 @@ export class SessionLifecycleGate {
   }
 
   private releaseStartupLease(lease: SessionStartupLease, succeeded: boolean): void {
-    const referenceCount = this.startupGenerationReferences.get(lease.generation);
-    if (referenceCount === undefined) {
+    const references = this.startupGenerationReferences.get(lease.generation);
+    if (!references) {
       return;
     }
-    if (referenceCount > 1) {
-      this.startupGenerationReferences.set(lease.generation, referenceCount - 1);
+    const hasSucceeded = references.hasSucceeded || succeeded;
+    if (references.count > 1) {
+      this.startupGenerationReferences.set(lease.generation, {
+        count: references.count - 1,
+        hasSucceeded,
+      });
       return;
     }
 
     this.startupGenerationReferences.delete(lease.generation);
     if (
-      !(succeeded || this.isSessionStopping(lease.sessionId)) &&
+      !(hasSucceeded || this.isSessionStopping(lease.sessionId)) &&
       this.isGenerationCurrent(lease.sessionId, lease.generation)
     ) {
       this.stopGenerations.delete(lease.sessionId);

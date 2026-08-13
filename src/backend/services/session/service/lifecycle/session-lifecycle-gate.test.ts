@@ -119,6 +119,34 @@ describe('SessionLifecycleGate', () => {
     await retainedStartup;
   });
 
+  it('retains a successful generation when a failing sibling releases last', async () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    const successfulDeferred = createDeferred();
+    let rejectFailure!: (reason?: unknown) => void;
+    const failureBoundary = new Promise<void>((_resolve, reject) => {
+      rejectFailure = reject;
+    });
+    let successfulLease!: SessionStartupLease;
+    let failingLease!: SessionStartupLease;
+
+    const successfulStartup = gate.runStartup('session-1', async (lease) => {
+      successfulLease = lease;
+      await successfulDeferred.promise;
+    });
+    const failingStartup = gate.runStartup('session-1', async (lease) => {
+      failingLease = lease;
+      await failureBoundary;
+    });
+
+    expect(failingLease).toEqual(successfulLease);
+    successfulDeferred.resolve();
+    await successfulStartup;
+    rejectFailure(new Error('sibling failed'));
+    await expect(failingStartup).rejects.toThrow('sibling failed');
+
+    expect(gate.isGenerationCurrent('session-1', successfulLease.generation)).toBe(true);
+  });
+
   it('reserves shutdown sessions instead of allowing their startup leases to continue', async () => {
     const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
     let firstLease!: SessionStartupLease;

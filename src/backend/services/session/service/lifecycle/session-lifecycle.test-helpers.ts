@@ -279,7 +279,7 @@ export function createLifecycleHarness(
     | 'updateSessionIfStatus'
   >;
   const runtimeManager = {
-    isStopInProgress: vi.fn(() => false),
+    isStopInProgress: vi.fn((_sessionId: string) => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
@@ -401,7 +401,7 @@ export function createLifecycleHarness(
   } satisfies SessionLifecycleMessageQueueBridge;
   const sendSessionMessage = vi.fn(async () => undefined);
   const lifecycleGate = new SessionLifecycleGate({
-    isRuntimeStopInProgress: () => runtimeManager.isStopInProgress(),
+    isRuntimeStopInProgress: (sessionId) => runtimeManager.isStopInProgress(sessionId),
   });
   const service = new SessionLifecycleService(
     unsafeCoerce({

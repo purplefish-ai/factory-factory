@@ -257,6 +257,14 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
 });
 
 describe('SessionTerminationCoordinator races', () => {
+  it('forwards the session id to the runtime stop visibility query', () => {
+    const harness = createLifecycleHarness();
+
+    expect(harness.service.isSessionStopping('session-1')).toBe(false);
+
+    expect(harness.runtimeManager.isStopInProgress).toHaveBeenCalledWith('session-1');
+  });
+
   it('releases the stop generation after a session stops', async () => {
     const { service } = createLifecycleHarness();
     const stopGeneration = service.getStopGeneration('session-1');
