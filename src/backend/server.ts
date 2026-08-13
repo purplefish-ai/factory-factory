@@ -70,7 +70,6 @@ export function createServer(application: Application, requestedPort?: number): 
     schedulerService,
     sessionFileLogger,
     sessionLifecycleService,
-    sessionRepository,
     terminalService,
     workspaceAutoIterationService,
     workspaceGitStateService,
@@ -497,7 +496,7 @@ export function createServer(application: Application, requestedPort?: number): 
         // Live ACP runtimes are in-memory only, so after a backend restart these
         // records must not drive workspace "Working" state.
         await runStartupTask('Failed to recover stale agent sessions on startup', async () => {
-          const recoveredCount = await sessionRepository.recoverStaleRunningSessions();
+          const recoveredCount = await sessionLifecycleService.recoverStaleRunningSessions();
           if (recoveredCount > 0) {
             logger.info('Recovered stale agent session states on startup', {
               recoveredCount,

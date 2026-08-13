@@ -138,7 +138,6 @@ export class SessionLifecycleService {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
   private notificationDeliveryService: SessionNotificationDeliveryService | null = null;
-
   constructor(options: SessionLifecycleServiceDependencies) {
     if (!(options.contextService && options.acpEnvironment)) {
       throw new Error('SessionLifecycleService requires context and ACP environment ports');
@@ -171,7 +170,6 @@ export class SessionLifecycleService {
     this.onBeforeStopSession = options.onBeforeStopSession;
     this.onSessionExit = options.onSessionExit;
   }
-
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
     messageQueue?: SessionLifecycleMessageQueueBridge;
@@ -1105,7 +1103,9 @@ export class SessionLifecycleService {
   persistClosedSession(sessionId: string): Promise<void> {
     return this.workflowFinalizer.persistClosedSession(sessionId);
   }
-
+  recoverStaleRunningSessions(): Promise<number> {
+    return this.workflowFinalizer.recoverStaleRunningSessions();
+  }
   private async getOrCreateAcpSessionClient(
     sessionId: string,
     options: {

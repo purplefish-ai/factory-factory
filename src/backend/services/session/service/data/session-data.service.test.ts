@@ -7,7 +7,6 @@ vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({
   agentSessionAccessor: {
     acquireFixerSession: vi.fn(),
     findById: vi.fn(),
-    recoverStaleRunning: vi.fn(),
   },
 }));
 
@@ -55,14 +54,6 @@ describe('sessionDataService', () => {
       model: 'gpt-5.3-codex',
       providerProjectPath: null,
     });
-  });
-
-  it('recovers stale running agent sessions through the session boundary', async () => {
-    vi.mocked(agentSessionAccessor.recoverStaleRunning).mockResolvedValue(3);
-
-    await expect(sessionDataService.recoverStaleRunningAgentSessions()).resolves.toBe(3);
-
-    expect(agentSessionAccessor.recoverStaleRunning).toHaveBeenCalledOnce();
   });
 
   it('maps persistence rows to capsule-owned session records', async () => {
