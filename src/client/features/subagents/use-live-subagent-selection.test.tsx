@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     isFetchedAfterMount: false,
     isFetching: false,
     isFetchNextPageError: false,
+    isRefetching: false,
     isSuccess: true,
   },
   useListInfiniteQuery: vi.fn(),
@@ -80,6 +81,7 @@ describe('useLiveSubagentSelection', () => {
     mocks.listInfiniteQueryResult.isFetchedAfterMount = false;
     mocks.listInfiniteQueryResult.isFetching = false;
     mocks.listInfiniteQueryResult.isFetchNextPageError = false;
+    mocks.listInfiniteQueryResult.isRefetching = false;
     mocks.listInfiniteQueryResult.isSuccess = true;
     mocks.fetchNextPage.mockClear();
     mocks.listRefetch.mockReset();
@@ -328,6 +330,35 @@ describe('useLiveSubagentSelection', () => {
     renderHookProbe(stored);
 
     expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+  });
+
+  it('accepts a cached null-timestamp selection after an automatic refetch recovers', () => {
+    const stored = selection({
+      name: 'Restored security review',
+      status: 'running',
+      updatedAt: null,
+    });
+    const refreshed = selection({
+      name: 'Refetched completed security review',
+      status: 'completed',
+      updatedAt: null,
+      completedAt: '2026-08-10T10:05:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [refreshed], nextCursor: null }]);
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:01:00.000Z');
+
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+
+    mocks.listInfiniteQueryResult.isRefetching = true;
+    renderHookProbe(stored);
+
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:05:00.000Z');
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+    mocks.listInfiniteQueryResult.isRefetching = false;
+    renderHookProbe(stored);
+
+    expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: refreshed });
   });
 
   it('fetches successive pages until it refreshes a restored later-page child', () => {

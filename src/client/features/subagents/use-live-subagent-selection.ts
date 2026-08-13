@@ -64,6 +64,10 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     dataUpdatedAt: query.dataUpdatedAt,
     loadedPageCount: query.data?.pages.length ?? 0,
   });
+  const automaticRefetchSnapshot = useRef<{
+    dataUpdatedAt: number;
+    loadedPageCount: number;
+  } | null>(null);
   querySnapshot.current = {
     dataUpdatedAt: query.dataUpdatedAt,
     loadedPageCount: query.data?.pages.length ?? 0,
@@ -83,6 +87,26 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
       setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
     }
   }, [query.refetch]);
+
+  useEffect(() => {
+    if (query.isRefetching) {
+      automaticRefetchSnapshot.current ??= querySnapshot.current;
+      return;
+    }
+    const before = automaticRefetchSnapshot.current;
+    if (before === null) {
+      return;
+    }
+    automaticRefetchSnapshot.current = null;
+    const current = querySnapshot.current;
+    if (
+      query.isSuccess &&
+      current.dataUpdatedAt > before.dataUpdatedAt &&
+      current.loadedPageCount === before.loadedPageCount
+    ) {
+      setSuccessfulRefetchDataUpdatedAt((timestamp) => Math.max(timestamp, current.dataUpdatedAt));
+    }
+  }, [query.isRefetching, query.isSuccess]);
 
   const startedMountRefetch = useRef(false);
   useEffect(() => {
