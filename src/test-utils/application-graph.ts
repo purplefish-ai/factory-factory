@@ -109,6 +109,7 @@ vi.mock('@/backend/services/run-script', () => ({
 }));
 vi.mock('@/backend/services/server-instance.service', () => ({
   createServerInstanceService: vi.fn(() => ({})),
+  serverInstanceService: {},
 }));
 vi.mock('@/backend/services/session', () => ({
   acpRuntimeManager: {},

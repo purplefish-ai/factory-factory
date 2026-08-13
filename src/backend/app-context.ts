@@ -54,8 +54,8 @@ import {
   startupScriptService,
 } from './services/run-script';
 import {
-  createServerInstanceService,
   type ServerInstanceService,
+  serverInstanceService,
 } from './services/server-instance.service';
 import {
   type AcpTraceLogger,
@@ -246,7 +246,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     runScriptService: defaultRunScriptService,
     runScriptStateMachine,
     schedulerService,
-    serverInstanceService: createServerInstanceService(),
+    serverInstanceService,
     sessionDataService,
     sessionDomainService,
     sessionEventBus,

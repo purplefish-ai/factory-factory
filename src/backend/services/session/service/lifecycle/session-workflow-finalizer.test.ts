@@ -89,6 +89,8 @@ describe('SessionWorkflowFinalizer', () => {
     const service = new SessionLifecycleService(
       unsafeCoerce({
         repository,
+        contextService: {},
+        acpEnvironment: {},
         promptBuilder: {},
         runtimeManager: {},
         sessionDomainService: domain,

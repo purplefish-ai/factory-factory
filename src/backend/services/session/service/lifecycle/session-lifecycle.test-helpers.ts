@@ -16,6 +16,8 @@ import type { SessionConfigService } from './session.config.service';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
+import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
+import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
@@ -40,6 +42,7 @@ export type LifecycleHarnessOverrides = {
   transcript?: ChatMessage[];
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   tryDispatchNextMessage?: SessionLifecycleMessageQueueBridge['tryDispatchNextMessage'];
+  getPermissionPreset?: SessionPermissionPresetPort['getPermissionPreset'];
   provider?: AgentSessionRecord['provider'];
   providerSessionId?: string | null;
   providerProcessPid?: number | null;
@@ -114,6 +117,8 @@ export type LifecycleHarness = {
     | 'buildAcpChatBarCapabilities'
   >;
   lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record' | 'hydrate'>;
+  contextService: SessionContextService;
+  acpEnvironment: MockedPick<SessionAcpEnvironmentPort, 'getBackendPort' | 'getMcpServers'>;
   notificationService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
   workspaceBridge: MockedPick<
     SessionLifecycleWorkspaceBridge,
@@ -408,17 +413,39 @@ export function createLifecycleHarness(
   const lifecycleGate = new SessionLifecycleGate({
     isRuntimeStopInProgress: (sessionId) => runtimeManager.isStopInProgress(sessionId),
   });
+  const promptBuilder = {
+    shouldInjectBranchRename: vi.fn(() => false),
+    buildSystemPrompt: vi.fn(() => ({
+      workflowPrompt: undefined,
+      systemPrompt: 'system prompt',
+      injectedBranchRename: false,
+    })),
+  };
+  const contextService = new SessionContextService({
+    repository,
+    promptBuilder,
+    permissionPresetPort: {
+      getPermissionPreset:
+        overrides.getPermissionPreset ??
+        ((workflow) => Promise.resolve(workflow === 'ratchet' ? 'YOLO' : 'STRICT')),
+    },
+  });
+  const acpEnvironment = {
+    getBackendPort: vi.fn(() => 4000),
+    getMcpServers: vi.fn(() => [
+      {
+        name: 'workspace-tools',
+        command: 'workspace-tools-server',
+        args: [],
+        env: {},
+      },
+    ]),
+  } satisfies SessionAcpEnvironmentPort;
   const service = new SessionLifecycleService(
     unsafeCoerce({
       repository,
-      promptBuilder: {
-        shouldInjectBranchRename: vi.fn(() => false),
-        buildSystemPrompt: vi.fn(() => ({
-          workflowPrompt: undefined,
-          systemPrompt: 'system prompt',
-          injectedBranchRename: false,
-        })),
-      },
+      contextService,
+      acpEnvironment,
       runtimeManager,
       sessionDomainService,
       sessionPermissionService: notificationService,
@@ -451,6 +478,8 @@ export function createLifecycleHarness(
     acpEventProcessor,
     sessionConfigService,
     lifecycleEventService,
+    contextService,
+    acpEnvironment,
     notificationService,
     workspaceBridge,
     messageQueueBridge,
