@@ -286,8 +286,10 @@ describe('SessionStartupCoordinator', () => {
       'Session not found: missing-session'
     );
 
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
     const generationAfterFailure = service.getStopGeneration('missing-session');
-    expect(generationAfterFailure).not.toBe(generationBeforeFailure);
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
+    expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
   });
 
   it('does not create a client when stop completes during the initial session lookup', async () => {
@@ -322,7 +324,9 @@ describe('SessionStartupCoordinator', () => {
 
     await expect(service.startSession('session-1')).rejects.toThrow('spawn failed');
 
-    expect(service.getStopGeneration('session-1')).not.toBe(generationBeforeFailure);
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
+    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('does not retain a stop generation when client lookup cannot find the session', async () => {
@@ -334,8 +338,10 @@ describe('SessionStartupCoordinator', () => {
       'Session not found: missing-session'
     );
 
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
     const generationAfterFailure = service.getStopGeneration('missing-session');
-    expect(generationAfterFailure).not.toBe(generationBeforeFailure);
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
+    expect(generationAfterFailure).toBeGreaterThan(sentinelGeneration);
   });
 
   it('releases the stop generation when record-based client creation fails', async () => {
@@ -347,7 +353,9 @@ describe('SessionStartupCoordinator', () => {
       'spawn failed'
     );
 
-    expect(service.getStopGeneration('session-1')).not.toBe(generationBeforeFailure);
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    expect(sentinelGeneration).toBeGreaterThan(generationBeforeFailure);
+    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('does not release a stop generation still owned by a concurrent startup', async () => {

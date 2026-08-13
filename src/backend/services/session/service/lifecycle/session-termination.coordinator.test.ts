@@ -256,7 +256,9 @@ describe('SessionTerminationCoordinator races', () => {
 
     await service.stopSession('session-1');
 
-    expect(service.getStopGeneration('session-1')).not.toBe(stopGeneration);
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    expect(sentinelGeneration).toBeGreaterThan(stopGeneration);
+    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('releases the stop generation when viewers retain inactive session state', async () => {
@@ -271,7 +273,9 @@ describe('SessionTerminationCoordinator races', () => {
     }
 
     expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
-    expect(service.getStopGeneration('session-1')).not.toBe(stopGeneration);
+    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    expect(sentinelGeneration).toBeGreaterThan(stopGeneration);
+    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('waits for a registered client creation and stops the resulting runtime', async () => {
