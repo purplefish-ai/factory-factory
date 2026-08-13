@@ -38,8 +38,6 @@ export type LifecycleHarnessOverrides = {
   transcript?: ChatMessage[];
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   tryDispatchNextMessage?: SessionLifecycleMessageQueueBridge['tryDispatchNextMessage'];
-  pendingNotificationCount?: number;
-  useRealNotificationDelivery?: boolean;
   provider?: AgentSessionRecord['provider'];
   providerSessionId?: string | null;
   providerProcessPid?: number | null;
@@ -123,9 +121,6 @@ export type LifecycleHarness = {
   workspace: LifecycleTestWorkspace;
   handle: AcpProcessHandle;
   sendSessionMessage: Mock<(sessionId: string, content: string) => Promise<void>>;
-  deliverPendingChildNotifications: Mock<
-    (sessionId: string, workspaceId: string) => Promise<number>
-  >;
   tryDispatchNextMessage: Mock<SessionLifecycleMessageQueueBridge['tryDispatchNextMessage']>;
 };
 
@@ -197,6 +192,33 @@ export function createLifecycleTestWorkspace(
   };
 }
 
+export function createPendingWorkspaceNotification(
+  overrides: Partial<{
+    id: string;
+    workspaceId: string;
+    sourceWorkspaceId: string;
+    sourceWorkspaceName: string;
+    sourceProjectName: string;
+    message: string;
+    direction: 'PARENT_TO_CHILD' | 'CHILD_TO_PARENT';
+    deliveredAt: Date | null;
+    createdAt: Date;
+  }> = {}
+) {
+  return {
+    id: 'notif-parent',
+    workspaceId: 'workspace-1',
+    sourceWorkspaceId: 'parent-workspace',
+    sourceWorkspaceName: 'Parent Workspace',
+    sourceProjectName: 'Parent Project',
+    message: 'Please check the failing test.',
+    direction: 'PARENT_TO_CHILD' as const,
+    deliveredAt: null,
+    createdAt: new Date('2026-06-22T10:30:00.000Z'),
+    ...overrides,
+  };
+}
+
 export function createLifecycleHarness(
   overrides: LifecycleHarnessOverrides = {}
 ): LifecycleHarness {
@@ -229,15 +251,16 @@ export function createLifecycleHarness(
     ),
     getSessionsByWorkspaceId: vi.fn<SessionRepository['getSessionsByWorkspaceId']>(
       overrides.getSessionsByWorkspaceId ??
-        (async () => [
-          createLifecycleTestSession({ id: 'session-running', status: SessionStatus.RUNNING }),
-          createLifecycleTestSession({
-            id: 'session-runtime-only',
-            status: SessionStatus.COMPLETED,
-          }),
-          createLifecycleTestSession({ id: 'session-browse-only', status: SessionStatus.IDLE }),
-          createLifecycleTestSession({ id: 'session-idle', status: SessionStatus.IDLE }),
-        ])
+        (async () =>
+          overrides.sessions ?? [
+            createLifecycleTestSession({ id: 'session-running', status: SessionStatus.RUNNING }),
+            createLifecycleTestSession({
+              id: 'session-runtime-only',
+              status: SessionStatus.COMPLETED,
+            }),
+            createLifecycleTestSession({ id: 'session-browse-only', status: SessionStatus.IDLE }),
+            createLifecycleTestSession({ id: 'session-idle', status: SessionStatus.IDLE }),
+          ])
     ),
     getWorkspaceById: vi.fn<SessionRepository['getWorkspaceById']>(async () => workspace),
     getProjectById: vi.fn<SessionRepository['getProjectById']>(async () => null),
@@ -403,16 +426,6 @@ export function createLifecycleHarness(
     })
   );
   service.configure({ workspace: workspaceBridge, messageQueue: messageQueueBridge });
-  const deliverPendingChildNotifications = vi.fn(
-    async () => overrides.pendingNotificationCount ?? 0
-  );
-  if (!overrides.useRealNotificationDelivery) {
-    (
-      service as unknown as {
-        deliverPendingChildNotifications(sessionId: string, workspaceId: string): Promise<number>;
-      }
-    ).deliverPendingChildNotifications = deliverPendingChildNotifications;
-  }
 
   return {
     service,
@@ -429,7 +442,6 @@ export function createLifecycleHarness(
     workspace,
     handle,
     sendSessionMessage,
-    deliverPendingChildNotifications,
     tryDispatchNextMessage: messageQueueBridge.tryDispatchNextMessage,
   };
 }
