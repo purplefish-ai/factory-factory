@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listRefetch: vi.fn(() => Promise.resolve()),
   listInfiniteQueryResult: {
     data: undefined as unknown,
+    dataUpdatedAt: 0,
     hasNextPage: false,
     isFetchedAfterMount: false,
     isFetching: false,
@@ -72,6 +73,7 @@ describe('useLiveSubagentSelection', () => {
       value: true,
     });
     mocks.listInfiniteQueryResult.data = undefined;
+    mocks.listInfiniteQueryResult.dataUpdatedAt = 0;
     mocks.listInfiniteQueryResult.hasNextPage = false;
     mocks.listInfiniteQueryResult.isFetchedAfterMount = false;
     mocks.listInfiniteQueryResult.isFetching = false;
@@ -232,7 +234,33 @@ describe('useLiveSubagentSelection', () => {
     expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
 
     mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:05:00.000Z');
     renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
+  });
+
+  it('keeps a successful null-timestamp summary after a refetch error', () => {
+    const stored = selection({
+      name: 'Restored security review',
+      status: 'running',
+      updatedAt: null,
+    });
+    const fetched = selection({
+      name: 'Provider-completed security review',
+      status: 'completed',
+      updatedAt: null,
+      completedAt: '2026-08-10T10:05:00.000Z',
+    }).subagent;
+    setPages([{ supported: true, subagents: [fetched], nextCursor: null }]);
+    mocks.listInfiniteQueryResult.dataUpdatedAt = Date.parse('2026-08-10T10:05:00.000Z');
+    mocks.listInfiniteQueryResult.isFetchedAfterMount = true;
+
+    renderHookProbe(stored);
+    expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
+
+    mocks.listInfiniteQueryResult.isSuccess = false;
+    renderHookProbe(stored);
+
     expect(JSON.parse(container.textContent ?? '')).toEqual({ ...stored, subagent: fetched });
   });
 

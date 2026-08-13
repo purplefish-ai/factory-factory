@@ -70,6 +70,7 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
     .flatMap((page) => page.subagents)
     .find((candidate) => candidate.id === selection.subagent.id);
   const loadedPageCount = query.data?.pages.length ?? 0;
+  const hasSuccessfulPostMountFetch = query.dataUpdatedAt > 0 && query.isFetchedAfterMount;
 
   useEffect(() => {
     if (
@@ -92,11 +93,7 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   ]);
 
   return refreshed &&
-    isProvenAtLeastAsFresh(
-      selection.subagent,
-      refreshed,
-      query.isFetchedAfterMount && query.isSuccess
-    )
+    isProvenAtLeastAsFresh(selection.subagent, refreshed, hasSuccessfulPostMountFetch)
     ? { ...selection, subagent: refreshed }
     : selection;
 }
