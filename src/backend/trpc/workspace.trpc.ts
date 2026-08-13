@@ -436,10 +436,23 @@ export const workspaceCoreRouter = router({
 
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const { cleanupWorkspaceRuntimeResources, workspaceDataService } = ctx.appContext.services;
+    const logger = getLogger(ctx);
+    const { cleanupWorkspaceRuntimeResources, workspaceDataService, worktreeLifecycleService } =
+      ctx.appContext.services;
+    const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, input.id);
     // Clean up running sessions, terminals, and dev processes before deleting
     await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
     ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
+
+    try {
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
+    } catch (error) {
+      logger.error('Failed to cleanup workspace worktree before delete', {
+        workspaceId: workspace.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const result = await workspaceDataService.delete(input.id);
     ctx.appContext.services.cleanupWorkspaceScopedCaches(input.id);
     return result;

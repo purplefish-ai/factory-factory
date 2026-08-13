@@ -28,6 +28,7 @@ const mockWorkspaceCreationCreate = vi.hoisted(() => vi.fn());
 const mockClearWorkspaceActivity = vi.hoisted(() => vi.fn());
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCleanupWorkspaceRuntimeResources = vi.hoisted(() => vi.fn());
+const mockCleanupWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
@@ -165,6 +166,9 @@ function createCaller(requestTrust?: {
       fakeGraph.services.workspaceQueryService,
       mockWorkspaceQueryService
     ),
+    worktreeLifecycleService: Object.assign({}, fakeGraph.services.worktreeLifecycleService, {
+      cleanupWorkspaceWorktree: (...args: unknown[]) => mockCleanupWorkspaceWorktree(...args),
+    }),
     runScriptConfigPersistenceService: Object.assign(
       {},
       fakeGraph.services.runScriptConfigPersistenceService,
@@ -227,6 +231,7 @@ function createCaller(requestTrust?: {
     terminalService: composedTerminalService,
     cliHealthService,
     eventCollector: fakeGraph.lifecycle.eventCollector,
+    logger,
   };
 }
 
@@ -247,6 +252,7 @@ describe('workspaceCoreRouter', () => {
     mockDeriveWorkspaceSidebarStatus.mockReturnValue({ activityState: 'IDLE', ciState: 'NONE' });
     mockComputePendingRequestType.mockReturnValue(null);
     mockCreateAgentSession.mockResolvedValue({ id: 'session-1' });
+    mockCleanupWorkspaceWorktree.mockResolvedValue(undefined);
     mockCleanupWorkspaceRuntimeResources.mockImplementation(
       async (
         workspaceId: string,
@@ -672,12 +678,22 @@ describe('workspaceCoreRouter', () => {
     expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('w1');
+    expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledWith(
+      { id: 'w1', project: { slug: 'demo' } },
+      {}
+    );
     const evictionCallOrder = runScriptService.evictWorkspaceBuffers.mock.invocationCallOrder[0];
+    const worktreeCleanupCallOrder = mockCleanupWorkspaceWorktree.mock.invocationCallOrder[0];
     const deleteCallOrder = mockWorkspaceDataService.delete.mock.invocationCallOrder[0];
-    if (evictionCallOrder === undefined || deleteCallOrder === undefined) {
-      throw new Error('Expected buffer eviction and workspace deletion to be called');
+    if (
+      evictionCallOrder === undefined ||
+      worktreeCleanupCallOrder === undefined ||
+      deleteCallOrder === undefined
+    ) {
+      throw new Error('Expected buffer eviction, worktree cleanup, and workspace deletion');
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
+    expect(worktreeCleanupCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(eventCollector.removeWorkspace).toHaveBeenCalledWith('w1');
 
@@ -692,6 +708,24 @@ describe('workspaceCoreRouter', () => {
     await expect(caller.hasChanges({ workspaceId: 'w1' })).resolves.toEqual({ hasChanges: true });
   });
 
+  it('deletes and clears caches when worktree cleanup fails', async () => {
+    mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
+    mockCleanupWorkspaceWorktree.mockRejectedValue(new Error('worktree cleanup failed'));
+    const { caller, eventCollector, logger } = createCaller();
+
+    await expect(caller.delete({ id: 'w1' })).resolves.toEqual({ deleted: true });
+
+    expect(mockWorkspaceDataService.delete).toHaveBeenCalledWith('w1');
+    expect(eventCollector.removeWorkspace).toHaveBeenCalledWith('w1');
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to cleanup workspace worktree before delete',
+      {
+        workspaceId: 'w1',
+        error: 'worktree cleanup failed',
+      }
+    );
+  });
+
   it('does not delete when run script cleanup reports failure', async () => {
     const { caller, sessionLifecycleService, runScriptService, terminalService } = createCaller();
     runScriptService.stopRunScript.mockResolvedValue({ success: false, error: 'stop failed' });
@@ -703,6 +737,7 @@ describe('workspaceCoreRouter', () => {
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(runScriptService.evictWorkspaceBuffers).not.toHaveBeenCalled();
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
+    expect(mockCleanupWorkspaceWorktree).not.toHaveBeenCalled();
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
 
