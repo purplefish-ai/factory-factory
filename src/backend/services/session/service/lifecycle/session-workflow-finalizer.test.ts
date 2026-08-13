@@ -1,136 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { workspaceDataService } from '@/backend/services/workspace';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionLifecycleService } from './session.lifecycle.service';
-import { createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
+import type { PersistClosedSessionInput } from './closed-session-persistence.service';
+import {
+  createLifecycleTestSession,
+  createLifecycleTestWorkspace,
+} from './session-lifecycle.test-helpers';
+import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
-vi.mock('./closed-session-persistence.service', () => ({
-  closedSessionPersistenceService: {
-    persistClosedSession: vi.fn(async () => undefined),
-  },
-}));
+type FinalizerHarness = ReturnType<typeof createFinalizerHarness>;
 
-import { closedSessionPersistenceService } from './closed-session-persistence.service';
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-  getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
-}));
-
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: { findById: vi.fn() },
-  workspaceNotificationService: {
-    listPendingForDelivery: vi.fn(),
-    markDelivered: vi.fn(),
-  },
-}));
-
-describe('SessionWorkflowFinalizer', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('hydrates durable lifecycle rows before persisting a closed transcript', async () => {
-    const domain = new SessionDomainService();
-    const hydrateProviderHistory = vi.fn(() => {
-      domain.replaceTranscript('session-1', [
-        {
-          id: 'provider-user-1',
-          source: 'user',
-          text: 'Original provider conversation',
-          timestamp: '2026-07-30T12:00:00.000Z',
-          order: 0,
-        },
-      ]);
-      return Promise.resolve();
-    });
-    const lifecycleEventService = new SessionLifecycleEventService({
-      store: {
-        upsert: vi.fn(),
-        findBySessionId: vi.fn(async () => [
-          {
-            id: 'event-1',
-            workspaceId: 'workspace-1',
-            sessionId: 'session-1',
-            kind: 'TURN_INTERRUPTED',
-            reason: 'PROMPT_TIMEOUT',
-            message: 'Turn stopped: reached the 4-hour limit.',
-            dedupeKey: 'prompt-timeout',
-            createdAt: new Date('2026-07-30T12:22:23.353Z'),
-          },
-        ]),
-      } as never,
-      sessionDomainService: domain,
-    });
-    const hydrateLifecycleEvents = vi.spyOn(lifecycleEventService, 'hydrate');
-    domain.clearSession('session-1');
-    const repository = {
-      getSessionById: vi.fn(async () => ({
-        id: 'session-1',
-        workspaceId: 'workspace-1',
-        name: 'Chat',
-        workflow: 'user',
-        provider: 'CLAUDE',
-        model: 'claude-sonnet',
-        createdAt: new Date('2026-07-30T12:00:00.000Z'),
-      })),
-    };
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
-      id: 'workspace-1',
-      worktreePath: '/tmp/worktree',
-    } as never);
-    const service = new SessionLifecycleService(
-      unsafeCoerce({
-        repository,
-        contextService: {},
-        acpEnvironment: {},
-        promptBuilder: {},
-        runtimeManager: {},
-        sessionDomainService: domain,
-        sessionPermissionService: {},
-        sessionConfigService: {},
-        acpEventProcessor: {},
-        promptTurnCompletionService: {},
-        retryService: {},
-        sendSessionMessage: vi.fn(),
-        lifecycleEventService,
-        hydrateProviderHistory,
-      })
-    );
-
-    await service.persistClosedSession('session-1');
-
-    expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'session-1',
-        messages: expect.arrayContaining([
-          expect.objectContaining({ id: 'provider-user-1' }),
-          expect.objectContaining({ id: 'session-lifecycle:event-1' }),
-        ]),
-      })
-    );
-    expect(hydrateProviderHistory).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({ provider: 'CLAUDE' })
-    );
-    expect(hydrateProviderHistory.mock.invocationCallOrder[0]).toBeLessThan(
-      hydrateLifecycleEvents.mock.invocationCallOrder[0]!
-    );
-  });
-
-  it('repeats closed-session finalization with the same durable transcript', async () => {
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
-      id: 'workspace-1',
-      worktreePath: '/tmp/worktree',
-    } as never);
-    const transcript = [
+function createFinalizerHarness(options?: {
+  session?: AgentSessionRecord | null;
+  workspace?: ReturnType<typeof createLifecycleTestWorkspace> | null;
+  running?: boolean;
+  viewerCount?: number;
+}) {
+  const session = options?.session === undefined ? createLifecycleTestSession() : options.session;
+  const workspace =
+    options?.workspace === undefined ? createLifecycleTestWorkspace() : options.workspace;
+  const repository = {
+    getSessionById: vi.fn(async () => session),
+    deleteSession: vi.fn(async () => createLifecycleTestSession()),
+    recoverStaleRunningSessions: vi.fn(async () => 2),
+  };
+  const workspaceLookup = {
+    findById: vi.fn(async () => workspace),
+  };
+  const domain = {
+    getTranscriptSnapshot: vi.fn(() => [
       {
         id: 'user-1',
         source: 'user' as const,
@@ -138,21 +35,258 @@ describe('SessionWorkflowFinalizer', () => {
         timestamp: '2026-07-30T12:00:00.000Z',
         order: 0,
       },
-    ];
-    const harness = createLifecycleHarness({ transcript });
+    ]),
+    clearSession: vi.fn(),
+  };
+  const persistence = {
+    persistClosedSession: vi.fn<(input: PersistClosedSessionInput) => Promise<void>>(
+      async () => undefined
+    ),
+  };
+  const lifecycleEvents = {
+    hydrate: vi.fn(async () => undefined),
+  };
+  const hydrateProviderHistory = vi.fn(async () => undefined);
+  const runtime = {
+    isSessionRunning: vi.fn(() => options?.running ?? false),
+    isStopInProgress: vi.fn(() => false),
+  };
+  const viewerCount = vi.fn(() => options?.viewerCount ?? 0);
+  const workspaceBridge = {
+    markSessionRunning: vi.fn(() => 0),
+    markSessionIdle: vi.fn(),
+    recordRatchetSessionEnd: vi.fn(async () => undefined),
+    resetPRDiscoveryBackoff: vi.fn(async () => true),
+  };
+  const autoIterationExit = {
+    onAutoIterationSessionExit: vi.fn(),
+  };
+  const finalizer = new SessionWorkflowFinalizer({
+    repository,
+    workspaceLookup,
+    sessionDomainService: domain,
+    closedSessionPersistenceService: persistence,
+    lifecycleEventService: lifecycleEvents,
+    hydrateProviderHistory,
+    runtimeManager: runtime,
+    countViewers: viewerCount,
+  });
+  finalizer.configure({ workspace: workspaceBridge, autoIterationExit });
 
-    await harness.service.persistClosedSession('session-1');
-    await harness.service.persistClosedSession('session-1');
+  return {
+    finalizer,
+    repository,
+    workspaceLookup,
+    domain,
+    persistence,
+    lifecycleEvents,
+    hydrateProviderHistory,
+    runtime,
+    viewerCount,
+    workspaceBridge,
+    autoIterationExit,
+    session,
+  };
+}
 
-    expect(harness.lifecycleEventService.hydrate).toHaveBeenCalledTimes(2);
-    expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledTimes(2);
-    expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ sessionId: 'session-1', messages: transcript })
+describe('SessionWorkflowFinalizer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hydrates provider and lifecycle history before persisting a closed transcript', async () => {
+    const harness = createFinalizerHarness();
+
+    await harness.finalizer.persistClosedSession('session-1');
+
+    expect(harness.hydrateProviderHistory).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        id: 'session-1',
+        workspace: { worktreePath: '/tmp/workspace' },
+      })
     );
-    expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ sessionId: 'session-1', messages: transcript })
+    expect(harness.hydrateProviderHistory.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.lifecycleEvents.hydrate.mock.invocationCallOrder[0]!
     );
+    expect(harness.lifecycleEvents.hydrate.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.persistence.persistClosedSession.mock.invocationCallOrder[0]!
+    );
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        worktreePath: '/tmp/workspace',
+        messages: [
+          expect.objectContaining({
+            id: 'user-1',
+            text: 'Keep this transcript durable.',
+          }),
+        ],
+      })
+    );
+  });
+
+  it.each([
+    ['missing session', { session: null }],
+    ['missing worktree', { workspace: createLifecycleTestWorkspace({ worktreePath: null }) }],
+  ] as const)('skips closed persistence for a %s', async (_caseName, options) => {
+    const harness = createFinalizerHarness(options);
+
+    await harness.finalizer.persistClosedSession('session-1');
+
+    expect(harness.hydrateProviderHistory).not.toHaveBeenCalled();
+    expect(harness.lifecycleEvents.hydrate).not.toHaveBeenCalled();
+    expect(harness.persistence.persistClosedSession).not.toHaveBeenCalled();
+  });
+
+  it('settles a deliberate ratchet stop as completed before removing its transient session', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+
+    await harness.finalizer.finalizeDeliberateStop({
+      session: harness.session,
+      sessionId: 'session-1',
+      cleanupTransientRatchetSession: true,
+    });
+
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1',
+      'COMPLETED'
+    );
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
+    expect(harness.repository.deleteSession).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('keeps deliberate stop cleanup best effort when transient persistence or deletion fails', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+    harness.persistence.persistClosedSession.mockRejectedValueOnce(new Error('disk unavailable'));
+
+    await expect(
+      harness.finalizer.finalizeDeliberateStop({
+        session: harness.session,
+        sessionId: 'session-1',
+        cleanupTransientRatchetSession: true,
+      })
+    ).resolves.toBeUndefined();
+    expect(harness.repository.deleteSession).not.toHaveBeenCalled();
+
+    harness.persistence.persistClosedSession.mockResolvedValueOnce(undefined);
+    harness.repository.deleteSession.mockRejectedValueOnce(new Error('already deleted'));
+    await expect(
+      harness.finalizer.finalizeDeliberateStop({
+        session: harness.session,
+        sessionId: 'session-1',
+        cleanupTransientRatchetSession: true,
+      })
+    ).resolves.toBeUndefined();
+    expect(harness.domain.clearSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [0, false, 'COMPLETED'],
+    [1, false, 'DIED'],
+    [null, true, 'COMPLETED'],
+  ] as const)('settles ratchet runtime exit code %s as %s', async (exitCode, deliberate, outcome) => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode,
+      deliberate,
+    });
+
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1',
+      outcome
+    );
+  });
+
+  it('notifies auto-iteration only for unmanaged runtime exits', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'auto-iteration' }),
+    });
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 0,
+      deliberate: true,
+    });
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 1,
+      deliberate: false,
+    });
+
+    expect(harness.autoIterationExit.onAutoIterationSessionExit).toHaveBeenCalledOnce();
+    expect(harness.autoIterationExit.onAutoIterationSessionExit).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1'
+    );
+  });
+
+  it('schedules PR discovery after a runtime exit without delaying finalization', async () => {
+    const harness = createFinalizerHarness();
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 0,
+      deliberate: false,
+    });
+
+    expect(harness.workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');
+  });
+
+  it('retains inactive in-memory session state while a viewer is attached', () => {
+    const harness = createFinalizerHarness({ viewerCount: 1 });
+
+    harness.finalizer.clearInactiveSession('session-1', 'manual_stop');
+
+    expect(harness.domain.clearSession).not.toHaveBeenCalled();
+  });
+
+  it('repeats finalization safely through conditional persistence and bridge operations', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 0,
+      deliberate: false,
+    });
+    harness.repository.deleteSession.mockRejectedValueOnce(new Error('already deleted'));
+    await expect(
+      harness.finalizer.finalizeRuntimeExit({
+        session: harness.session!,
+        sessionId: 'session-1',
+        exitCode: 0,
+        deliberate: false,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledTimes(2);
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledTimes(2);
+    expect(harness.domain.clearSession).toHaveBeenCalledOnce();
+  });
+
+  it('delegates stale-running recovery to the session repository', async () => {
+    const harness: FinalizerHarness = createFinalizerHarness();
+
+    await expect(harness.finalizer.recoverStaleRunningSessions()).resolves.toBe(2);
+
+    expect(harness.repository.recoverStaleRunningSessions).toHaveBeenCalledOnce();
   });
 });

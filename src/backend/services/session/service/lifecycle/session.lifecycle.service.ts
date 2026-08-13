@@ -10,7 +10,6 @@ import type {
 } from '@/backend/services/session/service/acp';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import type {
-  RatchetSessionEndOutcome,
   SessionAutoIterationExitBridge,
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
@@ -47,8 +46,8 @@ import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import { maybeDiscoverPROnSessionEnd as maybeDiscoverPROnSessionEndHelper } from './session-pr-discovery.service';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
+import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
 
@@ -131,13 +130,13 @@ export class SessionLifecycleService {
   private readonly lifecycleEventService: SessionLifecycleEventService;
   private readonly lifecycleGate: SessionLifecycleGate;
   private readonly hydrateProviderHistory: HydrateProviderHistory;
+  private readonly workflowFinalizer: SessionWorkflowFinalizer;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
   private readonly onSessionExit?: (sessionId: string) => void;
   private readonly clientCreationOperations = new Map<string, Set<Promise<AcpProcessHandle>>>();
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
-  private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
   private notificationDeliveryService: SessionNotificationDeliveryService | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
@@ -158,6 +157,16 @@ export class SessionLifecycleService {
     this.lifecycleGate = options.lifecycleGate;
     this.hydrateProviderHistory =
       options.hydrateProviderHistory ?? (async (): Promise<void> => undefined);
+    this.workflowFinalizer = new SessionWorkflowFinalizer({
+      repository: this.repository,
+      workspaceLookup: workspaceDataService,
+      sessionDomainService: this.sessionDomainService,
+      closedSessionPersistenceService,
+      lifecycleEventService: this.lifecycleEventService,
+      hydrateProviderHistory: this.hydrateProviderHistory,
+      runtimeManager: this.runtimeManager,
+      countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
+    });
     this.sendSessionMessage = options.sendSessionMessage;
     this.onBeforeStopSession = options.onBeforeStopSession;
     this.onSessionExit = options.onSessionExit;
@@ -170,7 +179,10 @@ export class SessionLifecycleService {
   }): void {
     this.workspaceBridge = bridges.workspace;
     this.messageQueueBridge = bridges.messageQueue ?? null;
-    this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
+    this.workflowFinalizer.configure({
+      workspace: bridges.workspace,
+      autoIterationExit: bridges.autoIterationExit,
+    });
   }
 
   configureNotificationDelivery(service: SessionNotificationDeliveryService): void {
@@ -332,15 +344,15 @@ export class SessionLifecycleService {
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
           options?.cleanupTransientRatchetSession ?? true;
-        await this.cleanupTransientRatchetOnStop(
+        await this.workflowFinalizer.finalizeDeliberateStop({
           session,
           sessionId,
-          shouldCleanupTransientRatchetSession
-        );
+          cleanupTransientRatchetSession: shouldCleanupTransientRatchetSession,
+        });
       }
 
       try {
-        this.clearSessionStoreIfInactive(sessionId, 'manual_stop');
+        this.workflowFinalizer.clearInactiveSession(sessionId, 'manual_stop');
         logger.info('ACP session stopped', {
           sessionId,
           ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
@@ -798,9 +810,12 @@ export class SessionLifecycleService {
         wasDeliberateStop,
         runtimeIncarnationId
       );
-      await this.recordRatchetSessionEndOnExit(session.workspaceId, sessionId, exitCode);
-      void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
-      await this.cleanupExitedWorkflow(session, sessionId, wasDeliberateStop);
+      await this.workflowFinalizer.finalizeRuntimeExit({
+        session,
+        sessionId,
+        exitCode,
+        deliberate: wasDeliberateStop,
+      });
     } catch (error) {
       logger.warn('Failed to process ACP session exit', {
         sessionId,
@@ -808,7 +823,7 @@ export class SessionLifecycleService {
       });
     } finally {
       try {
-        this.clearSessionStoreIfInactive(sessionId, 'runtime_exit');
+        this.workflowFinalizer.clearInactiveSession(sessionId, 'runtime_exit');
       } finally {
         acpTraceLogger.closeSession(sessionId);
       }
@@ -837,27 +852,6 @@ export class SessionLifecycleService {
           : `Session stopped: agent process exited unexpectedly (code ${exitCode}).`,
       dedupeKey: `process-exit:${runtimeIncarnationId}:${exitCode ?? 'signal'}`,
     });
-  }
-
-  private async cleanupExitedWorkflow(
-    session: AgentSessionRecord,
-    sessionId: string,
-    wasDeliberateStop: boolean
-  ): Promise<void> {
-    if (session.workflow === 'ratchet') {
-      await this.persistRatchetTranscript(sessionId);
-      await this.repository.deleteSession(sessionId);
-      this.sessionDomainService.clearSession(sessionId);
-      logger.debug('Deleted transient ratchet ACP session', { sessionId });
-    }
-
-    if (
-      session.workflow === 'auto-iteration' &&
-      this.autoIterationExitBridge &&
-      !wasDeliberateStop
-    ) {
-      this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sessionId);
-    }
   }
 
   private async createAcpClient(
@@ -1108,130 +1102,8 @@ export class SessionLifecycleService {
     }
   }
 
-  private async cleanupTransientRatchetOnStop(
-    session: AgentSessionRecord | null,
-    sessionId: string,
-    shouldCleanupTransientRatchetSession: boolean
-  ): Promise<void> {
-    if (session?.workflow !== 'ratchet') {
-      return;
-    }
-
-    try {
-      // A stop is deliberate, so the dispatch settles as COMPLETED (no retry).
-      // No-ops if another session-end path already settled the record.
-      await this.recordRatchetSessionEnd(session.workspaceId, sessionId, 'COMPLETED');
-    } catch (error) {
-      logger.warn('Failed settling ratchet dispatch record during stop', {
-        sessionId,
-        workspaceId: session.workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    if (!shouldCleanupTransientRatchetSession) {
-      return;
-    }
-
-    try {
-      await this.persistRatchetTranscript(sessionId);
-      await this.repository.deleteSession(sessionId);
-      this.sessionDomainService.clearSession(sessionId);
-      logger.debug('Deleted transient ratchet session after stop', { sessionId });
-    } catch (error) {
-      logger.warn('Failed persisting or deleting transient ratchet session during stop', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async recordRatchetSessionEnd(
-    workspaceId: string,
-    sessionId: string,
-    outcome: RatchetSessionEndOutcome
-  ): Promise<void> {
-    if (!this.workspaceBridge) {
-      return;
-    }
-
-    await this.workspaceBridge.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
-  }
-
-  /**
-   * Deliberate stops (isStopInProgress) and clean exits settle the ratchet
-   * dispatch as COMPLETED; unexpected exits settle it as DIED so the ratchet
-   * can re-dispatch (bounded) for the same PR state.
-   */
-  private async recordRatchetSessionEndOnExit(
-    workspaceId: string,
-    sessionId: string,
-    exitCode: number | null
-  ): Promise<void> {
-    const outcome =
-      exitCode === 0 || this.runtimeManager.isStopInProgress(sessionId) ? 'COMPLETED' : 'DIED';
-    await this.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
-  }
-
-  private async maybeDiscoverPROnSessionEnd(workspaceId: string): Promise<void> {
-    if (!this.workspaceBridge) {
-      return;
-    }
-    await maybeDiscoverPROnSessionEndHelper(workspaceId, logger, this.workspaceBridge);
-  }
-
-  private clearSessionStoreIfInactive(
-    sessionId: string,
-    reason: 'manual_stop' | 'runtime_exit'
-  ): void {
-    if (
-      this.runtimeManager.isSessionRunning(sessionId) ||
-      sessionEventBus.countViewers(sessionId) > 0
-    ) {
-      return;
-    }
-    this.sessionDomainService.clearSession(sessionId, { preserveRejections: true });
-    logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
-  }
-
-  async persistClosedSession(sessionId: string): Promise<void> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      logger.warn('Cannot persist closed session: session not found', { sessionId });
-      return;
-    }
-
-    const workspace = await workspaceDataService.findById(session.workspaceId);
-    if (!workspace?.worktreePath) {
-      logger.warn('Cannot persist closed session: no worktree path', {
-        sessionId,
-        workspaceId: session.workspaceId,
-      });
-      return;
-    }
-
-    await this.hydrateProviderHistory(sessionId, {
-      ...session,
-      workspace: { worktreePath: workspace.worktreePath },
-    });
-    await this.lifecycleEventService.hydrate(sessionId);
-
-    const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
-    await closedSessionPersistenceService.persistClosedSession({
-      sessionId,
-      workspaceId: session.workspaceId,
-      worktreePath: workspace.worktreePath,
-      name: session.name,
-      workflow: session.workflow,
-      provider: session.provider,
-      model: session.model,
-      startedAt: session.createdAt,
-      messages: transcript,
-    });
-  }
-
-  private async persistRatchetTranscript(sessionId: string): Promise<void> {
-    await this.persistClosedSession(sessionId);
+  persistClosedSession(sessionId: string): Promise<void> {
+    return this.workflowFinalizer.persistClosedSession(sessionId);
   }
 
   private async getOrCreateAcpSessionClient(
