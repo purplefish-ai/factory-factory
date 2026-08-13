@@ -86,7 +86,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     const panelRef = createRef<TerminalPanelRef>();
-    let terminalState: TerminalTabState | null = null;
+    const terminalStates: TerminalTabState[] = [];
 
     flushSync(() => {
       root.render(
@@ -94,7 +94,7 @@ describe('TerminalPanel', () => {
           workspaceId: 'workspace-1',
           ref: panelRef,
           onStateChange: (state) => {
-            terminalState = state;
+            terminalStates.push(state);
           },
         })
       );
@@ -105,7 +105,7 @@ describe('TerminalPanel', () => {
     });
 
     expect(mocks.create).not.toHaveBeenCalled();
-    expect(terminalState?.tabs).toEqual([]);
+    expect(terminalStates.at(-1)?.tabs).toEqual([]);
 
     flushSync(() => {
       mocks.options?.onTerminalList?.([
@@ -113,7 +113,7 @@ describe('TerminalPanel', () => {
       ]);
     });
 
-    expect(terminalState?.tabs).toEqual([
+    expect(terminalStates.at(-1)?.tabs).toEqual([
       { id: 'tab-terminal-existing', label: 'Terminal 1' },
     ]);
 
