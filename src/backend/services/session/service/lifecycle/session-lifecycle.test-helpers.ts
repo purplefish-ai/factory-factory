@@ -6,6 +6,7 @@ import type {
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus, WorkspaceStatus } from '@/shared/core';
@@ -17,6 +18,7 @@ import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
+import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -81,6 +83,7 @@ export type LifecycleHarness = {
     | 'emitDelta'
     | 'hasQueuedMessage'
     | 'enqueue'
+    | 'removeQueuedMessage'
     | 'getTranscriptSnapshot'
     | 'getHistoryHydrationSource'
     | 'setRuntimeSnapshot'
@@ -315,6 +318,7 @@ export function createLifecycleHarness(
     emitDelta: vi.fn(),
     hasQueuedMessage: vi.fn((_sessionId: string, _messageId: string) => false),
     enqueue: vi.fn<SessionDomainService['enqueue']>(overrides.enqueue ?? (() => ({ position: 0 }))),
+    removeQueuedMessage: vi.fn(() => true),
     getTranscriptSnapshot: vi.fn(() => overrides.transcript ?? []),
     getHistoryHydrationSource: vi.fn(() => overrides.historyHydrationSource ?? 'none'),
     setRuntimeSnapshot: vi.fn(),
@@ -334,6 +338,7 @@ export function createLifecycleHarness(
     | 'emitDelta'
     | 'hasQueuedMessage'
     | 'enqueue'
+    | 'removeQueuedMessage'
     | 'getTranscriptSnapshot'
     | 'getHistoryHydrationSource'
     | 'setRuntimeSnapshot'
@@ -426,6 +431,14 @@ export function createLifecycleHarness(
       sendSessionMessage,
       lifecycleEventService,
       lifecycleGate,
+    })
+  );
+  service.configureNotificationDelivery(
+    new SessionNotificationDeliveryService({
+      notificationPort: workspaceNotificationService,
+      queuePort: sessionDomainService,
+      transcriptPort: sessionDomainService,
+      deltaPort: sessionDomainService,
     })
   );
   service.configure({ workspace: workspaceBridge, messageQueue: messageQueueBridge });

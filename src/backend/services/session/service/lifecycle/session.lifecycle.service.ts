@@ -21,8 +21,8 @@ import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-t
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
-import type { AgentMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { workspaceDataService } from '@/backend/services/workspace';
+import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import {
   SessionLifecycleEventKind,
@@ -34,11 +34,6 @@ import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import {
-  buildWorkspaceNotificationMessageText,
-  WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX,
-  workspaceNotificationMessageId,
-} from '@/shared/workspace-notifications';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import type {
@@ -53,6 +48,7 @@ import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
+import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import { maybeDiscoverPROnSessionEnd as maybeDiscoverPROnSessionEndHelper } from './session-pr-discovery.service';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
@@ -152,6 +148,7 @@ export class SessionLifecycleService {
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
+  private notificationDeliveryService: SessionNotificationDeliveryService | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
     this.repository = options.repository;
@@ -180,6 +177,19 @@ export class SessionLifecycleService {
     this.workspaceBridge = bridges.workspace;
     this.messageQueueBridge = bridges.messageQueue ?? null;
     this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
+  }
+
+  configureNotificationDelivery(service: SessionNotificationDeliveryService): void {
+    this.notificationDeliveryService = service;
+  }
+
+  private get notificationDelivery(): SessionNotificationDeliveryService {
+    if (!this.notificationDeliveryService) {
+      throw new Error(
+        'SessionLifecycleService not configured: notification delivery service missing'
+      );
+    }
+    return this.notificationDeliveryService;
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
@@ -978,11 +988,16 @@ export class SessionLifecycleService {
     // Queue pending notifications only after the ACP client starts successfully.
     // Callers decide when dispatch is safe for their startup flow.
     this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-    const dispatchableNotificationCount = await this.deliverPendingChildNotifications(
-      sessionId,
-      sessionContext.workspaceId,
-      stopGeneration
-    );
+    const { dispatchableCount: dispatchableNotificationCount } =
+      await this.notificationDelivery.recoverPending({
+        sessionId,
+        workspaceId: sessionContext.workspaceId,
+        assertAllowed: () =>
+          this.lifecycleGate.assertStartupAllowed({
+            sessionId,
+            generation: stopGeneration,
+          }),
+      });
 
     return { handle, dispatchableNotificationCount };
   }
@@ -1418,192 +1433,6 @@ export class SessionLifecycleService {
       workspaceStatus: workspace.status,
       parentWorkspaceId: workspace.parentWorkspaceId,
     };
-  }
-
-  private async deliverPendingChildNotifications(
-    sessionId: string,
-    workspaceId: string,
-    stopGeneration = this.lifecycleGate.getGeneration(sessionId)
-  ): Promise<number> {
-    try {
-      const pending = await workspaceNotificationService.listPendingForDelivery(workspaceId);
-      this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-      if (pending.length === 0) {
-        return 0;
-      }
-      if (!this.messageQueueBridge) {
-        logger.warn(
-          'Cannot deliver pending workspace notifications: message queue bridge missing',
-          {
-            sessionId,
-            workspaceId,
-            count: pending.length,
-          }
-        );
-        return 0;
-      }
-      let enqueuedCount = 0;
-      let dispatchableCount = 0;
-      const consumedContentMatchIds = new Set<string>();
-      for (const notification of pending) {
-        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-        const timestamp = notification.createdAt.toISOString();
-        const messageId = workspaceNotificationMessageId(notification.id);
-        if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
-          dispatchableCount += 1;
-          continue;
-        }
-        let claudeMessage: AgentMessage;
-        if (notification.direction === 'PARENT_TO_CHILD') {
-          claudeMessage = {
-            type: 'parent_workspace_update' as const,
-            parentWorkspaceId: notification.sourceWorkspaceId,
-            parentWorkspaceName: notification.sourceWorkspaceName,
-            parentProjectName: notification.sourceProjectName,
-            text: notification.message,
-            timestamp,
-          };
-        } else {
-          claudeMessage = {
-            type: 'child_workspace_update' as const,
-            childWorkspaceId: notification.sourceWorkspaceId,
-            childWorkspaceName: notification.sourceWorkspaceName,
-            childProjectName: notification.sourceProjectName,
-            text: notification.message,
-            timestamp,
-          };
-        }
-        const enqueueText = buildWorkspaceNotificationMessageText(notification);
-        const alreadyDelivered = await this.markDeliveredIfTranscriptMatch(
-          sessionId,
-          workspaceId,
-          notification.id,
-          messageId,
-          enqueueText,
-          consumedContentMatchIds
-        );
-        this.lifecycleGate.assertStartupAllowed({ sessionId, generation: stopGeneration });
-        if (alreadyDelivered) {
-          continue;
-        }
-        if (this.sessionDomainService.hasQueuedMessage(sessionId, messageId)) {
-          dispatchableCount += 1;
-          continue;
-        }
-
-        const enqueueResult = this.sessionDomainService.enqueue(sessionId, {
-          id: messageId,
-          text: enqueueText,
-          timestamp,
-          settings: {
-            selectedModel: null,
-            reasoningEffort: null,
-            thinkingEnabled: false,
-            planModeEnabled: false,
-          },
-        } satisfies QueuedMessage);
-        if ('error' in enqueueResult) {
-          logger.warn('Failed to enqueue pending workspace notification', {
-            sessionId,
-            workspaceId,
-            notificationId: notification.id,
-            error: enqueueResult.error,
-          });
-          continue;
-        }
-        enqueuedCount += 1;
-        dispatchableCount += 1;
-        const order = this.sessionDomainService.appendClaudeEvent(sessionId, claudeMessage);
-        this.sessionDomainService.emitDelta(sessionId, {
-          type: 'agent_message',
-          data: claudeMessage,
-          order,
-        } as SessionDeltaEvent & { order: number });
-      }
-      logger.info('Queued pending workspace notifications', {
-        sessionId,
-        workspaceId,
-        count: enqueuedCount,
-        dispatchableCount,
-      });
-      return dispatchableCount;
-    } catch (error) {
-      logger.warn('Failed to deliver pending workspace notifications', {
-        sessionId,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return 0;
-    }
-  }
-
-  private findCommittedQueuedWorkspaceNotificationMessage(
-    sessionId: string,
-    messageId: string,
-    messageText: string,
-    consumedContentMatchIds: ReadonlySet<string>
-  ): { id: string; matchedByContent: boolean } | undefined {
-    const userEntries = this.sessionDomainService
-      .getTranscriptSnapshot(sessionId)
-      .filter((entry) => entry.source === 'user');
-    const exactIdMatch = userEntries.find((entry) => entry.id === messageId);
-    if (exactIdMatch) {
-      return { id: exactIdMatch.id, matchedByContent: false };
-    }
-    if (this.sessionDomainService.getHistoryHydrationSource(sessionId) !== 'jsonl') {
-      return undefined;
-    }
-    const contentMatch = userEntries.find(
-      (entry) =>
-        !entry.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX) &&
-        entry.text === messageText &&
-        !consumedContentMatchIds.has(entry.id)
-    );
-    if (contentMatch) {
-      return { id: contentMatch.id, matchedByContent: true };
-    }
-    return undefined;
-  }
-
-  private async markDeliveredIfTranscriptMatch(
-    sessionId: string,
-    workspaceId: string,
-    notificationId: string,
-    messageId: string,
-    messageText: string,
-    consumedContentMatchIds: Set<string>
-  ): Promise<boolean> {
-    const committedMessage = this.findCommittedQueuedWorkspaceNotificationMessage(
-      sessionId,
-      messageId,
-      messageText,
-      consumedContentMatchIds
-    );
-    if (!committedMessage) {
-      return false;
-    }
-    if (committedMessage.matchedByContent) {
-      consumedContentMatchIds.add(committedMessage.id);
-    }
-    await this.markDeliveredAfterTranscriptMatch(sessionId, workspaceId, notificationId);
-    return true;
-  }
-
-  private async markDeliveredAfterTranscriptMatch(
-    sessionId: string,
-    workspaceId: string,
-    notificationId: string
-  ): Promise<void> {
-    try {
-      await workspaceNotificationService.markDelivered([notificationId]);
-    } catch (error) {
-      logger.warn('Failed to mark already-transcripted workspace notification delivered', {
-        sessionId,
-        workspaceId,
-        notificationId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 
   private async resolveParentWorkspaceContext(workspace: {
