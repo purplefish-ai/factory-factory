@@ -13,6 +13,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionConfigService } from './session.config.service';
 import { SessionLifecycleService } from './session.lifecycle.service';
+import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
@@ -112,7 +113,7 @@ export type LifecycleHarness = {
     | 'buildAcpChatBarCapabilities'
   >;
   lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record' | 'hydrate'>;
-  notificationService: { cancelPendingRequests: Mock<(sessionId: string) => void> };
+  notificationService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
   workspaceBridge: MockedPick<
     SessionLifecycleWorkspaceBridge,
     'markSessionRunning' | 'markSessionIdle' | 'recordRatchetSessionEnd' | 'resetPRDiscoveryBackoff'
@@ -202,7 +203,8 @@ export function createLifecycleHarness(
   const session = createLifecycleTestSession({
     provider: overrides.provider ?? 'CLAUDE',
     providerSessionId: overrides.providerSessionId ?? null,
-    providerProcessPid: overrides.providerProcessPid ?? 4242,
+    providerProcessPid:
+      overrides.providerProcessPid === undefined ? 4242 : overrides.providerProcessPid,
     ...overrides.session,
   });
   const workspace = createLifecycleTestWorkspace({
@@ -362,8 +364,8 @@ export function createLifecycleHarness(
     hydrate: vi.fn(async () => undefined),
   } satisfies Pick<SessionLifecycleEventService, 'record' | 'hydrate'>;
   const notificationService = {
-    cancelPendingRequests: vi.fn(),
-  };
+    cancelPendingRequests: vi.fn<SessionPermissionService['cancelPendingRequests']>(),
+  } satisfies Pick<SessionPermissionService, 'cancelPendingRequests'>;
   const workspaceBridge = {
     markSessionRunning: vi.fn(() => 0),
     markSessionIdle: vi.fn(),

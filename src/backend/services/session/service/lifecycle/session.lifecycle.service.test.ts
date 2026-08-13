@@ -52,6 +52,10 @@ it('creates isolated lifecycle harness state', () => {
   expect(first.runtimeManager.getClient).not.toBe(second.runtimeManager.getClient);
 });
 
+it('preserves an explicit null lifecycle provider process ID', () =>
+  expect(
+    createLifecycleHarness({ providerProcessPid: null }).session.providerProcessPid
+  ).toBeNull());
 async function deliverPendingChildNotifications(
   service: SessionLifecycleService,
   sessionId = 'session-1',
@@ -65,11 +69,7 @@ async function deliverPendingChildNotifications(
 }
 
 function getStopGenerations(service: SessionLifecycleService): Map<string, number> {
-  return (
-    service as unknown as {
-      stopGenerations: Map<string, number>;
-    }
-  ).stopGenerations;
+  return (service as unknown as { stopGenerations: Map<string, number> }).stopGenerations;
 }
 
 function getRuntimeHandlers(service: SessionLifecycleService) {
