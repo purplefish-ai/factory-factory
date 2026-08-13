@@ -655,7 +655,9 @@ describe('workspaceCoreRouter', () => {
   });
 
   it('cleans up on delete and delegates summary procedures', async () => {
+    const worktreeCleanup = createDeferredPromise<void>();
     mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
+    mockCleanupWorkspaceWorktree.mockReturnValue(worktreeCleanup.promise);
     mockWorkspaceQueryService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
     mockWorkspaceQueryService.getFactoryConfig.mockResolvedValue({ scripts: { run: 'pnpm dev' } });
     mockWorkspaceQueryService.syncPRStatus.mockResolvedValue({ synced: true });
@@ -665,7 +667,11 @@ describe('workspaceCoreRouter', () => {
     const { caller, sessionLifecycleService, runScriptService, terminalService, eventCollector } =
       createCaller();
 
-    await expect(caller.delete({ id: 'w1' })).resolves.toEqual({ deleted: true });
+    const deletion = caller.delete({ id: 'w1' });
+    await vi.waitFor(() => expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledOnce());
+    expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+    worktreeCleanup.resolve();
+    await expect(deletion).resolves.toEqual({ deleted: true });
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
       'w1',
       expect.objectContaining({
@@ -683,17 +689,11 @@ describe('workspaceCoreRouter', () => {
       {}
     );
     const evictionCallOrder = runScriptService.evictWorkspaceBuffers.mock.invocationCallOrder[0];
-    const worktreeCleanupCallOrder = mockCleanupWorkspaceWorktree.mock.invocationCallOrder[0];
     const deleteCallOrder = mockWorkspaceDataService.delete.mock.invocationCallOrder[0];
-    if (
-      evictionCallOrder === undefined ||
-      worktreeCleanupCallOrder === undefined ||
-      deleteCallOrder === undefined
-    ) {
-      throw new Error('Expected buffer eviction, worktree cleanup, and workspace deletion');
+    if (evictionCallOrder === undefined || deleteCallOrder === undefined) {
+      throw new Error('Expected buffer eviction and workspace deletion');
     }
     expect(evictionCallOrder).toBeLessThan(deleteCallOrder);
-    expect(worktreeCleanupCallOrder).toBeLessThan(deleteCallOrder);
     expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('w1');
     expect(eventCollector.removeWorkspace).toHaveBeenCalledWith('w1');
 
@@ -782,3 +782,13 @@ describe('workspaceCoreRouter', () => {
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
 });
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
