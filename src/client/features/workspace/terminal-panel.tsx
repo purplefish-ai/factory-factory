@@ -275,6 +275,10 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     // Create new terminal tab - extracted so it can be exposed via ref
     const handleNewTab = useCallback(() => {
+      if (!connected) {
+        return;
+      }
+
       const requestId = createTerminalRequestId();
       const id = `tab-${requestId}`;
 
@@ -290,7 +294,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       ]);
       setActiveTabId(id);
       create(requestId);
-    }, [create, setActiveTabId, updateTabs]);
+    }, [connected, create, setActiveTabId, updateTabs]);
 
     // Expose createNewTerminal to parent via ref
     useImperativeHandle(

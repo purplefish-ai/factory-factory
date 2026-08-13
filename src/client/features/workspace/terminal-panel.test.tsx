@@ -5,7 +5,11 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
-import { TerminalPanel, type TerminalPanelRef } from './terminal-panel';
+import {
+  TerminalPanel,
+  type TerminalPanelRef,
+  type TerminalTabState,
+} from './terminal-panel';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -76,6 +80,46 @@ describe('TerminalPanel', () => {
     document.body.innerHTML = '';
   });
 
+  it('ignores disconnected create requests without blocking terminal restoration', () => {
+    mocks.connected = false;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+    let terminalState: TerminalTabState | null = null;
+
+    flushSync(() => {
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          ref: panelRef,
+          onStateChange: (state) => {
+            terminalState = state;
+          },
+        })
+      );
+    });
+
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(terminalState?.tabs).toEqual([]);
+
+    flushSync(() => {
+      mocks.options?.onTerminalList?.([
+        { id: 'terminal-existing', createdAt: '2026-08-13T00:00:00.000Z' },
+      ]);
+    });
+
+    expect(terminalState?.tabs).toEqual([
+      { id: 'tab-terminal-existing', label: 'Terminal 1' },
+    ]);
+
+    root.unmount();
+  });
+
   it('keeps the server active terminal aligned with the selected pending tab', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -139,7 +183,6 @@ describe('TerminalPanel', () => {
   });
 
   it('shows a disconnected notice while the transport is reconnecting', async () => {
-    mocks.connected = false;
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -150,6 +193,15 @@ describe('TerminalPanel', () => {
     });
     flushSync(() => {
       panelRef.current?.createNewTerminal();
+    });
+    const requestId = mocks.create.mock.calls[0]?.[0] as string;
+    flushSync(() => {
+      mocks.options?.onCreated?.('terminal-a', requestId);
+    });
+
+    mocks.connected = false;
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
     });
     await vi.dynamicImportSettled();
 
@@ -166,13 +218,9 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
-    });
-    flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1' }));
     });
     await vi.dynamicImportSettled();
 
