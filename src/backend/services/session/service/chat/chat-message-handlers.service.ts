@@ -21,7 +21,6 @@ import {
 } from '@/backend/services/session/service/lifecycle/session-core-services';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
-import { workspaceNotificationService } from '@/backend/services/workspace';
 import {
   type AgentContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -30,7 +29,6 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
-import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
@@ -42,6 +40,7 @@ import {
 } from './chat-message-handlers/registry';
 import type {
   ChatMessageHandlerLifecycleGate,
+  ChatMessageHandlerNotificationDeliveryService,
   ChatMessageHandlerStartupService,
 } from './chat-message-handlers/types';
 
@@ -104,18 +103,9 @@ export class ChatMessageHandlerService {
   /** Retry timers for provider-side busy responses that are not reflected locally yet. */
   private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnInProgressRetryAttempts = new Map<string, number>();
-  /**
-   * Workspace notifications currently being delivered, keyed by notification id
-   * with the owning session as value. Claimed synchronously before dispatch so a
-   * concurrent dispatch of a duplicate copy (persist-first delivery can enqueue
-   * the same notification on two sessions) drops instead of double-sending.
-   * Released once the send settles, or when the owning session is reset — a hung
-   * send must not block redelivery of a still-pending notification forever.
-   */
-  private inFlightNotificationDeliveries = new Map<string, string>();
-
   private lifecycleGate: ChatMessageHandlerLifecycleGate | null = null;
   private startupService: ChatMessageHandlerStartupService | null = null;
+  private notificationDeliveryService: ChatMessageHandlerNotificationDeliveryService | null = null;
   private handlerRegistry: ChatMessageHandlerRegistry | null = null;
   /** Per-session override to allow dispatch under manual_resume policy. */
   private manualDispatchResumed = new Map<string, boolean>();
@@ -133,9 +123,11 @@ export class ChatMessageHandlerService {
   configureLifecycle(dependencies: {
     gate: ChatMessageHandlerLifecycleGate;
     startup: ChatMessageHandlerStartupService;
+    notificationDelivery: ChatMessageHandlerNotificationDeliveryService;
   }): void {
     this.lifecycleGate = dependencies.gate;
     this.startupService = dependencies.startup;
+    this.notificationDeliveryService = dependencies.notificationDelivery;
     this.handlerRegistry = createChatMessageHandlerRegistry({
       acpRuntimeManager,
       sessionConfigService,
@@ -160,11 +152,16 @@ export class ChatMessageHandlerService {
   private get lifecycle(): {
     gate: ChatMessageHandlerLifecycleGate;
     startup: ChatMessageHandlerStartupService;
+    notificationDelivery: ChatMessageHandlerNotificationDeliveryService;
   } {
-    if (!(this.lifecycleGate && this.startupService)) {
+    if (!(this.lifecycleGate && this.startupService && this.notificationDeliveryService)) {
       throw new Error('ChatMessageHandlerService not configured: lifecycle gate/startup missing');
     }
-    return { gate: this.lifecycleGate, startup: this.startupService };
+    return {
+      gate: this.lifecycleGate,
+      startup: this.startupService,
+      notificationDelivery: this.notificationDeliveryService,
+    };
   }
 
   setManualDispatchResume(sessionId: string, resumed: boolean): void {
@@ -178,11 +175,7 @@ export class ChatMessageHandlerService {
   resetDispatchState(sessionId: string): void {
     this.dispatchInProgress.delete(sessionId);
     this.clearTurnInProgressRetry(sessionId);
-    for (const [notificationId, ownerSessionId] of this.inFlightNotificationDeliveries) {
-      if (ownerSessionId === sessionId) {
-        this.inFlightNotificationDeliveries.delete(notificationId);
-      }
-    }
+    this.notificationDeliveryService?.resetSession(sessionId);
   }
 
   private isDispatchInProgress(dbSessionId: string): boolean {
@@ -265,60 +258,29 @@ export class ChatMessageHandlerService {
       return 'done';
     }
 
-    const claim = this.claimNotificationForDispatch(dbSessionId, peeked.id);
+    const claim = this.lifecycle.notificationDelivery.claimForDispatch(dbSessionId, peeked.id);
     if (claim.status === 'duplicate') {
-      return this.dropDuplicateNotification(dbSessionId, peeked.id) ? 'continue' : 'done';
+      return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
+        ? 'continue'
+        : 'done';
     }
 
     try {
       if (
         claim.status === 'claimed' &&
-        (await this.isNotificationRowDelivered(claim.notificationId))
+        (await this.lifecycle.notificationDelivery.isAlreadyDelivered(claim.notificationId))
       ) {
-        return this.dropDuplicateNotification(dbSessionId, peeked.id) ? 'continue' : 'done';
+        return this.lifecycle.notificationDelivery.removeDuplicateFromQueue(dbSessionId, peeked.id)
+          ? 'continue'
+          : 'done';
       }
       await this.dispatchPeekedMessage(dbSessionId, peeked, stopGeneration);
       return 'done';
     } finally {
       if (claim.status === 'claimed') {
-        this.releaseNotificationClaim(dbSessionId, claim.notificationId);
+        claim.release();
       }
     }
-  }
-
-  /**
-   * Release a notification claim, but only if this session still owns it — a
-   * reset may have transferred the claim to another session's retry while a
-   * stale dispatch was hung in send.
-   */
-  private releaseNotificationClaim(dbSessionId: string, notificationId: string): void {
-    if (this.inFlightNotificationDeliveries.get(notificationId) === dbSessionId) {
-      this.inFlightNotificationDeliveries.delete(notificationId);
-    }
-  }
-
-  /**
-   * Persist-first delivery can enqueue the same workspace notification twice
-   * (a live send racing session-startup delivery). Claim the notification
-   * synchronously — no awaits between the duplicate checks and the claim —
-   * so concurrent dispatches on other sessions see it as in flight.
-   */
-  private claimNotificationForDispatch(
-    dbSessionId: string,
-    messageId: string
-  ): { status: 'none' } | { status: 'duplicate' } | { status: 'claimed'; notificationId: string } {
-    const notificationId = this.getWorkspaceNotificationId(messageId);
-    if (!notificationId) {
-      return { status: 'none' };
-    }
-    if (
-      this.inFlightNotificationDeliveries.has(notificationId) ||
-      this.isNotificationCommittedToTranscript(dbSessionId, messageId)
-    ) {
-      return { status: 'duplicate' };
-    }
-    this.inFlightNotificationDeliveries.set(notificationId, dbSessionId);
-    return { status: 'claimed', notificationId };
   }
 
   private async dispatchPeekedMessage(
@@ -636,7 +598,7 @@ export class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
         userMessage: dispatchedUserMessage,
       });
-      await this.markWorkspaceNotificationDeliveredIfNeeded(msg.id);
+      await this.lifecycle.notificationDelivery.acknowledgeSuccessfulDispatch(msg.id);
     } catch (error) {
       if (isCompactCommand && compactionClient) {
         compactionClient.endCompaction();
@@ -696,7 +658,7 @@ export class ChatMessageHandlerService {
   }
 
   private failStoppedUserMessage(dbSessionId: string, msg: QueuedMessage): void {
-    if (this.getWorkspaceNotificationId(msg.id)) {
+    if (this.lifecycle.notificationDelivery.isNotificationMessage(msg.id)) {
       sessionDomainService.emitSessionSnapshot(dbSessionId);
       return;
     }
@@ -705,64 +667,6 @@ export class ChatMessageHandlerService {
       msg,
       'Message was not sent because the session stopped during dispatch.'
     );
-  }
-
-  private getWorkspaceNotificationId(messageId: string): string | null {
-    if (!messageId.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)) {
-      return null;
-    }
-    const notificationId = messageId.slice(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX.length);
-    return notificationId || null;
-  }
-
-  private isNotificationCommittedToTranscript(dbSessionId: string, messageId: string): boolean {
-    return sessionDomainService
-      .getTranscriptSnapshot(dbSessionId)
-      .some((entry) => entry.source === 'user' && entry.id === messageId);
-  }
-
-  private async isNotificationRowDelivered(notificationId: string): Promise<boolean> {
-    try {
-      const notification = await workspaceNotificationService.findForDelivery(notificationId);
-      return notification?.deliveredAt != null;
-    } catch (error) {
-      logger.warn('[Chat WS] Failed to check workspace notification delivery state', {
-        notificationId,
-        error: this.formatDispatchError(error),
-      });
-      // Fail open: a duplicate delivery is better than a lost message.
-      return false;
-    }
-  }
-
-  /**
-   * Remove a duplicate workspace notification from the queue, emitting a queue
-   * snapshot so the UI does not keep a phantom queued card. Returns false if the
-   * message was unexpectedly absent (caller should stop looping).
-   */
-  private dropDuplicateNotification(dbSessionId: string, messageId: string): boolean {
-    logger.info('[Chat WS] Dropping already-delivered workspace notification', {
-      dbSessionId,
-      messageId,
-    });
-    return sessionDomainService.removeQueuedMessage(dbSessionId, messageId);
-  }
-
-  private async markWorkspaceNotificationDeliveredIfNeeded(messageId: string): Promise<void> {
-    const notificationId = this.getWorkspaceNotificationId(messageId);
-    if (!notificationId) {
-      return;
-    }
-
-    try {
-      await workspaceNotificationService.markDelivered([notificationId]);
-    } catch (error) {
-      logger.warn('[Chat WS] Failed to mark workspace notification delivered', {
-        messageId,
-        notificationId,
-        error: this.formatDispatchError(error),
-      });
-    }
   }
 
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {

@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
+import type { NotificationDispatchClaim } from '../../lifecycle/session-notification-delivery.service';
 
 export interface ChatMessageHandlerRuntimeManager {
   isSessionRunning: (sessionId: string) => boolean;
@@ -44,6 +45,15 @@ export interface ChatMessageHandlerLifecycleGate {
 export interface ChatMessageHandlerStartupService {
   getSessionClient(sessionId: string): unknown | undefined;
   getOrCreateSessionClient(sessionId: string, options: ChatClientStartOptions): Promise<unknown>;
+}
+
+export interface ChatMessageHandlerNotificationDeliveryService {
+  claimForDispatch(sessionId: string, messageId: string): NotificationDispatchClaim;
+  isAlreadyDelivered(notificationId: string): Promise<boolean>;
+  acknowledgeSuccessfulDispatch(messageId: string): Promise<void>;
+  removeDuplicateFromQueue(sessionId: string, messageId: string): boolean;
+  resetSession(sessionId: string): void;
+  isNotificationMessage(messageId: string): boolean;
 }
 
 export interface HandlerContext<T extends ChatMessageInput = ChatMessageInput> {
