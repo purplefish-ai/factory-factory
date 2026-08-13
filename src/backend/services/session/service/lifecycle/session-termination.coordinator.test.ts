@@ -3,6 +3,7 @@ import { sessionEventBus } from '@/backend/services/session/service/session-even
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { SessionLifecycleGate } from './session-lifecycle-gate';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -165,6 +166,9 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
           run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
         },
         lifecycleEventService,
+        lifecycleGate: new SessionLifecycleGate({
+          isRuntimeStopInProgress: runtimeManager.isStopInProgress,
+        }),
         hydrateProviderHistory: vi.fn(),
         sendSessionMessage: vi.fn(),
       })
@@ -230,6 +234,9 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
             record: vi.fn(() => new Promise(() => undefined)),
             hydrate: vi.fn(async () => undefined),
           },
+          lifecycleGate: new SessionLifecycleGate({
+            isRuntimeStopInProgress: runtimeManager.isStopInProgress,
+          }),
           hydrateProviderHistory: vi.fn(),
           sendSessionMessage: vi.fn(),
         })

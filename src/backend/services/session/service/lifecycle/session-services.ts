@@ -12,6 +12,7 @@ import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 import { SessionService } from './session.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
 
 const logger = createLogger('session');
@@ -72,16 +73,17 @@ export type SessionPromptService = Pick<
   'configure' | 'sendAcpMessage' | 'sendSessionMessage'
 >;
 
+const sessionLifecycleGate = new SessionLifecycleGate({
+  isRuntimeStopInProgress: (sessionId) => acpRuntimeManager.isStopInProgress(sessionId),
+});
+
 const sessionPromptCoordinator = new SessionService({
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   lifecycleEventService: sessionLifecycleEventService,
-  getStopGeneration: (sessionId): number => sessionLifecycleService.getStopGeneration(sessionId),
-  isStopGenerationCurrent: (sessionId, stopGeneration): boolean =>
-    sessionLifecycleService.isStopGenerationCurrent(sessionId, stopGeneration),
-  isSessionStopping: (sessionId): boolean => sessionLifecycleService.isSessionStopping(sessionId),
+  lifecycleGate: sessionLifecycleGate,
 });
 
 export const sessionService: SessionPromptService = sessionPromptCoordinator;
@@ -97,6 +99,7 @@ export const sessionLifecycleService: SessionLifecycleService = new SessionLifec
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   retryService: sessionRetryService,
   lifecycleEventService: sessionLifecycleEventService,
+  lifecycleGate: sessionLifecycleGate,
   hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   sendSessionMessage: (sessionId, content): Promise<void> =>
     sessionService.sendSessionMessage(sessionId, content),

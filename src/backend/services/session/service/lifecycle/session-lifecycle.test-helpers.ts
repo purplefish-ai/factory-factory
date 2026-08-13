@@ -16,6 +16,7 @@ import { SessionLifecycleService } from './session.lifecycle.service';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
+import { SessionLifecycleGate } from './session-lifecycle-gate';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -399,6 +400,9 @@ export function createLifecycleHarness(
     ),
   } satisfies SessionLifecycleMessageQueueBridge;
   const sendSessionMessage = vi.fn(async () => undefined);
+  const lifecycleGate = new SessionLifecycleGate({
+    isRuntimeStopInProgress: () => runtimeManager.isStopInProgress(),
+  });
   const service = new SessionLifecycleService(
     unsafeCoerce({
       repository,
@@ -421,6 +425,7 @@ export function createLifecycleHarness(
       },
       sendSessionMessage,
       lifecycleEventService,
+      lifecycleGate,
     })
   );
   service.configure({ workspace: workspaceBridge, messageQueue: messageQueueBridge });
