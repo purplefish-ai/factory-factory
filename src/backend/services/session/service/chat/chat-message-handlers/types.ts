@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
+import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
-import type { NotificationDispatchClaim } from '../../lifecycle/session-notification-delivery.service';
 
 export interface ChatMessageHandlerRuntimeManager {
   isSessionRunning: (sessionId: string) => boolean;

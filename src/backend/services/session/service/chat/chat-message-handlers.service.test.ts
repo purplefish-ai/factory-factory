@@ -453,29 +453,38 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     );
   });
 
-  it('does not call markIdle when process has already stopped during dispatch failure', async () => {
+  it('removes failed notification transcript evidence when the process has stopped', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
       endCompaction: vi.fn(),
       setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
     };
+    const notificationMessage = {
+      ...queuedMessage,
+      id: 'workspace-notification-notif-parent',
+    };
     mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
     mockSessionService.sendSessionMessage.mockRejectedValue(new Error('send failed'));
     mockSessionService.isSessionRunning.mockReturnValueOnce(true).mockReturnValue(false);
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
-    expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
-      emitSnapshot: false,
-    });
+    expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith(
+      's1',
+      'workspace-notification-notif-parent',
+      { emitSnapshot: false }
+    );
+    expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markError).not.toHaveBeenCalled();
     expect(mockSessionDomainService.failMessage).toHaveBeenCalledWith(
       's1',
-      queuedMessage,
+      notificationMessage,
       'send failed'
     );
   });
