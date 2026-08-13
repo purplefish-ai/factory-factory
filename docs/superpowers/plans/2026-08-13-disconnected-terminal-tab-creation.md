@@ -38,7 +38,7 @@ it('ignores disconnected create requests without blocking terminal restoration',
   document.body.appendChild(container);
   const root = createRoot(container);
   const panelRef = createRef<TerminalPanelRef>();
-  let terminalState: TerminalTabState | null = null;
+  const terminalStates: TerminalTabState[] = [];
 
   flushSync(() => {
     root.render(
@@ -46,7 +46,7 @@ it('ignores disconnected create requests without blocking terminal restoration',
         workspaceId: 'workspace-1',
         ref: panelRef,
         onStateChange: (state) => {
-          terminalState = state;
+          terminalStates.push(state);
         },
       })
     );
@@ -57,7 +57,7 @@ it('ignores disconnected create requests without blocking terminal restoration',
   });
 
   expect(mocks.create).not.toHaveBeenCalled();
-  expect(terminalState?.tabs).toEqual([]);
+  expect(terminalStates.at(-1)?.tabs).toEqual([]);
 
   flushSync(() => {
     mocks.options?.onTerminalList?.([
@@ -65,7 +65,7 @@ it('ignores disconnected create requests without blocking terminal restoration',
     ]);
   });
 
-  expect(terminalState?.tabs).toEqual([
+  expect(terminalStates.at(-1)?.tabs).toEqual([
     { id: 'tab-terminal-existing', label: 'Terminal 1' },
   ]);
 
