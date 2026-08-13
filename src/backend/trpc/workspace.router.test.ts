@@ -668,9 +668,12 @@ describe('workspaceCoreRouter', () => {
       createCaller();
 
     const deletion = caller.delete({ id: 'w1' });
-    await vi.waitFor(() => expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledOnce());
-    expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
-    worktreeCleanup.resolve();
+    try {
+      await vi.waitFor(() => expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledOnce());
+      expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
+    } finally {
+      worktreeCleanup.resolve();
+    }
     await expect(deletion).resolves.toEqual({ deleted: true });
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
       'w1',
