@@ -89,10 +89,18 @@ export class SessionWorkflowFinalizer {
     const { session, sessionId, exitCode, deliberate } = input;
     if (session.workflow === 'ratchet') {
       const outcome: RatchetSessionEndOutcome =
-        exitCode === 0 || this.dependencies.runtimeManager.isStopInProgress(sessionId)
+        exitCode === 0 || deliberate || this.dependencies.runtimeManager.isStopInProgress(sessionId)
           ? 'COMPLETED'
           : 'DIED';
-      await this.recordRatchetSessionEnd(session.workspaceId, sessionId, outcome);
+      try {
+        await this.recordRatchetSessionEnd(session.workspaceId, sessionId, outcome);
+      } catch (error) {
+        logger.warn('Failed settling ratchet dispatch record during runtime exit', {
+          sessionId,
+          workspaceId: session.workspaceId,
+          error: toErrorMessage(error),
+        });
+      }
     }
 
     if (this.workspaceBridge) {

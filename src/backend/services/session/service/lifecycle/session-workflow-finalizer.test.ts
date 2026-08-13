@@ -231,6 +231,47 @@ describe('SessionWorkflowFinalizer', () => {
     );
   });
 
+  it('settles a lifecycle-deliberate ratchet exit as completed after the runtime stop clears', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+
+    await harness.finalizer.finalizeRuntimeExit({
+      session: harness.session!,
+      sessionId: 'session-1',
+      exitCode: 1,
+      deliberate: true,
+    });
+
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1',
+      'COMPLETED'
+    );
+  });
+
+  it('cleans up a transient ratchet session when runtime-exit settlement fails', async () => {
+    const harness = createFinalizerHarness({
+      session: createLifecycleTestSession({ workflow: 'ratchet' }),
+    });
+    harness.workspaceBridge.recordRatchetSessionEnd.mockRejectedValueOnce(
+      new Error('settlement unavailable')
+    );
+
+    await expect(
+      harness.finalizer.finalizeRuntimeExit({
+        session: harness.session!,
+        sessionId: 'session-1',
+        exitCode: 1,
+        deliberate: false,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
+    expect(harness.repository.deleteSession).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1');
+  });
+
   it('notifies auto-iteration only for unmanaged runtime exits', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'auto-iteration' }),
