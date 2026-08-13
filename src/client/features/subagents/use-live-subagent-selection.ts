@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { trpc } from '@/client/lib/trpc';
 import type { SubagentSelection } from './types';
@@ -46,12 +46,52 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
   const query = trpc.session.listSubagents.useInfiniteQuery(
     { sessionId: selection.parentSessionId, cursor: null, limit: 100 },
     {
-      refetchOnMount: 'always',
+      refetchOnMount: false,
       getNextPageParam: (lastPage) =>
         lastPage.supported ? (lastPage.nextCursor ?? undefined) : undefined,
     }
   );
   const mountDataUpdatedAt = useRef(query.dataUpdatedAt);
+  const hadCachedDataAtMount = useRef(query.data !== undefined);
+  const [successfulRefetchDataUpdatedAt, setSuccessfulRefetchDataUpdatedAt] = useState(0);
+
+  const refreshed = query.data?.pages
+    .filter((page) => page.supported)
+    .flatMap((page) => page.subagents)
+    .find((candidate) => candidate.id === selection.subagent.id);
+  const candidateWasCachedAtMount = useRef(refreshed !== undefined);
+  const querySnapshot = useRef({
+    dataUpdatedAt: query.dataUpdatedAt,
+    loadedPageCount: query.data?.pages.length ?? 0,
+  });
+  querySnapshot.current = {
+    dataUpdatedAt: query.dataUpdatedAt,
+    loadedPageCount: query.data?.pages.length ?? 0,
+  };
+
+  const refetch = useCallback(async () => {
+    const before = querySnapshot.current;
+    const result = await query.refetch();
+    const resultPageCount = result.data?.pages.length ?? 0;
+    // The query cache is shared, so a next-page fetch can advance dataUpdatedAt
+    // without refreshing a candidate that was already cached.
+    if (
+      result.isSuccess &&
+      result.dataUpdatedAt > before.dataUpdatedAt &&
+      resultPageCount === before.loadedPageCount
+    ) {
+      setSuccessfulRefetchDataUpdatedAt((current) => Math.max(current, result.dataUpdatedAt));
+    }
+  }, [query.refetch]);
+
+  const startedMountRefetch = useRef(false);
+  useEffect(() => {
+    if (startedMountRefetch.current || !hadCachedDataAtMount.current) {
+      return;
+    }
+    startedMountRefetch.current = true;
+    void refetch();
+  }, [refetch]);
 
   useEffect(
     () =>
@@ -60,19 +100,16 @@ export function useLiveSubagentSelection(selection: SubagentSelection): Subagent
           detail.sessionId === selection.parentSessionId &&
           detail.subagentId === selection.subagent.id
         ) {
-          void query.refetch();
+          void refetch();
         }
       }),
-    [query.refetch, selection.parentSessionId, selection.subagent.id]
+    [refetch, selection.parentSessionId, selection.subagent.id]
   );
 
-  const refreshed = query.data?.pages
-    .filter((page) => page.supported)
-    .flatMap((page) => page.subagents)
-    .find((candidate) => candidate.id === selection.subagent.id);
   const loadedPageCount = query.data?.pages.length ?? 0;
-  const hasSuccessfulPostMountFetch =
-    query.isFetchedAfterMount && query.dataUpdatedAt > mountDataUpdatedAt.current;
+  const hasSuccessfulPostMountFetch = candidateWasCachedAtMount.current
+    ? successfulRefetchDataUpdatedAt > mountDataUpdatedAt.current
+    : query.isFetchedAfterMount && query.dataUpdatedAt > mountDataUpdatedAt.current;
 
   useEffect(() => {
     if (
