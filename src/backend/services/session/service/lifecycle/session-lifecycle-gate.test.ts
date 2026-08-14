@@ -80,6 +80,21 @@ describe('SessionLifecycleGate', () => {
     gate.releaseShutdown('session-1');
   });
 
+  it('distinguishes explicit stop reservations from runtime and shutdown stops', () => {
+    const gate = new SessionLifecycleGate({
+      isRuntimeStopInProgress: (sessionId) => sessionId === 'runtime-stop',
+    });
+    const explicitStop = gate.reserveStop('explicit-stop');
+    gate.reserveShutdown(['shutdown-stop']);
+
+    expect(gate.isStopReserved('explicit-stop')).toBe(true);
+    expect(gate.isStopReserved('runtime-stop')).toBe(false);
+    expect(gate.isStopReserved('shutdown-stop')).toBe(false);
+
+    explicitStop?.release();
+    gate.releaseShutdown('shutdown-stop');
+  });
+
   it('allows lifecycle cleanup to join a runtime-owned stop operation', () => {
     const gate = new SessionLifecycleGate({
       isRuntimeStopInProgress: (sessionId) => sessionId === 'session-1',

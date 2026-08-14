@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import {
   ClientSideConnection,
@@ -25,9 +26,14 @@ import {
   subagentReadResultSchema,
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
-import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
-import type { AcpRuntimeEvent } from './acp-runtime-events';
+import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
+import type {
+  AcpRuntimeEvent,
+  AcpRuntimeEventHandlers,
+  AcpRuntimePurpose,
+} from './acp-runtime-events';
+import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
   createAcpSpawnError,
   hasUsableWorkingDir,
@@ -37,11 +43,11 @@ import {
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
-import { createNormalizedAcpReadableStream, normalizeUnknownError } from './acp-stream-normalizer';
+import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 import type { AcpClientOptions, PermissionPreset } from './types';
 
 const logger = createLogger('acp-runtime-manager');
-
+type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose; installed: boolean };
 /** Thrown when an ACP prompt exceeds the caller-specified timeout. */
 export class PromptTimeoutError extends Error {
   constructor(
@@ -59,7 +65,6 @@ export class AcpBrowseSessionUnavailableError extends Error {
     this.name = 'AcpBrowseSessionUnavailableError';
   }
 }
-
 type AcpSubagentBrowseErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_FOUND'
@@ -82,22 +87,8 @@ export type AcpRuntimeCreatedCallback = (
   client: AcpProcessHandle,
   context: { workspaceId: string; workingDir: string }
 ) => void;
-
-export type AcpRuntimeEventHandlers = {
-  onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
-  onExit?: (sessionId: string, code: number | null) => Promise<void>;
-  onError?: (sessionId: string, error: Error) => Promise<void> | void;
-  onAcpEvent?: (sessionId: string, event: AcpRuntimeEvent) => void;
-  onAcpLog?: (sessionId: string, payload: Record<string, unknown>) => void;
-  /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
-  permissionBridge?: AcpPermissionBridge;
-};
-
 function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
-  if (preset === 'YOLO' || preset === 'RELAXED') {
-    return 'all';
-  }
-  return 'none';
+  return preset === 'YOLO' || preset === 'RELAXED' ? 'all' : 'none';
 }
 
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
@@ -254,6 +245,8 @@ export class AcpRuntimeManager {
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
+  private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
+  private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private readonly shutdownWaiters = new Set<() => void>();
@@ -379,16 +372,16 @@ export class AcpRuntimeManager {
     return handle;
   }
 
-  getOrCreateClient(
+  async getOrCreateClient(
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
+    guardExit(sessionId);
     if (this.isShuttingDown) {
-      return Promise.reject(this.createShutdownError(sessionId));
+      throw this.createShutdownError(sessionId);
     }
-
     let lock = this.creationLocks.get(sessionId);
     if (!lock) {
       lock = pLimit(1);
@@ -399,15 +392,19 @@ export class AcpRuntimeManager {
     const currentCount = this.lockRefCounts.get(sessionId) ?? 0;
     this.lockRefCounts.set(sessionId, currentCount + 1);
 
-    return lock(async () => {
+    return await lock(async () => {
       try {
+        const exitHandling = this.exitHandling.get(sessionId);
+        if (exitHandling) {
+          await exitHandling;
+        }
         if (this.isShuttingDown) {
           throw this.createShutdownError(sessionId);
         }
 
         const existing = this.getBrowseClient(sessionId);
         if (existing?.isRunning()) {
-          this.promoteForActiveUse(sessionId, options);
+          this.promoteForActiveUse(sessionId, options, existing);
           logger.debug('Returning existing running ACP client', { sessionId });
           return existing;
         }
@@ -416,13 +413,17 @@ export class AcpRuntimeManager {
         if (pending) {
           logger.debug('Waiting for pending ACP client creation', { sessionId });
           const handle = await pending;
-          this.promoteForActiveUse(sessionId, options);
+          this.promoteForActiveUse(sessionId, options, handle);
           return handle;
         }
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
         this.recordClientPurpose(sessionId, options);
-        const createPromise = this.createClient(sessionId, options, handlers, context);
+        const createPromise = this.createClient(sessionId, options, handlers, context, {
+          incarnationId: randomUUID(),
+          purpose: options.purpose ?? 'active',
+          installed: false,
+        });
         this.pendingCreation.set(sessionId, createPromise);
 
         try {
@@ -444,9 +445,17 @@ export class AcpRuntimeManager {
     });
   }
 
-  private promoteForActiveUse(sessionId: string, options: AcpClientOptions): void {
+  private promoteForActiveUse(
+    sessionId: string,
+    options: AcpClientOptions,
+    handle: AcpProcessHandle
+  ): void {
     if (options.purpose !== 'browse') {
       this.browseOnlySessions.delete(sessionId);
+      const metadata = this.runtimeMetadata.get(handle.child);
+      if (metadata) {
+        metadata.purpose = 'active';
+      }
     }
   }
 
@@ -468,7 +477,8 @@ export class AcpRuntimeManager {
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
-    context: { workspaceId: string; workingDir: string }
+    context: { workspaceId: string; workingDir: string },
+    runtime: AcpRuntimeMetadata
   ): Promise<AcpProcessHandle> {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
@@ -519,6 +529,7 @@ export class AcpRuntimeManager {
       env: spawnEnv,
       detached: false,
     });
+    this.runtimeMetadata.set(child, runtime);
 
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
@@ -530,7 +541,13 @@ export class AcpRuntimeManager {
     });
     const startupErrorSettled = startupError.catch(() => undefined);
 
-    this.wireChildErrorHandler(child, sessionId, handlers);
+    wireAcpRuntimeErrorHandler(
+      child,
+      sessionId,
+      handlers,
+      runtime,
+      () => !runtime.installed || this.sessions.get(sessionId)?.child === child
+    );
     await this.abortClientCreationIfStopping(child, sessionId);
 
     // Wire stderr to session log hook
@@ -664,9 +681,10 @@ export class AcpRuntimeManager {
 
     // Store in sessions map
     this.sessions.set(sessionId, handle);
+    runtime.installed = true;
     this.recordClientPurpose(sessionId, options);
 
-    this.wireChildExitHandler(sessionId, child, handlers);
+    this.wireChildExitHandler(sessionId, child, handlers, runtime);
     await this.notifyClientCreated(sessionId, handle, context, handlers);
 
     return handle;
@@ -822,60 +840,63 @@ export class AcpRuntimeManager {
   private wireChildExitHandler(
     sessionId: string,
     child: ChildProcess,
-    handlers: AcpRuntimeEventHandlers
+    handlers: AcpRuntimeEventHandlers,
+    runtime: AcpRuntimeMetadata
   ): void {
-    child.on('exit', async (code) => {
-      if (this.shouldSkipChildExitHandler(sessionId, child, code)) {
+    child.once('exit', (code) => {
+      const classification = this.classifyChildExit(sessionId, child, code);
+      if (classification === null) {
         this.clearBrowseOnlyPurposeIfUnused(sessionId);
         return;
       }
 
       this.pendingCreation.delete(sessionId);
 
-      try {
-        if (handlers.onExit) {
-          await handlers.onExit(sessionId, code);
+      const [exitHandling, releaseExitHandling] = createExitFence();
+      this.exitHandling.set(sessionId, exitHandling);
+      void dispatchAcpRuntimeExit(handlers, {
+        sessionId,
+        exitCode: code,
+        incarnationId: runtime.incarnationId,
+        ...classification,
+      }).finally(() => {
+        if (this.exitHandling.get(sessionId) === exitHandling) {
+          this.exitHandling.delete(sessionId);
         }
-      } catch (error) {
-        logger.warn('Failed to handle ACP exit event', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
         this.clearBrowseOnlyPurposeIfUnused(sessionId);
-      }
+        releaseExitHandling();
+      });
     });
   }
 
-  private shouldSkipChildExitHandler(
+  private classifyChildExit(
     sessionId: string,
     child: ChildProcess,
     code: number | null
-  ): boolean {
+  ): { managed: boolean; purpose: AcpRuntimePurpose } | null {
+    const purpose = this.runtimeMetadata.get(child)?.purpose ?? 'active';
     const current = this.sessions.get(sessionId);
-    const isCurrentProcess = current?.child === child;
-    const isManagedStopProcess = this.managedStopChildren.delete(child);
+    const managed =
+      this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
 
-    if (isCurrentProcess) {
+    if (current?.child === child) {
       this.sessions.delete(sessionId);
-    }
-
-    if (current && !isCurrentProcess) {
+    } else if (current) {
       logger.debug('Skipping exit handler - stale ACP process exited', {
         sessionId,
         code,
         pid: child.pid,
         currentPid: current.getPid(),
       });
-      return true;
+      return null;
     }
 
-    if (isManagedStopProcess || this.stoppingInProgress.has(sessionId)) {
+    if (!current && managed) {
       logger.debug('Skipping exit handler - managed stop process exited', { sessionId, code });
-      return true;
+      return null;
     }
 
-    return false;
+    return { managed, purpose };
   }
 
   private async notifyClientCreated(
@@ -899,34 +920,6 @@ export class AcpRuntimeManager {
         });
       }
     }
-  }
-
-  private wireChildErrorHandler(
-    child: ChildProcess,
-    sessionId: string,
-    handlers: AcpRuntimeEventHandlers
-  ): void {
-    // Route runtime child-process errors through the domain error callback.
-    child.on('error', async (error) => {
-      const normalizedError = normalizeUnknownError(error);
-      if (handlers.onError) {
-        try {
-          await handlers.onError(sessionId, normalizedError);
-        } catch (handlerError) {
-          logger.warn('Failed to handle ACP error event', {
-            sessionId,
-            originalError: normalizedError.message,
-            handlerError:
-              handlerError instanceof Error ? handlerError.message : String(handlerError),
-          });
-        }
-      } else {
-        logger.warn('ACP child process error (no handler provided)', {
-          sessionId,
-          error: normalizedError.message,
-        });
-      }
-    });
   }
 
   private async createOrResumeSession(

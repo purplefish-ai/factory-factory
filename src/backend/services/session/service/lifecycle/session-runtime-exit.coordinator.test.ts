@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
-import { createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
+import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+
+const { mockTraceLog, mockTraceClose } = vi.hoisted(() => ({
+  mockTraceLog: vi.fn(),
+  mockTraceClose: vi.fn(),
+}));
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -13,157 +18,343 @@ vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
 }));
 
-vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: { findById: vi.fn() },
-  workspaceNotificationService: {
-    listPendingForDelivery: vi.fn(),
-    markDelivered: vi.fn(),
+vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
+  acpTraceLogger: {
+    log: mockTraceLog,
+    closeSession: mockTraceClose,
   },
 }));
 
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: {
-    get: vi.fn(async () => ({
-      defaultWorkspacePermissions: 'STRICT',
-      ratchetPermissions: 'YOLO',
-    })),
-  },
-}));
+type ExitCoordinatorHarness = ReturnType<typeof createExitCoordinatorHarness>;
 
-async function captureRuntimeExit(
-  harness: ReturnType<typeof createLifecycleHarness>
-): Promise<(sessionId: string, exitCode: number | null) => Promise<void>> {
-  await harness.service.getOrCreateSessionClient('session-1');
-  const onExit = harness.runtimeManager.getOrCreateClient.mock.calls.at(-1)?.[2]?.onExit;
-  if (!onExit) {
-    throw new Error('Expected runtime exit callback');
-  }
-  return onExit;
+function createExitCoordinatorHarness(options?: {
+  browse?: boolean;
+  lifecycleStopping?: boolean;
+  explicitStopReserved?: boolean;
+}) {
+  const session = createLifecycleTestSession();
+  const repository = {
+    getSessionById: vi.fn(async () => session),
+    updateSession: vi.fn(async () => session),
+  };
+  const domain = {
+    markError: vi.fn(),
+    markProcessExit: vi.fn(),
+  };
+  const permission = {
+    cancelPendingRequests: vi.fn(),
+  };
+  const processorHandlers = {
+    onAcpEvent: vi.fn(),
+  };
+  const processor = {
+    createRuntimeEventHandler: vi.fn(() => processorHandlers),
+    clearSessionState: vi.fn(),
+    finalizeOrphanedToolCalls: vi.fn(),
+    clearPendingToolCalls: vi.fn(),
+    handleAcpLog: vi.fn(),
+  };
+  const promptCompletion = {
+    clearSession: vi.fn(),
+  };
+  const lifecycleEvents = {
+    record: vi.fn(async () => null),
+  };
+  const lifecycleGate = {
+    isSessionStopping: vi.fn(() => options?.lifecycleStopping ?? false),
+    isStopReserved: vi.fn(() => options?.explicitStopReserved ?? false),
+    releaseShutdown: vi.fn(),
+  };
+  const workflowFinalizer = {
+    finalizeRuntimeExit: vi.fn(async () => undefined),
+    clearInactiveSession: vi.fn(),
+  };
+  const onSessionExit = vi.fn();
+  const coordinator = new SessionRuntimeExitCoordinator({
+    repository,
+    sessionDomainService: domain,
+    sessionPermissionService: permission,
+    acpEventProcessor: processor,
+    promptTurnCompletionService: promptCompletion,
+    lifecycleEventService: lifecycleEvents,
+    lifecycleGate,
+    workflowFinalizer,
+    onSessionExit,
+  });
+  const purpose = options?.browse ? ('browse' as const) : ('active' as const);
+  const handlers = coordinator.createHandlers({
+    sessionId: 'session-1',
+    purpose,
+    persistProviderSessionId: !options?.browse,
+  });
+
+  return {
+    coordinator,
+    handlers,
+    repository,
+    domain,
+    permission,
+    processor,
+    processorHandlers,
+    promptCompletion,
+    lifecycleEvents,
+    lifecycleGate,
+    workflowFinalizer,
+    onSessionExit,
+    session,
+  };
+}
+
+function runtimeExit(
+  overrides: Partial<{
+    exitCode: number | null;
+    incarnationId: string;
+    purpose: 'active' | 'browse';
+    managed: boolean;
+  }> = {}
+) {
+  return {
+    sessionId: 'session-1',
+    exitCode: 1,
+    incarnationId: '11111111-1111-4111-8111-111111111111',
+    purpose: 'active' as const,
+    managed: false,
+    ...overrides,
+  };
 }
 
 describe('SessionRuntimeExitCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([]);
   });
 
-  it('records an unexpected process exit once with its runtime incarnation and exit code', async () => {
-    const harness = createLifecycleHarness();
-    const onExit = await captureRuntimeExit(harness);
+  it('creates ACP handlers and persists provider session identity for active runtimes', async () => {
+    const harness = createExitCoordinatorHarness();
 
-    await onExit('session-1', 1);
+    await harness.handlers.onSessionId?.('session-1', 'provider-session-9');
 
-    expect(harness.sessionDomainService.markProcessExit).toHaveBeenCalledWith('session-1', 1);
+    expect(harness.processor.createRuntimeEventHandler).toHaveBeenCalledWith('session-1');
+    expect(harness.handlers.onAcpEvent).toBe(harness.processorHandlers.onAcpEvent);
     expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
-      status: SessionStatus.FAILED,
+      providerSessionId: 'provider-session-9',
     });
-    expect(harness.lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'SESSION_STOPPED',
-        reason: 'UNEXPECTED_EXIT',
-        message: 'Session stopped: agent process exited unexpectedly (code 1).',
-        dedupeKey: expect.stringMatching(
-          /^process-exit:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:1$/
-        ),
-      })
-    );
-    expect(harness.sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
+    expect(mockTraceLog).toHaveBeenCalledWith('session-1', 'runtime_metadata', {
+      type: 'provider_session_id',
+      providerSessionId: 'provider-session-9',
     });
   });
 
-  it('records an unexpected process exit when the status update fails', async () => {
-    const harness = createLifecycleHarness();
-    const onExit = await captureRuntimeExit(harness);
+  it('omits provider session persistence for browse runtimes', () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+
+    expect(harness.handlers.onSessionId).toBeUndefined();
+  });
+
+  it('public handleExit cleans up a browse exit without finalizing the active session', async () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+
+    await harness.coordinator.handleExit(runtimeExit({ purpose: 'browse' }));
+
+    expect(harness.lifecycleGate.releaseShutdown).toHaveBeenCalledWith('session-1');
+    expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
+    expect(harness.repository.getSessionById).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
+  });
+
+  it('records runtime errors only for active runtimes', () => {
+    const active = createExitCoordinatorHarness();
+    const browse = createExitCoordinatorHarness({ browse: true });
+    const runtimeError = new Error('provider transport failed');
+
+    active.handlers.onError?.('session-1', runtimeError);
+    browse.handlers.onError?.('session-1', runtimeError);
+
+    expect(active.domain.markError).toHaveBeenCalledWith('session-1', 'provider transport failed');
+    expect(browse.domain.markError).not.toHaveBeenCalled();
+    expect(mockTraceLog).toHaveBeenCalledWith(
+      'session-1',
+      'runtime_error',
+      expect.objectContaining({ message: 'provider transport failed' })
+    );
+  });
+
+  it('uses typed runtime error purpose instead of handler creation purpose', () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+    const runtimeError = new Error('promoted runtime failed');
+
+    harness.handlers.onRuntimeError?.({
+      sessionId: 'session-1',
+      error: runtimeError,
+      incarnationId: '11111111-1111-4111-8111-111111111111',
+      purpose: 'active',
+    });
+
+    expect(harness.domain.markError).toHaveBeenCalledWith('session-1', 'promoted runtime failed');
+  });
+
+  it('records the process-exit snapshot and successful persisted status', async () => {
+    const harness = createExitCoordinatorHarness();
+
+    await harness.coordinator.handleExit(runtimeExit({ exitCode: 0 }));
+
+    expect(harness.domain.markProcessExit).toHaveBeenCalledWith('session-1', 0);
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.COMPLETED,
+    });
+  });
+
+  it('continues durable exit effects after the persisted status update fails', async () => {
+    const harness = createExitCoordinatorHarness();
     harness.repository.updateSession.mockRejectedValueOnce(new Error('database write failed'));
 
-    await onExit('session-1', 1);
+    await harness.coordinator.handleExit(runtimeExit());
 
-    expect(harness.lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'UNEXPECTED_EXIT',
-        dedupeKey: expect.stringMatching(/^process-exit:.+:1$/),
-      })
-    );
+    expect(harness.lifecycleEvents.record).toHaveBeenCalledOnce();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
   });
 
-  it('does not collapse repeated null-PID exits from separate runtime incarnations', async () => {
-    const harness = createLifecycleHarness({
-      providerProcessPid: null,
+  it('continues workflow finalization when unexpected-exit history fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.lifecycleEvents.record.mockRejectedValueOnce(new Error('history write failed'));
+
+    await harness.coordinator.handleExit(runtimeExit());
+
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [1, 'Session stopped: agent process exited unexpectedly (code 1).', '1'],
+    [null, 'Session stopped: agent process exited unexpectedly.', 'signal'],
+  ] as const)('records unmanaged exit code %s with an incarnation-scoped dedupe key', async (exitCode, message, dedupeSuffix) => {
+    const harness = createExitCoordinatorHarness();
+
+    await harness.coordinator.handleExit(runtimeExit({ exitCode }));
+
+    expect(harness.lifecycleEvents.record).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      kind: 'SESSION_STOPPED',
+      reason: 'UNEXPECTED_EXIT',
+      message,
+      dedupeKey: `process-exit:11111111-1111-4111-8111-111111111111:${dedupeSuffix}`,
+    });
+  });
+
+  it('preserves idle status when an explicit lifecycle stop owns the transition', async () => {
+    const harness = createExitCoordinatorHarness({
+      lifecycleStopping: true,
+      explicitStopReserved: true,
     });
 
-    const firstExit = await captureRuntimeExit(harness);
-    await firstExit('session-1', 1);
-    const secondExit = await captureRuntimeExit(harness);
-    await secondExit('session-1', 1);
+    await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
 
-    const dedupeKeys = harness.lifecycleEventService.record.mock.calls.map(
-      ([recordInput]) => recordInput.dedupeKey
-    );
-    expect(dedupeKeys).toHaveLength(2);
-    expect(new Set(dedupeKeys).size).toBe(2);
-    expect(dedupeKeys).toEqual([
-      expect.stringMatching(/^process-exit:.+:1$/),
-      expect.stringMatching(/^process-exit:.+:1$/),
-    ]);
-  });
-
-  it('does not label a deliberate stop as an unexpected exit', async () => {
-    const harness = createLifecycleHarness();
-    const onExit = await captureRuntimeExit(harness);
-    harness.runtimeManager.isStopInProgress.mockReturnValue(true);
-
-    await onExit('session-1', 0);
-
-    expect(harness.lifecycleEventService.record).not.toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'UNEXPECTED_EXIT' })
+    expect(harness.repository.updateSession).not.toHaveBeenCalled();
+    expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+      expect.objectContaining({ deliberate: true })
     );
   });
 
-  it('records a null-code runtime exit as a failed signal exit', async () => {
-    const harness = createLifecycleHarness();
-    const onExit = await captureRuntimeExit(harness);
-    harness.repository.updateSession.mockClear();
+  it.each([
+    ['runtime-managed', false],
+    ['shutdown-managed', true],
+  ] as const)('persists failed status for %s exits without an explicit stop reservation', async (_caseName, lifecycleStopping) => {
+    const harness = createExitCoordinatorHarness({ lifecycleStopping });
 
-    await onExit('session-1', null);
+    await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
 
-    expect(harness.sessionDomainService.markProcessExit).toHaveBeenCalledWith('session-1', null);
     expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.FAILED,
     });
-    expect(harness.lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'UNEXPECTED_EXIT',
-        message: 'Session stopped: agent process exited unexpectedly.',
-        dedupeKey: expect.stringMatching(/^process-exit:.+:signal$/),
-      })
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+      expect.objectContaining({ deliberate: true })
     );
   });
 
-  // AcpRuntimeManager separately owns stale SIGKILL callback suppression. This
-  // characterizes lifecycle state when an older callback is already in flight.
-  it('preserves a restarted generation when a stale-incarnation exit finishes', async () => {
-    const harness = createLifecycleHarness();
-    const onExit = await captureRuntimeExit(harness);
-    let resolveUpdate!: (value: typeof harness.session) => void;
-    harness.repository.updateSession.mockReturnValueOnce(
-      new Promise<typeof harness.session>((resolve) => {
-        resolveUpdate = resolve;
-      })
+  it('prepares active runtime state and delegates workflow-specific exit effects', async () => {
+    const harness = createExitCoordinatorHarness({ lifecycleStopping: true });
+
+    await harness.coordinator.handleExit(runtimeExit());
+
+    expect(harness.promptCompletion.clearSession).toHaveBeenCalledWith('session-1');
+    expect(harness.onSessionExit).toHaveBeenCalledWith('session-1');
+    expect(harness.processor.finalizeOrphanedToolCalls).toHaveBeenCalledWith(
+      'session-1',
+      'runtime_exit'
     );
-    const oldGeneration = harness.service.getStopGeneration('session-1');
+    expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
+    expect(harness.permission.cancelPendingRequests).toHaveBeenCalledWith('session-1');
+    expect(mockTraceLog).toHaveBeenCalledWith('session-1', 'runtime_exit', { exitCode: 1 });
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith({
+      session: harness.session,
+      sessionId: 'session-1',
+      exitCode: 1,
+      deliberate: true,
+    });
+  });
 
-    const exitPromise = onExit('session-1', 0);
+  it('continues cleanup when the session-exit callback fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.onSessionExit.mockImplementationOnce(() => {
+      throw new Error('queue cleanup failed');
+    });
 
-    expect(harness.service.isStopGenerationCurrent('session-1', oldGeneration)).toBe(false);
-    await harness.service.startSession('session-1');
-    const restartedGeneration = harness.service.getStopGeneration('session-1');
-    expect(restartedGeneration).not.toBe(oldGeneration);
+    await harness.coordinator.handleExit(runtimeExit());
 
-    resolveUpdate(harness.session);
-    await exitPromise;
+    expect(harness.processor.finalizeOrphanedToolCalls).toHaveBeenCalledWith(
+      'session-1',
+      'runtime_exit'
+    );
+    expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
+    expect(harness.permission.cancelPendingRequests).toHaveBeenCalledWith('session-1');
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.FAILED,
+    });
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
+  });
 
-    expect(harness.service.isStopGenerationCurrent('session-1', restartedGeneration)).toBe(true);
-    expect(harness.service.isStopGenerationCurrent('session-1', oldGeneration)).toBe(false);
+  it('closes the trace without active finalization when browse cleanup fails', async () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+    harness.processor.clearSessionState.mockImplementationOnce(() => {
+      throw new Error('browse cleanup failed');
+    });
+
+    await expect(
+      harness.coordinator.handleExit(runtimeExit({ purpose: 'browse' }))
+    ).rejects.toThrow('browse cleanup failed');
+
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
+  });
+
+  it('closes the trace without finalization when active preparation fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.promptCompletion.clearSession.mockImplementationOnce(() => {
+      throw new Error('active preparation failed');
+    });
+
+    await expect(harness.coordinator.handleExit(runtimeExit())).rejects.toThrow(
+      'active preparation failed'
+    );
+
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
+  });
+
+  it('closes the trace in finally when inactive cleanup fails', async () => {
+    const harness: ExitCoordinatorHarness = createExitCoordinatorHarness();
+    harness.workflowFinalizer.clearInactiveSession.mockImplementationOnce(() => {
+      throw new Error('inactive cleanup failed');
+    });
+
+    await expect(harness.coordinator.handleExit(runtimeExit())).rejects.toThrow(
+      'inactive cleanup failed'
+    );
+
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
   });
 });

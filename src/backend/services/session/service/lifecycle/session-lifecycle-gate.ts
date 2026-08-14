@@ -100,6 +100,10 @@ export class SessionLifecycleGate {
     );
   }
 
+  isStopReserved(sessionId: string): boolean {
+    return this.stoppingSessions.has(sessionId);
+  }
+
   getGeneration(sessionId: string): number {
     return this.stopGenerations.get(sessionId) ?? this.advanceGeneration(sessionId);
   }
