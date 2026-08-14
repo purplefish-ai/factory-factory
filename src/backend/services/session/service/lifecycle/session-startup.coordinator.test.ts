@@ -8,7 +8,12 @@ import {
   createDeferred,
   createLifecycleHarness,
   createPendingWorkspaceNotification,
+  type LifecycleHarness,
 } from './session-lifecycle.test-helpers';
+import {
+  SessionStartupCoordinator,
+  type SessionStartupCoordinatorDependencies,
+} from './session-startup.coordinator';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -28,11 +33,71 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
+function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoordinator {
+  const dependencies = {
+    repository: harness.repository,
+    contextService: harness.contextService,
+    acpEnvironment: harness.acpEnvironment,
+    runtimeManager: harness.runtimeManager,
+    sessionDomainService: harness.sessionDomainService,
+    sessionConfigService: harness.sessionConfigService,
+    acpEventProcessor: harness.acpEventProcessor,
+    runtimeExitCoordinator: { createHandlers: vi.fn(() => ({})) },
+    lifecycleGate: harness.lifecycleGate,
+    notificationDelivery: harness.notificationDeliveryService,
+    getMessageQueueBridge: () => harness.messageQueueBridge,
+    sendSessionMessage: harness.sendSessionMessage,
+    stopSession: (sessionId, options) => harness.service.stopSession(sessionId, options),
+    registerClientCreation: () => ({
+      isOnlyOperation: () => true,
+      release: vi.fn(),
+    }),
+  } satisfies SessionStartupCoordinatorDependencies;
+  return new SessionStartupCoordinator(dependencies);
+}
+
 describe('SessionStartupCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([]);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
+  });
+
+  it('reconciles a newly created client to durable and in-memory running state', async () => {
+    const harness = createLifecycleHarness();
+    const coordinator = createStartupCoordinator(harness);
+
+    await expect(coordinator.getOrCreateSessionClient('session-1')).resolves.toBe(harness.handle);
+
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.RUNNING,
+    });
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith('session-1', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: expect.any(String),
+    });
+  });
+
+  it('preserves the running-before-stopping restart probe order', async () => {
+    const harness = createLifecycleHarness();
+    const probes: string[] = [];
+    harness.runtimeManager.isSessionRunning.mockImplementationOnce(() => {
+      probes.push('running');
+      return true;
+    });
+    harness.runtimeManager.isStopInProgress.mockImplementationOnce(() => {
+      probes.push('stopping');
+      return true;
+    });
+    const coordinator = createStartupCoordinator(harness);
+
+    await expect(coordinator.restartSession('session-1')).rejects.toThrow(
+      'Cannot restart: session is currently being stopped. Please try again shortly.'
+    );
+
+    expect(probes).toEqual(['running', 'stopping']);
   });
 
   it('builds ACP startup options through the injected environment port', async () => {
@@ -95,6 +160,49 @@ describe('SessionStartupCoordinator', () => {
     );
     expect(workspaceNotificationService.listPendingForDelivery).not.toHaveBeenCalled();
     expect(sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('rejects an existing browse client while stop is in progress', async () => {
+    const harness = createLifecycleHarness();
+    const runtimeStop = createDeferred<void>();
+    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
+      version: 1,
+      list: true,
+      read: true,
+      notifications: true,
+    });
+    harness.runtimeManager.stopClient.mockReturnValueOnce(runtimeStop.promise);
+
+    const stopPromise = harness.service.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+
+    await expect(harness.service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+
+    runtimeStop.resolve(undefined);
+    await stopPromise;
+  });
+
+  it('rejects a pending browse client when stop completes before it settles', async () => {
+    const harness = createLifecycleHarness();
+    const pendingClient = createDeferred<typeof harness.handle>();
+    harness.runtimeManager.getPendingClient.mockReturnValueOnce(pendingClient.promise);
+
+    const browseResult = harness.service.ensureSubagentBrowseSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.getPendingClient).toHaveBeenCalledWith('session-1');
+    });
+    await harness.service.stopSession('session-1');
+    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
+      version: 1,
+      list: true,
+      read: true,
+      notifications: true,
+    });
+    pendingClient.resolve(harness.handle);
+
+    await expect(browseResult).resolves.toBe(false);
   });
 
   it('does not spawn a browse client without a stored provider session', async () => {
@@ -557,6 +665,87 @@ describe('SessionStartupCoordinator', () => {
     expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
     expect(sendSessionMessage).not.toHaveBeenCalled();
     expect(service.getStopGeneration('session-1')).not.toBe(startupGeneration);
+  });
+
+  it('does not publish startup capabilities after stop completes during snapshot persistence', async () => {
+    const harness = createLifecycleHarness();
+    const snapshotPersistence = createDeferred<void>();
+    harness.sessionConfigService.persistAcpConfigSnapshot.mockReturnValueOnce(
+      snapshotPersistence.promise
+    );
+
+    const startResult = harness.service
+      .startSession('session-1', { initialPrompt: '' })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(harness.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledOnce();
+    });
+
+    const stopPromise = harness.service.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+    const firstSettlement = await Promise.race([
+      stopPromise.then(() => 'stopped' as const),
+      new Promise<'blocked'>((resolve) => {
+        setImmediate(() => resolve('blocked'));
+      }),
+    ]);
+
+    expect(firstSettlement).toBe('blocked');
+    snapshotPersistence.resolve(undefined);
+    await stopPromise;
+
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(harness.sessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
+  it('keeps stop ahead of startup when runtime stop fails during running persistence', async () => {
+    const harness = createLifecycleHarness({ session: { workflow: 'ratchet' } });
+    const runningPersistence = createDeferred<typeof harness.session>();
+    harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+    harness.runtimeManager.stopClient.mockRejectedValueOnce(new Error('stop failed'));
+
+    const startResult = harness.service
+      .startSession('session-1', { initialPrompt: '' })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+        status: SessionStatus.RUNNING,
+      });
+    });
+
+    const stopPromise = harness.service.stopSession('session-1', {
+      cleanupTransientRatchetSession: false,
+    });
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+    const firstSettlement = await Promise.race([
+      stopPromise.then(() => 'stopped' as const),
+      new Promise<'blocked'>((resolve) => {
+        setImmediate(() => resolve('blocked'));
+      }),
+    ]);
+
+    expect(firstSettlement).toBe('blocked');
+    runningPersistence.resolve(harness.session);
+    await stopPromise;
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalledTimes(2);
+    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1',
+      'COMPLETED'
+    );
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith(
+      'session-1',
+      expect.objectContaining({ phase: 'idle', processState: 'stopped', activity: 'IDLE' })
+    );
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {

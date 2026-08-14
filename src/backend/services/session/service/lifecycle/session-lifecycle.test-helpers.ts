@@ -119,6 +119,8 @@ export type LifecycleHarness = {
   lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record' | 'hydrate'>;
   contextService: SessionContextService;
   acpEnvironment: MockedPick<SessionAcpEnvironmentPort, 'getBackendPort' | 'getMcpServers'>;
+  lifecycleGate: SessionLifecycleGate;
+  notificationDeliveryService: SessionNotificationDeliveryService;
   notificationService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
   workspaceBridge: MockedPick<
     SessionLifecycleWorkspaceBridge,
@@ -460,14 +462,13 @@ export function createLifecycleHarness(
       lifecycleGate,
     })
   );
-  service.configureNotificationDelivery(
-    new SessionNotificationDeliveryService({
-      notificationPort: workspaceNotificationService,
-      queuePort: sessionDomainService,
-      transcriptPort: sessionDomainService,
-      deltaPort: sessionDomainService,
-    })
-  );
+  const notificationDeliveryService = new SessionNotificationDeliveryService({
+    notificationPort: workspaceNotificationService,
+    queuePort: sessionDomainService,
+    transcriptPort: sessionDomainService,
+    deltaPort: sessionDomainService,
+  });
+  service.configureNotificationDelivery(notificationDeliveryService);
   service.configure({ workspace: workspaceBridge, messageQueue: messageQueueBridge });
 
   return {
@@ -480,6 +481,8 @@ export function createLifecycleHarness(
     lifecycleEventService,
     contextService,
     acpEnvironment,
+    lifecycleGate,
+    notificationDeliveryService,
     notificationService,
     workspaceBridge,
     messageQueueBridge,
