@@ -4,7 +4,6 @@ import type { AgentSessionRecord } from '@/backend/services/session/resources/ag
 import type {
   AcpClientOptions,
   AcpProcessHandle,
-  AcpRuntimeEventHandlers,
   AcpRuntimeManager,
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
@@ -46,14 +45,11 @@ import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
-
-function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
-  return exitCode === 0 ? SessionStatus.COMPLETED : SessionStatus.FAILED;
-}
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
@@ -131,9 +127,9 @@ export class SessionLifecycleService {
   private readonly lifecycleGate: SessionLifecycleGate;
   private readonly hydrateProviderHistory: HydrateProviderHistory;
   private readonly workflowFinalizer: SessionWorkflowFinalizer;
+  private readonly runtimeExitCoordinator: SessionRuntimeExitCoordinator;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
-  private readonly onSessionExit?: (sessionId: string) => void;
   private readonly clientCreationOperations = new Map<string, Set<Promise<AcpProcessHandle>>>();
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
@@ -166,9 +162,19 @@ export class SessionLifecycleService {
       runtimeManager: this.runtimeManager,
       countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
     });
+    this.runtimeExitCoordinator = new SessionRuntimeExitCoordinator({
+      repository: this.repository,
+      sessionDomainService: this.sessionDomainService,
+      sessionPermissionService: this.sessionPermissionService,
+      acpEventProcessor: this.acpEventProcessor,
+      promptTurnCompletionService: this.promptTurnCompletionService,
+      lifecycleEventService: this.lifecycleEventService,
+      lifecycleGate: this.lifecycleGate,
+      workflowFinalizer: this.workflowFinalizer,
+      onSessionExit: options.onSessionExit,
+    });
     this.sendSessionMessage = options.sendSessionMessage;
     this.onBeforeStopSession = options.onBeforeStopSession;
-    this.onSessionExit = options.onSessionExit;
   }
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
@@ -698,160 +704,6 @@ export class SessionLifecycleService {
     }
   }
 
-  private setupAcpEventHandler(
-    sessionId: string,
-    options?: { persistProviderSessionId?: boolean }
-  ): AcpRuntimeEventHandlers {
-    const runtimeEventHandler = this.acpEventProcessor.createRuntimeEventHandler(sessionId);
-    const runtimeIncarnationId = randomUUID();
-    const providerSessionIdHandler =
-      options?.persistProviderSessionId === false
-        ? {}
-        : {
-            onSessionId: async (sid: string, providerSessionId: string) => {
-              try {
-                await this.repository.updateSession(sid, { providerSessionId });
-                acpTraceLogger.log(sid, 'runtime_metadata', {
-                  type: 'provider_session_id',
-                  providerSessionId,
-                });
-                logger.debug('Updated session with ACP providerSessionId', {
-                  sessionId: sid,
-                  providerSessionId,
-                });
-              } catch (error) {
-                logger.warn('Failed to update session with ACP providerSessionId', {
-                  sessionId: sid,
-                  providerSessionId,
-                  error: error instanceof Error ? error.message : String(error),
-                });
-              }
-            },
-          };
-
-    return {
-      ...runtimeEventHandler,
-      ...providerSessionIdHandler,
-      onExit: async (sid: string, exitCode: number | null) => {
-        const wasDeliberateStop = this.lifecycleGate.isSessionStopping(sid);
-        this.lifecycleGate.releaseShutdown(sid);
-        if (this.runtimeManager.isBrowseOnlySession(sid)) {
-          this.acpEventProcessor.clearSessionState(sid);
-          acpTraceLogger.closeSession(sid);
-          return;
-        }
-        this.prepareAcpRuntimeExit(sid, exitCode);
-        await this.handleAcpRuntimeExit(sid, exitCode, wasDeliberateStop, runtimeIncarnationId);
-      },
-      onError: (sid: string, error: Error) => {
-        acpTraceLogger.log(sid, 'runtime_error', {
-          message: error.message,
-          stack: error.stack,
-        });
-        if (!this.runtimeManager.isBrowseOnlySession(sid)) {
-          this.sessionDomainService.markError(sid, error.message);
-        }
-        logger.error('ACP client error', {
-          sessionId: sid,
-          error: error.message,
-          stack: error.stack,
-        });
-      },
-      onAcpLog: (sid: string, payload: Record<string, unknown>) => {
-        this.acpEventProcessor.handleAcpLog(sid, payload);
-      },
-    };
-  }
-
-  private prepareAcpRuntimeExit(sessionId: string, exitCode: number | null): void {
-    this.promptTurnCompletionService.clearSession(sessionId);
-    this.onSessionExit?.(sessionId);
-    this.finalizeOrphanedToolCalls(sessionId, 'runtime_exit');
-    this.acpEventProcessor.clearSessionState(sessionId);
-    this.sessionPermissionService.cancelPendingRequests(sessionId);
-    acpTraceLogger.log(sessionId, 'runtime_exit', { exitCode });
-  }
-
-  private async handleAcpRuntimeExit(
-    sessionId: string,
-    exitCode: number | null,
-    wasDeliberateStop: boolean,
-    runtimeIncarnationId: string
-  ): Promise<void> {
-    try {
-      this.sessionDomainService.markProcessExit(sessionId, exitCode);
-      const session = await this.repository.getSessionById(sessionId);
-      if (!session) {
-        logger.warn('Failed to find ACP session on exit', { sessionId });
-        return;
-      }
-
-      const persistedStatus = getPersistedStatusForExitCode(exitCode);
-      try {
-        await this.repository.updateSession(sessionId, { status: persistedStatus });
-        logger.debug('Updated ACP session status on exit', {
-          sessionId,
-          exitCode,
-          status: persistedStatus,
-        });
-      } catch (error) {
-        logger.warn('Failed to update ACP session status on exit', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      await this.recordUnexpectedExitIfNeeded(
-        session,
-        sessionId,
-        exitCode,
-        wasDeliberateStop,
-        runtimeIncarnationId
-      );
-      await this.workflowFinalizer.finalizeRuntimeExit({
-        session,
-        sessionId,
-        exitCode,
-        deliberate: wasDeliberateStop,
-      });
-    } catch (error) {
-      logger.warn('Failed to process ACP session exit', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      try {
-        this.workflowFinalizer.clearInactiveSession(sessionId, 'runtime_exit');
-      } finally {
-        acpTraceLogger.closeSession(sessionId);
-      }
-    }
-  }
-
-  private async recordUnexpectedExitIfNeeded(
-    session: AgentSessionRecord,
-    sessionId: string,
-    exitCode: number | null,
-    wasDeliberateStop: boolean,
-    runtimeIncarnationId: string
-  ): Promise<void> {
-    if (wasDeliberateStop) {
-      return;
-    }
-
-    await this.lifecycleEventService.record({
-      workspaceId: session.workspaceId,
-      sessionId,
-      kind: SessionLifecycleEventKind.SESSION_STOPPED,
-      reason: SessionLifecycleEventReason.UNEXPECTED_EXIT,
-      message:
-        exitCode === null
-          ? 'Session stopped: agent process exited unexpectedly.'
-          : `Session stopped: agent process exited unexpectedly (code ${exitCode}).`,
-      dedupeKey: `process-exit:${runtimeIncarnationId}:${exitCode ?? 'signal'}`,
-    });
-  }
-
   private async createAcpClient(
     sessionId: string,
     options?: {
@@ -879,7 +731,9 @@ export class SessionLifecycleService {
       provider: session?.provider ?? 'CLAUDE',
     });
 
-    const handlers = this.setupAcpEventHandler(sessionId, {
+    const handlers = this.runtimeExitCoordinator.createHandlers({
+      sessionId,
+      purpose: browseOnly ? 'browse' : 'active',
       persistProviderSessionId: !browseOnly,
     });
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);

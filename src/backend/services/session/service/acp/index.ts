@@ -6,10 +6,12 @@ export { AcpProcessHandle } from './acp-process-handle';
 export type {
   AcpPermissionRequestEvent,
   AcpRuntimeEvent,
+  AcpRuntimeEventHandlers,
+  AcpRuntimeExitEvent,
+  AcpRuntimePurpose,
   AcpSessionUpdateEvent,
   AcpSubagentsChangedEvent,
 } from './acp-runtime-events';
-export type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 export {
   AcpRuntimeManager,
   acpRuntimeManager,

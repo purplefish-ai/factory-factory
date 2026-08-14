@@ -17,6 +17,7 @@ const {
   mockSetSessionModel,
   mockExtMethod,
   mockNdJsonStream,
+  mockLoggerWarn,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockInitialize: vi.fn(),
@@ -31,6 +32,7 @@ const {
   mockNdJsonStream: vi
     .fn()
     .mockReturnValue({ writable: {}, readable: { pipeThrough: () => ({}) } }),
+  mockLoggerWarn: vi.fn(),
 }));
 
 // ---- Mocks ----
@@ -68,7 +70,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
-    warn: vi.fn(),
+    warn: mockLoggerWarn,
     error: vi.fn(),
   }),
   getCurrentProcessEnv: () => ({ ...process.env }),
@@ -83,7 +85,7 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
-import type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
+import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { AcpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
 import type { AcpClientOptions } from './types';
 
@@ -968,12 +970,12 @@ describe('AcpRuntimeManager', () => {
       expect(mockNewSession).not.toHaveBeenCalled();
     });
 
-    it('preserves browse-only state when an older process finishes exit handling', async () => {
+    it('runtime exit event identifies the current incarnation and preserves replacement purpose', async () => {
       const firstChild = setupSuccessfulSpawn();
       const exitHandling = createDeferred<void>();
       const firstHandlers = {
         ...defaultHandlers(),
-        onExit: vi.fn(() => exitHandling.promise),
+        onRuntimeExit: vi.fn(() => exitHandling.promise),
       };
 
       await manager.getOrCreateClient(
@@ -985,8 +987,18 @@ describe('AcpRuntimeManager', () => {
 
       firstChild.exitCode = 1;
       firstChild.emit('exit', 1, null);
+      firstChild.emit('exit', 1, null);
       await vi.waitFor(() => {
-        expect(firstHandlers.onExit).toHaveBeenCalledWith('db-session-1', 1);
+        expect(firstHandlers.onRuntimeExit).toHaveBeenCalledOnce();
+      });
+      expect(firstHandlers.onRuntimeExit).toHaveBeenCalledWith({
+        sessionId: 'db-session-1',
+        exitCode: 1,
+        incarnationId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+        ),
+        purpose: 'active',
+        managed: false,
       });
 
       const replacementChild = setupSuccessfulSpawn({
@@ -1506,16 +1518,13 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getPendingClient('session-1')).toBeUndefined();
     });
 
-    it('skips exit handler when stop is in progress', async () => {
+    it('runtime exit event marks a current managed stop', async () => {
       const child = setupSuccessfulSpawn();
-      const handlers = defaultHandlers();
+      const onRuntimeExit = vi.fn().mockResolvedValue(undefined);
+      const handlers = { ...defaultHandlers(), onRuntimeExit };
 
       await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
 
-      // Clear the mock calls from initial creation
-      (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
-
-      // SIGTERM triggers exit event
       child.kill = vi.fn(() => {
         child.exitCode = 0;
         child.emit('exit', 0, null);
@@ -1524,8 +1533,14 @@ describe('AcpRuntimeManager', () => {
 
       await manager.stopClient('session-1');
 
-      // onExit should NOT be called during managed stop
-      expect(handlers.onExit).not.toHaveBeenCalled();
+      expect(onRuntimeExit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          exitCode: 0,
+          purpose: 'active',
+          managed: true,
+        })
+      );
     });
 
     it('skips exit handler when a stopped process exits after stop timeout', async () => {
@@ -1561,9 +1576,10 @@ describe('AcpRuntimeManager', () => {
       expect(handlers.onExit).not.toHaveBeenCalled();
     });
 
-    it('does not let a late stopped-process exit affect a replacement client', async () => {
+    it('runtime exit event omits a stale incarnation without affecting its replacement', async () => {
       const firstChild = setupSuccessfulSpawn();
-      const firstHandlers = defaultHandlers();
+      const firstExit = vi.fn().mockResolvedValue(undefined);
+      const firstHandlers = { ...defaultHandlers(), onRuntimeExit: firstExit };
 
       await manager.getOrCreateClient(
         'session-1',
@@ -1598,56 +1614,33 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      (firstHandlers.onExit as ReturnType<typeof vi.fn>).mockClear();
       firstChild.exitCode = 137;
       firstChild.emit('exit', 137, 'SIGKILL');
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(firstHandlers.onExit).not.toHaveBeenCalled();
+      expect(firstExit).not.toHaveBeenCalled();
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
 
-    it('does not call onExit for stale SIGKILL exit after stop completes and session restarts', async () => {
-      const firstChild = setupSuccessfulSpawn();
-      const handlers = defaultHandlers();
-
-      await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
-
-      firstChild.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          firstChild.killed = true;
-        }
-        if (signal === 'SIGKILL') {
-          firstChild.exitCode = 137;
-        }
-        return true;
-      });
-
-      vi.useFakeTimers();
-
-      const stopPromise = manager.stopClient('session-1');
-      await vi.advanceTimersByTimeAsync(5100);
-      await stopPromise;
-
-      vi.useRealTimers();
-
-      const secondChild = createMockChildProcess();
-      mockSpawn.mockReturnValueOnce(secondChild);
-
-      const newHandle = await manager.getOrCreateClient(
+    it('runtime exit event logs handler rejection outside the child emitter', async () => {
+      const child = setupSuccessfulSpawn();
+      const onRuntimeExit = vi.fn().mockRejectedValue(new Error('domain exit failed'));
+      await manager.getOrCreateClient(
         'session-1',
         defaultOptions(),
-        handlers,
+        { ...defaultHandlers(), onRuntimeExit },
         defaultContext()
       );
-      expect(newHandle.child).toBe(secondChild);
 
-      (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
-      firstChild.emit('exit', 137, 'SIGKILL');
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      child.exitCode = 1;
+      expect(() => child.emit('exit', 1, null)).not.toThrow();
 
-      expect(handlers.onExit).not.toHaveBeenCalled();
-      expect(manager.getClient('session-1')).toBe(newHandle);
+      await vi.waitFor(() => {
+        expect(mockLoggerWarn).toHaveBeenCalledWith('Failed to handle ACP exit event', {
+          sessionId: 'session-1',
+          error: 'domain exit failed',
+        });
+      });
     });
 
     it('rejects client creation while a stop is in progress', async () => {

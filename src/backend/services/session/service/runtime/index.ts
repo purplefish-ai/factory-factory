@@ -5,7 +5,7 @@ export {
   acpRuntimeManager,
 } from '@/backend/services/session/service/acp';
 // ACP runtime (Phase 19+)
-export type { AcpRuntimeEventHandlers } from '@/backend/services/session/service/acp/acp-runtime-manager';
+export type { AcpRuntimeEventHandlers } from '@/backend/services/session/service/acp/acp-runtime-events';
 export type {
   ProviderRuntimeManager,
   RuntimeCreatedCallback,
