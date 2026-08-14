@@ -165,12 +165,6 @@ describe('SessionStartupCoordinator', () => {
   it('rejects an existing browse client while stop is in progress', async () => {
     const harness = createLifecycleHarness();
     const runtimeStop = createDeferred<void>();
-    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
-      version: 1,
-      list: true,
-      read: true,
-      notifications: true,
-    });
     harness.runtimeManager.stopClient.mockReturnValueOnce(runtimeStop.promise);
 
     const stopPromise = harness.service.stopSession('session-1');
@@ -194,12 +188,6 @@ describe('SessionStartupCoordinator', () => {
       expect(harness.runtimeManager.getPendingClient).toHaveBeenCalledWith('session-1');
     });
     await harness.service.stopSession('session-1');
-    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
-      version: 1,
-      list: true,
-      read: true,
-      notifications: true,
-    });
     pendingClient.resolve(harness.handle);
 
     await expect(browseResult).resolves.toBe(false);
