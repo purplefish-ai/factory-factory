@@ -299,15 +299,30 @@ export class SessionLifecycleService {
   }
 
   private async stopRuntimeAndPendingCreation(sessionId: string): Promise<void> {
-    await this.runtimeManager.stopClient(sessionId);
+    let stopError: { cause: unknown } | undefined;
+    try {
+      await this.runtimeManager.stopClient(sessionId);
+    } catch (error) {
+      stopError = { cause: error };
+    }
 
     const pendingCreations = this.clientCreationOperations.get(sessionId);
     if (!pendingCreations || pendingCreations.size === 0) {
+      if (stopError) {
+        throw stopError.cause;
+      }
       return;
     }
 
     await Promise.allSettled([...pendingCreations]);
-    await this.runtimeManager.stopClient(sessionId);
+    try {
+      await this.runtimeManager.stopClient(sessionId);
+    } catch (error) {
+      stopError ??= { cause: error };
+    }
+    if (stopError) {
+      throw stopError.cause;
+    }
   }
 
   async stopWorkspaceSessions(

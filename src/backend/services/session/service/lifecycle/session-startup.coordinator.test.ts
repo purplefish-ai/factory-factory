@@ -659,10 +659,11 @@ describe('SessionStartupCoordinator', () => {
     expect(harness.sessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
 
-  it('keeps stop ahead of startup during durable running-state persistence', async () => {
+  it('keeps stop ahead of startup when runtime stop fails during running persistence', async () => {
     const harness = createLifecycleHarness();
     const runningPersistence = createDeferred<typeof harness.session>();
     harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+    harness.runtimeManager.stopClient.mockRejectedValueOnce(new Error('stop failed'));
 
     const startResult = harness.service
       .startSession('session-1', { initialPrompt: '' })
@@ -687,6 +688,7 @@ describe('SessionStartupCoordinator', () => {
     expect(firstSettlement).toBe('blocked');
     runningPersistence.resolve(harness.session);
     await stopPromise;
+    expect(harness.runtimeManager.stopClient).toHaveBeenCalledTimes(2);
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
     );
