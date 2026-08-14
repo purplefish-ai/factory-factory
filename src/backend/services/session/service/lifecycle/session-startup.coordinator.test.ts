@@ -8,7 +8,12 @@ import {
   createDeferred,
   createLifecycleHarness,
   createPendingWorkspaceNotification,
+  type LifecycleHarness,
 } from './session-lifecycle.test-helpers';
+import {
+  SessionStartupCoordinator,
+  type SessionStartupCoordinatorDependencies,
+} from './session-startup.coordinator';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -28,11 +33,51 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
+function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoordinator {
+  const dependencies = {
+    repository: harness.repository,
+    contextService: harness.contextService,
+    acpEnvironment: harness.acpEnvironment,
+    runtimeManager: harness.runtimeManager,
+    sessionDomainService: harness.sessionDomainService,
+    sessionConfigService: harness.sessionConfigService,
+    acpEventProcessor: harness.acpEventProcessor,
+    runtimeExitCoordinator: { createHandlers: vi.fn(() => ({})) },
+    lifecycleGate: harness.lifecycleGate,
+    notificationDelivery: harness.notificationDeliveryService,
+    getMessageQueueBridge: () => harness.messageQueueBridge,
+    sendSessionMessage: harness.sendSessionMessage,
+    stopSession: (sessionId, options) => harness.service.stopSession(sessionId, options),
+    registerClientCreation: () => ({
+      isOnlyOperation: () => true,
+      release: vi.fn(),
+    }),
+  } satisfies SessionStartupCoordinatorDependencies;
+  return new SessionStartupCoordinator(dependencies);
+}
+
 describe('SessionStartupCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(workspaceNotificationService.listPendingForDelivery).mockResolvedValue([]);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
+  });
+
+  it('reconciles a newly created client to durable and in-memory running state', async () => {
+    const harness = createLifecycleHarness();
+    const coordinator = createStartupCoordinator(harness);
+
+    await expect(coordinator.getOrCreateSessionClient('session-1')).resolves.toBe(harness.handle);
+
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.RUNNING,
+    });
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith('session-1', {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: expect.any(String),
+    });
   });
 
   it('builds ACP startup options through the injected environment port', async () => {
@@ -557,6 +602,29 @@ describe('SessionStartupCoordinator', () => {
     expect(runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
     expect(sendSessionMessage).not.toHaveBeenCalled();
     expect(service.getStopGeneration('session-1')).not.toBe(startupGeneration);
+  });
+
+  it('does not publish startup capabilities after stop completes during snapshot persistence', async () => {
+    const harness = createLifecycleHarness();
+    const snapshotPersistence = createDeferred<void>();
+    harness.sessionConfigService.persistAcpConfigSnapshot.mockReturnValueOnce(
+      snapshotPersistence.promise
+    );
+
+    const startResult = harness.service
+      .startSession('session-1', { initialPrompt: '' })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(harness.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledOnce();
+    });
+
+    await harness.service.stopSession('session-1');
+    snapshotPersistence.resolve(undefined);
+
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(harness.sessionDomainService.emitDelta).not.toHaveBeenCalled();
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {

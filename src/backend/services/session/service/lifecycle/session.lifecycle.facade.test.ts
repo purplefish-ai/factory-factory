@@ -7,6 +7,7 @@ import {
   createLifecycleHarness,
   createPendingWorkspaceNotification,
 } from './session-lifecycle.test-helpers';
+import { SessionStartupCoordinator } from './session-startup.coordinator';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -80,6 +81,18 @@ describe('SessionLifecycleFacade', () => {
     await expect(service.getSessionOptions('session-1')).resolves.toEqual(options);
 
     expect(getOptions).toHaveBeenCalledWith('session-1');
+  });
+
+  it('delegates startup through the configured startup coordinator', async () => {
+    const startSession = vi
+      .spyOn(SessionStartupCoordinator.prototype, 'startSession')
+      .mockResolvedValueOnce(undefined);
+    const { service } = createLifecycleHarness();
+    const options = { initialPrompt: 'Resume the task', startupModePreset: 'plan' } as const;
+
+    await service.startSession('session-1', options);
+
+    expect(startSession).toHaveBeenCalledWith('session-1', options);
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {
