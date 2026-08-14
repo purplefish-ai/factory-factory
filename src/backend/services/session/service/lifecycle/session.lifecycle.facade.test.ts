@@ -8,6 +8,7 @@ import {
   createPendingWorkspaceNotification,
 } from './session-lifecycle.test-helpers';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
+import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -118,6 +119,52 @@ describe('SessionLifecycleFacade', () => {
     expect(getOrCreateSessionClient).toHaveBeenCalledWith('session-3', clientOptions);
     expect(getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(session, clientOptions);
     expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-4');
+  });
+
+  it('forwards explicit and workspace stops to the termination coordinator', async () => {
+    const stopSession = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopSession')
+      .mockResolvedValueOnce(undefined);
+    const stopWorkspaceSessions = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopWorkspaceSessions')
+      .mockResolvedValueOnce(undefined);
+    const { service } = createLifecycleHarness();
+    const sessionOptions = {
+      cleanupTransientRatchetSession: false,
+      recordLifecycleEvent: false,
+      reason: 'USER_STOP',
+    } as const;
+    const workspaceOptions = { reason: 'WORKSPACE_ARCHIVED' } as const;
+
+    await expect(service.stopSession('session-exact', sessionOptions)).resolves.toBeUndefined();
+    await expect(
+      service.stopWorkspaceSessions('workspace-exact', workspaceOptions)
+    ).resolves.toBeUndefined();
+
+    expect(stopSession).toHaveBeenCalledWith('session-exact', sessionOptions);
+    expect(stopWorkspaceSessions).toHaveBeenCalledWith('workspace-exact', workspaceOptions);
+    stopSession.mockRestore();
+    stopWorkspaceSessions.mockRestore();
+  });
+
+  it('preserves termination coordinator rejections', async () => {
+    const sessionFailure = new Error('session stop rejected');
+    const workspaceFailure = new Error('workspace stop rejected');
+    const stopSession = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopSession')
+      .mockRejectedValueOnce(sessionFailure);
+    const stopWorkspaceSessions = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopWorkspaceSessions')
+      .mockRejectedValueOnce(workspaceFailure);
+    const { service } = createLifecycleHarness();
+
+    await expect(service.stopSession('session-rejected')).rejects.toBe(sessionFailure);
+    await expect(service.stopWorkspaceSessions('workspace-rejected')).rejects.toBe(
+      workspaceFailure
+    );
+
+    stopSession.mockRestore();
+    stopWorkspaceSessions.mockRestore();
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {

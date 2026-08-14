@@ -25,6 +25,7 @@ import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import type { StopSessionOptions } from './session-termination.coordinator';
 
 const logger = createLogger('session');
 
@@ -85,10 +86,7 @@ export type SessionStartupCoordinatorDependencies = {
     'tryDispatchNextMessage'
   > | null;
   sendSessionMessage: (sessionId: string, content: string) => Promise<void>;
-  stopSession: (
-    sessionId: string,
-    options: { cleanupTransientRatchetSession: false }
-  ) => Promise<void>;
+  stopSession: (sessionId: string, options: StopSessionOptions) => Promise<void>;
 };
 
 export class SessionStartupCoordinator {

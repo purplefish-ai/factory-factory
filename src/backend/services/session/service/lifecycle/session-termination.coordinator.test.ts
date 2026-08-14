@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionLifecycleService } from './session.lifecycle.service';
-import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
+import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -38,39 +39,45 @@ describe('SessionTerminationCoordinator workspace stops', () => {
     vi.clearAllMocks();
   });
 
-  it('stops running sessions and runtime-only sessions', async () => {
-    const { service, repository, runtimeManager } = createLifecycleHarness();
-    const stopSession = vi.spyOn(service, 'stopSession').mockResolvedValue();
+  it('constructs the public coordinator directly through the narrow harness', () => {
+    expect(createTerminationHarness().coordinator).toBeInstanceOf(SessionTerminationCoordinator);
+  });
 
-    await service.stopWorkspaceSessions('workspace-1');
+  it('stops running sessions and runtime-only sessions', async () => {
+    const { coordinator, repository, runtimeManager, lifecycleEventService } =
+      createTerminationHarness();
+
+    await coordinator.stopWorkspaceSessions('workspace-1');
 
     expect(repository.getSessionsByWorkspaceId).toHaveBeenCalledWith('workspace-1');
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-runtime-only');
     expect(runtimeManager.isSessionRunning).toHaveBeenCalledWith('session-idle');
-    expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
-    expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
-    expect(stopSession).toHaveBeenCalledWith('session-browse-only', {
-      reason: 'SYSTEM_STOP',
-      recordLifecycleEvent: false,
-    });
-    expect(stopSession).not.toHaveBeenCalledWith('session-idle');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-running');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-runtime-only');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-browse-only');
+    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-idle');
+    expect(lifecycleEventService.record).toHaveBeenCalledTimes(2);
+    expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-browse-only' })
+    );
   });
 
-  it('attempts every running session and throws when any stop fails', async () => {
-    const { service } = createLifecycleHarness();
-    const stopSession = vi.spyOn(service, 'stopSession').mockResolvedValue();
-    stopSession.mockImplementation((sessionId: string) => {
-      if (sessionId === 'session-running') {
-        return Promise.reject(new Error('stop failed'));
+  it('attempts every eligible persisted and runtime-owned session and aggregates failures', async () => {
+    const { coordinator, lifecycleEventService, runtimeManager } = createTerminationHarness();
+    lifecycleEventService.record.mockImplementation(({ sessionId }) => {
+      if (sessionId === 'session-running' || sessionId === 'session-runtime-only') {
+        return Promise.reject(new Error(`stop failed: ${sessionId}`));
       }
-      return Promise.resolve();
+      return Promise.resolve(null);
     });
 
-    await expect(service.stopWorkspaceSessions('workspace-1')).rejects.toThrow(
-      'Failed to stop 1 workspace session'
+    await expect(coordinator.stopWorkspaceSessions('workspace-1')).rejects.toThrow(
+      'Failed to stop 2 workspace sessions'
     );
-    expect(stopSession).toHaveBeenCalledWith('session-running', { reason: 'SYSTEM_STOP' });
-    expect(stopSession).toHaveBeenCalledWith('session-runtime-only', { reason: 'SYSTEM_STOP' });
+    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-running');
+    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-runtime-only');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-browse-only');
+    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-idle');
   });
 });
 
@@ -85,9 +92,9 @@ describe('SessionTerminationCoordinator stop causes', () => {
     ['WORKSPACE_ARCHIVED', 'Session stopped because the workspace was archived.'],
     ['SYSTEM_STOP', 'Session stopped by the system.'],
   ] as const)('records %s before stopping the runtime', async (reason, message) => {
-    const { service, lifecycleEventService, runtimeManager } = createLifecycleHarness();
+    const { coordinator, lifecycleEventService, runtimeManager } = createTerminationHarness();
 
-    await service.stopSession('session-1', { reason });
+    await coordinator.stopSession('session-1', { reason });
 
     expect(lifecycleEventService.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -107,11 +114,11 @@ describe('SessionTerminationCoordinator stop causes', () => {
   });
 
   it('uses a new durable stop identity after lifecycle-service reconstruction', async () => {
-    const first = createLifecycleHarness();
-    const reconstructed = createLifecycleHarness();
+    const first = createTerminationHarness();
+    const reconstructed = createTerminationHarness();
 
-    await first.service.stopSession('session-1', { reason: 'USER_STOP' });
-    await reconstructed.service.stopSession('session-1', { reason: 'USER_STOP' });
+    await first.coordinator.stopSession('session-1', { reason: 'USER_STOP' });
+    await reconstructed.coordinator.stopSession('session-1', { reason: 'USER_STOP' });
 
     const firstKey = first.lifecycleEventService.record.mock.calls[0]?.[0]?.dedupeKey;
     const reconstructedKey =
@@ -122,16 +129,16 @@ describe('SessionTerminationCoordinator stop causes', () => {
   });
 
   it('can clean up a failed startup without recording a stop event', async () => {
-    const { service, lifecycleEventService, runtimeManager } = createLifecycleHarness();
+    const { coordinator, lifecycleEventService, runtimeManager } = createTerminationHarness();
 
-    await service.stopSession('session-1', { recordLifecycleEvent: false });
+    await coordinator.stopSession('session-1', { recordLifecycleEvent: false });
 
     expect(lifecycleEventService.record).not.toHaveBeenCalled();
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
   });
 });
 
-describe('SessionTerminationCoordinator graceful shutdown', () => {
+describe('SessionLifecycleService graceful shutdown', () => {
   it('records SYSTEM_STOP for active and pending runtimes before bounded shutdown', async () => {
     const runtimeManager = {
       beginShutdown: vi.fn(() => ['session-active', 'session-pending', 'session-browse-only']),
@@ -262,73 +269,250 @@ describe('SessionTerminationCoordinator graceful shutdown', () => {
 });
 
 describe('SessionTerminationCoordinator races', () => {
-  it('forwards the session id to the runtime stop visibility query', () => {
-    const harness = createLifecycleHarness();
+  it('reserves the stop synchronously before loading the session', async () => {
+    const effects: string[] = [];
+    const harness = createTerminationHarness({
+      getSessionById: () => {
+        effects.push('load-session');
+        return Promise.resolve(harness.session);
+      },
+    });
+    const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
+      effects.push('reserve-stop');
+      return originalReserveStop(sessionId);
+    });
 
-    expect(harness.service.isSessionStopping('session-1')).toBe(false);
+    const stop = harness.coordinator.stopSession('session-1');
 
-    expect(harness.runtimeManager.isStopInProgress).toHaveBeenCalledWith('session-1');
+    expect(effects.indexOf('reserve-stop')).toBe(0);
+    expect(effects.indexOf('reserve-stop')).toBeLessThan(effects.indexOf('load-session'));
+    await stop;
+  });
+
+  it('waits for the durable event to complete before runtime quiescence begins', async () => {
+    const effects: string[] = [];
+    const harness = createTerminationHarness();
+    const durableEvent = createDeferred<null>();
+    harness.lifecycleEventService.record.mockImplementation(async () => {
+      await durableEvent.promise;
+      effects.push('durable-event-complete');
+      return null;
+    });
+    harness.runtimeManager.stopAndQuiesce.mockImplementation(() => {
+      effects.push('runtime-stop');
+      return Promise.resolve();
+    });
+
+    const stop = harness.coordinator.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledOnce();
+    });
+    expect(harness.runtimeManager.stopAndQuiesce).not.toHaveBeenCalled();
+
+    durableEvent.resolve(null);
+    await stop;
+
+    expect(effects).toEqual(['durable-event-complete', 'runtime-stop']);
+  });
+
+  it('keeps cleanup order and releases the reservation after a propagated cleanup failure', async () => {
+    const effects: string[] = [];
+    const harness = createTerminationHarness({
+      onBeforeStopSession: () => effects.push('before-stop'),
+      getSessionById: () => {
+        effects.push('load-session');
+        return Promise.resolve(harness.session);
+      },
+    });
+    harness.promptTurnCompletionService.clearSession.mockImplementation(() => {
+      effects.push('clear-prompt');
+    });
+    harness.sessionDomainService.clearQueuedWork.mockImplementation(() => {
+      effects.push('clear-queued-work');
+    });
+    harness.lifecycleEventService.record.mockImplementation(() => {
+      effects.push('durable-event');
+      return Promise.resolve(null);
+    });
+    harness.sessionDomainService.setRuntimeSnapshot.mockImplementation((_sessionId, snapshot) => {
+      effects.push(snapshot.phase === 'stopping' ? 'snapshot-stopping' : 'snapshot-idle');
+    });
+    harness.acpEventProcessor.clearStreamingState.mockImplementation(() => {
+      effects.push('clear-streaming');
+    });
+    harness.acpEventProcessor.clearReplaySuppression.mockImplementation(() => {
+      effects.push('clear-replay');
+    });
+    harness.sessionPermissionService.cancelPendingRequests.mockImplementation(() => {
+      effects.push('cancel-permissions');
+    });
+    harness.runtimeManager.stopAndQuiesce.mockImplementation(() => {
+      effects.push('runtime-stop');
+      return Promise.resolve();
+    });
+    harness.acpEventProcessor.finalizeOrphanedToolCalls.mockImplementation(() => {
+      effects.push('finalize-orphans');
+    });
+    harness.repository.updateSessionIfStatus.mockImplementation(() => {
+      effects.push('update-idle-status');
+      return Promise.resolve(0);
+    });
+    harness.workspaceBridge.markSessionIdle.mockImplementation(() => {
+      effects.push('workspace-idle');
+    });
+    harness.acpEventProcessor.clearSessionState.mockImplementation(() => {
+      effects.push('clear-acp-state');
+    });
+    harness.workflowFinalizer.finalizeDeliberateStop.mockImplementation(() => {
+      effects.push('deliberate-finalization');
+      return Promise.resolve();
+    });
+    harness.workflowFinalizer.clearInactiveSession.mockImplementation(() => {
+      effects.push('clear-inactive');
+      throw new Error('clear inactive failed');
+    });
+    const closeTrace = vi.spyOn(acpTraceLogger, 'closeSession').mockImplementation(() => {
+      effects.push('close-trace');
+    });
+    const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
+      effects.push('reserve-stop');
+      const reservation = originalReserveStop(sessionId);
+      if (!reservation) {
+        return null;
+      }
+      return {
+        generation: reservation.generation,
+        release: () => {
+          effects.push('release-stop');
+          reservation.release();
+        },
+      };
+    });
+
+    try {
+      await expect(harness.coordinator.stopSession('session-1')).rejects.toThrow(
+        'clear inactive failed'
+      );
+    } finally {
+      closeTrace.mockRestore();
+    }
+
+    expect(effects).toEqual([
+      'reserve-stop',
+      'clear-prompt',
+      'before-stop',
+      'clear-queued-work',
+      'load-session',
+      'durable-event',
+      'snapshot-stopping',
+      'clear-streaming',
+      'clear-replay',
+      'cancel-permissions',
+      'runtime-stop',
+      'finalize-orphans',
+      'update-idle-status',
+      'snapshot-idle',
+      'workspace-idle',
+      'clear-acp-state',
+      'deliberate-finalization',
+      'clear-inactive',
+      'close-trace',
+      'release-stop',
+    ]);
+    expect(harness.lifecycleGate.isStopReserved('session-1')).toBe(false);
+  });
+
+  it('continues mandatory cleanup after runtime stop fails and skips deliberate finalization', async () => {
+    const effects: string[] = [];
+    const harness = createTerminationHarness();
+    harness.runtimeManager.stopAndQuiesce.mockImplementation(() => {
+      effects.push('runtime-stop-failed');
+      return Promise.reject(new Error('runtime stop failed'));
+    });
+    harness.acpEventProcessor.finalizeOrphanedToolCalls.mockImplementation(() => {
+      effects.push('finalize-orphans');
+    });
+    harness.repository.updateSessionIfStatus.mockImplementation(() => {
+      effects.push('update-idle-status');
+      return Promise.resolve(0);
+    });
+    harness.sessionDomainService.setRuntimeSnapshot.mockImplementation((_sessionId, snapshot) => {
+      if (snapshot.phase === 'idle') {
+        effects.push('snapshot-idle');
+      }
+    });
+    harness.workspaceBridge.markSessionIdle.mockImplementation(() => {
+      effects.push('workspace-idle');
+    });
+    harness.acpEventProcessor.clearSessionState.mockImplementation(() => {
+      effects.push('clear-acp-state');
+    });
+    harness.workflowFinalizer.clearInactiveSession.mockImplementation(() => {
+      effects.push('clear-inactive');
+    });
+
+    await expect(harness.coordinator.stopSession('session-1')).resolves.toBeUndefined();
+
+    expect(effects).toEqual([
+      'runtime-stop-failed',
+      'finalize-orphans',
+      'update-idle-status',
+      'snapshot-idle',
+      'workspace-idle',
+      'clear-acp-state',
+      'clear-inactive',
+    ]);
+    expect(harness.workflowFinalizer.finalizeDeliberateStop).not.toHaveBeenCalled();
+    expect(harness.lifecycleGate.isStopReserved('session-1')).toBe(false);
   });
 
   it('releases the stop generation after a session stops', async () => {
-    const { service } = createLifecycleHarness();
-    const stopGeneration = service.getStopGeneration('session-1');
+    const { coordinator, lifecycleGate } = createTerminationHarness();
+    const stopGeneration = lifecycleGate.getGeneration('session-1');
 
-    await service.stopSession('session-1');
+    await coordinator.stopSession('session-1');
 
-    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    const sentinelGeneration = lifecycleGate.getGeneration('sentinel-session');
     expect(sentinelGeneration).toBeGreaterThan(stopGeneration);
-    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
+    expect(lifecycleGate.getGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
-  it('releases the stop generation when viewers retain inactive session state', async () => {
-    const { service, sessionDomainService } = createLifecycleHarness();
-    const stopGeneration = service.getStopGeneration('session-1');
-    sessionEventBus.registerViewerCountProvider((sessionId) => (sessionId === 'session-1' ? 1 : 0));
+  it('releases the stop generation when finalization retains inactive session state', async () => {
+    const { coordinator, lifecycleGate, workflowFinalizer } = createTerminationHarness();
+    const stopGeneration = lifecycleGate.getGeneration('session-1');
 
-    try {
-      await service.stopSession('session-1');
-    } finally {
-      sessionEventBus.registerViewerCountProvider(null);
-    }
+    await coordinator.stopSession('session-1');
 
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
-    const sentinelGeneration = service.getStopGeneration('sentinel-session');
+    expect(workflowFinalizer.clearInactiveSession).toHaveBeenCalledWith('session-1', 'manual_stop');
+    const sentinelGeneration = lifecycleGate.getGeneration('sentinel-session');
     expect(sentinelGeneration).toBeGreaterThan(stopGeneration);
-    expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
+    expect(lifecycleGate.getGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
   it('waits for a runtime-owned client creation fence and stops the resulting runtime', async () => {
-    const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness();
-    type RuntimeHandle = Awaited<ReturnType<typeof runtimeManager.getOrCreateClient>>;
+    const { coordinator, runtimeManager } = createTerminationHarness();
+    type RuntimeHandle = { id: string };
     let activeHandle: RuntimeHandle | undefined;
     let resolveClient!: (handle: RuntimeHandle) => void;
     const pendingClient = new Promise<RuntimeHandle>((resolve) => {
       resolveClient = resolve;
     });
-    const quiescence = new AcpRuntimeQuiescence({ stopClient: runtimeManager.stopClient });
-    runtimeManager.getClient.mockImplementation(() => activeHandle);
-    runtimeManager.getOrCreateClient.mockImplementation(async () => {
-      activeHandle = await pendingClient;
-      return activeHandle;
-    });
-    runtimeManager.runClientCreationOperation.mockImplementation((sessionId, purpose, operation) =>
-      quiescence.runClientCreationOperation(sessionId, purpose, operation)
-    );
-    runtimeManager.stopAndQuiesce.mockImplementation((sessionId) =>
-      quiescence.stopAndQuiesce(sessionId)
-    );
-    runtimeManager.stopClient.mockImplementation(() => {
+    const stopClient = vi.fn(() => {
       activeHandle = undefined;
       return Promise.resolve();
     });
-
-    const startResult = service.startSession('session-1').catch((error) => error);
-    await vi.waitFor(() => {
-      expect(runtimeManager.getOrCreateClient).toHaveBeenCalled();
+    const quiescence = new AcpRuntimeQuiescence({ stopClient });
+    runtimeManager.stopAndQuiesce.mockImplementation((sessionId) =>
+      quiescence.stopAndQuiesce(sessionId)
+    );
+    const creation = quiescence.runClientCreationOperation('session-1', 'active', async () => {
+      activeHandle = await pendingClient;
+      return activeHandle;
     });
 
-    const stopPromise = service.stopSession('session-1');
+    const stopPromise = coordinator.stopSession('session-1');
     await vi.waitFor(() => {
       expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
@@ -338,50 +522,55 @@ describe('SessionTerminationCoordinator races', () => {
     });
     await Promise.resolve();
     expect(stopSettled).toBe(false);
-    resolveClient(
-      unsafeCoerce<RuntimeHandle>({
-        provider: 'CLAUDE',
-        providerSessionId: 'provider-session-1',
-        configOptions: [],
-        isPromptInFlight: false,
-      })
-    );
+    resolveClient({ id: 'runtime-handle' });
 
     await stopPromise;
-    await expect(startResult).resolves.toEqual(
-      expect.objectContaining({ message: 'Session is currently being stopped' })
-    );
+    await creation;
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledTimes(1);
-    expect(runtimeManager.getClient('session-1')).toBeUndefined();
-    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(stopClient).toHaveBeenCalledWith('session-1');
+    expect(activeHandle).toBeUndefined();
   });
 
-  it('returns a duplicate stop early while preserving the active stop barrier', async () => {
-    const harness = createLifecycleHarness();
+  it('returns a duplicate stop without repeating effects or releasing the active reservation', async () => {
+    const harness = createTerminationHarness();
     const stopEvent = createDeferred<null>();
     harness.lifecycleEventService.record.mockReturnValueOnce(stopEvent.promise);
+    const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
+    const releases = vi.fn();
+    vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((sessionId) => {
+      const reservation = originalReserveStop(sessionId);
+      if (!reservation) {
+        return null;
+      }
+      return {
+        generation: reservation.generation,
+        release: () => {
+          releases();
+          reservation.release();
+        },
+      };
+    });
 
-    const firstStop = harness.service.stopSession('session-1');
+    const firstStop = harness.coordinator.stopSession('session-1');
     await vi.waitFor(() => {
       expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(1);
     });
 
-    await expect(harness.service.stopSession('session-1')).resolves.toBeUndefined();
-    expect(harness.service.isSessionStopping('session-1')).toBe(true);
-    await expect(harness.service.getOrCreateSessionClient('session-1')).rejects.toThrow(
-      'Session is currently being stopped'
-    );
+    await expect(harness.coordinator.stopSession('session-1')).resolves.toBeUndefined();
+    expect(harness.lifecycleGate.isSessionStopping('session-1')).toBe(true);
     expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(1);
-    expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
     expect(harness.runtimeManager.stopAndQuiesce).not.toHaveBeenCalled();
     expect(harness.sessionDomainService.clearQueuedWork).toHaveBeenCalledTimes(1);
+    expect(harness.acpEventProcessor.clearSessionState).not.toHaveBeenCalled();
+    expect(releases).not.toHaveBeenCalled();
 
     stopEvent.resolve(null);
     await firstStop;
 
-    expect(harness.service.isSessionStopping('session-1')).toBe(false);
+    expect(harness.lifecycleGate.isSessionStopping('session-1')).toBe(false);
     expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledTimes(1);
     expect(harness.repository.updateSessionIfStatus).toHaveBeenCalledTimes(1);
-    expect(harness.sessionDomainService.clearSession).toHaveBeenCalledTimes(1);
+    expect(harness.acpEventProcessor.clearSessionState).toHaveBeenCalledTimes(1);
+    expect(releases).toHaveBeenCalledTimes(1);
   });
 });
