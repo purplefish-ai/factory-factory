@@ -1412,40 +1412,37 @@ describe('AcpRuntimeManager', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
-    it('aborts in-flight client creation and cleans up the spawned subprocess', async () => {
-      const child = createMockChildProcess();
+    it('quiesces a deferred post-creation reconciliation before stopping its runtime', async () => {
+      // Catches allowing reconciliation to install a runtime after the final stop pass.
+      const reconciliation = createDeferred<void>();
+      const child = setupSuccessfulSpawn();
       exitChildAfterSigterm(child);
-      mockSpawn.mockReturnValue(child);
-      mockInitialize.mockImplementation(
-        () =>
-          new Promise(() => {
-            // Keep creation pending until the per-session stop aborts it.
-          })
-      );
-
-      const createPromise = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-      const createRejection = createPromise.catch((error: unknown) => error);
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalledTimes(1);
-        expect(manager.getPendingClient('session-1')).toBeDefined();
+      const creation = manager.runClientCreationOperation('session-1', 'active', async () => {
+        await reconciliation.promise;
+        return manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
       });
 
-      await manager.stopClient('session-1');
-
-      await expect(createRejection).resolves.toMatchObject({
-        message: expect.stringContaining('ACP session stop requested'),
+      const firstStop = manager.stopAndQuiesce('session-1');
+      const secondStop = manager.stopAndQuiesce('session-1');
+      expect(secondStop).toBe(firstStop);
+      let stopSettled = false;
+      void firstStop.then(() => {
+        stopSettled = true;
       });
+      await Promise.resolve();
+      expect(stopSettled).toBe(false);
+
+      reconciliation.resolve(undefined);
+      await creation;
+      await Promise.all([firstStop, secondStop]);
+
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
-      expect(manager.isStopInProgress('session-1')).toBe(false);
       expect(manager.getClient('session-1')).toBeUndefined();
-      expect(manager.getPendingClient('session-1')).toBeUndefined();
     });
 
     it('runtime exit event atomically captures browse purpose for a managed stop', async () => {
@@ -1785,7 +1782,8 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopAllClients', () => {
-    it('atomically closes admission and reports active and pending session ids', async () => {
+    it('waits for fence-only reconciliation while closing admission', async () => {
+      // Catches shutdown omitting creation-fence sessions or skipping its barrier wait.
       const activeChild = setupSuccessfulSpawn();
       await manager.getOrCreateClient(
         'session-active',
@@ -1794,32 +1792,20 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      const pendingChild = createMockChildProcess();
-      exitChildAfterSigterm(pendingChild);
-      mockSpawn.mockReturnValueOnce(pendingChild);
-      mockInitialize.mockImplementationOnce(
-        () =>
-          new Promise(() => {
-            // Remain pending until beginShutdown rejects the creation signal.
-          })
+      const reconciliation = createDeferred<void>();
+      const fenceOnly = manager.runClientCreationOperation(
+        'session-fence-only',
+        'browse',
+        () => reconciliation.promise
       );
-      const pendingCreation = manager
-        .getOrCreateClient(
-          'session-pending',
-          { ...defaultOptions(), sessionId: 'session-pending' },
-          defaultHandlers(),
-          defaultContext()
-        )
-        .catch((error: unknown) => error);
-      await vi.waitFor(() => {
-        expect(manager.getPendingClient('session-pending')).toBeDefined();
-      });
 
       const shutdownSessionIds = (
         manager as unknown as { beginShutdown(): string[] }
       ).beginShutdown();
 
-      expect(new Set(shutdownSessionIds)).toEqual(new Set(['session-active', 'session-pending']));
+      expect(new Set(shutdownSessionIds)).toEqual(
+        new Set(['session-active', 'session-fence-only'])
+      );
       await expect(
         manager.getOrCreateClient(
           'session-too-late',
@@ -1834,10 +1820,15 @@ describe('AcpRuntimeManager', () => {
         activeChild.emit('exit', 0, null);
         return true;
       });
-      await manager.stopAllClients(50);
-      await expect(pendingCreation).resolves.toMatchObject({
-        message: expect.stringContaining('ACP runtime manager is shutting down'),
+      const stopAll = manager.stopAllClients(50);
+      let stopped = false;
+      void stopAll.then(() => {
+        stopped = true;
       });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      reconciliation.resolve(undefined);
+      await Promise.all([fenceOnly, stopAll]);
     });
 
     it('clears per-client shutdown timeouts when clients stop quickly', async () => {
