@@ -100,12 +100,15 @@ export class AcpRuntimeQuiescence {
   }
 
   isBrowseOnlySession(sessionId: string): boolean {
+    return this.getTrackedSessionPurpose(sessionId) === 'browse';
+  }
+
+  getTrackedSessionPurpose(sessionId: string): AcpRuntimePurpose | null {
     const records = this.creationRecords.get(sessionId);
-    return (
-      records !== undefined &&
-      records.size > 0 &&
-      [...records].every(({ purpose }) => purpose === 'browse')
-    );
+    if (records === undefined || records.size === 0) {
+      return null;
+    }
+    return [...records].every(({ purpose }) => purpose === 'browse') ? 'browse' : 'active';
   }
 
   async waitForAll(): Promise<void> {

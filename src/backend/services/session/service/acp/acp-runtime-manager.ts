@@ -245,11 +245,9 @@ export class AcpRuntimeManager {
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
   private preferSourceEntrypoint = true;
   private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
-
   constructor(options?: { acpStartupTimeoutMs?: number }) {
     this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
   }
-
   setAcpStartupTimeoutMs(timeoutMs: number): void {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
@@ -257,7 +255,6 @@ export class AcpRuntimeManager {
     }
     this.acpStartupTimeoutMs = Math.floor(timeoutMs);
   }
-
   configureEnvironment(options: {
     preferSourceEntrypoint: boolean;
     childProcessEnvProvider: () => NodeJS.ProcessEnv;
@@ -265,7 +262,6 @@ export class AcpRuntimeManager {
     this.preferSourceEntrypoint = options.preferSourceEntrypoint;
     this.childProcessEnvProvider = options.childProcessEnvProvider;
   }
-
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
   }
@@ -273,7 +269,6 @@ export class AcpRuntimeManager {
   isStopInProgress(sessionId: string): boolean {
     return this.stoppingInProgress.has(sessionId);
   }
-
   getClient(sessionId: string): AcpProcessHandle | undefined {
     return this.browseOnlySessions.has(sessionId) ? undefined : this.getBrowseClient(sessionId);
   }
@@ -282,23 +277,28 @@ export class AcpRuntimeManager {
     const handle = this.sessions.get(sessionId);
     return handle?.isRunning() ? handle : undefined;
   }
-
   isBrowseOnlySession(sessionId: string): boolean {
-    return this.browseOnlySessions.has(sessionId) || this.quiescence.isBrowseOnlySession(sessionId);
+    const hasRuntime = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
+    const fencePurpose = this.quiescence.getTrackedSessionPurpose(sessionId);
+    return (
+      (hasRuntime || fencePurpose !== null) &&
+      (!hasRuntime || this.browseOnlySessions.has(sessionId)) &&
+      (fencePurpose === null || fencePurpose === 'browse')
+    );
   }
-
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
   }
-
   runClientCreationOperation<T>(
     sessionId: string,
     purpose: AcpRuntimePurpose,
     operation: (registration: AcpClientCreationOperation) => Promise<T>
   ): Promise<T> {
+    if (this.isShuttingDown) {
+      return Promise.reject(this.createShutdownError(sessionId));
+    }
     return this.quiescence.runClientCreationOperation(sessionId, purpose, operation);
   }
-
   stopAndQuiesce(sessionId: string): Promise<void> {
     return this.quiescence.stopAndQuiesce(sessionId);
   }
