@@ -83,8 +83,9 @@ export class AcpRuntimeQuiescence {
       rejectOperation = reject;
     });
     this.quiescenceOperations.set(sessionId, quiescenceOperation);
+    const barriers = [...(this.creationRecords.get(sessionId) ?? [])].map(({ barrier }) => barrier);
 
-    void this.runStopAndQuiesce(sessionId)
+    void this.runStopAndQuiesce(sessionId, barriers)
       .then(resolveOperation, rejectOperation)
       .finally(() => {
         if (this.quiescenceOperations.get(sessionId) === quiescenceOperation) {
@@ -115,7 +116,7 @@ export class AcpRuntimeQuiescence {
     );
   }
 
-  private async runStopAndQuiesce(sessionId: string): Promise<void> {
+  private async runStopAndQuiesce(sessionId: string, barriers: Promise<void>[]): Promise<void> {
     let firstStopError: unknown;
     let firstStopRejected = false;
     try {
@@ -125,7 +126,6 @@ export class AcpRuntimeQuiescence {
       firstStopError = error;
     }
 
-    const barriers = [...(this.creationRecords.get(sessionId) ?? [])].map(({ barrier }) => barrier);
     await Promise.all(barriers);
     if (barriers.length === 0) {
       if (firstStopRejected) {

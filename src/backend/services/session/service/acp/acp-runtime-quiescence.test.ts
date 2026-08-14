@@ -102,7 +102,7 @@ describe('AcpRuntimeQuiescence', () => {
     );
 
     const stop = quiescence.stopAndQuiesce('session-1');
-    await vi.waitFor(() => expect(stopClient).toHaveBeenCalledTimes(1));
+    expect(stopClient).toHaveBeenCalledWith('session-1');
     let stopped = false;
     void stop.then(() => {
       stopped = true;
@@ -130,7 +130,7 @@ describe('AcpRuntimeQuiescence', () => {
     );
 
     const stop = quiescence.stopAndQuiesce('session-1');
-    await vi.waitFor(() => expect(stopClient).toHaveBeenCalledTimes(1));
+    expect(stopClient).toHaveBeenCalledWith('session-1');
     pending.resolve();
 
     await expect(stop).resolves.toBeUndefined();
@@ -145,6 +145,32 @@ describe('AcpRuntimeQuiescence', () => {
 
     await expect(quiescence.stopAndQuiesce('session-1')).rejects.toThrow('stop failed');
     expect(stopClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries after a creation operation settles before the first stop resolves', async () => {
+    // Catches snapshotting barriers after the initial stop erases a settled reconciliation.
+    const pending = createDeferred<void>();
+    const firstStop = createDeferred<void>();
+    const stopClient = vi
+      .fn<() => Promise<void>>()
+      .mockReturnValueOnce(firstStop.promise)
+      .mockResolvedValueOnce(undefined);
+    const quiescence = new AcpRuntimeQuiescence({ stopClient });
+    const creation = quiescence.runClientCreationOperation(
+      'session-1',
+      'active',
+      () => pending.promise
+    );
+
+    const stop = quiescence.stopAndQuiesce('session-1');
+    expect(stopClient).toHaveBeenCalledWith('session-1');
+    pending.resolve();
+    await creation;
+    firstStop.resolve();
+
+    await stop;
+    expect(stopClient).toHaveBeenCalledTimes(2);
+    expect(stopClient).toHaveBeenLastCalledWith('session-1');
   });
 
   it('propagates an undefined initial stop rejection when no creation operation was tracked', async () => {
@@ -170,7 +196,7 @@ describe('AcpRuntimeQuiescence', () => {
     const firstStop = quiescence.stopAndQuiesce('session-1');
     const secondStop = quiescence.stopAndQuiesce('session-1');
     expect(secondStop).toBe(firstStop);
-    await vi.waitFor(() => expect(stopClient).toHaveBeenCalledTimes(1));
+    expect(stopClient).toHaveBeenCalledWith('session-1');
     pending.resolve();
 
     await Promise.all([creation, firstStop, secondStop]);
