@@ -5,7 +5,11 @@ import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { SessionLifecycleEventKind, SessionStatus } from '@/shared/core';
+import {
+  SessionLifecycleEventKind,
+  SessionLifecycleEventReason,
+  SessionStatus,
+} from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -21,6 +25,8 @@ import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
+const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
+const SHUTDOWN_SESSION_STOP_MESSAGE = 'Session stopped by the system.';
 
 export type SessionStopReason =
   | 'USER_STOP'
@@ -55,6 +61,8 @@ export type SessionTerminationCoordinatorDependencies = {
     | 'isSessionRunning'
     | 'isBrowseOnlySession'
     | 'stopAndQuiesce'
+    | 'beginShutdown'
+    | 'stopAllClients'
   >;
   sessionDomainService: Pick<
     SessionDomainService,
@@ -70,9 +78,12 @@ export type SessionTerminationCoordinatorDependencies = {
     | 'clearPendingToolCalls'
     | 'getWorkspaceId'
   >;
-  promptTurnCompletionService: Pick<SessionPromptTurnCompletionService, 'clearSession'>;
+  promptTurnCompletionService: Pick<
+    SessionPromptTurnCompletionService,
+    'clearSession' | 'clearAll'
+  >;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop'>;
+  lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown'>;
   workflowFinalizer: Pick<
     SessionWorkflowFinalizer,
     'finalizeDeliberateStop' | 'clearInactiveSession'
@@ -133,6 +144,26 @@ export class SessionTerminationCoordinator {
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
+  }
+
+  async stopAllClients(timeoutMs = 5000): Promise<void> {
+    this.dependencies.promptTurnCompletionService.clearAll();
+    const shutdownSessionIds = this.dependencies.runtimeManager.beginShutdown();
+    const activeShutdownSessionIds = shutdownSessionIds.filter(
+      (sessionId) => !this.dependencies.runtimeManager.isBrowseOnlySession(sessionId)
+    );
+    this.dependencies.lifecycleGate.reserveShutdown(activeShutdownSessionIds);
+
+    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
+
+    try {
+      await this.dependencies.runtimeManager.stopAllClients(timeoutMs);
+    } catch (error) {
+      logger.error('Failed to stop ACP clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
   private async stopSessionWithBarrier(
@@ -312,6 +343,54 @@ export class SessionTerminationCoordinator {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
+    }
+  }
+
+  private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
+    const session = await this.loadSessionForStop(sessionId);
+    const workspaceId =
+      session?.workspaceId ?? this.dependencies.acpEventProcessor.getWorkspaceId(sessionId);
+    if (!workspaceId) {
+      logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
+      return;
+    }
+    await this.dependencies.lifecycleEventService.record({
+      workspaceId,
+      sessionId,
+      kind: SessionLifecycleEventKind.SESSION_STOPPED,
+      reason: SessionLifecycleEventReason.SYSTEM_STOP,
+      message: SHUTDOWN_SESSION_STOP_MESSAGE,
+      dedupeKey: `session-stop:${randomUUID()}`,
+    });
+  }
+
+  private async recordShutdownLifecycleEvents(sessionIds: string[]): Promise<void> {
+    const resultsPromise = Promise.allSettled(
+      sessionIds.map((sessionId) => this.recordShutdownLifecycleEvent(sessionId))
+    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const results = await Promise.race([
+      resultsPromise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    if (results === null) {
+      logger.warn('Timed out recording shutdown lifecycle events; continuing shutdown', {
+        timeoutMs: SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS,
+      });
+      return;
+    }
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
+          sessionId: sessionIds[index],
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+      }
     }
   }
 

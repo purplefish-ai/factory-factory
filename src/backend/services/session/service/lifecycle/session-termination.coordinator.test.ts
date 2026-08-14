@@ -1,19 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
-import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { SessionLifecycleService } from './session.lifecycle.service';
 import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
-import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
+const logger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => logger,
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),
 }));
 
@@ -33,6 +32,36 @@ vi.mock('@/backend/services/settings', () => ({
     })),
   },
 }));
+
+function createShutdownHarness(
+  sessionIds = ['session-active', 'session-pending', 'session-fenced', 'session-browse-only']
+) {
+  const base = createTerminationHarness();
+  const runtimeManager = {
+    ...base.runtimeManager,
+    beginShutdown: vi.fn(() => sessionIds),
+    stopAllClients: vi.fn(async () => undefined),
+  };
+  const promptTurnCompletionService = {
+    ...base.promptTurnCompletionService,
+    clearAll: vi.fn(),
+  };
+  const coordinator = new SessionTerminationCoordinator({
+    repository: base.repository,
+    retryService: base.retryService,
+    runtimeManager,
+    sessionDomainService: base.sessionDomainService,
+    sessionPermissionService: base.sessionPermissionService,
+    acpEventProcessor: base.acpEventProcessor,
+    promptTurnCompletionService,
+    lifecycleEventService: base.lifecycleEventService,
+    lifecycleGate: base.lifecycleGate,
+    workflowFinalizer: base.workflowFinalizer,
+    getWorkspaceBridge: () => base.workspaceBridge,
+  });
+
+  return { ...base, coordinator, runtimeManager, promptTurnCompletionService };
+}
 
 describe('SessionTerminationCoordinator workspace stops', () => {
   beforeEach(() => {
@@ -138,133 +167,124 @@ describe('SessionTerminationCoordinator stop causes', () => {
   });
 });
 
-describe('SessionLifecycleService graceful shutdown', () => {
-  it('records SYSTEM_STOP for active and pending runtimes before bounded shutdown', async () => {
-    const runtimeManager = {
-      beginShutdown: vi.fn(() => ['session-active', 'session-pending', 'session-browse-only']),
-      stopAllClients: vi.fn(async () => undefined),
-      isStopInProgress: vi.fn(() => false),
-      isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
-    };
-    const repository = {
-      getSessionById: vi.fn(async (sessionId: string) => ({
-        id: sessionId,
-        workspaceId: 'workspace-1',
-        workflow: 'code',
-      })),
-    };
-    const lifecycleEventService = {
-      record: vi.fn(async () => null),
-      hydrate: vi.fn(async () => undefined),
-    };
-    const promptTurnCompletionService = {
-      clearAll: vi.fn(),
-    };
-    const service = new SessionLifecycleService(
-      unsafeCoerce({
-        repository,
-        contextService: {},
-        acpEnvironment: {},
-        promptBuilder: {},
-        runtimeManager,
-        sessionDomainService: {},
-        sessionPermissionService: {},
-        sessionConfigService: {},
-        acpEventProcessor: { getWorkspaceId: vi.fn() },
-        promptTurnCompletionService,
-        retryService: {
-          run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
-        },
-        lifecycleEventService,
-        lifecycleGate: new SessionLifecycleGate({
-          isRuntimeStopInProgress: runtimeManager.isStopInProgress,
-        }),
-        hydrateProviderHistory: vi.fn(),
-        sendSessionMessage: vi.fn(),
-      })
-    );
-
-    await service.stopAllClients(4321);
-
-    expect(runtimeManager.beginShutdown).toHaveBeenCalledOnce();
-    expect(lifecycleEventService.record).toHaveBeenCalledTimes(2);
-    expect(lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'session-active',
-        reason: 'SYSTEM_STOP',
-      })
-    );
-    expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'session-browse-only' })
-    );
-    expect(lifecycleEventService.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'session-pending',
-        reason: 'SYSTEM_STOP',
-      })
-    );
-    expect(runtimeManager.beginShutdown.mock.invocationCallOrder[0]).toBeLessThan(
-      lifecycleEventService.record.mock.invocationCallOrder[0]!
-    );
-    expect(lifecycleEventService.record.mock.invocationCallOrder.at(-1)).toBeLessThan(
-      runtimeManager.stopAllClients.mock.invocationCallOrder[0]!
-    );
-    expect(runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
+describe('SessionTerminationCoordinator graceful shutdown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('continues runtime shutdown after lifecycle recording timeout', async () => {
+  it('closes admission and reserves non-browse sessions before awaiting durable stop events', async () => {
+    const event = createDeferred<null>();
+    const effects: string[] = [];
+    const harness = createShutdownHarness();
+    harness.promptTurnCompletionService.clearAll.mockImplementation(() => {
+      effects.push('clear-prompts');
+    });
+    harness.runtimeManager.beginShutdown.mockImplementation(() => {
+      effects.push('close-admission');
+      return ['session-active', 'session-pending', 'session-fenced', 'session-browse-only'];
+    });
+    harness.lifecycleEventService.record.mockImplementation(({ sessionId }) => {
+      effects.push(`record:${sessionId}`);
+      return event.promise;
+    });
+
+    const shutdown = harness.coordinator.stopAllClients(4321);
+    await vi.waitFor(() => {
+      expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(3);
+    });
+
+    expect(effects.slice(0, 2)).toEqual(['clear-prompts', 'close-admission']);
+    expect(harness.lifecycleGate.isSessionStopping('session-active')).toBe(true);
+    expect(harness.lifecycleGate.isSessionStopping('session-pending')).toBe(true);
+    expect(harness.lifecycleGate.isSessionStopping('session-fenced')).toBe(true);
+    expect(harness.lifecycleGate.isSessionStopping('session-browse-only')).toBe(false);
+    expect(harness.lifecycleEventService.record.mock.calls.map(([input]) => input)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionId: 'session-active', reason: 'SYSTEM_STOP' }),
+        expect.objectContaining({ sessionId: 'session-pending', reason: 'SYSTEM_STOP' }),
+        expect.objectContaining({ sessionId: 'session-fenced', reason: 'SYSTEM_STOP' }),
+      ])
+    );
+    expect(harness.lifecycleEventService.record).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-browse-only' })
+    );
+    expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
+
+    event.resolve(null);
+    await shutdown;
+
+    expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
+  });
+
+  it('logs lifecycle recording failures independently and still shuts down the runtime', async () => {
+    const harness = createShutdownHarness(['session-active', 'session-fenced']);
+    harness.lifecycleEventService.record.mockImplementation(({ sessionId }) =>
+      Promise.reject(
+        new Error(sessionId === 'session-active' ? 'active event failed' : 'fenced event failed')
+      )
+    );
+
+    await expect(harness.coordinator.stopAllClients()).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Failed recording shutdown lifecycle event; continuing shutdown',
+      { sessionId: 'session-active', error: 'active event failed' }
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Failed recording shutdown lifecycle event; continuing shutdown',
+      { sessionId: 'session-fenced', error: 'fenced event failed' }
+    );
+    expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(5000);
+  });
+
+  it('clears the one-second lifecycle recording timeout after early completion', async () => {
     vi.useFakeTimers();
     try {
-      const runtimeManager = {
-        beginShutdown: vi.fn(() => ['session-active']),
-        stopAllClients: vi.fn(async () => undefined),
-        isStopInProgress: vi.fn(() => false),
-        isBrowseOnlySession: vi.fn(() => false),
-      };
-      const service = new SessionLifecycleService(
-        unsafeCoerce({
-          repository: {
-            getSessionById: vi.fn(async () => ({
-              id: 'session-active',
-              workspaceId: 'workspace-1',
-              workflow: 'code',
-            })),
-          },
-          contextService: {},
-          acpEnvironment: {},
-          promptBuilder: {},
-          runtimeManager,
-          sessionDomainService: {},
-          sessionPermissionService: {},
-          sessionConfigService: {},
-          acpEventProcessor: { getWorkspaceId: vi.fn() },
-          promptTurnCompletionService: { clearAll: vi.fn() },
-          retryService: {
-            run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
-          },
-          lifecycleEventService: {
-            record: vi.fn(() => new Promise(() => undefined)),
-            hydrate: vi.fn(async () => undefined),
-          },
-          lifecycleGate: new SessionLifecycleGate({
-            isRuntimeStopInProgress: runtimeManager.isStopInProgress,
-          }),
-          hydrateProviderHistory: vi.fn(),
-          sendSessionMessage: vi.fn(),
-        })
-      );
+      const harness = createShutdownHarness(['session-active']);
 
-      const shutdown = service.stopAllClients(4321);
+      await harness.coordinator.stopAllClients();
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('continues runtime shutdown when lifecycle recording reaches one second', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createShutdownHarness(['session-active']);
+      harness.lifecycleEventService.record.mockReturnValue(new Promise(() => undefined));
+
+      const shutdown = harness.coordinator.stopAllClients(4321);
       await vi.advanceTimersByTimeAsync(999);
-      expect(runtimeManager.stopAllClients).not.toHaveBeenCalled();
+      expect(harness.runtimeManager.stopAllClients).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
       await shutdown;
 
-      expect(runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Timed out recording shutdown lifecycle events; continuing shutdown',
+        { timeoutMs: 1000 }
+      );
+      expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(4321);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('forwards the caller timeout and propagates runtime shutdown rejection after logging', async () => {
+    const runtimeFailure = new Error('runtime shutdown failed');
+    const harness = createShutdownHarness([]);
+    harness.runtimeManager.stopAllClients.mockRejectedValue(runtimeFailure);
+
+    await expect(harness.coordinator.stopAllClients(8765)).rejects.toBe(runtimeFailure);
+
+    expect(harness.runtimeManager.stopAllClients).toHaveBeenCalledWith(8765);
+    expect(logger.error).toHaveBeenCalledWith('Failed to stop ACP clients during shutdown', {
+      error: runtimeFailure.message,
+    });
   });
 });
 

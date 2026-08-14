@@ -128,6 +128,9 @@ describe('SessionLifecycleFacade', () => {
     const stopWorkspaceSessions = vi
       .spyOn(SessionTerminationCoordinator.prototype, 'stopWorkspaceSessions')
       .mockResolvedValueOnce(undefined);
+    const stopAllClients = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopAllClients')
+      .mockResolvedValue(undefined);
     const { service } = createLifecycleHarness();
     const sessionOptions = {
       cleanupTransientRatchetSession: false,
@@ -140,31 +143,42 @@ describe('SessionLifecycleFacade', () => {
     await expect(
       service.stopWorkspaceSessions('workspace-exact', workspaceOptions)
     ).resolves.toBeUndefined();
+    await expect(service.stopAllClients(4321)).resolves.toBeUndefined();
+    await expect(service.stopAllClients()).resolves.toBeUndefined();
 
     expect(stopSession).toHaveBeenCalledWith('session-exact', sessionOptions);
     expect(stopWorkspaceSessions).toHaveBeenCalledWith('workspace-exact', workspaceOptions);
+    expect(stopAllClients).toHaveBeenNthCalledWith(1, 4321);
+    expect(stopAllClients).toHaveBeenNthCalledWith(2, 5000);
     stopSession.mockRestore();
     stopWorkspaceSessions.mockRestore();
+    stopAllClients.mockRestore();
   });
 
   it('preserves termination coordinator rejections', async () => {
     const sessionFailure = new Error('session stop rejected');
     const workspaceFailure = new Error('workspace stop rejected');
+    const shutdownFailure = new Error('shutdown rejected');
     const stopSession = vi
       .spyOn(SessionTerminationCoordinator.prototype, 'stopSession')
       .mockRejectedValueOnce(sessionFailure);
     const stopWorkspaceSessions = vi
       .spyOn(SessionTerminationCoordinator.prototype, 'stopWorkspaceSessions')
       .mockRejectedValueOnce(workspaceFailure);
+    const stopAllClients = vi
+      .spyOn(SessionTerminationCoordinator.prototype, 'stopAllClients')
+      .mockRejectedValueOnce(shutdownFailure);
     const { service } = createLifecycleHarness();
 
     await expect(service.stopSession('session-rejected')).rejects.toBe(sessionFailure);
     await expect(service.stopWorkspaceSessions('workspace-rejected')).rejects.toBe(
       workspaceFailure
     );
+    await expect(service.stopAllClients()).rejects.toBe(shutdownFailure);
 
     stopSession.mockRestore();
     stopWorkspaceSessions.mockRestore();
+    stopAllClients.mockRestore();
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {

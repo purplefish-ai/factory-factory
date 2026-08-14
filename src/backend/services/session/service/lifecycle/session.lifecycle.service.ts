@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
@@ -10,11 +8,7 @@ import type {
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService } from '@/backend/services/workspace';
-import {
-  SessionLifecycleEventKind,
-  SessionLifecycleEventReason,
-  type WorkspaceStatus,
-} from '@/shared/core';
+import type { WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -46,11 +40,6 @@ import {
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 export type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
-
-const logger = createLogger('session');
-
-const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
-const SHUTDOWN_SESSION_STOP_MESSAGE = 'Session stopped by the system.';
 
 type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
 type HydrateProviderHistory = (
@@ -296,86 +285,7 @@ export class SessionLifecycleService {
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    this.promptTurnCompletionService.clearAll();
-    const shutdownSessionIds = this.runtimeManager.beginShutdown();
-    const activeShutdownSessionIds = shutdownSessionIds.filter(
-      (sessionId) => !this.runtimeManager.isBrowseOnlySession(sessionId)
-    );
-    this.lifecycleGate.reserveShutdown(activeShutdownSessionIds);
-
-    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
-
-    try {
-      await this.runtimeManager.stopAllClients(timeoutMs);
-    } catch (error) {
-      logger.error('Failed to stop ACP clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
-
-  private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
-    const session = await this.loadSessionForStop(sessionId);
-    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
-    if (!workspaceId) {
-      logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
-      return;
-    }
-    await this.lifecycleEventService.record({
-      workspaceId,
-      sessionId,
-      kind: SessionLifecycleEventKind.SESSION_STOPPED,
-      reason: SessionLifecycleEventReason.SYSTEM_STOP,
-      message: SHUTDOWN_SESSION_STOP_MESSAGE,
-      dedupeKey: `session-stop:${randomUUID()}`,
-    });
-  }
-
-  private async recordShutdownLifecycleEvents(sessionIds: string[]): Promise<void> {
-    const resultsPromise = Promise.allSettled(
-      sessionIds.map((sessionId) => this.recordShutdownLifecycleEvent(sessionId))
-    );
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const results = await Promise.race([
-      resultsPromise,
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS);
-      }),
-    ]);
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    if (results === null) {
-      logger.warn('Timed out recording shutdown lifecycle events; continuing shutdown', {
-        timeoutMs: SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS,
-      });
-      return;
-    }
-    for (const [index, result] of results.entries()) {
-      if (result.status === 'rejected') {
-        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
-          sessionId: sessionIds[index],
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        });
-      }
-    }
-  }
-
-  private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
-    try {
-      return await this.retryService.run(() => this.repository.getSessionById(sessionId), {
-        attempts: 2,
-        operationName: 'loadSessionForStop',
-        context: { sessionId },
-      });
-    } catch (error) {
-      logger.warn('Failed to load session before stop; continuing with process shutdown', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
+    await this.terminationCoordinator.stopAllClients(timeoutMs);
   }
 
   persistClosedSession(sessionId: string): Promise<void> {

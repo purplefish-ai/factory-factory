@@ -157,6 +157,8 @@ export type TerminationHarness = {
     | 'isSessionRunning'
     | 'isBrowseOnlySession'
     | 'stopAndQuiesce'
+    | 'beginShutdown'
+    | 'stopAllClients'
   >;
   sessionDomainService: MockedPick<
     SessionDomainService,
@@ -172,7 +174,10 @@ export type TerminationHarness = {
     | 'clearPendingToolCalls'
     | 'getWorkspaceId'
   >;
-  promptTurnCompletionService: { clearSession: Mock<(sessionId: string) => void> };
+  promptTurnCompletionService: {
+    clearSession: Mock<(sessionId: string) => void>;
+    clearAll: Mock<() => void>;
+  };
   lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record'>;
   lifecycleGate: SessionLifecycleGate;
   workflowFinalizer: MockedPick<
@@ -233,6 +238,8 @@ export function createTerminationHarness(
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     stopAndQuiesce: vi.fn(async () => undefined),
+    beginShutdown: vi.fn(() => []),
+    stopAllClients: vi.fn(async () => undefined),
   } satisfies Pick<
     AcpRuntimeManager,
     | 'getClient'
@@ -241,6 +248,8 @@ export function createTerminationHarness(
     | 'isSessionRunning'
     | 'isBrowseOnlySession'
     | 'stopAndQuiesce'
+    | 'beginShutdown'
+    | 'stopAllClients'
   >;
   const sessionDomainService = {
     clearQueuedWork: vi.fn(),
@@ -274,7 +283,10 @@ export function createTerminationHarness(
     | 'clearPendingToolCalls'
     | 'getWorkspaceId'
   >;
-  const promptTurnCompletionService = { clearSession: vi.fn<(sessionId: string) => void>() };
+  const promptTurnCompletionService = {
+    clearSession: vi.fn<(sessionId: string) => void>(),
+    clearAll: vi.fn<() => void>(),
+  };
   const lifecycleEventService = {
     record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
   } satisfies Pick<SessionLifecycleEventService, 'record'>;
