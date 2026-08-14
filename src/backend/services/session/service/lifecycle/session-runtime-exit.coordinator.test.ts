@@ -27,7 +27,11 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
 
 type ExitCoordinatorHarness = ReturnType<typeof createExitCoordinatorHarness>;
 
-function createExitCoordinatorHarness(options?: { browse?: boolean; lifecycleStopping?: boolean }) {
+function createExitCoordinatorHarness(options?: {
+  browse?: boolean;
+  lifecycleStopping?: boolean;
+  explicitStopReserved?: boolean;
+}) {
   const session = createLifecycleTestSession();
   const repository = {
     getSessionById: vi.fn(async () => session),
@@ -58,6 +62,7 @@ function createExitCoordinatorHarness(options?: { browse?: boolean; lifecycleSto
   };
   const lifecycleGate = {
     isSessionStopping: vi.fn(() => options?.lifecycleStopping ?? false),
+    isStopReserved: vi.fn(() => options?.explicitStopReserved ?? false),
     releaseShutdown: vi.fn(),
   };
   const workflowFinalizer = {
@@ -237,16 +242,32 @@ describe('SessionRuntimeExitCoordinator', () => {
     });
   });
 
-  it.each([
-    ['runtime-managed', { managed: true }, false],
-    ['lifecycle-deliberate', {}, true],
-  ] as const)('preserves idle status for %s deliberate exits', async (_caseName, eventOverrides, lifecycleStopping) => {
-    const harness = createExitCoordinatorHarness({ lifecycleStopping });
+  it('preserves idle status when an explicit lifecycle stop owns the transition', async () => {
+    const harness = createExitCoordinatorHarness({
+      lifecycleStopping: true,
+      explicitStopReserved: true,
+    });
 
-    await harness.coordinator.handleExit(runtimeExit({ ...eventOverrides, exitCode: null }));
+    await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
 
     expect(harness.repository.updateSession).not.toHaveBeenCalled();
     expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+      expect.objectContaining({ deliberate: true })
+    );
+  });
+
+  it.each([
+    ['runtime-managed', false],
+    ['shutdown-managed', true],
+  ] as const)('persists failed status for %s exits without an explicit stop reservation', async (_caseName, lifecycleStopping) => {
+    const harness = createExitCoordinatorHarness({ lifecycleStopping });
+
+    await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
+
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.FAILED,
+    });
     expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
       expect.objectContaining({ deliberate: true })
     );

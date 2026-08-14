@@ -38,7 +38,10 @@ type RuntimeExitCoordinatorDependencies = {
   >;
   promptTurnCompletionService: Pick<SessionPromptTurnCompletionService, 'clearSession'>;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
-  lifecycleGate: Pick<SessionLifecycleGate, 'isSessionStopping' | 'releaseShutdown'>;
+  lifecycleGate: Pick<
+    SessionLifecycleGate,
+    'isSessionStopping' | 'isStopReserved' | 'releaseShutdown'
+  >;
   workflowFinalizer: Pick<SessionWorkflowFinalizer, 'finalizeRuntimeExit' | 'clearInactiveSession'>;
   onSessionExit?: (sessionId: string) => void;
 };
@@ -94,6 +97,7 @@ export class SessionRuntimeExitCoordinator {
 
   async handleExit(event: AcpRuntimeExitEvent): Promise<void> {
     try {
+      const stopWillPersistIdle = this.dependencies.lifecycleGate.isStopReserved(event.sessionId);
       const deliberate =
         event.managed || this.dependencies.lifecycleGate.isSessionStopping(event.sessionId);
       this.dependencies.lifecycleGate.releaseShutdown(event.sessionId);
@@ -102,7 +106,7 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
       this.prepareRuntimeExit(event.sessionId, event.exitCode);
-      await this.handleActiveExit(event, deliberate);
+      await this.handleActiveExit(event, deliberate, stopWillPersistIdle);
     } finally {
       if (event.purpose === 'browse') {
         acpTraceLogger.closeSession(event.sessionId);
@@ -153,7 +157,11 @@ export class SessionRuntimeExitCoordinator {
     });
   }
 
-  private async handleActiveExit(event: AcpRuntimeExitEvent, deliberate: boolean): Promise<void> {
+  private async handleActiveExit(
+    event: AcpRuntimeExitEvent,
+    deliberate: boolean,
+    stopWillPersistIdle: boolean
+  ): Promise<void> {
     try {
       this.dependencies.sessionDomainService.markProcessExit(event.sessionId, event.exitCode);
       const session = await this.dependencies.repository.getSessionById(event.sessionId);
@@ -162,7 +170,7 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
 
-      if (!(deliberate && event.exitCode !== 0)) {
+      if (!(stopWillPersistIdle && event.exitCode !== 0)) {
         await this.updatePersistedStatus(event);
       }
       try {
