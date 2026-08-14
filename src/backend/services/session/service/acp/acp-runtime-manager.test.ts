@@ -874,6 +874,7 @@ describe('AcpRuntimeManager', () => {
       expect(onRuntimeError).toHaveBeenCalledWith({
         sessionId: 'db-session-1',
         error: expect.objectContaining({ message: 'provider transport failed' }),
+        incarnationId: expect.any(String),
         purpose: 'active',
       });
     });
@@ -1337,7 +1338,6 @@ describe('AcpRuntimeManager', () => {
       });
 
       vi.useFakeTimers();
-
       const stopPromise = manager.stopClient('session-1');
 
       // Advance past the 5s timeout
@@ -1518,18 +1518,19 @@ describe('AcpRuntimeManager', () => {
       expect(handlers.onExit).not.toHaveBeenCalled();
     });
 
-    it('runtime exit event omits a stale incarnation without affecting its replacement', async () => {
+    it('omits stale runtime error and exit events without affecting its replacement', async () => {
       const firstChild = setupSuccessfulSpawn();
-      const firstExit = vi.fn().mockResolvedValue(undefined);
-      const firstHandlers = { ...defaultHandlers(), onRuntimeExit: firstExit };
-
+      const firstHandlers = {
+        ...defaultHandlers(),
+        onRuntimeExit: vi.fn().mockResolvedValue(undefined),
+        onRuntimeError: vi.fn(),
+      };
       await manager.getOrCreateClient(
         'session-1',
         defaultOptions(),
         firstHandlers,
         defaultContext()
       );
-
       firstChild.kill = vi.fn((signal?: string) => {
         if (signal) {
           firstChild.killed = true;
@@ -1542,13 +1543,10 @@ describe('AcpRuntimeManager', () => {
       const stopPromise = manager.stopClient('session-1');
       await vi.advanceTimersByTimeAsync(5100);
       await stopPromise;
-
       vi.useRealTimers();
-
       const secondChild = createMockChildProcess();
       const secondHandlers = defaultHandlers();
       mockSpawn.mockReturnValueOnce(secondChild);
-
       const restartedHandle = await manager.getOrCreateClient(
         'session-1',
         defaultOptions(),
@@ -1556,11 +1554,13 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
+      firstChild.emit('error', new Error('stale provider transport failed'));
       firstChild.exitCode = 137;
       firstChild.emit('exit', 137, 'SIGKILL');
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(firstExit).not.toHaveBeenCalled();
+      expect(firstHandlers.onRuntimeError).not.toHaveBeenCalled();
+      expect(firstHandlers.onRuntimeExit).not.toHaveBeenCalled();
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
 

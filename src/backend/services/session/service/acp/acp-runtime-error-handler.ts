@@ -1,18 +1,24 @@
 import type { ChildProcess } from 'node:child_process';
 import { createLogger } from '@/backend/services/logger.service';
-import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
+import type { AcpRuntimeErrorEvent, AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { normalizeUnknownError } from './acp-stream-normalizer';
 
 const logger = createLogger('acp-runtime-manager');
+
+type RuntimeErrorContext = Pick<AcpRuntimeErrorEvent, 'incarnationId' | 'purpose'>;
 
 export function wireAcpRuntimeErrorHandler(
   child: ChildProcess,
   sessionId: string,
   handlers: AcpRuntimeEventHandlers,
-  getPurpose: () => AcpRuntimePurpose
+  runtime: RuntimeErrorContext,
+  shouldDispatch: () => boolean
 ): void {
   child.on('error', async (error) => {
     const normalizedError = normalizeUnknownError(error);
+    if (!shouldDispatch()) {
+      return;
+    }
     if (!(handlers.onRuntimeError || handlers.onError)) {
       logger.warn('ACP child process error (no handler provided)', {
         sessionId,
@@ -23,7 +29,12 @@ export function wireAcpRuntimeErrorHandler(
 
     try {
       if (handlers.onRuntimeError) {
-        await handlers.onRuntimeError({ sessionId, error: normalizedError, purpose: getPurpose() });
+        await handlers.onRuntimeError({
+          sessionId,
+          error: normalizedError,
+          incarnationId: runtime.incarnationId,
+          purpose: runtime.purpose,
+        });
       } else {
         await handlers.onError?.(sessionId, normalizedError);
       }

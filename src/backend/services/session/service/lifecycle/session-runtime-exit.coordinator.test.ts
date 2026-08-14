@@ -182,6 +182,7 @@ describe('SessionRuntimeExitCoordinator', () => {
     harness.handlers.onRuntimeError?.({
       sessionId: 'session-1',
       error: runtimeError,
+      incarnationId: '11111111-1111-4111-8111-111111111111',
       purpose: 'active',
     });
 
@@ -209,6 +210,15 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
   });
 
+  it('continues workflow finalization when unexpected-exit history fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.lifecycleEvents.record.mockRejectedValueOnce(new Error('history write failed'));
+
+    await harness.coordinator.handleExit(runtimeExit());
+
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
+  });
+
   it.each([
     [1, 'Session stopped: agent process exited unexpectedly (code 1).', '1'],
     [null, 'Session stopped: agent process exited unexpectedly.', 'signal'],
@@ -230,12 +240,16 @@ describe('SessionRuntimeExitCoordinator', () => {
   it.each([
     ['runtime-managed', { managed: true }, false],
     ['lifecycle-deliberate', {}, true],
-  ] as const)('excludes a %s stop from unexpected-exit history', async (_caseName, eventOverrides, lifecycleStopping) => {
+  ] as const)('preserves idle status for %s deliberate exits', async (_caseName, eventOverrides, lifecycleStopping) => {
     const harness = createExitCoordinatorHarness({ lifecycleStopping });
 
-    await harness.coordinator.handleExit(runtimeExit(eventOverrides));
+    await harness.coordinator.handleExit(runtimeExit({ ...eventOverrides, exitCode: null }));
 
+    expect(harness.repository.updateSession).not.toHaveBeenCalled();
     expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+      expect.objectContaining({ deliberate: true })
+    );
   });
 
   it('prepares active runtime state and delegates workflow-specific exit effects', async () => {
@@ -258,6 +272,26 @@ describe('SessionRuntimeExitCoordinator', () => {
       exitCode: 1,
       deliberate: true,
     });
+  });
+
+  it('continues cleanup when the session-exit callback fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.onSessionExit.mockImplementationOnce(() => {
+      throw new Error('queue cleanup failed');
+    });
+
+    await harness.coordinator.handleExit(runtimeExit());
+
+    expect(harness.processor.finalizeOrphanedToolCalls).toHaveBeenCalledWith(
+      'session-1',
+      'runtime_exit'
+    );
+    expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
+    expect(harness.permission.cancelPendingRequests).toHaveBeenCalledWith('session-1');
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.FAILED,
+    });
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
   });
 
   it('closes the trace without active finalization when browse cleanup fails', async () => {

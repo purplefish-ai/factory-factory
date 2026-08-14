@@ -15,6 +15,7 @@ export type AcpRuntimeExitEvent = Readonly<{
 export type AcpRuntimeErrorEvent = Readonly<{
   sessionId: string;
   error: Error;
+  incarnationId: string;
   purpose: AcpRuntimePurpose;
 }>;
 

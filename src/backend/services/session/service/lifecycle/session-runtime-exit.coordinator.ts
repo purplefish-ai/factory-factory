@@ -79,7 +79,12 @@ export class SessionRuntimeExitCoordinator {
         });
       },
       onError: (sessionId, error) => {
-        this.handleRuntimeError({ sessionId, error, purpose: input.purpose });
+        this.handleRuntimeError({
+          sessionId,
+          error,
+          incarnationId: legacyIncarnationId,
+          purpose: input.purpose,
+        });
       },
       onAcpLog: (sessionId, payload) => {
         this.dependencies.acpEventProcessor.handleAcpLog(sessionId, payload);
@@ -157,8 +162,17 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
 
-      await this.updatePersistedStatus(event);
-      await this.recordUnexpectedExitIfNeeded(session, event, deliberate);
+      if (!(deliberate && event.exitCode !== 0)) {
+        await this.updatePersistedStatus(event);
+      }
+      try {
+        await this.recordUnexpectedExitIfNeeded(session, event, deliberate);
+      } catch (error) {
+        logger.warn('Failed recording unexpected ACP session exit', {
+          sessionId: event.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       await this.dependencies.workflowFinalizer.finalizeRuntimeExit({
         session,
         sessionId: event.sessionId,
@@ -175,7 +189,14 @@ export class SessionRuntimeExitCoordinator {
 
   private prepareRuntimeExit(sessionId: string, exitCode: number | null): void {
     this.dependencies.promptTurnCompletionService.clearSession(sessionId);
-    this.dependencies.onSessionExit?.(sessionId);
+    try {
+      this.dependencies.onSessionExit?.(sessionId);
+    } catch (error) {
+      logger.warn('Failed handling ACP session exit callback', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     this.finalizeOrphanedToolCalls(sessionId);
     this.dependencies.acpEventProcessor.clearSessionState(sessionId);
     this.dependencies.sessionPermissionService.cancelPendingRequests(sessionId);

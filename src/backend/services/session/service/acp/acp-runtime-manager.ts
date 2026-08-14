@@ -47,9 +47,7 @@ import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 import type { AcpClientOptions, PermissionPreset } from './types';
 
 const logger = createLogger('acp-runtime-manager');
-
-type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose };
-
+type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose; installed: boolean };
 /** Thrown when an ACP prompt exceeds the caller-specified timeout. */
 export class PromptTimeoutError extends Error {
   constructor(
@@ -67,7 +65,6 @@ export class AcpBrowseSessionUnavailableError extends Error {
     this.name = 'AcpBrowseSessionUnavailableError';
   }
 }
-
 type AcpSubagentBrowseErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_FOUND'
@@ -425,6 +422,7 @@ export class AcpRuntimeManager {
         const createPromise = this.createClient(sessionId, options, handlers, context, {
           incarnationId: randomUUID(),
           purpose: options.purpose ?? 'active',
+          installed: false,
         });
         this.pendingCreation.set(sessionId, createPromise);
 
@@ -547,7 +545,8 @@ export class AcpRuntimeManager {
       child,
       sessionId,
       handlers,
-      () => this.runtimeMetadata.get(child)?.purpose ?? 'active'
+      runtime,
+      () => !runtime.installed || this.sessions.get(sessionId)?.child === child
     );
     await this.abortClientCreationIfStopping(child, sessionId);
 
@@ -682,6 +681,7 @@ export class AcpRuntimeManager {
 
     // Store in sessions map
     this.sessions.set(sessionId, handle);
+    runtime.installed = true;
     this.recordClientPurpose(sessionId, options);
 
     this.wireChildExitHandler(sessionId, child, handlers, runtime);
