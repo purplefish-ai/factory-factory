@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionLifecycleService } from './session.lifecycle.service';
@@ -101,7 +102,7 @@ describe('SessionTerminationCoordinator stop causes', () => {
       })
     );
     expect(lifecycleEventService.record.mock.invocationCallOrder[0]).toBeLessThan(
-      runtimeManager.stopClient.mock.invocationCallOrder[0]!
+      runtimeManager.stopAndQuiesce.mock.invocationCallOrder[0]!
     );
   });
 
@@ -126,7 +127,7 @@ describe('SessionTerminationCoordinator stop causes', () => {
     await service.stopSession('session-1', { recordLifecycleEvent: false });
 
     expect(lifecycleEventService.record).not.toHaveBeenCalled();
-    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
   });
 });
 
@@ -297,14 +298,30 @@ describe('SessionTerminationCoordinator races', () => {
     expect(service.getStopGeneration('session-1')).toBeGreaterThan(sentinelGeneration);
   });
 
-  it('waits for a registered client creation and stops the resulting runtime', async () => {
+  it('waits for a runtime-owned client creation fence and stops the resulting runtime', async () => {
     const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness();
     type RuntimeHandle = Awaited<ReturnType<typeof runtimeManager.getOrCreateClient>>;
+    let activeHandle: RuntimeHandle | undefined;
     let resolveClient!: (handle: RuntimeHandle) => void;
     const pendingClient = new Promise<RuntimeHandle>((resolve) => {
       resolveClient = resolve;
     });
-    runtimeManager.getOrCreateClient.mockReturnValueOnce(pendingClient);
+    const quiescence = new AcpRuntimeQuiescence({ stopClient: runtimeManager.stopClient });
+    runtimeManager.getClient.mockImplementation(() => activeHandle);
+    runtimeManager.getOrCreateClient.mockImplementation(async () => {
+      activeHandle = await pendingClient;
+      return activeHandle;
+    });
+    runtimeManager.runClientCreationOperation.mockImplementation((sessionId, purpose, operation) =>
+      quiescence.runClientCreationOperation(sessionId, purpose, operation)
+    );
+    runtimeManager.stopAndQuiesce.mockImplementation((sessionId) =>
+      quiescence.stopAndQuiesce(sessionId)
+    );
+    runtimeManager.stopClient.mockImplementation(() => {
+      activeHandle = undefined;
+      return Promise.resolve();
+    });
 
     const startResult = service.startSession('session-1').catch((error) => error);
     await vi.waitFor(() => {
@@ -313,8 +330,14 @@ describe('SessionTerminationCoordinator races', () => {
 
     const stopPromise = service.stopSession('session-1');
     await vi.waitFor(() => {
-      expect(runtimeManager.stopClient).toHaveBeenCalledTimes(1);
+      expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
+    let stopSettled = false;
+    void stopPromise.then(() => {
+      stopSettled = true;
+    });
+    await Promise.resolve();
+    expect(stopSettled).toBe(false);
     resolveClient(
       unsafeCoerce<RuntimeHandle>({
         provider: 'CLAUDE',
@@ -328,7 +351,8 @@ describe('SessionTerminationCoordinator races', () => {
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
     );
-    expect(runtimeManager.stopClient).toHaveBeenCalledTimes(2);
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledTimes(1);
+    expect(runtimeManager.getClient('session-1')).toBeUndefined();
     expect(sendSessionMessage).not.toHaveBeenCalled();
   });
 
@@ -349,14 +373,14 @@ describe('SessionTerminationCoordinator races', () => {
     );
     expect(harness.lifecycleEventService.record).toHaveBeenCalledTimes(1);
     expect(harness.runtimeManager.getOrCreateClient).not.toHaveBeenCalled();
-    expect(harness.runtimeManager.stopClient).not.toHaveBeenCalled();
+    expect(harness.runtimeManager.stopAndQuiesce).not.toHaveBeenCalled();
     expect(harness.sessionDomainService.clearQueuedWork).toHaveBeenCalledTimes(1);
 
     stopEvent.resolve(null);
     await firstStop;
 
     expect(harness.service.isSessionStopping('session-1')).toBe(false);
-    expect(harness.runtimeManager.stopClient).toHaveBeenCalledTimes(1);
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledTimes(1);
     expect(harness.repository.updateSessionIfStatus).toHaveBeenCalledTimes(1);
     expect(harness.sessionDomainService.clearSession).toHaveBeenCalledTimes(1);
   });

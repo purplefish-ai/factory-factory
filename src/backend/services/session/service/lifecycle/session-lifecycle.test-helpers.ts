@@ -50,7 +50,7 @@ export type LifecycleHarnessOverrides = {
 };
 
 type MockedPick<T, K extends keyof T> = {
-  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> & T[P] : T[P];
 };
 
 export type LifecycleHarness = {
@@ -76,7 +76,9 @@ export type LifecycleHarness = {
     | 'getPendingClient'
     | 'getSubagentBrowseCapability'
     | 'getOrCreateClient'
+    | 'runClientCreationOperation'
     | 'stopClient'
+    | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
   >;
@@ -288,6 +290,11 @@ export function createLifecycleHarness(
     | 'updateSession'
     | 'updateSessionIfStatus'
   >;
+  const runClientCreationOperation: AcpRuntimeManager['runClientCreationOperation'] = async (
+    _sessionId,
+    _purpose,
+    operation
+  ) => await operation({ isOnlyOperation: () => true });
   const runtimeManager = {
     isStopInProgress: vi.fn((_sessionId: string) => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
@@ -302,7 +309,12 @@ export function createLifecycleHarness(
     getOrCreateClient: vi.fn<AcpRuntimeManager['getOrCreateClient']>(
       overrides.getOrCreateClient ?? (async () => handle)
     ),
+    runClientCreationOperation: vi.fn(runClientCreationOperation) as Mock<
+      AcpRuntimeManager['runClientCreationOperation']
+    > &
+      AcpRuntimeManager['runClientCreationOperation'],
     stopClient: vi.fn(async () => undefined),
+    stopAndQuiesce: vi.fn(async () => undefined),
     beginShutdown: vi.fn(() => []),
     stopAllClients: vi.fn(async () => undefined),
   } satisfies Pick<
@@ -316,7 +328,9 @@ export function createLifecycleHarness(
     | 'getPendingClient'
     | 'getSubagentBrowseCapability'
     | 'getOrCreateClient'
+    | 'runClientCreationOperation'
     | 'stopClient'
+    | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
   >;

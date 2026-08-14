@@ -109,7 +109,6 @@ export class SessionLifecycleService {
   private readonly runtimeExitCoordinator: SessionRuntimeExitCoordinator;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
-  private readonly clientCreationOperations = new Map<string, Set<Promise<unknown>>>();
   private startupCoordinator: SessionStartupCoordinator | null = null;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
@@ -183,8 +182,6 @@ export class SessionLifecycleService {
       getMessageQueueBridge: () => this.messageQueueBridge,
       sendSessionMessage: this.sendSessionMessage,
       stopSession: (sessionId, options) => this.stopSession(sessionId, options),
-      registerClientCreation: (sessionId, operation) =>
-        this.registerClientCreation(sessionId, operation),
     });
   }
 
@@ -257,7 +254,7 @@ export class SessionLifecycleService {
 
     let stopClientFailed = false;
     try {
-      await this.stopRuntimeAndPendingCreation(sessionId);
+      await this.runtimeManager.stopAndQuiesce(sessionId);
     } catch (error) {
       stopClientFailed = true;
       logger.warn('Error stopping ACP session runtime; continuing cleanup', {
@@ -296,26 +293,6 @@ export class SessionLifecycleService {
         acpTraceLogger.closeSession(sessionId);
       }
     }
-  }
-
-  private async stopRuntimeAndPendingCreation(sessionId: string): Promise<void> {
-    let stopError: { cause: unknown } | undefined;
-    try {
-      await this.runtimeManager.stopClient(sessionId);
-    } catch (error) {
-      stopError = { cause: error };
-    }
-
-    const pendingCreations = this.clientCreationOperations.get(sessionId);
-    if (!pendingCreations || pendingCreations.size === 0) {
-      if (stopError) {
-        throw stopError.cause;
-      }
-      return;
-    }
-
-    await Promise.allSettled([...pendingCreations]);
-    await this.runtimeManager.stopClient(sessionId);
   }
 
   async stopWorkspaceSessions(
@@ -592,23 +569,5 @@ export class SessionLifecycleService {
   }
   recoverStaleRunningSessions(): Promise<number> {
     return this.workflowFinalizer.recoverStaleRunningSessions();
-  }
-
-  private registerClientCreation(
-    sessionId: string,
-    operation: Promise<unknown>
-  ): { isOnlyOperation: () => boolean; release: () => void } {
-    const operations = this.clientCreationOperations.get(sessionId) ?? new Set<Promise<unknown>>();
-    operations.add(operation);
-    this.clientCreationOperations.set(sessionId, operations);
-    return {
-      isOnlyOperation: () => operations.size === 1,
-      release: () => {
-        operations.delete(operation);
-        if (operations.size === 0) {
-          this.clientCreationOperations.delete(sessionId);
-        }
-      },
-    };
   }
 }

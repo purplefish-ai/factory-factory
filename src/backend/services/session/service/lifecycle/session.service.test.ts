@@ -9,7 +9,6 @@ const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -19,12 +18,31 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
   getCurrentProcessEnv: () => ({ ...process.env }),
 }));
-
 vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
-
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
+  const runtimeManager = {
+    getClient: vi.fn().mockReturnValue(undefined),
+    getOrCreateClient: vi.fn(),
+    runClientCreationOperation: vi.fn(
+      async (_sessionId, _purpose, operation) => await operation({ isOnlyOperation: () => true })
+    ),
+    stopClient: vi.fn(),
+    stopAndQuiesce: vi.fn(async (sessionId: string) => await runtimeManager.stopClient(sessionId)),
+    beginShutdown: vi.fn().mockReturnValue([]),
+    stopAllClients: vi.fn(),
+    sendPrompt: vi.fn(),
+    cancelPrompt: vi.fn(),
+    isSessionRunning: vi.fn().mockReturnValue(false),
+    isSessionWorking: vi.fn().mockReturnValue(false),
+    isAnySessionWorking: vi.fn().mockReturnValue(false),
+    isBrowseOnlySession: vi.fn().mockReturnValue(false),
+    isStopInProgress: vi.fn().mockReturnValue(false),
+    setConfigOption: vi.fn(),
+    setSessionMode: vi.fn(),
+    setSessionModel: vi.fn(),
+  };
   return {
     ...actual,
     AcpEventTranslator: class MockAcpEventTranslator {
@@ -34,33 +52,15 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
       cancelAll = vi.fn();
       resolvePermission = vi.fn();
     },
-    acpRuntimeManager: {
-      getClient: vi.fn().mockReturnValue(undefined),
-      getOrCreateClient: vi.fn(),
-      stopClient: vi.fn(),
-      beginShutdown: vi.fn().mockReturnValue([]),
-      stopAllClients: vi.fn(),
-      sendPrompt: vi.fn(),
-      cancelPrompt: vi.fn(),
-      isSessionRunning: vi.fn().mockReturnValue(false),
-      isSessionWorking: vi.fn().mockReturnValue(false),
-      isAnySessionWorking: vi.fn().mockReturnValue(false),
-      isBrowseOnlySession: vi.fn().mockReturnValue(false),
-      isStopInProgress: vi.fn().mockReturnValue(false),
-      setConfigOption: vi.fn(),
-      setSessionMode: vi.fn(),
-      setSessionModel: vi.fn(),
-    },
+    acpRuntimeManager: runtimeManager,
   };
 });
-
 vi.mock('@/backend/interceptors/registry', () => ({
   interceptorRegistry: {
     notifyToolStart: (...args: unknown[]) => mockNotifyToolStart(...args),
     notifyToolComplete: (...args: unknown[]) => mockNotifyToolComplete(...args),
   },
 }));
-
 vi.mock('./session.repository', () => ({
   SessionRepository: class {},
   sessionRepository: {
