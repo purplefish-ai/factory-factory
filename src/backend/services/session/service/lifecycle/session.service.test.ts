@@ -22,14 +22,16 @@ vi.mock('@/backend/services/workspace');
 vi.mock('./closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
+  const RuntimeQuiescence =
+    actual.AcpRuntimeQuiescence as typeof import('@/backend/services/session/service/acp').AcpRuntimeQuiescence;
+  const stopClient = vi.fn(async () => undefined);
+  const quiescence = new RuntimeQuiescence({ stopClient });
   const runtimeManager = {
     getClient: vi.fn().mockReturnValue(undefined),
     getOrCreateClient: vi.fn(),
-    runClientCreationOperation: vi.fn(
-      async (_sessionId, _purpose, operation) => await operation({ isOnlyOperation: () => true })
-    ),
-    stopClient: vi.fn(),
-    stopAndQuiesce: vi.fn(async (sessionId: string) => await runtimeManager.stopClient(sessionId)),
+    runClientCreationOperation: vi.fn(quiescence.runClientCreationOperation.bind(quiescence)),
+    stopClient,
+    stopAndQuiesce: vi.fn((sessionId: string) => quiescence.stopAndQuiesce(sessionId)),
     beginShutdown: vi.fn().mockReturnValue([]),
     stopAllClients: vi.fn(),
     sendPrompt: vi.fn(),
@@ -75,7 +77,6 @@ vi.mock('./session.repository', () => ({
     recoverStaleRunningSessions: vi.fn(),
   },
 }));
-
 vi.mock('./session.prompt-builder', () => ({
   SessionPromptBuilder: class {},
   sessionPromptBuilder: {
@@ -83,7 +84,6 @@ vi.mock('./session.prompt-builder', () => ({
     buildSystemPrompt: vi.fn(),
   },
 }));
-
 vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
   acpTraceLogger: {
     log: vi.fn(),

@@ -265,14 +265,12 @@ export class AcpRuntimeManager {
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
   }
-
   isStopInProgress(sessionId: string): boolean {
     return this.stoppingInProgress.has(sessionId);
   }
   getClient(sessionId: string): AcpProcessHandle | undefined {
     return this.browseOnlySessions.has(sessionId) ? undefined : this.getBrowseClient(sessionId);
   }
-
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
     return handle?.isRunning() ? handle : undefined;
@@ -285,6 +283,9 @@ export class AcpRuntimeManager {
       (!hasRuntime || this.browseOnlySessions.has(sessionId)) &&
       (fencePurpose === null || fencePurpose === 'browse')
     );
+  }
+  hasClientCreationOperation(sessionId: string): boolean {
+    return this.quiescence.getTrackedSessionPurpose(sessionId) !== null;
   }
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
@@ -302,7 +303,6 @@ export class AcpRuntimeManager {
   stopAndQuiesce(sessionId: string): Promise<void> {
     return this.quiescence.stopAndQuiesce(sessionId);
   }
-
   getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
     return this.getBrowseClient(sessionId)?.getSubagentBrowseCapability() ?? null;
   }
@@ -1361,7 +1361,7 @@ export class AcpRuntimeManager {
 
     await this.stopCurrentClients(timeoutMs);
     await this.waitForPendingCreations(timeoutMs);
-    await raceWithSoftTimeout(this.quiescence.waitForAll(), timeoutMs);
+    await this.quiescence.waitForAll();
     await this.stopCurrentClients(timeoutMs);
 
     this.sessions.clear();

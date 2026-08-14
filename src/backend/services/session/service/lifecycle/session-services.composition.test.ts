@@ -3,12 +3,13 @@ import {
   chatMessageHandlerService as publicChatMessageHandlerService,
   sessionLifecycleService as publicSessionLifecycleService,
 } from '@/backend/services/session';
-import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { sessionRepository } from './session.repository';
 import { sessionLifecycleService as coreSessionLifecycleService } from './session-core-services';
-import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
+import {
+  createLifecycleHarness,
+  createLifecycleTestSession,
+} from './session-lifecycle.test-helpers';
 import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 
@@ -65,24 +66,22 @@ describe('session services composition', () => {
     expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-1');
   });
 
-  it('wires the public singleton termination coordinator to the later workspace bridge', async () => {
+  it('wires a lifecycle coordinator to a later workspace bridge without mutating the singleton', async () => {
+    const { service, repository, runtimeManager } = createLifecycleHarness();
     const workspaceBridge = {
       markSessionIdle: vi.fn(),
     };
-    publicSessionLifecycleService.configure({ workspace: unsafeCoerce(workspaceBridge) });
-    vi.spyOn(sessionRepository, 'getSessionById').mockResolvedValue(
+    service.configure({ workspace: unsafeCoerce(workspaceBridge) });
+    repository.getSessionById.mockResolvedValue(
       createLifecycleTestSession({ id: 'session-composed', workspaceId: 'workspace-composed' })
     );
-    vi.spyOn(sessionRepository, 'updateSessionIfStatus').mockResolvedValue(1);
-    const stopAndQuiesce = vi
-      .spyOn(acpRuntimeManager, 'stopAndQuiesce')
-      .mockResolvedValue(undefined);
+    repository.updateSessionIfStatus.mockResolvedValue(1);
 
-    await publicSessionLifecycleService.stopSession('session-composed', {
+    await service.stopSession('session-composed', {
       recordLifecycleEvent: false,
     });
 
-    expect(stopAndQuiesce).toHaveBeenCalledWith('session-composed');
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-composed');
     expect(workspaceBridge.markSessionIdle).toHaveBeenCalledWith(
       'workspace-composed',
       'session-composed'

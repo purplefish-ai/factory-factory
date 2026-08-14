@@ -57,6 +57,7 @@ function createShutdownHarness(
     lifecycleEventService: base.lifecycleEventService,
     lifecycleGate: base.lifecycleGate,
     workflowFinalizer: base.workflowFinalizer,
+    getRuntimeSnapshot: base.getRuntimeSnapshot,
     getWorkspaceBridge: () => base.workspaceBridge,
   });
 
@@ -72,9 +73,12 @@ describe('SessionTerminationCoordinator workspace stops', () => {
     expect(createTerminationHarness().coordinator).toBeInstanceOf(SessionTerminationCoordinator);
   });
 
-  it('stops running sessions and runtime-only sessions', async () => {
+  it('stops persisted, runtime-owned, and active-creation sessions', async () => {
     const { coordinator, repository, runtimeManager, lifecycleEventService } =
       createTerminationHarness();
+    runtimeManager.hasClientCreationOperation.mockImplementation(
+      (sessionId) => sessionId === 'session-idle'
+    );
 
     await coordinator.stopWorkspaceSessions('workspace-1');
 
@@ -84,8 +88,8 @@ describe('SessionTerminationCoordinator workspace stops', () => {
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-running');
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-runtime-only');
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-browse-only');
-    expect(runtimeManager.stopAndQuiesce).not.toHaveBeenCalledWith('session-idle');
-    expect(lifecycleEventService.record).toHaveBeenCalledTimes(2);
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-idle');
+    expect(lifecycleEventService.record).toHaveBeenCalledTimes(3);
     expect(lifecycleEventService.record).not.toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-browse-only' })
     );
@@ -164,6 +168,30 @@ describe('SessionTerminationCoordinator stop causes', () => {
 
     expect(lifecycleEventService.record).not.toHaveBeenCalled();
     expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
+  });
+
+  it('uses the facade-owned runtime snapshot when entering stopping state', async () => {
+    const harness = createTerminationHarness();
+    harness.getRuntimeSnapshot.mockReturnValue({
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: '2026-08-14T12:00:00.000Z',
+    });
+
+    await harness.coordinator.stopSession('session-1');
+
+    expect(harness.getRuntimeSnapshot).toHaveBeenCalledWith('session-1');
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenNthCalledWith(
+      1,
+      'session-1',
+      {
+        phase: 'stopping',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: expect.any(String),
+      }
+    );
   });
 });
 

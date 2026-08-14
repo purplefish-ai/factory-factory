@@ -4,7 +4,7 @@
 
 **Goal:** Make `AcpRuntimeManager` the sole owner of client-creation quiescence and extract explicit, workspace, and shutdown stop orchestration into `SessionTerminationCoordinator` without changing the public lifecycle API or observable cleanup order.
 
-**Architecture:** A small ACP-layer `AcpRuntimeQuiescence` unit owns tracked client-creation reconciliation operations and idempotent stop-and-quiesce operations. `AcpRuntimeManager` exposes that behavior through `runClientCreationOperation` and `stopAndQuiesce`, while retaining all subprocess maps and stop mechanics. `SessionStartupCoordinator` runs creation through the runtime-owned fence, and a new `SessionTerminationCoordinator` owns the lifecycle stop barrier, durable reasons, cleanup ordering, workspace stops, and bounded shutdown. `SessionLifecycleService` composes both coordinators and delegates its existing public methods.
+**Architecture:** A small ACP-layer `AcpRuntimeQuiescence` unit owns tracked client-creation reconciliation operations and idempotent stop-and-quiesce operations. `AcpRuntimeManager` exposes that behavior through `runClientCreationOperation` and `stopAndQuiesce`, while retaining all subprocess maps and stop mechanics. `SessionStartupCoordinator` runs creation through the runtime-owned fence, and a new `SessionTerminationCoordinator` owns the lifecycle stop barrier, durable reasons, cleanup ordering, workspace stops, and shutdown. `SessionLifecycleService` composes both coordinators and delegates its existing public methods.
 
 **Tech Stack:** TypeScript 5.9, Vitest 4, pnpm, Biome, dependency-cruiser.
 
@@ -83,11 +83,11 @@
   5. if a barrier existed, call `stopClient` again and use the retry outcome as authoritative;
   6. clear the quiescence entry in `finally` only when it still refers to this operation.
 
-  Expose read-only `getTrackedSessionIds()`, `isBrowseOnlySession(sessionId)`, and `waitForAll()` methods for shutdown integration. Do not expose the records or a manual `release()` function. `waitForAll()` itself is unbounded; `AcpRuntimeManager.stopAllClients(timeoutMs)` applies the existing soft timeout at the boundary.
+  Expose read-only `getTrackedSessionIds()`, `isBrowseOnlySession(sessionId)`, and `waitForAll()` methods for shutdown integration. Do not expose the records or a manual `release()` function. `waitForAll()` is an unbounded lifecycle-reconciliation barrier; process-stop operations retain their existing soft timeouts.
 
 - [ ] **Step 4: Add runtime-manager integration RED tests**
 
-  Extend existing public manager tests without increasing `acp-runtime-manager.test.ts` beyond its 2,714-line ceiling. Rework an existing pending-creation stop case to run a deferred post-creation reconciliation through `runClientCreationOperation`, call `stopAndQuiesce`, and assert that:
+  Extend existing public manager tests without increasing `acp-runtime-manager.test.ts` beyond its 2,705-line ceiling. Rework an existing pending-creation stop case to run a deferred post-creation reconciliation through `runClientCreationOperation`, call `stopAndQuiesce`, and assert that:
 
   - the first stop cannot finish the public quiescence operation while reconciliation is pending;
   - a runtime installed by the operation is stopped by the retry;
@@ -98,7 +98,7 @@
 
 - [ ] **Step 5: Wire the helper into `AcpRuntimeManager`**
 
-  Construct one helper inside `AcpRuntimeManager`, delegate the two new public methods, include `getTrackedSessionIds()` in `beginShutdown()`, and include the helper's purpose classification in `isBrowseOnlySession()`. Insert `raceWithSoftTimeout(quiescence.waitForAll(), timeoutMs)` between the first and final `stopCurrentClients()` passes in `stopAllClients()`.
+  Construct one helper inside `AcpRuntimeManager`, delegate the two new public methods, include `getTrackedSessionIds()` in `beginShutdown()`, and include the helper's purpose classification in `isBrowseOnlySession()`. Await `quiescence.waitForAll()` between the first and final `stopCurrentClients()` passes in `stopAllClients()` so no durable startup reconciliation can outlive shutdown.
 
   Keep `stopClientOnce`, process cancellation, incarnation filtering, creation locks, and `pendingCreation` unchanged. If the 1,449-line manager would grow, extract delegation or shutdown mechanics into the new helper or compact behavior-neutral code; do not raise the baseline.
 
@@ -113,7 +113,7 @@
   pnpm typecheck
   ```
 
-  Expected: both suites pass, TypeScript reports no diagnostics, the manager remains at or below 1,449 lines, and the manager test remains at or below 2,714 lines.
+  Expected: both suites pass, TypeScript reports no diagnostics, the manager remains at or below 1,449 lines, and the manager test remains at or below 2,705 lines.
 
 - [ ] **Step 7: Commit the runtime contract**
 

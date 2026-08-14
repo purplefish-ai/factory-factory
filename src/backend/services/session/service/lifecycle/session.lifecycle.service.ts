@@ -128,6 +128,7 @@ export class SessionLifecycleService {
       lifecycleEventService: this.lifecycleEventService,
       lifecycleGate: this.lifecycleGate,
       workflowFinalizer: this.workflowFinalizer,
+      getRuntimeSnapshot: (sessionId) => this.getRuntimeSnapshot(sessionId),
       getWorkspaceBridge: () => this.workspaceBridge,
       onBeforeStopSession: options.onBeforeStopSession,
     });

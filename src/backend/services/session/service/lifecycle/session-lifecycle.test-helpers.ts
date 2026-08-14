@@ -10,6 +10,7 @@ import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus, WorkspaceStatus } from '@/shared/core';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionConfigService } from './session.config.service';
@@ -75,6 +76,7 @@ export type LifecycleHarness = {
     AcpRuntimeManager,
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
     | 'getClient'
@@ -155,6 +157,7 @@ export type TerminationHarness = {
     | 'isSessionWorking'
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'stopAndQuiesce'
     | 'beginShutdown'
@@ -185,6 +188,7 @@ export type TerminationHarness = {
     'finalizeDeliberateStop' | 'clearInactiveSession'
   >;
   workspaceBridge: MockedPick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'>;
+  getRuntimeSnapshot: Mock<(sessionId: string) => SessionRuntimeState>;
   session: AgentSessionRecord;
 };
 
@@ -236,6 +240,7 @@ export function createTerminationHarness(
     isSessionWorking: vi.fn(() => false),
     isStopInProgress: vi.fn(() => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     stopAndQuiesce: vi.fn(async () => undefined),
     beginShutdown: vi.fn(() => []),
@@ -246,6 +251,7 @@ export function createTerminationHarness(
     | 'isSessionWorking'
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'stopAndQuiesce'
     | 'beginShutdown'
@@ -300,6 +306,12 @@ export function createTerminationHarness(
   const lifecycleGate = new SessionLifecycleGate({
     isRuntimeStopInProgress: () => false,
   });
+  const getRuntimeSnapshot = vi.fn(() => ({
+    phase: 'idle' as const,
+    processState: 'stopped' as const,
+    activity: 'IDLE' as const,
+    updatedAt: '2026-07-15T00:00:00.000Z',
+  }));
   const coordinator = new SessionTerminationCoordinator({
     repository,
     retryService,
@@ -311,6 +323,7 @@ export function createTerminationHarness(
     lifecycleEventService,
     lifecycleGate,
     workflowFinalizer,
+    getRuntimeSnapshot,
     getWorkspaceBridge: () => workspaceBridge,
     onBeforeStopSession: overrides.onBeforeStopSession,
   });
@@ -328,6 +341,7 @@ export function createTerminationHarness(
     lifecycleGate,
     workflowFinalizer,
     workspaceBridge,
+    getRuntimeSnapshot,
     session,
   };
 }
@@ -484,6 +498,7 @@ export function createLifecycleHarness(
   const runtimeManager = {
     isStopInProgress: vi.fn((_sessionId: string) => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
@@ -507,6 +522,7 @@ export function createLifecycleHarness(
     AcpRuntimeManager,
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
     | 'getClient'

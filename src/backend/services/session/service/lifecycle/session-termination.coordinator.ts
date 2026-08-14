@@ -10,10 +10,7 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
-import {
-  createInitialSessionRuntimeState,
-  type SessionRuntimeState,
-} from '@/shared/session-runtime';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
@@ -21,7 +18,6 @@ import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
-import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 const logger = createLogger('session');
@@ -55,19 +51,14 @@ export type SessionTerminationCoordinatorDependencies = {
   retryService: Pick<SessionRetryService, 'run'>;
   runtimeManager: Pick<
     AcpRuntimeManager,
-    | 'getClient'
-    | 'isSessionWorking'
-    | 'isStopInProgress'
     | 'isSessionRunning'
     | 'isBrowseOnlySession'
+    | 'hasClientCreationOperation'
     | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
   >;
-  sessionDomainService: Pick<
-    SessionDomainService,
-    'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
-  >;
+  sessionDomainService: Pick<SessionDomainService, 'clearQueuedWork' | 'setRuntimeSnapshot'>;
   sessionPermissionService: Pick<SessionPermissionService, 'cancelPendingRequests'>;
   acpEventProcessor: Pick<
     AcpEventProcessor,
@@ -88,6 +79,7 @@ export type SessionTerminationCoordinatorDependencies = {
     SessionWorkflowFinalizer,
     'finalizeDeliberateStop' | 'clearInactiveSession'
   >;
+  getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState;
   getWorkspaceBridge: () => Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'> | null;
   onBeforeStopSession?: (sessionId: string) => void;
 };
@@ -190,7 +182,7 @@ export class SessionTerminationCoordinator {
       });
     }
 
-    const current = this.getRuntimeSnapshot(sessionId);
+    const current = this.dependencies.getRuntimeSnapshot(sessionId);
     this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
       ...current,
       phase: 'stopping',
@@ -251,50 +243,23 @@ export class SessionTerminationCoordinator {
   ): StopSessionOptions | null {
     const browseOnlyClient = this.dependencies.runtimeManager.isBrowseOnlySession(session.id);
     const activeClient = this.dependencies.runtimeManager.isSessionRunning(session.id);
-    if (!(session.status === SessionStatus.RUNNING || activeClient || browseOnlyClient)) {
+    const creationOperation = this.dependencies.runtimeManager.hasClientCreationOperation(
+      session.id
+    );
+    if (
+      !(
+        session.status === SessionStatus.RUNNING ||
+        activeClient ||
+        browseOnlyClient ||
+        creationOperation
+      )
+    ) {
       return null;
     }
     return {
       reason,
       ...(browseOnlyClient && !activeClient ? { recordLifecycleEvent: false } : {}),
     };
-  }
-
-  private getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
-    const fallback = createInitialSessionRuntimeState();
-    const persisted = this.dependencies.sessionDomainService.getRuntimeSnapshot(sessionId);
-    const base = persisted ?? fallback;
-
-    const acpClient = this.dependencies.runtimeManager.getClient(sessionId);
-    if (acpClient) {
-      const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
-      return {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: base.updatedAt,
-      };
-    }
-
-    if (this.dependencies.runtimeManager.isStopInProgress(sessionId)) {
-      return {
-        ...base,
-        phase: 'stopping',
-        updatedAt: base.updatedAt,
-      };
-    }
-
-    if (isStaleLoadingRuntime(base)) {
-      return {
-        ...base,
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: base.updatedAt,
-      };
-    }
-
-    return base;
   }
 
   private finalizeOrphanedToolCalls(sessionId: string, reason: string): void {

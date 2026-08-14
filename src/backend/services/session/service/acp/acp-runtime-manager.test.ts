@@ -1791,7 +1791,6 @@ describe('AcpRuntimeManager', () => {
 
   describe('stopAllClients', () => {
     it('waits for fence-only reconciliation while closing admission', async () => {
-      // Catches shutdown omitting creation-fence sessions or skipping its barrier wait.
       const activeChild = setupSuccessfulSpawn();
       await manager.getOrCreateClient(
         'session-active',
@@ -1805,10 +1804,10 @@ describe('AcpRuntimeManager', () => {
         'browse',
         () => reconciliation.promise
       );
+      expect(manager.hasClientCreationOperation('session-fence-only')).toBe(true);
       const shutdownSessionIds = (
         manager as unknown as { beginShutdown(): string[] }
       ).beginShutdown();
-
       expect(new Set(shutdownSessionIds)).toEqual(
         new Set(['session-active', 'session-fence-only'])
       );
@@ -1827,10 +1826,11 @@ describe('AcpRuntimeManager', () => {
       void stopAll.then(() => {
         stopped = true;
       });
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 60));
       expect(stopped).toBe(false);
       reconciliation.resolve(undefined);
       await Promise.all([fenceOnly, stopAll]);
+      expect(manager.hasClientCreationOperation('session-fence-only')).toBe(false);
     });
 
     it('clears per-client shutdown timeouts when clients stop quickly', async () => {
