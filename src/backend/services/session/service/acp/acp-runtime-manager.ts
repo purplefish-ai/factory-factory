@@ -33,6 +33,7 @@ import type {
   AcpRuntimeEventHandlers,
   AcpRuntimePurpose,
 } from './acp-runtime-events';
+import { createExitFence, dispatchAcpRuntimeExit } from './acp-runtime-exit-handler';
 import {
   createAcpSpawnError,
   hasUsableWorkingDir,
@@ -248,6 +249,7 @@ export class AcpRuntimeManager {
   private readonly stopOperations = new Map<string, Promise<void>>();
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
+  private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private readonly shutdownWaiters = new Set<() => void>();
@@ -395,6 +397,10 @@ export class AcpRuntimeManager {
 
     return lock(async () => {
       try {
+        const exitHandling = this.exitHandling.get(sessionId);
+        if (exitHandling) {
+          await exitHandling;
+        }
         if (this.isShuttingDown) {
           throw this.createShutdownError(sessionId);
         }
@@ -837,9 +843,8 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     runtime: AcpRuntimeMetadata
   ): void {
-    child.once('exit', async (code) => {
+    child.once('exit', (code) => {
       const classification = this.classifyChildExit(sessionId, child, code);
-      const purpose = this.browseOnlySessions.has(sessionId) ? 'browse' : 'active';
       if (classification === null) {
         this.clearBrowseOnlyPurposeIfUnused(sessionId);
         return;
@@ -847,26 +852,20 @@ export class AcpRuntimeManager {
 
       this.pendingCreation.delete(sessionId);
 
-      try {
-        if (handlers.onRuntimeExit) {
-          await handlers.onRuntimeExit({
-            sessionId,
-            exitCode: code,
-            incarnationId: runtime.incarnationId,
-            purpose,
-            managed: classification,
-          });
-        } else if (!classification && handlers.onExit) {
-          await handlers.onExit(sessionId, code);
+      const [exitHandling, releaseExitHandling] = createExitFence();
+      this.exitHandling.set(sessionId, exitHandling);
+      void dispatchAcpRuntimeExit(handlers, {
+        sessionId,
+        exitCode: code,
+        incarnationId: runtime.incarnationId,
+        ...classification,
+      }).finally(() => {
+        if (this.exitHandling.get(sessionId) === exitHandling) {
+          this.exitHandling.delete(sessionId);
         }
-      } catch (error) {
-        logger.warn('Failed to handle ACP exit event', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
         this.clearBrowseOnlyPurposeIfUnused(sessionId);
-      }
+        releaseExitHandling();
+      });
     });
   }
 
@@ -874,7 +873,8 @@ export class AcpRuntimeManager {
     sessionId: string,
     child: ChildProcess,
     code: number | null
-  ): boolean | null {
+  ): { managed: boolean; purpose: AcpRuntimePurpose } | null {
+    const purpose = this.runtimeMetadata.get(child)?.purpose ?? 'active';
     const current = this.sessions.get(sessionId);
     const managed =
       this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
@@ -896,7 +896,7 @@ export class AcpRuntimeManager {
       return null;
     }
 
-    return managed;
+    return { managed, purpose };
   }
 
   private async notifyClientCreated(

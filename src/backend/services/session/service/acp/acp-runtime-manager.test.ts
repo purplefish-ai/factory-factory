@@ -78,15 +78,12 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // ---- Imports (after mocks) ----
 
-import {
-  SUBAGENTS_CAPABILITY_META_KEY,
-  SUBAGENTS_LIST_METHOD,
-  SUBAGENTS_READ_METHOD,
-} from '@/shared/acp-protocol/subagents';
+import { SUBAGENTS_LIST_METHOD, SUBAGENTS_READ_METHOD } from '@/shared/acp-protocol/subagents';
 import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { AcpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
+import { createDeferred, subagentBrowseCapabilities } from './acp-runtime-manager.test-helpers';
 import type { AcpClientOptions } from './types';
 
 // ---- Helpers ----
@@ -229,34 +226,6 @@ function setupSuccessfulSpawn(agentCapabilities: Record<string, unknown> = { loa
   mockSetSessionMode.mockResolvedValue({});
   mockSetSessionModel.mockResolvedValue({});
   return child;
-}
-
-function subagentBrowseCapabilities(): Record<string, unknown> {
-  return {
-    loadSession: {},
-    _meta: {
-      [SUBAGENTS_CAPABILITY_META_KEY]: {
-        version: 1,
-        list: true,
-        read: true,
-        notifications: true,
-      },
-    },
-  };
-}
-
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolvePromise!: (value: T) => void;
-  let rejectPromise!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return { promise, resolve: resolvePromise, reject: rejectPromise };
 }
 
 // ---- Tests ----
@@ -972,7 +941,7 @@ describe('AcpRuntimeManager', () => {
       expect(mockNewSession).not.toHaveBeenCalled();
     });
 
-    it('runtime exit event identifies the current incarnation and preserves replacement purpose', async () => {
+    it('runtime exit event fences replacement creation until current exit handling settles', async () => {
       const firstChild = setupSuccessfulSpawn();
       const exitHandling = createDeferred<void>();
       const firstHandlers = {
@@ -1003,27 +972,29 @@ describe('AcpRuntimeManager', () => {
         managed: false,
       });
 
-      const replacementChild = setupSuccessfulSpawn({
-        ...subagentBrowseCapabilities(),
-        loadSession: true,
-      });
-      const replacementHandle = await manager.getOrCreateClient(
+      const replacementChild = setupSuccessfulSpawn();
+      const replacementPromise = manager.getOrCreateClient(
         'db-session-1',
-        {
-          ...codexOptions(),
-          purpose: 'browse',
-          resumeProviderSessionId: 'provider-session-existing',
-        },
+        defaultOptions(),
         defaultHandlers(),
         defaultContext()
       );
-
-      exitHandling.resolve();
+      let replacementSettled = false;
+      void replacementPromise.then(() => {
+        replacementSettled = true;
+      });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      expect(replacementSettled).toBe(false);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(manager.getBrowseClient('db-session-1')).toBeUndefined();
+
+      exitHandling.resolve();
+      const replacementHandle = await replacementPromise;
+
       expect(manager.getBrowseClient('db-session-1')).toBe(replacementHandle);
-      expect(manager.isBrowseOnlySession('db-session-1')).toBe(true);
-      expect(manager.getClient('db-session-1')).toBeUndefined();
+      expect(manager.isBrowseOnlySession('db-session-1')).toBe(false);
+      expect(manager.getClient('db-session-1')).toBe(replacementHandle);
 
       exitChildAfterSigterm(replacementChild);
       await manager.stopClient('db-session-1');
@@ -1518,12 +1489,24 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getPendingClient('session-1')).toBeUndefined();
     });
 
-    it('runtime exit event marks a current managed stop', async () => {
-      const child = setupSuccessfulSpawn();
+    it('runtime exit event atomically captures browse purpose for a managed stop', async () => {
+      const child = setupSuccessfulSpawn({
+        ...subagentBrowseCapabilities(),
+        loadSession: true,
+      });
       const onRuntimeExit = vi.fn().mockResolvedValue(undefined);
       const handlers = { ...defaultHandlers(), onRuntimeExit };
 
-      await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
+      await manager.getOrCreateClient(
+        'session-1',
+        {
+          ...codexOptions(),
+          purpose: 'browse',
+          resumeProviderSessionId: 'provider-session-existing',
+        },
+        handlers,
+        defaultContext()
+      );
 
       child.kill = vi.fn(() => {
         child.exitCode = 0;
@@ -1537,7 +1520,7 @@ describe('AcpRuntimeManager', () => {
         expect.objectContaining({
           sessionId: 'session-1',
           exitCode: 0,
-          purpose: 'active',
+          purpose: 'browse',
           managed: true,
         })
       );
@@ -1622,7 +1605,7 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
 
-    it('runtime exit event logs handler rejection outside the child emitter', async () => {
+    it('runtime exit event logs handler rejection and releases replacement creation', async () => {
       const child = setupSuccessfulSpawn();
       const onRuntimeExit = vi.fn().mockRejectedValue(new Error('domain exit failed'));
       await manager.getOrCreateClient(
@@ -1635,12 +1618,23 @@ describe('AcpRuntimeManager', () => {
       child.exitCode = 1;
       expect(() => child.emit('exit', 1, null)).not.toThrow();
 
+      const replacementChild = setupSuccessfulSpawn();
+      const replacementHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
       await vi.waitFor(() => {
         expect(mockLoggerWarn).toHaveBeenCalledWith('Failed to handle ACP exit event', {
           sessionId: 'session-1',
           error: 'domain exit failed',
         });
       });
+      expect(manager.getClient('session-1')).toBe(replacementHandle);
+      exitChildAfterSigterm(replacementChild);
+      await manager.stopClient('session-1');
     });
 
     it('rejects client creation while a stop is in progress', async () => {
