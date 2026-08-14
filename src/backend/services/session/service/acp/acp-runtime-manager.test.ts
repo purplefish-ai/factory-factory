@@ -913,10 +913,10 @@ describe('AcpRuntimeManager', () => {
       await manager.stopClient('db-session-1');
     });
 
-    it('keeps a browse-only restored client stopped until active startup promotes it', async () => {
-      setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
+    it('emits active runtime error purpose after promoting a browse runtime', async () => {
+      const child = setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
       mockExtMethod.mockResolvedValueOnce({ subagents: [], nextCursor: null });
-
+      const onRuntimeError = vi.fn();
       const browseHandle = await manager.getOrCreateClient(
         'db-session-1',
         {
@@ -924,34 +924,36 @@ describe('AcpRuntimeManager', () => {
           purpose: 'browse',
           resumeProviderSessionId: 'provider-session-existing',
         },
-        defaultHandlers(),
+        { ...defaultHandlers(), onRuntimeError },
         defaultContext()
       );
-
       await expect(
         manager.listSubagents('db-session-1', { cursor: null, limit: 50 })
       ).resolves.toEqual({ subagents: [], nextCursor: null });
       expect(manager.getClient('db-session-1')).toBeUndefined();
       expect(manager.isSessionRunning('db-session-1')).toBe(false);
-
       const activeHandle = await manager.getOrCreateClient(
         'db-session-1',
         { ...codexOptions(), purpose: 'active' },
         defaultHandlers(),
         defaultContext()
       );
-
       expect(activeHandle).toBe(browseHandle);
       expect(manager.getClient('db-session-1')).toBe(browseHandle);
       expect(manager.isSessionRunning('db-session-1')).toBe(true);
       expect(mockSpawn).toHaveBeenCalledTimes(1);
+      child.emit('error', new Error('provider transport failed'));
+      expect(onRuntimeError).toHaveBeenCalledWith({
+        sessionId: 'db-session-1',
+        error: expect.objectContaining({ message: 'provider transport failed' }),
+        purpose: 'active',
+      });
     });
 
     it('does not replace a missing browse-only provider session with a new session', async () => {
       const child = setupSuccessfulSpawn({ ...subagentBrowseCapabilities(), loadSession: true });
       exitChildAfterSigterm(child);
       mockLoadSession.mockRejectedValueOnce(new Error('stored provider session missing'));
-
       await expect(
         manager.getOrCreateClient(
           'db-session-1',
@@ -1030,7 +1032,6 @@ describe('AcpRuntimeManager', () => {
     it('classifies a provider without loadSession as unsupported for browse restoration', async () => {
       const child = setupSuccessfulSpawn(subagentBrowseCapabilities());
       exitChildAfterSigterm(child);
-
       await expect(
         manager.getOrCreateClient(
           'db-session-1',
@@ -1048,7 +1049,6 @@ describe('AcpRuntimeManager', () => {
 
     it('returns the negotiated capability only for a live handle', async () => {
       expect(manager.getSubagentBrowseCapability('session-1')).toBeNull();
-
       const child = setupSuccessfulSpawn(subagentBrowseCapabilities());
       await manager.getOrCreateClient(
         'session-1',

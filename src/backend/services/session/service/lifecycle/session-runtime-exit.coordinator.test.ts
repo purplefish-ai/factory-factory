@@ -145,10 +145,10 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.handlers.onSessionId).toBeUndefined();
   });
 
-  it('cleans up a browse exit without finalizing the active session', async () => {
+  it('public handleExit cleans up a browse exit without finalizing the active session', async () => {
     const harness = createExitCoordinatorHarness({ browse: true });
 
-    await harness.handlers.onRuntimeExit?.(runtimeExit({ purpose: 'browse' }));
+    await harness.coordinator.handleExit(runtimeExit({ purpose: 'browse' }));
 
     expect(harness.lifecycleGate.releaseShutdown).toHaveBeenCalledWith('session-1');
     expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
@@ -173,6 +173,19 @@ describe('SessionRuntimeExitCoordinator', () => {
       'runtime_error',
       expect.objectContaining({ message: 'provider transport failed' })
     );
+  });
+
+  it('uses typed runtime error purpose instead of handler creation purpose', () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+    const runtimeError = new Error('promoted runtime failed');
+
+    harness.handlers.onRuntimeError?.({
+      sessionId: 'session-1',
+      error: runtimeError,
+      purpose: 'active',
+    });
+
+    expect(harness.domain.markError).toHaveBeenCalledWith('session-1', 'promoted runtime failed');
   });
 
   it('records the process-exit snapshot and successful persisted status', async () => {
@@ -228,7 +241,7 @@ describe('SessionRuntimeExitCoordinator', () => {
   it('prepares active runtime state and delegates workflow-specific exit effects', async () => {
     const harness = createExitCoordinatorHarness({ lifecycleStopping: true });
 
-    await harness.handlers.onRuntimeExit?.(runtimeExit());
+    await harness.coordinator.handleExit(runtimeExit());
 
     expect(harness.promptCompletion.clearSession).toHaveBeenCalledWith('session-1');
     expect(harness.onSessionExit).toHaveBeenCalledWith('session-1');
@@ -245,6 +258,36 @@ describe('SessionRuntimeExitCoordinator', () => {
       exitCode: 1,
       deliberate: true,
     });
+  });
+
+  it('closes the trace without active finalization when browse cleanup fails', async () => {
+    const harness = createExitCoordinatorHarness({ browse: true });
+    harness.processor.clearSessionState.mockImplementationOnce(() => {
+      throw new Error('browse cleanup failed');
+    });
+
+    await expect(
+      harness.coordinator.handleExit(runtimeExit({ purpose: 'browse' }))
+    ).rejects.toThrow('browse cleanup failed');
+
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
+  });
+
+  it('closes the trace without finalization when active preparation fails', async () => {
+    const harness = createExitCoordinatorHarness();
+    harness.promptCompletion.clearSession.mockImplementationOnce(() => {
+      throw new Error('active preparation failed');
+    });
+
+    await expect(harness.coordinator.handleExit(runtimeExit())).rejects.toThrow(
+      'active preparation failed'
+    );
+
+    expect(mockTraceClose).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
   });
 
   it('closes the trace in finally when inactive cleanup fails', async () => {

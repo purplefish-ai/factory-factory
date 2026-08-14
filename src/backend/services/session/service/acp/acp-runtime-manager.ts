@@ -27,7 +27,12 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
-import type { AcpRuntimeEvent, AcpRuntimeEventHandlers } from './acp-runtime-events';
+import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
+import type {
+  AcpRuntimeEvent,
+  AcpRuntimeEventHandlers,
+  AcpRuntimePurpose,
+} from './acp-runtime-events';
 import {
   createAcpSpawnError,
   hasUsableWorkingDir,
@@ -37,10 +42,12 @@ import {
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
-import { createNormalizedAcpReadableStream, normalizeUnknownError } from './acp-stream-normalizer';
+import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 import type { AcpClientOptions, PermissionPreset } from './types';
 
 const logger = createLogger('acp-runtime-manager');
+
+type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose };
 
 /** Thrown when an ACP prompt exceeds the caller-specified timeout. */
 export class PromptTimeoutError extends Error {
@@ -240,6 +247,7 @@ export class AcpRuntimeManager {
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
+  private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private readonly shutdownWaiters = new Set<() => void>();
@@ -393,7 +401,7 @@ export class AcpRuntimeManager {
 
         const existing = this.getBrowseClient(sessionId);
         if (existing?.isRunning()) {
-          this.promoteForActiveUse(sessionId, options);
+          this.promoteForActiveUse(sessionId, options, existing);
           logger.debug('Returning existing running ACP client', { sessionId });
           return existing;
         }
@@ -402,7 +410,7 @@ export class AcpRuntimeManager {
         if (pending) {
           logger.debug('Waiting for pending ACP client creation', { sessionId });
           const handle = await pending;
-          this.promoteForActiveUse(sessionId, options);
+          this.promoteForActiveUse(sessionId, options, handle);
           return handle;
         }
 
@@ -410,6 +418,7 @@ export class AcpRuntimeManager {
         this.recordClientPurpose(sessionId, options);
         const createPromise = this.createClient(sessionId, options, handlers, context, {
           incarnationId: randomUUID(),
+          purpose: options.purpose ?? 'active',
         });
         this.pendingCreation.set(sessionId, createPromise);
 
@@ -432,9 +441,17 @@ export class AcpRuntimeManager {
     });
   }
 
-  private promoteForActiveUse(sessionId: string, options: AcpClientOptions): void {
+  private promoteForActiveUse(
+    sessionId: string,
+    options: AcpClientOptions,
+    handle: AcpProcessHandle
+  ): void {
     if (options.purpose !== 'browse') {
       this.browseOnlySessions.delete(sessionId);
+      const metadata = this.runtimeMetadata.get(handle.child);
+      if (metadata) {
+        metadata.purpose = 'active';
+      }
     }
   }
 
@@ -457,7 +474,7 @@ export class AcpRuntimeManager {
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string },
-    runtime: { incarnationId: string }
+    runtime: AcpRuntimeMetadata
   ): Promise<AcpProcessHandle> {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
@@ -508,6 +525,7 @@ export class AcpRuntimeManager {
       env: spawnEnv,
       detached: false,
     });
+    this.runtimeMetadata.set(child, runtime);
 
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
@@ -519,7 +537,12 @@ export class AcpRuntimeManager {
     });
     const startupErrorSettled = startupError.catch(() => undefined);
 
-    this.wireChildErrorHandler(child, sessionId, handlers);
+    wireAcpRuntimeErrorHandler(
+      child,
+      sessionId,
+      handlers,
+      () => this.runtimeMetadata.get(child)?.purpose ?? 'active'
+    );
     await this.abortClientCreationIfStopping(child, sessionId);
 
     // Wire stderr to session log hook
@@ -812,7 +835,7 @@ export class AcpRuntimeManager {
     sessionId: string,
     child: ChildProcess,
     handlers: AcpRuntimeEventHandlers,
-    runtime: { incarnationId: string }
+    runtime: AcpRuntimeMetadata
   ): void {
     child.once('exit', async (code) => {
       const classification = this.classifyChildExit(sessionId, child, code);
@@ -897,34 +920,6 @@ export class AcpRuntimeManager {
         });
       }
     }
-  }
-
-  private wireChildErrorHandler(
-    child: ChildProcess,
-    sessionId: string,
-    handlers: AcpRuntimeEventHandlers
-  ): void {
-    // Route runtime child-process errors through the domain error callback.
-    child.on('error', async (error) => {
-      const normalizedError = normalizeUnknownError(error);
-      if (handlers.onError) {
-        try {
-          await handlers.onError(sessionId, normalizedError);
-        } catch (handlerError) {
-          logger.warn('Failed to handle ACP error event', {
-            sessionId,
-            originalError: normalizedError.message,
-            handlerError:
-              handlerError instanceof Error ? handlerError.message : String(handlerError),
-          });
-        }
-      } else {
-        logger.warn('ACP child process error (no handler provided)', {
-          sessionId,
-          error: normalizedError.message,
-        });
-      }
-    });
   }
 
   private async createOrResumeSession(

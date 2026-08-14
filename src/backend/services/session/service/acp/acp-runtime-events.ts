@@ -12,9 +12,16 @@ export type AcpRuntimeExitEvent = Readonly<{
   managed: boolean;
 }>;
 
+export type AcpRuntimeErrorEvent = Readonly<{
+  sessionId: string;
+  error: Error;
+  purpose: AcpRuntimePurpose;
+}>;
+
 export type AcpRuntimeEventHandlers = {
   onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
   onRuntimeExit?: (event: AcpRuntimeExitEvent) => Promise<void>;
+  onRuntimeError?: (event: AcpRuntimeErrorEvent) => Promise<void> | void;
   /** @deprecated Transitional adapter for callers that have not migrated to onRuntimeExit. */
   onExit?: (sessionId: string, code: number | null) => Promise<void>;
   onError?: (sessionId: string, error: Error) => Promise<void> | void;

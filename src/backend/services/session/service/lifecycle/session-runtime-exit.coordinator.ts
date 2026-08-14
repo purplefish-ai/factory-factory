@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
+  AcpRuntimeErrorEvent,
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
   AcpRuntimePurpose,
@@ -64,11 +65,12 @@ export class SessionRuntimeExitCoordinator {
       ...(input.persistProviderSessionId
         ? { onSessionId: this.createProviderSessionIdHandler() }
         : {}),
-      onRuntimeExit: async (event) => {
-        await this.handleRuntimeExitEvent(event);
+      onRuntimeExit: (event) => this.handleExit(event),
+      onRuntimeError: (event) => {
+        this.handleRuntimeError(event);
       },
       onExit: async (sessionId, exitCode) => {
-        await this.handleRuntimeExitEvent({
+        await this.handleExit({
           sessionId,
           exitCode,
           incarnationId: legacyIncarnationId,
@@ -77,7 +79,7 @@ export class SessionRuntimeExitCoordinator {
         });
       },
       onError: (sessionId, error) => {
-        this.handleRuntimeError(sessionId, error, input.purpose);
+        this.handleRuntimeError({ sessionId, error, purpose: input.purpose });
       },
       onAcpLog: (sessionId, payload) => {
         this.dependencies.acpEventProcessor.handleAcpLog(sessionId, payload);
@@ -86,35 +88,25 @@ export class SessionRuntimeExitCoordinator {
   }
 
   async handleExit(event: AcpRuntimeExitEvent): Promise<void> {
-    const deliberate =
-      event.managed || this.dependencies.lifecycleGate.isSessionStopping(event.sessionId);
-
     try {
-      this.dependencies.sessionDomainService.markProcessExit(event.sessionId, event.exitCode);
-      const session = await this.dependencies.repository.getSessionById(event.sessionId);
-      if (!session) {
-        logger.warn('Failed to find ACP session on exit', { sessionId: event.sessionId });
+      const deliberate =
+        event.managed || this.dependencies.lifecycleGate.isSessionStopping(event.sessionId);
+      this.dependencies.lifecycleGate.releaseShutdown(event.sessionId);
+      if (event.purpose === 'browse') {
+        this.dependencies.acpEventProcessor.clearSessionState(event.sessionId);
         return;
       }
-
-      await this.updatePersistedStatus(event);
-      await this.recordUnexpectedExitIfNeeded(session, event, deliberate);
-      await this.dependencies.workflowFinalizer.finalizeRuntimeExit({
-        session,
-        sessionId: event.sessionId,
-        exitCode: event.exitCode,
-        deliberate,
-      });
-    } catch (error) {
-      logger.warn('Failed to process ACP session exit', {
-        sessionId: event.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      this.prepareRuntimeExit(event.sessionId, event.exitCode);
+      await this.handleActiveExit(event, deliberate);
     } finally {
-      try {
-        this.dependencies.workflowFinalizer.clearInactiveSession(event.sessionId, 'runtime_exit');
-      } finally {
+      if (event.purpose === 'browse') {
         acpTraceLogger.closeSession(event.sessionId);
+      } else {
+        try {
+          this.dependencies.workflowFinalizer.clearInactiveSession(event.sessionId, 'runtime_exit');
+        } finally {
+          acpTraceLogger.closeSession(event.sessionId);
+        }
       }
     }
   }
@@ -141,30 +133,44 @@ export class SessionRuntimeExitCoordinator {
     };
   }
 
-  private async handleRuntimeExitEvent(event: AcpRuntimeExitEvent): Promise<void> {
-    this.dependencies.lifecycleGate.releaseShutdown(event.sessionId);
-    if (event.purpose === 'browse') {
-      this.dependencies.acpEventProcessor.clearSessionState(event.sessionId);
-      acpTraceLogger.closeSession(event.sessionId);
-      return;
-    }
-    this.prepareRuntimeExit(event.sessionId, event.exitCode);
-    await this.handleExit(event);
-  }
-
-  private handleRuntimeError(sessionId: string, error: Error, purpose: AcpRuntimePurpose): void {
-    acpTraceLogger.log(sessionId, 'runtime_error', {
-      message: error.message,
-      stack: error.stack,
+  private handleRuntimeError(event: AcpRuntimeErrorEvent): void {
+    acpTraceLogger.log(event.sessionId, 'runtime_error', {
+      message: event.error.message,
+      stack: event.error.stack,
     });
-    if (purpose !== 'browse') {
-      this.dependencies.sessionDomainService.markError(sessionId, error.message);
+    if (event.purpose !== 'browse') {
+      this.dependencies.sessionDomainService.markError(event.sessionId, event.error.message);
     }
     logger.error('ACP client error', {
-      sessionId,
-      error: error.message,
-      stack: error.stack,
+      sessionId: event.sessionId,
+      error: event.error.message,
+      stack: event.error.stack,
     });
+  }
+
+  private async handleActiveExit(event: AcpRuntimeExitEvent, deliberate: boolean): Promise<void> {
+    try {
+      this.dependencies.sessionDomainService.markProcessExit(event.sessionId, event.exitCode);
+      const session = await this.dependencies.repository.getSessionById(event.sessionId);
+      if (!session) {
+        logger.warn('Failed to find ACP session on exit', { sessionId: event.sessionId });
+        return;
+      }
+
+      await this.updatePersistedStatus(event);
+      await this.recordUnexpectedExitIfNeeded(session, event, deliberate);
+      await this.dependencies.workflowFinalizer.finalizeRuntimeExit({
+        session,
+        sessionId: event.sessionId,
+        exitCode: event.exitCode,
+        deliberate,
+      });
+    } catch (error) {
+      logger.warn('Failed to process ACP session exit', {
+        sessionId: event.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private prepareRuntimeExit(sessionId: string, exitCode: number | null): void {
