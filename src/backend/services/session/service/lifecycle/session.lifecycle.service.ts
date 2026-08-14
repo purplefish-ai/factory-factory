@@ -315,14 +315,7 @@ export class SessionLifecycleService {
     }
 
     await Promise.allSettled([...pendingCreations]);
-    try {
-      await this.runtimeManager.stopClient(sessionId);
-    } catch (error) {
-      stopError ??= { cause: error };
-    }
-    if (stopError) {
-      throw stopError.cause;
-    }
+    await this.runtimeManager.stopClient(sessionId);
   }
 
   async stopWorkspaceSessions(

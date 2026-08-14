@@ -204,26 +204,19 @@ export class SessionStartupCoordinator {
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
-    if (this.dependencies.runtimeManager.getSubagentBrowseCapability(sessionId)) {
-      return true;
-    }
-
-    const pendingClient = this.dependencies.runtimeManager.getPendingClient(sessionId);
-    if (pendingClient) {
-      try {
-        await pendingClient;
-      } catch (error) {
-        if (error instanceof AcpBrowseSessionUnavailableError) {
-          return false;
-        }
-        throw error;
-      }
-      return await this.resolveSubagentBrowseSupport(sessionId);
-    }
-
     return await this.dependencies.lifecycleGate
       .runStartup(sessionId, async (lease) => {
         const stopGeneration = lease.generation;
+        this.assertStartupAllowed(sessionId, stopGeneration);
+
+        const existingBrowseSupport = await this.resolveExistingBrowseSupport(
+          sessionId,
+          stopGeneration
+        );
+        if (existingBrowseSupport !== null) {
+          return existingBrowseSupport;
+        }
+
         const session = await this.dependencies.repository.getSessionById(sessionId);
         if (!(session?.provider === 'CODEX' && session.providerSessionId)) {
           return false;
@@ -267,6 +260,30 @@ export class SessionStartupCoordinator {
         }
         throw error;
       });
+  }
+
+  private async resolveExistingBrowseSupport(
+    sessionId: string,
+    stopGeneration: number
+  ): Promise<boolean | null> {
+    if (this.dependencies.runtimeManager.getSubagentBrowseCapability(sessionId)) {
+      return true;
+    }
+
+    const pendingClient = this.dependencies.runtimeManager.getPendingClient(sessionId);
+    if (!pendingClient) {
+      return null;
+    }
+    try {
+      await pendingClient;
+    } catch (error) {
+      if (error instanceof AcpBrowseSessionUnavailableError) {
+        return false;
+      }
+      throw error;
+    }
+    this.assertStartupAllowed(sessionId, stopGeneration);
+    return await this.resolveSubagentBrowseSupport(sessionId);
   }
 
   private async getOrCreateFromRecord(
