@@ -80,6 +80,26 @@ describe('SessionStartupCoordinator', () => {
     });
   });
 
+  it('preserves the running-before-stopping restart probe order', async () => {
+    const harness = createLifecycleHarness();
+    const probes: string[] = [];
+    harness.runtimeManager.isSessionRunning.mockImplementationOnce(() => {
+      probes.push('running');
+      return true;
+    });
+    harness.runtimeManager.isStopInProgress.mockImplementationOnce(() => {
+      probes.push('stopping');
+      return true;
+    });
+    const coordinator = createStartupCoordinator(harness);
+
+    await expect(coordinator.restartSession('session-1')).rejects.toThrow(
+      'Cannot restart: session is currently being stopped. Please try again shortly.'
+    );
+
+    expect(probes).toEqual(['running', 'stopping']);
+  });
+
   it('builds ACP startup options through the injected environment port', async () => {
     const { service, runtimeManager, acpEnvironment } = createLifecycleHarness({
       workspace: { parentWorkspaceId: 'parent-workspace' },
@@ -618,13 +638,63 @@ describe('SessionStartupCoordinator', () => {
       expect(harness.sessionConfigService.persistAcpConfigSnapshot).toHaveBeenCalledOnce();
     });
 
-    await harness.service.stopSession('session-1');
+    const stopPromise = harness.service.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+    const firstSettlement = await Promise.race([
+      stopPromise.then(() => 'stopped' as const),
+      new Promise<'blocked'>((resolve) => {
+        setImmediate(() => resolve('blocked'));
+      }),
+    ]);
+
+    expect(firstSettlement).toBe('blocked');
     snapshotPersistence.resolve(undefined);
+    await stopPromise;
 
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
     );
     expect(harness.sessionDomainService.emitDelta).not.toHaveBeenCalled();
+  });
+
+  it('keeps stop ahead of startup during durable running-state persistence', async () => {
+    const harness = createLifecycleHarness();
+    const runningPersistence = createDeferred<typeof harness.session>();
+    harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+
+    const startResult = harness.service
+      .startSession('session-1', { initialPrompt: '' })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+        status: SessionStatus.RUNNING,
+      });
+    });
+
+    const stopPromise = harness.service.stopSession('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+    });
+    const firstSettlement = await Promise.race([
+      stopPromise.then(() => 'stopped' as const),
+      new Promise<'blocked'>((resolve) => {
+        setImmediate(() => resolve('blocked'));
+      }),
+    ]);
+
+    expect(firstSettlement).toBe('blocked');
+    runningPersistence.resolve(harness.session);
+    await stopPromise;
+    await expect(startResult).resolves.toEqual(
+      expect.objectContaining({ message: 'Session is currently being stopped' })
+    );
+    expect(harness.sessionDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+    });
   });
 
   it('does not fail startup when queued notification dispatch fails', async () => {

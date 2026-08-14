@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
-import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
   SessionAutoIterationExitBridge,
   SessionLifecycleMessageQueueBridge,
@@ -109,7 +109,7 @@ export class SessionLifecycleService {
   private readonly runtimeExitCoordinator: SessionRuntimeExitCoordinator;
   private readonly sendSessionMessage: SendSessionMessage;
   private readonly onBeforeStopSession?: (sessionId: string) => void;
-  private readonly clientCreationOperations = new Map<string, Set<Promise<AcpProcessHandle>>>();
+  private readonly clientCreationOperations = new Map<string, Set<Promise<unknown>>>();
   private startupCoordinator: SessionStartupCoordinator | null = null;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
@@ -588,10 +588,9 @@ export class SessionLifecycleService {
 
   private registerClientCreation(
     sessionId: string,
-    operation: Promise<AcpProcessHandle>
+    operation: Promise<unknown>
   ): { isOnlyOperation: () => boolean; release: () => void } {
-    const operations =
-      this.clientCreationOperations.get(sessionId) ?? new Set<Promise<AcpProcessHandle>>();
+    const operations = this.clientCreationOperations.get(sessionId) ?? new Set<Promise<unknown>>();
     operations.add(operation);
     this.clientCreationOperations.set(sessionId, operations);
     return {

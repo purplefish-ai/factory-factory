@@ -94,7 +94,7 @@ export type SessionStartupCoordinatorDependencies = {
   ) => Promise<void>;
   registerClientCreation: (
     sessionId: string,
-    operation: Promise<AcpProcessHandle>
+    operation: Promise<unknown>
   ) => ClientCreationRegistration;
 };
 
@@ -146,13 +146,16 @@ export class SessionStartupCoordinator {
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
-    if (this.dependencies.runtimeManager.isStopInProgress(sessionId)) {
+    const isRunning = this.dependencies.runtimeManager.isSessionRunning(sessionId);
+    const isStopInProgress = this.dependencies.runtimeManager.isStopInProgress(sessionId);
+
+    if (isStopInProgress) {
       throw new Error(
         'Cannot restart: session is currently being stopped. Please try again shortly.'
       );
     }
 
-    if (this.dependencies.runtimeManager.isSessionRunning(sessionId)) {
+    if (isRunning) {
       try {
         await this.dependencies.stopSession(sessionId, {
           cleanupTransientRatchetSession: false,
@@ -238,12 +241,15 @@ export class SessionStartupCoordinator {
         this.assertStartupAllowed(sessionId, stopGeneration);
 
         try {
-          await this.createAcpClient(
-            sessionId,
-            { purpose: 'browse' },
-            session,
-            undefined,
-            stopGeneration
+          await this.runTrackedClientCreation(sessionId, (registration) =>
+            this.createAcpClient(
+              sessionId,
+              { purpose: 'browse' },
+              session,
+              undefined,
+              stopGeneration,
+              registration
+            )
           );
           this.dependencies.lifecycleGate.establishStartup(lease);
         } catch (error) {
@@ -305,7 +311,8 @@ export class SessionStartupCoordinator {
     options: { model?: string; purpose?: 'active' | 'browse' },
     session: AgentSessionRecord,
     permissionPreset: PermissionPreset | undefined,
-    stopGeneration: number
+    stopGeneration: number,
+    registration: ClientCreationRegistration
   ): Promise<{ handle: AcpProcessHandle; dispatchableNotificationCount: number }> {
     const sessionContext = await this.dependencies.contextService.load(sessionId, session);
     if (!sessionContext) {
@@ -359,7 +366,6 @@ export class SessionStartupCoordinator {
         workingDir: sessionContext.workingDir,
       }
     );
-    const registration = this.dependencies.registerClientCreation(sessionId, creationPromise);
     let handle: AcpProcessHandle;
     try {
       handle = await creationPromise;
@@ -377,8 +383,6 @@ export class SessionStartupCoordinator {
         this.dependencies.acpEventProcessor.clearSessionState(sessionId);
       }
       throw error;
-    } finally {
-      registration.release();
     }
 
     this.assertStartupAllowed(sessionId, stopGeneration);
@@ -441,38 +445,61 @@ export class SessionStartupCoordinator {
     const resolvedPreset = await this.dependencies.contextService.resolvePermissionPreset(session);
     this.assertStartupAllowed(sessionId, stopGeneration);
 
-    let handle: AcpProcessHandle;
-    let dispatchableNotificationCount = 0;
-    try {
-      const created = await this.createAcpClient(
-        sessionId,
-        options,
-        session,
-        resolvedPreset,
-        stopGeneration
-      );
-      handle = created.handle;
-      dispatchableNotificationCount = created.dispatchableNotificationCount;
-    } catch (error) {
+    return await this.runTrackedClientCreation(sessionId, async (registration) => {
+      let handle: AcpProcessHandle;
+      let dispatchableNotificationCount = 0;
+      try {
+        const created = await this.createAcpClient(
+          sessionId,
+          options,
+          session,
+          resolvedPreset,
+          stopGeneration,
+          registration
+        );
+        handle = created.handle;
+        dispatchableNotificationCount = created.dispatchableNotificationCount;
+      } catch (error) {
+        this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
+          phase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
+          errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+          updatedAt: new Date().toISOString(),
+        });
+        throw error;
+      }
+
+      this.assertStartupAllowed(sessionId, stopGeneration);
+      await this.dependencies.repository.updateSession(sessionId, {
+        status: SessionStatus.RUNNING,
+      });
+      this.assertStartupAllowed(sessionId, stopGeneration);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-        errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+        phase: handle.isPromptInFlight ? 'running' : 'idle',
+        processState: 'alive',
+        activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
-      throw error;
-    }
-
-    this.assertStartupAllowed(sessionId, stopGeneration);
-    await this.dependencies.repository.updateSession(sessionId, { status: SessionStatus.RUNNING });
-    this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: handle.isPromptInFlight ? 'running' : 'idle',
-      processState: 'alive',
-      activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
-      updatedAt: new Date().toISOString(),
+      return { handle, resolvedPreset, dispatchableNotificationCount };
     });
-    return { handle, resolvedPreset, dispatchableNotificationCount };
+  }
+
+  private async runTrackedClientCreation<T>(
+    sessionId: string,
+    operation: (registration: ClientCreationRegistration) => Promise<T>
+  ): Promise<T> {
+    let settleBarrier!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      settleBarrier = resolve;
+    });
+    const registration = this.dependencies.registerClientCreation(sessionId, barrier);
+    try {
+      return await operation(registration);
+    } finally {
+      settleBarrier();
+      registration.release();
+    }
   }
 
   private async dispatchQueuedNotificationsIfNeeded(

@@ -83,16 +83,41 @@ describe('SessionLifecycleFacade', () => {
     expect(getOptions).toHaveBeenCalledWith('session-1');
   });
 
-  it('delegates startup through the configured startup coordinator', async () => {
+  it('delegates every startup entry point through the configured coordinator', async () => {
     const startSession = vi
       .spyOn(SessionStartupCoordinator.prototype, 'startSession')
       .mockResolvedValueOnce(undefined);
-    const { service } = createLifecycleHarness();
+    const restartSession = vi
+      .spyOn(SessionStartupCoordinator.prototype, 'restartSession')
+      .mockResolvedValueOnce(undefined);
+    const getOrCreateSessionClient = vi
+      .spyOn(SessionStartupCoordinator.prototype, 'getOrCreateSessionClient')
+      .mockResolvedValueOnce('client-by-id');
+    const getOrCreateSessionClientFromRecord = vi
+      .spyOn(SessionStartupCoordinator.prototype, 'getOrCreateSessionClientFromRecord')
+      .mockResolvedValueOnce('client-by-record');
+    const ensureSubagentBrowseSession = vi
+      .spyOn(SessionStartupCoordinator.prototype, 'ensureSubagentBrowseSession')
+      .mockResolvedValueOnce(true);
+    const { service, session } = createLifecycleHarness();
     const options = { initialPrompt: 'Resume the task', startupModePreset: 'plan' } as const;
+    const clientOptions = { model: 'claude-opus', reasoningEffort: 'high' };
 
     await service.startSession('session-1', options);
+    await service.restartSession('session-2', options);
+    await expect(service.getOrCreateSessionClient('session-3', clientOptions)).resolves.toBe(
+      'client-by-id'
+    );
+    await expect(service.getOrCreateSessionClientFromRecord(session, clientOptions)).resolves.toBe(
+      'client-by-record'
+    );
+    await expect(service.ensureSubagentBrowseSession('session-4')).resolves.toBe(true);
 
     expect(startSession).toHaveBeenCalledWith('session-1', options);
+    expect(restartSession).toHaveBeenCalledWith('session-2', options);
+    expect(getOrCreateSessionClient).toHaveBeenCalledWith('session-3', clientOptions);
+    expect(getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(session, clientOptions);
+    expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-4');
   });
 
   it('skips the restart default continue prompt when notifications are queued', async () => {
