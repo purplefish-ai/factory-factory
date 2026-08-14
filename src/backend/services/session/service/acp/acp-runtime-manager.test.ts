@@ -83,8 +83,14 @@ import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { AcpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
-import { createDeferred, subagentBrowseCapabilities } from './acp-runtime-manager.test-helpers';
-import type { AcpClientOptions } from './types';
+import {
+  codexOptions,
+  createDeferred,
+  defaultConfigOptions,
+  defaultContext,
+  defaultOptions,
+  subagentBrowseCapabilities,
+} from './acp-runtime-manager.test-helpers';
 
 // ---- Helpers ----
 
@@ -149,22 +155,6 @@ function exitChildAfterSigterm(child: ReturnType<typeof createMockChildProcess>)
   });
 }
 
-function defaultOptions(): AcpClientOptions {
-  return {
-    provider: 'CLAUDE',
-    workingDir: '/tmp/workspace',
-    sessionId: 'test-session-1',
-  };
-}
-
-function codexOptions(): AcpClientOptions {
-  return {
-    provider: 'CODEX',
-    workingDir: '/tmp/workspace',
-    sessionId: 'test-session-1',
-  };
-}
-
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
@@ -172,37 +162,6 @@ function defaultHandlers(): AcpRuntimeEventHandlers {
     onError: vi.fn(),
     onAcpEvent: vi.fn(),
   };
-}
-
-function defaultContext() {
-  return { workspaceId: 'w1', workingDir: '/tmp/workspace' };
-}
-
-function defaultConfigOptions() {
-  return [
-    {
-      id: 'model',
-      name: 'Model',
-      type: 'select' as const,
-      category: 'model',
-      currentValue: 'sonnet',
-      options: [
-        { value: 'sonnet', name: 'Sonnet' },
-        { value: 'opus', name: 'Opus' },
-      ],
-    },
-    {
-      id: 'mode',
-      name: 'Mode',
-      type: 'select' as const,
-      category: 'mode',
-      currentValue: 'default',
-      options: [
-        { value: 'default', name: 'Default' },
-        { value: 'plan', name: 'Plan' },
-      ],
-    },
-  ];
 }
 
 function setupSuccessfulSpawn(agentCapabilities: Record<string, unknown> = { loadSession: {} }) {
@@ -1605,9 +1564,21 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
 
-    it('runtime exit event logs handler rejection and releases replacement creation', async () => {
+    it('rejects same-session reentrant exit creation and releases the fence', async () => {
       const child = setupSuccessfulSpawn();
-      const onRuntimeExit = vi.fn().mockRejectedValue(new Error('domain exit failed'));
+      let exitHandlerSettled = false;
+      const onRuntimeExit = vi.fn(async () => {
+        try {
+          await manager.getOrCreateClient(
+            'session-1',
+            defaultOptions(),
+            defaultHandlers(),
+            defaultContext()
+          );
+        } finally {
+          exitHandlerSettled = true;
+        }
+      });
       await manager.getOrCreateClient(
         'session-1',
         defaultOptions(),
@@ -1617,6 +1588,12 @@ describe('AcpRuntimeManager', () => {
 
       child.exitCode = 1;
       expect(() => child.emit('exit', 1, null)).not.toThrow();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(exitHandlerSettled).toBe(true);
+      expect(mockLoggerWarn).toHaveBeenCalledWith('Failed to handle ACP exit event', {
+        sessionId: 'session-1',
+        error: 'Cannot create ACP client for session session-1 from its runtime exit handler',
+      });
 
       const replacementChild = setupSuccessfulSpawn();
       const replacementHandle = await manager.getOrCreateClient(
@@ -1626,15 +1603,38 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      await vi.waitFor(() => {
-        expect(mockLoggerWarn).toHaveBeenCalledWith('Failed to handle ACP exit event', {
-          sessionId: 'session-1',
-          error: 'domain exit failed',
-        });
-      });
       expect(manager.getClient('session-1')).toBe(replacementHandle);
       exitChildAfterSigterm(replacementChild);
       await manager.stopClient('session-1');
+    });
+
+    it('allows an exit handler to create a runtime for a different session', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      let differentSessionCreated = false;
+      const onRuntimeExit = vi.fn(async () => {
+        await manager.getOrCreateClient(
+          'session-2',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+        differentSessionCreated = true;
+      });
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        { ...defaultHandlers(), onRuntimeExit },
+        defaultContext()
+      );
+      const secondChild = setupSuccessfulSpawn();
+
+      firstChild.emit('exit', 1, null);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(differentSessionCreated).toBe(true);
+      expect(manager.getClient('session-2')).toBeDefined();
+      exitChildAfterSigterm(secondChild);
+      await manager.stopClient('session-2');
     });
 
     it('rejects client creation while a stop is in progress', async () => {

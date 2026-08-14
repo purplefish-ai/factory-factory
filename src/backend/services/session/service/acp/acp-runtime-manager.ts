@@ -33,7 +33,7 @@ import type {
   AcpRuntimeEventHandlers,
   AcpRuntimePurpose,
 } from './acp-runtime-events';
-import { createExitFence, dispatchAcpRuntimeExit } from './acp-runtime-exit-handler';
+import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
   createAcpSpawnError,
   hasUsableWorkingDir,
@@ -375,16 +375,16 @@ export class AcpRuntimeManager {
     return handle;
   }
 
-  getOrCreateClient(
+  async getOrCreateClient(
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
+    guardExit(sessionId);
     if (this.isShuttingDown) {
-      return Promise.reject(this.createShutdownError(sessionId));
+      throw this.createShutdownError(sessionId);
     }
-
     let lock = this.creationLocks.get(sessionId);
     if (!lock) {
       lock = pLimit(1);
@@ -395,7 +395,7 @@ export class AcpRuntimeManager {
     const currentCount = this.lockRefCounts.get(sessionId) ?? 0;
     this.lockRefCounts.set(sessionId, currentCount + 1);
 
-    return lock(async () => {
+    return await lock(async () => {
       try {
         const exitHandling = this.exitHandling.get(sessionId);
         if (exitHandling) {
