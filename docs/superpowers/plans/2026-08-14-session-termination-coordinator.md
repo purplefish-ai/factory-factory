@@ -218,7 +218,6 @@
     workspaceId: string,
     options?: { reason?: SessionStopReason }
   ): Promise<void>;
-  stopAllClients(timeoutMs?: number): Promise<void>;
   ```
 
 - Consumes: explicit typed ports for repository, retry, runtime, domain, permission, ACP cleanup, prompt completion, lifecycle event/gate, workflow finalization, workspace bridge lookup, and optional pre-stop callback.
@@ -258,7 +257,7 @@
 
 - [ ] **Step 5: Add facade delegation RED/GREEN coverage**
 
-  In `session.lifecycle.facade.test.ts`, spy on the three `SessionTerminationCoordinator` public methods and assert that the facade forwards exact session IDs, workspace IDs, options, default timeout behavior, results, and rejections. Do not assert coordinator internals in the facade suite.
+  In `session.lifecycle.facade.test.ts`, spy on the two `SessionTerminationCoordinator` public methods and assert that the facade forwards exact session IDs, workspace IDs, options, results, and rejections. Do not assert coordinator internals in the facade suite. `stopAllClients` remains on the facade until Task 4.
 
   Run:
 
@@ -290,6 +289,7 @@
 
 **Interfaces:**
 - Preserves: `SessionLifecycleService.stopAllClients(timeoutMs = 5000)` and `AcpRuntimeManager.stopAllClients(timeoutMs = 5000)`.
+- Adds: `SessionTerminationCoordinator.stopAllClients(timeoutMs = 5000)` and delegates the existing facade method to it.
 - Produces: one fully composed termination coordinator using the same lifecycle gate, runtime manager, workflow finalizer, and mutable workspace-bridge seam as the facade.
 
 - [ ] **Step 1: Add direct shutdown RED tests**
