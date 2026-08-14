@@ -162,15 +162,9 @@ describe('SessionStartupCoordinator', () => {
     expect(sessionDomainService.setRuntimeSnapshot).not.toHaveBeenCalled();
   });
 
-  it('rejects an existing browse client while stop is in progress', async () => {
+  it('rejects stop before inspecting existing browse support', async () => {
     const harness = createLifecycleHarness();
     const runtimeStop = createDeferred<void>();
-    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
-      version: 1,
-      list: true,
-      read: true,
-      notifications: true,
-    });
     harness.runtimeManager.stopClient.mockReturnValueOnce(runtimeStop.promise);
 
     const stopPromise = harness.service.stopSession('session-1');
@@ -179,12 +173,13 @@ describe('SessionStartupCoordinator', () => {
     });
 
     await expect(harness.service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
+    expect(harness.runtimeManager.getSubagentBrowseCapability).not.toHaveBeenCalled();
 
     runtimeStop.resolve(undefined);
     await stopPromise;
   });
 
-  it('rejects a pending browse client when stop completes before it settles', async () => {
+  it('rejects a pending browse client before rechecking support after stop', async () => {
     const harness = createLifecycleHarness();
     const pendingClient = createDeferred<typeof harness.handle>();
     harness.runtimeManager.getPendingClient.mockReturnValueOnce(pendingClient.promise);
@@ -194,15 +189,10 @@ describe('SessionStartupCoordinator', () => {
       expect(harness.runtimeManager.getPendingClient).toHaveBeenCalledWith('session-1');
     });
     await harness.service.stopSession('session-1');
-    harness.runtimeManager.getSubagentBrowseCapability.mockReturnValue({
-      version: 1,
-      list: true,
-      read: true,
-      notifications: true,
-    });
     pendingClient.resolve(harness.handle);
 
     await expect(browseResult).resolves.toBe(false);
+    expect(harness.runtimeManager.getSubagentBrowseCapability).toHaveBeenCalledOnce();
   });
 
   it('does not spawn a browse client without a stored provider session', async () => {
