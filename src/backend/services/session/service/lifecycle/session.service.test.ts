@@ -25,11 +25,17 @@ vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const RuntimeQuiescence =
     actual.AcpRuntimeQuiescence as typeof import('@/backend/services/session/service/acp').AcpRuntimeQuiescence;
   const stopClient = vi.fn(async () => undefined);
-  const quiescence = new RuntimeQuiescence({ stopClient });
+  let quiescence = new RuntimeQuiescence({ stopClient });
+  beforeEach(() => {
+    stopClient.mockReset().mockResolvedValue(undefined);
+    quiescence = new RuntimeQuiescence({ stopClient });
+  });
   const runtimeManager = {
     getClient: vi.fn().mockReturnValue(undefined),
     getOrCreateClient: vi.fn(),
-    runClientCreationOperation: vi.fn(quiescence.runClientCreationOperation.bind(quiescence)),
+    runClientCreationOperation: vi.fn((sessionId, purpose, operation) =>
+      quiescence.runClientCreationOperation(sessionId, purpose, operation)
+    ),
     stopClient,
     stopAndQuiesce: vi.fn((sessionId: string) => quiescence.stopAndQuiesce(sessionId)),
     beginShutdown: vi.fn().mockReturnValue([]),
@@ -97,6 +103,7 @@ import { workspaceDataService } from '@/backend/services/workspace';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
+import { createDeferred } from './session-lifecycle.test-helpers';
 import {
   acpEventProcessor,
   sessionLifecycleService,
@@ -104,32 +111,15 @@ import {
   sessionService,
 } from './session-services';
 
-function getAcpProcessorState() {
-  return acpEventProcessor;
-}
-
+const getAcpProcessorState = () => acpEventProcessor;
 function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
   vi.mocked(acpRuntimeManager.getOrCreateClient).mockImplementation(() => {
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(acpHandle);
     return Promise.resolve(acpHandle);
   });
 }
-
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolvePromise!: (value: T) => void;
-  let rejectPromise!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return { promise, resolve: resolvePromise, reject: rejectPromise };
-}
-
 describe('SessionService', () => {
+  const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
@@ -147,12 +137,8 @@ describe('SessionService', () => {
       recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       resetPRDiscoveryBackoff: vi.fn(async () => true),
     };
-    sessionService.configure({
-      workspace: workspaceBridge,
-    });
-    sessionLifecycleService.configure({
-      workspace: workspaceBridge,
-    });
+    sessionService.configure({ workspace: workspaceBridge });
+    sessionLifecycleService.configure({ workspace: workspaceBridge });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
@@ -168,7 +154,24 @@ describe('SessionService', () => {
     vi.mocked(closedSessionPersistenceService.persistClosedSession).mockResolvedValue();
     vi.mocked(sessionRepository.updateSessionIfStatus).mockResolvedValue(1);
   });
-
+  it('can leave a runtime quiescence barrier pending', async () => {
+    const pending = createDeferred<void>();
+    void acpRuntimeManager.runClientCreationOperation(sessionId, 'active', () => pending.promise);
+    void acpRuntimeManager.stopAndQuiesce(sessionId);
+    await expect(
+      acpRuntimeManager.runClientCreationOperation(sessionId, 'active', () =>
+        Promise.resolve('late')
+      )
+    ).rejects.toThrow('ACP session stop requested');
+  });
+  it('starts the next test with isolated runtime quiescence state', async () => {
+    await expect(
+      acpRuntimeManager.runClientCreationOperation(sessionId, 'active', (registration) => {
+        expect(registration.isOnlyOperation()).toBe(true);
+        return Promise.resolve('created');
+      })
+    ).resolves.toBe('created');
+  });
   it('starts a session via ACP runtime and updates DB state', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -181,7 +184,6 @@ describe('SessionService', () => {
       provider: 'CLAUDE',
       providerSessionId: null,
     });
-
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
       id: 'workspace-1',
       worktreePath: '/tmp/work',
@@ -192,12 +194,10 @@ describe('SessionService', () => {
       description: null,
       projectId: 'project-1',
     });
-
     const project = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getProjectById>>>({
       id: 'project-1',
       githubOwner: 'owner',
     });
-
     const acpHandle = unsafeCoerce<AcpProcessHandle>({
       getPid: vi.fn().mockReturnValue(123),
       isPromptInFlight: false,
