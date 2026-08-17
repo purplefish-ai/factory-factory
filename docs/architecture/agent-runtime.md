@@ -39,6 +39,7 @@ drift with `pnpm check:codex-schema`.
 owns subprocess handles, pending creation, incarnation filtering, and
 quiescence. Lifecycle work has one owner per responsibility; transport handlers
 consume the composed services and never wire lifecycle dependencies.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
@@ -46,14 +47,15 @@ finalization each have one coordinator or service.
 | --- | --- | --- |
 | Startup | `SessionStartupCoordinator` | Persisted `RUNNING` state |
 | Termination | `SessionTerminationCoordinator` | Persisted idle/stopped state |
-| Runtime exit | `SessionRuntimeExitCoordinator` | Terminal status and provider history |
+| Runtime exit | `SessionRuntimeExitCoordinator` | Terminal status and unexpected-exit lifecycle history |
 | Notifications | `SessionNotificationDeliveryService` | Transcript plus delivered evidence |
-| Context | `SessionContextService` | Session context is resolved before lifecycle work |
+| Context | `SessionContextService` | Operational precondition; no durable-state reconciliation |
 | Workflow finalization | `SessionWorkflowFinalizer` | Idempotent workflow completion |
 
 When changing lifecycle behavior, keep these boundaries intact: coordinators
-or services reconcile their own responsibility, while the lifecycle facade
-delegates public operations and the session composition root wires the owners.
+and services own their named responsibility and reconciliation evidence where
+applicable; context supplies operational inputs. The lifecycle facade delegates
+public operations and the session composition root wires the owners.
 
 ## Provider sub-agents
 
