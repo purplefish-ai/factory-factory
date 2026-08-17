@@ -60,6 +60,8 @@ export type SessionLifecycleServiceDependencies = {
 };
 
 export class SessionLifecycleService {
+  private configured = false;
+
   constructor(private readonly dependencies: SessionLifecycleServiceDependencies) {}
 
   configure(bridges: LifecycleBridges): void {
@@ -69,17 +71,21 @@ export class SessionLifecycleService {
     });
     this.dependencies.terminationCoordinator.configure({ workspace: bridges.workspace });
     this.dependencies.startupCoordinator.configure({ messageQueue: bridges.messageQueue });
+    this.configured = true;
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    this.assertConfigured();
     await this.dependencies.startupCoordinator.startSession(sessionId, options);
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
+    this.assertConfigured();
     await this.dependencies.startupCoordinator.restartSession(sessionId, options);
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
+    this.assertConfigured();
     await this.dependencies.terminationCoordinator.stopSession(sessionId, options);
   }
 
@@ -87,6 +93,7 @@ export class SessionLifecycleService {
     workspaceId: string,
     options?: { reason?: SessionStopReason }
   ): Promise<void> {
+    this.assertConfigured();
     await this.dependencies.terminationCoordinator.stopWorkspaceSessions(workspaceId, options);
   }
 
@@ -94,6 +101,7 @@ export class SessionLifecycleService {
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
+    this.assertConfigured();
     return await this.dependencies.startupCoordinator.getOrCreateSessionClient(sessionId, options);
   }
 
@@ -101,6 +109,7 @@ export class SessionLifecycleService {
     session: AgentSessionRecord,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
+    this.assertConfigured();
     return await this.dependencies.startupCoordinator.getOrCreateSessionClientFromRecord(
       session,
       options
@@ -108,6 +117,7 @@ export class SessionLifecycleService {
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
+    this.assertConfigured();
     return await this.dependencies.startupCoordinator.ensureSubagentBrowseSession(sessionId);
   }
 
@@ -175,13 +185,22 @@ export class SessionLifecycleService {
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
+    this.assertConfigured();
     await this.dependencies.terminationCoordinator.stopAllClients(timeoutMs);
   }
 
   persistClosedSession(sessionId: string): Promise<void> {
+    this.assertConfigured();
     return this.dependencies.workflowFinalizer.persistClosedSession(sessionId);
   }
   recoverStaleRunningSessions(): Promise<number> {
+    this.assertConfigured();
     return this.dependencies.workflowFinalizer.recoverStaleRunningSessions();
+  }
+
+  private assertConfigured(): void {
+    if (!this.configured) {
+      throw new Error('SessionLifecycleService not configured: lifecycle bridges missing');
+    }
   }
 }

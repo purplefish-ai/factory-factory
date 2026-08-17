@@ -155,6 +155,51 @@ describe('SessionLifecycleFacade', () => {
     const clientOptions = { model: 'delegated-model', reasoningEffort: 'high' };
     const session = unsafeCoerce<AgentSessionRecord>({ id: 'record-session' });
 
+    const guardedOperations = [
+      ['start', () => service.startSession('unconfigured-start'), startupCoordinator.startSession],
+      [
+        'restart',
+        () => service.restartSession('unconfigured-restart'),
+        startupCoordinator.restartSession,
+      ],
+      ['stop', () => service.stopSession('unconfigured-stop'), terminationCoordinator.stopSession],
+      [
+        'workspace stop',
+        () => service.stopWorkspaceSessions('unconfigured-workspace'),
+        terminationCoordinator.stopWorkspaceSessions,
+      ],
+      ['stop all', () => service.stopAllClients(), terminationCoordinator.stopAllClients],
+      [
+        'client creation',
+        () => service.getOrCreateSessionClient('unconfigured-client'),
+        startupCoordinator.getOrCreateSessionClient,
+      ],
+      [
+        'record client creation',
+        () => service.getOrCreateSessionClientFromRecord(session),
+        startupCoordinator.getOrCreateSessionClientFromRecord,
+      ],
+      [
+        'browse client creation',
+        () => service.ensureSubagentBrowseSession('unconfigured-browse'),
+        startupCoordinator.ensureSubagentBrowseSession,
+      ],
+    ] as const;
+
+    for (const [operation, invoke, collaborator] of guardedOperations) {
+      await expect(invoke()).rejects.toThrow('SessionLifecycleService not configured');
+      expect(collaborator).not.toHaveBeenCalled();
+      expect(operation).toBeTruthy();
+    }
+    expect(() => service.persistClosedSession('unconfigured-closed')).toThrow(
+      'SessionLifecycleService not configured'
+    );
+    expect(workflowFinalizer.persistClosedSession).not.toHaveBeenCalled();
+    expect(() => service.recoverStaleRunningSessions()).toThrow(
+      'SessionLifecycleService not configured'
+    );
+    expect(workflowFinalizer.recoverStaleRunningSessions).not.toHaveBeenCalled();
+
     service.configure({
       workspace: workspaceBridge,
       messageQueue: messageQueueBridge,
@@ -227,6 +272,166 @@ describe('SessionLifecycleFacade', () => {
     workflowFinalizer.persistClosedSession.mockRejectedValueOnce(persistFailure);
     await expect(service.stopSession('rejected-stop')).rejects.toBe(stopFailure);
     await expect(service.persistClosedSession('rejected-persist')).rejects.toBe(persistFailure);
+
+    const rejectedDelegations = [
+      {
+        name: 'restart',
+        reject: (error: Error) => startupCoordinator.restartSession.mockRejectedValueOnce(error),
+        invoke: () => service.restartSession('rejected-restart'),
+      },
+      {
+        name: 'workspace stop',
+        reject: (error: Error) =>
+          terminationCoordinator.stopWorkspaceSessions.mockRejectedValueOnce(error),
+        invoke: () => service.stopWorkspaceSessions('rejected-workspace'),
+      },
+      {
+        name: 'stop all',
+        reject: (error: Error) =>
+          terminationCoordinator.stopAllClients.mockRejectedValueOnce(error),
+        invoke: () => service.stopAllClients(),
+      },
+      {
+        name: 'client acquisition',
+        reject: (error: Error) =>
+          startupCoordinator.getOrCreateSessionClient.mockRejectedValueOnce(error),
+        invoke: () => service.getOrCreateSessionClient('rejected-client'),
+      },
+      {
+        name: 'record client acquisition',
+        reject: (error: Error) =>
+          startupCoordinator.getOrCreateSessionClientFromRecord.mockRejectedValueOnce(error),
+        invoke: () => service.getOrCreateSessionClientFromRecord(session),
+      },
+      {
+        name: 'browse acquisition',
+        reject: (error: Error) =>
+          startupCoordinator.ensureSubagentBrowseSession.mockRejectedValueOnce(error),
+        invoke: () => service.ensureSubagentBrowseSession('rejected-browse'),
+      },
+      {
+        name: 'option read',
+        reject: (error: Error) => contextService.getOptions.mockRejectedValueOnce(error),
+        invoke: () => service.getSessionOptions('rejected-options'),
+      },
+      {
+        name: 'stale-session recovery',
+        reject: (error: Error) =>
+          workflowFinalizer.recoverStaleRunningSessions.mockRejectedValueOnce(error),
+        invoke: () => service.recoverStaleRunningSessions(),
+      },
+    ] as const;
+
+    for (const { name, reject, invoke } of rejectedDelegations) {
+      const failure = new Error(`${name} rejected`);
+      reject(failure);
+      await expect(invoke()).rejects.toBe(failure);
+    }
+
+    const synchronousThrowCases = [
+      {
+        name: 'session client read',
+        throwFrom: (error: Error) =>
+          runtimeManager.getClient.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.getSessionClient('throwing-client-read'),
+      },
+      {
+        name: 'runtime snapshot domain read',
+        throwFrom: (error: Error) =>
+          sessionDomainService.getRuntimeSnapshot.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.getRuntimeSnapshot('throwing-domain-snapshot'),
+      },
+      {
+        name: 'runtime snapshot client read',
+        throwFrom: (error: Error) =>
+          runtimeManager.getClient.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.getRuntimeSnapshot('throwing-runtime-snapshot'),
+      },
+      {
+        name: 'runtime snapshot activity read',
+        throwFrom: (error: Error) =>
+          runtimeManager.isSessionWorking.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.getRuntimeSnapshot('throwing-runtime-activity'),
+      },
+      {
+        name: 'runtime snapshot stop read',
+        throwFrom: (error: Error) => {
+          runtimeManager.getClient.mockReturnValueOnce(undefined);
+          runtimeManager.isStopInProgress.mockImplementationOnce(() => {
+            throw error;
+          });
+        },
+        invoke: () => service.getRuntimeSnapshot('throwing-runtime-stop'),
+      },
+      {
+        name: 'stopping gate read',
+        throwFrom: (error: Error) =>
+          lifecycleGate.isSessionStopping.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.isSessionStopping('throwing-stopping-gate'),
+      },
+      {
+        name: 'generation gate read',
+        throwFrom: (error: Error) =>
+          lifecycleGate.getGeneration.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.getStopGeneration('throwing-generation-gate'),
+      },
+      {
+        name: 'generation-current gate read',
+        throwFrom: (error: Error) =>
+          lifecycleGate.isGenerationCurrent.mockImplementationOnce(() => {
+            throw error;
+          }),
+        invoke: () => service.isStopGenerationCurrent('throwing-current-gate', 1),
+      },
+    ] as const;
+
+    for (const { name, throwFrom, invoke } of synchronousThrowCases) {
+      const failure = new Error(`${name} threw`);
+      throwFrom(failure);
+      expect(invoke).toThrow(failure);
+    }
+
+    const configurationThrowCases = [
+      {
+        name: 'workflow finalizer configuration',
+        throwFrom: (error: Error) =>
+          workflowFinalizer.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+      {
+        name: 'termination configuration',
+        throwFrom: (error: Error) =>
+          terminationCoordinator.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+      {
+        name: 'startup configuration',
+        throwFrom: (error: Error) =>
+          startupCoordinator.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+    ] as const;
+
+    for (const { name, throwFrom } of configurationThrowCases) {
+      const failure = new Error(`${name} threw`);
+      throwFrom(failure);
+      expect(() => service.configure({ workspace: workspaceBridge })).toThrow(failure);
+    }
   });
 
   it('delegates session option reads to the injected context service', async () => {
