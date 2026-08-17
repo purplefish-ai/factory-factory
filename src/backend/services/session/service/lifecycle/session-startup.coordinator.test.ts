@@ -46,11 +46,12 @@ function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoor
     runtimeExitCoordinator: { createHandlers: vi.fn(() => ({})) },
     lifecycleGate: harness.lifecycleGate,
     notificationDelivery: harness.notificationDeliveryService,
-    getMessageQueueBridge: () => harness.messageQueueBridge,
     sendSessionMessage: harness.sendSessionMessage,
     stopSession: (sessionId, options) => harness.service.stopSession(sessionId, options),
   } satisfies SessionStartupCoordinatorDependencies;
-  return new SessionStartupCoordinator(dependencies);
+  const coordinator = new SessionStartupCoordinator(dependencies);
+  coordinator.configure({ messageQueue: harness.messageQueueBridge });
+  return coordinator;
 }
 
 function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescence {

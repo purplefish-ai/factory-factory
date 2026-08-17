@@ -58,8 +58,8 @@ function createShutdownHarness(
     lifecycleGate: base.lifecycleGate,
     workflowFinalizer: base.workflowFinalizer,
     getRuntimeSnapshot: base.getRuntimeSnapshot,
-    getWorkspaceBridge: () => base.workspaceBridge,
   });
+  coordinator.configure({ workspace: base.workspaceBridge });
 
   return { ...base, coordinator, runtimeManager, promptTurnCompletionService };
 }

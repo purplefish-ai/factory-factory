@@ -81,16 +81,23 @@ export type SessionStartupCoordinatorDependencies = {
   runtimeExitCoordinator: Pick<SessionRuntimeExitCoordinator, 'createHandlers'>;
   lifecycleGate: SessionLifecycleGate;
   notificationDelivery: Pick<SessionNotificationDeliveryService, 'recoverPending'>;
-  getMessageQueueBridge: () => Pick<
-    SessionLifecycleMessageQueueBridge,
-    'tryDispatchNextMessage'
-  > | null;
   sendSessionMessage: (sessionId: string, content: string) => Promise<void>;
   stopSession: (sessionId: string, options: StopSessionOptions) => Promise<void>;
 };
 
 export class SessionStartupCoordinator {
+  private messageQueueBridge: Pick<
+    SessionLifecycleMessageQueueBridge,
+    'tryDispatchNextMessage'
+  > | null = null;
+
   constructor(private readonly dependencies: SessionStartupCoordinatorDependencies) {}
+
+  configure(bridges: {
+    messageQueue?: Pick<SessionLifecycleMessageQueueBridge, 'tryDispatchNextMessage'>;
+  }): void {
+    this.messageQueueBridge = bridges.messageQueue ?? null;
+  }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
     await this.dependencies.lifecycleGate.runStartup(sessionId, async (lease) => {
@@ -504,7 +511,7 @@ export class SessionStartupCoordinator {
     sessionId: string,
     dispatchableNotificationCount: number
   ): Promise<void> {
-    const messageQueueBridge = this.dependencies.getMessageQueueBridge();
+    const messageQueueBridge = this.messageQueueBridge;
     if (dispatchableNotificationCount === 0 || !messageQueueBridge) {
       return;
     }

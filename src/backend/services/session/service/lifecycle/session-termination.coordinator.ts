@@ -80,12 +80,19 @@ export type SessionTerminationCoordinatorDependencies = {
     'finalizeDeliberateStop' | 'clearInactiveSession'
   >;
   getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState;
-  getWorkspaceBridge: () => Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'> | null;
   onBeforeStopSession?: (sessionId: string) => void;
 };
 
 export class SessionTerminationCoordinator {
+  private workspaceBridge: Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'> | null = null;
+
   constructor(private readonly dependencies: SessionTerminationCoordinatorDependencies) {}
+
+  configure(bridges: {
+    workspace: Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'>;
+  }): void {
+    this.workspaceBridge = bridges.workspace;
+  }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
     const stopReservation = this.dependencies.lifecycleGate.reserveStop(sessionId);
@@ -276,13 +283,12 @@ export class SessionTerminationCoordinator {
   }
 
   private markWorkspaceSessionIdleOnStop(workspaceId: string | undefined, sessionId: string): void {
-    const workspaceBridge = this.dependencies.getWorkspaceBridge();
-    if (!(workspaceId && workspaceBridge)) {
+    if (!(workspaceId && this.workspaceBridge)) {
       return;
     }
 
     try {
-      workspaceBridge.markSessionIdle(workspaceId, sessionId);
+      this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
     } catch (error) {
       logger.warn('Failed to mark workspace session idle during stop', {
         sessionId,

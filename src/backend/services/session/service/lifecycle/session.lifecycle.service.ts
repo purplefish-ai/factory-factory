@@ -6,234 +6,123 @@ import type {
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
-import { workspaceDataService } from '@/backend/services/workspace';
 import type { WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import type { AcpEventProcessor } from './acp-event-processor';
-import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import type { SessionConfigService } from './session.config.service';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import type { SessionRepository } from './session.repository';
-import type { SessionRetryService } from './session.retry.service';
 import type { SessionContextService } from './session-context.service';
-import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
-import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
-import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
-import {
-  type GetOrCreateSessionClientOptions,
-  SessionStartupCoordinator,
-  type StartSessionOptions,
+import type {
+  GetOrCreateSessionClientOptions,
+  StartSessionOptions,
 } from './session-startup.coordinator';
-import {
-  type SessionStopReason,
-  SessionTerminationCoordinator,
-  type StopSessionOptions,
-} from './session-termination.coordinator';
-import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
 
+export type {
+  GetOrCreateSessionClientOptions,
+  StartSessionOptions,
+} from './session-startup.coordinator';
 export type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
 
-type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
-type HydrateProviderHistory = (
-  sessionId: string,
-  session: AgentSessionRecord & {
-    workspace: { worktreePath: string | null };
-  }
-) => Promise<void>;
+export type LifecycleBridges = {
+  workspace: SessionLifecycleWorkspaceBridge;
+  messageQueue?: SessionLifecycleMessageQueueBridge;
+  autoIterationExit?: SessionAutoIterationExitBridge;
+};
 
 export type SessionLifecycleServiceDependencies = {
-  repository: SessionRepository;
-  contextService: SessionContextService;
-  acpEnvironment: SessionAcpEnvironmentPort;
-  runtimeManager: AcpRuntimeManager;
-  sessionDomainService: SessionDomainService;
-  sessionPermissionService: SessionPermissionService;
-  sessionConfigService: SessionConfigService;
-  acpEventProcessor: AcpEventProcessor;
-  promptTurnCompletionService: SessionPromptTurnCompletionService;
-  retryService: SessionRetryService;
-  lifecycleEventService: SessionLifecycleEventService;
-  lifecycleGate: SessionLifecycleGate;
-  hydrateProviderHistory?: HydrateProviderHistory;
-  sendSessionMessage: SendSessionMessage;
-  onBeforeStopSession?: (sessionId: string) => void;
-  onSessionExit?: (sessionId: string) => void;
+  startupCoordinator: Pick<
+    import('./session-startup.coordinator').SessionStartupCoordinator,
+    | 'configure'
+    | 'startSession'
+    | 'restartSession'
+    | 'getOrCreateSessionClient'
+    | 'getOrCreateSessionClientFromRecord'
+    | 'ensureSubagentBrowseSession'
+  >;
+  terminationCoordinator: Pick<
+    import('./session-termination.coordinator').SessionTerminationCoordinator,
+    'configure' | 'stopSession' | 'stopWorkspaceSessions' | 'stopAllClients'
+  >;
+  workflowFinalizer: Pick<
+    import('./session-workflow-finalizer').SessionWorkflowFinalizer,
+    'configure' | 'persistClosedSession' | 'recoverStaleRunningSessions'
+  >;
+  contextService: Pick<SessionContextService, 'getOptions'>;
+  runtimeManager: Pick<AcpRuntimeManager, 'getClient' | 'isSessionWorking' | 'isStopInProgress'>;
+  sessionDomainService: Pick<SessionDomainService, 'getRuntimeSnapshot'>;
+  lifecycleGate: Pick<
+    SessionLifecycleGate,
+    'isSessionStopping' | 'getGeneration' | 'isGenerationCurrent'
+  >;
 };
 
 export class SessionLifecycleService {
-  private readonly repository: SessionRepository;
-  private readonly contextService: SessionContextService;
-  private readonly acpEnvironment: SessionAcpEnvironmentPort;
-  private readonly runtimeManager: AcpRuntimeManager;
-  private readonly sessionDomainService: SessionDomainService;
-  private readonly sessionPermissionService: SessionPermissionService;
-  private readonly sessionConfigService: SessionConfigService;
-  private readonly acpEventProcessor: AcpEventProcessor;
-  private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
-  private readonly retryService: SessionRetryService;
-  private readonly lifecycleEventService: SessionLifecycleEventService;
-  private readonly lifecycleGate: SessionLifecycleGate;
-  private readonly hydrateProviderHistory: HydrateProviderHistory;
-  private readonly workflowFinalizer: SessionWorkflowFinalizer;
-  private readonly terminationCoordinator: SessionTerminationCoordinator;
-  private readonly runtimeExitCoordinator: SessionRuntimeExitCoordinator;
-  private readonly sendSessionMessage: SendSessionMessage;
-  private startupCoordinator: SessionStartupCoordinator | null = null;
-  private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
-  private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
-  constructor(options: SessionLifecycleServiceDependencies) {
-    if (!(options.contextService && options.acpEnvironment)) {
-      throw new Error('SessionLifecycleService requires context and ACP environment ports');
-    }
-    this.repository = options.repository;
-    this.contextService = options.contextService;
-    this.acpEnvironment = options.acpEnvironment;
-    this.runtimeManager = options.runtimeManager;
-    this.sessionDomainService = options.sessionDomainService;
-    this.sessionPermissionService = options.sessionPermissionService;
-    this.sessionConfigService = options.sessionConfigService;
-    this.acpEventProcessor = options.acpEventProcessor;
-    this.promptTurnCompletionService = options.promptTurnCompletionService;
-    this.retryService = options.retryService;
-    this.lifecycleEventService = options.lifecycleEventService;
-    this.lifecycleGate = options.lifecycleGate;
-    this.hydrateProviderHistory =
-      options.hydrateProviderHistory ?? (async (): Promise<void> => undefined);
-    this.workflowFinalizer = new SessionWorkflowFinalizer({
-      repository: this.repository,
-      workspaceLookup: workspaceDataService,
-      sessionDomainService: this.sessionDomainService,
-      closedSessionPersistenceService,
-      lifecycleEventService: this.lifecycleEventService,
-      hydrateProviderHistory: this.hydrateProviderHistory,
-      runtimeManager: this.runtimeManager,
-      countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
-    });
-    this.terminationCoordinator = new SessionTerminationCoordinator({
-      repository: this.repository,
-      retryService: this.retryService,
-      runtimeManager: this.runtimeManager,
-      sessionDomainService: this.sessionDomainService,
-      sessionPermissionService: this.sessionPermissionService,
-      acpEventProcessor: this.acpEventProcessor,
-      promptTurnCompletionService: this.promptTurnCompletionService,
-      lifecycleEventService: this.lifecycleEventService,
-      lifecycleGate: this.lifecycleGate,
-      workflowFinalizer: this.workflowFinalizer,
-      getRuntimeSnapshot: (sessionId) => this.getRuntimeSnapshot(sessionId),
-      getWorkspaceBridge: () => this.workspaceBridge,
-      onBeforeStopSession: options.onBeforeStopSession,
-    });
-    this.runtimeExitCoordinator = new SessionRuntimeExitCoordinator({
-      repository: this.repository,
-      sessionDomainService: this.sessionDomainService,
-      sessionPermissionService: this.sessionPermissionService,
-      acpEventProcessor: this.acpEventProcessor,
-      promptTurnCompletionService: this.promptTurnCompletionService,
-      lifecycleEventService: this.lifecycleEventService,
-      lifecycleGate: this.lifecycleGate,
-      workflowFinalizer: this.workflowFinalizer,
-      onSessionExit: options.onSessionExit,
-    });
-    this.sendSessionMessage = options.sendSessionMessage;
-  }
-  configure(bridges: {
-    workspace: SessionLifecycleWorkspaceBridge;
-    messageQueue?: SessionLifecycleMessageQueueBridge;
-    autoIterationExit?: SessionAutoIterationExitBridge;
-  }): void {
-    this.workspaceBridge = bridges.workspace;
-    this.messageQueueBridge = bridges.messageQueue ?? null;
-    this.workflowFinalizer.configure({
+  constructor(private readonly dependencies: SessionLifecycleServiceDependencies) {}
+
+  configure(bridges: LifecycleBridges): void {
+    this.dependencies.workflowFinalizer.configure({
       workspace: bridges.workspace,
       autoIterationExit: bridges.autoIterationExit,
     });
-  }
-
-  configureNotificationDelivery(service: SessionNotificationDeliveryService): void {
-    this.startupCoordinator = new SessionStartupCoordinator({
-      repository: this.repository,
-      contextService: this.contextService,
-      acpEnvironment: this.acpEnvironment,
-      runtimeManager: this.runtimeManager,
-      sessionDomainService: this.sessionDomainService,
-      sessionConfigService: this.sessionConfigService,
-      acpEventProcessor: this.acpEventProcessor,
-      runtimeExitCoordinator: this.runtimeExitCoordinator,
-      lifecycleGate: this.lifecycleGate,
-      notificationDelivery: service,
-      getMessageQueueBridge: () => this.messageQueueBridge,
-      sendSessionMessage: this.sendSessionMessage,
-      stopSession: (sessionId, options) => this.stopSession(sessionId, options),
-    });
-  }
-
-  private get startup(): SessionStartupCoordinator {
-    if (!this.startupCoordinator) {
-      throw new Error(
-        'SessionLifecycleService not configured: notification delivery service missing'
-      );
-    }
-    return this.startupCoordinator;
+    this.dependencies.terminationCoordinator.configure({ workspace: bridges.workspace });
+    this.dependencies.startupCoordinator.configure({ messageQueue: bridges.messageQueue });
   }
 
   async startSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
-    await this.startup.startSession(sessionId, options);
+    await this.dependencies.startupCoordinator.startSession(sessionId, options);
   }
 
   async restartSession(sessionId: string, options?: StartSessionOptions): Promise<void> {
-    await this.startup.restartSession(sessionId, options);
+    await this.dependencies.startupCoordinator.restartSession(sessionId, options);
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
-    await this.terminationCoordinator.stopSession(sessionId, options);
+    await this.dependencies.terminationCoordinator.stopSession(sessionId, options);
   }
 
   async stopWorkspaceSessions(
     workspaceId: string,
     options?: { reason?: SessionStopReason }
   ): Promise<void> {
-    await this.terminationCoordinator.stopWorkspaceSessions(workspaceId, options);
+    await this.dependencies.terminationCoordinator.stopWorkspaceSessions(workspaceId, options);
   }
 
   async getOrCreateSessionClient(
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
-    return await this.startup.getOrCreateSessionClient(sessionId, options);
+    return await this.dependencies.startupCoordinator.getOrCreateSessionClient(sessionId, options);
   }
 
   async getOrCreateSessionClientFromRecord(
     session: AgentSessionRecord,
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
-    return await this.startup.getOrCreateSessionClientFromRecord(session, options);
+    return await this.dependencies.startupCoordinator.getOrCreateSessionClientFromRecord(
+      session,
+      options
+    );
   }
 
   async ensureSubagentBrowseSession(sessionId: string): Promise<boolean> {
-    return await this.startup.ensureSubagentBrowseSession(sessionId);
+    return await this.dependencies.startupCoordinator.ensureSubagentBrowseSession(sessionId);
   }
 
   getSessionClient(sessionId: string): unknown | undefined {
-    return this.runtimeManager.getClient(sessionId);
+    return this.dependencies.runtimeManager.getClient(sessionId);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     const fallback = createInitialSessionRuntimeState();
-    const persisted = this.sessionDomainService.getRuntimeSnapshot(sessionId);
+    const persisted = this.dependencies.sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
 
-    const acpClient = this.runtimeManager.getClient(sessionId);
+    const acpClient = this.dependencies.runtimeManager.getClient(sessionId);
     if (acpClient) {
-      const isWorking = this.runtimeManager.isSessionWorking(sessionId);
+      const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -242,7 +131,7 @@ export class SessionLifecycleService {
       };
     }
 
-    if (this.runtimeManager.isStopInProgress(sessionId)) {
+    if (this.dependencies.runtimeManager.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -264,15 +153,15 @@ export class SessionLifecycleService {
   }
 
   isSessionStopping(sessionId: string): boolean {
-    return this.lifecycleGate.isSessionStopping(sessionId);
+    return this.dependencies.lifecycleGate.isSessionStopping(sessionId);
   }
 
   getStopGeneration(sessionId: string): number {
-    return this.lifecycleGate.getGeneration(sessionId);
+    return this.dependencies.lifecycleGate.getGeneration(sessionId);
   }
 
   isStopGenerationCurrent(sessionId: string, stopGeneration: number): boolean {
-    return this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration);
+    return this.dependencies.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration);
   }
 
   getSessionOptions(sessionId: string): Promise<{
@@ -282,17 +171,17 @@ export class SessionLifecycleService {
     model: string;
     workspaceStatus: WorkspaceStatus;
   } | null> {
-    return this.contextService.getOptions(sessionId);
+    return this.dependencies.contextService.getOptions(sessionId);
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    await this.terminationCoordinator.stopAllClients(timeoutMs);
+    await this.dependencies.terminationCoordinator.stopAllClients(timeoutMs);
   }
 
   persistClosedSession(sessionId: string): Promise<void> {
-    return this.workflowFinalizer.persistClosedSession(sessionId);
+    return this.dependencies.workflowFinalizer.persistClosedSession(sessionId);
   }
   recoverStaleRunningSessions(): Promise<number> {
-    return this.workflowFinalizer.recoverStaleRunningSessions();
+    return this.dependencies.workflowFinalizer.recoverStaleRunningSessions();
   }
 }

@@ -23,11 +23,13 @@ import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import { SessionStartupCoordinator } from './session-startup.coordinator';
 import {
   SessionTerminationCoordinator,
   type SessionTerminationCoordinatorDependencies,
 } from './session-termination.coordinator';
-import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
+import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -324,9 +326,9 @@ export function createTerminationHarness(
     lifecycleGate,
     workflowFinalizer,
     getRuntimeSnapshot,
-    getWorkspaceBridge: () => workspaceBridge,
     onBeforeStopSession: overrides.onBeforeStopSession,
   });
+  coordinator.configure({ workspace: workspaceBridge });
 
   return {
     coordinator,
@@ -659,32 +661,83 @@ export function createLifecycleHarness(
       },
     ]),
   } satisfies SessionAcpEnvironmentPort;
-  const service = new SessionLifecycleService(
-    unsafeCoerce({
-      repository,
-      contextService,
-      acpEnvironment,
-      runtimeManager,
-      sessionDomainService,
-      sessionPermissionService: notificationService,
-      sessionConfigService,
-      acpEventProcessor,
-      promptTurnCompletionService: { clearSession: vi.fn(), clearAll: vi.fn() },
-      retryService: {
-        run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
-      },
-      sendSessionMessage,
-      lifecycleEventService,
-      lifecycleGate,
-    })
-  );
+  const promptTurnCompletionService = { clearSession: vi.fn(), clearAll: vi.fn() };
+  const retryService = {
+    run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
+  };
   const notificationDeliveryService = new SessionNotificationDeliveryService({
     notificationPort: workspaceNotificationService,
     queuePort: sessionDomainService,
     transcriptPort: sessionDomainService,
     deltaPort: sessionDomainService,
   });
-  service.configureNotificationDelivery(notificationDeliveryService);
+  const workflowFinalizer = new SessionWorkflowFinalizer(
+    unsafeCoerce({
+      repository,
+      workspaceLookup: { findById: async () => workspace },
+      sessionDomainService,
+      closedSessionPersistenceService: { persistClosedSession: vi.fn(async () => undefined) },
+      lifecycleEventService,
+      hydrateProviderHistory: async () => undefined,
+      runtimeManager,
+      countViewers: () => 0,
+    })
+  );
+  const runtimeExitCoordinator = new SessionRuntimeExitCoordinator(
+    unsafeCoerce({
+      repository,
+      sessionDomainService,
+      sessionPermissionService: notificationService,
+      acpEventProcessor,
+      promptTurnCompletionService,
+      lifecycleEventService,
+      lifecycleGate,
+      workflowFinalizer,
+      onSessionExit: vi.fn(),
+    })
+  );
+  let service: SessionLifecycleService;
+  const terminationCoordinator = new SessionTerminationCoordinator(
+    unsafeCoerce({
+      repository,
+      retryService,
+      runtimeManager,
+      sessionDomainService,
+      sessionPermissionService: notificationService,
+      acpEventProcessor,
+      promptTurnCompletionService,
+      lifecycleEventService,
+      lifecycleGate,
+      workflowFinalizer,
+      getRuntimeSnapshot: (sessionId: string) => service.getRuntimeSnapshot(sessionId),
+    })
+  );
+  const startupCoordinator = new SessionStartupCoordinator(
+    unsafeCoerce({
+      repository,
+      contextService,
+      acpEnvironment,
+      runtimeManager,
+      sessionDomainService,
+      sessionConfigService,
+      acpEventProcessor,
+      runtimeExitCoordinator,
+      lifecycleGate,
+      notificationDelivery: notificationDeliveryService,
+      sendSessionMessage,
+      stopSession: (sessionId: string, options: unknown) =>
+        service.stopSession(sessionId, unsafeCoerce(options)),
+    })
+  );
+  service = new SessionLifecycleService({
+    startupCoordinator,
+    terminationCoordinator,
+    workflowFinalizer,
+    contextService,
+    runtimeManager,
+    sessionDomainService,
+    lifecycleGate,
+  });
   service.configure({ workspace: workspaceBridge, messageQueue: messageQueueBridge });
 
   return {

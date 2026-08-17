@@ -11,7 +11,6 @@ import {
   createLifecycleTestSession,
 } from './session-lifecycle.test-helpers';
 import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
-import { SessionStartupCoordinator } from './session-startup.coordinator';
 
 describe('session services composition', () => {
   afterEach(() => {
@@ -52,18 +51,6 @@ describe('session services composition', () => {
       model: 'opus',
       reasoningEffort: 'high',
     });
-  });
-
-  it('exports the public lifecycle singleton with startup configured', async () => {
-    const ensureSubagentBrowseSession = vi
-      .spyOn(SessionStartupCoordinator.prototype, 'ensureSubagentBrowseSession')
-      .mockResolvedValueOnce(false);
-
-    await expect(
-      publicSessionLifecycleService.ensureSubagentBrowseSession('session-1')
-    ).resolves.toBe(false);
-
-    expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-1');
   });
 
   it('wires a lifecycle coordinator to a later workspace bridge without mutating the singleton', async () => {
