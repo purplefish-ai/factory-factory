@@ -19,6 +19,10 @@ export {
   PromptTimeoutError,
 } from './acp-runtime-manager';
 export {
+  type AcpClientCreationOperation,
+  AcpRuntimeQuiescence,
+} from './acp-runtime-quiescence';
+export {
   type ClaudeModelCatalogEntry,
   fetchClaudeModelCatalogFromAcp,
 } from './claude-model-catalog-loader';

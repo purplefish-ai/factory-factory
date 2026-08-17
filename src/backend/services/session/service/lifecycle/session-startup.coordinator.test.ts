@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
+import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
@@ -48,12 +49,22 @@ function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoor
     getMessageQueueBridge: () => harness.messageQueueBridge,
     sendSessionMessage: harness.sendSessionMessage,
     stopSession: (sessionId, options) => harness.service.stopSession(sessionId, options),
-    registerClientCreation: () => ({
-      isOnlyOperation: () => true,
-      release: vi.fn(),
-    }),
   } satisfies SessionStartupCoordinatorDependencies;
   return new SessionStartupCoordinator(dependencies);
+}
+
+function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescence {
+  const quiescence = new AcpRuntimeQuiescence({
+    stopClient: harness.runtimeManager.stopClient,
+  });
+  harness.runtimeManager.runClientCreationOperation.mockImplementation(
+    (sessionId, purpose, operation) =>
+      quiescence.runClientCreationOperation(sessionId, purpose, operation)
+  );
+  harness.runtimeManager.stopAndQuiesce.mockImplementation((sessionId) =>
+    quiescence.stopAndQuiesce(sessionId)
+  );
+  return quiescence;
 }
 
 describe('SessionStartupCoordinator', () => {
@@ -78,6 +89,55 @@ describe('SessionStartupCoordinator', () => {
       activity: 'IDLE',
       updatedAt: expect.any(String),
     });
+  });
+
+  it('keeps the runtime creation fence pending through durable running reconciliation', async () => {
+    // Catches releasing the runtime creation fence before the durable RUNNING write settles.
+    const harness = createLifecycleHarness();
+    const coordinator = createStartupCoordinator(harness);
+    const runningPersistence = createDeferred<typeof harness.session>();
+    const quiescence = new AcpRuntimeQuiescence({
+      stopClient: harness.runtimeManager.stopClient,
+    });
+    let creationOperation: Promise<unknown> | undefined;
+    harness.runtimeManager.runClientCreationOperation.mockImplementation(
+      (sessionId, purpose, operation) => {
+        creationOperation = quiescence.runClientCreationOperation(sessionId, purpose, operation);
+        return creationOperation;
+      }
+    );
+    harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+
+    const startup = coordinator.getOrCreateSessionClient('session-1');
+    await vi.waitFor(() => {
+      expect(harness.runtimeManager.runClientCreationOperation).toHaveBeenCalledWith(
+        'session-1',
+        'active',
+        expect.any(Function)
+      );
+      expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+        status: SessionStatus.RUNNING,
+      });
+    });
+
+    const stopReservation = harness.lifecycleGate.reserveStop('session-1');
+    expect(stopReservation).not.toBeNull();
+    let creationSettled = false;
+    void creationOperation?.then(
+      () => {
+        creationSettled = true;
+      },
+      () => {
+        creationSettled = true;
+      }
+    );
+    await Promise.resolve();
+    expect(creationSettled).toBe(false);
+
+    runningPersistence.resolve(harness.session);
+    await expect(startup).rejects.toThrow('Session is currently being stopped');
+    await expect(creationOperation).rejects.toThrow('Session is currently being stopped');
+    stopReservation?.release();
   });
 
   it('preserves the running-before-stopping restart probe order', async () => {
@@ -165,11 +225,11 @@ describe('SessionStartupCoordinator', () => {
   it('rejects stop before inspecting existing browse support', async () => {
     const harness = createLifecycleHarness();
     const runtimeStop = createDeferred<void>();
-    harness.runtimeManager.stopClient.mockReturnValueOnce(runtimeStop.promise);
+    harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(runtimeStop.promise);
 
     const stopPromise = harness.service.stopSession('session-1');
     await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
 
     await expect(harness.service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
@@ -323,10 +383,12 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not let a failed browse creation clear a concurrent active startup context', async () => {
-    const { service, handle, runtimeManager, acpEventProcessor } = createLifecycleHarness({
+    const harness = createLifecycleHarness({
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
+    const { service, handle, runtimeManager, acpEventProcessor } = harness;
+    installRuntimeQuiescence(harness);
     const browseCreation = createDeferred<typeof handle>();
     const activeCreation = createDeferred<typeof handle>();
     runtimeManager.getOrCreateClient
@@ -659,6 +721,7 @@ describe('SessionStartupCoordinator', () => {
 
   it('does not publish startup capabilities after stop completes during snapshot persistence', async () => {
     const harness = createLifecycleHarness();
+    installRuntimeQuiescence(harness);
     const snapshotPersistence = createDeferred<void>();
     harness.sessionConfigService.persistAcpConfigSnapshot.mockReturnValueOnce(
       snapshotPersistence.promise
@@ -673,7 +736,7 @@ describe('SessionStartupCoordinator', () => {
 
     const stopPromise = harness.service.stopSession('session-1');
     await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
     const firstSettlement = await Promise.race([
       stopPromise.then(() => 'stopped' as const),
@@ -694,6 +757,7 @@ describe('SessionStartupCoordinator', () => {
 
   it('keeps stop ahead of startup when runtime stop fails during running persistence', async () => {
     const harness = createLifecycleHarness({ session: { workflow: 'ratchet' } });
+    installRuntimeQuiescence(harness);
     const runningPersistence = createDeferred<typeof harness.session>();
     harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
     harness.runtimeManager.stopClient.mockRejectedValueOnce(new Error('stop failed'));
@@ -711,7 +775,7 @@ describe('SessionStartupCoordinator', () => {
       cleanupTransientRatchetSession: false,
     });
     await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
     const firstSettlement = await Promise.race([
       stopPromise.then(() => 'stopped' as const),
@@ -813,7 +877,7 @@ describe('SessionStartupCoordinator', () => {
 
     const stopPromise = harness.service.stopSession('session-1');
     await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
+      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     });
     releaseBoundary();
     await stopPromise;

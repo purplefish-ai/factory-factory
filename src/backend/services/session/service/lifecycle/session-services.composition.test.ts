@@ -6,6 +6,10 @@ import {
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { sessionLifecycleService as coreSessionLifecycleService } from './session-core-services';
+import {
+  createLifecycleHarness,
+  createLifecycleTestSession,
+} from './session-lifecycle.test-helpers';
 import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 
@@ -60,5 +64,27 @@ describe('session services composition', () => {
     ).resolves.toBe(false);
 
     expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('wires a lifecycle coordinator to a later workspace bridge without mutating the singleton', async () => {
+    const { service, repository, runtimeManager } = createLifecycleHarness();
+    const workspaceBridge = {
+      markSessionIdle: vi.fn(),
+    };
+    service.configure({ workspace: unsafeCoerce(workspaceBridge) });
+    repository.getSessionById.mockResolvedValue(
+      createLifecycleTestSession({ id: 'session-composed', workspaceId: 'workspace-composed' })
+    );
+    repository.updateSessionIfStatus.mockResolvedValue(1);
+
+    await service.stopSession('session-composed', {
+      recordLifecycleEvent: false,
+    });
+
+    expect(runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-composed');
+    expect(workspaceBridge.markSessionIdle).toHaveBeenCalledWith(
+      'workspace-composed',
+      'session-composed'
+    );
   });
 });

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
@@ -7,16 +5,10 @@ import type {
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
-import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { workspaceDataService } from '@/backend/services/workspace';
-import {
-  SessionLifecycleEventKind,
-  SessionLifecycleEventReason,
-  SessionStatus,
-  type WorkspaceStatus,
-} from '@/shared/core';
+import type { WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -40,29 +32,14 @@ import {
   SessionStartupCoordinator,
   type StartSessionOptions,
 } from './session-startup.coordinator';
+import {
+  type SessionStopReason,
+  SessionTerminationCoordinator,
+  type StopSessionOptions,
+} from './session-termination.coordinator';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
-const logger = createLogger('session');
-
-export type SessionStopReason =
-  | 'USER_STOP'
-  | 'SESSION_CLOSED'
-  | 'WORKSPACE_ARCHIVED'
-  | 'SYSTEM_STOP';
-
-export type StopSessionOptions = {
-  cleanupTransientRatchetSession?: boolean;
-  recordLifecycleEvent?: boolean;
-  reason?: SessionStopReason;
-};
-
-const SESSION_STOP_MESSAGES: Record<SessionStopReason, string> = {
-  USER_STOP: 'Session stopped by you.',
-  SESSION_CLOSED: 'Session closed by you.',
-  WORKSPACE_ARCHIVED: 'Session stopped because the workspace was archived.',
-  SYSTEM_STOP: 'Session stopped by the system.',
-};
-const SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS = 1000;
+export type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
 
 type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
 type HydrateProviderHistory = (
@@ -106,10 +83,9 @@ export class SessionLifecycleService {
   private readonly lifecycleGate: SessionLifecycleGate;
   private readonly hydrateProviderHistory: HydrateProviderHistory;
   private readonly workflowFinalizer: SessionWorkflowFinalizer;
+  private readonly terminationCoordinator: SessionTerminationCoordinator;
   private readonly runtimeExitCoordinator: SessionRuntimeExitCoordinator;
   private readonly sendSessionMessage: SendSessionMessage;
-  private readonly onBeforeStopSession?: (sessionId: string) => void;
-  private readonly clientCreationOperations = new Map<string, Set<Promise<unknown>>>();
   private startupCoordinator: SessionStartupCoordinator | null = null;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private messageQueueBridge: SessionLifecycleMessageQueueBridge | null = null;
@@ -141,6 +117,21 @@ export class SessionLifecycleService {
       runtimeManager: this.runtimeManager,
       countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
     });
+    this.terminationCoordinator = new SessionTerminationCoordinator({
+      repository: this.repository,
+      retryService: this.retryService,
+      runtimeManager: this.runtimeManager,
+      sessionDomainService: this.sessionDomainService,
+      sessionPermissionService: this.sessionPermissionService,
+      acpEventProcessor: this.acpEventProcessor,
+      promptTurnCompletionService: this.promptTurnCompletionService,
+      lifecycleEventService: this.lifecycleEventService,
+      lifecycleGate: this.lifecycleGate,
+      workflowFinalizer: this.workflowFinalizer,
+      getRuntimeSnapshot: (sessionId) => this.getRuntimeSnapshot(sessionId),
+      getWorkspaceBridge: () => this.workspaceBridge,
+      onBeforeStopSession: options.onBeforeStopSession,
+    });
     this.runtimeExitCoordinator = new SessionRuntimeExitCoordinator({
       repository: this.repository,
       sessionDomainService: this.sessionDomainService,
@@ -153,7 +144,6 @@ export class SessionLifecycleService {
       onSessionExit: options.onSessionExit,
     });
     this.sendSessionMessage = options.sendSessionMessage;
-    this.onBeforeStopSession = options.onBeforeStopSession;
   }
   configure(bridges: {
     workspace: SessionLifecycleWorkspaceBridge;
@@ -183,8 +173,6 @@ export class SessionLifecycleService {
       getMessageQueueBridge: () => this.messageQueueBridge,
       sendSessionMessage: this.sendSessionMessage,
       stopSession: (sessionId, options) => this.stopSession(sessionId, options),
-      registerClientCreation: (sessionId, operation) =>
-        this.registerClientCreation(sessionId, operation),
     });
   }
 
@@ -206,167 +194,14 @@ export class SessionLifecycleService {
   }
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
-    const stopReservation = this.lifecycleGate.reserveStop(sessionId);
-    if (!stopReservation) {
-      logger.debug('Session stop already in progress', { sessionId });
-      return;
-    }
-
-    const stopInvocationId = randomUUID();
-    try {
-      await this.stopSessionWithBarrier(sessionId, stopInvocationId, options);
-    } finally {
-      stopReservation.release();
-    }
-  }
-
-  private async stopSessionWithBarrier(
-    sessionId: string,
-    stopInvocationId: string,
-    options?: StopSessionOptions
-  ): Promise<void> {
-    this.promptTurnCompletionService.clearSession(sessionId);
-    this.onBeforeStopSession?.(sessionId);
-    this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
-    const session = await this.loadSessionForStop(sessionId);
-    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
-    const reason = options?.reason ?? 'SYSTEM_STOP';
-
-    if (workspaceId && options?.recordLifecycleEvent !== false) {
-      await this.lifecycleEventService.record({
-        workspaceId,
-        sessionId,
-        kind: SessionLifecycleEventKind.SESSION_STOPPED,
-        reason,
-        message: SESSION_STOP_MESSAGES[reason],
-        dedupeKey: `session-stop:${stopInvocationId}`,
-      });
-    }
-
-    const current = this.getRuntimeSnapshot(sessionId);
-    this.sessionDomainService.setRuntimeSnapshot(sessionId, {
-      ...current,
-      phase: 'stopping',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
-
-    this.acpEventProcessor.clearStreamingState(sessionId);
-    this.acpEventProcessor.clearReplaySuppression(sessionId);
-    this.sessionPermissionService.cancelPendingRequests(sessionId);
-
-    let stopClientFailed = false;
-    try {
-      await this.stopRuntimeAndPendingCreation(sessionId);
-    } catch (error) {
-      stopClientFailed = true;
-      logger.warn('Error stopping ACP session runtime; continuing cleanup', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
-      await this.updateStoppedSessionState(sessionId);
-      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-      this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
-      this.acpEventProcessor.clearSessionState(sessionId);
-
-      if (!stopClientFailed) {
-        const shouldCleanupTransientRatchetSession =
-          options?.cleanupTransientRatchetSession ?? true;
-        await this.workflowFinalizer.finalizeDeliberateStop({
-          session,
-          sessionId,
-          cleanupTransientRatchetSession: shouldCleanupTransientRatchetSession,
-        });
-      }
-
-      try {
-        this.workflowFinalizer.clearInactiveSession(sessionId, 'manual_stop');
-        logger.info('ACP session stopped', {
-          sessionId,
-          ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
-        });
-      } finally {
-        acpTraceLogger.closeSession(sessionId);
-      }
-    }
-  }
-
-  private async stopRuntimeAndPendingCreation(sessionId: string): Promise<void> {
-    let stopError: { cause: unknown } | undefined;
-    try {
-      await this.runtimeManager.stopClient(sessionId);
-    } catch (error) {
-      stopError = { cause: error };
-    }
-
-    const pendingCreations = this.clientCreationOperations.get(sessionId);
-    if (!pendingCreations || pendingCreations.size === 0) {
-      if (stopError) {
-        throw stopError.cause;
-      }
-      return;
-    }
-
-    await Promise.allSettled([...pendingCreations]);
-    await this.runtimeManager.stopClient(sessionId);
+    await this.terminationCoordinator.stopSession(sessionId, options);
   }
 
   async stopWorkspaceSessions(
     workspaceId: string,
     options?: { reason?: SessionStopReason }
   ): Promise<void> {
-    const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
-    const stopErrors: unknown[] = [];
-
-    for (const session of sessions) {
-      const stopOptions = this.getWorkspaceSessionStopOptions(
-        session,
-        options?.reason ?? 'SYSTEM_STOP'
-      );
-      if (!stopOptions) {
-        continue;
-      }
-      try {
-        await this.stopSession(session.id, stopOptions);
-      } catch (error) {
-        logger.error('Failed to stop workspace session', {
-          sessionId: session.id,
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        stopErrors.push(error);
-      }
-    }
-
-    if (stopErrors.length > 0) {
-      throw new Error(
-        `Failed to stop ${stopErrors.length} workspace session${stopErrors.length === 1 ? '' : 's'}`
-      );
-    }
-
-    logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
-  }
-
-  private getWorkspaceSessionStopOptions(
-    session: { id: string; status: SessionStatus },
-    reason: SessionStopReason
-  ): StopSessionOptions | null {
-    const browseOnlyClient = this.runtimeManager.isBrowseOnlySession(session.id);
-    const activeClient = this.runtimeManager.isSessionRunning(session.id);
-    if (!(session.status === SessionStatus.RUNNING || activeClient || browseOnlyClient)) {
-      return null;
-    }
-    return {
-      reason,
-      ...(browseOnlyClient && !activeClient ? { recordLifecycleEvent: false } : {}),
-    };
+    await this.terminationCoordinator.stopWorkspaceSessions(workspaceId, options);
   }
 
   async getOrCreateSessionClient(
@@ -451,140 +286,7 @@ export class SessionLifecycleService {
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    this.promptTurnCompletionService.clearAll();
-    const shutdownSessionIds = this.runtimeManager.beginShutdown();
-    const activeShutdownSessionIds = shutdownSessionIds.filter(
-      (sessionId) => !this.runtimeManager.isBrowseOnlySession(sessionId)
-    );
-    this.lifecycleGate.reserveShutdown(activeShutdownSessionIds);
-
-    await this.recordShutdownLifecycleEvents(activeShutdownSessionIds);
-
-    try {
-      await this.runtimeManager.stopAllClients(timeoutMs);
-    } catch (error) {
-      logger.error('Failed to stop ACP clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
-
-  private async recordShutdownLifecycleEvent(sessionId: string): Promise<void> {
-    const session = await this.loadSessionForStop(sessionId);
-    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
-    if (!workspaceId) {
-      logger.warn('Skipped shutdown lifecycle event without workspace owner', { sessionId });
-      return;
-    }
-    await this.lifecycleEventService.record({
-      workspaceId,
-      sessionId,
-      kind: SessionLifecycleEventKind.SESSION_STOPPED,
-      reason: SessionLifecycleEventReason.SYSTEM_STOP,
-      message: SESSION_STOP_MESSAGES.SYSTEM_STOP,
-      dedupeKey: `session-stop:${randomUUID()}`,
-    });
-  }
-
-  private async recordShutdownLifecycleEvents(sessionIds: string[]): Promise<void> {
-    const resultsPromise = Promise.allSettled(
-      sessionIds.map((sessionId) => this.recordShutdownLifecycleEvent(sessionId))
-    );
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const results = await Promise.race([
-      resultsPromise,
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS);
-      }),
-    ]);
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    if (results === null) {
-      logger.warn('Timed out recording shutdown lifecycle events; continuing shutdown', {
-        timeoutMs: SHUTDOWN_LIFECYCLE_RECORD_TIMEOUT_MS,
-      });
-      return;
-    }
-    for (const [index, result] of results.entries()) {
-      if (result.status === 'rejected') {
-        logger.warn('Failed recording shutdown lifecycle event; continuing shutdown', {
-          sessionId: sessionIds[index],
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        });
-      }
-    }
-  }
-
-  private finalizeOrphanedToolCalls(sessionId: string, reason: string): void {
-    try {
-      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, reason);
-    } catch (error) {
-      logger.warn('Failed finalizing orphaned ACP tool calls', {
-        sessionId,
-        reason,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      this.acpEventProcessor.clearPendingToolCalls(sessionId);
-    }
-  }
-
-  private markWorkspaceSessionIdleOnStop(workspaceId: string | undefined, sessionId: string): void {
-    if (!(workspaceId && this.workspaceBridge)) {
-      return;
-    }
-
-    try {
-      this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
-    } catch (error) {
-      logger.warn('Failed to mark workspace session idle during stop', {
-        sessionId,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
-    try {
-      return await this.retryService.run(() => this.repository.getSessionById(sessionId), {
-        attempts: 2,
-        operationName: 'loadSessionForStop',
-        context: { sessionId },
-      });
-    } catch (error) {
-      logger.warn('Failed to load session before stop; continuing with process shutdown', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  private async updateStoppedSessionState(sessionId: string): Promise<void> {
-    try {
-      await this.retryService.run(
-        () =>
-          this.repository.updateSessionIfStatus(
-            sessionId,
-            {
-              status: SessionStatus.IDLE,
-            },
-            [SessionStatus.RUNNING]
-          ),
-        {
-          attempts: 2,
-          operationName: 'updateStoppedSessionState',
-          context: { sessionId },
-        }
-      );
-    } catch (error) {
-      logger.warn('Failed to update session state during stop; continuing cleanup', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await this.terminationCoordinator.stopAllClients(timeoutMs);
   }
 
   persistClosedSession(sessionId: string): Promise<void> {
@@ -592,23 +294,5 @@ export class SessionLifecycleService {
   }
   recoverStaleRunningSessions(): Promise<number> {
     return this.workflowFinalizer.recoverStaleRunningSessions();
-  }
-
-  private registerClientCreation(
-    sessionId: string,
-    operation: Promise<unknown>
-  ): { isOnlyOperation: () => boolean; release: () => void } {
-    const operations = this.clientCreationOperations.get(sessionId) ?? new Set<Promise<unknown>>();
-    operations.add(operation);
-    this.clientCreationOperations.set(sessionId, operations);
-    return {
-      isOnlyOperation: () => operations.size === 1,
-      release: () => {
-        operations.delete(operation);
-        if (operations.size === 0) {
-          this.clientCreationOperations.delete(sessionId);
-        }
-      },
-    };
   }
 }

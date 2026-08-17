@@ -35,6 +35,11 @@ import type {
 } from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
+  type AcpClientCreationOperation,
+  AcpRuntimeQuiescence,
+  raceWithSoftTimeout,
+} from './acp-runtime-quiescence';
+import {
   createAcpSpawnError,
   hasUsableWorkingDir,
   resolveAcpBinary,
@@ -219,31 +224,15 @@ function normalizeSubagentBrowseError(
   });
 }
 
-async function raceWithSoftTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number
-): Promise<T | undefined> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<undefined>((resolve) => {
-    timeout = setTimeout(() => resolve(undefined), timeoutMs);
-    timeout.unref?.();
-  });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly browseOnlySessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
+  private readonly quiescence = new AcpRuntimeQuiescence({
+    stopClient: (sessionId) => this.stopClient(sessionId),
+  });
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
   private readonly exitHandling = new Map<string, Promise<void>>();
@@ -256,11 +245,9 @@ export class AcpRuntimeManager {
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
   private preferSourceEntrypoint = true;
   private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
-
   constructor(options?: { acpStartupTimeoutMs?: number }) {
     this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
   }
-
   setAcpStartupTimeoutMs(timeoutMs: number): void {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
@@ -268,7 +255,6 @@ export class AcpRuntimeManager {
     }
     this.acpStartupTimeoutMs = Math.floor(timeoutMs);
   }
-
   configureEnvironment(options: {
     preferSourceEntrypoint: boolean;
     childProcessEnvProvider: () => NodeJS.ProcessEnv;
@@ -276,35 +262,47 @@ export class AcpRuntimeManager {
     this.preferSourceEntrypoint = options.preferSourceEntrypoint;
     this.childProcessEnvProvider = options.childProcessEnvProvider;
   }
-
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
   }
-
   isStopInProgress(sessionId: string): boolean {
     return this.stoppingInProgress.has(sessionId);
   }
-
   getClient(sessionId: string): AcpProcessHandle | undefined {
-    if (this.browseOnlySessions.has(sessionId)) {
-      return undefined;
-    }
-    return this.getBrowseClient(sessionId);
+    return this.browseOnlySessions.has(sessionId) ? undefined : this.getBrowseClient(sessionId);
   }
-
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
     return handle?.isRunning() ? handle : undefined;
   }
-
   isBrowseOnlySession(sessionId: string): boolean {
-    return this.browseOnlySessions.has(sessionId);
+    const hasRuntime = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
+    const fencePurpose = this.quiescence.getTrackedSessionPurpose(sessionId);
+    return (
+      (hasRuntime || fencePurpose !== null) &&
+      (!hasRuntime || this.browseOnlySessions.has(sessionId)) &&
+      (fencePurpose === null || fencePurpose === 'browse')
+    );
   }
-
+  hasClientCreationOperation(sessionId: string): boolean {
+    return this.quiescence.getTrackedSessionPurpose(sessionId) !== null;
+  }
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
     return this.pendingCreation.get(sessionId);
   }
-
+  runClientCreationOperation<T>(
+    sessionId: string,
+    purpose: AcpRuntimePurpose,
+    operation: (registration: AcpClientCreationOperation) => Promise<T>
+  ): Promise<T> {
+    if (this.isShuttingDown) {
+      return Promise.reject(this.createShutdownError(sessionId));
+    }
+    return this.quiescence.runClientCreationOperation(sessionId, purpose, operation);
+  }
+  stopAndQuiesce(sessionId: string): Promise<void> {
+    return this.quiescence.stopAndQuiesce(sessionId);
+  }
   getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
     return this.getBrowseClient(sessionId)?.getSubagentBrowseCapability() ?? null;
   }
@@ -755,6 +753,7 @@ export class AcpRuntimeManager {
       ...this.sessions.keys(),
       ...this.pendingCreation.keys(),
       ...this.creationLocks.keys(),
+      ...this.quiescence.getTrackedSessionIds(),
     ]);
 
     if (!this.isShuttingDown) {
@@ -1362,6 +1361,7 @@ export class AcpRuntimeManager {
 
     await this.stopCurrentClients(timeoutMs);
     await this.waitForPendingCreations(timeoutMs);
+    await this.quiescence.waitForAll();
     await this.stopCurrentClients(timeoutMs);
 
     this.sessions.clear();

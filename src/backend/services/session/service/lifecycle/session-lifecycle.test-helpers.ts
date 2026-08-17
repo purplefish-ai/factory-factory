@@ -10,17 +10,24 @@ import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus, WorkspaceStatus } from '@/shared/core';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpEventProcessor } from './acp-event-processor';
 import type { SessionConfigService } from './session.config.service';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionRepository } from './session.repository';
+import { SessionRetryService } from './session.retry.service';
 import { SessionContextService, type SessionPermissionPresetPort } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import { SessionLifecycleGate } from './session-lifecycle-gate';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
+import {
+  SessionTerminationCoordinator,
+  type SessionTerminationCoordinatorDependencies,
+} from './session-termination.coordinator';
+import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 
 export type Deferred<T> = {
   promise: Promise<T>;
@@ -50,7 +57,7 @@ export type LifecycleHarnessOverrides = {
 };
 
 type MockedPick<T, K extends keyof T> = {
-  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> : T[P];
+  [P in K]: T[P] extends (...args: never[]) => unknown ? Mock<T[P]> & T[P] : T[P];
 };
 
 export type LifecycleHarness = {
@@ -69,6 +76,7 @@ export type LifecycleHarness = {
     AcpRuntimeManager,
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
     | 'getClient'
@@ -76,7 +84,9 @@ export type LifecycleHarness = {
     | 'getPendingClient'
     | 'getSubagentBrowseCapability'
     | 'getOrCreateClient'
+    | 'runClientCreationOperation'
     | 'stopClient'
+    | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
   >;
@@ -134,6 +144,61 @@ export type LifecycleHarness = {
   tryDispatchNextMessage: Mock<SessionLifecycleMessageQueueBridge['tryDispatchNextMessage']>;
 };
 
+export type TerminationHarness = {
+  coordinator: SessionTerminationCoordinator;
+  repository: MockedPick<
+    SessionRepository,
+    'getSessionById' | 'getSessionsByWorkspaceId' | 'updateSessionIfStatus'
+  >;
+  retryService: SessionTerminationCoordinatorDependencies['retryService'];
+  runtimeManager: MockedPick<
+    AcpRuntimeManager,
+    | 'getClient'
+    | 'isSessionWorking'
+    | 'isStopInProgress'
+    | 'isSessionRunning'
+    | 'hasClientCreationOperation'
+    | 'isBrowseOnlySession'
+    | 'stopAndQuiesce'
+    | 'beginShutdown'
+    | 'stopAllClients'
+  >;
+  sessionDomainService: MockedPick<
+    SessionDomainService,
+    'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
+  >;
+  sessionPermissionService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
+  acpEventProcessor: MockedPick<
+    AcpEventProcessor,
+    | 'clearSessionState'
+    | 'clearStreamingState'
+    | 'clearReplaySuppression'
+    | 'finalizeOrphanedToolCalls'
+    | 'clearPendingToolCalls'
+    | 'getWorkspaceId'
+  >;
+  promptTurnCompletionService: {
+    clearSession: Mock<(sessionId: string) => void>;
+    clearAll: Mock<() => void>;
+  };
+  lifecycleEventService: MockedPick<SessionLifecycleEventService, 'record'>;
+  lifecycleGate: SessionLifecycleGate;
+  workflowFinalizer: MockedPick<
+    SessionWorkflowFinalizer,
+    'finalizeDeliberateStop' | 'clearInactiveSession'
+  >;
+  workspaceBridge: MockedPick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'>;
+  getRuntimeSnapshot: Mock<(sessionId: string) => SessionRuntimeState>;
+  session: AgentSessionRecord;
+};
+
+export type TerminationHarnessOverrides = Pick<
+  LifecycleHarnessOverrides,
+  'session' | 'getSessionById' | 'getSessionsByWorkspaceId'
+> & {
+  onBeforeStopSession?: (sessionId: string) => void;
+};
+
 export function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -142,6 +207,143 @@ export function createDeferred<T>(): Deferred<T> {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+export function createTerminationHarness(
+  overrides: TerminationHarnessOverrides = {}
+): TerminationHarness {
+  const session = createLifecycleTestSession(overrides.session);
+  const repository = {
+    getSessionById: vi.fn<SessionRepository['getSessionById']>(
+      overrides.getSessionById ?? (async (sessionId) => ({ ...session, id: sessionId }))
+    ),
+    getSessionsByWorkspaceId: vi.fn<SessionRepository['getSessionsByWorkspaceId']>(
+      overrides.getSessionsByWorkspaceId ??
+        (async () => [
+          createLifecycleTestSession({ id: 'session-running', status: SessionStatus.RUNNING }),
+          createLifecycleTestSession({
+            id: 'session-runtime-only',
+            status: SessionStatus.COMPLETED,
+          }),
+          createLifecycleTestSession({ id: 'session-browse-only', status: SessionStatus.IDLE }),
+          createLifecycleTestSession({ id: 'session-idle', status: SessionStatus.IDLE }),
+        ])
+    ),
+    updateSessionIfStatus: vi.fn<SessionRepository['updateSessionIfStatus']>(async () => 0),
+  } satisfies Pick<
+    SessionRepository,
+    'getSessionById' | 'getSessionsByWorkspaceId' | 'updateSessionIfStatus'
+  >;
+  const retryService = new SessionRetryService();
+  const runtimeManager = {
+    getClient: vi.fn(() => undefined),
+    isSessionWorking: vi.fn(() => false),
+    isStopInProgress: vi.fn(() => false),
+    isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    hasClientCreationOperation: vi.fn(() => false),
+    isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
+    stopAndQuiesce: vi.fn(async () => undefined),
+    beginShutdown: vi.fn(() => []),
+    stopAllClients: vi.fn(async () => undefined),
+  } satisfies Pick<
+    AcpRuntimeManager,
+    | 'getClient'
+    | 'isSessionWorking'
+    | 'isStopInProgress'
+    | 'isSessionRunning'
+    | 'hasClientCreationOperation'
+    | 'isBrowseOnlySession'
+    | 'stopAndQuiesce'
+    | 'beginShutdown'
+    | 'stopAllClients'
+  >;
+  const sessionDomainService = {
+    clearQueuedWork: vi.fn(),
+    getRuntimeSnapshot: vi.fn<SessionDomainService['getRuntimeSnapshot']>(() => ({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-07-15T00:00:00.000Z',
+    })),
+    setRuntimeSnapshot: vi.fn(),
+  } satisfies Pick<
+    SessionDomainService,
+    'clearQueuedWork' | 'getRuntimeSnapshot' | 'setRuntimeSnapshot'
+  >;
+  const sessionPermissionService = {
+    cancelPendingRequests: vi.fn<SessionPermissionService['cancelPendingRequests']>(),
+  } satisfies Pick<SessionPermissionService, 'cancelPendingRequests'>;
+  const acpEventProcessor = {
+    clearSessionState: vi.fn(),
+    clearStreamingState: vi.fn(),
+    clearReplaySuppression: vi.fn(),
+    finalizeOrphanedToolCalls: vi.fn(),
+    clearPendingToolCalls: vi.fn(),
+    getWorkspaceId: vi.fn(() => undefined),
+  } satisfies Pick<
+    AcpEventProcessor,
+    | 'clearSessionState'
+    | 'clearStreamingState'
+    | 'clearReplaySuppression'
+    | 'finalizeOrphanedToolCalls'
+    | 'clearPendingToolCalls'
+    | 'getWorkspaceId'
+  >;
+  const promptTurnCompletionService = {
+    clearSession: vi.fn<(sessionId: string) => void>(),
+    clearAll: vi.fn<() => void>(),
+  };
+  const lifecycleEventService = {
+    record: vi.fn<SessionLifecycleEventService['record']>(async () => null),
+  } satisfies Pick<SessionLifecycleEventService, 'record'>;
+  const workflowFinalizer = {
+    finalizeDeliberateStop: vi.fn(async () => undefined),
+    clearInactiveSession: vi.fn(),
+  } satisfies Pick<SessionWorkflowFinalizer, 'finalizeDeliberateStop' | 'clearInactiveSession'>;
+  const workspaceBridge = {
+    markSessionIdle: vi.fn(),
+  } satisfies Pick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'>;
+  const lifecycleGate = new SessionLifecycleGate({
+    isRuntimeStopInProgress: () => false,
+  });
+  const getRuntimeSnapshot = vi.fn(() => ({
+    phase: 'idle' as const,
+    processState: 'stopped' as const,
+    activity: 'IDLE' as const,
+    updatedAt: '2026-07-15T00:00:00.000Z',
+  }));
+  const coordinator = new SessionTerminationCoordinator({
+    repository,
+    retryService,
+    runtimeManager,
+    sessionDomainService,
+    sessionPermissionService,
+    acpEventProcessor,
+    promptTurnCompletionService,
+    lifecycleEventService,
+    lifecycleGate,
+    workflowFinalizer,
+    getRuntimeSnapshot,
+    getWorkspaceBridge: () => workspaceBridge,
+    onBeforeStopSession: overrides.onBeforeStopSession,
+  });
+
+  return {
+    coordinator,
+    repository,
+    retryService,
+    runtimeManager,
+    sessionDomainService,
+    sessionPermissionService,
+    acpEventProcessor,
+    promptTurnCompletionService,
+    lifecycleEventService,
+    lifecycleGate,
+    workflowFinalizer,
+    workspaceBridge,
+    getRuntimeSnapshot,
+    session,
+  };
 }
 
 export function createLifecycleTestSession(
@@ -288,9 +490,15 @@ export function createLifecycleHarness(
     | 'updateSession'
     | 'updateSessionIfStatus'
   >;
+  const runClientCreationOperation: AcpRuntimeManager['runClientCreationOperation'] = async (
+    _sessionId,
+    _purpose,
+    operation
+  ) => await operation({ isOnlyOperation: () => true });
   const runtimeManager = {
     isStopInProgress: vi.fn((_sessionId: string) => false),
     isSessionRunning: vi.fn((sessionId: string) => sessionId === 'session-runtime-only'),
+    hasClientCreationOperation: vi.fn(() => false),
     isBrowseOnlySession: vi.fn((sessionId: string) => sessionId === 'session-browse-only'),
     isSessionWorking: vi.fn(() => false),
     getClient: vi.fn(() => undefined),
@@ -302,13 +510,19 @@ export function createLifecycleHarness(
     getOrCreateClient: vi.fn<AcpRuntimeManager['getOrCreateClient']>(
       overrides.getOrCreateClient ?? (async () => handle)
     ),
+    runClientCreationOperation: vi.fn(runClientCreationOperation) as Mock<
+      AcpRuntimeManager['runClientCreationOperation']
+    > &
+      AcpRuntimeManager['runClientCreationOperation'],
     stopClient: vi.fn(async () => undefined),
+    stopAndQuiesce: vi.fn(async () => undefined),
     beginShutdown: vi.fn(() => []),
     stopAllClients: vi.fn(async () => undefined),
   } satisfies Pick<
     AcpRuntimeManager,
     | 'isStopInProgress'
     | 'isSessionRunning'
+    | 'hasClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionWorking'
     | 'getClient'
@@ -316,7 +530,9 @@ export function createLifecycleHarness(
     | 'getPendingClient'
     | 'getSubagentBrowseCapability'
     | 'getOrCreateClient'
+    | 'runClientCreationOperation'
     | 'stopClient'
+    | 'stopAndQuiesce'
     | 'beginShutdown'
     | 'stopAllClients'
   >;
