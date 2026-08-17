@@ -432,6 +432,72 @@ describe('SessionLifecycleFacade', () => {
       throwFrom(failure);
       expect(() => service.configure({ workspace: workspaceBridge })).toThrow(failure);
     }
+
+    const retryWorkspaceBridge = unsafeCoerce<SessionLifecycleWorkspaceBridge>({
+      markSessionIdle: vi.fn(),
+    });
+    const retryMessageQueueBridge = { tryDispatchNextMessage: vi.fn(async () => undefined) };
+    const retryAutoIterationExit = { onAutoIterationSessionExit: vi.fn() };
+    const reconfigurationFailures = [
+      {
+        name: 'workflow finalizer',
+        throwFrom: (error: Error) =>
+          workflowFinalizer.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+      {
+        name: 'termination coordinator',
+        throwFrom: (error: Error) =>
+          terminationCoordinator.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+      {
+        name: 'startup coordinator',
+        throwFrom: (error: Error) =>
+          startupCoordinator.configure.mockImplementationOnce(() => {
+            throw error;
+          }),
+      },
+    ] as const;
+
+    for (const { name, throwFrom } of reconfigurationFailures) {
+      service.configure({ workspace: workspaceBridge });
+      const failure = new Error(`${name} reconfiguration failed`);
+      throwFrom(failure);
+
+      expect(() =>
+        service.configure({
+          workspace: retryWorkspaceBridge,
+          messageQueue: retryMessageQueueBridge,
+          autoIterationExit: retryAutoIterationExit,
+        })
+      ).toThrow(failure);
+
+      const operationCallsBeforeFailure = startupCoordinator.startSession.mock.calls.length;
+      await expect(service.startSession(`blocked-after-${name}`)).rejects.toThrow(
+        'SessionLifecycleService not configured'
+      );
+      expect(startupCoordinator.startSession).toHaveBeenCalledTimes(operationCallsBeforeFailure);
+
+      service.configure({
+        workspace: retryWorkspaceBridge,
+        messageQueue: retryMessageQueueBridge,
+        autoIterationExit: retryAutoIterationExit,
+      });
+      await expect(service.startSession(`restored-after-${name}`)).resolves.toBeUndefined();
+      expect(workflowFinalizer.configure).toHaveBeenLastCalledWith({
+        workspace: retryWorkspaceBridge,
+        autoIterationExit: retryAutoIterationExit,
+      });
+      expect(terminationCoordinator.configure).toHaveBeenLastCalledWith({
+        workspace: retryWorkspaceBridge,
+      });
+      expect(startupCoordinator.configure).toHaveBeenLastCalledWith({
+        messageQueue: retryMessageQueueBridge,
+      });
+    }
   });
 
   it('delegates session option reads to the injected context service', async () => {

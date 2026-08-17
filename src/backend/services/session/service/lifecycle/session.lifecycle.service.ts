@@ -65,6 +65,7 @@ export class SessionLifecycleService {
   constructor(private readonly dependencies: SessionLifecycleServiceDependencies) {}
 
   configure(bridges: LifecycleBridges): void {
+    this.configured = false;
     this.dependencies.workflowFinalizer.configure({
       workspace: bridges.workspace,
       autoIterationExit: bridges.autoIterationExit,
