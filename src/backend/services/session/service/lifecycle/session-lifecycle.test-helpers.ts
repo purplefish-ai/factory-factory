@@ -73,6 +73,8 @@ export type LifecycleHarness = {
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
     | 'updateSessionIfStatus'
+    | 'deleteSession'
+    | 'recoverStaleRunningSessions'
   >;
   runtimeManager: MockedPick<
     AcpRuntimeManager,
@@ -107,6 +109,7 @@ export type LifecycleHarness = {
     | 'clearQueuedWork'
     | 'clearSession'
     | 'markProcessExit'
+    | 'markError'
   >;
   acpEventProcessor: MockedPick<
     AcpEventProcessor,
@@ -117,8 +120,10 @@ export type LifecycleHarness = {
     | 'clearStreamingState'
     | 'clearReplaySuppression'
     | 'finalizeOrphanedToolCalls'
+    | 'clearPendingToolCalls'
     | 'clearSessionContext'
     | 'getWorkspaceId'
+    | 'handleAcpLog'
   >;
   sessionConfigService: MockedPick<
     SessionConfigService,
@@ -482,6 +487,10 @@ export function createLifecycleHarness(
     ),
     updateSession: vi.fn<SessionRepository['updateSession']>(async () => session),
     updateSessionIfStatus: vi.fn<SessionRepository['updateSessionIfStatus']>(async () => 0),
+    deleteSession: vi.fn<SessionRepository['deleteSession']>(async () => session),
+    recoverStaleRunningSessions: vi.fn<SessionRepository['recoverStaleRunningSessions']>(
+      async () => 0
+    ),
   } satisfies Pick<
     SessionRepository,
     | 'getSessionById'
@@ -491,6 +500,8 @@ export function createLifecycleHarness(
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
     | 'updateSessionIfStatus'
+    | 'deleteSession'
+    | 'recoverStaleRunningSessions'
   >;
   const runClientCreationOperation: AcpRuntimeManager['runClientCreationOperation'] = async (
     _sessionId,
@@ -557,6 +568,7 @@ export function createLifecycleHarness(
     clearQueuedWork: vi.fn(),
     clearSession: vi.fn(),
     markProcessExit: vi.fn(),
+    markError: vi.fn(),
   } satisfies Pick<
     SessionDomainService,
     | 'appendClaudeEvent'
@@ -572,6 +584,7 @@ export function createLifecycleHarness(
     | 'clearQueuedWork'
     | 'clearSession'
     | 'markProcessExit'
+    | 'markError'
   >;
   const sessionConfigService = {
     applyConfiguredReasoningEffort: vi.fn(async () => undefined),
@@ -597,8 +610,10 @@ export function createLifecycleHarness(
     clearStreamingState: vi.fn(),
     clearReplaySuppression: vi.fn(),
     finalizeOrphanedToolCalls: vi.fn(),
+    clearPendingToolCalls: vi.fn(),
     clearSessionContext: vi.fn(),
     getWorkspaceId: vi.fn(() => undefined),
+    handleAcpLog: vi.fn(),
   } satisfies Pick<
     AcpEventProcessor,
     | 'createRuntimeEventHandler'
@@ -608,8 +623,10 @@ export function createLifecycleHarness(
     | 'clearStreamingState'
     | 'clearReplaySuppression'
     | 'finalizeOrphanedToolCalls'
+    | 'clearPendingToolCalls'
     | 'clearSessionContext'
     | 'getWorkspaceId'
+    | 'handleAcpLog'
   >;
   const lifecycleEventService = {
     record: vi.fn<SessionLifecycleEventService['record']>(async () => null),

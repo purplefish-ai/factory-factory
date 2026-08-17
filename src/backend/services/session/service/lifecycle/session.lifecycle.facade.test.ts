@@ -156,40 +156,31 @@ describe('SessionLifecycleFacade', () => {
     const session = unsafeCoerce<AgentSessionRecord>({ id: 'record-session' });
 
     const guardedOperations = [
-      ['start', () => service.startSession('unconfigured-start'), startupCoordinator.startSession],
+      [() => service.startSession('unconfigured-start'), startupCoordinator.startSession],
+      [() => service.restartSession('unconfigured-restart'), startupCoordinator.restartSession],
+      [() => service.stopSession('unconfigured-stop'), terminationCoordinator.stopSession],
       [
-        'restart',
-        () => service.restartSession('unconfigured-restart'),
-        startupCoordinator.restartSession,
-      ],
-      ['stop', () => service.stopSession('unconfigured-stop'), terminationCoordinator.stopSession],
-      [
-        'workspace stop',
         () => service.stopWorkspaceSessions('unconfigured-workspace'),
         terminationCoordinator.stopWorkspaceSessions,
       ],
-      ['stop all', () => service.stopAllClients(), terminationCoordinator.stopAllClients],
+      [() => service.stopAllClients(), terminationCoordinator.stopAllClients],
       [
-        'client creation',
         () => service.getOrCreateSessionClient('unconfigured-client'),
         startupCoordinator.getOrCreateSessionClient,
       ],
       [
-        'record client creation',
         () => service.getOrCreateSessionClientFromRecord(session),
         startupCoordinator.getOrCreateSessionClientFromRecord,
       ],
       [
-        'browse client creation',
         () => service.ensureSubagentBrowseSession('unconfigured-browse'),
         startupCoordinator.ensureSubagentBrowseSession,
       ],
     ] as const;
 
-    for (const [operation, invoke, collaborator] of guardedOperations) {
+    for (const [invoke, collaborator] of guardedOperations) {
       await expect(invoke()).rejects.toThrow('SessionLifecycleService not configured');
       expect(collaborator).not.toHaveBeenCalled();
-      expect(operation).toBeTruthy();
     }
     expect(() => service.persistClosedSession('unconfigured-closed')).toThrow(
       'SessionLifecycleService not configured'
