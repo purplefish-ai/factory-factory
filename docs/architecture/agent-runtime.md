@@ -33,6 +33,28 @@ The ACP layer is import-fenced by dependency-cruiser
 app-server schemas are generated — run `pnpm codex:schema:generate` and check
 drift with `pnpm check:codex-schema`.
 
+## Session lifecycle ownership
+
+`SessionLifecycleGate` owns domain startup/stop eligibility. `AcpRuntimeManager`
+owns subprocess handles, pending creation, incarnation filtering, and
+quiescence. Lifecycle work has one owner per responsibility; transport handlers
+consume the composed services and never wire lifecycle dependencies.
+Startup, termination, runtime exit, notifications, context, and workflow
+finalization each have one coordinator or service.
+
+| Responsibility | Owner | Reconciliation point |
+| --- | --- | --- |
+| Startup | `SessionStartupCoordinator` | Persisted `RUNNING` state |
+| Termination | `SessionTerminationCoordinator` | Persisted idle/stopped state |
+| Runtime exit | `SessionRuntimeExitCoordinator` | Terminal status and provider history |
+| Notifications | `SessionNotificationDeliveryService` | Transcript plus delivered evidence |
+| Context | `SessionContextService` | Session context is resolved before lifecycle work |
+| Workflow finalization | `SessionWorkflowFinalizer` | Idempotent workflow completion |
+
+When changing lifecycle behavior, keep these boundaries intact: coordinators
+or services reconcile their own responsibility, while the lifecycle facade
+delegates public operations and the session composition root wires the owners.
+
 ## Provider sub-agents
 
 Provider-initiated sub-agents are session-scoped, read-only, and provider-owned.
