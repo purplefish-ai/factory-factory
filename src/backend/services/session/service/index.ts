@@ -34,8 +34,12 @@ export { sessionInterceptorBridge } from './interceptor.bridge';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
 export { SessionConfigService } from './lifecycle/session.config.service';
 export {
+  type GetOrCreateSessionClientOptions,
+  type LifecycleBridges,
   SessionLifecycleService,
   type SessionStopReason,
+  type StartSessionOptions,
+  type StopSessionOptions,
 } from './lifecycle/session.lifecycle.service';
 export { SessionPermissionService } from './lifecycle/session.permission.service';
 export {

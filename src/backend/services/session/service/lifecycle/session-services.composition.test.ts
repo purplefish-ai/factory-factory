@@ -11,7 +11,6 @@ import {
   createLifecycleTestSession,
 } from './session-lifecycle.test-helpers';
 import { chatMessageHandlerService, sessionLifecycleService } from './session-services';
-import { SessionStartupCoordinator } from './session-startup.coordinator';
 
 describe('session services composition', () => {
   afterEach(() => {
@@ -54,16 +53,71 @@ describe('session services composition', () => {
     });
   });
 
-  it('exports the public lifecycle singleton with startup configured', async () => {
-    const ensureSubagentBrowseSession = vi
-      .spyOn(SessionStartupCoordinator.prototype, 'ensureSubagentBrowseSession')
-      .mockResolvedValueOnce(false);
+  it('composes browse startup through the real startup coordinator', async () => {
+    const { service, runtimeManager } = createLifecycleHarness({
+      provider: 'CODEX',
+      providerSessionId: 'provider-session-1',
+    });
+    runtimeManager.getSubagentBrowseCapability.mockImplementation(() =>
+      runtimeManager.getOrCreateClient.mock.calls.length > 0
+        ? { version: 1, list: true, read: true, notifications: true }
+        : null
+    );
 
-    await expect(
-      publicSessionLifecycleService.ensureSubagentBrowseSession('session-1')
-    ).resolves.toBe(false);
+    await expect(service.ensureSubagentBrowseSession('session-1')).resolves.toBe(true);
 
-    expect(ensureSubagentBrowseSession).toHaveBeenCalledWith('session-1');
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        provider: 'CODEX',
+        purpose: 'browse',
+        resumeProviderSessionId: 'provider-session-1',
+      }),
+      expect.objectContaining({
+        onRuntimeError: expect.any(Function),
+        onRuntimeExit: expect.any(Function),
+      }),
+      {
+        workspaceId: 'workspace-1',
+        workingDir: '/tmp/workspace',
+      }
+    );
+  });
+
+  it('builds runtime handlers backed by complete lifecycle harness ports', async () => {
+    const { service, runtimeManager, sessionDomainService, acpEventProcessor } =
+      createLifecycleHarness();
+    await service.getOrCreateSessionClient('session-1');
+    const handlers = runtimeManager.getOrCreateClient.mock.calls[0]?.[2];
+    expect(handlers?.onRuntimeError).toEqual(expect.any(Function));
+    expect(handlers?.onAcpLog).toEqual(expect.any(Function));
+
+    handlers?.onRuntimeError?.({
+      sessionId: 'session-1',
+      error: new Error('runtime failed'),
+      incarnationId: 'incarnation-1',
+      purpose: 'active',
+    });
+    handlers?.onAcpLog?.('session-1', { message: 'provider log' });
+
+    expect(sessionDomainService.markError).toHaveBeenCalledWith('session-1', 'runtime failed');
+    expect(acpEventProcessor.handleAcpLog).toHaveBeenCalledWith('session-1', {
+      message: 'provider log',
+    });
+  });
+
+  it('builds workflow finalization with recovery and transient deletion ports', async () => {
+    const { service, sessionDomainService } = createLifecycleHarness({
+      session: { workflow: 'ratchet' },
+    });
+
+    await expect(service.recoverStaleRunningSessions()).resolves.toBe(0);
+    await service.stopSession('session-1', {
+      cleanupTransientRatchetSession: true,
+      recordLifecycleEvent: false,
+    });
+
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
   });
 
   it('wires a lifecycle coordinator to a later workspace bridge without mutating the singleton', async () => {
