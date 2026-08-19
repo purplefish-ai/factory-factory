@@ -19,3 +19,12 @@ export type AcpRuntimeCreatedCallback = (
   client: AcpProcessHandle,
   context: AcpRuntimeContext
 ) => void;
+
+export type AcpActiveProcessSnapshot = {
+  sessionId: string;
+  pid: number | undefined;
+  status: string;
+  isRunning: boolean;
+  isPromptInFlight: boolean;
+  provider: string;
+};
