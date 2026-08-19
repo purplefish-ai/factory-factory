@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
+import type { AcpRuntimeManager } from './acp-runtime-manager';
 import type { AcpClientOptions } from './types';
 
 function unsafeCoerce<T>(value: unknown): T {
@@ -57,6 +58,23 @@ export function exitChildAfterSigterm(child: MockChildProcess): void {
   });
 }
 
+export function exitChildWithCode(child: MockChildProcess): void {
+  child.kill = vi.fn(() => {
+    child.exitCode = 0;
+    child.emit('exit', 0, null);
+    return true;
+  });
+}
+
+export function markChildKilledOnSignal(child: MockChildProcess): void {
+  child.kill = vi.fn((signal?: string) => {
+    if (signal) {
+      child.killed = true;
+    }
+    return true;
+  });
+}
+
 export function createTestProcessHandle(params?: {
   provider?: string;
   providerSessionId?: string;
@@ -79,6 +97,23 @@ export function defaultHandlers(): AcpRuntimeEventHandlers {
     onError: vi.fn(),
     onAcpEvent: vi.fn(),
   };
+}
+
+export function createTestClient(
+  manager: AcpRuntimeManager,
+  params?: {
+    sessionId?: string;
+    options?: AcpClientOptions;
+    handlers?: AcpRuntimeEventHandlers;
+    context?: ReturnType<typeof defaultContext>;
+  }
+) {
+  return manager.getOrCreateClient(
+    params?.sessionId ?? 'session-1',
+    params?.options ?? defaultOptions(),
+    params?.handlers ?? defaultHandlers(),
+    params?.context ?? defaultContext()
+  );
 }
 
 export function defaultOptions(): AcpClientOptions {

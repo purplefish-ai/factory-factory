@@ -12,10 +12,13 @@ import {
   codexOptions,
   createDeferred,
   createMockChildProcess,
+  createTestClient,
   defaultContext,
   defaultHandlers,
   defaultOptions,
   exitChildAfterSigterm,
+  exitChildWithCode,
+  markChildKilledOnSignal,
   subagentBrowseCapabilities,
 } from './acp-runtime-manager.test-helpers';
 
@@ -33,45 +36,24 @@ describe('AcpRuntimeManager', () => {
       const child = harness.setupSuccessfulSpawn();
       exitChildAfterSigterm(child);
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       const firstStop = manager.stopClient('session-1');
       const duplicateStop = manager.stopClient('session-1');
       expect(duplicateStop).toBe(firstStop);
       await firstStop;
       harness.setupSuccessfulSpawn();
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).resolves.toBeDefined();
+      await expect(createTestClient(manager)).resolves.toBeDefined();
       expect(mockSpawn).toHaveBeenCalledTimes(2);
     });
 
     it('sends SIGTERM, waits grace period, cleans up references', async () => {
       const child = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       // Make SIGTERM trigger exit
-      child.kill = vi.fn(() => {
-        child.exitCode = 0;
-        child.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(child);
 
       await manager.stopClient('session-1');
 
@@ -82,18 +64,9 @@ describe('AcpRuntimeManager', () => {
     it('clears the SIGTERM grace-period timeout when the child exits quickly', async () => {
       const child = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
-      child.kill = vi.fn(() => {
-        child.exitCode = 0;
-        child.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(child);
 
       vi.useFakeTimers();
 
@@ -110,12 +83,7 @@ describe('AcpRuntimeManager', () => {
     it('escalates to SIGKILL after timeout', async () => {
       const child = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       // SIGTERM does NOT cause exit - process stays alive
       const killCalls: string[] = [];
@@ -147,22 +115,13 @@ describe('AcpRuntimeManager', () => {
     it('cancels prompt if isPromptInFlight before SIGTERM', async () => {
       const child = setupSuccessfulSpawn();
 
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
       handle.isPromptInFlight = true;
 
       mockCancel.mockResolvedValue(undefined);
 
       // Make SIGTERM trigger exit
-      child.kill = vi.fn(() => {
-        child.exitCode = 0;
-        child.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(child);
 
       await manager.stopClient('session-1');
 
@@ -175,12 +134,7 @@ describe('AcpRuntimeManager', () => {
     it('waits for an existing stop when called concurrently', async () => {
       const child = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       child.kill = vi.fn(() => true);
 
@@ -211,12 +165,7 @@ describe('AcpRuntimeManager', () => {
       exitChildAfterSigterm(child);
       const creation = manager.runClientCreationOperation('session-1', 'active', async () => {
         await reconciliation.promise;
-        return manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        );
+        return createTestClient(manager);
       });
 
       const firstStop = manager.stopAndQuiesce('session-1');
@@ -256,11 +205,7 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      child.kill = vi.fn(() => {
-        child.exitCode = 0;
-        child.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(child);
 
       await manager.stopClient('session-1');
 
@@ -280,12 +225,7 @@ describe('AcpRuntimeManager', () => {
 
       await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
 
-      child.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          child.killed = true;
-        }
-        return true;
-      });
+      markChildKilledOnSignal(child);
 
       vi.useFakeTimers();
 
@@ -314,18 +254,8 @@ describe('AcpRuntimeManager', () => {
         onRuntimeExit: vi.fn().mockResolvedValue(undefined),
         onRuntimeError: vi.fn(),
       };
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        firstHandlers,
-        defaultContext()
-      );
-      firstChild.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          firstChild.killed = true;
-        }
-        return true;
-      });
+      await createTestClient(manager, { handlers: firstHandlers });
+      markChildKilledOnSignal(firstChild);
 
       vi.useFakeTimers();
 
@@ -336,12 +266,7 @@ describe('AcpRuntimeManager', () => {
       const secondChild = createMockChildProcess();
       const secondHandlers = defaultHandlers();
       mockSpawn.mockReturnValueOnce(secondChild);
-      const restartedHandle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        secondHandlers,
-        defaultContext()
-      );
+      const restartedHandle = await createTestClient(manager, { handlers: secondHandlers });
 
       firstChild.emit('error', new Error('stale provider transport failed'));
       firstChild.exitCode = 137;
@@ -358,22 +283,12 @@ describe('AcpRuntimeManager', () => {
       let exitHandlerSettled = false;
       const onRuntimeExit = vi.fn(async () => {
         try {
-          await manager.getOrCreateClient(
-            'session-1',
-            defaultOptions(),
-            defaultHandlers(),
-            defaultContext()
-          );
+          await createTestClient(manager);
         } finally {
           exitHandlerSettled = true;
         }
       });
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        { ...defaultHandlers(), onRuntimeExit },
-        defaultContext()
-      );
+      await createTestClient(manager, { handlers: { ...defaultHandlers(), onRuntimeExit } });
 
       child.exitCode = 1;
       expect(() => child.emit('exit', 1, null)).not.toThrow();
@@ -385,12 +300,7 @@ describe('AcpRuntimeManager', () => {
       });
 
       const replacementChild = setupSuccessfulSpawn();
-      const replacementHandle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const replacementHandle = await createTestClient(manager);
 
       expect(manager.getClient('session-1')).toBe(replacementHandle);
       exitChildAfterSigterm(replacementChild);
@@ -401,20 +311,10 @@ describe('AcpRuntimeManager', () => {
       const firstChild = setupSuccessfulSpawn();
       let differentSessionCreated = false;
       const onRuntimeExit = vi.fn(async () => {
-        await manager.getOrCreateClient(
-          'session-2',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        );
+        await createTestClient(manager, { sessionId: 'session-2' });
         differentSessionCreated = true;
       });
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        { ...defaultHandlers(), onRuntimeExit },
-        defaultContext()
-      );
+      await createTestClient(manager, { handlers: { ...defaultHandlers(), onRuntimeExit } });
       const secondChild = setupSuccessfulSpawn();
 
       firstChild.emit('exit', 1, null);
@@ -429,20 +329,10 @@ describe('AcpRuntimeManager', () => {
     it('rejects client creation while a stop is in progress', async () => {
       const firstChild = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       // SIGTERM marks the old process as no longer running, but delay exit.
-      firstChild.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          firstChild.killed = true;
-        }
-        return true;
-      });
+      markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
       await vi.waitFor(() => {
@@ -453,14 +343,7 @@ describe('AcpRuntimeManager', () => {
       exitChildAfterSigterm(secondChild);
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).rejects.toThrow('ACP session stop requested');
+      await expect(createTestClient(manager)).rejects.toThrow('ACP session stop requested');
       expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
       expect(secondChild.kill).not.toHaveBeenCalledWith('SIGKILL');
 
@@ -474,20 +357,10 @@ describe('AcpRuntimeManager', () => {
     it('wires child error handlers before aborting creation during stop', async () => {
       const firstChild = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       // SIGTERM marks the old process as no longer running, but delay exit.
-      firstChild.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          firstChild.killed = true;
-        }
-        return true;
-      });
+      markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
       await vi.waitFor(() => {
@@ -526,20 +399,10 @@ describe('AcpRuntimeManager', () => {
     it('allows a replacement after stop rejects a concurrent create', async () => {
       const firstChild = setupSuccessfulSpawn();
 
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
 
       // SIGTERM marks process as no longer running but delays exit event.
-      firstChild.kill = vi.fn((signal?: string) => {
-        if (signal) {
-          firstChild.killed = true;
-        }
-        return true;
-      });
+      markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
       await vi.waitFor(() => {
@@ -550,40 +413,21 @@ describe('AcpRuntimeManager', () => {
       exitChildAfterSigterm(secondChild);
       mockSpawn.mockReturnValueOnce(secondChild);
 
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).rejects.toThrow('ACP session stop requested');
+      await expect(createTestClient(manager)).rejects.toThrow('ACP session stop requested');
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);
 
       await stopPromise;
       setupSuccessfulSpawn();
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).resolves.toBeDefined();
+      await expect(createTestClient(manager)).resolves.toBeDefined();
     });
   });
 
   describe('stopAllClients', () => {
     it('waits for fence-only reconciliation while closing admission', async () => {
       const activeChild = setupSuccessfulSpawn();
-      await manager.getOrCreateClient(
-        'session-active',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager, { sessionId: 'session-active' });
       const reconciliation = createDeferred<void>();
       const fenceOnly = manager.runClientCreationOperation(
         'session-fence-only',
@@ -600,11 +444,7 @@ describe('AcpRuntimeManager', () => {
         manager.runClientCreationOperation('session-too-late', 'active', lateOperation)
       ).rejects.toThrow('ACP runtime manager is shutting down');
       expect(lateOperation).not.toHaveBeenCalled();
-      activeChild.kill = vi.fn(() => {
-        activeChild.exitCode = 0;
-        activeChild.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(activeChild);
       const stopAll = manager.stopAllClients(50);
       let stopped = false;
       void stopAll.then(() => {
@@ -619,12 +459,7 @@ describe('AcpRuntimeManager', () => {
 
     it('clears per-client shutdown timeouts when clients stop quickly', async () => {
       const firstChild = setupSuccessfulSpawn();
-      await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      await createTestClient(manager);
       const secondChild = createMockChildProcess();
       mockSpawn.mockReturnValueOnce(secondChild);
 
@@ -635,16 +470,8 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      firstChild.kill = vi.fn(() => {
-        firstChild.exitCode = 0;
-        firstChild.emit('exit', 0, null);
-        return true;
-      });
-      secondChild.kill = vi.fn(() => {
-        secondChild.exitCode = 0;
-        secondChild.emit('exit', 0, null);
-        return true;
-      });
+      exitChildWithCode(firstChild);
+      exitChildWithCode(secondChild);
 
       vi.useFakeTimers();
 
@@ -664,12 +491,7 @@ describe('AcpRuntimeManager', () => {
       await manager.stopAllClients();
 
       await expect(
-        manager.getOrCreateClient(
-          'session-after-shutdown',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
+        createTestClient(manager, { sessionId: 'session-after-shutdown' })
       ).rejects.toThrow('ACP runtime manager is shutting down');
 
       expect(mockSpawn).not.toHaveBeenCalled();
@@ -686,12 +508,7 @@ describe('AcpRuntimeManager', () => {
           })
       );
 
-      const createPromise = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const createPromise = createTestClient(manager);
       const createRejection = createPromise.catch((error: unknown) => error);
 
       await vi.waitFor(() => {
@@ -720,24 +537,14 @@ describe('AcpRuntimeManager', () => {
           })
       );
 
-      const firstCreate = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const firstCreate = createTestClient(manager);
       const firstRejection = firstCreate.catch((error: unknown) => error);
 
       await vi.waitFor(() => {
         expect(mockSpawn).toHaveBeenCalledTimes(1);
       });
 
-      const secondCreate = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const secondCreate = createTestClient(manager);
       const secondRejection = secondCreate.catch((error: unknown) => error);
 
       await manager.stopAllClients(50);

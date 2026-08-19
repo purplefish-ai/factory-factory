@@ -11,6 +11,7 @@ import {
 import {
   codexOptions,
   createMockChildProcess,
+  createTestClient,
   defaultConfigOptions,
   defaultContext,
   defaultHandlers,
@@ -55,12 +56,7 @@ describe('AcpRuntimeManager', () => {
     it('spawns subprocess with detached:false, wires streams, initializes, creates session, returns handle', async () => {
       setupSuccessfulSpawn();
 
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
 
       // Verify spawn was called with correct args
       expect(mockSpawn).toHaveBeenCalledTimes(1);
@@ -233,14 +229,7 @@ describe('AcpRuntimeManager', () => {
       mockSpawn.mockReturnValue(child);
       mockInitialize.mockRejectedValue(new Error('handshake failed'));
 
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).rejects.toThrow('handshake failed');
+      await expect(createTestClient(manager)).rejects.toThrow('handshake failed');
 
       expect(child.kill).toHaveBeenCalledTimes(1);
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
@@ -256,12 +245,7 @@ describe('AcpRuntimeManager', () => {
       vi.useFakeTimers();
 
       try {
-        const creationPromise = manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        );
+        const creationPromise = createTestClient(manager);
         const creationRejection = creationPromise.catch((error: unknown) => error);
 
         await vi.advanceTimersByTimeAsync(5000);
@@ -279,12 +263,7 @@ describe('AcpRuntimeManager', () => {
       vi.useFakeTimers();
 
       try {
-        const creationPromise = manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        );
+        const creationPromise = createTestClient(manager);
         const creationRejection = creationPromise.catch((error: unknown) => error);
 
         await vi.advanceTimersByTimeAsync(0);
@@ -362,18 +341,8 @@ describe('AcpRuntimeManager', () => {
     it('returns existing handle if session already exists and is running', async () => {
       setupSuccessfulSpawn();
 
-      const handle1 = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-      const handle2 = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle1 = await createTestClient(manager);
+      const handle2 = await createTestClient(manager);
 
       expect(handle1).toBe(handle2);
       expect(mockSpawn).toHaveBeenCalledTimes(1);
@@ -394,18 +363,8 @@ describe('AcpRuntimeManager', () => {
         configOptions: defaultConfigOptions(),
       });
 
-      const first = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-      const second = manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const first = createTestClient(manager);
+      const second = createTestClient(manager);
 
       // Let microtasks process
       await new Promise((r) => setTimeout(r, 10));
@@ -436,12 +395,7 @@ describe('AcpRuntimeManager', () => {
       const callback = vi.fn();
       manager.setOnClientCreated(callback);
 
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
 
       expect(callback).toHaveBeenCalledWith('session-1', handle, defaultContext());
     });
@@ -476,12 +430,7 @@ describe('AcpRuntimeManager', () => {
         sessionId: 'provider-session-123',
         configOptions: expectedConfigOptions,
       });
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
 
       expect(handle.configOptions).toEqual(expectedConfigOptions);
     });
@@ -493,14 +442,9 @@ describe('AcpRuntimeManager', () => {
         sessionId: 'provider-session-123',
       });
 
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).rejects.toThrow('did not include required configOptions');
+      await expect(createTestClient(manager)).rejects.toThrow(
+        'did not include required configOptions'
+      );
     });
 
     it('derives required config options from models/modes when newSession omits configOptions', async () => {
@@ -523,12 +467,7 @@ describe('AcpRuntimeManager', () => {
         },
       });
 
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
 
       const modelOption = handle.configOptions.find((option) => option.category === 'model');
       const modeOption = handle.configOptions.find((option) => option.category === 'mode');
@@ -572,14 +511,9 @@ describe('AcpRuntimeManager', () => {
         ],
       });
 
-      await expect(
-        manager.getOrCreateClient(
-          'session-1',
-          defaultOptions(),
-          defaultHandlers(),
-          defaultContext()
-        )
-      ).rejects.toThrow('missing required config option categories: model, mode');
+      await expect(createTestClient(manager)).rejects.toThrow(
+        'missing required config option categories: model, mode'
+      );
     });
 
     it('uses model family name for Claude default model labels in configOptions', async () => {
@@ -616,12 +550,7 @@ describe('AcpRuntimeManager', () => {
         ],
       });
 
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
+      const handle = await createTestClient(manager);
       const modelOption = handle.configOptions.find((option) => option.id === 'model');
       const defaultEntry = modelOption?.options.find(
         (option) => 'value' in option && option.value === 'default'
