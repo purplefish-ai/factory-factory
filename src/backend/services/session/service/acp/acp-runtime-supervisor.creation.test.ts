@@ -14,6 +14,33 @@ import {
 } from './acp-runtime-manager.test-helpers';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
 
+const loggerMocks = vi.hoisted(() => {
+  const manager = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const other = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  return {
+    manager,
+    other,
+    createLogger: vi.fn((category: string) =>
+      category === 'acp-runtime-manager' ? manager : other
+    ),
+  };
+});
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: loggerMocks.createLogger,
+  getCurrentProcessEnv: () => ({}),
+}));
+
 type FactoryImplementation = (params: CreateAcpClientParams) => Promise<AcpProcessHandle>;
 type CancelPrompt = (sessionId: string, handle: AcpProcessHandle) => Promise<boolean>;
 
@@ -36,6 +63,93 @@ function createHarness(implementation?: FactoryImplementation) {
 describe('AcpRuntimeSupervisor creation and exit ownership', () => {
   beforeEach(() => {
     vi.useRealTimers();
+    loggerMocks.manager.debug.mockClear();
+    loggerMocks.manager.info.mockClear();
+    loggerMocks.manager.warn.mockClear();
+    loggerMocks.manager.error.mockClear();
+    loggerMocks.other.debug.mockClear();
+    loggerMocks.other.info.mockClear();
+    loggerMocks.other.warn.mockClear();
+    loggerMocks.other.error.mockClear();
+  });
+
+  it('logs new client creation under the manager category', async () => {
+    const handle = createTestProcessHandle();
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+
+    expect(loggerMocks.manager.info).toHaveBeenCalledOnce();
+    expect(loggerMocks.manager.info).toHaveBeenCalledWith('Creating new ACP client', {
+      sessionId: 'session-1',
+      provider: 'CLAUDE',
+    });
+    expect(loggerMocks.other.info).not.toHaveBeenCalledWith(
+      'Creating new ACP client',
+      expect.anything()
+    );
+  });
+
+  it('logs reuse of an existing running client under the manager category', async () => {
+    const handle = createTestProcessHandle();
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    loggerMocks.manager.debug.mockClear();
+
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+
+    expect(loggerMocks.manager.debug).toHaveBeenCalledWith(
+      'Returning existing running ACP client',
+      { sessionId: 'session-1' }
+    );
+    expect(loggerMocks.other.debug).not.toHaveBeenCalledWith(
+      'Returning existing running ACP client',
+      expect.anything()
+    );
+  });
+
+  it('logs waiting for a registered pending creation under the manager category', async () => {
+    const pendingHandle = createTestProcessHandle();
+    const { supervisor, createClient } = createHarness();
+    (
+      supervisor as unknown as {
+        pendingCreation: Map<string, Promise<AcpProcessHandle>>;
+      }
+    ).pendingCreation.set('session-1', Promise.resolve(pendingHandle));
+
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      )
+    ).resolves.toBe(pendingHandle);
+
+    expect(createClient).not.toHaveBeenCalled();
+    expect(loggerMocks.manager.debug).toHaveBeenCalledWith(
+      'Waiting for pending ACP client creation',
+      { sessionId: 'session-1' }
+    );
+    expect(loggerMocks.other.debug).not.toHaveBeenCalledWith(
+      'Waiting for pending ACP client creation',
+      expect.anything()
+    );
   });
 
   it('coalesces same-session creation while allowing different sessions to start concurrently', async () => {

@@ -20,7 +20,7 @@ import {
 } from './acp-runtime-quiescence';
 import type { AcpClientOptions } from './types';
 
-const logger = createLogger('acp-runtime-supervisor');
+const logger = createLogger('acp-runtime-manager');
 const STOP_TIMEOUT_MS = 5000;
 
 export type AcpRuntimeSupervisorDependencies = {
@@ -134,16 +134,19 @@ export class AcpRuntimeSupervisor {
         const existing = this.getBrowseClient(sessionId);
         if (existing) {
           this.promoteForActiveUse(sessionId, options, existing);
+          logger.debug('Returning existing running ACP client', { sessionId });
           return existing;
         }
 
         const pending = this.pendingCreation.get(sessionId);
         if (pending) {
+          logger.debug('Waiting for pending ACP client creation', { sessionId });
           const handle = await pending;
           this.promoteForActiveUse(sessionId, options, handle);
           return handle;
         }
 
+        logger.info('Creating new ACP client', { sessionId, provider: options.provider });
         this.recordClientPurpose(sessionId, options);
         const createPromise = this.createClient(
           sessionId,
@@ -197,6 +200,7 @@ export class AcpRuntimeSupervisor {
   stopClient(sessionId: string): Promise<void> {
     const existingStop = this.stopOperations.get(sessionId);
     if (existingStop) {
+      logger.debug('ACP session stop already in progress', { sessionId });
       return existingStop;
     }
 

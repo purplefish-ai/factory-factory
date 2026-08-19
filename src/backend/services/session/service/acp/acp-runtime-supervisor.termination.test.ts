@@ -14,6 +14,33 @@ import {
 } from './acp-runtime-manager.test-helpers';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
 
+const loggerMocks = vi.hoisted(() => {
+  const manager = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const other = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  return {
+    manager,
+    other,
+    createLogger: vi.fn((category: string) =>
+      category === 'acp-runtime-manager' ? manager : other
+    ),
+  };
+});
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: loggerMocks.createLogger,
+  getCurrentProcessEnv: () => ({}),
+}));
+
 type FactoryImplementation = (params: CreateAcpClientParams) => Promise<AcpProcessHandle>;
 type CancelPrompt = (sessionId: string, handle: AcpProcessHandle) => Promise<boolean>;
 
@@ -48,6 +75,38 @@ async function install(
 describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
   beforeEach(() => {
     vi.useRealTimers();
+    loggerMocks.manager.debug.mockClear();
+    loggerMocks.manager.info.mockClear();
+    loggerMocks.manager.warn.mockClear();
+    loggerMocks.manager.error.mockClear();
+    loggerMocks.other.debug.mockClear();
+    loggerMocks.other.info.mockClear();
+    loggerMocks.other.warn.mockClear();
+    loggerMocks.other.error.mockClear();
+  });
+
+  it('logs a deduplicated stop under the manager category', async () => {
+    const handle = createTestProcessHandle();
+    markChildKilledOnSignal(mockChildOf(handle));
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await install(supervisor);
+
+    const firstStop = supervisor.stopClient('session-1');
+    await vi.waitFor(() => expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM'));
+    const duplicateStop = supervisor.stopClient('session-1');
+
+    expect(duplicateStop).toBe(firstStop);
+    expect(loggerMocks.manager.debug).toHaveBeenCalledWith('ACP session stop already in progress', {
+      sessionId: 'session-1',
+    });
+    expect(loggerMocks.other.debug).not.toHaveBeenCalledWith(
+      'ACP session stop already in progress',
+      expect.anything()
+    );
+
+    mockChildOf(handle).exitCode = 0;
+    handle.child.emit('exit', 0, null);
+    await firstStop;
   });
 
   it('returns the identical stop promise and admits a replacement after cleanup', async () => {
