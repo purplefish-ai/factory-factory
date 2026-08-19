@@ -315,7 +315,9 @@ export class CodexAppServerAcpAdapter implements Agent {
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
       await this.streamEventHandler.replayThreadHistory(session.sessionId, session.threadId);
-      await this.streamEventHandler.refreshTaskStatus(session);
+      await this.streamEventHandler
+        .refreshTaskStatus(session)
+        .catch(() => this.reportShapeDrift('thread_goal_refresh_failed'));
     } catch (error) {
       try {
         await this.removeMcpServersForThread(session.threadId);

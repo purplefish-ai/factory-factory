@@ -281,6 +281,36 @@ describe('stream-event-handler', () => {
     expect(handleSubagentTranscriptActivity).toHaveBeenCalledWith('subagent-thread-1');
   });
 
+  it('does not retain goal versions for sub-agent threads without an active refresh', async () => {
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      handleSubagentTranscriptActivity: vi.fn(async () => undefined),
+    });
+
+    await handler.handleCodexNotification({
+      method: 'thread/goal/cleared',
+      params: { threadId: 'completed-subagent-thread' },
+    });
+
+    const internalHandler = handler as unknown as {
+      goalRefreshStateByThreadId: Map<string, unknown>;
+    };
+    expect(internalHandler.goalRefreshStateByThreadId.size).toBe(0);
+  });
+
   it('projects replay turns into updates without emitting them', async () => {
     const session = createSession();
     const emitSessionUpdate = vi.fn(async () => undefined);

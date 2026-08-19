@@ -35,6 +35,7 @@ import type {
   AcpRuntimePurpose,
 } from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
+import { AcpRuntimeIncarnations } from './acp-runtime-incarnations';
 import {
   type AcpClientCreationOperation,
   AcpRuntimeQuiescence,
@@ -235,7 +236,7 @@ export class AcpRuntimeManager {
     stopClient: (sessionId) => this.stopClient(sessionId),
   });
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
-  private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
+  private readonly runtimeIncarnations = new AcpRuntimeIncarnations<AcpRuntimeMetadata>();
   private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
@@ -418,17 +419,19 @@ export class AcpRuntimeManager {
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
         this.activity.recordPurpose(sessionId, options.purpose);
-        const createPromise = this.createClient(sessionId, options, handlers, context, {
+        const runtime = this.runtimeIncarnations.begin(sessionId, {
           incarnationId: randomUUID(),
           purpose: options.purpose ?? 'active',
           installed: false,
         });
+        const createPromise = this.createClient(sessionId, options, handlers, context, runtime);
         this.pendingCreation.set(sessionId, createPromise);
 
         try {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
+          this.runtimeIncarnations.clearUninstalled(sessionId, runtime);
           this.clearActivityIfUnused(sessionId);
         }
       } finally {
@@ -451,7 +454,7 @@ export class AcpRuntimeManager {
   ): void {
     if (options.purpose !== 'browse') {
       this.activity.promote(sessionId);
-      const metadata = this.runtimeMetadata.get(handle.child);
+      const metadata = this.runtimeIncarnations.getForChild(handle.child);
       if (metadata) {
         metadata.purpose = 'active';
       }
@@ -519,7 +522,7 @@ export class AcpRuntimeManager {
       env: spawnEnv,
       detached: false,
     });
-    this.runtimeMetadata.set(child, runtime);
+    this.runtimeIncarnations.recordChild(child, runtime);
 
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
@@ -531,16 +534,11 @@ export class AcpRuntimeManager {
     });
     const startupErrorSettled = startupError.catch(() => undefined);
 
-    wireAcpRuntimeErrorHandler(
-      child,
-      sessionId,
-      handlers,
-      runtime,
-      () => !runtime.installed || this.sessions.get(sessionId)?.child === child
+    wireAcpRuntimeErrorHandler(child, sessionId, handlers, runtime, () =>
+      this.runtimeIncarnations.isCurrent(sessionId, runtime)
     );
     await this.abortClientCreationIfStopping(child, sessionId);
 
-    // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
       handlers.onAcpLog?.(options.sessionId, {
         eventType: 'acp_stderr',
@@ -565,7 +563,7 @@ export class AcpRuntimeManager {
 
     const acpEventHandler = handlers.onAcpEvent;
     const onEvent = (sid: string, event: AcpRuntimeEvent) => {
-      if (runtime.installed && this.sessions.get(sid)?.child !== child) {
+      if (!this.runtimeIncarnations.isCurrent(sid, runtime)) {
         logger.debug('Ignoring ACP event from stale runtime', { sessionId: sid });
         return;
       }
@@ -603,7 +601,6 @@ export class AcpRuntimeManager {
     ]);
 
     try {
-      // Initialize handshake
       initResult = await Promise.race([
         withTimeout({
           promise: connection.initialize({
@@ -629,7 +626,6 @@ export class AcpRuntimeManager {
         agentCapabilities: initResult.agentCapabilities,
       });
 
-      // Create or resume provider session
       const agentCapabilities = initResult.agentCapabilities ?? {};
       sessionInfo = await Promise.race([
         withTimeout({
@@ -868,7 +864,7 @@ export class AcpRuntimeManager {
     child: ChildProcess,
     code: number | null
   ): { managed: boolean; purpose: AcpRuntimePurpose } | null {
-    const purpose = this.runtimeMetadata.get(child)?.purpose ?? 'active';
+    const purpose = this.runtimeIncarnations.getForChild(child)?.purpose ?? 'active';
     const current = this.sessions.get(sessionId);
     const managed =
       this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
@@ -885,6 +881,8 @@ export class AcpRuntimeManager {
       });
       return null;
     }
+
+    this.runtimeIncarnations.clearForChild(sessionId, child);
 
     if (!current && managed) {
       logger.debug('Skipping exit handler - managed stop process exited', { sessionId, code });
@@ -1114,6 +1112,7 @@ export class AcpRuntimeManager {
       if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
         this.activity.clear(sessionId);
+        this.runtimeIncarnations.clearForChild(sessionId, stoppedHandle?.child);
       }
     }
   }
@@ -1362,6 +1361,7 @@ export class AcpRuntimeManager {
 
     this.sessions.clear();
     this.pendingCreation.clear();
+    this.runtimeIncarnations.clear();
     this.creationLocks.clear();
     this.lockRefCounts.clear();
     this.shutdownWaiters.clear();

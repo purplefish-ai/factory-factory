@@ -83,7 +83,10 @@ type StreamEventHandlerDeps = {
 };
 
 export class CodexStreamEventHandler {
-  private readonly goalNotificationVersionByThreadId = new Map<string, number>();
+  private readonly goalRefreshStateByThreadId = new Map<
+    string,
+    { notificationVersion: number; pendingRefreshCount: number }
+  >();
 
   constructor(private readonly deps: StreamEventHandlerDeps) {}
 
@@ -102,30 +105,44 @@ export class CodexStreamEventHandler {
   }
 
   async refreshTaskStatus(session: AdapterSession): Promise<void> {
-    const notificationVersion = this.goalNotificationVersionByThreadId.get(session.threadId) ?? 0;
-    let raw: unknown;
+    const refreshState = this.goalRefreshStateByThreadId.get(session.threadId) ?? {
+      notificationVersion: 0,
+      pendingRefreshCount: 0,
+    };
+    refreshState.pendingRefreshCount += 1;
+    this.goalRefreshStateByThreadId.set(session.threadId, refreshState);
+    const notificationVersion = refreshState.notificationVersion;
     try {
-      raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
-    } catch (error) {
-      this.deps.reportShapeDrift('thread_goal_get_failed', {
-        threadId: session.threadId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
+      let raw: unknown;
+      try {
+        raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
+      } catch (error) {
+        this.deps.reportShapeDrift('thread_goal_get_failed', {
+          threadId: session.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      if (refreshState.notificationVersion !== notificationVersion) {
+        return;
+      }
+      const response = threadGoalGetResponseSchema.safeParse(raw);
+      if (!response.success) {
+        this.deps.reportShapeDrift('malformed_thread_goal_get', {
+          issues: response.error.issues.slice(0, 3).map((issue) => issue.message),
+        });
+        return;
+      }
+      await this.notifyTaskStatus(session.sessionId, response.data.goal?.status === 'active');
+    } finally {
+      refreshState.pendingRefreshCount -= 1;
+      if (
+        refreshState.pendingRefreshCount === 0 &&
+        this.goalRefreshStateByThreadId.get(session.threadId) === refreshState
+      ) {
+        this.goalRefreshStateByThreadId.delete(session.threadId);
+      }
     }
-    if (
-      (this.goalNotificationVersionByThreadId.get(session.threadId) ?? 0) !== notificationVersion
-    ) {
-      return;
-    }
-    const response = threadGoalGetResponseSchema.safeParse(raw);
-    if (!response.success) {
-      this.deps.reportShapeDrift('malformed_thread_goal_get', {
-        issues: response.error.issues.slice(0, 3).map((issue) => issue.message),
-      });
-      return;
-    }
-    await this.notifyTaskStatus(session.sessionId, response.data.goal?.status === 'active');
   }
 
   async projectThreadTurns(
@@ -283,9 +300,10 @@ export class CodexStreamEventHandler {
       notification.method === 'thread/goal/updated' ||
       notification.method === 'thread/goal/cleared'
     ) {
-      const notificationVersion =
-        (this.goalNotificationVersionByThreadId.get(notification.params.threadId) ?? 0) + 1;
-      this.goalNotificationVersionByThreadId.set(notification.params.threadId, notificationVersion);
+      const refreshState = this.goalRefreshStateByThreadId.get(notification.params.threadId);
+      if (refreshState) {
+        refreshState.notificationVersion += 1;
+      }
       const sessionId = this.deps.sessionIdByThreadId.get(notification.params.threadId);
       if (sessionId) {
         await this.notifyTaskStatus(
