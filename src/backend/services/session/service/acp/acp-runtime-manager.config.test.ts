@@ -25,8 +25,8 @@ describe('AcpRuntimeManager', () => {
       ['setConfigOption', () => manager.setConfigOption('missing-session', 'mode', 'plan')],
       ['setSessionMode', () => manager.setSessionMode('missing-session', 'plan')],
       ['setSessionModel', () => manager.setSessionModel('missing-session', 'opus')],
-    ])('preserves the missing-session error for %s', (_operation, call) => {
-      expect(call).toThrow('No ACP session found for sessionId: missing-session');
+    ])('preserves the missing-session promise rejection for %s', async (_operation, call) => {
+      await expect(call()).rejects.toThrow('No ACP session found for sessionId: missing-session');
     });
 
     it('updates cached config options from setSessionConfigOption response', async () => {

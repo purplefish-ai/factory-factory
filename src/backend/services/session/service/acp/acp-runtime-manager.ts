@@ -151,24 +151,33 @@ export class AcpRuntimeManager {
     );
   }
 
-  setConfigOption(
+  async setConfigOption(
     sessionId: string,
     configId: string,
     value: string
   ): Promise<SessionConfigOption[]> {
-    return this.configController.setConfigOption(
+    return await this.configController.setConfigOption(
       this.requireInstalledHandle(sessionId),
       configId,
-      value
+      value,
+      sessionId
     );
   }
 
-  setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
-    return this.configController.setSessionMode(this.requireInstalledHandle(sessionId), modeId);
+  async setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
+    return await this.configController.setSessionMode(
+      this.requireInstalledHandle(sessionId),
+      modeId,
+      sessionId
+    );
   }
 
-  setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
-    return this.configController.setSessionModel(this.requireInstalledHandle(sessionId), modelId);
+  async setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
+    return await this.configController.setSessionModel(
+      this.requireInstalledHandle(sessionId),
+      modelId,
+      sessionId
+    );
   }
 
   stopAllClients(timeoutMs = 5000): Promise<void> {

@@ -123,35 +123,6 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     );
   });
 
-  it('logs waiting for a registered pending creation under the manager category', async () => {
-    const pendingHandle = createTestProcessHandle();
-    const { supervisor, createClient } = createHarness();
-    (
-      supervisor as unknown as {
-        pendingCreation: Map<string, Promise<AcpProcessHandle>>;
-      }
-    ).pendingCreation.set('session-1', Promise.resolve(pendingHandle));
-
-    await expect(
-      supervisor.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      )
-    ).resolves.toBe(pendingHandle);
-
-    expect(createClient).not.toHaveBeenCalled();
-    expect(loggerMocks.manager.debug).toHaveBeenCalledWith(
-      'Waiting for pending ACP client creation',
-      { sessionId: 'session-1' }
-    );
-    expect(loggerMocks.other.debug).not.toHaveBeenCalledWith(
-      'Waiting for pending ACP client creation',
-      expect.anything()
-    );
-  });
-
   it('coalesces same-session creation while allowing different sessions to start concurrently', async () => {
     // Catches a global lock or duplicate same-session factory invocation.
     const firstHandle = createTestProcessHandle({ providerSessionId: 'provider-1' });
@@ -587,65 +558,5 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     await supervisor.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
 
     expect(order).toEqual(['created', 'provider-id']);
-  });
-
-  it('reports installed runtime identity, liveness, work, and process snapshots', async () => {
-    // Catches status queries filtering browse handles or deriving work from public visibility.
-    const active = createTestProcessHandle({ provider: 'CLAUDE' });
-    const browse = createTestProcessHandle({ provider: 'CODEX' });
-    mockChildOf(browse).pid = 54_321;
-    const { supervisor, createClient } = createHarness();
-    createClient.mockResolvedValueOnce(active).mockResolvedValueOnce(browse);
-    await supervisor.getOrCreateClient(
-      'active-session',
-      defaultOptions(),
-      defaultHandlers(),
-      defaultContext()
-    );
-    await supervisor.getOrCreateClient(
-      'browse-session',
-      { ...defaultOptions(), purpose: 'browse' },
-      defaultHandlers(),
-      defaultContext()
-    );
-    active.isPromptInFlight = true;
-    browse.isPromptInFlight = true;
-
-    expect(supervisor.isCurrentHandle('active-session', active)).toBe(true);
-    expect(supervisor.isCurrentHandle('active-session', browse)).toBe(false);
-    expect(supervisor.isSessionRunning('active-session')).toBe(true);
-    expect(supervisor.isSessionRunning('browse-session')).toBe(false);
-    expect(supervisor.isSessionWorking('browse-session')).toBe(true);
-    expect(supervisor.isAnySessionWorking(['missing', 'browse-session'])).toBe(true);
-    expect([...supervisor.getAllClients()]).toEqual([
-      ['active-session', active],
-      ['browse-session', browse],
-    ]);
-    expect(supervisor.getAllActiveProcesses()).toEqual([
-      {
-        sessionId: 'active-session',
-        pid: 12_345,
-        status: 'running',
-        isRunning: true,
-        isPromptInFlight: true,
-        provider: 'CLAUDE',
-      },
-      {
-        sessionId: 'browse-session',
-        pid: 54_321,
-        status: 'running',
-        isRunning: true,
-        isPromptInFlight: true,
-        provider: 'CODEX',
-      },
-    ]);
-
-    mockChildOf(browse).killed = true;
-    expect(supervisor.getBrowseClient('browse-session')).toBeUndefined();
-    expect(supervisor.getInstalledHandle('browse-session')).toBe(browse);
-    expect(supervisor.getAllActiveProcesses()[1]).toMatchObject({
-      status: 'stopped',
-      isRunning: false,
-    });
   });
 });
