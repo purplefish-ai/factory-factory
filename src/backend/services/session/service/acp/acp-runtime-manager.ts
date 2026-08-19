@@ -20,11 +20,11 @@ import type {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
+import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
 import {
   AcpBrowseSessionUnavailableError,
   getAcpErrorLogDetails,
-  isMethodNotFoundError,
   PromptTimeoutError,
 } from './acp-runtime-errors';
 import type {
@@ -69,6 +69,7 @@ const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
+  private readonly configController = new AcpRuntimeConfigController();
   private readonly browseOnlySessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
@@ -1046,109 +1047,32 @@ export class AcpRuntimeManager {
     return true;
   }
 
-  async setConfigOption(
+  private requireInstalledHandle(sessionId: string): AcpProcessHandle {
+    const handle = this.sessions.get(sessionId);
+    if (!handle) {
+      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
+    }
+    return handle;
+  }
+
+  setConfigOption(
     sessionId: string,
     configId: string,
     value: string
   ): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    try {
-      const response = await handle.connection.setSessionConfigOption({
-        sessionId: handle.providerSessionId,
-        configId,
-        value,
-      });
-
-      const configOptions = requireSessionConfigOptions(handle.provider, 'setSessionConfigOption', {
-        configOptions: response.configOptions,
-      });
-      handle.configOptions = configOptions;
-      return configOptions;
-    } catch (error) {
-      logger.warn('setSessionConfigOption failed', {
-        sessionId,
-        configId,
-        provider: handle.provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+    return this.configController.setConfigOption(
+      this.requireInstalledHandle(sessionId),
+      configId,
+      value
+    );
   }
 
-  async setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    try {
-      await handle.connection.setSessionMode({
-        sessionId: handle.providerSessionId,
-        modeId,
-      });
-
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'mode' ? { ...option, currentValue: modeId } : option
-      );
-
-      return [...handle.configOptions];
-    } catch (error) {
-      logger.warn('setSessionMode failed', {
-        sessionId,
-        modeId,
-        provider: handle.provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+  setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
+    return this.configController.setSessionMode(this.requireInstalledHandle(sessionId), modeId);
   }
 
-  async setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    const applyModelToCache = (): SessionConfigOption[] => {
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'model' ? { ...option, currentValue: modelId } : option
-      );
-      return [...handle.configOptions];
-    };
-
-    if (handle.provider === 'CLAUDE') {
-      try {
-        await handle.connection.unstable_setSessionModel({
-          sessionId: handle.providerSessionId,
-          modelId,
-        });
-        return applyModelToCache();
-      } catch (error) {
-        if (!isMethodNotFoundError(error)) {
-          logger.warn('setSessionModel failed', {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
-        logger.warn(
-          'unstable_setSessionModel unavailable, falling back to setSessionConfigOption',
-          {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-          }
-        );
-      }
-    }
-
-    return await this.setConfigOption(sessionId, 'model', modelId);
+  setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
+    return this.configController.setSessionModel(this.requireInstalledHandle(sessionId), modelId);
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
