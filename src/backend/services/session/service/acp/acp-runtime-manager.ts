@@ -10,24 +10,23 @@ import {
   type SessionConfigOption,
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
-import { z } from 'zod';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
-import {
-  SUBAGENTS_LIST_METHOD,
-  SUBAGENTS_READ_METHOD,
-  type SubagentBrowseCapability,
-  type SubagentListParams,
-  type SubagentListResult,
-  type SubagentReadParams,
-  type SubagentReadResult,
-  subagentListParamsSchema,
-  subagentListResultSchema,
-  subagentReadParamsSchema,
-  subagentReadResultSchema,
+import type {
+  SubagentBrowseCapability,
+  SubagentListParams,
+  SubagentListResult,
+  SubagentReadParams,
+  SubagentReadResult,
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
+import {
+  AcpBrowseSessionUnavailableError,
+  getAcpErrorLogDetails,
+  isMethodNotFoundError,
+  PromptTimeoutError,
+} from './acp-runtime-errors';
 import type {
   AcpRuntimeEvent,
   AcpRuntimeEventHandlers,
@@ -49,43 +48,13 @@ import {
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
+import { AcpSubagentBrowser } from './acp-subagent-browser';
 import type { AcpClientOptions, PermissionPreset } from './types';
+
+export { AcpBrowseSessionUnavailableError, PromptTimeoutError } from './acp-runtime-errors';
 
 const logger = createLogger('acp-runtime-manager');
 type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose; installed: boolean };
-/** Thrown when an ACP prompt exceeds the caller-specified timeout. */
-export class PromptTimeoutError extends Error {
-  constructor(
-    sessionId: string,
-    public readonly timeoutMs: number
-  ) {
-    super(`ACP prompt timed out after ${timeoutMs}ms for session ${sessionId}`);
-    this.name = 'PromptTimeoutError';
-  }
-}
-
-export class AcpBrowseSessionUnavailableError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'AcpBrowseSessionUnavailableError';
-  }
-}
-type AcpSubagentBrowseErrorCode =
-  | 'INVALID_INPUT'
-  | 'NOT_FOUND'
-  | 'PRECONDITION_FAILED'
-  | 'INTERNAL_ERROR';
-
-class AcpSubagentBrowseError extends Error {
-  constructor(
-    public readonly code: AcpSubagentBrowseErrorCode,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.name = 'AcpSubagentBrowseError';
-  }
-}
 
 export type AcpRuntimeCreatedCallback = (
   sessionId: string,
@@ -98,138 +67,13 @@ function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApp
 
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 
-type AcpErrorLogDetails = {
-  message: string;
-  code?: number | string;
-  data?: unknown;
-};
-
-function getAcpErrorMetadata(error: {
-  code?: unknown;
-  data?: unknown;
-}): Omit<AcpErrorLogDetails, 'message'> {
-  const code =
-    typeof error.code === 'number' || typeof error.code === 'string' ? error.code : undefined;
-  return {
-    ...(code !== undefined ? { code } : {}),
-    ...(typeof error.data !== 'undefined' ? { data: error.data } : {}),
-  };
-}
-
-function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
-  if (error instanceof Error) {
-    const maybe = error as Error & { code?: unknown; data?: unknown };
-    return {
-      message: error.message,
-      ...getAcpErrorMetadata(maybe),
-    };
-  }
-
-  if (typeof error === 'object' && error !== null) {
-    const maybe = error as { message?: unknown; code?: unknown; data?: unknown };
-    const message =
-      typeof maybe.message === 'string'
-        ? maybe.message
-        : (() => {
-            try {
-              return JSON.stringify(error);
-            } catch {
-              return String(error);
-            }
-          })();
-    return {
-      message,
-      ...getAcpErrorMetadata(maybe),
-    };
-  }
-
-  return { message: String(error) };
-}
-
-function isMethodNotFoundError(error: unknown): boolean {
-  const details = getAcpErrorLogDetails(error);
-  return details.code === -32_601 || details.message.includes('Method not found');
-}
-
-type SubagentBrowseOperation = 'list' | 'transcript';
-
-function subagentBrowseMessage(
-  operation: SubagentBrowseOperation,
-  kind: 'invalid' | 'not_found' | 'protocol' | 'failed'
-): string {
-  const subject = operation === 'list' ? 'Sub-agent list' : 'Sub-agent transcript';
-  if (kind === 'invalid') {
-    return `Invalid ${subject.toLowerCase()} request.`;
-  }
-  if (kind === 'not_found') {
-    return `${subject} not found for this session.`;
-  }
-  if (kind === 'protocol') {
-    return `${subject} is unavailable because the provider returned an invalid response.`;
-  }
-  return `${subject} request failed.`;
-}
-
-function normalizeSubagentBrowseError(
-  error: unknown,
-  operation: SubagentBrowseOperation
-): AcpSubagentBrowseError {
-  if (error instanceof AcpSubagentBrowseError) {
-    return error;
-  }
-  if (error instanceof z.ZodError) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      subagentBrowseMessage(operation, 'protocol'),
-      { cause: error }
-    );
-  }
-
-  const details = getAcpErrorLogDetails(error);
-  if (details.code === -32_602) {
-    return new AcpSubagentBrowseError(
-      'INVALID_INPUT',
-      subagentBrowseMessage(operation, 'invalid'),
-      { cause: error }
-    );
-  }
-  if (details.code === -32_002) {
-    return new AcpSubagentBrowseError('NOT_FOUND', subagentBrowseMessage(operation, 'not_found'), {
-      cause: error,
-    });
-  }
-  if (details.code === -32_601) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      'Sub-agent browsing is unavailable for this session.',
-      { cause: error }
-    );
-  }
-  if (details.code === -32_000) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      'Provider authentication is required for sub-agent browsing.',
-      { cause: error }
-    );
-  }
-  if (details.code === -32_603 || details.code === -32_600 || details.code === -32_700) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      subagentBrowseMessage(operation, 'protocol'),
-      { cause: error }
-    );
-  }
-  return new AcpSubagentBrowseError('INTERNAL_ERROR', subagentBrowseMessage(operation, 'failed'), {
-    cause: error,
-  });
-}
-
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly browseOnlySessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
+  private readonly subagentBrowser = new AcpSubagentBrowser();
   private readonly quiescence = new AcpRuntimeQuiescence({
     stopClient: (sessionId) => this.stopClient(sessionId),
   });
@@ -304,70 +148,21 @@ export class AcpRuntimeManager {
     return this.quiescence.stopAndQuiesce(sessionId);
   }
   getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
-    return this.getBrowseClient(sessionId)?.getSubagentBrowseCapability() ?? null;
+    return this.subagentBrowser.getCapability(this.getBrowseClient(sessionId));
   }
 
-  async listSubagents(
+  listSubagents(
     sessionId: string,
     input: Omit<SubagentListParams, 'sessionId'>
   ): Promise<SubagentListResult> {
-    const handle = this.requireSubagentBrowseHandle(sessionId);
-    const parsedParams = subagentListParamsSchema.safeParse({
-      ...input,
-      sessionId: handle.providerSessionId,
-    });
-    if (!parsedParams.success) {
-      throw new AcpSubagentBrowseError('INVALID_INPUT', subagentBrowseMessage('list', 'invalid'), {
-        cause: parsedParams.error,
-      });
-    }
-    try {
-      const response = await handle.connection.extMethod(SUBAGENTS_LIST_METHOD, parsedParams.data);
-      return subagentListResultSchema.parse(response);
-    } catch (error) {
-      throw normalizeSubagentBrowseError(error, 'list');
-    }
+    return this.subagentBrowser.listSubagents(this.getBrowseClient(sessionId), input);
   }
 
-  async readSubagentTranscript(
+  readSubagentTranscript(
     sessionId: string,
     input: Omit<SubagentReadParams, 'sessionId'>
   ): Promise<SubagentReadResult> {
-    const handle = this.requireSubagentBrowseHandle(sessionId);
-    const parsedParams = subagentReadParamsSchema.safeParse({
-      ...input,
-      sessionId: handle.providerSessionId,
-    });
-    if (!parsedParams.success) {
-      throw new AcpSubagentBrowseError(
-        'INVALID_INPUT',
-        subagentBrowseMessage('transcript', 'invalid'),
-        { cause: parsedParams.error }
-      );
-    }
-    try {
-      const response = await handle.connection.extMethod(SUBAGENTS_READ_METHOD, parsedParams.data);
-      return subagentReadResultSchema.parse(response);
-    } catch (error) {
-      throw normalizeSubagentBrowseError(error, 'transcript');
-    }
-  }
-
-  private requireSubagentBrowseHandle(sessionId: string): AcpProcessHandle {
-    const handle = this.getBrowseClient(sessionId);
-    if (!handle) {
-      throw new AcpSubagentBrowseError(
-        'PRECONDITION_FAILED',
-        'Sub-agent browsing requires a running parent session.'
-      );
-    }
-    if (!handle.getSubagentBrowseCapability()) {
-      throw new AcpSubagentBrowseError(
-        'PRECONDITION_FAILED',
-        'Sub-agent browsing is unavailable for this session.'
-      );
-    }
-    return handle;
+    return this.subagentBrowser.readSubagentTranscript(this.getBrowseClient(sessionId), input);
   }
 
   async getOrCreateClient(
