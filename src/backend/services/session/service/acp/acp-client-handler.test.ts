@@ -376,3 +376,184 @@ describe('AcpClientHandler', () => {
     });
   });
 });
+
+describe('AcpClientHandler', () => {
+  it('AcpEventCallback is a discriminated ACP runtime event union', () => {
+    const onEvent: AcpEventCallback = (_sessionId, event) => {
+      if (event.type === 'acp_session_update') {
+        expect(event.update.sessionUpdate).toBe('agent_message_chunk');
+        return;
+      }
+
+      if (event.type === 'acp_permission_request') {
+        expect(event.params.toolCall.toolCallId).toBe('tc-1');
+        return;
+      }
+
+      expect(event.subagentId).toBe('child-1');
+      expect(event.change).toBe('updated');
+    };
+
+    onEvent('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
+    });
+
+    onEvent('test-session', {
+      type: 'acp_permission_request',
+      requestId: 'req-1',
+      params: {
+        sessionId: 'provider-session-1',
+        toolCall: { toolCallId: 'tc-1', title: 'Write file' },
+        options: [{ optionId: 'allow-1', kind: 'allow_once', name: 'Allow once' }],
+      },
+    });
+
+    onEvent('test-session', {
+      type: 'acp_subagents_changed',
+      subagentId: 'child-1',
+      change: 'updated',
+    });
+  });
+
+  it('sessionUpdate emits logs through onLog callback', async () => {
+    const onEvent = vi.fn();
+    const onLog = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent, undefined, onLog);
+
+    await handler.sessionUpdate({
+      sessionId: 'provider-session-1',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
+    });
+
+    expect(onLog).toHaveBeenCalledWith('test-session', {
+      eventType: 'acp_session_update',
+      sessionUpdate: 'agent_message_chunk',
+      data: expect.objectContaining({ sessionUpdate: 'agent_message_chunk' }),
+    });
+  });
+
+  it('sessionUpdate forwards all events as acp_session_update wrapper', async () => {
+    const onEvent = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent);
+
+    await handler.sessionUpdate({
+      sessionId: 'provider-session-1',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
+    });
+
+    expect(onEvent).toHaveBeenCalledWith('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
+    });
+  });
+
+  it('sessionUpdate forwards tool_call events as acp_session_update wrapper', async () => {
+    const onEvent = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent);
+
+    await handler.sessionUpdate({
+      sessionId: 'provider-session-1',
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-1',
+        title: 'Read file',
+        kind: 'read',
+        status: 'in_progress',
+      },
+    });
+
+    expect(onEvent).toHaveBeenCalledWith('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-1',
+        title: 'Read file',
+        kind: 'read',
+        status: 'in_progress',
+      },
+    });
+  });
+
+  it('sessionUpdate forwards all event types including previously deferred ones', async () => {
+    const onEvent = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent);
+
+    await handler.sessionUpdate({
+      sessionId: 'provider-session-1',
+      update: {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: 'thinking...' },
+      },
+    });
+
+    expect(onEvent).toHaveBeenCalledWith('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: 'thinking...' },
+      },
+    });
+  });
+
+  it('requestPermission fails closed by default when no bridge exists', async () => {
+    const onEvent = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent);
+
+    const result = await handler.requestPermission({
+      sessionId: 'provider-session-1',
+      toolCall: { toolCallId: 'tc-1', title: 'Write file' },
+      options: [
+        { optionId: 'reject-1', kind: 'reject_once', name: 'Deny' },
+        { optionId: 'allow-1', kind: 'allow_always', name: 'Allow Always' },
+        { optionId: 'allow-2', kind: 'allow_once', name: 'Allow Once' },
+      ],
+    });
+
+    expect(result).toEqual({
+      outcome: {
+        outcome: 'selected',
+        optionId: 'reject-1',
+      },
+    });
+  });
+
+  it('requestPermission selects a reject option when no bridge exists', async () => {
+    const onEvent = vi.fn();
+
+    const handler = new AcpClientHandler('test-session', onEvent);
+
+    const result = await handler.requestPermission({
+      sessionId: 'provider-session-1',
+      toolCall: { toolCallId: 'tc-1', title: 'Write file' },
+      options: [
+        { optionId: 'reject-1', kind: 'reject_once', name: 'Deny' },
+        { optionId: 'reject-2', kind: 'reject_always', name: 'Deny Always' },
+      ],
+    });
+
+    expect(result).toEqual({
+      outcome: {
+        outcome: 'selected',
+        optionId: 'reject-1',
+      },
+    });
+  });
+});

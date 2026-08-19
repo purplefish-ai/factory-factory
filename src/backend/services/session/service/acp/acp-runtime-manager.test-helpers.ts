@@ -1,5 +1,85 @@
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import type { ClientSideConnection } from '@agentclientprotocol/sdk';
+import { vi } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
+import { AcpProcessHandle } from './acp-process-handle';
+import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import type { AcpClientOptions } from './types';
+
+function unsafeCoerce<T>(value: unknown): T {
+  return value as T;
+}
+
+export type MockChildProcess = EventEmitter & {
+  pid: number;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  killed: boolean;
+  kill: ReturnType<typeof vi.fn>;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  stdin: PassThrough;
+};
+
+export function createMockChildProcess(): MockChildProcess {
+  const child = new EventEmitter() as MockChildProcess;
+  child.pid = 12_345;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.killed = false;
+  child.kill = vi.fn((signal?: string) => {
+    if (signal) {
+      child.killed = true;
+    }
+    if (signal === 'SIGKILL') {
+      child.exitCode = 137;
+      child.emit('exit', 137, 'SIGKILL');
+    }
+    return true;
+  });
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  return child;
+}
+
+export function exitChildAfterSigterm(child: MockChildProcess): void {
+  child.kill = vi.fn((signal?: string) => {
+    if (signal === 'SIGTERM') {
+      queueMicrotask(() => {
+        child.signalCode = 'SIGTERM';
+        child.emit('exit', null, 'SIGTERM');
+      });
+    }
+    return true;
+  });
+}
+
+export function createTestProcessHandle(params?: {
+  provider?: string;
+  providerSessionId?: string;
+  agentCapabilities?: Record<string, unknown>;
+  connection?: Partial<ClientSideConnection>;
+}): AcpProcessHandle {
+  return new AcpProcessHandle({
+    connection: unsafeCoerce<ClientSideConnection>(params?.connection ?? {}),
+    child: unsafeCoerce<ChildProcess>(createMockChildProcess()),
+    provider: params?.provider ?? 'CODEX',
+    providerSessionId: params?.providerSessionId ?? 'provider-session-1',
+    agentCapabilities: params?.agentCapabilities ?? {},
+  });
+}
+
+export function defaultHandlers(): AcpRuntimeEventHandlers {
+  return {
+    onSessionId: vi.fn().mockResolvedValue(undefined),
+    onExit: vi.fn().mockResolvedValue(undefined),
+    onError: vi.fn(),
+    onAcpEvent: vi.fn(),
+  };
+}
 
 export function defaultOptions(): AcpClientOptions {
   return {
