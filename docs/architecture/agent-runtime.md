@@ -35,10 +35,12 @@ drift with `pnpm check:codex-schema`.
 
 ## Session lifecycle ownership
 
-`SessionLifecycleGate` owns domain startup/stop eligibility. `AcpRuntimeManager`
-owns subprocess handles, pending creation, incarnation filtering, and
-quiescence. Lifecycle work has one owner per responsibility; transport handlers
-consume the composed services and never wire lifecycle dependencies.
+`SessionLifecycleGate` owns domain startup/stop eligibility.
+`AcpRuntimeSupervisor` is the sole mutable ACP runtime authority: it owns
+subprocess handles, pending creation, incarnation filtering, exits, stops, and
+quiescence. `AcpRuntimeManager` is the stable compatibility facade over the
+supervisor and stateless ACP collaborators. Lifecycle coordinators continue to
+own durable reconciliation and never manipulate runtime registries directly.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

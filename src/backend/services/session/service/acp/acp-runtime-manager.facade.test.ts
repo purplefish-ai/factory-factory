@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  type AcpRuntimeManager,
+  AcpRuntimeManager,
   createManagerTestHarness,
   setupSuccessfulSpawn,
 } from './acp-runtime-manager.test-harness';
@@ -10,6 +10,41 @@ import {
   defaultHandlers,
   defaultOptions,
 } from './acp-runtime-manager.test-helpers';
+
+type ExpectedRuntimeSurface = Pick<
+  AcpRuntimeManager,
+  | 'setAcpStartupTimeoutMs'
+  | 'configureEnvironment'
+  | 'setOnClientCreated'
+  | 'isStopInProgress'
+  | 'getClient'
+  | 'getBrowseClient'
+  | 'isBrowseOnlySession'
+  | 'hasClientCreationOperation'
+  | 'getPendingClient'
+  | 'getOrCreateClient'
+  | 'runClientCreationOperation'
+  | 'stopAndQuiesce'
+  | 'beginShutdown'
+  | 'stopClient'
+  | 'stopAllClients'
+  | 'sendPrompt'
+  | 'cancelPrompt'
+  | 'setConfigOption'
+  | 'setSessionMode'
+  | 'setSessionModel'
+  | 'getSubagentBrowseCapability'
+  | 'listSubagents'
+  | 'readSubagentTranscript'
+  | 'getAllClients'
+  | 'isSessionRunning'
+  | 'isSessionWorking'
+  | 'isAnySessionWorking'
+  | 'getAllActiveProcesses'
+>;
+
+const acceptsExpectedRuntimeSurface = (_runtime: ExpectedRuntimeSurface): void => undefined;
+acceptsExpectedRuntimeSurface(new AcpRuntimeManager());
 
 describe('AcpRuntimeManager', () => {
   let manager: AcpRuntimeManager;
@@ -29,6 +64,19 @@ describe('AcpRuntimeManager', () => {
       expect(source).not.toContain(forbidden);
     }
     expect(source.match(/new AcpRuntimeSupervisor\(/g)).toHaveLength(1);
+  });
+
+  it('does not export internal runtime collaborators from the ACP barrel', () => {
+    const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    for (const internalCollaborator of [
+      'AcpRuntimeSupervisor',
+      'AcpClientFactory',
+      'AcpPromptController',
+      'AcpRuntimeConfigController',
+      'AcpSubagentBrowser',
+    ]) {
+      expect(source).not.toContain(internalCollaborator);
+    }
   });
 
   describe('session status methods', () => {
