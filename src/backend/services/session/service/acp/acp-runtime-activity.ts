@@ -11,7 +11,6 @@ export class AcpRuntimeActivity {
   recordPurpose(sessionId: string, purpose: AcpRuntimePurpose | undefined): void {
     if (purpose === 'browse') {
       this.browseOnlySessions.add(sessionId);
-      this.activeTaskSessions.delete(sessionId);
       return;
     }
     this.browseOnlySessions.delete(sessionId);

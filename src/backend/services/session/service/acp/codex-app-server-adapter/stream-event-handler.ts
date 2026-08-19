@@ -83,6 +83,8 @@ type StreamEventHandlerDeps = {
 };
 
 export class CodexStreamEventHandler {
+  private readonly goalNotificationVersionByThreadId = new Map<string, number>();
+
   constructor(private readonly deps: StreamEventHandlerDeps) {}
 
   async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
@@ -100,7 +102,22 @@ export class CodexStreamEventHandler {
   }
 
   async refreshTaskStatus(session: AdapterSession): Promise<void> {
-    const raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
+    const notificationVersion = this.goalNotificationVersionByThreadId.get(session.threadId) ?? 0;
+    let raw: unknown;
+    try {
+      raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
+    } catch (error) {
+      this.deps.reportShapeDrift('thread_goal_get_failed', {
+        threadId: session.threadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    if (
+      (this.goalNotificationVersionByThreadId.get(session.threadId) ?? 0) !== notificationVersion
+    ) {
+      return;
+    }
     const response = threadGoalGetResponseSchema.safeParse(raw);
     if (!response.success) {
       this.deps.reportShapeDrift('malformed_thread_goal_get', {
@@ -266,6 +283,9 @@ export class CodexStreamEventHandler {
       notification.method === 'thread/goal/updated' ||
       notification.method === 'thread/goal/cleared'
     ) {
+      const notificationVersion =
+        (this.goalNotificationVersionByThreadId.get(notification.params.threadId) ?? 0) + 1;
+      this.goalNotificationVersionByThreadId.set(notification.params.threadId, notificationVersion);
       const sessionId = this.deps.sessionIdByThreadId.get(notification.params.threadId);
       if (sessionId) {
         await this.notifyTaskStatus(
@@ -273,6 +293,8 @@ export class CodexStreamEventHandler {
           notification.method === 'thread/goal/updated' &&
             notification.params.goal.status === 'active'
         );
+      } else {
+        await this.deps.handleSubagentTranscriptActivity?.(notification.params.threadId);
       }
       return true;
     }
@@ -293,7 +315,14 @@ export class CodexStreamEventHandler {
       return;
     }
     const params = taskStatusChangedParamsSchema.parse({ sessionId, active });
-    await this.deps.extNotification(TASK_STATUS_CHANGED_METHOD, params);
+    try {
+      await this.deps.extNotification(TASK_STATUS_CHANGED_METHOD, params);
+    } catch (error) {
+      this.deps.reportShapeDrift('task_status_notification_failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async replayThreadHistoryItem(

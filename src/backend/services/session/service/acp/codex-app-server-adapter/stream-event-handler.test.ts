@@ -126,6 +126,161 @@ describe('stream-event-handler', () => {
     });
   });
 
+  it('ignores a goal snapshot superseded by a live goal notification', async () => {
+    const session = createSession();
+    let resolveGoal: ((value: unknown) => void) | undefined;
+    const request = vi.fn();
+    request.mockReturnValue(
+      new Promise<unknown>((resolve) => {
+        resolveGoal = resolve;
+      })
+    );
+    const extNotification = vi.fn(async () => undefined);
+    const handler = new CodexStreamEventHandler({
+      codex: { request },
+      sessionIdByThreadId: new Map([[session.threadId, session.sessionId]]),
+      sessions: new Map([[session.sessionId, session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      extNotification,
+    });
+
+    const refresh = handler.refreshTaskStatus(session);
+    await Promise.resolve();
+    await handler.handleCodexNotification({
+      method: 'thread/goal/cleared',
+      params: { threadId: session.threadId },
+    });
+    resolveGoal?.({
+      goal: {
+        threadId: session.threadId,
+        objective: 'Stale objective',
+        status: 'active',
+        tokenBudget: null,
+        tokensUsed: 100,
+        timeUsedSeconds: 5,
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    });
+    await refresh;
+
+    expect(extNotification).toHaveBeenCalledOnce();
+    expect(extNotification).toHaveBeenCalledWith('factoryfactory.ai/task/status-changed', {
+      sessionId: session.sessionId,
+      active: false,
+    });
+  });
+
+  it('does not fail goal refresh when task status delivery is unavailable', async () => {
+    const session = createSession();
+    const reportShapeDrift = vi.fn();
+    const request = vi.fn();
+    request.mockResolvedValue({ goal: null });
+    const handler = new CodexStreamEventHandler({
+      codex: { request },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift,
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      extNotification: vi.fn(() => Promise.reject(new Error('connection closed'))),
+    });
+
+    await expect(handler.refreshTaskStatus(session)).resolves.toBeUndefined();
+    expect(reportShapeDrift).toHaveBeenCalledWith('task_status_notification_failed', {
+      sessionId: session.sessionId,
+      error: 'connection closed',
+    });
+  });
+
+  it('does not fail session recovery when the optional goal request is unavailable', async () => {
+    const session = createSession();
+    const request = vi.fn();
+    request.mockRejectedValue(new Error('thread/goal/get unavailable'));
+    const reportShapeDrift = vi.fn();
+    const handler = new CodexStreamEventHandler({
+      codex: { request },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift,
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await expect(handler.refreshTaskStatus(session)).resolves.toBeUndefined();
+    expect(reportShapeDrift).toHaveBeenCalledWith('thread_goal_get_failed', {
+      threadId: session.threadId,
+      error: 'thread/goal/get unavailable',
+    });
+  });
+
+  it('invalidates a sub-agent transcript when its goal changes', async () => {
+    const handleSubagentTranscriptActivity = vi.fn(async () => undefined);
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map(),
+      sessions: new Map(),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift: vi.fn(),
+      buildToolCallState: vi.fn(() => null),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+      handleSubagentTranscriptActivity,
+    });
+
+    await handler.handleCodexNotification({
+      method: 'thread/goal/updated',
+      params: {
+        threadId: 'subagent-thread-1',
+        turnId: null,
+        goal: {
+          threadId: 'subagent-thread-1',
+          objective: 'Inspect the runtime',
+          status: 'active',
+          tokenBudget: null,
+          tokensUsed: 10,
+          timeUsedSeconds: 1,
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      },
+    });
+
+    expect(handleSubagentTranscriptActivity).toHaveBeenCalledWith('subagent-thread-1');
+  });
+
   it('projects replay turns into updates without emitting them', async () => {
     const session = createSession();
     const emitSessionUpdate = vi.fn(async () => undefined);

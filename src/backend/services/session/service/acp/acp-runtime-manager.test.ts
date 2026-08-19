@@ -1,6 +1,4 @@
-import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
-import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
@@ -18,6 +16,7 @@ const {
   mockExtMethod,
   mockNdJsonStream,
   mockLoggerWarn,
+  mockAcpClients,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockInitialize: vi.fn(),
@@ -33,6 +32,7 @@ const {
     .fn()
     .mockReturnValue({ writable: {}, readable: { pipeThrough: () => ({}) } }),
   mockLoggerWarn: vi.fn(),
+  mockAcpClients: [] as unknown[],
 }));
 
 // ---- Mocks ----
@@ -56,6 +56,7 @@ vi.mock('@agentclientprotocol/sdk', () => {
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
       this.toClient = toClient;
+      mockAcpClients.push(toClient({}));
     }
   }
 
@@ -86,9 +87,11 @@ import { AcpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
 import {
   codexOptions,
   createDeferred,
+  createMockChildProcess,
   defaultConfigOptions,
   defaultContext,
   defaultOptions,
+  exitChildAfterSigterm,
   subagentBrowseCapabilities,
 } from './acp-runtime-manager.test-helpers';
 
@@ -101,59 +104,6 @@ describe('PromptTimeoutError', () => {
     expect((error as PromptTimeoutError & { timeoutMs?: number }).timeoutMs).toBe(300_000);
   });
 });
-
-function createMockChildProcess(): EventEmitter & {
-  pid: number;
-  exitCode: number | null;
-  signalCode: NodeJS.Signals | null;
-  killed: boolean;
-  kill: ReturnType<typeof vi.fn>;
-  stdout: PassThrough;
-  stderr: PassThrough;
-  stdin: PassThrough;
-} {
-  const child = new EventEmitter() as EventEmitter & {
-    pid: number;
-    exitCode: number | null;
-    signalCode: NodeJS.Signals | null;
-    killed: boolean;
-    kill: ReturnType<typeof vi.fn>;
-    stdout: PassThrough;
-    stderr: PassThrough;
-    stdin: PassThrough;
-  };
-  child.pid = 12_345;
-  child.exitCode = null;
-  child.signalCode = null;
-  child.killed = false;
-  child.kill = vi.fn((signal?: string) => {
-    if (signal) {
-      // Match Node ChildProcess semantics: successful signal dispatch flips .killed
-      child.killed = true;
-    }
-    if (signal === 'SIGKILL') {
-      child.exitCode = 137;
-      child.emit('exit', 137, 'SIGKILL');
-    }
-    return true;
-  });
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  child.stdin = new PassThrough();
-  return child;
-}
-
-function exitChildAfterSigterm(child: ReturnType<typeof createMockChildProcess>): void {
-  child.kill = vi.fn((signal?: string) => {
-    if (signal === 'SIGTERM') {
-      queueMicrotask(() => {
-        child.signalCode = 'SIGTERM';
-        child.emit('exit', null, 'SIGTERM');
-      });
-    }
-    return true;
-  });
-}
 
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
@@ -193,6 +143,7 @@ describe('AcpRuntimeManager', () => {
   let manager: AcpRuntimeManager;
 
   beforeEach(() => {
+    mockAcpClients.length = 0;
     manager = new AcpRuntimeManager();
   });
 
@@ -2504,6 +2455,38 @@ describe('AcpRuntimeManager', () => {
       expect(manager.isSessionWorking('session-1')).toBe(false);
       handle.isPromptInFlight = true;
       expect(manager.isSessionWorking('session-1')).toBe(true);
+    });
+
+    it('ignores task status events from a replaced runtime', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      exitChildAfterSigterm(firstChild);
+      const firstHandlers = defaultHandlers();
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        firstHandlers,
+        defaultContext()
+      );
+      const staleClient = mockAcpClients[0] as AcpClientHandler;
+      await manager.stopClient('session-1');
+
+      const replacementChild = setupSuccessfulSpawn();
+      exitChildAfterSigterm(replacementChild);
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await staleClient.extNotification('factoryfactory.ai/task/status-changed', {
+        sessionId: 'provider-session-123',
+        active: true,
+      });
+
+      expect(manager.isSessionWorking('session-1')).toBe(false);
+      expect(firstHandlers.onAcpEvent).not.toHaveBeenCalled();
+      await manager.stopClient('session-1');
     });
 
     it('isAnySessionWorking checks multiple sessions', async () => {

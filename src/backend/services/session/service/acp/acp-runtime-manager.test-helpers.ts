@@ -1,5 +1,53 @@
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { vi } from 'vitest';
 import { SUBAGENTS_CAPABILITY_META_KEY } from '@/shared/acp-protocol/subagents';
 import type { AcpClientOptions } from './types';
+
+export type MockChildProcess = EventEmitter & {
+  pid: number;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  killed: boolean;
+  kill: ReturnType<typeof vi.fn>;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  stdin: PassThrough;
+};
+
+export function createMockChildProcess(): MockChildProcess {
+  const child = new EventEmitter() as MockChildProcess;
+  child.pid = 12_345;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.killed = false;
+  child.kill = vi.fn((signal?: string) => {
+    if (signal) {
+      child.killed = true;
+    }
+    if (signal === 'SIGKILL') {
+      child.exitCode = 137;
+      child.emit('exit', 137, 'SIGKILL');
+    }
+    return true;
+  });
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  return child;
+}
+
+export function exitChildAfterSigterm(child: MockChildProcess): void {
+  child.kill = vi.fn((signal?: string) => {
+    if (signal === 'SIGTERM') {
+      queueMicrotask(() => {
+        child.signalCode = 'SIGTERM';
+        child.emit('exit', null, 'SIGTERM');
+      });
+    }
+    return true;
+  });
+}
 
 export function defaultOptions(): AcpClientOptions {
   return {

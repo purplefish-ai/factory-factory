@@ -548,7 +548,6 @@ export class AcpRuntimeManager {
       });
     });
 
-    // Convert Node.js streams to Web Streams for ndJsonStream
     // stdout/stdin are guaranteed to be set because we spawned with stdio: ['pipe', 'pipe', 'pipe']
     if (!(child.stdout && child.stdin)) {
       throw new Error('ACP subprocess stdio streams not available');
@@ -564,9 +563,12 @@ export class AcpRuntimeManager {
       readable: createNormalizedAcpReadableStream(stream.readable),
     };
 
-    // Create event callback that routes to handlers
     const acpEventHandler = handlers.onAcpEvent;
     const onEvent = (sid: string, event: AcpRuntimeEvent) => {
+      if (runtime.installed && this.sessions.get(sid)?.child !== child) {
+        logger.debug('Ignoring ACP event from stale runtime', { sessionId: sid });
+        return;
+      }
       this.activity.recordEvent(sid, event);
       if (acpEventHandler) {
         acpEventHandler(sid, event);
@@ -575,10 +577,8 @@ export class AcpRuntimeManager {
       logger.debug('ACP event received but no handler registered', { sessionId });
     };
 
-    // Resolve auto-approve policy from user's configured permission preset
     const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
 
-    // Create connection with client handler (inject permission bridge from handlers)
     const connection = new ClientSideConnection(
       (_agent) =>
         new AcpClientHandler(

@@ -146,7 +146,7 @@ export class AcpEventProcessor {
     event: Exclude<AcpRuntimeEvent, { type: 'acp_session_update' }>
   ): void {
     if (event.type === 'acp_task_status_changed') {
-      if (this.runtimeManager.isSessionWorking(sid)) {
+      if (event.active || this.runtimeManager.isSessionWorking(sid)) {
         this.sessionDomainService.markRunning(sid);
       } else {
         this.sessionDomainService.markIdle(sid, 'alive');
