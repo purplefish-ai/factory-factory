@@ -27,6 +27,7 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
+import { AcpRuntimeActivity } from './acp-runtime-activity';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
 import type {
   AcpRuntimeEvent,
@@ -226,7 +227,7 @@ function normalizeSubagentBrowseError(
 
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
-  private readonly browseOnlySessions = new Set<string>();
+  private readonly activity = new AcpRuntimeActivity();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
@@ -269,7 +270,7 @@ export class AcpRuntimeManager {
     return this.stoppingInProgress.has(sessionId);
   }
   getClient(sessionId: string): AcpProcessHandle | undefined {
-    return this.browseOnlySessions.has(sessionId) ? undefined : this.getBrowseClient(sessionId);
+    return this.activity.isBrowseOnly(sessionId) ? undefined : this.getBrowseClient(sessionId);
   }
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
@@ -280,7 +281,7 @@ export class AcpRuntimeManager {
     const fencePurpose = this.quiescence.getTrackedSessionPurpose(sessionId);
     return (
       (hasRuntime || fencePurpose !== null) &&
-      (!hasRuntime || this.browseOnlySessions.has(sessionId)) &&
+      (!hasRuntime || this.activity.isBrowseOnly(sessionId)) &&
       (fencePurpose === null || fencePurpose === 'browse')
     );
   }
@@ -416,7 +417,7 @@ export class AcpRuntimeManager {
         }
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
-        this.recordClientPurpose(sessionId, options);
+        this.activity.recordPurpose(sessionId, options.purpose);
         const createPromise = this.createClient(sessionId, options, handlers, context, {
           incarnationId: randomUUID(),
           purpose: options.purpose ?? 'active',
@@ -428,7 +429,7 @@ export class AcpRuntimeManager {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
-          this.clearBrowseOnlyPurposeIfUnused(sessionId);
+          this.clearActivityIfUnused(sessionId);
         }
       } finally {
         const refCount = this.lockRefCounts.get(sessionId) ?? 1;
@@ -449,7 +450,7 @@ export class AcpRuntimeManager {
     handle: AcpProcessHandle
   ): void {
     if (options.purpose !== 'browse') {
-      this.browseOnlySessions.delete(sessionId);
+      this.activity.promote(sessionId);
       const metadata = this.runtimeMetadata.get(handle.child);
       if (metadata) {
         metadata.purpose = 'active';
@@ -457,18 +458,9 @@ export class AcpRuntimeManager {
     }
   }
 
-  private recordClientPurpose(sessionId: string, options: AcpClientOptions): void {
-    if (options.purpose === 'browse') {
-      this.browseOnlySessions.add(sessionId);
-      return;
-    }
-    this.browseOnlySessions.delete(sessionId);
-  }
-
-  private clearBrowseOnlyPurposeIfUnused(sessionId: string): void {
-    if (!(this.sessions.has(sessionId) || this.pendingCreation.has(sessionId))) {
-      this.browseOnlySessions.delete(sessionId);
-    }
+  private clearActivityIfUnused(sessionId: string): void {
+    const isInUse = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
+    this.activity.clearIfUnused(sessionId, isInUse);
   }
 
   private async createClient(
@@ -574,11 +566,14 @@ export class AcpRuntimeManager {
 
     // Create event callback that routes to handlers
     const acpEventHandler = handlers.onAcpEvent;
-    const onEvent = acpEventHandler
-      ? (sid: string, event: AcpRuntimeEvent) => acpEventHandler(sid, event)
-      : (_sid: string, _event: AcpRuntimeEvent) => {
-          logger.debug('ACP event received but no handler registered', { sessionId });
-        };
+    const onEvent = (sid: string, event: AcpRuntimeEvent) => {
+      this.activity.recordEvent(sid, event);
+      if (acpEventHandler) {
+        acpEventHandler(sid, event);
+        return;
+      }
+      logger.debug('ACP event received but no handler registered', { sessionId });
+    };
 
     // Resolve auto-approve policy from user's configured permission preset
     const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
@@ -680,7 +675,7 @@ export class AcpRuntimeManager {
     // Store in sessions map
     this.sessions.set(sessionId, handle);
     runtime.installed = true;
-    this.recordClientPurpose(sessionId, options);
+    this.activity.recordPurpose(sessionId, options.purpose);
 
     this.wireChildExitHandler(sessionId, child, handlers, runtime);
     await this.notifyClientCreated(sessionId, handle, context, handlers);
@@ -845,7 +840,7 @@ export class AcpRuntimeManager {
     child.once('exit', (code) => {
       const classification = this.classifyChildExit(sessionId, child, code);
       if (classification === null) {
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         return;
       }
 
@@ -862,7 +857,7 @@ export class AcpRuntimeManager {
         if (this.exitHandling.get(sessionId) === exitHandling) {
           this.exitHandling.delete(sessionId);
         }
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         releaseExitHandling();
       });
     });
@@ -880,6 +875,7 @@ export class AcpRuntimeManager {
 
     if (current?.child === child) {
       this.sessions.delete(sessionId);
+      this.activity.clear(sessionId);
     } else if (current) {
       logger.debug('Skipping exit handler - stale ACP process exited', {
         sessionId,
@@ -1117,7 +1113,7 @@ export class AcpRuntimeManager {
       const current = this.sessions.get(sessionId);
       if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
-        this.browseOnlySessions.delete(sessionId);
+        this.activity.clear(sessionId);
       }
     }
   }
@@ -1405,7 +1401,10 @@ export class AcpRuntimeManager {
 
   isSessionWorking(sessionId: string): boolean {
     const handle = this.sessions.get(sessionId);
-    return handle?.isPromptInFlight ?? false;
+    if (!handle) {
+      return false;
+    }
+    return this.activity.isWorking(sessionId, handle.isPromptInFlight);
   }
 
   isAnySessionWorking(sessionIds: string[]): boolean {

@@ -52,6 +52,26 @@ function makeDeps(): AcpEventProcessorDependencies {
 }
 
 describe('AcpEventProcessor sub-agent invalidations', () => {
+  it('publishes runtime changes when task activity starts and stops', () => {
+    const deps = makeDeps();
+    const isSessionWorking = deps.runtimeManager.isSessionWorking as ReturnType<typeof vi.fn>;
+    isSessionWorking.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const markRunning = vi.fn();
+    const markIdle = vi.fn();
+    Object.assign(deps.sessionDomainService, { markRunning, markIdle });
+    const processor = new AcpEventProcessor(deps);
+    const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
+    if (!onAcpEvent) {
+      throw new Error('Expected an ACP runtime event handler');
+    }
+
+    onAcpEvent('db-session-1', { type: 'acp_task_status_changed', active: true });
+    onAcpEvent('db-session-1', { type: 'acp_task_status_changed', active: false });
+
+    expect(markRunning).toHaveBeenCalledWith('db-session-1');
+    expect(markIdle).toHaveBeenCalledWith('db-session-1', 'alive');
+  });
+
   it('publishes one ephemeral session delta without creating transcript state', () => {
     const deps = makeDeps();
     const processor = new AcpEventProcessor(deps);

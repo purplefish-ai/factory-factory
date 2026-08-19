@@ -256,6 +256,33 @@ describe('codex-zod', () => {
     });
   });
 
+  it('parses task goal updates and clears', () => {
+    const updated = knownCodexNotificationSchema.parse({
+      method: 'thread/goal/updated',
+      params: {
+        threadId: 'thread_1',
+        turnId: null,
+        goal: {
+          threadId: 'thread_1',
+          objective: 'Finish the migration',
+          status: 'active',
+          tokenBudget: null,
+          tokensUsed: 100,
+          timeUsedSeconds: 5,
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      },
+    });
+    const cleared = knownCodexNotificationSchema.parse({
+      method: 'thread/goal/cleared',
+      params: { threadId: 'thread_1' },
+    });
+
+    expect(updated.method).toBe('thread/goal/updated');
+    expect(cleared.method).toBe('thread/goal/cleared');
+  });
+
   it('parses sub-agent activity items while preserving unknown fields', () => {
     const parsed = subAgentActivityItemSchema.parse({
       type: 'subAgentActivity',

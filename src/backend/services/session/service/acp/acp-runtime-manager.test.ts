@@ -2536,8 +2536,8 @@ describe('AcpClientHandler', () => {
         return;
       }
 
-      expect(event.subagentId).toBe('child-1');
-      expect(event.change).toBe('updated');
+      expect('subagentId' in event && event.subagentId).toBe('child-1');
+      expect('change' in event && event.change).toBe('updated');
     };
 
     onEvent('test-session', {

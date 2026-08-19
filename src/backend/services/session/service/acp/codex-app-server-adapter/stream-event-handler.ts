@@ -21,8 +21,10 @@ import {
   isKnownCodexTurnStatus,
   knownCodexNotificationSchema,
   type ThreadReadTurn,
+  threadGoalGetResponseSchema,
   threadReadResponseSchema,
 } from './codex-zod';
+import { TASK_STATUS_CHANGED_METHOD, taskStatusChangedParamsSchema } from './task-status-protocol';
 
 type ThreadReadItem = ReturnType<
   typeof threadReadResponseSchema.parse
@@ -32,6 +34,8 @@ type CodexNotificationPayload = {
   method: string;
   params?: unknown;
 };
+
+type KnownCodexNotification = ReturnType<typeof knownCodexNotificationSchema.parse>;
 
 function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
   return meta ? { _meta: meta } : {};
@@ -75,6 +79,7 @@ type StreamEventHandlerDeps = {
   ) => Promise<void>;
   handleSubagentStatusChanged?: (subagentId: string, runtimeType: string) => Promise<void>;
   handleSubagentTranscriptActivity?: (subagentId: string) => Promise<void>;
+  extNotification?: (method: string, params: Record<string, unknown>) => Promise<void>;
 };
 
 export class CodexStreamEventHandler {
@@ -92,6 +97,18 @@ export class CodexStreamEventHandler {
     for (const update of updates) {
       await this.deps.emitSessionUpdate(sessionId, update);
     }
+  }
+
+  async refreshTaskStatus(session: AdapterSession): Promise<void> {
+    const raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
+    const response = threadGoalGetResponseSchema.safeParse(raw);
+    if (!response.success) {
+      this.deps.reportShapeDrift('malformed_thread_goal_get', {
+        issues: response.error.issues.slice(0, 3).map((issue) => issue.message),
+      });
+      return;
+    }
+    await this.notifyTaskStatus(session.sessionId, response.data.goal?.status === 'active');
   }
 
   async projectThreadTurns(
@@ -132,11 +149,7 @@ export class CodexStreamEventHandler {
       return;
     }
 
-    if (typedNotification.method === 'thread/status/changed') {
-      await this.deps.handleSubagentStatusChanged?.(
-        typedNotification.params.threadId,
-        typedNotification.params.status.type
-      );
+    if (await this.handleThreadNotification(typedNotification)) {
       return;
     }
 
@@ -246,6 +259,41 @@ export class CodexStreamEventHandler {
         typedNotification.params.turn.error?.message
       );
     }
+  }
+
+  private async handleThreadNotification(notification: KnownCodexNotification): Promise<boolean> {
+    if (
+      notification.method === 'thread/goal/updated' ||
+      notification.method === 'thread/goal/cleared'
+    ) {
+      const sessionId = this.deps.sessionIdByThreadId.get(notification.params.threadId);
+      if (sessionId) {
+        await this.notifyTaskStatus(
+          sessionId,
+          notification.method === 'thread/goal/updated' &&
+            notification.params.goal.status === 'active'
+        );
+      }
+      return true;
+    }
+
+    if (notification.method === 'thread/status/changed') {
+      await this.deps.handleSubagentStatusChanged?.(
+        notification.params.threadId,
+        notification.params.status.type
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  private async notifyTaskStatus(sessionId: string, active: boolean): Promise<void> {
+    if (!this.deps.extNotification) {
+      return;
+    }
+    const params = taskStatusChangedParamsSchema.parse({ sessionId, active });
+    await this.deps.extNotification(TASK_STATUS_CHANGED_METHOD, params);
   }
 
   private async replayThreadHistoryItem(
