@@ -27,6 +27,7 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
+import { AcpRuntimeActivity } from './acp-runtime-activity';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
 import type {
   AcpRuntimeEvent,
@@ -34,6 +35,7 @@ import type {
   AcpRuntimePurpose,
 } from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
+import { AcpRuntimeIncarnations } from './acp-runtime-incarnations';
 import {
   type AcpClientCreationOperation,
   AcpRuntimeQuiescence,
@@ -226,7 +228,7 @@ function normalizeSubagentBrowseError(
 
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
-  private readonly browseOnlySessions = new Set<string>();
+  private readonly activity = new AcpRuntimeActivity();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
@@ -234,7 +236,7 @@ export class AcpRuntimeManager {
     stopClient: (sessionId) => this.stopClient(sessionId),
   });
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
-  private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
+  private readonly runtimeIncarnations = new AcpRuntimeIncarnations<AcpRuntimeMetadata>();
   private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
@@ -269,7 +271,7 @@ export class AcpRuntimeManager {
     return this.stoppingInProgress.has(sessionId);
   }
   getClient(sessionId: string): AcpProcessHandle | undefined {
-    return this.browseOnlySessions.has(sessionId) ? undefined : this.getBrowseClient(sessionId);
+    return this.activity.isBrowseOnly(sessionId) ? undefined : this.getBrowseClient(sessionId);
   }
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
     const handle = this.sessions.get(sessionId);
@@ -280,7 +282,7 @@ export class AcpRuntimeManager {
     const fencePurpose = this.quiescence.getTrackedSessionPurpose(sessionId);
     return (
       (hasRuntime || fencePurpose !== null) &&
-      (!hasRuntime || this.browseOnlySessions.has(sessionId)) &&
+      (!hasRuntime || this.activity.isBrowseOnly(sessionId)) &&
       (fencePurpose === null || fencePurpose === 'browse')
     );
   }
@@ -416,19 +418,21 @@ export class AcpRuntimeManager {
         }
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
-        this.recordClientPurpose(sessionId, options);
-        const createPromise = this.createClient(sessionId, options, handlers, context, {
+        this.activity.recordPurpose(sessionId, options.purpose);
+        const runtime = this.runtimeIncarnations.begin(sessionId, {
           incarnationId: randomUUID(),
           purpose: options.purpose ?? 'active',
           installed: false,
         });
+        const createPromise = this.createClient(sessionId, options, handlers, context, runtime);
         this.pendingCreation.set(sessionId, createPromise);
 
         try {
           return await createPromise;
         } finally {
           this.pendingCreation.delete(sessionId);
-          this.clearBrowseOnlyPurposeIfUnused(sessionId);
+          this.runtimeIncarnations.clearUninstalled(sessionId, runtime);
+          this.clearActivityIfUnused(sessionId);
         }
       } finally {
         const refCount = this.lockRefCounts.get(sessionId) ?? 1;
@@ -449,26 +453,17 @@ export class AcpRuntimeManager {
     handle: AcpProcessHandle
   ): void {
     if (options.purpose !== 'browse') {
-      this.browseOnlySessions.delete(sessionId);
-      const metadata = this.runtimeMetadata.get(handle.child);
+      this.activity.promote(sessionId);
+      const metadata = this.runtimeIncarnations.getForChild(handle.child);
       if (metadata) {
         metadata.purpose = 'active';
       }
     }
   }
 
-  private recordClientPurpose(sessionId: string, options: AcpClientOptions): void {
-    if (options.purpose === 'browse') {
-      this.browseOnlySessions.add(sessionId);
-      return;
-    }
-    this.browseOnlySessions.delete(sessionId);
-  }
-
-  private clearBrowseOnlyPurposeIfUnused(sessionId: string): void {
-    if (!(this.sessions.has(sessionId) || this.pendingCreation.has(sessionId))) {
-      this.browseOnlySessions.delete(sessionId);
-    }
+  private clearActivityIfUnused(sessionId: string): void {
+    const isInUse = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
+    this.activity.clearIfUnused(sessionId, isInUse);
   }
 
   private async createClient(
@@ -527,7 +522,7 @@ export class AcpRuntimeManager {
       env: spawnEnv,
       detached: false,
     });
-    this.runtimeMetadata.set(child, runtime);
+    this.runtimeIncarnations.recordChild(child, runtime);
 
     // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
     // client creation cleanly instead of surfacing as uncaught process errors.
@@ -539,16 +534,11 @@ export class AcpRuntimeManager {
     });
     const startupErrorSettled = startupError.catch(() => undefined);
 
-    wireAcpRuntimeErrorHandler(
-      child,
-      sessionId,
-      handlers,
-      runtime,
-      () => !runtime.installed || this.sessions.get(sessionId)?.child === child
+    wireAcpRuntimeErrorHandler(child, sessionId, handlers, runtime, () =>
+      this.runtimeIncarnations.isCurrent(sessionId, runtime)
     );
     await this.abortClientCreationIfStopping(child, sessionId);
 
-    // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
       handlers.onAcpLog?.(options.sessionId, {
         eventType: 'acp_stderr',
@@ -556,7 +546,6 @@ export class AcpRuntimeManager {
       });
     });
 
-    // Convert Node.js streams to Web Streams for ndJsonStream
     // stdout/stdin are guaranteed to be set because we spawned with stdio: ['pipe', 'pipe', 'pipe']
     if (!(child.stdout && child.stdin)) {
       throw new Error('ACP subprocess stdio streams not available');
@@ -572,18 +561,22 @@ export class AcpRuntimeManager {
       readable: createNormalizedAcpReadableStream(stream.readable),
     };
 
-    // Create event callback that routes to handlers
     const acpEventHandler = handlers.onAcpEvent;
-    const onEvent = acpEventHandler
-      ? (sid: string, event: AcpRuntimeEvent) => acpEventHandler(sid, event)
-      : (_sid: string, _event: AcpRuntimeEvent) => {
-          logger.debug('ACP event received but no handler registered', { sessionId });
-        };
+    const onEvent = (sid: string, event: AcpRuntimeEvent) => {
+      if (!this.runtimeIncarnations.isCurrent(sid, runtime)) {
+        logger.debug('Ignoring ACP event from stale runtime', { sessionId: sid });
+        return;
+      }
+      this.activity.recordEvent(sid, event);
+      if (acpEventHandler) {
+        acpEventHandler(sid, event);
+        return;
+      }
+      logger.debug('ACP event received but no handler registered', { sessionId });
+    };
 
-    // Resolve auto-approve policy from user's configured permission preset
     const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
 
-    // Create connection with client handler (inject permission bridge from handlers)
     const connection = new ClientSideConnection(
       (_agent) =>
         new AcpClientHandler(
@@ -608,7 +601,6 @@ export class AcpRuntimeManager {
     ]);
 
     try {
-      // Initialize handshake
       initResult = await Promise.race([
         withTimeout({
           promise: connection.initialize({
@@ -634,7 +626,6 @@ export class AcpRuntimeManager {
         agentCapabilities: initResult.agentCapabilities,
       });
 
-      // Create or resume provider session
       const agentCapabilities = initResult.agentCapabilities ?? {};
       sessionInfo = await Promise.race([
         withTimeout({
@@ -680,7 +671,7 @@ export class AcpRuntimeManager {
     // Store in sessions map
     this.sessions.set(sessionId, handle);
     runtime.installed = true;
-    this.recordClientPurpose(sessionId, options);
+    this.activity.recordPurpose(sessionId, options.purpose);
 
     this.wireChildExitHandler(sessionId, child, handlers, runtime);
     await this.notifyClientCreated(sessionId, handle, context, handlers);
@@ -845,7 +836,7 @@ export class AcpRuntimeManager {
     child.once('exit', (code) => {
       const classification = this.classifyChildExit(sessionId, child, code);
       if (classification === null) {
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         return;
       }
 
@@ -862,7 +853,7 @@ export class AcpRuntimeManager {
         if (this.exitHandling.get(sessionId) === exitHandling) {
           this.exitHandling.delete(sessionId);
         }
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         releaseExitHandling();
       });
     });
@@ -873,13 +864,14 @@ export class AcpRuntimeManager {
     child: ChildProcess,
     code: number | null
   ): { managed: boolean; purpose: AcpRuntimePurpose } | null {
-    const purpose = this.runtimeMetadata.get(child)?.purpose ?? 'active';
+    const purpose = this.runtimeIncarnations.getForChild(child)?.purpose ?? 'active';
     const current = this.sessions.get(sessionId);
     const managed =
       this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
 
     if (current?.child === child) {
       this.sessions.delete(sessionId);
+      this.activity.clear(sessionId);
     } else if (current) {
       logger.debug('Skipping exit handler - stale ACP process exited', {
         sessionId,
@@ -889,6 +881,8 @@ export class AcpRuntimeManager {
       });
       return null;
     }
+
+    this.runtimeIncarnations.clearForChild(sessionId, child);
 
     if (!current && managed) {
       logger.debug('Skipping exit handler - managed stop process exited', { sessionId, code });
@@ -1117,7 +1111,8 @@ export class AcpRuntimeManager {
       const current = this.sessions.get(sessionId);
       if (current === stoppedHandle) {
         this.sessions.delete(sessionId);
-        this.browseOnlySessions.delete(sessionId);
+        this.activity.clear(sessionId);
+        this.runtimeIncarnations.clearForChild(sessionId, stoppedHandle?.child);
       }
     }
   }
@@ -1366,6 +1361,7 @@ export class AcpRuntimeManager {
 
     this.sessions.clear();
     this.pendingCreation.clear();
+    this.runtimeIncarnations.clear();
     this.creationLocks.clear();
     this.lockRefCounts.clear();
     this.shutdownWaiters.clear();
@@ -1405,7 +1401,10 @@ export class AcpRuntimeManager {
 
   isSessionWorking(sessionId: string): boolean {
     const handle = this.sessions.get(sessionId);
-    return handle?.isPromptInFlight ?? false;
+    if (!handle) {
+      return false;
+    }
+    return this.activity.isWorking(sessionId, handle.isPromptInFlight);
   }
 
   isAnySessionWorking(sessionIds: string[]): boolean {

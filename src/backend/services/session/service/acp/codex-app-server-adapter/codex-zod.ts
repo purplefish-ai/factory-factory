@@ -216,6 +216,54 @@ const errorNotificationSchema = z.object({
     .passthrough(),
 });
 
+export const codexThreadGoalStatusSchema = z.enum([
+  'active',
+  'paused',
+  'blocked',
+  'usageLimited',
+  'budgetLimited',
+  'complete',
+]);
+
+export const codexThreadGoalSchema = z
+  .object({
+    threadId: z.string(),
+    objective: z.string(),
+    status: codexThreadGoalStatusSchema,
+    tokenBudget: z.number().nullable(),
+    tokensUsed: z.number(),
+    timeUsedSeconds: z.number(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+  })
+  .passthrough();
+
+export const threadGoalGetResponseSchema = z
+  .object({
+    goal: codexThreadGoalSchema.nullable(),
+  })
+  .passthrough();
+
+const threadGoalUpdatedNotificationSchema = z
+  .object({
+    method: z.literal('thread/goal/updated'),
+    params: z
+      .object({
+        threadId: z.string(),
+        turnId: z.string().nullable(),
+        goal: codexThreadGoalSchema,
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+const threadGoalClearedNotificationSchema = z
+  .object({
+    method: z.literal('thread/goal/cleared'),
+    params: z.object({ threadId: z.string() }).passthrough(),
+  })
+  .passthrough();
+
 export const threadStatusChangedNotificationSchema = z
   .object({
     method: z.literal('thread/status/changed'),
@@ -241,6 +289,8 @@ export const knownCodexNotificationSchema = z.union([
   turnStartedNotificationSchema,
   errorNotificationSchema,
   threadStatusChangedNotificationSchema,
+  threadGoalUpdatedNotificationSchema,
+  threadGoalClearedNotificationSchema,
 ]);
 
 export const commandExecutionApprovalRequestSchema = z.object({

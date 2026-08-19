@@ -89,6 +89,12 @@ positively asserted — it means a human owns the next action — and a code wit
 obvious home belongs in WORKING. Archived workspaces derive no column at all so
 they stay off the board.
 
+Codex tasks remain automation-owned between turns. The app-server adapter
+bridges `thread/goal/updated` and `thread/goal/cleared` into session runtime
+activity, and reads `thread/goal/get` when resuming a session. An `active` goal
+therefore keeps the workspace in WORKING even when no prompt is currently in
+flight; paused, blocked, limited, completed and cleared goals do not.
+
 One endpoint (`workspace.listForProject`) serves both the board and the sidebar,
 and one React Query cache backs both — the snapshot WebSocket patches that
 single cache.

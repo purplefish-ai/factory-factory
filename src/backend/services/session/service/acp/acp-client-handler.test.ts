@@ -308,6 +308,21 @@ describe('AcpClientHandler', () => {
   });
 
   describe('extension notifications', () => {
+    it('dispatches task activity changes under the DB session ID', async () => {
+      const eventFn = vi.fn();
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, vi.fn(), 'all');
+
+      await handler.extNotification('factoryfactory.ai/task/status-changed', {
+        sessionId: 'provider-session-123',
+        active: true,
+      });
+
+      expect(eventFn).toHaveBeenCalledWith('db-session-1', {
+        type: 'acp_task_status_changed',
+        active: true,
+      });
+    });
+
     it('logs then dispatches a valid sub-agent change under the DB session ID', async () => {
       const eventFn = vi.fn();
       const logFn = vi.fn();

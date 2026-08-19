@@ -21,8 +21,10 @@ import {
   isKnownCodexTurnStatus,
   knownCodexNotificationSchema,
   type ThreadReadTurn,
+  threadGoalGetResponseSchema,
   threadReadResponseSchema,
 } from './codex-zod';
+import { TASK_STATUS_CHANGED_METHOD, taskStatusChangedParamsSchema } from './task-status-protocol';
 
 type ThreadReadItem = ReturnType<
   typeof threadReadResponseSchema.parse
@@ -32,6 +34,8 @@ type CodexNotificationPayload = {
   method: string;
   params?: unknown;
 };
+
+type KnownCodexNotification = ReturnType<typeof knownCodexNotificationSchema.parse>;
 
 function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
   return meta ? { _meta: meta } : {};
@@ -75,9 +79,15 @@ type StreamEventHandlerDeps = {
   ) => Promise<void>;
   handleSubagentStatusChanged?: (subagentId: string, runtimeType: string) => Promise<void>;
   handleSubagentTranscriptActivity?: (subagentId: string) => Promise<void>;
+  extNotification?: (method: string, params: Record<string, unknown>) => Promise<void>;
 };
 
 export class CodexStreamEventHandler {
+  private readonly goalRefreshStateByThreadId = new Map<
+    string,
+    { notificationVersion: number; pendingRefreshCount: number }
+  >();
+
   constructor(private readonly deps: StreamEventHandlerDeps) {}
 
   async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
@@ -91,6 +101,47 @@ export class CodexStreamEventHandler {
     const updates = await this.projectThreadTurns(session, threadRead.thread.turns);
     for (const update of updates) {
       await this.deps.emitSessionUpdate(sessionId, update);
+    }
+  }
+
+  async refreshTaskStatus(session: AdapterSession): Promise<void> {
+    const refreshState = this.goalRefreshStateByThreadId.get(session.threadId) ?? {
+      notificationVersion: 0,
+      pendingRefreshCount: 0,
+    };
+    refreshState.pendingRefreshCount += 1;
+    this.goalRefreshStateByThreadId.set(session.threadId, refreshState);
+    const notificationVersion = refreshState.notificationVersion;
+    try {
+      let raw: unknown;
+      try {
+        raw = await this.deps.codex.request('thread/goal/get', { threadId: session.threadId });
+      } catch (error) {
+        this.deps.reportShapeDrift('thread_goal_get_failed', {
+          threadId: session.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      if (refreshState.notificationVersion !== notificationVersion) {
+        return;
+      }
+      const response = threadGoalGetResponseSchema.safeParse(raw);
+      if (!response.success) {
+        this.deps.reportShapeDrift('malformed_thread_goal_get', {
+          issues: response.error.issues.slice(0, 3).map((issue) => issue.message),
+        });
+        return;
+      }
+      await this.notifyTaskStatus(session.sessionId, response.data.goal?.status === 'active');
+    } finally {
+      refreshState.pendingRefreshCount -= 1;
+      if (
+        refreshState.pendingRefreshCount === 0 &&
+        this.goalRefreshStateByThreadId.get(session.threadId) === refreshState
+      ) {
+        this.goalRefreshStateByThreadId.delete(session.threadId);
+      }
     }
   }
 
@@ -132,11 +183,7 @@ export class CodexStreamEventHandler {
       return;
     }
 
-    if (typedNotification.method === 'thread/status/changed') {
-      await this.deps.handleSubagentStatusChanged?.(
-        typedNotification.params.threadId,
-        typedNotification.params.status.type
-      );
+    if (await this.handleThreadNotification(typedNotification)) {
       return;
     }
 
@@ -245,6 +292,54 @@ export class CodexStreamEventHandler {
         typedNotification.params.turn.status,
         typedNotification.params.turn.error?.message
       );
+    }
+  }
+
+  private async handleThreadNotification(notification: KnownCodexNotification): Promise<boolean> {
+    if (
+      notification.method === 'thread/goal/updated' ||
+      notification.method === 'thread/goal/cleared'
+    ) {
+      const refreshState = this.goalRefreshStateByThreadId.get(notification.params.threadId);
+      if (refreshState) {
+        refreshState.notificationVersion += 1;
+      }
+      const sessionId = this.deps.sessionIdByThreadId.get(notification.params.threadId);
+      if (sessionId) {
+        await this.notifyTaskStatus(
+          sessionId,
+          notification.method === 'thread/goal/updated' &&
+            notification.params.goal.status === 'active'
+        );
+      } else {
+        await this.deps.handleSubagentTranscriptActivity?.(notification.params.threadId);
+      }
+      return true;
+    }
+
+    if (notification.method === 'thread/status/changed') {
+      await this.deps.handleSubagentStatusChanged?.(
+        notification.params.threadId,
+        notification.params.status.type
+      );
+      return true;
+    }
+
+    return false;
+  }
+
+  private async notifyTaskStatus(sessionId: string, active: boolean): Promise<void> {
+    if (!this.deps.extNotification) {
+      return;
+    }
+    const params = taskStatusChangedParamsSchema.parse({ sessionId, active });
+    try {
+      await this.deps.extNotification(TASK_STATUS_CHANGED_METHOD, params);
+    } catch (error) {
+      this.deps.reportShapeDrift('task_status_notification_failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
