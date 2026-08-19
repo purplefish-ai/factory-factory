@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   type AcpRuntimeManager,
@@ -15,6 +16,19 @@ describe('AcpRuntimeManager', () => {
 
   beforeEach(() => {
     ({ manager } = createManagerTestHarness());
+  });
+
+  it('keeps cross-session runtime state in exactly one supervisor', () => {
+    const source = readFileSync(new URL('./acp-runtime-manager.ts', import.meta.url), 'utf8');
+    for (const forbidden of [
+      'new Map<string, AcpProcessHandle>()',
+      'new Map<string, Promise<AcpProcessHandle>>()',
+      'new WeakMap<ChildProcess, AcpRuntimeMetadata>()',
+      'new Set<string>()',
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
+    expect(source.match(/new AcpRuntimeSupervisor\(/g)).toHaveLength(1);
   });
 
   describe('session status methods', () => {

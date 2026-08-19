@@ -339,13 +339,9 @@ describe('AcpRuntimeManager', () => {
         expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
       });
 
-      const secondChild = createMockChildProcess();
-      exitChildAfterSigterm(secondChild);
-      mockSpawn.mockReturnValueOnce(secondChild);
-
       await expect(createTestClient(manager)).rejects.toThrow('ACP session stop requested');
-      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(secondChild.kill).not.toHaveBeenCalledWith('SIGKILL');
+      expect(mockSpawn).toHaveBeenCalledOnce();
+      expect(firstChild.kill).toHaveBeenCalledOnce();
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);
@@ -354,7 +350,7 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBeUndefined();
     });
 
-    it('wires child error handlers before aborting creation during stop', async () => {
+    it('rejects before spawning or dispatching child errors during stop', async () => {
       const firstChild = setupSuccessfulSpawn();
 
       await createTestClient(manager);
@@ -367,29 +363,17 @@ describe('AcpRuntimeManager', () => {
         expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
       });
 
-      const secondChild = createMockChildProcess();
-      secondChild.kill = vi.fn((signal?: string) => {
-        if (signal === 'SIGTERM') {
-          secondChild.emit('error', new Error('cleanup child error'));
-          queueMicrotask(() => {
-            secondChild.exitCode = 0;
-            secondChild.emit('exit', 0, null);
-          });
-        }
-        return true;
-      });
-      mockSpawn.mockReturnValueOnce(secondChild);
-      const handlers = defaultHandlers();
+      const onRuntimeError = vi.fn();
+      const handlers = { ...defaultHandlers(), onRuntimeError };
 
       await expect(
         manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext())
       ).rejects.toThrow('ACP session stop requested');
 
-      expect(secondChild.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(secondChild.kill).not.toHaveBeenCalledWith('SIGKILL');
-      await vi.waitFor(() => {
-        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
-      });
+      expect(mockSpawn).toHaveBeenCalledOnce();
+      expect(firstChild.kill).toHaveBeenCalledOnce();
+      expect(onRuntimeError).not.toHaveBeenCalled();
+      expect(handlers.onError).not.toHaveBeenCalled();
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);
