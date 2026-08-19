@@ -1,17 +1,16 @@
 import type { ChildProcess } from 'node:child_process';
 import { createLogger } from '@/backend/services/logger.service';
-import type { AcpRuntimeErrorEvent, AcpRuntimeEventHandlers } from './acp-runtime-events';
+import type { AcpRuntimeMetadata } from './acp-runtime-contracts';
+import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { normalizeUnknownError } from './acp-stream-normalizer';
 
 const logger = createLogger('acp-runtime-manager');
-
-type RuntimeErrorContext = Pick<AcpRuntimeErrorEvent, 'incarnationId' | 'purpose'>;
 
 export function wireAcpRuntimeErrorHandler(
   child: ChildProcess,
   sessionId: string,
   handlers: AcpRuntimeEventHandlers,
-  runtime: RuntimeErrorContext,
+  runtime: Pick<AcpRuntimeMetadata, 'incarnationId' | 'purpose'>,
   shouldDispatch: () => boolean
 ): void {
   child.on('error', async (error) => {

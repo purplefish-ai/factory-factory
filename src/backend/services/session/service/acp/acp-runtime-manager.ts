@@ -1,16 +1,8 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { Readable, Writable } from 'node:stream';
-import {
-  ClientSideConnection,
-  type ContentBlock,
-  type LoadSessionResponse,
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionConfigOption,
-} from '@agentclientprotocol/sdk';
+import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
-import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   SubagentBrowseCapability,
   SubagentListParams,
@@ -18,53 +10,33 @@ import type {
   SubagentReadParams,
   SubagentReadResult,
 } from '@/shared/acp-protocol/subagents';
-import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
-import { AcpProcessHandle } from './acp-process-handle';
+import { AcpClientFactory, cleanupFailedAcpClientCreation } from './acp-client-factory';
+import type { AcpProcessHandle } from './acp-process-handle';
 import { AcpPromptController } from './acp-prompt-controller';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
-import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
-import { AcpBrowseSessionUnavailableError, getAcpErrorLogDetails } from './acp-runtime-errors';
 import type {
-  AcpRuntimeEvent,
-  AcpRuntimeEventHandlers,
-  AcpRuntimePurpose,
-} from './acp-runtime-events';
+  AcpRuntimeContext,
+  AcpRuntimeCreatedCallback,
+  AcpRuntimeMetadata,
+  AcpStartupSignal,
+} from './acp-runtime-contracts';
+import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
 import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
 import {
   type AcpClientCreationOperation,
   AcpRuntimeQuiescence,
   raceWithSoftTimeout,
 } from './acp-runtime-quiescence';
-import {
-  createAcpSpawnError,
-  hasUsableWorkingDir,
-  resolveAcpBinary,
-  resolveInternalCodexAcpSpawnCommand,
-  type SpawnCommand,
-  withTimeout,
-} from './acp-runtime-spawn';
-import { requireSessionConfigOptions } from './acp-session-config-options';
-import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 import { AcpSubagentBrowser } from './acp-subagent-browser';
-import type { AcpClientOptions, PermissionPreset } from './types';
+import type { AcpClientOptions } from './types';
 
+export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
 export { AcpBrowseSessionUnavailableError, PromptTimeoutError } from './acp-runtime-errors';
 
 const logger = createLogger('acp-runtime-manager');
-type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose; installed: boolean };
-
-export type AcpRuntimeCreatedCallback = (
-  sessionId: string,
-  client: AcpProcessHandle,
-  context: { workspaceId: string; workingDir: string }
-) => void;
-function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
-  return preset === 'YOLO' || preset === 'RELAXED' ? 'all' : 'none';
-}
-
-const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 
 export class AcpRuntimeManager {
+  private readonly clientFactory: AcpClientFactory;
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly promptController = new AcpPromptController({
     isCurrentHandle: (sessionId, handle) => this.sessions.get(sessionId) === handle,
@@ -88,25 +60,17 @@ export class AcpRuntimeManager {
   private readonly sessionStopWaiters = new Map<string, Set<() => void>>();
   private isShuttingDown = false;
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
-  private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-  private preferSourceEntrypoint = true;
-  private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
   constructor(options?: { acpStartupTimeoutMs?: number }) {
-    this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
+    this.clientFactory = new AcpClientFactory(options);
   }
   setAcpStartupTimeoutMs(timeoutMs: number): void {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-      return;
-    }
-    this.acpStartupTimeoutMs = Math.floor(timeoutMs);
+    this.clientFactory.setAcpStartupTimeoutMs(timeoutMs);
   }
   configureEnvironment(options: {
     preferSourceEntrypoint: boolean;
     childProcessEnvProvider: () => NodeJS.ProcessEnv;
   }): void {
-    this.preferSourceEntrypoint = options.preferSourceEntrypoint;
-    this.childProcessEnvProvider = options.childProcessEnvProvider;
+    this.clientFactory.configureEnvironment(options);
   }
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
@@ -171,7 +135,7 @@ export class AcpRuntimeManager {
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
-    context: { workspaceId: string; workingDir: string }
+    context: AcpRuntimeContext
   ): Promise<AcpProcessHandle> {
     guardExit(sessionId);
     if (this.isShuttingDown) {
@@ -272,269 +236,47 @@ export class AcpRuntimeManager {
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
-    context: { workspaceId: string; workingDir: string },
-    runtime: AcpRuntimeMetadata
+    context: AcpRuntimeContext,
+    metadata: AcpRuntimeMetadata
   ): Promise<AcpProcessHandle> {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
     }
 
-    if (!hasUsableWorkingDir(options.workingDir)) {
-      throw new Error('ACP working directory is required before spawning adapter process');
-    }
-
-    const isCodex = options.provider === 'CODEX';
-    const spawnCommand: SpawnCommand = options.adapterBinaryPath
-      ? {
-          command: options.adapterBinaryPath,
-          args: [],
-          commandLabel: options.adapterBinaryPath,
-        }
-      : isCodex
-        ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
-        : (() => {
-            const binaryName = 'claude-agent-acp';
-            const packageName = '@agentclientprotocol/claude-agent-acp';
-            const binaryPath = resolveAcpBinary(packageName, binaryName);
-            return {
-              command: binaryPath,
-              args: [],
-              commandLabel: binaryPath,
-            };
-          })();
-
-    logger.info('Spawning ACP subprocess', {
-      sessionId,
-      command: spawnCommand.command,
-      args: spawnCommand.args,
-      provider: options.provider,
-      workingDir: options.workingDir,
-    });
-
-    const spawnEnv = {
-      ...this.childProcessEnvProvider(),
-      BROWSER: 'none',
-      ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true' } : {}),
-    };
-
-    // Spawn subprocess (CRITICAL: detached MUST be false for orphan prevention)
-    const child: ChildProcess = spawn(spawnCommand.command, spawnCommand.args, {
-      cwd: options.workingDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: spawnEnv,
-      detached: false,
-    });
-    this.runtimeMetadata.set(child, runtime);
-
-    // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
-    // client creation cleanly instead of surfacing as uncaught process errors.
-    let startupErrorListener: ((error: unknown) => void) | null = null;
-    const startupError = new Promise<never>((_, reject) => {
-      startupErrorListener = (error: unknown) =>
-        reject(createAcpSpawnError(spawnCommand.commandLabel, error));
-      child.once('error', startupErrorListener);
-    });
-    const startupErrorSettled = startupError.catch(() => undefined);
-
-    wireAcpRuntimeErrorHandler(
-      child,
-      sessionId,
-      handlers,
-      runtime,
-      () => !runtime.installed || this.sessions.get(sessionId)?.child === child
-    );
-    await this.abortClientCreationIfStopping(child, sessionId);
-
-    // Wire stderr to session log hook
-    child.stderr?.on('data', (chunk: Buffer) => {
-      handlers.onAcpLog?.(options.sessionId, {
-        eventType: 'acp_stderr',
-        data: chunk.toString(),
-      });
-    });
-
-    // Convert Node.js streams to Web Streams for ndJsonStream
-    // stdout/stdin are guaranteed to be set because we spawned with stdio: ['pipe', 'pipe', 'pipe']
-    if (!(child.stdout && child.stdin)) {
-      throw new Error('ACP subprocess stdio streams not available');
-    }
-    const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
-    const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
-    const stream = ndJsonStream(output, input);
-
-    // Normalize malformed session/update notifications before SDK Zod validation.
-    // Workaround: claude-agent-acp sends `line: [start, end]` arrays instead of numbers.
-    const normalizedStream = {
-      writable: stream.writable,
-      readable: createNormalizedAcpReadableStream(stream.readable),
-    };
-
-    // Create event callback that routes to handlers
-    const acpEventHandler = handlers.onAcpEvent;
-    const onEvent = acpEventHandler
-      ? (sid: string, event: AcpRuntimeEvent) => acpEventHandler(sid, event)
-      : (_sid: string, _event: AcpRuntimeEvent) => {
-          logger.debug('ACP event received but no handler registered', { sessionId });
-        };
-
-    // Resolve auto-approve policy from user's configured permission preset
-    const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
-
-    // Create connection with client handler (inject permission bridge from handlers)
-    const connection = new ClientSideConnection(
-      (_agent) =>
-        new AcpClientHandler(
-          sessionId,
-          onEvent,
-          handlers.permissionBridge,
-          handlers.onAcpLog,
-          autoApprovePolicy
-        ),
-      normalizedStream
-    );
-
-    let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
-    let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
-    const startupTimeoutMs = this.acpStartupTimeoutMs;
     const shutdownSignal = this.createShutdownSignal(sessionId);
     const stopSignal = this.createSessionStopSignal(sessionId);
-    const startupCancelOn = Promise.race([
-      startupErrorSettled,
-      shutdownSignal.promise.catch(() => undefined),
-      stopSignal.promise.catch(() => undefined),
-    ]);
-
     try {
-      // Initialize handshake
-      initResult = await Promise.race([
-        withTimeout({
-          promise: connection.initialize({
-            protocolVersion: PROTOCOL_VERSION,
-            clientCapabilities: {},
-            clientInfo: {
-              name: 'factory-factory',
-              title: 'Factory Factory',
-              version: '1.2.0',
-            },
-          }),
-          timeoutMs: startupTimeoutMs,
-          description: 'initialize handshake',
-          cancelOn: startupCancelOn,
-        }),
-        startupError,
-        shutdownSignal.promise,
-        stopSignal.promise,
-      ]);
-
-      logger.info('ACP connection initialized', {
+      const handle = await this.clientFactory.createClient({
         sessionId,
-        agentCapabilities: initResult.agentCapabilities,
+        options,
+        handlers,
+        metadata,
+        shutdownSignal,
+        stopSignal,
+        shouldDispatchRuntimeError: (child) =>
+          !metadata.installed || this.sessions.get(sessionId)?.child === child,
       });
 
-      // Create or resume provider session
-      const agentCapabilities = initResult.agentCapabilities ?? {};
-      sessionInfo = await Promise.race([
-        withTimeout({
-          promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
-          timeoutMs: startupTimeoutMs,
-          description: 'session creation',
-          cancelOn: startupCancelOn,
-        }),
-        startupError,
-        shutdownSignal.promise,
-        stopSignal.promise,
-      ]);
-    } catch (error) {
-      await this.cleanupFailedClientCreation(child, sessionId);
-      throw error;
+      if (this.isShuttingDown) {
+        await cleanupFailedAcpClientCreation(handle.child, sessionId);
+        throw this.createShutdownError(sessionId);
+      }
+      if (this.stoppingInProgress.has(sessionId)) {
+        await cleanupFailedAcpClientCreation(handle.child, sessionId);
+        throw this.createStopRequestedError(sessionId);
+      }
+
+      this.runtimeMetadata.set(handle.child, metadata);
+      this.sessions.set(sessionId, handle);
+      metadata.installed = true;
+      this.recordClientPurpose(sessionId, options);
+      this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
+      await this.notifyClientCreated(sessionId, handle, context, handlers);
+      return handle;
     } finally {
       shutdownSignal.dispose();
       stopSignal.dispose();
-      if (startupErrorListener) {
-        child.removeListener('error', startupErrorListener);
-        startupErrorListener = null;
-      }
     }
-
-    if (this.isShuttingDown) {
-      await this.cleanupFailedClientCreation(child, sessionId);
-      throw this.createShutdownError(sessionId);
-    }
-
-    await this.abortClientCreationIfStopping(child, sessionId);
-
-    // Build handle
-    const agentCapabilities = initResult.agentCapabilities ?? {};
-    const handle = new AcpProcessHandle({
-      connection,
-      child,
-      provider: options.provider,
-      providerSessionId: sessionInfo.providerSessionId,
-      agentCapabilities,
-    });
-    handle.configOptions = sessionInfo.configOptions;
-
-    // Store in sessions map
-    this.sessions.set(sessionId, handle);
-    runtime.installed = true;
-    this.recordClientPurpose(sessionId, options);
-
-    this.wireChildExitHandler(sessionId, child, handlers, runtime);
-    await this.notifyClientCreated(sessionId, handle, context, handlers);
-
-    return handle;
-  }
-
-  private async cleanupFailedClientCreation(child: ChildProcess, sessionId: string): Promise<void> {
-    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
-
-    if (hasExited()) {
-      return;
-    }
-
-    try {
-      let terminationObserved = false;
-      const exitPromise = new Promise<void>((resolve) => {
-        const resolveOnTermination = () => {
-          terminationObserved = true;
-          child.removeListener('exit', resolveOnTermination);
-          child.removeListener('close', resolveOnTermination);
-          resolve();
-        };
-        child.once('exit', resolveOnTermination);
-        child.once('close', resolveOnTermination);
-        if (hasExited()) {
-          resolveOnTermination();
-        }
-      });
-
-      child.kill('SIGTERM');
-
-      await raceWithSoftTimeout(exitPromise, 5000);
-
-      if (!(terminationObserved || hasExited())) {
-        child.kill('SIGKILL');
-      }
-    } catch {
-      // Ignore process-kill errors while cleaning up failed initialization.
-    }
-
-    logger.warn('Cleaned up ACP subprocess after initialization failure', {
-      sessionId,
-      pid: child.pid,
-    });
-  }
-
-  private async abortClientCreationIfStopping(
-    child: ChildProcess,
-    sessionId: string
-  ): Promise<void> {
-    if (!this.stoppingInProgress.has(sessionId)) {
-      return;
-    }
-
-    await this.cleanupFailedClientCreation(child, sessionId);
-    throw this.createStopRequestedError(sessionId);
   }
 
   private createShutdownError(sessionId: string): Error {
@@ -578,10 +320,7 @@ export class AcpRuntimeManager {
     this.sessionStopWaiters.delete(sessionId);
   }
 
-  private createShutdownSignal(sessionId: string): {
-    promise: Promise<never>;
-    dispose: () => void;
-  } {
+  private createShutdownSignal(sessionId: string): AcpStartupSignal {
     let rejectShutdown!: () => void;
     const promise = new Promise<never>((_resolve, reject) => {
       rejectShutdown = () => reject(this.createShutdownError(sessionId));
@@ -601,10 +340,7 @@ export class AcpRuntimeManager {
     };
   }
 
-  private createSessionStopSignal(sessionId: string): {
-    promise: Promise<never>;
-    dispose: () => void;
-  } {
+  private createSessionStopSignal(sessionId: string): AcpStartupSignal {
     let rejectStop!: () => void;
     const promise = new Promise<never>((_resolve, reject) => {
       rejectStop = () => reject(this.createStopRequestedError(sessionId));
@@ -698,7 +434,7 @@ export class AcpRuntimeManager {
   private async notifyClientCreated(
     sessionId: string,
     handle: AcpProcessHandle,
-    context: { workspaceId: string; workingDir: string },
+    context: AcpRuntimeContext,
     handlers: AcpRuntimeEventHandlers
   ): Promise<void> {
     if (this.onClientCreatedCallback) {
@@ -716,119 +452,6 @@ export class AcpRuntimeManager {
         });
       }
     }
-  }
-
-  private async createOrResumeSession(
-    connection: ClientSideConnection,
-    sessionId: string,
-    options: AcpClientOptions,
-    agentCapabilities: Record<string, unknown>
-  ): Promise<{
-    providerSessionId: string;
-    configOptions: SessionConfigOption[];
-  }> {
-    const storedId = options.resumeProviderSessionId;
-    const browseOnly = options.purpose === 'browse';
-
-    const mcpServers = (options.mcpServers ?? []).map((s) => ({
-      name: s.name,
-      command: s.command,
-      args: s.args,
-      env: Object.entries(s.env).map(([name, value]) => ({ name, value })),
-    }));
-    const resumed = await this.tryLoadStoredSession(
-      connection,
-      sessionId,
-      options,
-      agentCapabilities,
-      mcpServers
-    );
-    if (resumed) {
-      return resumed;
-    }
-
-    if (browseOnly) {
-      throw new AcpBrowseSessionUnavailableError(
-        storedId
-          ? 'Provider does not support restoring this session for sub-agent browsing.'
-          : 'Stored provider session is required for sub-agent browsing.'
-      );
-    }
-
-    const sessionResult = await connection.newSession({
-      cwd: options.workingDir,
-      mcpServers,
-    });
-    logger.info('ACP session created', {
-      sessionId,
-      providerSessionId: sessionResult.sessionId,
-    });
-    return {
-      providerSessionId: sessionResult.sessionId,
-      configOptions: requireSessionConfigOptions(options.provider, 'newSession', sessionResult),
-    };
-  }
-
-  private async tryLoadStoredSession(
-    connection: ClientSideConnection,
-    sessionId: string,
-    options: AcpClientOptions,
-    agentCapabilities: Record<string, unknown>,
-    mcpServers: Array<{
-      name: string;
-      command: string;
-      args: string[];
-      env: Array<{ name: string; value: string }>;
-    }>
-  ): Promise<{ providerSessionId: string; configOptions: SessionConfigOption[] } | null> {
-    const storedId = options.resumeProviderSessionId;
-    if (!(agentCapabilities.loadSession === true && storedId)) {
-      return null;
-    }
-
-    let loadResult: LoadSessionResponse;
-    try {
-      loadResult = await connection.loadSession({
-        sessionId: storedId,
-        cwd: options.workingDir,
-        mcpServers,
-      });
-    } catch (error) {
-      this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
-      if (options.purpose === 'browse') {
-        throw new AcpBrowseSessionUnavailableError(
-          'Provider failed to restore this session for sub-agent browsing.',
-          { cause: error }
-        );
-      }
-      return null;
-    }
-
-    logger.info('ACP session resumed via loadSession', {
-      sessionId,
-      providerSessionId: storedId,
-    });
-    return {
-      providerSessionId: storedId,
-      configOptions: requireSessionConfigOptions(options.provider, 'loadSession', loadResult),
-    };
-  }
-
-  private logLoadSessionFailure(
-    sessionId: string,
-    storedProviderSessionId: string,
-    error: unknown,
-    browseOnly: boolean
-  ): void {
-    const details = getAcpErrorLogDetails(error);
-    logger.warn(browseOnly ? 'Browse-only loadSession failed' : 'loadSession failed', {
-      sessionId,
-      storedProviderSessionId,
-      error: details.message,
-      ...(details.code !== undefined ? { errorCode: details.code } : {}),
-      ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
-      ...(!browseOnly ? { fallback: 'newSession' } : {}),
-    });
   }
 
   stopClient(sessionId: string): Promise<void> {
