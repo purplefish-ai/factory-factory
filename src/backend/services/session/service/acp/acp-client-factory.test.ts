@@ -124,6 +124,17 @@ function createSignal(): RejectableSignal {
   return { promise, dispose: vi.fn(), reject: rejectSignal };
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+} {
+  let resolvePromise!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
 function defaultOptions(overrides?: Partial<AcpClientOptions>): AcpClientOptions {
   return {
     provider: 'CLAUDE',
@@ -432,6 +443,48 @@ describe('AcpClientFactory', () => {
       new AcpClientFactory({ acpStartupTimeoutMs: 10 }).createClient(createParams())
     ).rejects.toThrow('ACP initialize handshake timed out after 10ms');
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('keeps the creation timeout snapshot when configuration changes during initialize', async () => {
+    vi.useFakeTimers();
+    try {
+      setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
+      const initialize = createDeferred<{
+        protocolVersion: number;
+        agentCapabilities: Record<string, unknown>;
+      }>();
+      const newSession = createDeferred<{
+        sessionId: string;
+        configOptions: typeof CONFIG_OPTIONS;
+      }>();
+      mocks.initialize.mockReturnValue(initialize.promise);
+      mocks.newSession.mockReturnValue(newSession.promise);
+      const factory = new AcpClientFactory({ acpStartupTimeoutMs: 100 });
+      const creation = factory.createClient(createParams());
+      const result = creation.then(
+        (handle) => ({ handle }),
+        (error: unknown) => ({ error })
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      factory.setAcpStartupTimeoutMs(10);
+      initialize.resolve({ protocolVersion: 1, agentCapabilities: {} });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.newSession).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(10);
+      newSession.resolve({
+        sessionId: 'provider-session-after-config-change',
+        configOptions: CONFIG_OPTIONS,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(result).resolves.toMatchObject({
+        handle: { providerSessionId: 'provider-session-after-config-change' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([

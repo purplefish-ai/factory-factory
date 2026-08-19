@@ -95,6 +95,7 @@ export class AcpClientFactory {
 
   async createClient(params: CreateAcpClientParams): Promise<AcpProcessHandle> {
     const { sessionId, options, handlers, metadata, shutdownSignal, stopSignal } = params;
+    const startupTimeoutMs = this.acpStartupTimeoutMs;
     if (!hasUsableWorkingDir(options.workingDir)) {
       throw new Error('ACP working directory is required before spawning adapter process');
     }
@@ -185,7 +186,7 @@ export class AcpClientFactory {
               version: '1.2.0',
             },
           }),
-          timeoutMs: this.acpStartupTimeoutMs,
+          timeoutMs: startupTimeoutMs,
           description: 'initialize handshake',
           cancelOn: startupCancelOn,
         }),
@@ -202,7 +203,7 @@ export class AcpClientFactory {
       const sessionInfo = await Promise.race([
         withTimeout({
           promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
-          timeoutMs: this.acpStartupTimeoutMs,
+          timeoutMs: startupTimeoutMs,
           description: 'session creation',
           cancelOn: startupCancelOn,
         }),
