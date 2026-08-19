@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreateAcpClientParams } from './acp-client-factory';
 import type { AcpProcessHandle } from './acp-process-handle';
+import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import {
   createDeferred,
@@ -8,6 +9,7 @@ import {
   defaultContext,
   defaultHandlers,
   defaultOptions,
+  exitChildAfterSigterm,
   type MockChildProcess,
 } from './acp-runtime-manager.test-helpers';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
@@ -181,6 +183,25 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(createClient).toHaveBeenCalledTimes(2);
   });
 
+  it('lets a same-tick direct stop cancel creation admitted only to the session lock', async () => {
+    // Catches stop returning before a p-limit-queued creation becomes pending.
+    const handle = createTestProcessHandle();
+    const { supervisor, createClient } = createHarness(() => Promise.resolve(handle));
+
+    const creation = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    const stopping = supervisor.stopClient('session-1');
+
+    await expect(stopping).resolves.toBeUndefined();
+    await expect(creation).rejects.toThrow('ACP session stop requested');
+    expect(createClient).not.toHaveBeenCalled();
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+  });
+
   it('fences replacement creation until the current exit callback settles', async () => {
     // Catches a replacement overtaking lifecycle reconciliation for the prior incarnation.
     const firstHandle = createTestProcessHandle({ providerSessionId: 'provider-old' });
@@ -212,6 +233,41 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     exitCallback.resolve(undefined);
     await expect(replacement).resolves.toBe(replacementHandle);
     expect(createClient).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets stop cancel a creation queued behind an exit fence', async () => {
+    // Catches an exit-fenced creation forgetting a stop that completed before the fence opened.
+    const firstHandle = createTestProcessHandle();
+    const replacementHandle = createTestProcessHandle();
+    const exitCallback = createDeferred<void>();
+    const { supervisor, createClient } = createHarness();
+    createClient.mockResolvedValueOnce(firstHandle).mockResolvedValueOnce(replacementHandle);
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      {
+        ...defaultHandlers(),
+        onRuntimeExit: vi.fn(() => exitCallback.promise),
+      },
+      defaultContext()
+    );
+    mockChildOf(firstHandle).exitCode = 1;
+    firstHandle.child.emit('exit', 1, null);
+    await vi.waitFor(() => expect(supervisor.getInstalledHandle('session-1')).toBeUndefined());
+
+    const replacement = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    const stopping = supervisor.stopClient('session-1');
+    await stopping;
+    exitCallback.resolve(undefined);
+
+    await expect(replacement).rejects.toThrow('ACP session stop requested');
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
   });
 
   it('rejects same-session reentrant creation from an exit callback without retaining its fence', async () => {
@@ -313,6 +369,84 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     handle.child.emit('exit', 1, null);
     await vi.waitFor(() => expect(supervisor.getInstalledHandle('session-1')).toBeUndefined());
     expect(params?.shouldDispatchRuntimeError(handle.child)).toBe(false);
+  });
+
+  it.each([
+    'stop',
+    'shutdown',
+  ] as const)('disables startup error dispatch before %s cleans a cancelled candidate', async (termination) => {
+    // Catches late child errors dispatching forever because a cancelled candidate was never installed.
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const factoryResult = createDeferred<AcpProcessHandle>();
+    let factoryParams: CreateAcpClientParams | undefined;
+    const onRuntimeError = vi.fn();
+    const handlers = { ...defaultHandlers(), onRuntimeError };
+    const { supervisor } = createHarness((params) => {
+      factoryParams = params;
+      wireAcpRuntimeErrorHandler(
+        handle.child,
+        params.sessionId,
+        params.handlers,
+        params.metadata,
+        () => params.shouldDispatchRuntimeError(handle.child)
+      );
+      return factoryResult.promise;
+    });
+    const creation = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      handlers,
+      defaultContext()
+    );
+    await vi.waitFor(() => expect(factoryParams).toBeDefined());
+
+    const terminating =
+      termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
+    factoryResult.resolve(handle);
+    await expect(creation).rejects.toThrow(
+      termination === 'stop' ? 'ACP session stop requested' : 'ACP runtime manager is shutting down'
+    );
+    await terminating;
+
+    if (!factoryParams) {
+      throw new Error('Factory parameters were not captured');
+    }
+    expect(factoryParams.shouldDispatchRuntimeError(handle.child)).toBe(false);
+    handle.child.emit('error', new Error(`late ${termination} cleanup error`));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(onRuntimeError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'stop',
+    'shutdown',
+  ] as const)('rejects an installed candidate when %s begins during provider ID notification', async (termination) => {
+    // Catches creation fulfilling with a handle killed while its final callback was pending.
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const notification = createDeferred<void>();
+    const onSessionId = vi.fn(() => notification.promise);
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    const creation = supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      { ...defaultHandlers(), onSessionId },
+      defaultContext()
+    );
+    await vi.waitFor(() => expect(onSessionId).toHaveBeenCalledOnce());
+    expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+
+    const terminating =
+      termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
+    notification.resolve(undefined);
+
+    await expect(creation).rejects.toThrow(
+      termination === 'stop' ? 'ACP session stop requested' : 'ACP runtime manager is shutting down'
+    );
+    await terminating;
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM');
   });
 
   it('installs the handle before invoking creation callbacks in callback order', async () => {

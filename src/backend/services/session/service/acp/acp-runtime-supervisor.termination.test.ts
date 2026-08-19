@@ -369,6 +369,54 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect([...supervisor.getAllClients()]).toEqual([]);
   });
 
+  it('finishes shutdown cleanup and the final sweep before rethrowing a stop failure', async () => {
+    // Catches one kill failure short-circuiting quiescence, the final sweep, and registry cleanup.
+    const failing = createTestProcessHandle();
+    mockChildOf(failing).kill = vi.fn(() => {
+      throw new Error('signal failed');
+    });
+    const slow = createTestProcessHandle();
+    markChildKilledOnSignal(mockChildOf(slow));
+    const barrier = createDeferred<void>();
+    const { supervisor, createClient } = createHarness();
+    createClient.mockResolvedValueOnce(failing).mockResolvedValueOnce(slow);
+    await install(supervisor, 'failing-session');
+    await install(supervisor, 'slow-session');
+    const barrierOperation = supervisor.runClientCreationOperation(
+      'barrier-session',
+      'browse',
+      () => barrier.promise
+    );
+    vi.useFakeTimers();
+
+    let shutdownSettled = false;
+    const shutdownResult = supervisor.stopAllClients(20).then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    void shutdownResult.then(() => {
+      shutdownSettled = true;
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    const settledAfterFirstPass = shutdownSettled;
+    barrier.resolve(undefined);
+    await barrierOperation;
+    await vi.advanceTimersByTimeAsync(20);
+    const shutdownError = await shutdownResult;
+    const remainingClients = [...supervisor.getAllClients()];
+    const remainingInventory = supervisor.beginShutdown();
+    const barrierStillTracked = supervisor.hasClientCreationOperation('barrier-session');
+
+    await vi.advanceTimersByTimeAsync(5001);
+
+    expect(settledAfterFirstPass).toBe(false);
+    expect(shutdownError).toMatchObject({ message: 'signal failed' });
+    expect(remainingClients).toEqual([]);
+    expect(remainingInventory).toEqual([]);
+    expect(barrierStillTracked).toBe(false);
+    expect(slow.child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
   it('uses the final sweep to wait for a stop that outlives the first shutdown pass', async () => {
     // Catches clearing a still-running registry immediately after the first soft stop timeout.
     const handle = createTestProcessHandle();

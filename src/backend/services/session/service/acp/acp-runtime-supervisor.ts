@@ -41,6 +41,7 @@ export class AcpRuntimeSupervisor {
   private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
+  private readonly stopGenerations = new Map<string, number>();
   private readonly shutdownWaiters = new Set<() => void>();
   private readonly sessionStopWaiters = new Map<string, Set<() => void>>();
   private readonly quiescence: AcpRuntimeQuiescence;
@@ -119,14 +120,16 @@ export class AcpRuntimeSupervisor {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
     }
+    if (this.stopOperations.has(sessionId) || this.stoppingInProgress.has(sessionId)) {
+      throw this.createStopRequestedError(sessionId);
+    }
 
+    const stopGeneration = this.getStopGeneration(sessionId);
     const lock = this.acquireCreationLock(sessionId);
     return await lock(async () => {
       try {
         await this.exitHandling.get(sessionId);
-        if (this.isShuttingDown) {
-          throw this.createShutdownError(sessionId);
-        }
+        this.throwIfCreationCancelled(sessionId, stopGeneration);
 
         const existing = this.getBrowseClient(sessionId);
         if (existing) {
@@ -142,11 +145,18 @@ export class AcpRuntimeSupervisor {
         }
 
         this.recordClientPurpose(sessionId, options);
-        const createPromise = this.createClient(sessionId, options, handlers, context, {
-          incarnationId: randomUUID(),
-          purpose: options.purpose ?? 'active',
-          installed: false,
-        });
+        const createPromise = this.createClient(
+          sessionId,
+          options,
+          handlers,
+          context,
+          {
+            incarnationId: randomUUID(),
+            purpose: options.purpose ?? 'active',
+            installed: false,
+          },
+          stopGeneration
+        );
         this.pendingCreation.set(sessionId, createPromise);
         try {
           return await createPromise;
@@ -195,6 +205,7 @@ export class AcpRuntimeSupervisor {
       if (this.stopOperations.get(sessionId) === trackedStop) {
         this.stopOperations.delete(sessionId);
       }
+      this.clearStopGenerationIfIdle(sessionId);
     });
     this.stopOperations.set(sessionId, trackedStop);
     return trackedStop;
@@ -202,12 +213,23 @@ export class AcpRuntimeSupervisor {
 
   async stopAllClients(timeoutMs = STOP_TIMEOUT_MS): Promise<void> {
     this.beginShutdown();
-    await this.stopCurrentClients(timeoutMs);
-    await this.waitForPendingCreations(timeoutMs);
-    await this.quiescence.waitForAll();
-    await this.stopCurrentClients(timeoutMs);
-    this.clearRegistries();
+    const failures: unknown[] = [];
+    try {
+      await this.captureShutdownFailure(failures, async () => {
+        failures.push(...(await this.stopCurrentClients(timeoutMs)));
+      });
+      await this.captureShutdownFailure(failures, () => this.waitForPendingCreations(timeoutMs));
+      await this.captureShutdownFailure(failures, () => this.quiescence.waitForAll());
+      await this.captureShutdownFailure(failures, async () => {
+        failures.push(...(await this.stopCurrentClients(timeoutMs)));
+      });
+    } finally {
+      this.clearRegistries();
+    }
     logger.info('All ACP clients stopped and cleaned up');
+    if (failures.length > 0) {
+      throw failures[0];
+    }
   }
 
   getAllClients(): IterableIterator<[string, AcpProcessHandle]> {
@@ -256,6 +278,7 @@ export class AcpRuntimeSupervisor {
     if (nextCount <= 0) {
       this.creationLocks.delete(sessionId);
       this.lockRefCounts.delete(sessionId);
+      this.clearStopGenerationIfIdle(sessionId);
       return;
     }
     this.lockRefCounts.set(sessionId, nextCount);
@@ -295,13 +318,15 @@ export class AcpRuntimeSupervisor {
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
     context: AcpRuntimeContext,
-    metadata: AcpRuntimeMetadata
+    metadata: AcpRuntimeMetadata,
+    stopGeneration: number
   ): Promise<AcpProcessHandle> {
     if (this.isShuttingDown) {
       throw this.createShutdownError(sessionId);
     }
     const shutdownSignal = this.createShutdownSignal(sessionId);
     const stopSignal = this.createSessionStopSignal(sessionId);
+    let startupActive = true;
     try {
       const handle = await this.clientFactory.createClient({
         sessionId,
@@ -311,15 +336,16 @@ export class AcpRuntimeSupervisor {
         shutdownSignal,
         stopSignal,
         shouldDispatchRuntimeError: (child) =>
-          !metadata.installed || this.sessions.get(sessionId)?.child === child,
+          startupActive ||
+          (metadata.installed &&
+            !this.isCreationCancelled(sessionId, stopGeneration) &&
+            this.sessions.get(sessionId)?.child === child),
       });
-      if (this.isShuttingDown) {
+      startupActive = false;
+      const cancellation = this.getCreationCancellationError(sessionId, stopGeneration);
+      if (cancellation) {
         await cleanupFailedAcpClientCreation(handle.child, sessionId);
-        throw this.createShutdownError(sessionId);
-      }
-      if (this.stoppingInProgress.has(sessionId)) {
-        await cleanupFailedAcpClientCreation(handle.child, sessionId);
-        throw this.createStopRequestedError(sessionId);
+        throw cancellation;
       }
 
       this.runtimeMetadata.set(handle.child, metadata);
@@ -328,8 +354,19 @@ export class AcpRuntimeSupervisor {
       this.recordClientPurpose(sessionId, options);
       this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
       await this.notifyClientCreated(sessionId, handle, context, handlers);
+      const notificationCancellation = this.getCreationCancellationError(sessionId, stopGeneration);
+      if (notificationCancellation) {
+        if (this.sessions.get(sessionId) === handle) {
+          this.sessions.delete(sessionId);
+          this.browseOnlySessions.delete(sessionId);
+        }
+        this.managedStopChildren.add(handle.child);
+        await cleanupFailedAcpClientCreation(handle.child, sessionId);
+        throw notificationCancellation;
+      }
       return handle;
     } finally {
+      startupActive = false;
       shutdownSignal.dispose();
       stopSignal.dispose();
     }
@@ -341,6 +378,40 @@ export class AcpRuntimeSupervisor {
 
   private createStopRequestedError(sessionId: string): Error {
     return new Error(`ACP session stop requested; cannot create client ${sessionId}`);
+  }
+
+  private getStopGeneration(sessionId: string): number {
+    return this.stopGenerations.get(sessionId) ?? 0;
+  }
+
+  private isCreationCancelled(sessionId: string, stopGeneration: number): boolean {
+    return this.isShuttingDown || this.getStopGeneration(sessionId) !== stopGeneration;
+  }
+
+  private getCreationCancellationError(
+    sessionId: string,
+    stopGeneration: number
+  ): Error | undefined {
+    if (this.isShuttingDown) {
+      return this.createShutdownError(sessionId);
+    }
+    if (this.getStopGeneration(sessionId) !== stopGeneration) {
+      return this.createStopRequestedError(sessionId);
+    }
+    return undefined;
+  }
+
+  private throwIfCreationCancelled(sessionId: string, stopGeneration: number): void {
+    const error = this.getCreationCancellationError(sessionId, stopGeneration);
+    if (error) {
+      throw error;
+    }
+  }
+
+  private clearStopGenerationIfIdle(sessionId: string): void {
+    if (!(this.creationLocks.has(sessionId) || this.stopOperations.has(sessionId))) {
+      this.stopGenerations.delete(sessionId);
+    }
   }
 
   private createShutdownSignal(sessionId: string): AcpStartupSignal {
@@ -476,6 +547,7 @@ export class AcpRuntimeSupervisor {
   }
 
   private async stopClientOnce(sessionId: string): Promise<void> {
+    this.stopGenerations.set(sessionId, this.getStopGeneration(sessionId) + 1);
     const pendingCreation = this.pendingCreation.get(sessionId);
     const initialHandle = this.sessions.get(sessionId);
     if (!(initialHandle || pendingCreation)) {
@@ -491,7 +563,7 @@ export class AcpRuntimeSupervisor {
           STOP_TIMEOUT_MS
         );
       }
-      const handle = this.sessions.get(sessionId) ?? initialHandle;
+      const handle = this.sessions.get(sessionId);
       if (!handle) {
         return;
       }
@@ -532,12 +604,24 @@ export class AcpRuntimeSupervisor {
     }
   }
 
-  private async stopCurrentClients(timeoutMs: number): Promise<void> {
-    await Promise.all(
+  private async stopCurrentClients(timeoutMs: number): Promise<unknown[]> {
+    const results = await Promise.allSettled(
       [...this.sessions.keys()].map((sessionId) =>
         raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
       )
     );
+    return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  }
+
+  private async captureShutdownFailure(
+    failures: unknown[],
+    operation: () => Promise<void>
+  ): Promise<void> {
+    try {
+      await operation();
+    } catch (error) {
+      failures.push(error);
+    }
   }
 
   private async waitForPendingCreations(timeoutMs: number): Promise<void> {
@@ -560,6 +644,7 @@ export class AcpRuntimeSupervisor {
     this.exitHandling.clear();
     this.creationLocks.clear();
     this.lockRefCounts.clear();
+    this.stopGenerations.clear();
     this.shutdownWaiters.clear();
     this.sessionStopWaiters.clear();
   }
