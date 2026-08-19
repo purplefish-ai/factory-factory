@@ -20,13 +20,10 @@ import type {
 } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import { AcpProcessHandle } from './acp-process-handle';
+import { AcpPromptController } from './acp-prompt-controller';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
-import {
-  AcpBrowseSessionUnavailableError,
-  getAcpErrorLogDetails,
-  PromptTimeoutError,
-} from './acp-runtime-errors';
+import { AcpBrowseSessionUnavailableError, getAcpErrorLogDetails } from './acp-runtime-errors';
 import type {
   AcpRuntimeEvent,
   AcpRuntimeEventHandlers,
@@ -69,6 +66,10 @@ const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 
 export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
+  private readonly promptController = new AcpPromptController({
+    isCurrentHandle: (sessionId, handle) => this.sessions.get(sessionId) === handle,
+    stopClient: (sessionId) => this.stopClient(sessionId),
+  });
   private readonly configController = new AcpRuntimeConfigController();
   private readonly browseOnlySessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
@@ -875,9 +876,7 @@ export class AcpRuntimeManager {
       // Cancel prompt if in flight
       if (handle.isPromptInFlight) {
         try {
-          await handle.connection.cancel({
-            sessionId: handle.providerSessionId,
-          });
+          await this.promptController.cancelPrompt(sessionId, handle);
         } catch (error) {
           logger.debug('Failed to cancel prompt during stop (expected)', {
             sessionId,
@@ -928,123 +927,12 @@ export class AcpRuntimeManager {
       throw new Error(`No ACP session found for sessionId: ${sessionId}`);
     }
 
-    handle.isPromptInFlight = true;
-    try {
-      const promptPromise = handle.connection.prompt({
-        sessionId: handle.providerSessionId,
-        prompt,
-      });
-
-      let result: { stopReason: string };
-      if (timeoutMs != null && timeoutMs > 0) {
-        result = await new Promise<{ stopReason: string }>((resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new PromptTimeoutError(sessionId, timeoutMs)),
-            timeoutMs
-          );
-          promptPromise.then(
-            (r) => {
-              clearTimeout(timer);
-              resolve(r);
-            },
-            (e) => {
-              clearTimeout(timer);
-              reject(e);
-            }
-          );
-        });
-      } else {
-        result = await promptPromise;
-      }
-
-      handle.isPromptInFlight = false;
-      return { stopReason: result.stopReason };
-    } catch (error) {
-      if (error instanceof PromptTimeoutError) {
-        await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
-      }
-      handle.isPromptInFlight = false;
-      throw error;
-    }
-  }
-
-  /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
-  private async escalatePromptTimeout(
-    sessionId: string,
-    timedOutHandle: AcpProcessHandle,
-    timeoutMs: number | undefined
-  ): Promise<void> {
-    if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-      return;
-    }
-
-    logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
-    try {
-      const cancelled = await Promise.race([
-        this.cancelPrompt(sessionId).then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
-      ]);
-      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-        return;
-      }
-      if (!cancelled) {
-        logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
-        this.clearPromptInFlight(sessionId);
-        await this.stopClient(sessionId).catch(() => {
-          // Best-effort cleanup
-        });
-      }
-    } catch {
-      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-        return;
-      }
-      // Cancel failed — stop the client forcibly
-      logger.warn('Cancel failed after timeout, stopping client', { sessionId });
-      this.clearPromptInFlight(sessionId);
-      await this.stopClient(sessionId).catch(() => {
-        // Best-effort cleanup
-      });
-    }
-  }
-
-  private isCurrentPromptTimeoutHandle(
-    sessionId: string,
-    timedOutHandle: AcpProcessHandle,
-    timeoutMs: number | undefined
-  ): boolean {
-    if (this.sessions.get(sessionId) === timedOutHandle) {
-      return true;
-    }
-
-    logger.info('Ignoring stale prompt timeout for replaced ACP session', {
-      sessionId,
-      timeoutMs,
-    });
-    return false;
-  }
-
-  private clearPromptInFlight(sessionId: string): void {
-    const handle = this.sessions.get(sessionId);
-    if (handle) {
-      handle.isPromptInFlight = false;
-    }
+    return await this.promptController.sendPrompt(sessionId, handle, prompt, timeoutMs);
   }
 
   /** Returns true when a prompt was actually in flight and got cancelled. */
   async cancelPrompt(sessionId: string): Promise<boolean> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      return false;
-    }
-
-    if (!handle.isPromptInFlight) {
-      return false;
-    }
-
-    await handle.connection.cancel({
-      sessionId: handle.providerSessionId,
-    });
-    return true;
+    return await this.promptController.cancelPrompt(sessionId, this.sessions.get(sessionId));
   }
 
   private requireInstalledHandle(sessionId: string): AcpProcessHandle {
