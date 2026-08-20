@@ -530,13 +530,12 @@ export class CodexStreamEventHandler {
     if (this.isReplayedTurnItem(session, turnId, itemId)) {
       return;
     }
+    if (session.syntheticallyCompletedToolItemIds.has(itemId)) {
+      return;
+    }
     const toolCall = session.toolCallsByItemId.get(itemId);
     if (!toolCall) {
       this.deps.reportShapeDrift('tool_progress_without_tool_call', { turnId, itemId });
-      return;
-    }
-
-    if (session.syntheticallyCompletedToolItemIds.has(itemId)) {
       return;
     }
 
@@ -694,6 +693,22 @@ export class CodexStreamEventHandler {
       return;
     }
 
+    if (item.type === 'subAgentActivity') {
+      session.syntheticallyCompletedToolItemIds.add(item.id);
+      await this.recordSubagentActivity(session, item, toolInfo);
+      await this.deps.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call',
+        toolCallId: toolInfo.toolCallId,
+        title: toolInfo.title,
+        kind: toolInfo.kind,
+        status: 'completed',
+        ...metaUpdate(toolInfo.meta),
+        rawInput: item,
+        rawOutput: item,
+      });
+      return;
+    }
+
     session.syntheticallyCompletedToolItemIds.delete(item.id);
     session.toolCallsByItemId.set(item.id, toolInfo);
     await this.recordSubagentActivity(session, item, toolInfo);
@@ -726,6 +741,12 @@ export class CodexStreamEventHandler {
     turnId: string
   ): Promise<void> {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
+      return;
+    }
+    if (
+      item.type === 'subAgentActivity' &&
+      session.syntheticallyCompletedToolItemIds.has(item.id)
+    ) {
       return;
     }
 

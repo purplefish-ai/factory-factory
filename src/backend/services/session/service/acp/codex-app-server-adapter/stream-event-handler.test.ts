@@ -565,13 +565,14 @@ describe('stream-event-handler', () => {
     );
   });
 
-  it('retains tool metadata through started, progress, and completed updates', async () => {
+  it('completes sub-agent activity once while retaining tool metadata', async () => {
     const session = createSession();
     const updates: SessionUpdate[] = [];
     const emitSessionUpdate = vi.fn((_sessionId: string, update: SessionUpdate) => {
       updates.push(update);
       return Promise.resolve();
     });
+    const reportShapeDrift = vi.fn();
     const toolState: ToolCallState = {
       toolCallId: 'call_subagent_1',
       kind: 'other',
@@ -591,7 +592,7 @@ describe('stream-event-handler', () => {
       sessions: new Map([['sess_thread_1', session]]),
       requireSession: vi.fn(),
       emitSessionUpdate,
-      reportShapeDrift: vi.fn(),
+      reportShapeDrift,
       buildToolCallState: vi.fn(() => toolState),
       emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
       shouldHoldTurnForPlanApproval: vi.fn(() => false),
@@ -636,27 +637,15 @@ describe('stream-event-handler', () => {
       },
     });
 
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sessionUpdate: 'tool_call',
-          toolCallId: 'call_subagent_1',
-          _meta: toolState.meta,
-        }),
-        expect.objectContaining({
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'call_subagent_1',
-          status: 'in_progress',
-          _meta: toolState.meta,
-        }),
-        expect.objectContaining({
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'call_subagent_1',
-          status: 'completed',
-          _meta: toolState.meta,
-        }),
-      ])
-    );
+    expect(updates).toEqual([
+      expect.objectContaining({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'call_subagent_1',
+        status: 'completed',
+        _meta: toolState.meta,
+      }),
+    ]);
+    expect(reportShapeDrift).not.toHaveBeenCalled();
   });
 
   it('correlates and invalidates a live sub-agent activity item exactly once', async () => {
@@ -696,6 +685,10 @@ describe('stream-event-handler', () => {
 
     await handler.handleCodexNotification({
       method: 'item/started',
+      params: { threadId: 'thread_1', turnId: 'turn_1', item },
+    });
+    await handler.handleCodexNotification({
+      method: 'item/completed',
       params: { threadId: 'thread_1', turnId: 'turn_1', item },
     });
     await handler.handleCodexNotification({
