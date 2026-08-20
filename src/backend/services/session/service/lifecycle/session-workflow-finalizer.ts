@@ -33,7 +33,7 @@ type WorkflowFinalizerDependencies = {
   };
   lifecycleEventService: Pick<SessionLifecycleEventService, 'hydrate'>;
   hydrateProviderHistory: HydrateProviderHistory;
-  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning' | 'isStopInProgress'>;
+  runtimeManager: Pick<AcpRuntimeManager, 'isSessionRunning'>;
   countViewers(sessionId: string): number;
 };
 
@@ -88,10 +88,7 @@ export class SessionWorkflowFinalizer {
   }): Promise<void> {
     const { session, sessionId, exitCode, deliberate } = input;
     if (session.workflow === 'ratchet') {
-      const outcome: RatchetSessionEndOutcome =
-        exitCode === 0 || deliberate || this.dependencies.runtimeManager.isStopInProgress(sessionId)
-          ? 'COMPLETED'
-          : 'DIED';
+      const outcome: RatchetSessionEndOutcome = exitCode === 0 || deliberate ? 'COMPLETED' : 'DIED';
       try {
         await this.recordRatchetSessionEnd(session.workspaceId, sessionId, outcome);
       } catch (error) {

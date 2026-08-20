@@ -192,7 +192,9 @@ describe('SessionWorkflowFinalizer', () => {
     [0, false, 'COMPLETED'],
     [1, false, 'DIED'],
     [null, false, 'DIED'],
-  ] as const)('settles ratchet runtime exit code %s as %s', async (exitCode, deliberate, outcome) => {
+    [1, true, 'COMPLETED'],
+    [null, true, 'COMPLETED'],
+  ] as const)('settles ratchet runtime exit code %s with deliberate=%s as %s', async (exitCode, deliberate, outcome) => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
     });
@@ -211,7 +213,7 @@ describe('SessionWorkflowFinalizer', () => {
     );
   });
 
-  it('settles a runtime-managed ratchet stop as completed without a lifecycle stop', async () => {
+  it('uses the captured deliberate-stop state when settling a ratchet exit', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
     });
@@ -227,7 +229,7 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
       'workspace-1',
       'session-1',
-      'COMPLETED'
+      'DIED'
     );
   });
 
