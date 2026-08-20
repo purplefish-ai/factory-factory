@@ -150,7 +150,7 @@ error codes and messages. It retains no session or handle state.
 
 ```text
 manager request
-  -> supervisor rejects shutdown or exit-handler reentry
+  -> supervisor rejects shutdown, same-session stop, or exit-handler reentry
   -> supervisor serializes work for the session
   -> supervisor waits for prior exit handling
   -> supervisor returns/promotes an existing or pending runtime when possible

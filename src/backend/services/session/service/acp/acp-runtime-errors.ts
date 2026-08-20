@@ -46,6 +46,22 @@ function getAcpErrorMetadata(error: {
   };
 }
 
+function stringifyAcpError(error: object): string {
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized !== undefined) {
+      return serialized;
+    }
+  } catch {
+    // Fall through to the object's string representation.
+  }
+  try {
+    return String(error);
+  } catch {
+    return 'Unknown ACP error';
+  }
+}
+
 export function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   if (error instanceof Error) {
     const maybe = error as Error & { code?: unknown; data?: unknown };
@@ -57,16 +73,7 @@ export function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
 
   if (typeof error === 'object' && error !== null) {
     const maybe = error as { message?: unknown; code?: unknown; data?: unknown };
-    const message =
-      typeof maybe.message === 'string'
-        ? maybe.message
-        : (() => {
-            try {
-              return JSON.stringify(error);
-            } catch {
-              return String(error);
-            }
-          })();
+    const message = typeof maybe.message === 'string' ? maybe.message : stringifyAcpError(error);
     return {
       message,
       ...getAcpErrorMetadata(maybe),

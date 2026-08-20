@@ -405,16 +405,15 @@ export class AcpRuntimeSupervisor {
       metadata.installed = true;
       this.recordClientPurpose(sessionId, options);
       this.wireChildExitHandler(sessionId, handle.child, handlers, metadata);
-      await this.notifyClientCreated(sessionId, handle, context, handlers);
+      try {
+        await this.notifyClientCreated(sessionId, handle, context, handlers);
+      } catch (error) {
+        await this.cleanupInstalledCandidate(sessionId, handle, metadata);
+        throw error;
+      }
       const notificationCancellation = this.getCreationCancellationError(sessionId, stopGeneration);
       if (notificationCancellation) {
-        if (this.sessions.get(sessionId) === handle) {
-          this.sessions.delete(sessionId);
-          this.clearActivity(sessionId);
-          this.clearCurrentRuntime(sessionId, metadata);
-        }
-        this.managedStopChildren.add(handle.child);
-        await cleanupFailedAcpClientCreation(handle.child, sessionId);
+        await this.cleanupInstalledCandidate(sessionId, handle, metadata);
         throw notificationCancellation;
       }
       return handle;
@@ -427,6 +426,20 @@ export class AcpRuntimeSupervisor {
 
   private createShutdownError(sessionId: string): Error {
     return new Error(`ACP runtime manager is shutting down; cannot create client ${sessionId}`);
+  }
+
+  private async cleanupInstalledCandidate(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    metadata: AcpRuntimeMetadata
+  ): Promise<void> {
+    if (this.sessions.get(sessionId) === handle) {
+      this.sessions.delete(sessionId);
+      this.clearActivity(sessionId);
+      this.clearCurrentRuntime(sessionId, metadata);
+    }
+    this.managedStopChildren.add(handle.child);
+    await cleanupFailedAcpClientCreation(handle.child, sessionId);
   }
 
   private createStopRequestedError(sessionId: string): Error {
@@ -614,6 +627,7 @@ export class AcpRuntimeSupervisor {
 
     this.beginSessionStop(sessionId);
     let stoppedHandle: AcpProcessHandle | undefined;
+    let stopCompleted = false;
     try {
       if (pendingCreation) {
         await raceWithSoftTimeout(
@@ -644,18 +658,31 @@ export class AcpRuntimeSupervisor {
           resolve();
         }
       });
-      handle.child.kill('SIGTERM');
+      this.sendProcessSignal(sessionId, handle, 'SIGTERM');
       await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
       if (handle.child.exitCode === null && handle.child.signalCode === null) {
         logger.warn('ACP process did not exit after SIGTERM, escalating to SIGKILL', {
           sessionId,
           pid: handle.getPid(),
         });
-        handle.child.kill('SIGKILL');
+        this.sendProcessSignal(sessionId, handle, 'SIGKILL');
       }
+      stopCompleted = true;
     } finally {
       this.stoppingInProgress.delete(sessionId);
-      this.removeStoppedHandle(sessionId, stoppedHandle);
+      if (stopCompleted) {
+        this.removeStoppedHandle(sessionId, stoppedHandle);
+      }
+    }
+  }
+
+  private sendProcessSignal(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    signal: NodeJS.Signals
+  ): void {
+    if (!handle.child.kill(signal)) {
+      throw new Error(`Failed to send ${signal} to ACP process for session ${sessionId}`);
     }
   }
 

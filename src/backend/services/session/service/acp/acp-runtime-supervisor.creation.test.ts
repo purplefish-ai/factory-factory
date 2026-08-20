@@ -559,4 +559,27 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     expect(order).toEqual(['created', 'provider-id']);
   });
+
+  it('rolls back an installed runtime when the creation callback throws', async () => {
+    // Catches a rejected creation leaving its live runtime installed and reusable.
+    const handle = createTestProcessHandle();
+    exitChildAfterSigterm(mockChildOf(handle));
+    const callbackError = new Error('creation callback failed');
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    supervisor.setOnClientCreated(() => {
+      throw callbackError;
+    });
+
+    await expect(
+      supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      )
+    ).rejects.toBe(callbackError);
+
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    expect(handle.child.signalCode).toBe('SIGTERM');
+  });
 });

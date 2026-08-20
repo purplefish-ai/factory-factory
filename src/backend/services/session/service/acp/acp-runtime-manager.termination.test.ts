@@ -98,18 +98,20 @@ describe('AcpRuntimeManager', () => {
       });
 
       vi.useFakeTimers();
-      const stopPromise = manager.stopClient('session-1');
+      try {
+        const stopPromise = manager.stopClient('session-1');
 
-      // Advance past the 5s timeout
-      await vi.advanceTimersByTimeAsync(5100);
+        // Advance past the 5s timeout
+        await vi.advanceTimersByTimeAsync(5100);
 
-      await stopPromise;
+        await stopPromise;
 
-      expect(killCalls).toContain('SIGTERM');
-      expect(killCalls).toContain('SIGKILL');
-      expect(manager.getClient('session-1')).toBeUndefined();
-
-      vi.useRealTimers();
+        expect(killCalls).toContain('SIGTERM');
+        expect(killCalls).toContain('SIGKILL');
+        expect(manager.getClient('session-1')).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('cancels prompt if isPromptInFlight before SIGTERM', async () => {
@@ -228,16 +230,17 @@ describe('AcpRuntimeManager', () => {
       markChildKilledOnSignal(child);
 
       vi.useFakeTimers();
+      try {
+        const stopPromise = manager.stopClient('session-1');
+        await vi.advanceTimersByTimeAsync(5100);
+        await stopPromise;
 
-      const stopPromise = manager.stopClient('session-1');
-      await vi.advanceTimersByTimeAsync(5100);
-      await stopPromise;
-
-      vi.useRealTimers();
-
-      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
-      expect(manager.isStopInProgress('session-1')).toBe(false);
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+        expect(manager.isStopInProgress('session-1')).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
 
       (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
       child.exitCode = 137;
@@ -258,11 +261,13 @@ describe('AcpRuntimeManager', () => {
       markChildKilledOnSignal(firstChild);
 
       vi.useFakeTimers();
-
-      const stopPromise = manager.stopClient('session-1');
-      await vi.advanceTimersByTimeAsync(5100);
-      await stopPromise;
-      vi.useRealTimers();
+      try {
+        const stopPromise = manager.stopClient('session-1');
+        await vi.advanceTimersByTimeAsync(5100);
+        await stopPromise;
+      } finally {
+        vi.useRealTimers();
+      }
       const secondChild = createMockChildProcess();
       const secondHandlers = defaultHandlers();
       mockSpawn.mockReturnValueOnce(secondChild);

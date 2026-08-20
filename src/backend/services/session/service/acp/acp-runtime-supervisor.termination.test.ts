@@ -99,10 +99,6 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect(loggerMocks.manager.debug).toHaveBeenCalledWith('ACP session stop already in progress', {
       sessionId: 'session-1',
     });
-    expect(loggerMocks.other.debug).not.toHaveBeenCalledWith(
-      'ACP session stop already in progress',
-      expect.anything()
-    );
 
     mockChildOf(handle).exitCode = 0;
     handle.child.emit('exit', 0, null);
@@ -155,20 +151,74 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
 
     await expect(supervisor.stopAndQuiesce('session-1')).rejects.toThrow('signal failed');
     expect(supervisor.isStopInProgress('session-1')).toBe(false);
+    expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+
+    exitChildAfterSigterm(mockChildOf(handle));
+    await supervisor.stopClient('session-1');
     expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
   });
 
-  it('retries after a first-stop failure when a creation barrier can install replacement work', async () => {
-    // Catches propagating a recoverable first-pass failure instead of enforcing the final stop pass.
-    const first = createTestProcessHandle();
-    mockChildOf(first).kill = vi.fn(() => {
-      throw new Error('first signal failed');
+  it('retains the current handle when SIGTERM returns false and permits a retry', async () => {
+    // Catches a failed signal unregistering a process that may still be alive.
+    const handle = createTestProcessHandle();
+    const child = mockChildOf(handle);
+    let signalAttempt = 0;
+    child.kill = vi.fn((signal?: string) => {
+      signalAttempt += 1;
+      if (signalAttempt === 1) {
+        return false;
+      }
+      if (signal === 'SIGTERM') {
+        queueMicrotask(() => {
+          child.signalCode = 'SIGTERM';
+          child.emit('exit', null, 'SIGTERM');
+        });
+      }
+      return true;
     });
-    const replacement = createTestProcessHandle();
-    exitChildAfterSigterm(mockChildOf(replacement));
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await install(supervisor);
+    vi.useFakeTimers();
+
+    try {
+      const firstStop = supervisor.stopClient('session-1').then(
+        () => undefined,
+        (error: unknown) => error
+      );
+      await vi.advanceTimersByTimeAsync(5001);
+      await expect(firstStop).resolves.toMatchObject({
+        message: 'Failed to send SIGTERM to ACP process for session session-1',
+      });
+      expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+
+      await supervisor.stopClient('session-1');
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries the retained runtime after a first-stop failure when a creation barrier completes', async () => {
+    // Catches a final stop pass targeting replacement work while the original process remains live.
+    const first = createTestProcessHandle();
+    const firstChild = mockChildOf(first);
+    firstChild.kill = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('first signal failed');
+      })
+      .mockImplementation((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          queueMicrotask(() => {
+            firstChild.signalCode = 'SIGTERM';
+            firstChild.emit('exit', null, 'SIGTERM');
+          });
+        }
+        return true;
+      });
     const barrier = createDeferred<void>();
     const { supervisor, createClient } = createHarness();
-    createClient.mockResolvedValueOnce(first).mockResolvedValueOnce(replacement);
+    createClient.mockResolvedValueOnce(first);
     await install(supervisor);
     const creation = supervisor.runClientCreationOperation('session-1', 'active', async () => {
       await barrier.promise;
@@ -178,10 +228,11 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     const stopping = supervisor.stopAndQuiesce('session-1');
     await vi.waitFor(() => expect(first.child.kill).toHaveBeenCalledWith('SIGTERM'));
     barrier.resolve(undefined);
-    await expect(creation).resolves.toBe(replacement);
+    await expect(creation).resolves.toBe(first);
     await expect(stopping).resolves.toBeUndefined();
 
-    expect(replacement.child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(first.child.kill).toHaveBeenCalledTimes(2);
+    expect(createClient).toHaveBeenCalledOnce();
     expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
   });
 

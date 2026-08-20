@@ -70,7 +70,7 @@ describe('AcpRuntimeManager', () => {
       expect(handle.isPromptInFlight).toBe(false);
     });
 
-    it('keeps prompt marked in flight while cancelling after prompt timeout', async () => {
+    it('releases the in-flight flag after cancelling on prompt timeout', async () => {
       setupSuccessfulSpawn();
       mockPrompt.mockReturnValue(new Promise(() => undefined));
       mockCancel.mockResolvedValue(undefined);
