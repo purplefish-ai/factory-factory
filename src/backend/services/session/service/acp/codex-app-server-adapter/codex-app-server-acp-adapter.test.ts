@@ -81,6 +81,18 @@ function getCodexRequestCalls(
   );
 }
 
+function sendCodexNotification(
+  adapter: CodexAppServerAcpAdapter,
+  method: string,
+  params: unknown
+): Promise<void> {
+  return (
+    adapter as unknown as {
+      handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+    }
+  ).handleCodexNotification(method, params);
+}
+
 const DEFAULT_APPROVAL_POLICY = 'on-failure';
 const DEFAULT_ALLOWED_APPROVAL_POLICIES = [DEFAULT_APPROVAL_POLICY, 'on-request', 'never'];
 const DEFAULT_ALLOWED_SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'];
@@ -762,11 +774,7 @@ describe('CodexAppServerAcpAdapter', () => {
     });
     (connection.sessionUpdate as ReturnType<typeof vi.fn>).mockClear();
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/started', {
+    await sendCodexNotification(adapter, 'item/started', {
       threadId: 'thread_replay_dedupe',
       turnId: 'turn_replay_dedupe',
       item: {
@@ -792,22 +800,14 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/reasoning/summaryTextDelta', {
+    await sendCodexNotification(adapter, 'item/reasoning/summaryTextDelta', {
       threadId: 'thread_replay_dedupe',
       turnId: 'turn_replay_dedupe',
       itemId: 'item_replayed_reasoning',
       delta: '**From live**',
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/completed', {
+    await sendCodexNotification(adapter, 'item/completed', {
       threadId: 'thread_replay_dedupe',
       turnId: 'turn_replay_dedupe',
       item: {
@@ -914,11 +914,7 @@ describe('CodexAppServerAcpAdapter', () => {
       mcpServers: [],
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/started', {
+    await sendCodexNotification(adapter, 'item/started', {
       threadId: 'thread_command_handoff',
       turnId: 'turn_command_handoff',
       item: {
@@ -930,27 +926,34 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/commandExecution/outputDelta', {
+    await sendCodexNotification(adapter, 'item/commandExecution/outputDelta', {
       threadId: 'thread_command_handoff',
       turnId: 'turn_command_handoff',
       itemId: 'item_command_handoff',
       delta: 'Process running with session ID 96081',
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/commandExecution/outputDelta', {
+    await sendCodexNotification(adapter, 'item/commandExecution/outputDelta', {
       threadId: 'thread_command_handoff',
       turnId: 'turn_command_handoff',
       itemId: 'item_command_handoff',
       delta: 'still running',
     });
+
+    const completedItem = {
+      type: 'commandExecution',
+      id: 'item_command_handoff',
+      status: 'completed',
+      aggregatedOutput: 'Process exited with code 0',
+      exitCode: 0,
+    };
+    for (let count = 0; count < 2; count += 1) {
+      await sendCodexNotification(adapter, 'item/completed', {
+        threadId: 'thread_command_handoff',
+        turnId: 'turn_command_handoff',
+        item: completedItem,
+      });
+    }
 
     const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
       (call) => call[0].update
@@ -962,16 +965,18 @@ describe('CodexAppServerAcpAdapter', () => {
         update.status === 'in_progress'
     );
     expect(inProgressUpdates).toHaveLength(1);
-    expect(updates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'call_command_handoff',
-          status: 'completed',
-          rawOutput: 'Process running with session ID 96081',
-        }),
-      ])
+    const completedUpdates = updates.filter(
+      (update) =>
+        (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') &&
+        update.toolCallId === 'call_command_handoff' &&
+        update.status === 'completed'
     );
+    expect(completedUpdates).toEqual([
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        rawOutput: 'Process running with session ID 96081',
+      }),
+    ]);
   });
 
   it('does not synthesize completion for normal output that mentions session handoff text', async () => {
@@ -991,11 +996,7 @@ describe('CodexAppServerAcpAdapter', () => {
       mcpServers: [],
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/started', {
+    await sendCodexNotification(adapter, 'item/started', {
       threadId: 'thread_command_log_output',
       turnId: 'turn_command_log_output',
       item: {
@@ -1007,22 +1008,14 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/commandExecution/outputDelta', {
+    await sendCodexNotification(adapter, 'item/commandExecution/outputDelta', {
       threadId: 'thread_command_log_output',
       turnId: 'turn_command_log_output',
       itemId: 'item_command_log_output',
       delta: 'worker log: process running with session ID 96081 and waiting',
     });
 
-    await (
-      adapter as unknown as {
-        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
-      }
-    ).handleCodexNotification('item/commandExecution/outputDelta', {
+    await sendCodexNotification(adapter, 'item/commandExecution/outputDelta', {
       threadId: 'thread_command_log_output',
       turnId: 'turn_command_log_output',
       itemId: 'item_command_log_output',
