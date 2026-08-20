@@ -104,20 +104,6 @@ class DecisionLogAccessor {
   }
 
   /**
-   * Get recent logs for a specific agent
-   */
-  findByAgentIdRecent(agentId: string, limit = 50): Promise<DecisionLog[]> {
-    return this.findByAgentId(agentId, limit);
-  }
-
-  /**
-   * Get recent logs across all agents
-   */
-  findAllRecent(limit = 100): Promise<DecisionLog[]> {
-    return this.findRecent(limit);
-  }
-
-  /**
    * List decision logs with optional filters
    */
   list(options: { agentId?: string; limit?: number }): Promise<DecisionLog[]> {
