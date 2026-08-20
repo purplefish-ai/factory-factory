@@ -6,9 +6,8 @@
  *
  * SECURITY PRINCIPLES:
  * 1. Prefer execCommand() with array args - bypasses shell entirely
- * 2. Use escapeShellArg() for single-quote wrapping when shell is needed
- * 3. Validate untrusted inputs (branch names, paths, session names)
- * 4. Never use command substitution ($(), ``) with untrusted data
+ * 2. Validate untrusted inputs (branch names, paths, session names)
+ * 3. Never use command substitution ($(), ``) with untrusted data
  */
 
 import { exec, type SpawnOptions, spawn } from 'node:child_process';
@@ -53,22 +52,6 @@ export interface ExecCommandOptions extends SpawnOptions {
 // ============================================================================
 
 /**
- * Escape a string for safe use in shell commands.
- * Uses single-quote wrapping with embedded single-quote escaping.
- *
- * This is the safest escaping method - single quotes prevent all
- * shell interpretation except for the single quote character itself.
- *
- * @example
- * escapeShellArg("hello world") // "'hello world'"
- * escapeShellArg("it's here") // "'it'\\''s here'"
- * escapeShellArg("$(rm -rf /)") // "'$(rm -rf /)'" - safe!
- */
-export function escapeShellArg(arg: string): string {
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-/**
  * Escape a string for AppleScript osascript commands.
  * Handles multiple escaping layers: shell -> AppleScript.
  */
@@ -79,48 +62,6 @@ export function escapeForOsascript(str: string): string {
     .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
     .replace(/"/g, '\\"') // Escape double quotes for AppleScript
     .replace(/'/g, "'\\''"); // Escape single quotes for shell
-}
-
-// ============================================================================
-// Validation Functions
-// ============================================================================
-
-/**
- * Validate a git branch name.
- * Allows: alphanumeric, hyphens, underscores, slashes, dots
- */
-function isValidBranchName(name: string): boolean {
-  // Git branch name rules (simplified):
-  // - No spaces, ~, ^, :, ?, *, [, \, consecutive dots, leading/trailing dots/slashes
-  return /^[\w][\w\-./]*$/.test(name) && !name.includes('..') && !name.endsWith('/');
-}
-
-/**
- * Validate a branch name and throw if invalid.
- */
-export function validateBranchName(name: string): string {
-  if (!isValidBranchName(name)) {
-    throw new Error(`Invalid branch name: ${name}`);
-  }
-  return name;
-}
-
-/**
- * Validate a tmux session name.
- * Only allows: alphanumeric, underscores, hyphens
- */
-function isValidSessionName(name: string): boolean {
-  return /^[\w-]+$/.test(name);
-}
-
-/**
- * Validate a session name and throw if invalid.
- */
-export function validateSessionName(name: string): string {
-  if (!isValidSessionName(name)) {
-    throw new Error(`Invalid tmux session name: ${name}`);
-  }
-  return name;
 }
 
 // ============================================================================
@@ -350,22 +291,6 @@ export function gitCommand(args: string[], cwd: string): Promise<ExecResult> {
  */
 export function gitCommandC(repoPath: string, args: string[]): Promise<ExecResult> {
   return execCommand('git', ['-C', repoPath, ...args]);
-}
-
-// ============================================================================
-// Tmux Helper Functions
-// ============================================================================
-
-/**
- * Execute a tmux command safely using spawn with array arguments.
- *
- * @example
- * await tmuxCommand(['has-session', '-t', sessionName]);
- * await tmuxCommand(['capture-pane', '-t', session, '-p']);
- */
-export function tmuxCommand(args: string[], socketPath?: string): Promise<ExecResult> {
-  const fullArgs = socketPath ? ['-S', socketPath, ...args] : args;
-  return execCommand('tmux', fullArgs);
 }
 
 // ============================================================================
