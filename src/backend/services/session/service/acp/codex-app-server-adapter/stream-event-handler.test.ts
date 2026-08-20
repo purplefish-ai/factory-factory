@@ -700,6 +700,68 @@ describe('stream-event-handler', () => {
     expect(recordSubagentActivity).toHaveBeenCalledWith('sess_thread_1', ['child_1'], 'created');
   });
 
+  it('bounds synthetic completions while suppressing recent sub-agent progress', async () => {
+    const session = createSession();
+    const reportShapeDrift = vi.fn();
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
+      sessions: new Map([['sess_thread_1', session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate: vi.fn(async () => undefined),
+      reportShapeDrift,
+      buildToolCallState: vi.fn(
+        (_session, item) =>
+          ({
+            toolCallId: `call_${item.id}`,
+            kind: 'other',
+            title: 'Start subagent',
+            locations: [],
+          }) satisfies ToolCallState
+      ),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    for (let index = 0; index <= 1000; index += 1) {
+      await handler.handleCodexNotification({
+        method: 'item/started',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          item: {
+            type: 'subAgentActivity',
+            id: `item_subagent_${index}`,
+            agentThreadId: `child_${index}`,
+            agentPath: `review/${index}`,
+            kind: 'started',
+          },
+        },
+      });
+    }
+
+    expect(session.syntheticallyCompletedToolItemIds.size).toBe(1000);
+    expect(session.syntheticallyCompletedToolItemIds.has('item_subagent_0')).toBe(false);
+    expect(session.syntheticallyCompletedToolItemIds.has('item_subagent_1000')).toBe(true);
+
+    await handler.handleCodexNotification({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'item_subagent_1000',
+        delta: 'late progress',
+      },
+    });
+
+    expect(reportShapeDrift).not.toHaveBeenCalled();
+  });
+
   it('retains tool metadata when replaying history', async () => {
     const session = createSession();
     const emitSessionUpdate = vi.fn(async () => undefined);

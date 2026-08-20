@@ -37,8 +37,21 @@ type CodexNotificationPayload = {
 
 type KnownCodexNotification = ReturnType<typeof knownCodexNotificationSchema.parse>;
 
+const MAX_SYNTHETIC_COMPLETION_TOMBSTONES = 1000;
+
 function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
   return meta ? { _meta: meta } : {};
+}
+
+function recordSyntheticCompletion(session: AdapterSession, itemId: string): void {
+  session.syntheticallyCompletedToolItemIds.add(itemId);
+  if (session.syntheticallyCompletedToolItemIds.size <= MAX_SYNTHETIC_COMPLETION_TOMBSTONES) {
+    return;
+  }
+  const oldestItemId = session.syntheticallyCompletedToolItemIds.values().next().value;
+  if (oldestItemId !== undefined) {
+    session.syntheticallyCompletedToolItemIds.delete(oldestItemId);
+  }
 }
 
 type StreamEventHandlerDeps = {
@@ -540,7 +553,7 @@ export class CodexStreamEventHandler {
     }
 
     if (source === 'commandExecution' && isCommandExecutionSessionHandoffOutput(output)) {
-      session.syntheticallyCompletedToolItemIds.add(itemId);
+      recordSyntheticCompletion(session, itemId);
       await this.deps.emitSessionUpdate(sessionId, {
         sessionUpdate: 'tool_call_update',
         toolCallId: toolCall.toolCallId,
@@ -694,7 +707,7 @@ export class CodexStreamEventHandler {
     }
 
     if (item.type === 'subAgentActivity') {
-      session.syntheticallyCompletedToolItemIds.add(item.id);
+      recordSyntheticCompletion(session, item.id);
       await this.recordSubagentActivity(session, item, toolInfo);
       await this.deps.emitSessionUpdate(session.sessionId, {
         sessionUpdate: 'tool_call',
