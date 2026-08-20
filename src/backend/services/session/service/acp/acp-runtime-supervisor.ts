@@ -652,27 +652,54 @@ export class AcpRuntimeSupervisor {
         }
       }
 
-      const exitPromise = new Promise<void>((resolve) => {
-        handle.child.on('exit', () => resolve());
-        if (handle.child.exitCode !== null || handle.child.signalCode !== null) {
-          resolve();
-        }
-      });
-      this.sendProcessSignal(sessionId, handle, 'SIGTERM');
-      await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
-      if (handle.child.exitCode === null && handle.child.signalCode === null) {
-        logger.warn('ACP process did not exit after SIGTERM, escalating to SIGKILL', {
-          sessionId,
-          pid: handle.getPid(),
-        });
-        this.sendProcessSignal(sessionId, handle, 'SIGKILL');
-      }
+      await this.terminateProcess(sessionId, handle);
       stopCompleted = true;
     } finally {
       this.stoppingInProgress.delete(sessionId);
       if (stopCompleted) {
         this.removeStoppedHandle(sessionId, stoppedHandle);
       }
+    }
+  }
+
+  private async terminateProcess(sessionId: string, handle: AcpProcessHandle): Promise<void> {
+    const hasExited = () => handle.child.exitCode !== null || handle.child.signalCode !== null;
+    let terminationObserved = hasExited();
+    let resolveOnTermination!: () => void;
+    const exitPromise = new Promise<void>((resolve) => {
+      resolveOnTermination = () => {
+        terminationObserved = true;
+        resolve();
+      };
+      handle.child.once('exit', resolveOnTermination);
+      handle.child.once('close', resolveOnTermination);
+      if (hasExited()) {
+        resolveOnTermination();
+      }
+    });
+
+    try {
+      this.sendProcessSignal(sessionId, handle, 'SIGTERM');
+      await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
+      if (terminationObserved || hasExited()) {
+        return;
+      }
+
+      logger.warn('ACP process did not exit after SIGTERM, escalating to SIGKILL', {
+        sessionId,
+        pid: handle.getPid(),
+      });
+      try {
+        this.sendProcessSignal(sessionId, handle, 'SIGKILL');
+      } catch (error) {
+        await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
+        if (!(terminationObserved || hasExited())) {
+          throw error;
+        }
+      }
+    } finally {
+      handle.child.removeListener('exit', resolveOnTermination);
+      handle.child.removeListener('close', resolveOnTermination);
     }
   }
 

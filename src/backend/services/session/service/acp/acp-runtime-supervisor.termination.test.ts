@@ -317,6 +317,82 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('accepts a pending exit when SIGKILL reports that the process is already gone', async () => {
+    // Catches a process exiting after the grace-period check but before SIGKILL is delivered.
+    const handle = createTestProcessHandle();
+    const child = mockChildOf(handle);
+    const signals: string[] = [];
+    child.kill = vi.fn((signal?: string) => {
+      signals.push(signal ?? 'default');
+      if (signal === 'SIGKILL') {
+        queueMicrotask(() => {
+          child.signalCode = 'SIGTERM';
+          child.emit('exit', null, 'SIGTERM');
+        });
+        return false;
+      }
+      return true;
+    });
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await install(supervisor);
+    vi.useFakeTimers();
+
+    try {
+      const stopResult = supervisor.stopClient('session-1').then(
+        () => undefined,
+        (error: unknown) => error
+      );
+      await vi.advanceTimersByTimeAsync(5001);
+
+      await expect(stopResult).resolves.toBeUndefined();
+      expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retains the runtime when SIGKILL fails without a confirmed exit', async () => {
+    // Catches a failed escalation unregistering a process whose termination remains unknown.
+    const handle = createTestProcessHandle();
+    const child = mockChildOf(handle);
+    let retrying = false;
+    child.kill = vi.fn((signal?: string) => {
+      if (retrying && signal === 'SIGTERM') {
+        queueMicrotask(() => {
+          child.signalCode = 'SIGTERM';
+          child.emit('exit', null, 'SIGTERM');
+        });
+        return true;
+      }
+      return signal !== 'SIGKILL';
+    });
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await install(supervisor);
+    vi.useFakeTimers();
+
+    try {
+      const firstStop = supervisor.stopClient('session-1').then(
+        () => undefined,
+        (error: unknown) => error
+      );
+      await vi.advanceTimersByTimeAsync(5001);
+      await vi.advanceTimersByTimeAsync(5001);
+
+      await expect(firstStop).resolves.toMatchObject({
+        message: 'Failed to send SIGKILL to ACP process for session session-1',
+      });
+      expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+
+      retrying = true;
+      await supervisor.stopClient('session-1');
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not escalate after the process exits from SIGTERM with a null exit code', async () => {
     // Catches treating Node's signal-termination shape as a still-live child process.
     const handle = createTestProcessHandle();
