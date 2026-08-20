@@ -10,7 +10,6 @@ const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
 const mockGitStateRemove = vi.hoisted(() => vi.fn());
 
 const mockGitClient = vi.hoisted(() => ({
-  checkWorktreeExists: vi.fn(),
   deleteWorktree: vi.fn(),
   isBlankRepository: vi.fn(),
   branchExists: vi.fn(),
