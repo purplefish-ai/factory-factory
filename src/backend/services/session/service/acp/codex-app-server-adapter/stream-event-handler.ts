@@ -831,7 +831,7 @@ export class CodexStreamEventHandler {
 
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
-      await this.handleCompletedItemWithoutStartedState(session, item, turnId);
+      await this.handleCompletedItemWithoutStartedState(session, item, turnId, releaseTurnBarrier);
       return;
     }
 
@@ -866,12 +866,14 @@ export class CodexStreamEventHandler {
   private async handleCompletedItemWithoutStartedState(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    turnId: string,
+    releaseTurnBarrier?: () => void
   ): Promise<void> {
     const recovered = this.deps.buildToolCallState(session, item, turnId);
     if (recovered) {
       if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
         this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
+        releaseTurnBarrier?.();
       }
 
       await this.recordSubagentActivity(session, item, recovered);

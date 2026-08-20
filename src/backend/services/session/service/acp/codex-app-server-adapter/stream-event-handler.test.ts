@@ -909,8 +909,17 @@ describe('stream-event-handler', () => {
 
     const emitSessionUpdate = vi.fn(async () => undefined);
     const shouldHoldTurnForPlanApproval = vi.fn(() => true);
-    const holdTurnUntilPlanApprovalResolves = vi.fn();
-    const maybeRequestPlanApproval = vi.fn(async () => undefined);
+    const approvalEvents: string[] = [];
+    const holdTurnUntilPlanApprovalResolves = vi.fn(() => {
+      approvalEvents.push('hold');
+    });
+    const maybeRequestPlanApproval = vi.fn(() => {
+      approvalEvents.push('request');
+      return Promise.resolve();
+    });
+    const releaseTurnBarrier = vi.fn(() => {
+      approvalEvents.push('release');
+    });
     const toolState: ToolCallState = {
       toolCallId: 'call_plan',
       kind: 'think',
@@ -941,17 +950,21 @@ describe('stream-event-handler', () => {
       status: 'completed',
     };
 
-    await handler.handleCodexNotification({
-      method: 'item/completed',
-      params: {
-        threadId: 'thread_1',
-        turnId: 'turn_1',
-        item,
+    await handler.handleCodexNotification(
+      {
+        method: 'item/completed',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          item,
+        },
       },
-    });
+      releaseTurnBarrier
+    );
 
     expect(shouldHoldTurnForPlanApproval).toHaveBeenCalledWith(session, item, 'turn_1');
     expect(holdTurnUntilPlanApprovalResolves).toHaveBeenCalledWith(session, 'turn_1');
+    expect(approvalEvents).toEqual(['hold', 'release', 'request']);
     expect(emitSessionUpdate).toHaveBeenCalledWith(
       'sess_thread_1',
       expect.objectContaining({
