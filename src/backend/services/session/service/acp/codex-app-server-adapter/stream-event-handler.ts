@@ -37,6 +37,8 @@ type CodexNotificationPayload = {
 
 type KnownCodexNotification = ReturnType<typeof knownCodexNotificationSchema.parse>;
 
+const MAX_SYNTHETIC_COMPLETION_TOMBSTONES = 1000;
+
 function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
   return meta ? { _meta: meta } : {};
 }
@@ -86,6 +88,10 @@ export class CodexStreamEventHandler {
   private readonly goalRefreshStateByThreadId = new Map<
     string,
     { notificationVersion: number; pendingRefreshCount: number }
+  >();
+  private readonly completedSyntheticToolItemKeysBySession = new WeakMap<
+    AdapterSession,
+    Set<string>
   >();
 
   constructor(private readonly deps: StreamEventHandlerDeps) {}
@@ -473,6 +479,37 @@ export class CodexStreamEventHandler {
     return session.replayedTurnItemKeys.has(toTurnItemKey(turnId, itemId));
   }
 
+  private hasSyntheticCompletion(session: AdapterSession, turnId: string, itemId: string): boolean {
+    return (
+      session.syntheticallyCompletedToolItemIds.has(itemId) ||
+      (this.completedSyntheticToolItemKeysBySession
+        .get(session)
+        ?.has(toTurnItemKey(turnId, itemId)) ??
+        false)
+    );
+  }
+
+  private finishSubagentSyntheticCompletion(
+    session: AdapterSession,
+    turnId: string,
+    itemId: string
+  ): void {
+    if (!session.syntheticallyCompletedToolItemIds.delete(itemId)) {
+      return;
+    }
+    const completedItemKeys =
+      this.completedSyntheticToolItemKeysBySession.get(session) ?? new Set<string>();
+    this.completedSyntheticToolItemKeysBySession.set(session, completedItemKeys);
+    completedItemKeys.add(toTurnItemKey(turnId, itemId));
+    if (completedItemKeys.size <= MAX_SYNTHETIC_COMPLETION_TOMBSTONES) {
+      return;
+    }
+    const oldestItemKey = completedItemKeys.values().next().value;
+    if (oldestItemKey !== undefined) {
+      completedItemKeys.delete(oldestItemKey);
+    }
+  }
+
   private async emitReasoningThoughtDelta(
     sessionId: string,
     session: AdapterSession,
@@ -534,13 +571,12 @@ export class CodexStreamEventHandler {
     if (this.isReplayedTurnItem(session, turnId, itemId)) {
       return;
     }
+    if (this.hasSyntheticCompletion(session, turnId, itemId)) {
+      return;
+    }
     const toolCall = session.toolCallsByItemId.get(itemId);
     if (!toolCall) {
       this.deps.reportShapeDrift('tool_progress_without_tool_call', { turnId, itemId });
-      return;
-    }
-
-    if (session.syntheticallyCompletedToolItemIds.has(itemId)) {
       return;
     }
 
@@ -698,6 +734,22 @@ export class CodexStreamEventHandler {
       return;
     }
 
+    if (item.type === 'subAgentActivity') {
+      session.syntheticallyCompletedToolItemIds.add(item.id);
+      await this.recordSubagentActivity(session, item, toolInfo);
+      await this.deps.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call',
+        toolCallId: toolInfo.toolCallId,
+        title: toolInfo.title,
+        kind: toolInfo.kind,
+        status: 'completed',
+        ...metaUpdate(toolInfo.meta),
+        rawInput: item,
+        rawOutput: item,
+      });
+      return;
+    }
+
     session.syntheticallyCompletedToolItemIds.delete(item.id);
     session.toolCallsByItemId.set(item.id, toolInfo);
     await this.recordSubagentActivity(session, item, toolInfo);
@@ -731,6 +783,10 @@ export class CodexStreamEventHandler {
     releaseTurnBarrier?: () => void
   ): Promise<void> {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
+      return;
+    }
+    if (item.type === 'subAgentActivity' && this.hasSyntheticCompletion(session, turnId, item.id)) {
+      this.finishSubagentSyntheticCompletion(session, turnId, item.id);
       return;
     }
 

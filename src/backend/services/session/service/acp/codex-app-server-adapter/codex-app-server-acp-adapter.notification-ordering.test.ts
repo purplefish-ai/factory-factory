@@ -141,12 +141,10 @@ describe('CodexAppServerAcpAdapter notification ordering', () => {
       }
     ).handleCodexNotification.bind(adapter);
     const item = {
-      type: 'subAgentActivity',
+      type: 'commandExecution',
       id: 'item_notification_order',
       callId: 'call_notification_order',
-      agentThreadId: 'child_notification_order',
-      agentPath: 'review/notification_order',
-      kind: 'started',
+      command: 'cat README.md',
     };
     const started = handleCodexNotification('item/started', {
       threadId: 'thread_notification_order',
