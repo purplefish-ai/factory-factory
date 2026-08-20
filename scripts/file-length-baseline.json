@@ -12,8 +12,6 @@
   "src/backend/services/ratchet/service/ratchet.service.ts": 1035,
   "src/backend/services/run-script/service/run-script.service.test.ts": 2332,
   "src/backend/services/run-script/service/run-script.service.ts": 1026,
-  "src/backend/services/session/service/acp/acp-runtime-manager.test.ts": 2688,
-  "src/backend/services/session/service/acp/acp-runtime-manager.ts": 1448,
   "src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts": 3422,
   "src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts": 1576,
   "src/backend/services/session/service/lifecycle/session.config.service.test.ts": 1159,

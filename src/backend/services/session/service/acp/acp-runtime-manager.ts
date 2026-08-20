@@ -1,1120 +1,133 @@
-import { type ChildProcess, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { Readable, Writable } from 'node:stream';
-import {
-  ClientSideConnection,
-  type ContentBlock,
-  type LoadSessionResponse,
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionConfigOption,
-} from '@agentclientprotocol/sdk';
-import pLimit from 'p-limit';
-import { z } from 'zod';
-import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
-import {
-  SUBAGENTS_LIST_METHOD,
-  SUBAGENTS_READ_METHOD,
-  type SubagentBrowseCapability,
-  type SubagentListParams,
-  type SubagentListResult,
-  type SubagentReadParams,
-  type SubagentReadResult,
-  subagentListParamsSchema,
-  subagentListResultSchema,
-  subagentReadParamsSchema,
-  subagentReadResultSchema,
-} from '@/shared/acp-protocol/subagents';
-import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
-import { AcpProcessHandle } from './acp-process-handle';
-import { AcpRuntimeActivity } from './acp-runtime-activity';
-import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
+import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
 import type {
-  AcpRuntimeEvent,
-  AcpRuntimeEventHandlers,
-  AcpRuntimePurpose,
-} from './acp-runtime-events';
-import { createExitFence, dispatchAcpRuntimeExit, guardExit } from './acp-runtime-exit-handler';
-import { AcpRuntimeIncarnations } from './acp-runtime-incarnations';
-import {
-  type AcpClientCreationOperation,
-  AcpRuntimeQuiescence,
-  raceWithSoftTimeout,
-} from './acp-runtime-quiescence';
-import {
-  createAcpSpawnError,
-  hasUsableWorkingDir,
-  resolveAcpBinary,
-  resolveInternalCodexAcpSpawnCommand,
-  type SpawnCommand,
-  withTimeout,
-} from './acp-runtime-spawn';
-import { requireSessionConfigOptions } from './acp-session-config-options';
-import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
-import type { AcpClientOptions, PermissionPreset } from './types';
+  SubagentBrowseCapability,
+  SubagentListParams,
+  SubagentListResult,
+  SubagentReadParams,
+  SubagentReadResult,
+} from '@/shared/acp-protocol/subagents';
+import { AcpClientFactory } from './acp-client-factory';
+import type { AcpProcessHandle } from './acp-process-handle';
+import { AcpPromptController } from './acp-prompt-controller';
+import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
+import type { AcpRuntimeContext, AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
+import type { AcpRuntimeEventHandlers, AcpRuntimePurpose } from './acp-runtime-events';
+import type { AcpClientCreationOperation } from './acp-runtime-quiescence';
+import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
+import { AcpSubagentBrowser } from './acp-subagent-browser';
+import type { AcpClientOptions } from './types';
 
-const logger = createLogger('acp-runtime-manager');
-type AcpRuntimeMetadata = { incarnationId: string; purpose: AcpRuntimePurpose; installed: boolean };
-/** Thrown when an ACP prompt exceeds the caller-specified timeout. */
-export class PromptTimeoutError extends Error {
-  constructor(
-    sessionId: string,
-    public readonly timeoutMs: number
-  ) {
-    super(`ACP prompt timed out after ${timeoutMs}ms for session ${sessionId}`);
-    this.name = 'PromptTimeoutError';
-  }
-}
-
-export class AcpBrowseSessionUnavailableError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'AcpBrowseSessionUnavailableError';
-  }
-}
-type AcpSubagentBrowseErrorCode =
-  | 'INVALID_INPUT'
-  | 'NOT_FOUND'
-  | 'PRECONDITION_FAILED'
-  | 'INTERNAL_ERROR';
-
-class AcpSubagentBrowseError extends Error {
-  constructor(
-    public readonly code: AcpSubagentBrowseErrorCode,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.name = 'AcpSubagentBrowseError';
-  }
-}
-
-export type AcpRuntimeCreatedCallback = (
-  sessionId: string,
-  client: AcpProcessHandle,
-  context: { workspaceId: string; workingDir: string }
-) => void;
-function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
-  return preset === 'YOLO' || preset === 'RELAXED' ? 'all' : 'none';
-}
-
-const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
-
-type AcpErrorLogDetails = {
-  message: string;
-  code?: number | string;
-  data?: unknown;
-};
-
-function getAcpErrorMetadata(error: {
-  code?: unknown;
-  data?: unknown;
-}): Omit<AcpErrorLogDetails, 'message'> {
-  const code =
-    typeof error.code === 'number' || typeof error.code === 'string' ? error.code : undefined;
-  return {
-    ...(code !== undefined ? { code } : {}),
-    ...(typeof error.data !== 'undefined' ? { data: error.data } : {}),
-  };
-}
-
-function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
-  if (error instanceof Error) {
-    const maybe = error as Error & { code?: unknown; data?: unknown };
-    return {
-      message: error.message,
-      ...getAcpErrorMetadata(maybe),
-    };
-  }
-
-  if (typeof error === 'object' && error !== null) {
-    const maybe = error as { message?: unknown; code?: unknown; data?: unknown };
-    const message =
-      typeof maybe.message === 'string'
-        ? maybe.message
-        : (() => {
-            try {
-              return JSON.stringify(error);
-            } catch {
-              return String(error);
-            }
-          })();
-    return {
-      message,
-      ...getAcpErrorMetadata(maybe),
-    };
-  }
-
-  return { message: String(error) };
-}
-
-function isMethodNotFoundError(error: unknown): boolean {
-  const details = getAcpErrorLogDetails(error);
-  return details.code === -32_601 || details.message.includes('Method not found');
-}
-
-type SubagentBrowseOperation = 'list' | 'transcript';
-
-function subagentBrowseMessage(
-  operation: SubagentBrowseOperation,
-  kind: 'invalid' | 'not_found' | 'protocol' | 'failed'
-): string {
-  const subject = operation === 'list' ? 'Sub-agent list' : 'Sub-agent transcript';
-  if (kind === 'invalid') {
-    return `Invalid ${subject.toLowerCase()} request.`;
-  }
-  if (kind === 'not_found') {
-    return `${subject} not found for this session.`;
-  }
-  if (kind === 'protocol') {
-    return `${subject} is unavailable because the provider returned an invalid response.`;
-  }
-  return `${subject} request failed.`;
-}
-
-function normalizeSubagentBrowseError(
-  error: unknown,
-  operation: SubagentBrowseOperation
-): AcpSubagentBrowseError {
-  if (error instanceof AcpSubagentBrowseError) {
-    return error;
-  }
-  if (error instanceof z.ZodError) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      subagentBrowseMessage(operation, 'protocol'),
-      { cause: error }
-    );
-  }
-
-  const details = getAcpErrorLogDetails(error);
-  if (details.code === -32_602) {
-    return new AcpSubagentBrowseError(
-      'INVALID_INPUT',
-      subagentBrowseMessage(operation, 'invalid'),
-      { cause: error }
-    );
-  }
-  if (details.code === -32_002) {
-    return new AcpSubagentBrowseError('NOT_FOUND', subagentBrowseMessage(operation, 'not_found'), {
-      cause: error,
-    });
-  }
-  if (details.code === -32_601) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      'Sub-agent browsing is unavailable for this session.',
-      { cause: error }
-    );
-  }
-  if (details.code === -32_000) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      'Provider authentication is required for sub-agent browsing.',
-      { cause: error }
-    );
-  }
-  if (details.code === -32_603 || details.code === -32_600 || details.code === -32_700) {
-    return new AcpSubagentBrowseError(
-      'PRECONDITION_FAILED',
-      subagentBrowseMessage(operation, 'protocol'),
-      { cause: error }
-    );
-  }
-  return new AcpSubagentBrowseError('INTERNAL_ERROR', subagentBrowseMessage(operation, 'failed'), {
-    cause: error,
-  });
-}
+export type { AcpRuntimeCreatedCallback } from './acp-runtime-contracts';
+export { AcpBrowseSessionUnavailableError, PromptTimeoutError } from './acp-runtime-errors';
 
 export class AcpRuntimeManager {
-  private readonly sessions = new Map<string, AcpProcessHandle>();
-  private readonly activity = new AcpRuntimeActivity();
-  private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
-  private readonly stoppingInProgress = new Set<string>();
-  private readonly stopOperations = new Map<string, Promise<void>>();
-  private readonly quiescence = new AcpRuntimeQuiescence({
-    stopClient: (sessionId) => this.stopClient(sessionId),
-  });
-  private readonly managedStopChildren = new WeakSet<ChildProcess>();
-  private readonly runtimeIncarnations = new AcpRuntimeIncarnations<AcpRuntimeMetadata>();
-  private readonly exitHandling = new Map<string, Promise<void>>();
-  private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
-  private readonly lockRefCounts = new Map<string, number>();
-  private readonly shutdownWaiters = new Set<() => void>();
-  private readonly sessionStopWaiters = new Map<string, Set<() => void>>();
-  private isShuttingDown = false;
-  private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
-  private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-  private preferSourceEntrypoint = true;
-  private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
+  private readonly clientFactory: AcpClientFactory;
+  private readonly promptController: AcpPromptController;
+  private readonly configController = new AcpRuntimeConfigController();
+  private readonly subagentBrowser = new AcpSubagentBrowser();
+  private readonly supervisor: AcpRuntimeSupervisor;
+
   constructor(options?: { acpStartupTimeoutMs?: number }) {
-    this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
+    this.clientFactory = new AcpClientFactory(options);
+    let supervisor!: AcpRuntimeSupervisor;
+    this.promptController = new AcpPromptController({
+      isCurrentHandle: (sessionId, handle) => supervisor.isCurrentHandle(sessionId, handle),
+      stopClient: (sessionId) => supervisor.stopClient(sessionId),
+    });
+    supervisor = new AcpRuntimeSupervisor({
+      clientFactory: this.clientFactory,
+      cancelPrompt: (sessionId, handle) => this.promptController.cancelPrompt(sessionId, handle),
+    });
+    this.supervisor = supervisor;
   }
+
   setAcpStartupTimeoutMs(timeoutMs: number): void {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-      return;
-    }
-    this.acpStartupTimeoutMs = Math.floor(timeoutMs);
+    this.clientFactory.setAcpStartupTimeoutMs(timeoutMs);
   }
+
   configureEnvironment(options: {
     preferSourceEntrypoint: boolean;
     childProcessEnvProvider: () => NodeJS.ProcessEnv;
   }): void {
-    this.preferSourceEntrypoint = options.preferSourceEntrypoint;
-    this.childProcessEnvProvider = options.childProcessEnvProvider;
+    this.clientFactory.configureEnvironment(options);
   }
+
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
-    this.onClientCreatedCallback = callback;
+    this.supervisor.setOnClientCreated(callback);
   }
+
   isStopInProgress(sessionId: string): boolean {
-    return this.stoppingInProgress.has(sessionId);
+    return this.supervisor.isStopInProgress(sessionId);
   }
+
   getClient(sessionId: string): AcpProcessHandle | undefined {
-    return this.activity.isBrowseOnly(sessionId) ? undefined : this.getBrowseClient(sessionId);
+    return this.supervisor.getClient(sessionId);
   }
+
   getBrowseClient(sessionId: string): AcpProcessHandle | undefined {
-    const handle = this.sessions.get(sessionId);
-    return handle?.isRunning() ? handle : undefined;
+    return this.supervisor.getBrowseClient(sessionId);
   }
+
   isBrowseOnlySession(sessionId: string): boolean {
-    const hasRuntime = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
-    const fencePurpose = this.quiescence.getTrackedSessionPurpose(sessionId);
-    return (
-      (hasRuntime || fencePurpose !== null) &&
-      (!hasRuntime || this.activity.isBrowseOnly(sessionId)) &&
-      (fencePurpose === null || fencePurpose === 'browse')
-    );
+    return this.supervisor.isBrowseOnlySession(sessionId);
   }
+
   hasClientCreationOperation(sessionId: string): boolean {
-    return this.quiescence.getTrackedSessionPurpose(sessionId) !== null;
+    return this.supervisor.hasClientCreationOperation(sessionId);
   }
+
   getPendingClient(sessionId: string): Promise<AcpProcessHandle> | undefined {
-    return this.pendingCreation.get(sessionId);
+    return this.supervisor.getPendingClient(sessionId);
   }
+
   runClientCreationOperation<T>(
     sessionId: string,
     purpose: AcpRuntimePurpose,
     operation: (registration: AcpClientCreationOperation) => Promise<T>
   ): Promise<T> {
-    if (this.isShuttingDown) {
-      return Promise.reject(this.createShutdownError(sessionId));
-    }
-    return this.quiescence.runClientCreationOperation(sessionId, purpose, operation);
-  }
-  stopAndQuiesce(sessionId: string): Promise<void> {
-    return this.quiescence.stopAndQuiesce(sessionId);
-  }
-  getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
-    return this.getBrowseClient(sessionId)?.getSubagentBrowseCapability() ?? null;
+    return this.supervisor.runClientCreationOperation(sessionId, purpose, operation);
   }
 
-  async listSubagents(
+  stopAndQuiesce(sessionId: string): Promise<void> {
+    return this.supervisor.stopAndQuiesce(sessionId);
+  }
+
+  getSubagentBrowseCapability(sessionId: string): SubagentBrowseCapability | null {
+    return this.subagentBrowser.getCapability(this.supervisor.getBrowseClient(sessionId));
+  }
+
+  listSubagents(
     sessionId: string,
     input: Omit<SubagentListParams, 'sessionId'>
   ): Promise<SubagentListResult> {
-    const handle = this.requireSubagentBrowseHandle(sessionId);
-    const parsedParams = subagentListParamsSchema.safeParse({
-      ...input,
-      sessionId: handle.providerSessionId,
-    });
-    if (!parsedParams.success) {
-      throw new AcpSubagentBrowseError('INVALID_INPUT', subagentBrowseMessage('list', 'invalid'), {
-        cause: parsedParams.error,
-      });
-    }
-    try {
-      const response = await handle.connection.extMethod(SUBAGENTS_LIST_METHOD, parsedParams.data);
-      return subagentListResultSchema.parse(response);
-    } catch (error) {
-      throw normalizeSubagentBrowseError(error, 'list');
-    }
+    return this.subagentBrowser.listSubagents(this.supervisor.getBrowseClient(sessionId), input);
   }
 
-  async readSubagentTranscript(
+  readSubagentTranscript(
     sessionId: string,
     input: Omit<SubagentReadParams, 'sessionId'>
   ): Promise<SubagentReadResult> {
-    const handle = this.requireSubagentBrowseHandle(sessionId);
-    const parsedParams = subagentReadParamsSchema.safeParse({
-      ...input,
-      sessionId: handle.providerSessionId,
-    });
-    if (!parsedParams.success) {
-      throw new AcpSubagentBrowseError(
-        'INVALID_INPUT',
-        subagentBrowseMessage('transcript', 'invalid'),
-        { cause: parsedParams.error }
-      );
-    }
-    try {
-      const response = await handle.connection.extMethod(SUBAGENTS_READ_METHOD, parsedParams.data);
-      return subagentReadResultSchema.parse(response);
-    } catch (error) {
-      throw normalizeSubagentBrowseError(error, 'transcript');
-    }
+    return this.subagentBrowser.readSubagentTranscript(
+      this.supervisor.getBrowseClient(sessionId),
+      input
+    );
   }
 
-  private requireSubagentBrowseHandle(sessionId: string): AcpProcessHandle {
-    const handle = this.getBrowseClient(sessionId);
-    if (!handle) {
-      throw new AcpSubagentBrowseError(
-        'PRECONDITION_FAILED',
-        'Sub-agent browsing requires a running parent session.'
-      );
-    }
-    if (!handle.getSubagentBrowseCapability()) {
-      throw new AcpSubagentBrowseError(
-        'PRECONDITION_FAILED',
-        'Sub-agent browsing is unavailable for this session.'
-      );
-    }
-    return handle;
-  }
-
-  async getOrCreateClient(
+  getOrCreateClient(
     sessionId: string,
     options: AcpClientOptions,
     handlers: AcpRuntimeEventHandlers,
-    context: { workspaceId: string; workingDir: string }
+    context: AcpRuntimeContext
   ): Promise<AcpProcessHandle> {
-    guardExit(sessionId);
-    if (this.isShuttingDown) {
-      throw this.createShutdownError(sessionId);
-    }
-    let lock = this.creationLocks.get(sessionId);
-    if (!lock) {
-      lock = pLimit(1);
-      this.creationLocks.set(sessionId, lock);
-      this.lockRefCounts.set(sessionId, 0);
-    }
-
-    const currentCount = this.lockRefCounts.get(sessionId) ?? 0;
-    this.lockRefCounts.set(sessionId, currentCount + 1);
-
-    return await lock(async () => {
-      try {
-        const exitHandling = this.exitHandling.get(sessionId);
-        if (exitHandling) {
-          await exitHandling;
-        }
-        if (this.isShuttingDown) {
-          throw this.createShutdownError(sessionId);
-        }
-
-        const existing = this.getBrowseClient(sessionId);
-        if (existing?.isRunning()) {
-          this.promoteForActiveUse(sessionId, options, existing);
-          logger.debug('Returning existing running ACP client', { sessionId });
-          return existing;
-        }
-
-        const pending = this.pendingCreation.get(sessionId);
-        if (pending) {
-          logger.debug('Waiting for pending ACP client creation', { sessionId });
-          const handle = await pending;
-          this.promoteForActiveUse(sessionId, options, handle);
-          return handle;
-        }
-
-        logger.info('Creating new ACP client', { sessionId, provider: options.provider });
-        this.activity.recordPurpose(sessionId, options.purpose);
-        const runtime = this.runtimeIncarnations.begin(sessionId, {
-          incarnationId: randomUUID(),
-          purpose: options.purpose ?? 'active',
-          installed: false,
-        });
-        const createPromise = this.createClient(sessionId, options, handlers, context, runtime);
-        this.pendingCreation.set(sessionId, createPromise);
-
-        try {
-          return await createPromise;
-        } finally {
-          this.pendingCreation.delete(sessionId);
-          this.runtimeIncarnations.clearUninstalled(sessionId, runtime);
-          this.clearActivityIfUnused(sessionId);
-        }
-      } finally {
-        const refCount = this.lockRefCounts.get(sessionId) ?? 1;
-        const newCount = refCount - 1;
-        if (newCount <= 0) {
-          this.creationLocks.delete(sessionId);
-          this.lockRefCounts.delete(sessionId);
-        } else {
-          this.lockRefCounts.set(sessionId, newCount);
-        }
-      }
-    });
-  }
-
-  private promoteForActiveUse(
-    sessionId: string,
-    options: AcpClientOptions,
-    handle: AcpProcessHandle
-  ): void {
-    if (options.purpose !== 'browse') {
-      this.activity.promote(sessionId);
-      const metadata = this.runtimeIncarnations.getForChild(handle.child);
-      if (metadata) {
-        metadata.purpose = 'active';
-      }
-    }
-  }
-
-  private clearActivityIfUnused(sessionId: string): void {
-    const isInUse = this.sessions.has(sessionId) || this.pendingCreation.has(sessionId);
-    this.activity.clearIfUnused(sessionId, isInUse);
-  }
-
-  private async createClient(
-    sessionId: string,
-    options: AcpClientOptions,
-    handlers: AcpRuntimeEventHandlers,
-    context: { workspaceId: string; workingDir: string },
-    runtime: AcpRuntimeMetadata
-  ): Promise<AcpProcessHandle> {
-    if (this.isShuttingDown) {
-      throw this.createShutdownError(sessionId);
-    }
-
-    if (!hasUsableWorkingDir(options.workingDir)) {
-      throw new Error('ACP working directory is required before spawning adapter process');
-    }
-
-    const isCodex = options.provider === 'CODEX';
-    const spawnCommand: SpawnCommand = options.adapterBinaryPath
-      ? {
-          command: options.adapterBinaryPath,
-          args: [],
-          commandLabel: options.adapterBinaryPath,
-        }
-      : isCodex
-        ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
-        : (() => {
-            const binaryName = 'claude-agent-acp';
-            const packageName = '@agentclientprotocol/claude-agent-acp';
-            const binaryPath = resolveAcpBinary(packageName, binaryName);
-            return {
-              command: binaryPath,
-              args: [],
-              commandLabel: binaryPath,
-            };
-          })();
-
-    logger.info('Spawning ACP subprocess', {
-      sessionId,
-      command: spawnCommand.command,
-      args: spawnCommand.args,
-      provider: options.provider,
-      workingDir: options.workingDir,
-    });
-
-    const spawnEnv = {
-      ...this.childProcessEnvProvider(),
-      BROWSER: 'none',
-      ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true' } : {}),
-    };
-
-    // Spawn subprocess (CRITICAL: detached MUST be false for orphan prevention)
-    const child: ChildProcess = spawn(spawnCommand.command, spawnCommand.args, {
-      cwd: options.workingDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: spawnEnv,
-      detached: false,
-    });
-    this.runtimeIncarnations.recordChild(child, runtime);
-
-    // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
-    // client creation cleanly instead of surfacing as uncaught process errors.
-    let startupErrorListener: ((error: unknown) => void) | null = null;
-    const startupError = new Promise<never>((_, reject) => {
-      startupErrorListener = (error: unknown) =>
-        reject(createAcpSpawnError(spawnCommand.commandLabel, error));
-      child.once('error', startupErrorListener);
-    });
-    const startupErrorSettled = startupError.catch(() => undefined);
-
-    wireAcpRuntimeErrorHandler(child, sessionId, handlers, runtime, () =>
-      this.runtimeIncarnations.isCurrent(sessionId, runtime)
-    );
-    await this.abortClientCreationIfStopping(child, sessionId);
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      handlers.onAcpLog?.(options.sessionId, {
-        eventType: 'acp_stderr',
-        data: chunk.toString(),
-      });
-    });
-
-    // stdout/stdin are guaranteed to be set because we spawned with stdio: ['pipe', 'pipe', 'pipe']
-    if (!(child.stdout && child.stdin)) {
-      throw new Error('ACP subprocess stdio streams not available');
-    }
-    const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
-    const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
-    const stream = ndJsonStream(output, input);
-
-    // Normalize malformed session/update notifications before SDK Zod validation.
-    // Workaround: claude-agent-acp sends `line: [start, end]` arrays instead of numbers.
-    const normalizedStream = {
-      writable: stream.writable,
-      readable: createNormalizedAcpReadableStream(stream.readable),
-    };
-
-    const acpEventHandler = handlers.onAcpEvent;
-    const onEvent = (sid: string, event: AcpRuntimeEvent) => {
-      if (!this.runtimeIncarnations.isCurrent(sid, runtime)) {
-        logger.debug('Ignoring ACP event from stale runtime', { sessionId: sid });
-        return;
-      }
-      this.activity.recordEvent(sid, event);
-      if (acpEventHandler) {
-        acpEventHandler(sid, event);
-        return;
-      }
-      logger.debug('ACP event received but no handler registered', { sessionId });
-    };
-
-    const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
-
-    const connection = new ClientSideConnection(
-      (_agent) =>
-        new AcpClientHandler(
-          sessionId,
-          onEvent,
-          handlers.permissionBridge,
-          handlers.onAcpLog,
-          autoApprovePolicy
-        ),
-      normalizedStream
-    );
-
-    let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
-    let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
-    const startupTimeoutMs = this.acpStartupTimeoutMs;
-    const shutdownSignal = this.createShutdownSignal(sessionId);
-    const stopSignal = this.createSessionStopSignal(sessionId);
-    const startupCancelOn = Promise.race([
-      startupErrorSettled,
-      shutdownSignal.promise.catch(() => undefined),
-      stopSignal.promise.catch(() => undefined),
-    ]);
-
-    try {
-      initResult = await Promise.race([
-        withTimeout({
-          promise: connection.initialize({
-            protocolVersion: PROTOCOL_VERSION,
-            clientCapabilities: {},
-            clientInfo: {
-              name: 'factory-factory',
-              title: 'Factory Factory',
-              version: '1.2.0',
-            },
-          }),
-          timeoutMs: startupTimeoutMs,
-          description: 'initialize handshake',
-          cancelOn: startupCancelOn,
-        }),
-        startupError,
-        shutdownSignal.promise,
-        stopSignal.promise,
-      ]);
-
-      logger.info('ACP connection initialized', {
-        sessionId,
-        agentCapabilities: initResult.agentCapabilities,
-      });
-
-      const agentCapabilities = initResult.agentCapabilities ?? {};
-      sessionInfo = await Promise.race([
-        withTimeout({
-          promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
-          timeoutMs: startupTimeoutMs,
-          description: 'session creation',
-          cancelOn: startupCancelOn,
-        }),
-        startupError,
-        shutdownSignal.promise,
-        stopSignal.promise,
-      ]);
-    } catch (error) {
-      await this.cleanupFailedClientCreation(child, sessionId);
-      throw error;
-    } finally {
-      shutdownSignal.dispose();
-      stopSignal.dispose();
-      if (startupErrorListener) {
-        child.removeListener('error', startupErrorListener);
-        startupErrorListener = null;
-      }
-    }
-
-    if (this.isShuttingDown) {
-      await this.cleanupFailedClientCreation(child, sessionId);
-      throw this.createShutdownError(sessionId);
-    }
-
-    await this.abortClientCreationIfStopping(child, sessionId);
-
-    // Build handle
-    const agentCapabilities = initResult.agentCapabilities ?? {};
-    const handle = new AcpProcessHandle({
-      connection,
-      child,
-      provider: options.provider,
-      providerSessionId: sessionInfo.providerSessionId,
-      agentCapabilities,
-    });
-    handle.configOptions = sessionInfo.configOptions;
-
-    // Store in sessions map
-    this.sessions.set(sessionId, handle);
-    runtime.installed = true;
-    this.activity.recordPurpose(sessionId, options.purpose);
-
-    this.wireChildExitHandler(sessionId, child, handlers, runtime);
-    await this.notifyClientCreated(sessionId, handle, context, handlers);
-
-    return handle;
-  }
-
-  private async cleanupFailedClientCreation(child: ChildProcess, sessionId: string): Promise<void> {
-    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
-
-    if (hasExited()) {
-      return;
-    }
-
-    try {
-      let terminationObserved = false;
-      const exitPromise = new Promise<void>((resolve) => {
-        const resolveOnTermination = () => {
-          terminationObserved = true;
-          child.removeListener('exit', resolveOnTermination);
-          child.removeListener('close', resolveOnTermination);
-          resolve();
-        };
-        child.once('exit', resolveOnTermination);
-        child.once('close', resolveOnTermination);
-        if (hasExited()) {
-          resolveOnTermination();
-        }
-      });
-
-      child.kill('SIGTERM');
-
-      await raceWithSoftTimeout(exitPromise, 5000);
-
-      if (!(terminationObserved || hasExited())) {
-        child.kill('SIGKILL');
-      }
-    } catch {
-      // Ignore process-kill errors while cleaning up failed initialization.
-    }
-
-    logger.warn('Cleaned up ACP subprocess after initialization failure', {
-      sessionId,
-      pid: child.pid,
-    });
-  }
-
-  private async abortClientCreationIfStopping(
-    child: ChildProcess,
-    sessionId: string
-  ): Promise<void> {
-    if (!this.stoppingInProgress.has(sessionId)) {
-      return;
-    }
-
-    await this.cleanupFailedClientCreation(child, sessionId);
-    throw this.createStopRequestedError(sessionId);
-  }
-
-  private createShutdownError(sessionId: string): Error {
-    return new Error(`ACP runtime manager is shutting down; cannot create client ${sessionId}`);
-  }
-
-  private createStopRequestedError(sessionId: string): Error {
-    return new Error(`ACP session stop requested; cannot create client ${sessionId}`);
+    return this.supervisor.getOrCreateClient(sessionId, options, handlers, context);
   }
 
   beginShutdown(): string[] {
-    const sessionIds = new Set([
-      ...this.sessions.keys(),
-      ...this.pendingCreation.keys(),
-      ...this.creationLocks.keys(),
-      ...this.quiescence.getTrackedSessionIds(),
-    ]);
-
-    if (!this.isShuttingDown) {
-      this.isShuttingDown = true;
-      for (const rejectShutdown of this.shutdownWaiters) {
-        rejectShutdown();
-      }
-      this.shutdownWaiters.clear();
-    }
-
-    return [...sessionIds];
-  }
-
-  private beginSessionStop(sessionId: string): void {
-    this.stoppingInProgress.add(sessionId);
-
-    const stopWaiters = this.sessionStopWaiters.get(sessionId);
-    if (!stopWaiters) {
-      return;
-    }
-
-    for (const rejectStop of stopWaiters) {
-      rejectStop();
-    }
-    this.sessionStopWaiters.delete(sessionId);
-  }
-
-  private createShutdownSignal(sessionId: string): {
-    promise: Promise<never>;
-    dispose: () => void;
-  } {
-    let rejectShutdown!: () => void;
-    const promise = new Promise<never>((_resolve, reject) => {
-      rejectShutdown = () => reject(this.createShutdownError(sessionId));
-    });
-
-    if (this.isShuttingDown) {
-      rejectShutdown();
-    } else {
-      this.shutdownWaiters.add(rejectShutdown);
-    }
-
-    return {
-      promise,
-      dispose: () => {
-        this.shutdownWaiters.delete(rejectShutdown);
-      },
-    };
-  }
-
-  private createSessionStopSignal(sessionId: string): {
-    promise: Promise<never>;
-    dispose: () => void;
-  } {
-    let rejectStop!: () => void;
-    const promise = new Promise<never>((_resolve, reject) => {
-      rejectStop = () => reject(this.createStopRequestedError(sessionId));
-    });
-
-    if (this.stoppingInProgress.has(sessionId)) {
-      rejectStop();
-    } else {
-      const waiters = this.sessionStopWaiters.get(sessionId) ?? new Set<() => void>();
-      waiters.add(rejectStop);
-      this.sessionStopWaiters.set(sessionId, waiters);
-    }
-
-    return {
-      promise,
-      dispose: () => {
-        const waiters = this.sessionStopWaiters.get(sessionId);
-        if (!waiters) {
-          return;
-        }
-        waiters.delete(rejectStop);
-        if (waiters.size === 0) {
-          this.sessionStopWaiters.delete(sessionId);
-        }
-      },
-    };
-  }
-
-  private wireChildExitHandler(
-    sessionId: string,
-    child: ChildProcess,
-    handlers: AcpRuntimeEventHandlers,
-    runtime: AcpRuntimeMetadata
-  ): void {
-    child.once('exit', (code) => {
-      const classification = this.classifyChildExit(sessionId, child, code);
-      if (classification === null) {
-        this.clearActivityIfUnused(sessionId);
-        return;
-      }
-
-      this.pendingCreation.delete(sessionId);
-
-      const [exitHandling, releaseExitHandling] = createExitFence();
-      this.exitHandling.set(sessionId, exitHandling);
-      void dispatchAcpRuntimeExit(handlers, {
-        sessionId,
-        exitCode: code,
-        incarnationId: runtime.incarnationId,
-        ...classification,
-      }).finally(() => {
-        if (this.exitHandling.get(sessionId) === exitHandling) {
-          this.exitHandling.delete(sessionId);
-        }
-        this.clearActivityIfUnused(sessionId);
-        releaseExitHandling();
-      });
-    });
-  }
-
-  private classifyChildExit(
-    sessionId: string,
-    child: ChildProcess,
-    code: number | null
-  ): { managed: boolean; purpose: AcpRuntimePurpose } | null {
-    const purpose = this.runtimeIncarnations.getForChild(child)?.purpose ?? 'active';
-    const current = this.sessions.get(sessionId);
-    const managed =
-      this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
-
-    if (current?.child === child) {
-      this.sessions.delete(sessionId);
-      this.activity.clear(sessionId);
-    } else if (current) {
-      logger.debug('Skipping exit handler - stale ACP process exited', {
-        sessionId,
-        code,
-        pid: child.pid,
-        currentPid: current.getPid(),
-      });
-      return null;
-    }
-
-    this.runtimeIncarnations.clearForChild(sessionId, child);
-
-    if (!current && managed) {
-      logger.debug('Skipping exit handler - managed stop process exited', { sessionId, code });
-      return null;
-    }
-
-    return { managed, purpose };
-  }
-
-  private async notifyClientCreated(
-    sessionId: string,
-    handle: AcpProcessHandle,
-    context: { workspaceId: string; workingDir: string },
-    handlers: AcpRuntimeEventHandlers
-  ): Promise<void> {
-    if (this.onClientCreatedCallback) {
-      this.onClientCreatedCallback(sessionId, handle, context);
-    }
-
-    if (handlers.onSessionId) {
-      try {
-        await handlers.onSessionId(sessionId, handle.providerSessionId);
-      } catch (error) {
-        logger.warn('Failed to handle ACP session ID event', {
-          sessionId,
-          providerSessionId: handle.providerSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-  }
-
-  private async createOrResumeSession(
-    connection: ClientSideConnection,
-    sessionId: string,
-    options: AcpClientOptions,
-    agentCapabilities: Record<string, unknown>
-  ): Promise<{
-    providerSessionId: string;
-    configOptions: SessionConfigOption[];
-  }> {
-    const storedId = options.resumeProviderSessionId;
-    const browseOnly = options.purpose === 'browse';
-
-    const mcpServers = (options.mcpServers ?? []).map((s) => ({
-      name: s.name,
-      command: s.command,
-      args: s.args,
-      env: Object.entries(s.env).map(([name, value]) => ({ name, value })),
-    }));
-    const resumed = await this.tryLoadStoredSession(
-      connection,
-      sessionId,
-      options,
-      agentCapabilities,
-      mcpServers
-    );
-    if (resumed) {
-      return resumed;
-    }
-
-    if (browseOnly) {
-      throw new AcpBrowseSessionUnavailableError(
-        storedId
-          ? 'Provider does not support restoring this session for sub-agent browsing.'
-          : 'Stored provider session is required for sub-agent browsing.'
-      );
-    }
-
-    const sessionResult = await connection.newSession({
-      cwd: options.workingDir,
-      mcpServers,
-    });
-    logger.info('ACP session created', {
-      sessionId,
-      providerSessionId: sessionResult.sessionId,
-    });
-    return {
-      providerSessionId: sessionResult.sessionId,
-      configOptions: requireSessionConfigOptions(options.provider, 'newSession', sessionResult),
-    };
-  }
-
-  private async tryLoadStoredSession(
-    connection: ClientSideConnection,
-    sessionId: string,
-    options: AcpClientOptions,
-    agentCapabilities: Record<string, unknown>,
-    mcpServers: Array<{
-      name: string;
-      command: string;
-      args: string[];
-      env: Array<{ name: string; value: string }>;
-    }>
-  ): Promise<{ providerSessionId: string; configOptions: SessionConfigOption[] } | null> {
-    const storedId = options.resumeProviderSessionId;
-    if (!(agentCapabilities.loadSession === true && storedId)) {
-      return null;
-    }
-
-    let loadResult: LoadSessionResponse;
-    try {
-      loadResult = await connection.loadSession({
-        sessionId: storedId,
-        cwd: options.workingDir,
-        mcpServers,
-      });
-    } catch (error) {
-      this.logLoadSessionFailure(sessionId, storedId, error, options.purpose === 'browse');
-      if (options.purpose === 'browse') {
-        throw new AcpBrowseSessionUnavailableError(
-          'Provider failed to restore this session for sub-agent browsing.',
-          { cause: error }
-        );
-      }
-      return null;
-    }
-
-    logger.info('ACP session resumed via loadSession', {
-      sessionId,
-      providerSessionId: storedId,
-    });
-    return {
-      providerSessionId: storedId,
-      configOptions: requireSessionConfigOptions(options.provider, 'loadSession', loadResult),
-    };
-  }
-
-  private logLoadSessionFailure(
-    sessionId: string,
-    storedProviderSessionId: string,
-    error: unknown,
-    browseOnly: boolean
-  ): void {
-    const details = getAcpErrorLogDetails(error);
-    logger.warn(browseOnly ? 'Browse-only loadSession failed' : 'loadSession failed', {
-      sessionId,
-      storedProviderSessionId,
-      error: details.message,
-      ...(details.code !== undefined ? { errorCode: details.code } : {}),
-      ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
-      ...(!browseOnly ? { fallback: 'newSession' } : {}),
-    });
+    return this.supervisor.beginShutdown();
   }
 
   stopClient(sessionId: string): Promise<void> {
-    const existingStop = this.stopOperations.get(sessionId);
-    if (existingStop) {
-      logger.debug('ACP session stop already in progress', { sessionId });
-      return existingStop;
-    }
-
-    let trackedStop: Promise<void>;
-    trackedStop = this.stopClientOnce(sessionId).finally(() => {
-      if (this.stopOperations.get(sessionId) === trackedStop) {
-        this.stopOperations.delete(sessionId);
-      }
-    });
-    this.stopOperations.set(sessionId, trackedStop);
-    return trackedStop;
-  }
-
-  private async stopClientOnce(sessionId: string): Promise<void> {
-    const pendingCreation = this.pendingCreation.get(sessionId);
-    const initialHandle = this.sessions.get(sessionId);
-    if (!(initialHandle || pendingCreation)) {
-      return;
-    }
-
-    this.beginSessionStop(sessionId);
-    let stoppedHandle: AcpProcessHandle | undefined;
-    try {
-      if (pendingCreation) {
-        await raceWithSoftTimeout(
-          pendingCreation.catch(() => undefined),
-          5000
-        );
-      }
-
-      const handle = this.sessions.get(sessionId) ?? initialHandle;
-      if (!handle) {
-        return;
-      }
-      stoppedHandle = handle;
-
-      this.managedStopChildren.add(handle.child);
-
-      // Cancel prompt if in flight
-      if (handle.isPromptInFlight) {
-        try {
-          await handle.connection.cancel({
-            sessionId: handle.providerSessionId,
-          });
-        } catch (error) {
-          logger.debug('Failed to cancel prompt during stop (expected)', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      // Wait for exit or timeout
-      const exitPromise = new Promise<void>((resolve) => {
-        handle.child.on('exit', () => resolve());
-        // If already exited, resolve immediately
-        if (handle.child.exitCode !== null) {
-          resolve();
-        }
-      });
-
-      // Send SIGTERM after registering exit listener to avoid missing fast exits.
-      handle.child.kill('SIGTERM');
-
-      await raceWithSoftTimeout(exitPromise, 5000);
-
-      // Escalate to SIGKILL if still alive
-      if (handle.child.exitCode === null) {
-        logger.warn('ACP process did not exit after SIGTERM, escalating to SIGKILL', {
-          sessionId,
-          pid: handle.getPid(),
-        });
-        handle.child.kill('SIGKILL');
-      }
-    } finally {
-      this.stoppingInProgress.delete(sessionId);
-      const current = this.sessions.get(sessionId);
-      if (current === stoppedHandle) {
-        this.sessions.delete(sessionId);
-        this.activity.clear(sessionId);
-        this.runtimeIncarnations.clearForChild(sessionId, stoppedHandle?.child);
-      }
-    }
+    return this.supervisor.stopClient(sessionId);
   }
 
   async sendPrompt(
@@ -1122,128 +135,20 @@ export class AcpRuntimeManager {
     prompt: ContentBlock[],
     timeoutMs?: number
   ): Promise<{ stopReason: string }> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    handle.isPromptInFlight = true;
-    try {
-      const promptPromise = handle.connection.prompt({
-        sessionId: handle.providerSessionId,
-        prompt,
-      });
-
-      let result: { stopReason: string };
-      if (timeoutMs != null && timeoutMs > 0) {
-        result = await new Promise<{ stopReason: string }>((resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new PromptTimeoutError(sessionId, timeoutMs)),
-            timeoutMs
-          );
-          promptPromise.then(
-            (r) => {
-              clearTimeout(timer);
-              resolve(r);
-            },
-            (e) => {
-              clearTimeout(timer);
-              reject(e);
-            }
-          );
-        });
-      } else {
-        result = await promptPromise;
-      }
-
-      handle.isPromptInFlight = false;
-      return { stopReason: result.stopReason };
-    } catch (error) {
-      if (error instanceof PromptTimeoutError) {
-        await this.escalatePromptTimeout(sessionId, handle, timeoutMs);
-      }
-      handle.isPromptInFlight = false;
-      throw error;
-    }
-  }
-
-  /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
-  private async escalatePromptTimeout(
-    sessionId: string,
-    timedOutHandle: AcpProcessHandle,
-    timeoutMs: number | undefined
-  ): Promise<void> {
-    if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-      return;
-    }
-
-    logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
-    try {
-      const cancelled = await Promise.race([
-        this.cancelPrompt(sessionId).then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
-      ]);
-      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-        return;
-      }
-      if (!cancelled) {
-        logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
-        this.clearPromptInFlight(sessionId);
-        await this.stopClient(sessionId).catch(() => {
-          // Best-effort cleanup
-        });
-      }
-    } catch {
-      if (!this.isCurrentPromptTimeoutHandle(sessionId, timedOutHandle, timeoutMs)) {
-        return;
-      }
-      // Cancel failed — stop the client forcibly
-      logger.warn('Cancel failed after timeout, stopping client', { sessionId });
-      this.clearPromptInFlight(sessionId);
-      await this.stopClient(sessionId).catch(() => {
-        // Best-effort cleanup
-      });
-    }
-  }
-
-  private isCurrentPromptTimeoutHandle(
-    sessionId: string,
-    timedOutHandle: AcpProcessHandle,
-    timeoutMs: number | undefined
-  ): boolean {
-    if (this.sessions.get(sessionId) === timedOutHandle) {
-      return true;
-    }
-
-    logger.info('Ignoring stale prompt timeout for replaced ACP session', {
+    return await this.promptController.sendPrompt(
       sessionId,
-      timeoutMs,
-    });
-    return false;
-  }
-
-  private clearPromptInFlight(sessionId: string): void {
-    const handle = this.sessions.get(sessionId);
-    if (handle) {
-      handle.isPromptInFlight = false;
-    }
+      this.requireInstalledHandle(sessionId),
+      prompt,
+      timeoutMs
+    );
   }
 
   /** Returns true when a prompt was actually in flight and got cancelled. */
   async cancelPrompt(sessionId: string): Promise<boolean> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      return false;
-    }
-
-    if (!handle.isPromptInFlight) {
-      return false;
-    }
-
-    await handle.connection.cancel({
-      sessionId: handle.providerSessionId,
-    });
-    return true;
+    return await this.promptController.cancelPrompt(
+      sessionId,
+      this.supervisor.getInstalledHandle(sessionId)
+    );
   }
 
   async setConfigOption(
@@ -1251,164 +156,48 @@ export class AcpRuntimeManager {
     configId: string,
     value: string
   ): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    try {
-      const response = await handle.connection.setSessionConfigOption({
-        sessionId: handle.providerSessionId,
-        configId,
-        value,
-      });
-
-      const configOptions = requireSessionConfigOptions(handle.provider, 'setSessionConfigOption', {
-        configOptions: response.configOptions,
-      });
-      handle.configOptions = configOptions;
-      return configOptions;
-    } catch (error) {
-      logger.warn('setSessionConfigOption failed', {
-        sessionId,
-        configId,
-        provider: handle.provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+    return await this.configController.setConfigOption(
+      this.requireInstalledHandle(sessionId),
+      configId,
+      value,
+      sessionId
+    );
   }
 
   async setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    try {
-      await handle.connection.setSessionMode({
-        sessionId: handle.providerSessionId,
-        modeId,
-      });
-
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'mode' ? { ...option, currentValue: modeId } : option
-      );
-
-      return [...handle.configOptions];
-    } catch (error) {
-      logger.warn('setSessionMode failed', {
-        sessionId,
-        modeId,
-        provider: handle.provider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+    return await this.configController.setSessionMode(
+      this.requireInstalledHandle(sessionId),
+      modeId,
+      sessionId
+    );
   }
 
   async setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
-    }
-
-    const applyModelToCache = (): SessionConfigOption[] => {
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'model' ? { ...option, currentValue: modelId } : option
-      );
-      return [...handle.configOptions];
-    };
-
-    if (handle.provider === 'CLAUDE') {
-      try {
-        await handle.connection.unstable_setSessionModel({
-          sessionId: handle.providerSessionId,
-          modelId,
-        });
-        return applyModelToCache();
-      } catch (error) {
-        if (!isMethodNotFoundError(error)) {
-          logger.warn('setSessionModel failed', {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
-        logger.warn(
-          'unstable_setSessionModel unavailable, falling back to setSessionConfigOption',
-          {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-          }
-        );
-      }
-    }
-
-    return await this.setConfigOption(sessionId, 'model', modelId);
-  }
-
-  async stopAllClients(timeoutMs = 5000): Promise<void> {
-    this.beginShutdown();
-
-    await this.stopCurrentClients(timeoutMs);
-    await this.waitForPendingCreations(timeoutMs);
-    await this.quiescence.waitForAll();
-    await this.stopCurrentClients(timeoutMs);
-
-    this.sessions.clear();
-    this.pendingCreation.clear();
-    this.runtimeIncarnations.clear();
-    this.creationLocks.clear();
-    this.lockRefCounts.clear();
-    this.shutdownWaiters.clear();
-    this.sessionStopWaiters.clear();
-
-    logger.info('All ACP clients stopped and cleaned up');
-  }
-
-  private async stopCurrentClients(timeoutMs: number): Promise<void> {
-    const sessionIds = [...this.sessions.keys()];
-    const stopPromises = sessionIds.map((sessionId) =>
-      raceWithSoftTimeout(this.stopClient(sessionId), timeoutMs)
+    return await this.configController.setSessionModel(
+      this.requireInstalledHandle(sessionId),
+      modelId,
+      sessionId
     );
-
-    await Promise.all(stopPromises);
   }
 
-  private async waitForPendingCreations(timeoutMs: number): Promise<void> {
-    const pendingCreations = [...this.pendingCreation.values()];
-    if (pendingCreations.length === 0) {
-      return;
-    }
-
-    await raceWithSoftTimeout(
-      Promise.allSettled(pendingCreations).then(() => undefined),
-      timeoutMs
-    );
+  stopAllClients(timeoutMs = 5000): Promise<void> {
+    return this.supervisor.stopAllClients(timeoutMs);
   }
 
   getAllClients(): IterableIterator<[string, AcpProcessHandle]> {
-    return this.sessions.entries();
+    return this.supervisor.getAllClients();
   }
 
   isSessionRunning(sessionId: string): boolean {
-    return this.getClient(sessionId) !== undefined;
+    return this.supervisor.isSessionRunning(sessionId);
   }
 
   isSessionWorking(sessionId: string): boolean {
-    const handle = this.sessions.get(sessionId);
-    if (!handle) {
-      return false;
-    }
-    return this.activity.isWorking(sessionId, handle.isPromptInFlight);
+    return this.supervisor.isSessionWorking(sessionId);
   }
 
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return sessionIds.some((id) => this.isSessionWorking(id));
+    return this.supervisor.isAnySessionWorking(sessionIds);
   }
 
   getAllActiveProcesses(): Array<{
@@ -1419,25 +208,15 @@ export class AcpRuntimeManager {
     isPromptInFlight: boolean;
     provider: string;
   }> {
-    const processes: Array<{
-      sessionId: string;
-      pid: number | undefined;
-      status: string;
-      isRunning: boolean;
-      isPromptInFlight: boolean;
-      provider: string;
-    }> = [];
-    for (const [sessionId, handle] of this.sessions) {
-      processes.push({
-        sessionId,
-        pid: handle.getPid(),
-        status: handle.isRunning() ? 'running' : 'stopped',
-        isRunning: handle.isRunning(),
-        isPromptInFlight: handle.isPromptInFlight,
-        provider: handle.provider,
-      });
+    return this.supervisor.getAllActiveProcesses();
+  }
+
+  private requireInstalledHandle(sessionId: string): AcpProcessHandle {
+    const handle = this.supervisor.getInstalledHandle(sessionId);
+    if (!handle) {
+      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
     }
-    return processes;
+    return handle;
   }
 }
 

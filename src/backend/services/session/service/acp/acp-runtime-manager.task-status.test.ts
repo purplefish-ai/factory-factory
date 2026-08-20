@@ -1,86 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { mockSpawn, mockInitialize, mockLoadSession, mockNewSession, mockAcpClients } = vi.hoisted(
-  () => ({
-    mockSpawn: vi.fn(),
-    mockInitialize: vi.fn(),
-    mockLoadSession: vi.fn(),
-    mockNewSession: vi.fn(),
-    mockAcpClients: [] as unknown[],
-  })
-);
-
-vi.mock('node:child_process', () => ({
-  spawn: (...args: unknown[]) => mockSpawn(...args),
-}));
-
-vi.mock('@agentclientprotocol/sdk', () => {
-  class MockClientSideConnection {
-    initialize = mockInitialize;
-    loadSession = mockLoadSession;
-    newSession = mockNewSession;
-    cancel = vi.fn();
-
-    constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
-      mockAcpClients.push(toClient({}));
-    }
-  }
-
-  return {
-    ClientSideConnection: MockClientSideConnection,
-    ndJsonStream: () => ({ writable: {}, readable: { pipeThrough: () => ({}) } }),
-    PROTOCOL_VERSION: 1,
-  };
-});
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-  getCurrentProcessEnv: () => ({ ...process.env }),
-}));
-
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { AcpClientHandler } from './acp-client-handler';
-import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
-import { AcpRuntimeManager } from './acp-runtime-manager';
+import type { AcpRuntimeManager } from './acp-runtime-manager';
+import {
+  createManagerTestHarness,
+  mockAcpClients,
+  mockInitialize,
+  mockLoadSession,
+  mockNewSession,
+  mockSpawn,
+} from './acp-runtime-manager.test-harness';
 import {
   codexOptions,
   createDeferred,
-  createMockChildProcess,
   defaultConfigOptions,
   defaultContext,
+  defaultHandlers,
   exitChildAfterSigterm,
 } from './acp-runtime-manager.test-helpers';
 
-function defaultHandlers(): AcpRuntimeEventHandlers {
-  return {
-    onSessionId: vi.fn().mockResolvedValue(undefined),
-    onExit: vi.fn().mockResolvedValue(undefined),
-    onError: vi.fn(),
-    onAcpEvent: vi.fn(),
-  };
-}
-
-function setupSuccessfulSpawn() {
-  const child = createMockChildProcess();
-  mockSpawn.mockReturnValue(child);
-  mockInitialize.mockResolvedValue({
-    protocolVersion: 1,
-    agentCapabilities: { loadSession: true },
-    agentInfo: { name: 'codex-app-server-acp' },
-  });
-  mockLoadSession.mockResolvedValue({ configOptions: defaultConfigOptions() });
-  mockNewSession.mockResolvedValue({
-    sessionId: 'provider-session-new',
-    configOptions: defaultConfigOptions(),
-  });
-  return child;
-}
-
-describe('AcpRuntimeManager startup task status', () => {
+describe('AcpRuntimeManager task status', () => {
   let manager: AcpRuntimeManager;
 
   beforeEach(() => {
@@ -89,14 +27,15 @@ describe('AcpRuntimeManager startup task status', () => {
     mockLoadSession.mockReset();
     mockNewSession.mockReset();
     mockAcpClients.length = 0;
-    manager = new AcpRuntimeManager();
+    manager = createManagerTestHarness().manager;
   });
 
   it('ignores task status events from a superseded startup runtime', async () => {
+    // Catches stale startup handlers mutating or forwarding status after replacement.
     const staleLoad = createDeferred<{
       configOptions: ReturnType<typeof defaultConfigOptions>;
     }>();
-    const firstChild = setupSuccessfulSpawn();
+    const firstChild = createManagerTestHarness().setupSuccessfulSpawn({ loadSession: true });
     exitChildAfterSigterm(firstChild);
     mockLoadSession.mockReturnValueOnce(staleLoad.promise);
     const firstHandlers = defaultHandlers();
@@ -108,14 +47,14 @@ describe('AcpRuntimeManager startup task status', () => {
         defaultContext()
       )
       .catch((error: unknown) => error);
-    await vi.waitFor(() => expect(mockLoadSession).toHaveBeenCalledOnce());
+    await expect.poll(() => mockLoadSession.mock.calls.length).toBe(1);
 
     await manager.stopClient('session-1');
     await expect(firstCreation).resolves.toMatchObject({
       message: expect.stringContaining('ACP session stop requested'),
     });
 
-    const replacementChild = setupSuccessfulSpawn();
+    const replacementChild = createManagerTestHarness().setupSuccessfulSpawn({ loadSession: true });
     exitChildAfterSigterm(replacementChild);
     await manager.getOrCreateClient(
       'session-1',
@@ -138,7 +77,8 @@ describe('AcpRuntimeManager startup task status', () => {
   });
 
   it('accepts task status emitted while the current runtime is starting', async () => {
-    const child = setupSuccessfulSpawn();
+    // Catches incarnation gating that recognizes only installed runtimes.
+    const child = createManagerTestHarness().setupSuccessfulSpawn({ loadSession: true });
     exitChildAfterSigterm(child);
     mockLoadSession.mockImplementationOnce(async () => {
       const currentClient = mockAcpClients.at(-1) as AcpClientHandler;

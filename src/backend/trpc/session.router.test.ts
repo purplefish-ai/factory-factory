@@ -1,7 +1,7 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
-import { AcpRuntimeManager } from '@/backend/services/session';
+import type { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 
 const mockSessionDataService = vi.hoisted(() => ({
@@ -32,7 +32,12 @@ const mockGetQuickAction = vi.hoisted(() => vi.fn());
 
 import { sessionRouter } from './session.trpc';
 
-function createCaller(options?: { acpRuntimeManager?: AcpRuntimeManager }) {
+type SubagentRuntimeManager = Pick<
+  AcpRuntimeManager,
+  'isSessionWorking' | 'getSubagentBrowseCapability' | 'listSubagents' | 'readSubagentTranscript'
+>;
+
+function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) {
   const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
     getSubagentBrowseCapability: vi.fn(),
@@ -92,27 +97,27 @@ function createCaller(options?: { acpRuntimeManager?: AcpRuntimeManager }) {
   };
 }
 
+type SubagentBrowseErrorCode = 'INVALID_INPUT' | 'NOT_FOUND' | 'PRECONDITION_FAILED';
+
 function createSubagentRuntimeManager(
-  extMethod: (method: string, params: Record<string, unknown>) => Promise<unknown>
-): AcpRuntimeManager {
-  const manager = new AcpRuntimeManager();
-  const handle = {
-    providerSessionId: 'provider-session-1',
-    connection: { extMethod: vi.fn(extMethod) },
-    isRunning: () => true,
+  code: SubagentBrowseErrorCode,
+  message: string
+): SubagentRuntimeManager {
+  const error = Object.assign(new Error(message), {
+    name: 'AcpSubagentBrowseError',
+    code,
+  });
+  return {
+    isSessionWorking: () => false,
     getSubagentBrowseCapability: () => ({
       version: 1 as const,
       list: true as const,
       read: true as const,
       notifications: true as const,
     }),
+    listSubagents: () => Promise.reject(new Error('Unexpected sub-agent list request')),
+    readSubagentTranscript: () => Promise.reject(error),
   };
-  (
-    manager as unknown as {
-      sessions: Map<string, typeof handle>;
-    }
-  ).sessions.set('session-1', handle);
-  return manager;
 }
 
 describe('sessionRouter', () => {
@@ -254,12 +259,9 @@ describe('sessionRouter', () => {
     });
 
     it('maps an invalid transcript cursor to a safe BAD_REQUEST', async () => {
-      const runtime = createSubagentRuntimeManager(() =>
-        Promise.reject({
-          code: -32_602,
-          message: 'Invalid params: provider cursor parser secret',
-          data: { cursor: 'invalid' },
-        })
+      const runtime = createSubagentRuntimeManager(
+        'INVALID_INPUT',
+        'Invalid sub-agent transcript request.'
       );
       const { caller } = createCaller({ acpRuntimeManager: runtime });
 
@@ -277,11 +279,9 @@ describe('sessionRouter', () => {
     });
 
     it('maps a foreign child to a safe NOT_FOUND', async () => {
-      const runtime = createSubagentRuntimeManager(() =>
-        Promise.reject({
-          code: -32_002,
-          message: 'Resource not found: provider thread secret',
-        })
+      const runtime = createSubagentRuntimeManager(
+        'NOT_FOUND',
+        'Sub-agent transcript not found for this session.'
       );
       const { caller } = createCaller({ acpRuntimeManager: runtime });
 
@@ -298,26 +298,11 @@ describe('sessionRouter', () => {
       });
     });
 
-    it.each([
-      {
-        label: 'malformed provider response',
-        extMethod: () =>
-          Promise.resolve({
-            projectionBoundary: 'turn',
-            updates: [{ sessionUpdate: 'unknown' }],
-            nextCursor: null,
-          }),
-      },
-      {
-        label: 'provider protocol error',
-        extMethod: () =>
-          Promise.reject({
-            code: -32_603,
-            message: 'Internal error: provider response IDs did not match',
-          }),
-      },
-    ])('maps a $label to a safe PRECONDITION_FAILED', async ({ extMethod }) => {
-      const runtime = createSubagentRuntimeManager(extMethod);
+    it('maps a normalized browse error to a safe PRECONDITION_FAILED', async () => {
+      const runtime = createSubagentRuntimeManager(
+        'PRECONDITION_FAILED',
+        'Sub-agent transcript is unavailable because the provider returned an invalid response.'
+      );
       const { caller } = createCaller({ acpRuntimeManager: runtime });
 
       await expect(
