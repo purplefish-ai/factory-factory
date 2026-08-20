@@ -174,7 +174,10 @@ export class CodexStreamEventHandler {
     return updates;
   }
 
-  async handleCodexNotification(notification: CodexNotificationPayload): Promise<void> {
+  async handleCodexNotification(
+    notification: CodexNotificationPayload,
+    releaseTurnBarrier?: () => void
+  ): Promise<void> {
     const parsed = knownCodexNotificationSchema.safeParse(notification);
     if (!parsed.success) {
       this.deps.reportShapeDrift('malformed_notification', {
@@ -286,7 +289,8 @@ export class CodexStreamEventHandler {
       await this.handleItemCompleted(
         session,
         typedNotification.params.item as { type: string; id: string } & Record<string, unknown>,
-        typedNotification.params.turnId
+        typedNotification.params.turnId,
+        releaseTurnBarrier
       );
       return;
     }
@@ -775,7 +779,8 @@ export class CodexStreamEventHandler {
   private async handleItemCompleted(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    turnId: string,
+    releaseTurnBarrier?: () => void
   ): Promise<void> {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
       return;
@@ -826,13 +831,16 @@ export class CodexStreamEventHandler {
 
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
-      await this.handleCompletedItemWithoutStartedState(session, item, turnId);
+      await this.handleCompletedItemWithoutStartedState(session, item, turnId, releaseTurnBarrier);
       return;
     }
 
-    if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
-      this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
-    }
+    const releaseHeldTurnBarrier = this.holdTurnForPlanApproval(
+      session,
+      item,
+      turnId,
+      releaseTurnBarrier
+    );
 
     const statusFromItem = toToolStatus(item.status);
     const status = statusFromItem ?? 'completed';
@@ -853,19 +861,26 @@ export class CodexStreamEventHandler {
     session.toolCallsByItemId.delete(item.id);
     session.syntheticallyCompletedToolItemIds.delete(item.id);
 
+    // Turn completion can now observe the hold after item completion is fully projected.
+    releaseHeldTurnBarrier?.();
+
     await this.deps.maybeRequestPlanApproval(session, item, turnId, existing);
   }
 
   private async handleCompletedItemWithoutStartedState(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    turnId: string,
+    releaseTurnBarrier?: () => void
   ): Promise<void> {
     const recovered = this.deps.buildToolCallState(session, item, turnId);
     if (recovered) {
-      if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
-        this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
-      }
+      const releaseHeldTurnBarrier = this.holdTurnForPlanApproval(
+        session,
+        item,
+        turnId,
+        releaseTurnBarrier
+      );
 
       await this.recordSubagentActivity(session, item, recovered);
 
@@ -881,6 +896,8 @@ export class CodexStreamEventHandler {
         rawOutput: item,
       });
 
+      releaseHeldTurnBarrier?.();
+
       await this.deps.maybeRequestPlanApproval(session, item, turnId, recovered);
       return;
     }
@@ -890,6 +907,19 @@ export class CodexStreamEventHandler {
       itemType: item.type,
       itemId: item.id,
     });
+  }
+
+  private holdTurnForPlanApproval(
+    session: AdapterSession,
+    item: { type: string; id: string } & Record<string, unknown>,
+    turnId: string,
+    releaseTurnBarrier?: () => void
+  ): (() => void) | undefined {
+    if (!this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
+      return undefined;
+    }
+    this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
+    return releaseTurnBarrier;
   }
 
   private async recordSubagentActivity(

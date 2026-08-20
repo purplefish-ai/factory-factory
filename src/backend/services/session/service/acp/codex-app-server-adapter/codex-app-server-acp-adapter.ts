@@ -747,11 +747,12 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
     return session;
   }
-
   private handleCodexNotification(method: string, params: unknown): Promise<void> {
     return this.codexNotificationQueue.enqueue(
+      method,
       params,
-      () => this.streamEventHandler.handleCodexNotification({ method, params }),
+      (releaseTurnBarrier) =>
+        this.streamEventHandler.handleCodexNotification({ method, params }, releaseTurnBarrier),
       (error) => {
         this.reportShapeDrift('notification_handler_error', {
           method,
