@@ -1618,7 +1618,7 @@ describe('GitHubCLIService', () => {
       );
     });
 
-    it('gets and closes issues with success and error branches', async () => {
+    it('gets issues with success and error branches', async () => {
       mockExecFile.mockResolvedValueOnce({
         stdout: JSON.stringify({
           number: 7,
@@ -1643,14 +1643,6 @@ describe('GitHubCLIService', () => {
 
       mockExecFile.mockRejectedValueOnce(new Error('issue lookup failed'));
       await expect(githubCLIService.getIssue('o', 'r', 7)).resolves.toBeNull();
-
-      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
-      await expect(githubCLIService.closeIssue('o', 'r', 7)).resolves.toBeUndefined();
-
-      mockExecFile.mockRejectedValueOnce(new Error('issue close failed'));
-      await expect(githubCLIService.closeIssue('o', 'r', 7)).rejects.toThrow(
-        'Failed to close issue: issue close failed'
-      );
     });
   });
 
@@ -1897,8 +1889,8 @@ describe('GitHubCLIService', () => {
       mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
 
       await Promise.all([
-        githubCLIService.closeIssue('owner', 'repo', 5),
-        githubCLIService.closeIssue('owner', 'repo', 5),
+        githubCLIService.approvePR('owner', 'repo', 5),
+        githubCLIService.approvePR('owner', 'repo', 5),
       ]);
 
       // Both calls should spawn separate processes (no dedup for writes)

@@ -1141,32 +1141,6 @@ class GitHubCLIService {
       return null;
     }
   }
-
-  /**
-   * Close a GitHub issue.
-   */
-  async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {
-    try {
-      await this.execMutating(
-        ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
-        { timeout: GH_TIMEOUT_MS.default }
-      );
-      logger.info('Issue closed successfully', { owner, repo, issueNumber });
-    } catch (error) {
-      const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      logger.error('Failed to close issue via gh CLI', {
-        owner,
-        repo,
-        issueNumber,
-        errorType,
-        error: errorMessage,
-      });
-
-      throw new Error(`Failed to close issue: ${errorMessage}`);
-    }
-  }
 }
 
 export type {
