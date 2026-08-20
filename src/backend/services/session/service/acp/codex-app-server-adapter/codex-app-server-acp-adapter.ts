@@ -206,6 +206,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         this.subagentController.handleThreadStatusChanged(subagentId, runtimeType),
       handleSubagentTranscriptActivity: (subagentId) =>
         this.subagentController.handleTranscriptActivity(subagentId),
+      extNotification: (method, params) => this.connection.extNotification(method, params),
     });
 
     this.monitorConnectionClose();
@@ -313,7 +314,10 @@ export class CodexAppServerAcpAdapter implements Agent {
     this.stateContainer.registerSession(session);
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
-      await this.replayThreadHistory(session.sessionId, session.threadId);
+      await this.streamEventHandler.replayThreadHistory(session.sessionId, session.threadId);
+      await this.streamEventHandler
+        .refreshTaskStatus(session)
+        .catch(() => this.reportShapeDrift('thread_goal_refresh_failed'));
     } catch (error) {
       try {
         await this.removeMcpServersForThread(session.threadId);
@@ -742,10 +746,6 @@ export class CodexAppServerAcpAdapter implements Agent {
       throw RequestError.invalidParams({ sessionId });
     }
     return session;
-  }
-
-  private async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
-    await this.streamEventHandler.replayThreadHistory(sessionId, threadId);
   }
 
   private handleCodexNotification(method: string, params: unknown): Promise<void> {

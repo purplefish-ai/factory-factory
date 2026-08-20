@@ -12,6 +12,7 @@ export type {
   AcpRuntimePurpose,
   AcpSessionUpdateEvent,
   AcpSubagentsChangedEvent,
+  AcpTaskStatusChangedEvent,
 } from './acp-runtime-events';
 export {
   AcpRuntimeManager,

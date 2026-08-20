@@ -308,6 +308,21 @@ describe('AcpClientHandler', () => {
   });
 
   describe('extension notifications', () => {
+    it('dispatches task activity changes under the DB session ID', async () => {
+      const eventFn = vi.fn();
+      const handler = new AcpClientHandler('db-session-1', eventFn, undefined, vi.fn(), 'all');
+
+      await handler.extNotification('factoryfactory.ai/task/status-changed', {
+        sessionId: 'provider-session-123',
+        active: true,
+      });
+
+      expect(eventFn).toHaveBeenCalledWith('db-session-1', {
+        type: 'acp_task_status_changed',
+        active: true,
+      });
+    });
+
     it('logs then dispatches a valid sub-agent change under the DB session ID', async () => {
       const eventFn = vi.fn();
       const logFn = vi.fn();
@@ -390,6 +405,11 @@ describe('AcpClientHandler', () => {
         return;
       }
 
+      if (event.type === 'acp_task_status_changed') {
+        expect(event.active).toBe(true);
+        return;
+      }
+
       expect(event.subagentId).toBe('child-1');
       expect(event.change).toBe('updated');
     };
@@ -410,6 +430,11 @@ describe('AcpClientHandler', () => {
         toolCall: { toolCallId: 'tc-1', title: 'Write file' },
         options: [{ optionId: 'allow-1', kind: 'allow_once', name: 'Allow once' }],
       },
+    });
+
+    onEvent('test-session', {
+      type: 'acp_task_status_changed',
+      active: true,
     });
 
     onEvent('test-session', {

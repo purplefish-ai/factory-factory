@@ -54,8 +54,8 @@ describe('AcpRuntimeSupervisor status queries', () => {
     expect(supervisor.isCurrentHandle('active-session', browse)).toBe(false);
     expect(supervisor.isSessionRunning('active-session')).toBe(true);
     expect(supervisor.isSessionRunning('browse-session')).toBe(false);
-    expect(supervisor.isSessionWorking('browse-session')).toBe(true);
-    expect(supervisor.isAnySessionWorking(['missing', 'browse-session'])).toBe(true);
+    expect(supervisor.isSessionWorking('browse-session')).toBe(false);
+    expect(supervisor.isAnySessionWorking(['missing', 'browse-session'])).toBe(false);
     expect([...supervisor.getAllClients()]).toEqual([
       ['active-session', active],
       ['browse-session', browse],
@@ -86,5 +86,64 @@ describe('AcpRuntimeSupervisor status queries', () => {
       status: 'stopped',
       isRunning: false,
     });
+  });
+
+  it('tracks task activity between prompts until the current runtime reports idle', async () => {
+    // Catches work status relying only on prompt-in-flight state.
+    const handle = createTestProcessHandle();
+    const { supervisor, createClient } = createHarness();
+    createClient.mockImplementationOnce((params) => {
+      params.handlers.onAcpEvent?.('session-1', {
+        type: 'acp_task_status_changed',
+        active: true,
+      });
+      return Promise.resolve(handle);
+    });
+
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+
+    expect(supervisor.isSessionWorking('session-1')).toBe(true);
+    const runtimeHandlers = createClient.mock.calls[0]?.[0].handlers;
+    runtimeHandlers?.onAcpEvent?.('session-1', {
+      type: 'acp_task_status_changed',
+      active: false,
+    });
+    expect(supervisor.isSessionWorking('session-1')).toBe(false);
+  });
+
+  it('keeps browse task activity hidden until the runtime is promoted', async () => {
+    // Catches browse-only runtimes affecting workspace work indicators.
+    const handle = createTestProcessHandle();
+    const { supervisor, createClient } = createHarness();
+    createClient.mockImplementationOnce((params) => {
+      params.handlers.onAcpEvent?.('session-1', {
+        type: 'acp_task_status_changed',
+        active: true,
+      });
+      return Promise.resolve(handle);
+    });
+
+    await supervisor.getOrCreateClient(
+      'session-1',
+      { ...defaultOptions(), purpose: 'browse' },
+      defaultHandlers(),
+      defaultContext()
+    );
+    handle.isPromptInFlight = true;
+    expect(supervisor.isSessionWorking('session-1')).toBe(false);
+
+    await supervisor.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    handle.isPromptInFlight = false;
+    expect(supervisor.isSessionWorking('session-1')).toBe(true);
   });
 });

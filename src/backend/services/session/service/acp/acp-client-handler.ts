@@ -12,6 +12,10 @@ import {
 } from '@/shared/acp-protocol/subagents';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
+import {
+  TASK_STATUS_CHANGED_METHOD,
+  taskStatusChangedParamsSchema,
+} from './codex-app-server-adapter/task-status-protocol';
 
 export type AcpEventCallback = (sessionId: string, event: AcpRuntimeEvent) => void;
 export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
@@ -205,6 +209,23 @@ export class AcpClientHandler implements Client {
       method,
       data: params,
     });
+
+    if (method === TASK_STATUS_CHANGED_METHOD) {
+      const parsed = taskStatusChangedParamsSchema.safeParse(params);
+      if (!parsed.success) {
+        logger.warn('Ignoring malformed ACP task status notification', {
+          sessionId: this.sessionId,
+          method,
+          issues: parsed.error.issues,
+        });
+        return Promise.resolve();
+      }
+      this.onEvent(this.sessionId, {
+        type: 'acp_task_status_changed',
+        active: parsed.data.active,
+      });
+      return Promise.resolve();
+    }
 
     if (method !== SUBAGENTS_CHANGED_METHOD) {
       logger.debug('Ignoring unknown ACP extension notification', {

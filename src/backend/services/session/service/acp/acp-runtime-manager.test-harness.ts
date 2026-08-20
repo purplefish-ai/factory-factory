@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     .fn()
     .mockReturnValue({ writable: {}, readable: { pipeThrough: () => ({}) } }),
   mockLoggerWarn: vi.fn(),
+  mockAcpClients: [] as unknown[],
 }));
 
 export const mockSpawn: ReturnType<typeof vi.fn> = mocks.mockSpawn;
@@ -39,6 +40,7 @@ export const mockSetSessionModel: ReturnType<typeof vi.fn> = mocks.mockSetSessio
 export const mockExtMethod: ReturnType<typeof vi.fn> = mocks.mockExtMethod;
 export const mockNdJsonStream: ReturnType<typeof vi.fn> = mocks.mockNdJsonStream;
 export const mockLoggerWarn: ReturnType<typeof vi.fn> = mocks.mockLoggerWarn;
+export const mockAcpClients: unknown[] = mocks.mockAcpClients;
 
 vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => mocks.mockSpawn(...args),
@@ -59,6 +61,7 @@ vi.mock('@agentclientprotocol/sdk', () => {
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
       this.toClient = toClient;
+      mocks.mockAcpClients.push(toClient({}));
     }
   }
 

@@ -58,7 +58,9 @@ function createMockCodexClient(): { client: InjectedCodexClient; mocks: CodexMoc
   const mocks: CodexMocks = {
     start: vi.fn(),
     stop: vi.fn(async () => undefined),
-    request: vi.fn(),
+    request: vi.fn((method: string) =>
+      Promise.resolve(method === 'thread/goal/get' ? { goal: null } : undefined)
+    ),
     notify: vi.fn(),
     respondSuccess: vi.fn(),
     respondError: vi.fn(),
@@ -690,7 +692,6 @@ describe('CodexAppServerAcpAdapter', () => {
         ],
       },
     });
-
     await adapter.loadSession({
       sessionId: 'sess_thread_abc',
       cwd: '/tmp/workspace',
@@ -754,7 +755,6 @@ describe('CodexAppServerAcpAdapter', () => {
         ],
       },
     });
-
     await adapter.loadSession({
       sessionId: 'sess_thread_replay_dedupe',
       cwd: '/tmp/workspace',
@@ -1171,7 +1171,6 @@ describe('CodexAppServerAcpAdapter', () => {
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_resume', turns: [] },
     });
-
     const mcpServers: McpServer[] = [
       {
         type: 'http',

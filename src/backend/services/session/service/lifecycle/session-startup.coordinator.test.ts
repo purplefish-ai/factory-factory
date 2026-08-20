@@ -92,6 +92,21 @@ describe('SessionStartupCoordinator', () => {
     });
   });
 
+  it('keeps a resumed active task working when no prompt is in flight', async () => {
+    const harness = createLifecycleHarness();
+    harness.runtimeManager.isSessionWorking.mockReturnValue(true);
+    const coordinator = createStartupCoordinator(harness);
+
+    await coordinator.getOrCreateSessionClient('session-1');
+
+    expect(harness.sessionDomainService.setRuntimeSnapshot).toHaveBeenLastCalledWith('session-1', {
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: expect.any(String),
+    });
+  });
+
   it('keeps the runtime creation fence pending through durable running reconciliation', async () => {
     // Catches releasing the runtime creation fence before the durable RUNNING write settles.
     const harness = createLifecycleHarness();

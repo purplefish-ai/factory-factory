@@ -74,6 +74,41 @@ async function initializeAdapter(
 }
 
 describe('CodexAppServerAcpAdapter notification ordering', () => {
+  it('keeps a replayed session when the optional task-status refresh fails', async () => {
+    const connection = createMockConnection();
+    const { client, request } = createMockCodexClient();
+    const shapeDriftWarn = vi.fn();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, client, {
+      shapeDriftWarn,
+    });
+    await initializeAdapter(adapter, request);
+
+    request.mockResolvedValueOnce({
+      thread: { id: 'thread_optional_goal', cwd: '/tmp/workspace' },
+      approvalPolicy: 'on-failure',
+      reasoningEffort: 'medium',
+    });
+    request.mockResolvedValueOnce({ thread: { id: 'thread_optional_goal', turns: [] } });
+    const internalAdapter = adapter as unknown as {
+      streamEventHandler: { refreshTaskStatus: () => Promise<void> };
+    };
+    vi.spyOn(internalAdapter.streamEventHandler, 'refreshTaskStatus').mockRejectedValueOnce(
+      new Error('goal refresh failed')
+    );
+
+    await expect(
+      adapter.loadSession({
+        sessionId: 'sess_thread_optional_goal',
+        cwd: '/tmp/workspace',
+        mcpServers: [],
+      })
+    ).resolves.toMatchObject({ configOptions: expect.any(Array) });
+    expect(shapeDriftWarn).toHaveBeenCalledWith(
+      'Codex app-server shape drift detected',
+      expect.objectContaining({ event: 'thread_goal_refresh_failed' })
+    );
+  });
+
   it('preserves Codex notification order across asynchronous ACP updates', async () => {
     const connection = createMockConnection();
     const { client, request } = createMockCodexClient();

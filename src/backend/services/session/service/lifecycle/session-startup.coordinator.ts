@@ -59,6 +59,7 @@ export type SessionStartupCoordinatorDependencies = {
     | 'runClientCreationOperation'
     | 'isBrowseOnlySession'
     | 'isSessionRunning'
+    | 'isSessionWorking'
     | 'isStopInProgress'
     | 'stopClient'
   >;
@@ -445,10 +446,11 @@ export class SessionStartupCoordinator {
     this.assertStartupAllowed(sessionId, stopGeneration);
     const existingAcp = this.dependencies.runtimeManager.getClient(sessionId);
     if (existingAcp) {
+      const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
       this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: existingAcp.isPromptInFlight ? 'running' : 'idle',
+        phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
-        activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
+        activity: isWorking ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
       return { handle: existingAcp, dispatchableNotificationCount: 0 };
@@ -496,10 +498,11 @@ export class SessionStartupCoordinator {
           status: SessionStatus.RUNNING,
         });
         this.assertStartupAllowed(sessionId, stopGeneration);
+        const isWorking = this.dependencies.runtimeManager.isSessionWorking(sessionId);
         this.dependencies.sessionDomainService.setRuntimeSnapshot(sessionId, {
-          phase: handle.isPromptInFlight ? 'running' : 'idle',
+          phase: isWorking ? 'running' : 'idle',
           processState: 'alive',
-          activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
+          activity: isWorking ? 'WORKING' : 'IDLE',
           updatedAt: new Date().toISOString(),
         });
         return { handle, resolvedPreset, dispatchableNotificationCount };

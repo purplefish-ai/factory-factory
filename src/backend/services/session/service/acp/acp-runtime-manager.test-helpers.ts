@@ -50,6 +50,7 @@ export function exitChildAfterSigterm(child: MockChildProcess): void {
   child.kill = vi.fn((signal?: string) => {
     if (signal === 'SIGTERM') {
       queueMicrotask(() => {
+        child.killed = true;
         child.signalCode = 'SIGTERM';
         child.emit('exit', null, 'SIGTERM');
       });

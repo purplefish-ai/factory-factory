@@ -33,11 +33,13 @@ export class AcpRuntimeSupervisor {
   private readonly cancelPrompt: AcpRuntimeSupervisorDependencies['cancelPrompt'];
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly browseOnlySessions = new Set<string>();
+  private readonly activeTaskSessions = new Set<string>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly stopOperations = new Map<string, Promise<void>>();
   private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly runtimeMetadata = new WeakMap<ChildProcess, AcpRuntimeMetadata>();
+  private readonly currentRuntimeBySessionId = new Map<string, AcpRuntimeMetadata>();
   private readonly exitHandling = new Map<string, Promise<void>>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
@@ -148,26 +150,29 @@ export class AcpRuntimeSupervisor {
 
         logger.info('Creating new ACP client', { sessionId, provider: options.provider });
         this.recordClientPurpose(sessionId, options);
+        const runtime = {
+          incarnationId: randomUUID(),
+          purpose: options.purpose ?? 'active',
+          installed: false,
+        } satisfies AcpRuntimeMetadata;
+        this.currentRuntimeBySessionId.set(sessionId, runtime);
         const createPromise = this.createClient(
           sessionId,
           options,
           handlers,
           context,
-          {
-            incarnationId: randomUUID(),
-            purpose: options.purpose ?? 'active',
-            installed: false,
-          },
+          runtime,
           stopGeneration
         );
         this.pendingCreation.set(sessionId, createPromise);
         try {
           return await createPromise;
         } finally {
-          if (this.pendingCreation.get(sessionId) === createPromise) {
-            this.pendingCreation.delete(sessionId);
+          this.pendingCreation.delete(sessionId);
+          if (!runtime.installed) {
+            this.clearCurrentRuntime(sessionId, runtime);
           }
-          this.clearBrowseOnlyPurposeIfUnused(sessionId);
+          this.clearActivityIfUnused(sessionId);
         }
       } finally {
         this.releaseCreationLock(sessionId);
@@ -245,7 +250,11 @@ export class AcpRuntimeSupervisor {
   }
 
   isSessionWorking(sessionId: string): boolean {
-    return this.sessions.get(sessionId)?.isPromptInFlight ?? false;
+    const handle = this.sessions.get(sessionId);
+    if (!handle || this.browseOnlySessions.has(sessionId)) {
+      return false;
+    }
+    return handle.isPromptInFlight || this.activeTaskSessions.has(sessionId);
   }
 
   isAnySessionWorking(sessionIds: string[]): boolean {
@@ -311,10 +320,48 @@ export class AcpRuntimeSupervisor {
     this.browseOnlySessions.delete(sessionId);
   }
 
-  private clearBrowseOnlyPurposeIfUnused(sessionId: string): void {
+  private clearActivityIfUnused(sessionId: string): void {
     if (!(this.sessions.has(sessionId) || this.pendingCreation.has(sessionId))) {
-      this.browseOnlySessions.delete(sessionId);
+      this.clearActivity(sessionId);
     }
+  }
+
+  private clearActivity(sessionId: string): void {
+    this.browseOnlySessions.delete(sessionId);
+    this.activeTaskSessions.delete(sessionId);
+  }
+
+  private clearCurrentRuntime(sessionId: string, runtime: AcpRuntimeMetadata): void {
+    if (this.currentRuntimeBySessionId.get(sessionId) === runtime) {
+      this.currentRuntimeBySessionId.delete(sessionId);
+    }
+  }
+
+  private createRuntimeHandlers(
+    handlers: AcpRuntimeEventHandlers,
+    runtime: AcpRuntimeMetadata
+  ): AcpRuntimeEventHandlers {
+    return {
+      ...handlers,
+      onAcpEvent: (sessionId, event) => {
+        if (this.currentRuntimeBySessionId.get(sessionId) !== runtime) {
+          logger.debug('Ignoring ACP event from stale runtime', { sessionId });
+          return;
+        }
+        if (event.type === 'acp_task_status_changed') {
+          if (event.active) {
+            this.activeTaskSessions.add(sessionId);
+          } else {
+            this.activeTaskSessions.delete(sessionId);
+          }
+        }
+        if (handlers.onAcpEvent) {
+          handlers.onAcpEvent(sessionId, event);
+          return;
+        }
+        logger.debug('ACP event received but no handler registered', { sessionId });
+      },
+    };
   }
 
   private async createClient(
@@ -330,12 +377,13 @@ export class AcpRuntimeSupervisor {
     }
     const shutdownSignal = this.createShutdownSignal(sessionId);
     const stopSignal = this.createSessionStopSignal(sessionId);
+    const runtimeHandlers = this.createRuntimeHandlers(handlers, metadata);
     let startupActive = true;
     try {
       const handle = await this.clientFactory.createClient({
         sessionId,
         options,
-        handlers,
+        handlers: runtimeHandlers,
         metadata,
         shutdownSignal,
         stopSignal,
@@ -362,7 +410,8 @@ export class AcpRuntimeSupervisor {
       if (notificationCancellation) {
         if (this.sessions.get(sessionId) === handle) {
           this.sessions.delete(sessionId);
-          this.browseOnlySessions.delete(sessionId);
+          this.clearActivity(sessionId);
+          this.clearCurrentRuntime(sessionId, metadata);
         }
         this.managedStopChildren.add(handle.child);
         await cleanupFailedAcpClientCreation(handle.child, sessionId);
@@ -481,7 +530,7 @@ export class AcpRuntimeSupervisor {
     child.once('exit', (code) => {
       const classification = this.classifyChildExit(sessionId, child, code);
       if (classification === null) {
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         return;
       }
       this.pendingCreation.delete(sessionId);
@@ -496,7 +545,7 @@ export class AcpRuntimeSupervisor {
         if (this.exitHandling.get(sessionId) === exitHandling) {
           this.exitHandling.delete(sessionId);
         }
-        this.clearBrowseOnlyPurposeIfUnused(sessionId);
+        this.clearActivityIfUnused(sessionId);
         releaseExitHandling();
       });
     });
@@ -513,6 +562,11 @@ export class AcpRuntimeSupervisor {
       this.managedStopChildren.delete(child) || this.stoppingInProgress.has(sessionId);
     if (current?.child === child) {
       this.sessions.delete(sessionId);
+      this.clearActivity(sessionId);
+      const runtime = this.runtimeMetadata.get(child);
+      if (runtime) {
+        this.clearCurrentRuntime(sessionId, runtime);
+      }
     } else if (current) {
       logger.debug('Skipping exit handler - stale ACP process exited', {
         sessionId,
@@ -601,10 +655,19 @@ export class AcpRuntimeSupervisor {
       }
     } finally {
       this.stoppingInProgress.delete(sessionId);
-      if (this.sessions.get(sessionId) === stoppedHandle) {
-        this.sessions.delete(sessionId);
-        this.browseOnlySessions.delete(sessionId);
-      }
+      this.removeStoppedHandle(sessionId, stoppedHandle);
+    }
+  }
+
+  private removeStoppedHandle(sessionId: string, stoppedHandle?: AcpProcessHandle): void {
+    if (this.sessions.get(sessionId) !== stoppedHandle) {
+      return;
+    }
+    this.sessions.delete(sessionId);
+    this.clearActivity(sessionId);
+    const runtime = stoppedHandle ? this.runtimeMetadata.get(stoppedHandle.child) : undefined;
+    if (runtime) {
+      this.clearCurrentRuntime(sessionId, runtime);
     }
   }
 
@@ -642,10 +705,12 @@ export class AcpRuntimeSupervisor {
   private clearRegistries(): void {
     this.sessions.clear();
     this.browseOnlySessions.clear();
+    this.activeTaskSessions.clear();
     this.pendingCreation.clear();
     this.stoppingInProgress.clear();
     this.stopOperations.clear();
     this.exitHandling.clear();
+    this.currentRuntimeBySessionId.clear();
     this.creationLocks.clear();
     this.lockRefCounts.clear();
     this.stopGenerations.clear();

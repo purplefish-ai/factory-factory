@@ -49,7 +49,13 @@ export type AcpSubagentsChangedEvent = {
   change: SubagentsChangedParams['change'];
 };
 
+export type AcpTaskStatusChangedEvent = {
+  type: 'acp_task_status_changed';
+  active: boolean;
+};
+
 export type AcpRuntimeEvent =
   | AcpSessionUpdateEvent
   | AcpPermissionRequestEvent
-  | AcpSubagentsChangedEvent;
+  | AcpSubagentsChangedEvent
+  | AcpTaskStatusChangedEvent;

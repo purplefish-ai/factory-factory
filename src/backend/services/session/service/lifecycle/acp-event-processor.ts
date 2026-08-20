@@ -145,6 +145,15 @@ export class AcpEventProcessor {
     sid: string,
     event: Exclude<AcpRuntimeEvent, { type: 'acp_session_update' }>
   ): void {
+    if (event.type === 'acp_task_status_changed') {
+      if (event.active || this.runtimeManager.isSessionWorking(sid)) {
+        this.sessionDomainService.markRunning(sid);
+      } else {
+        this.sessionDomainService.markIdle(sid, 'alive');
+      }
+      return;
+    }
+
     if (event.type === 'acp_subagents_changed') {
       this.sessionDomainService.emitDelta(sid, {
         type: 'subagents_changed',
