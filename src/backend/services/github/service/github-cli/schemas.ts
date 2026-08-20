@@ -41,27 +41,6 @@ const authorSchema = z.object({
   login: z.string(),
 });
 
-const repositorySchema = z.object({
-  nameWithOwner: z.string(),
-});
-
-export const basePRSchema = z.object({
-  number: z.number(),
-  title: z.string(),
-  url: z.string(),
-  repository: repositorySchema,
-  author: authorSchema,
-  createdAt: z.string(),
-  isDraft: z.boolean(),
-});
-
-export const prDetailsSchema = z.object({
-  reviewDecision: reviewDecisionSchema,
-  additions: z.number().optional(),
-  deletions: z.number().optional(),
-  changedFiles: z.number().optional(),
-});
-
 export const prListItemSchema = z.object({
   number: z.number(),
   url: z.string(),
