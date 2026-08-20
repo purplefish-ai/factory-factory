@@ -1,5 +1,4 @@
 {
-  "src/backend/clients/git.client.test.ts": 1024,
   "src/backend/interceptors/branch-naming.interceptor.test.ts": 1114,
   "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1097,
   "src/backend/orchestration/event-collector.orchestrator.test.ts": 1799,
