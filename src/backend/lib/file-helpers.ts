@@ -135,51 +135,6 @@ export async function isPathSafe(worktreePath: string, filePath: string): Promis
   }
 }
 
-/**
- * Recursively list all files in a directory, excluding common ignore patterns.
- */
-export async function listFilesRecursive(
-  rootPath: string,
-  currentPath = '',
-  maxDepth = 10,
-  currentDepth = 0
-): Promise<string[]> {
-  if (currentDepth >= maxDepth) {
-    return [];
-  }
-
-  const fullPath = path.join(rootPath, currentPath);
-  const files: string[] = [];
-
-  try {
-    const dirents = await readdir(fullPath, { withFileTypes: true });
-
-    for (const dirent of dirents) {
-      if (shouldIgnoreFileSearchEntry(dirent.name, DEFAULT_FILE_IGNORE_PATTERNS)) {
-        continue;
-      }
-
-      const relativePath = currentPath ? path.join(currentPath, dirent.name) : dirent.name;
-
-      if (dirent.isDirectory()) {
-        const subFiles = await listFilesRecursive(
-          rootPath,
-          relativePath,
-          maxDepth,
-          currentDepth + 1
-        );
-        files.push(...subFiles);
-      } else {
-        files.push(relativePath);
-      }
-    }
-  } catch (_error) {
-    return files;
-  }
-
-  return files;
-}
-
 export interface SearchFilesRecursiveOptions {
   query?: string;
   limit?: number;
