@@ -907,9 +907,12 @@ describe('stream-event-handler', () => {
     session.defaults.collaborationMode = 'plan';
     session.planTextByItemId.set('item_plan', '## Proposed Plan\n1. Fix recovery approval');
 
-    const emitSessionUpdate = vi.fn(async () => undefined);
-    const shouldHoldTurnForPlanApproval = vi.fn(() => true);
     const approvalEvents: string[] = [];
+    const emitSessionUpdate = vi.fn(() => {
+      approvalEvents.push('update');
+      return Promise.resolve();
+    });
+    const shouldHoldTurnForPlanApproval = vi.fn(() => true);
     const holdTurnUntilPlanApprovalResolves = vi.fn(() => {
       approvalEvents.push('hold');
     });
@@ -964,7 +967,7 @@ describe('stream-event-handler', () => {
 
     expect(shouldHoldTurnForPlanApproval).toHaveBeenCalledWith(session, item, 'turn_1');
     expect(holdTurnUntilPlanApprovalResolves).toHaveBeenCalledWith(session, 'turn_1');
-    expect(approvalEvents).toEqual(['hold', 'release', 'request']);
+    expect(approvalEvents).toEqual(['hold', 'update', 'release', 'request']);
     expect(emitSessionUpdate).toHaveBeenCalledWith(
       'sess_thread_1',
       expect.objectContaining({

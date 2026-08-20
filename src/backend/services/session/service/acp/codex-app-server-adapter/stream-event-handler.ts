@@ -835,11 +835,12 @@ export class CodexStreamEventHandler {
       return;
     }
 
-    if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
-      this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
-      // Turn completion can now observe the hold while permission remains pending.
-      releaseTurnBarrier?.();
-    }
+    const releaseHeldTurnBarrier = this.holdTurnForPlanApproval(
+      session,
+      item,
+      turnId,
+      releaseTurnBarrier
+    );
 
     const statusFromItem = toToolStatus(item.status);
     const status = statusFromItem ?? 'completed';
@@ -860,6 +861,9 @@ export class CodexStreamEventHandler {
     session.toolCallsByItemId.delete(item.id);
     session.syntheticallyCompletedToolItemIds.delete(item.id);
 
+    // Turn completion can now observe the hold after item completion is fully projected.
+    releaseHeldTurnBarrier?.();
+
     await this.deps.maybeRequestPlanApproval(session, item, turnId, existing);
   }
 
@@ -871,10 +875,12 @@ export class CodexStreamEventHandler {
   ): Promise<void> {
     const recovered = this.deps.buildToolCallState(session, item, turnId);
     if (recovered) {
-      if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
-        this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
-        releaseTurnBarrier?.();
-      }
+      const releaseHeldTurnBarrier = this.holdTurnForPlanApproval(
+        session,
+        item,
+        turnId,
+        releaseTurnBarrier
+      );
 
       await this.recordSubagentActivity(session, item, recovered);
 
@@ -890,6 +896,8 @@ export class CodexStreamEventHandler {
         rawOutput: item,
       });
 
+      releaseHeldTurnBarrier?.();
+
       await this.deps.maybeRequestPlanApproval(session, item, turnId, recovered);
       return;
     }
@@ -899,6 +907,19 @@ export class CodexStreamEventHandler {
       itemType: item.type,
       itemId: item.id,
     });
+  }
+
+  private holdTurnForPlanApproval(
+    session: AdapterSession,
+    item: { type: string; id: string } & Record<string, unknown>,
+    turnId: string,
+    releaseTurnBarrier?: () => void
+  ): (() => void) | undefined {
+    if (!this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
+      return undefined;
+    }
+    this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
+    return releaseTurnBarrier;
   }
 
   private async recordSubagentActivity(
