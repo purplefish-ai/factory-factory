@@ -31,13 +31,8 @@ export interface ElectronAPI {
   readClipboardImageAsPng: () => Promise<string | null>;
 }
 
-export interface ElectronWindowAPI {
-  onWindowFocusChanged?: (callback: (isFocused: boolean) => void) => () => void;
-}
-
 declare global {
   interface Window {
     electronAPI?: ElectronAPI;
-    electron?: ElectronWindowAPI;
   }
 }

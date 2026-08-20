@@ -8,18 +8,3 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readClipboardImageAsPng: (): Promise<string | null> =>
     ipcRenderer.invoke('clipboard:readImagePng'),
 });
-
-// Expose window focus API separately for type compatibility
-contextBridge.exposeInMainWorld('electron', {
-  onWindowFocusChanged: (callback: (isFocused: boolean) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, isFocused: boolean) => {
-      callback(isFocused);
-    };
-    ipcRenderer.on('window-focus-changed', handler);
-
-    // Return cleanup function
-    return () => {
-      ipcRenderer.removeListener('window-focus-changed', handler);
-    };
-  },
-});
