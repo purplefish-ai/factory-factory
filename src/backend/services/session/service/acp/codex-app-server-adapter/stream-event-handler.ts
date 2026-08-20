@@ -43,17 +43,6 @@ function metaUpdate(meta: ToolCallState['meta']): Record<string, unknown> {
   return meta ? { _meta: meta } : {};
 }
 
-function recordSyntheticCompletion(session: AdapterSession, itemId: string): void {
-  session.syntheticallyCompletedToolItemIds.add(itemId);
-  if (session.syntheticallyCompletedToolItemIds.size <= MAX_SYNTHETIC_COMPLETION_TOMBSTONES) {
-    return;
-  }
-  const oldestItemId = session.syntheticallyCompletedToolItemIds.values().next().value;
-  if (oldestItemId !== undefined) {
-    session.syntheticallyCompletedToolItemIds.delete(oldestItemId);
-  }
-}
-
 type StreamEventHandlerDeps = {
   codex: Pick<CodexClient, 'request'>;
   sessionIdByThreadId: Map<string, string>;
@@ -99,6 +88,10 @@ export class CodexStreamEventHandler {
   private readonly goalRefreshStateByThreadId = new Map<
     string,
     { notificationVersion: number; pendingRefreshCount: number }
+  >();
+  private readonly completedSyntheticToolItemKeysBySession = new WeakMap<
+    AdapterSession,
+    Set<string>
   >();
 
   constructor(private readonly deps: StreamEventHandlerDeps) {}
@@ -482,6 +475,37 @@ export class CodexStreamEventHandler {
     return session.replayedTurnItemKeys.has(toTurnItemKey(turnId, itemId));
   }
 
+  private hasSyntheticCompletion(session: AdapterSession, turnId: string, itemId: string): boolean {
+    return (
+      session.syntheticallyCompletedToolItemIds.has(itemId) ||
+      (this.completedSyntheticToolItemKeysBySession
+        .get(session)
+        ?.has(toTurnItemKey(turnId, itemId)) ??
+        false)
+    );
+  }
+
+  private finishSubagentSyntheticCompletion(
+    session: AdapterSession,
+    turnId: string,
+    itemId: string
+  ): void {
+    if (!session.syntheticallyCompletedToolItemIds.delete(itemId)) {
+      return;
+    }
+    const completedItemKeys =
+      this.completedSyntheticToolItemKeysBySession.get(session) ?? new Set<string>();
+    this.completedSyntheticToolItemKeysBySession.set(session, completedItemKeys);
+    completedItemKeys.add(toTurnItemKey(turnId, itemId));
+    if (completedItemKeys.size <= MAX_SYNTHETIC_COMPLETION_TOMBSTONES) {
+      return;
+    }
+    const oldestItemKey = completedItemKeys.values().next().value;
+    if (oldestItemKey !== undefined) {
+      completedItemKeys.delete(oldestItemKey);
+    }
+  }
+
   private async emitReasoningThoughtDelta(
     sessionId: string,
     session: AdapterSession,
@@ -543,7 +567,7 @@ export class CodexStreamEventHandler {
     if (this.isReplayedTurnItem(session, turnId, itemId)) {
       return;
     }
-    if (session.syntheticallyCompletedToolItemIds.has(itemId)) {
+    if (this.hasSyntheticCompletion(session, turnId, itemId)) {
       return;
     }
     const toolCall = session.toolCallsByItemId.get(itemId);
@@ -553,7 +577,7 @@ export class CodexStreamEventHandler {
     }
 
     if (source === 'commandExecution' && isCommandExecutionSessionHandoffOutput(output)) {
-      recordSyntheticCompletion(session, itemId);
+      session.syntheticallyCompletedToolItemIds.add(itemId);
       await this.deps.emitSessionUpdate(sessionId, {
         sessionUpdate: 'tool_call_update',
         toolCallId: toolCall.toolCallId,
@@ -707,7 +731,7 @@ export class CodexStreamEventHandler {
     }
 
     if (item.type === 'subAgentActivity') {
-      recordSyntheticCompletion(session, item.id);
+      session.syntheticallyCompletedToolItemIds.add(item.id);
       await this.recordSubagentActivity(session, item, toolInfo);
       await this.deps.emitSessionUpdate(session.sessionId, {
         sessionUpdate: 'tool_call',
@@ -756,10 +780,8 @@ export class CodexStreamEventHandler {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
       return;
     }
-    if (
-      item.type === 'subAgentActivity' &&
-      session.syntheticallyCompletedToolItemIds.has(item.id)
-    ) {
+    if (item.type === 'subAgentActivity' && this.hasSyntheticCompletion(session, turnId, item.id)) {
+      this.finishSubagentSyntheticCompletion(session, turnId, item.id);
       return;
     }
 

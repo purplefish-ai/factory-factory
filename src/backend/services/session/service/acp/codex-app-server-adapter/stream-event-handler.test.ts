@@ -700,9 +700,10 @@ describe('stream-event-handler', () => {
     expect(recordSubagentActivity).toHaveBeenCalledWith('sess_thread_1', ['child_1'], 'created');
   });
 
-  it('bounds synthetic completions while suppressing recent sub-agent progress', async () => {
+  it('bounds completed tombstones without evicting in-flight sub-agent activity', async () => {
     const session = createSession();
     const reportShapeDrift = vi.fn();
+    const recordSubagentActivity = vi.fn(async () => undefined);
     const handler = new CodexStreamEventHandler({
       codex: { request: vi.fn() },
       sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
@@ -717,6 +718,7 @@ describe('stream-event-handler', () => {
             kind: 'other',
             title: 'Start subagent',
             locations: [],
+            ...(item.id === 'item_subagent_0' ? { affectedSubagentIds: ['child_0'] } : {}),
           }) satisfies ToolCallState
       ),
       emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
@@ -726,11 +728,15 @@ describe('stream-event-handler', () => {
       hasPendingPlanApprovals: vi.fn(() => false),
       settleTurn: vi.fn(),
       emitTurnFailureMessage: vi.fn(async () => undefined),
+      recordSubagentActivity,
     });
 
-    for (let index = 0; index <= 1000; index += 1) {
-      await handler.handleCodexNotification({
-        method: 'item/started',
+    const sendSubagentActivity = (
+      method: 'item/started' | 'item/completed',
+      index: number
+    ): Promise<void> =>
+      handler.handleCodexNotification({
+        method,
         params: {
           threadId: 'thread_1',
           turnId: 'turn_1',
@@ -743,22 +749,33 @@ describe('stream-event-handler', () => {
           },
         },
       });
+
+    await sendSubagentActivity('item/started', 0);
+    for (let index = 1; index <= 1001; index += 1) {
+      await sendSubagentActivity('item/started', index);
+      await sendSubagentActivity('item/completed', index);
     }
 
-    expect(session.syntheticallyCompletedToolItemIds.size).toBe(1000);
-    expect(session.syntheticallyCompletedToolItemIds.has('item_subagent_0')).toBe(false);
-    expect(session.syntheticallyCompletedToolItemIds.has('item_subagent_1000')).toBe(true);
+    expect(session.syntheticallyCompletedToolItemIds).toEqual(new Set(['item_subagent_0']));
+    const internalHandler = handler as unknown as {
+      completedSyntheticToolItemKeysBySession: WeakMap<AdapterSession, Set<string>>;
+    };
+    expect(internalHandler.completedSyntheticToolItemKeysBySession.get(session)?.size).toBe(1000);
+
+    await sendSubagentActivity('item/completed', 0);
+    await sendSubagentActivity('item/completed', 0);
 
     await handler.handleCodexNotification({
       method: 'item/commandExecution/outputDelta',
       params: {
         threadId: 'thread_1',
         turnId: 'turn_1',
-        itemId: 'item_subagent_1000',
+        itemId: 'item_subagent_0',
         delta: 'late progress',
       },
     });
 
+    expect(recordSubagentActivity).toHaveBeenCalledTimes(1);
     expect(reportShapeDrift).not.toHaveBeenCalled();
   });
 
