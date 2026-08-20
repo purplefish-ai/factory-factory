@@ -168,7 +168,10 @@ export class CodexStreamEventHandler {
     return updates;
   }
 
-  async handleCodexNotification(notification: CodexNotificationPayload): Promise<void> {
+  async handleCodexNotification(
+    notification: CodexNotificationPayload,
+    releaseTurnBarrier?: () => void
+  ): Promise<void> {
     const parsed = knownCodexNotificationSchema.safeParse(notification);
     if (!parsed.success) {
       this.deps.reportShapeDrift('malformed_notification', {
@@ -280,7 +283,8 @@ export class CodexStreamEventHandler {
       await this.handleItemCompleted(
         session,
         typedNotification.params.item as { type: string; id: string } & Record<string, unknown>,
-        typedNotification.params.turnId
+        typedNotification.params.turnId,
+        releaseTurnBarrier
       );
       return;
     }
@@ -723,7 +727,8 @@ export class CodexStreamEventHandler {
   private async handleItemCompleted(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    turnId: string,
+    releaseTurnBarrier?: () => void
   ): Promise<void> {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
       return;
@@ -776,6 +781,8 @@ export class CodexStreamEventHandler {
 
     if (this.deps.shouldHoldTurnForPlanApproval(session, item, turnId)) {
       this.deps.holdTurnUntilPlanApprovalResolves(session, turnId);
+      // Turn completion can now observe the hold while permission remains pending.
+      releaseTurnBarrier?.();
     }
 
     const statusFromItem = toToolStatus(item.status);
