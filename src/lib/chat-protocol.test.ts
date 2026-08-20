@@ -343,6 +343,38 @@ describe('groupAdjacentToolCalls', () => {
       expect(grouped[0].pairedCalls[0]?.status).toBe('success');
     }
   });
+
+  it('pairs contiguous calls and results in occurrence order when a tool ID is reused', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 0 }),
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 1 }),
+      createToolResultMessage('call-reused', 2),
+      createToolResultMessage('call-reused', 3),
+    ]);
+
+    expect(grouped).toHaveLength(1);
+    expect(isToolSequence(grouped[0]!)).toBe(true);
+    if (isToolSequence(grouped[0]!)) {
+      expect(grouped[0].pairedCalls.map((call) => call.status)).toEqual(['success', 'success']);
+    }
+  });
+
+  it('reconciles delayed results in occurrence order when a tool ID is reused', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 0 }),
+      createAssistantTextMessage(1),
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 2 }),
+      createAssistantTextMessage(3),
+      createToolResultMessage('call-reused', 4),
+      createToolResultMessage('call-reused', 5),
+    ]);
+
+    const toolSequences = grouped.filter(isToolSequence);
+    expect(toolSequences.map((sequence) => sequence.pairedCalls[0]?.status)).toEqual([
+      'success',
+      'success',
+    ]);
+  });
 });
 
 describe('isReasoningToolCall', () => {

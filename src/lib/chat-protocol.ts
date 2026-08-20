@@ -589,7 +589,7 @@ export function isReasoningToolCall(name: unknown, input: unknown): boolean {
 function applyToolResultToCall(
   msg: ChatMessage,
   pairedCalls: PairedToolCall[],
-  toolUseIdToIndex: Map<string, number>
+  toolUseIdToIndexes: Map<string, number[]>
 ): void {
   if (!(msg.message && isToolResultMessage(msg.message))) {
     return;
@@ -598,9 +598,16 @@ function applyToolResultToCall(
   if (!resultInfo) {
     return;
   }
-  const callIndex = toolUseIdToIndex.get(resultInfo.toolUseId);
+  const callIndexes = toolUseIdToIndexes.get(resultInfo.toolUseId);
+  if (!callIndexes) {
+    return;
+  }
+  const callIndex = callIndexes.shift();
   if (callIndex === undefined) {
     return;
+  }
+  if (callIndexes.length === 0) {
+    toolUseIdToIndexes.delete(resultInfo.toolUseId);
   }
   const call = pairedCalls[callIndex];
   if (!call) {
@@ -623,20 +630,22 @@ function applyToolResultToPairedCall(call: PairedToolCall, resultInfo: ToolResul
  */
 function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
   const pairedCalls: PairedToolCall[] = [];
-  const toolUseIdToIndex = new Map<string, number>();
+  const toolUseIdToIndexes = new Map<string, number[]>();
 
   // First pass: collect all tool_use messages
   for (const msg of toolMessages) {
     const pairedCall = tryCreatePairedToolCall(msg);
     if (pairedCall) {
-      toolUseIdToIndex.set(pairedCall.id, pairedCalls.length);
+      const callIndexes = toolUseIdToIndexes.get(pairedCall.id) ?? [];
+      callIndexes.push(pairedCalls.length);
+      toolUseIdToIndexes.set(pairedCall.id, callIndexes);
       pairedCalls.push(pairedCall);
     }
   }
 
   // Second pass: match tool_result messages to their tool_use
   for (const msg of toolMessages) {
-    applyToolResultToCall(msg, pairedCalls, toolUseIdToIndex);
+    applyToolResultToCall(msg, pairedCalls, toolUseIdToIndexes);
   }
 
   return pairedCalls;
@@ -695,6 +704,40 @@ function isRenderableGroupedMessage(message: ChatMessage): boolean {
   );
 }
 
+function trackOpenPairedCalls(
+  pairedCalls: PairedToolCall[],
+  openPairedCallsById: Map<string, PairedToolCall[]>
+): void {
+  for (const call of pairedCalls) {
+    if (call.status !== 'pending') {
+      continue;
+    }
+    const openCalls = openPairedCallsById.get(call.id) ?? [];
+    openCalls.push(call);
+    openPairedCallsById.set(call.id, openCalls);
+  }
+}
+
+function applyLateToolResult(
+  resultInfo: ToolResultInfo,
+  openPairedCallsById: Map<string, PairedToolCall[]>
+): boolean {
+  const pendingCalls = openPairedCallsById.get(resultInfo.toolUseId);
+  if (!pendingCalls) {
+    return false;
+  }
+  const pendingCall = pendingCalls.shift();
+  if (!pendingCall) {
+    return false;
+  }
+
+  applyToolResultToPairedCall(pendingCall, resultInfo);
+  if (pendingCalls.length === 0) {
+    openPairedCallsById.delete(resultInfo.toolUseId);
+  }
+  return true;
+}
+
 /**
  * Groups adjacent tool_use and tool_result messages together.
  * Returns a mixed array of regular messages and tool sequences.
@@ -703,7 +746,7 @@ function isRenderableGroupedMessage(message: ChatMessage): boolean {
 export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[] {
   const result: GroupedMessageItem[] = [];
   let currentToolSequence: ChatMessage[] = [];
-  const openPairedCallsById = new Map<string, PairedToolCall>();
+  const openPairedCallsById = new Map<string, PairedToolCall[]>();
 
   const flushToolSequence = () => {
     if (currentToolSequence.length === 0) {
@@ -724,13 +767,7 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     };
     if (sequence.pairedCalls.length > 0) {
       result.push(sequence);
-      for (const call of sequence.pairedCalls) {
-        if (call.status === 'pending') {
-          openPairedCallsById.set(call.id, call);
-        } else {
-          openPairedCallsById.delete(call.id);
-        }
-      }
+      trackOpenPairedCalls(sequence.pairedCalls, openPairedCallsById);
     }
     currentToolSequence = [];
   };
@@ -740,13 +777,8 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
       message.message && isToolResultMessage(message.message)
         ? extractToolResultInfo(message.message)
         : null;
-    if (lateToolResultInfo) {
-      const pendingCall = openPairedCallsById.get(lateToolResultInfo.toolUseId);
-      if (pendingCall) {
-        applyToolResultToPairedCall(pendingCall, lateToolResultInfo);
-        openPairedCallsById.delete(lateToolResultInfo.toolUseId);
-        continue;
-      }
+    if (lateToolResultInfo && applyLateToolResult(lateToolResultInfo, openPairedCallsById)) {
+      continue;
     }
 
     const isToolMessage =
