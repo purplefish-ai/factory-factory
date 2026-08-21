@@ -489,14 +489,11 @@ export class CodexStreamEventHandler {
     );
   }
 
-  private finishSubagentSyntheticCompletion(
-    session: AdapterSession,
-    turnId: string,
-    itemId: string
-  ): void {
+  private finishSyntheticCompletion(session: AdapterSession, turnId: string, itemId: string): void {
     if (!session.syntheticallyCompletedToolItemIds.delete(itemId)) {
       return;
     }
+    session.toolCallsByItemId.delete(itemId);
     const completedItemKeys =
       this.completedSyntheticToolItemKeysBySession.get(session) ?? new Set<string>();
     this.completedSyntheticToolItemKeysBySession.set(session, completedItemKeys);
@@ -785,8 +782,12 @@ export class CodexStreamEventHandler {
     if (this.isReplayedTurnItem(session, turnId, item.id)) {
       return;
     }
-    if (item.type === 'subAgentActivity' && this.hasSyntheticCompletion(session, turnId, item.id)) {
-      this.finishSubagentSyntheticCompletion(session, turnId, item.id);
+    if (this.hasSyntheticCompletion(session, turnId, item.id)) {
+      const existing = session.toolCallsByItemId.get(item.id);
+      this.finishSyntheticCompletion(session, turnId, item.id);
+      if (existing) {
+        await this.deps.maybeRequestPlanApproval(session, item, turnId, existing);
+      }
       return;
     }
 
