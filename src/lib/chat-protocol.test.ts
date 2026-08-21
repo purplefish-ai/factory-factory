@@ -189,7 +189,11 @@ function createToolUseMessage(params: {
   };
 }
 
-function createToolResultMessage(toolUseId: string, order: number): ChatMessage {
+function createToolResultMessage(
+  toolUseId: string,
+  order: number,
+  options: { content?: string; isError?: boolean } = {}
+): ChatMessage {
   const agentMessage: AgentMessage = {
     type: 'user',
     message: {
@@ -198,7 +202,8 @@ function createToolResultMessage(toolUseId: string, order: number): ChatMessage 
         {
           type: 'tool_result',
           tool_use_id: toolUseId,
-          content: 'ok',
+          content: options.content ?? 'ok',
+          is_error: options.isError ?? false,
         },
       ],
     },
@@ -342,6 +347,43 @@ describe('groupAdjacentToolCalls', () => {
       expect(grouped[0].pairedCalls[0]?.id).toBe('call-1');
       expect(grouped[0].pairedCalls[0]?.status).toBe('success');
     }
+  });
+
+  it('pairs contiguous calls and results in occurrence order when a tool ID is reused', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 0 }),
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 1 }),
+      createToolResultMessage('call-reused', 2),
+      createToolResultMessage('call-reused', 3),
+    ]);
+
+    expect(grouped).toHaveLength(1);
+    expect(isToolSequence(grouped[0]!)).toBe(true);
+    if (isToolSequence(grouped[0]!)) {
+      expect(grouped[0].pairedCalls.map((call) => call.status)).toEqual(['success', 'success']);
+    }
+  });
+
+  it('reconciles delayed results in occurrence order when a tool ID is reused', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 0 }),
+      createAssistantTextMessage(1),
+      createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 2 }),
+      createAssistantTextMessage(3),
+      createToolResultMessage('call-reused', 4, { content: 'first result' }),
+      createToolResultMessage('call-reused', 5, { content: 'second result', isError: true }),
+    ]);
+
+    const toolSequences = grouped.filter(isToolSequence);
+    expect(
+      toolSequences.map((sequence) => {
+        const call = sequence.pairedCalls[0];
+        return { status: call?.status, result: call?.result };
+      })
+    ).toEqual([
+      { status: 'success', result: { content: 'first result', isError: false } },
+      { status: 'error', result: { content: 'second result', isError: true } },
+    ]);
   });
 });
 

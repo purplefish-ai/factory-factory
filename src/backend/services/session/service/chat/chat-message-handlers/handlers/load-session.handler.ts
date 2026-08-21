@@ -15,6 +15,7 @@ import {
 } from '@/backend/services/session/service/lifecycle/session-core-services';
 import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import {
   commandNameKey,
@@ -40,6 +41,16 @@ export function createLoadSessionHandler(
     await sessionLifecycleEventService.hydrate(sessionId);
 
     const sessionRuntime = sessionLifecycleService.getRuntimeSnapshot(sessionId);
+    if (sessionRuntime.processState === 'stopped') {
+      const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+      const recoveredTranscript = finalizeInterruptedTranscriptToolCalls(
+        transcript,
+        sessionRuntime.updatedAt
+      );
+      if (recoveredTranscript !== transcript) {
+        sessionDomainService.replaceTranscript(sessionId, recoveredTranscript);
+      }
+    }
     await sessionDomainService.subscribe({
       sessionId,
       sessionRuntime,
