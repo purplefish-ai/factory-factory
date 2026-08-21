@@ -189,7 +189,11 @@ function createToolUseMessage(params: {
   };
 }
 
-function createToolResultMessage(toolUseId: string, order: number): ChatMessage {
+function createToolResultMessage(
+  toolUseId: string,
+  order: number,
+  options: { content?: string; isError?: boolean } = {}
+): ChatMessage {
   const agentMessage: AgentMessage = {
     type: 'user',
     message: {
@@ -198,7 +202,8 @@ function createToolResultMessage(toolUseId: string, order: number): ChatMessage 
         {
           type: 'tool_result',
           tool_use_id: toolUseId,
-          content: 'ok',
+          content: options.content ?? 'ok',
+          is_error: options.isError ?? false,
         },
       ],
     },
@@ -365,14 +370,19 @@ describe('groupAdjacentToolCalls', () => {
       createAssistantTextMessage(1),
       createToolUseMessage({ id: 'call-reused', name: 'Read', input: {}, order: 2 }),
       createAssistantTextMessage(3),
-      createToolResultMessage('call-reused', 4),
-      createToolResultMessage('call-reused', 5),
+      createToolResultMessage('call-reused', 4, { content: 'first result' }),
+      createToolResultMessage('call-reused', 5, { content: 'second result', isError: true }),
     ]);
 
     const toolSequences = grouped.filter(isToolSequence);
-    expect(toolSequences.map((sequence) => sequence.pairedCalls[0]?.status)).toEqual([
-      'success',
-      'success',
+    expect(
+      toolSequences.map((sequence) => {
+        const call = sequence.pairedCalls[0];
+        return { status: call?.status, result: call?.result };
+      })
+    ).toEqual([
+      { status: 'success', result: { content: 'first result', isError: false } },
+      { status: 'error', result: { content: 'second result', isError: true } },
     ]);
   });
 });
