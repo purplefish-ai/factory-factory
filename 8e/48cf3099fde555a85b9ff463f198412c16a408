@@ -1,0 +1,22 @@
+package.json
+  s_20ae4a10b3d8ec::t_c03bc360677a03 3
+CHANGELOG.md
+  s_20ae4a10b3d8ec::t_1d3809105c0d2d 19-22
+  s_20ae4a10b3d8ec::t_c03bc360677a03 8-18,23-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8e48cf3099fde555a85b9ff463f198412c16a408",
+  "prompts": {},
+  "sessions": {
+    "s_20ae4a10b3d8ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a034c8-82ad-7083-a7f8-97a44f6beb4f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
