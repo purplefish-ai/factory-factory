@@ -15,6 +15,11 @@ on:
         required: false
         default: "false"
         type: boolean
+      staging_run_id:
+        description: "Run ID that staged the approved npm package"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   verify:
@@ -113,14 +118,60 @@ jobs:
       - name: Stage package on npm
         run: npm stage publish npm-package/factory-factory-*.tgz --access public
 
+      - name: Record finalization details
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "After npm approval, finalize this package with:" >> "$GITHUB_STEP_SUMMARY"
+          echo "staging_run_id: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "staged commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
   finalize-release:
     name: Finalize GitHub release
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release == 'true' }}
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Resolve staged commit
+        id: staging_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_RUN_ID: ${{ github.event.inputs.staging_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$STAGING_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "staging_run_id must be a GitHub Actions run ID" >&2
+            exit 1
+          fi
+          RUN_JSON=$(gh api "repos/${{ github.repository }}/actions/runs/$STAGING_RUN_ID")
+          WORKFLOW_PATH=$(jq -r '.path' <<< "$RUN_JSON")
+          EVENT=$(jq -r '.event' <<< "$RUN_JSON")
+          HEAD_BRANCH=$(jq -r '.head_branch' <<< "$RUN_JSON")
+          CONCLUSION=$(jq -r '.conclusion' <<< "$RUN_JSON")
+          COMMIT=$(jq -r '.head_sha' <<< "$RUN_JSON")
+          if [ "$WORKFLOW_PATH" != ".github/workflows/npm-publish.yml" ] ||
+            [ "$EVENT" != "workflow_dispatch" ] ||
+            [ "$HEAD_BRANCH" != "main" ] ||
+            [ "$CONCLUSION" != "success" ] ||
+            [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Run $STAGING_RUN_ID is not a successful main-branch staging run" >&2
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Download staged npm package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: npm-package
+          path: npm-package
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.inputs.staging_run_id }}
+
+      - name: Checkout staged commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ steps.staging_run.outputs.commit }}
 
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444

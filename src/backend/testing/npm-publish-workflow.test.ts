@@ -27,7 +27,7 @@ const workflowDispatchInputSchema = z.object({
   default: z.union([z.string(), z.boolean()]),
   description: z.string(),
   required: z.boolean(),
-  type: z.literal('boolean'),
+  type: z.enum(['boolean', 'string']),
 });
 
 const publishWorkflowSchema = z.object({
@@ -79,6 +79,12 @@ describe('npm publish workflow', () => {
       description: 'Finalize after approving the staged package on npm',
       required: false,
       type: 'boolean',
+    });
+    expect(workflow.on.workflow_dispatch.inputs.staging_run_id).toEqual({
+      default: '',
+      description: 'Run ID that staged the approved npm package',
+      required: false,
+      type: 'string',
     });
   });
 
@@ -168,7 +174,7 @@ describe('npm publish workflow', () => {
       )
     );
     expect(finalizeJob.environment).toBeUndefined();
-    expect(finalizeJob.permissions).toEqual({ contents: 'write' });
+    expect(finalizeJob.permissions).toEqual({ actions: 'read', contents: 'write' });
     const verifyPublishedStep = getStep(finalizeJob, 'Verify package is published on npm');
     expect(verifyPublishedStep.id).toBe('release_version');
     expect(verifyPublishedStep.run).toBe(`set -euo pipefail
@@ -185,6 +191,69 @@ echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       finalizeJob.steps.findIndex((step) => step.name === 'Verify package is published on npm')
     ).toBeLessThan(finalizeJob.steps.findIndex((step) => step.name === 'Create and push tag'));
     expect(getStep(finalizeJob, 'Create GitHub release')).toBeDefined();
+  });
+
+  it('tags the exact commit from the successful staging run', () => {
+    const stageJob = getJob('stage');
+    const recordFinalizationStep = getStep(stageJob, 'Record finalization details');
+    expect(recordFinalizationStep.if).toBe(
+      githubExpression("github.event_name == 'workflow_dispatch'")
+    );
+    expect(
+      recordFinalizationStep.run
+    ).toBe(`echo "After npm approval, finalize this package with:" >> "$GITHUB_STEP_SUMMARY"
+echo "staging_run_id: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+echo "staged commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+`);
+
+    const finalizeJob = getJob('finalize-release');
+    const resolveRunStep = getStep(finalizeJob, 'Resolve staged commit');
+    expect(resolveRunStep.id).toBe('staging_run');
+    expect(resolveRunStep.env).toEqual({
+      GH_TOKEN: githubExpression('github.token'),
+      STAGING_RUN_ID: githubExpression('github.event.inputs.staging_run_id'),
+    });
+    expect(resolveRunStep.run).toBe(`set -euo pipefail
+if [[ ! "$STAGING_RUN_ID" =~ ^[0-9]+$ ]]; then
+  echo "staging_run_id must be a GitHub Actions run ID" >&2
+  exit 1
+fi
+RUN_JSON=$(gh api "repos/${githubExpression('github.repository')}/actions/runs/$STAGING_RUN_ID")
+WORKFLOW_PATH=$(jq -r '.path' <<< "$RUN_JSON")
+EVENT=$(jq -r '.event' <<< "$RUN_JSON")
+HEAD_BRANCH=$(jq -r '.head_branch' <<< "$RUN_JSON")
+CONCLUSION=$(jq -r '.conclusion' <<< "$RUN_JSON")
+COMMIT=$(jq -r '.head_sha' <<< "$RUN_JSON")
+if [ "$WORKFLOW_PATH" != ".github/workflows/npm-publish.yml" ] ||
+  [ "$EVENT" != "workflow_dispatch" ] ||
+  [ "$HEAD_BRANCH" != "main" ] ||
+  [ "$CONCLUSION" != "success" ] ||
+  [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Run $STAGING_RUN_ID is not a successful main-branch staging run" >&2
+  exit 1
+fi
+echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+`);
+
+    expect(getStep(finalizeJob, 'Download staged npm package').with).toEqual({
+      name: 'npm-package',
+      path: 'npm-package',
+      'github-token': githubExpression('github.token'),
+      'run-id': githubExpression('github.event.inputs.staging_run_id'),
+    });
+    expect(getStep(finalizeJob, 'Checkout staged commit').with).toEqual({
+      ref: githubExpression('steps.staging_run.outputs.commit'),
+    });
+
+    const orderedSteps = [
+      'Resolve staged commit',
+      'Download staged npm package',
+      'Checkout staged commit',
+      'Verify package is published on npm',
+      'Create and push tag',
+    ].map((name) => finalizeJob.steps.findIndex((step) => step.name === name));
+    expect(orderedSteps).toEqual([...orderedSteps].sort((left, right) => left - right));
+    expect(orderedSteps).not.toContain(-1);
   });
 
   it('does not configure a traditional npm token in any job', () => {
