@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 const workflowStepSchema = z.object({
   env: z.record(z.string(), z.unknown()).optional(),
+  id: z.string().optional(),
   if: z.string().optional(),
   name: z.string().optional(),
   run: z.string().optional(),
@@ -22,8 +23,20 @@ const workflowJobSchema = z.object({
   steps: z.array(workflowStepSchema),
 });
 
+const workflowDispatchInputSchema = z.object({
+  default: z.union([z.string(), z.boolean()]),
+  description: z.string(),
+  required: z.boolean(),
+  type: z.literal('boolean'),
+});
+
 const publishWorkflowSchema = z.object({
   jobs: z.record(z.string(), workflowJobSchema),
+  on: z.object({
+    workflow_dispatch: z.object({
+      inputs: z.record(z.string(), workflowDispatchInputSchema),
+    }),
+  }),
 });
 
 const workflowPath = fileURLToPath(
@@ -60,9 +73,23 @@ function githubExpression(expression: string): string {
 }
 
 describe('npm publish workflow', () => {
+  it('requires an explicit finalization dispatch after npm approval', () => {
+    expect(workflow.on.workflow_dispatch.inputs.finalize_release).toEqual({
+      default: 'false',
+      description: 'Finalize after approving the staged package on npm',
+      required: false,
+      type: 'boolean',
+    });
+  });
+
   it('keeps verification and dry runs outside publishing credentials', () => {
     const verifyJob = getJob('verify');
 
+    expect(verifyJob.if).toBe(
+      githubExpression(
+        "github.event_name == 'release' || github.event.inputs.finalize_release != 'true'"
+      )
+    );
     expect(verifyJob.environment).toBeUndefined();
     expect(verifyJob.permissions).toEqual({ contents: 'read' });
     expectSecureNodeSetup(verifyJob);
@@ -82,7 +109,7 @@ describe('npm publish workflow', () => {
     expect(stageJob.needs).toBe('verify');
     expect(stageJob.if).toBe(
       githubExpression(
-        "github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')"
+        "github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true')"
       )
     );
     expect(stageJob.environment).toBe('npm-publish');
@@ -112,6 +139,11 @@ describe('npm publish workflow', () => {
 
   it('retains the package artifact for the protected-environment approval window', () => {
     const uploadStep = getStep(getJob('verify'), 'Upload npm package');
+    expect(uploadStep.if).toBe(
+      githubExpression(
+        "matrix.node-version == '22.22' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
+      )
+    );
     expect(uploadStep.with).toEqual({
       name: 'npm-package',
       path: 'factory-factory-*.tgz',
@@ -129,15 +161,29 @@ describe('npm publish workflow', () => {
   it('isolates GitHub release writes from the OIDC publisher', () => {
     const finalizeJob = getJob('finalize-release');
 
-    expect(finalizeJob.needs).toBe('stage');
+    expect(finalizeJob.needs).toBeUndefined();
     expect(finalizeJob.if).toBe(
       githubExpression(
-        "github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true'"
+        "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release == 'true'"
       )
     );
     expect(finalizeJob.environment).toBeUndefined();
     expect(finalizeJob.permissions).toEqual({ contents: 'write' });
-    expect(getStep(finalizeJob, 'Create and push tag')).toBeDefined();
+    const verifyPublishedStep = getStep(finalizeJob, 'Verify package is published on npm');
+    expect(verifyPublishedStep.id).toBe('release_version');
+    expect(verifyPublishedStep.run).toBe(`set -euo pipefail
+VERSION=$(node -p "require('./package.json').version")
+PUBLISHED_VERSION=$(npm view "factory-factory@$VERSION" version)
+if [ "$PUBLISHED_VERSION" != "$VERSION" ]; then
+  echo "factory-factory@$VERSION is not published on npm" >&2
+  exit 1
+fi
+echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+`);
+    getStep(finalizeJob, 'Create and push tag');
+    expect(
+      finalizeJob.steps.findIndex((step) => step.name === 'Verify package is published on npm')
+    ).toBeLessThan(finalizeJob.steps.findIndex((step) => step.name === 'Create and push tag'));
     expect(getStep(finalizeJob, 'Create GitHub release')).toBeDefined();
   });
 
