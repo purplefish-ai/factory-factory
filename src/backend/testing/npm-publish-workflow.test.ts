@@ -247,8 +247,8 @@ echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
     const orderedSteps = [
       'Resolve staged commit',
-      'Download staged npm package',
       'Checkout staged commit',
+      'Download staged npm package',
       'Verify package is published on npm',
       'Create and push tag',
     ].map((name) => finalizeJob.steps.findIndex((step) => step.name === name));
