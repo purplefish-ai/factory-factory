@@ -63,12 +63,6 @@ export {
 export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';
-// Runtime types
-export type {
-  ProviderRuntimeManager,
-  RuntimeCreatedCallback,
-  RuntimeEventHandlers,
-} from './runtime';
 // Core domain service (in-memory state management)
 export { SessionDomainService, sessionDomainService } from './session-domain.service';
 // Transport-free outbound event surface (consumed by the WebSocket adapter)
