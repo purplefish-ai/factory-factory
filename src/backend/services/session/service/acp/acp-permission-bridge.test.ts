@@ -170,21 +170,6 @@ describe('AcpPermissionBridge', () => {
     expect(bridge.pendingCount).toBe(0);
   });
 
-  it('getPendingParams returns params for pending request', () => {
-    const bridge = new AcpPermissionBridge();
-    const params = createMockParams();
-
-    void bridge.waitForUserResponse('req-1', params);
-
-    expect(bridge.getPendingParams('req-1')).toBe(params);
-  });
-
-  it('getPendingParams returns undefined for unknown requestId', () => {
-    const bridge = new AcpPermissionBridge();
-
-    expect(bridge.getPendingParams('nonexistent')).toBeUndefined();
-  });
-
   it('keeps pending requests open without timeout', async () => {
     vi.useFakeTimers();
     const bridge = new AcpPermissionBridge();

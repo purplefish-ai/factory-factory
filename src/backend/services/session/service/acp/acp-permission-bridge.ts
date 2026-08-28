@@ -99,13 +99,6 @@ export class AcpPermissionBridge {
   }
 
   /**
-   * Get the params for a pending request (for re-emit on session restore).
-   */
-  getPendingParams(requestId: string): RequestPermissionRequest | undefined {
-    return this.pending.get(requestId)?.params;
-  }
-
-  /**
    * Get count of pending requests (for diagnostics).
    */
   get pendingCount(): number {
