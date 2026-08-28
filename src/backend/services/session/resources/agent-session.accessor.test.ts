@@ -201,19 +201,6 @@ describe('agentSessionAccessor', () => {
     });
   });
 
-  it('countActiveByWorkspaceId counts only running and idle sessions', async () => {
-    mockCount.mockResolvedValue(2);
-
-    await expect(agentSessionAccessor.countActiveByWorkspaceId('workspace-1')).resolves.toBe(2);
-
-    expect(mockCount).toHaveBeenCalledWith({
-      where: {
-        workspaceId: 'workspace-1',
-        status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
-      },
-    });
-  });
-
   it('update maps null providerMetadata to Prisma.JsonNull', async () => {
     mockUpdate.mockResolvedValue({ id: 'session-1' });
 

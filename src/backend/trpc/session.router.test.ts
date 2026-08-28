@@ -6,7 +6,6 @@ import { SessionStatus } from '@/shared/core';
 
 const mockSessionDataService = vi.hoisted(() => ({
   findAgentSessionsByWorkspaceId: vi.fn(),
-  countActiveAgentSessionsByWorkspaceId: vi.fn(),
   findAgentSessionById: vi.fn(),
   createAgentSession: vi.fn(),
   createAgentSessionWithinWorkspaceLimit: vi.fn(),

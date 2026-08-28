@@ -68,10 +68,6 @@ class SessionDataService {
     );
   }
 
-  countActiveAgentSessionsByWorkspaceId(workspaceId: string): Promise<number> {
-    return agentSessionAccessor.countActiveByWorkspaceId(workspaceId);
-  }
-
   async createAgentSession(data: {
     workspaceId: string;
     name?: string;

@@ -91,7 +91,6 @@ export interface AgentSessionAccessor {
     workspaceId: string,
     filters?: AgentSessionFilters
   ): Promise<AgentSessionRecord[]>;
-  countActiveByWorkspaceId(workspaceId: string): Promise<number>;
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
   updateIfStatus(
     id: string,
@@ -166,15 +165,6 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where,
       take: filters?.limit,
       orderBy: { createdAt: 'asc' },
-    });
-  }
-
-  countActiveByWorkspaceId(workspaceId: string): Promise<number> {
-    return prisma.agentSession.count({
-      where: {
-        workspaceId,
-        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-      },
     });
   }
 
