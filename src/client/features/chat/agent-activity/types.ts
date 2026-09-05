@@ -35,14 +35,3 @@ export interface ToolCallInfo {
   };
   timestamp: string;
 }
-
-/**
- * File reference extracted from tool calls.
- */
-export interface FileReference {
-  path: string;
-  lineStart?: number;
-  lineEnd?: number;
-  toolName: string;
-  toolCallId: string;
-}

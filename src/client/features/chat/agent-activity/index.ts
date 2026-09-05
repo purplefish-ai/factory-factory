@@ -15,13 +15,12 @@ export {
 } from './message-renderers';
 
 // Tool renderers
-export { extractFileReferences, ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
+export { ToolCallGroupRenderer, ToolInfoRenderer } from './tool-renderers';
 
 // Types
 export type {
   AgentMessage,
   ChatMessage,
-  FileReference,
   ToolCallGroup,
   ToolCallInfo,
 } from './types';

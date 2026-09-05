@@ -1,6 +1,3 @@
-// File reference extraction
-export { extractFileReferences } from './extract-file-references';
-
 // Tool info rendering (main components)
 export type {
   ToolCallGroupRendererProps,
