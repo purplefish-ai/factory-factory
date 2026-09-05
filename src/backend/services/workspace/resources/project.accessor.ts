@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import { Prisma, type Project } from '@prisma-gen/client';
-import { GitClientFactory } from '@/backend/clients/git.client';
 import { prisma } from '@/backend/db';
 import { gitCommandC } from '@/backend/lib/shell';
 import type { IssueProvider } from '@/shared/core/enums';
@@ -306,21 +305,6 @@ class ProjectAccessor {
     return prisma.project.update({
       where: { id },
       data: { isArchived: true },
-    });
-  }
-
-  async delete(id: string): Promise<Project> {
-    // Get project first to evict from cache
-    const project = await prisma.project.findUnique({ where: { id } });
-    if (project) {
-      GitClientFactory.removeProject({
-        repoPath: project.repoPath,
-        worktreeBasePath: project.worktreeBasePath,
-      });
-    }
-
-    return prisma.project.delete({
-      where: { id },
     });
   }
 
