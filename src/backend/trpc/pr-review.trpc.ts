@@ -41,30 +41,6 @@ export const prReviewRouter = router({
   }),
 
   /**
-   * Approve a PR.
-   */
-  approve: publicProcedure
-    .input(
-      z.object({
-        owner: z.string(),
-        repo: z.string(),
-        prNumber: z.number(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const { githubCLIService } = ctx.appContext.services;
-      await githubCLIService.approvePR(input.owner, input.repo, input.prNumber);
-      return { success: true };
-    }),
-
-  /**
-   * Check gh CLI health status.
-   */
-  checkHealth: publicProcedure.query(({ ctx }) => {
-    return ctx.appContext.services.githubCLIService.checkHealth();
-  }),
-
-  /**
    * Get full details for a PR including reviews, comments, and CI status.
    */
   getPRDetails: publicProcedure

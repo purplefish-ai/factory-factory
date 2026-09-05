@@ -1505,16 +1505,6 @@ describe('GitHubCLIService', () => {
       ]);
     });
 
-    it('approves PR and logs failures with contextual error', async () => {
-      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
-      await expect(githubCLIService.approvePR('o', 'r', 22)).resolves.toBeUndefined();
-
-      mockExecFile.mockRejectedValueOnce(new Error('approval denied'));
-      await expect(githubCLIService.approvePR('o', 'r', 22)).rejects.toThrow(
-        'Failed to approve PR: approval denied'
-      );
-    });
-
     it('gets PR diff and maps failures', async () => {
       mockExecFile.mockResolvedValueOnce({ stdout: 'diff --git a b', stderr: '' });
       await expect(githubCLIService.getPRDiff('o/r', 8)).resolves.toBe('diff --git a b');
@@ -1889,8 +1879,8 @@ describe('GitHubCLIService', () => {
       mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
 
       await Promise.all([
-        githubCLIService.approvePR('owner', 'repo', 5),
-        githubCLIService.approvePR('owner', 'repo', 5),
+        githubCLIService.submitReview('owner/repo', 5, 'approve'),
+        githubCLIService.submitReview('owner/repo', 5, 'approve'),
       ]);
 
       // Both calls should spawn separate processes (no dedup for writes)

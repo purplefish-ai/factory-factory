@@ -486,31 +486,6 @@ class GitHubCLIService {
   }
 
   /**
-   * Approve a PR.
-   */
-  async approvePR(owner: string, repo: string, prNumber: number): Promise<void> {
-    const args = ['pr', 'review', String(prNumber), '--repo', `${owner}/${repo}`, '--approve'];
-
-    try {
-      await this.execMutating(args, { timeout: GH_TIMEOUT_MS.default });
-      logger.info('PR approved successfully', { owner, repo, prNumber });
-    } catch (error) {
-      const errorType = classifyError(error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      logger.error('Failed to approve PR via gh CLI', {
-        owner,
-        repo,
-        prNumber,
-        errorType,
-        error: errorMessage,
-      });
-
-      throw new Error(`Failed to approve PR: ${errorMessage}`);
-    }
-  }
-
-  /**
    * Get full PR details including reviews, comments, labels, and CI status.
    */
   async getPRFullDetails(

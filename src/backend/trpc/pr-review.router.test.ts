@@ -4,7 +4,6 @@ import { prReviewRouter } from './pr-review.trpc';
 function createCaller(overrides?: {
   checkHealth?: () => Promise<{ isInstalled: boolean; isAuthenticated: boolean }>;
   listReviewRequests?: () => Promise<unknown[]>;
-  approvePR?: (owner: string, repo: string, number: number) => Promise<void>;
   getPRFullDetails?: (repo: string, number: number) => Promise<unknown>;
   getPRDiff?: (repo: string, number: number) => Promise<string>;
   submitReview?: (
@@ -21,7 +20,6 @@ function createCaller(overrides?: {
           checkHealth:
             overrides?.checkHealth ?? (async () => ({ isInstalled: true, isAuthenticated: true })),
           listReviewRequests: overrides?.listReviewRequests ?? (async () => []),
-          approvePR: overrides?.approvePR ?? (async () => undefined),
           getPRFullDetails: overrides?.getPRFullDetails ?? (async () => ({ number: 1 })),
           getPRDiff: overrides?.getPRDiff ?? (async () => 'diff --git a b'),
           submitReview: overrides?.submitReview ?? (async () => undefined),
@@ -71,23 +69,14 @@ describe('prReviewRouter', () => {
     });
   });
 
-  it('delegates approve, health, details, diff, and submit review', async () => {
-    const approvePR = vi.fn(async () => undefined);
+  it('delegates details, diff, and submit review', async () => {
     const submitReview = vi.fn(async () => undefined);
     const caller = createCaller({
-      approvePR,
       submitReview,
       getPRFullDetails: async () => ({ number: 12, title: 'Fix CI' }),
       getPRDiff: async () => 'diff content',
     });
 
-    await expect(caller.approve({ owner: 'o', repo: 'r', prNumber: 12 })).resolves.toEqual({
-      success: true,
-    });
-    await expect(caller.checkHealth()).resolves.toEqual({
-      isInstalled: true,
-      isAuthenticated: true,
-    });
     await expect(caller.getPRDetails({ repo: 'o/r', number: 12 })).resolves.toEqual({
       number: 12,
       title: 'Fix CI',
@@ -104,7 +93,6 @@ describe('prReviewRouter', () => {
       })
     ).resolves.toEqual({ success: true });
 
-    expect(approvePR).toHaveBeenCalledWith('o', 'r', 12);
     expect(submitReview).toHaveBeenCalledWith('o/r', 12, 'request-changes', 'needs work');
   });
 });
