@@ -139,23 +139,18 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  it('short-circuits findByIds and findByIdsWithProject for empty id arrays', async () => {
-    await expect(workspaceAccessor.findByIds([])).resolves.toEqual([]);
+  it('short-circuits findByIdsWithProject for empty id arrays', async () => {
     await expect(workspaceAccessor.findByIdsWithProject([])).resolves.toEqual([]);
 
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
-  it('queries IDs with and without project include', async () => {
-    mockFindMany.mockResolvedValueOnce([{ id: 'ws-1' }]).mockResolvedValueOnce([{ id: 'ws-2' }]);
+  it('queries IDs with project include', async () => {
+    mockFindMany.mockResolvedValueOnce([{ id: 'ws-2' }]);
 
-    await workspaceAccessor.findByIds(['ws-1']);
     await workspaceAccessor.findByIdsWithProject(['ws-2']);
 
     expect(mockFindMany).toHaveBeenNthCalledWith(1, {
-      where: { id: { in: ['ws-1'] } },
-    });
-    expect(mockFindMany).toHaveBeenNthCalledWith(2, {
       where: { id: { in: ['ws-2'] } },
       include: { project: true, pr: true, autoIteration: true },
     });

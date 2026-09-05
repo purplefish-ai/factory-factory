@@ -976,21 +976,6 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find multiple workspaces by their IDs.
-   * Used for batch lookups when enriching process info.
-   */
-  findByIds(ids: string[]): Promise<Workspace[]> {
-    if (ids.length === 0) {
-      return Promise.resolve([]);
-    }
-    return prisma.workspace.findMany({
-      where: {
-        id: { in: ids },
-      },
-    });
-  }
-
-  /**
    * Find multiple workspaces by their IDs with project included.
    * Used for batch lookups when project info is needed (e.g., admin process list).
    */
