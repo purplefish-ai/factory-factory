@@ -1,12 +1,4 @@
 // Domain: workspace
-export type {
-  PRDiscoveryClaim,
-  PRSnapshotFields,
-  WorkspaceFixerContext,
-  WorkspacePRContext,
-  WorkspaceProviderSelectionSnapshot,
-  WorkspaceStatusSnapshot,
-} from '@/backend/services/workspace/types';
 // Public API for the workspace domain module.
 // Consumers should import from '@/backend/services/workspace' only.
 
@@ -17,19 +9,12 @@ export type {
   WorkspaceSessionBridge,
 } from './bridges';
 export { workspaceActivityService } from './lifecycle/activity.service';
-export {
-  type WorkspaceCreationDependencies,
-  WorkspaceCreationService,
-  type WorkspaceCreationSource,
-} from './lifecycle/creation.service';
+export { WorkspaceCreationService } from './lifecycle/creation.service';
 export { workspaceDataService } from './lifecycle/data.service';
 // --- Workspace lifecycle ---
 export {
-  type StartProvisioningOptions,
-  type TransitionOptions,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
-  WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
 export {
@@ -56,13 +41,9 @@ export {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
   type SnapshotChangedEvent,
-  type SnapshotDerivationFns,
-  type SnapshotFieldGroup,
   type SnapshotRemovedEvent,
   type SnapshotUpdateInput,
-  type SnapshotUpsertResult,
   sessionSummariesEqual,
-  type WorkspaceSessionSummary,
   type WorkspaceSnapshotEntry,
   WorkspaceSnapshotStore,
   workspaceSnapshotStore,
@@ -71,31 +52,16 @@ export {
 export {
   deriveWorkspaceFlowState,
   deriveWorkspaceFlowStateFromWorkspace,
-  type WorkspaceCiObservation,
-  type WorkspaceFlowPhase,
-  type WorkspaceFlowState,
-  type WorkspaceFlowStateInput,
-  type WorkspaceFlowStateSource,
 } from './state/flow-state';
 export {
   getWorkspaceInitPolicy,
-  type WorkspaceInitPolicy,
   type WorkspaceInitPolicyInput,
 } from './state/init-policy';
-export {
-  computePendingRequestType,
-  type WorkspacePendingRequestType,
-} from './state/pending-request-type';
+export { computePendingRequestType } from './state/pending-request-type';
 // --- Worktree management ---
-export {
-  type ExistingCloneStatus,
-  type GithubRepo,
-  gitCloneService,
-  parseGithubUrl,
-} from './worktree/git-clone.service';
-export { gitOpsService, type WorkspaceGitStats } from './worktree/git-ops.service';
+export { gitCloneService, parseGithubUrl } from './worktree/git-clone.service';
+export { gitOpsService } from './worktree/git-ops.service';
 export {
   assertWorktreePathSafe,
-  WorktreePathSafetyError,
   worktreeLifecycleService,
 } from './worktree/worktree-lifecycle.service';

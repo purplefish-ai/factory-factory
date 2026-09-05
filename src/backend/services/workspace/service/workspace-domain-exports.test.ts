@@ -11,8 +11,6 @@ import {
   // Lifecycle
   WorkspaceCreationService,
   WorkspaceSnapshotStore,
-  WorkspaceStateMachineError,
-  WorktreePathSafetyError,
   workspaceActivityService,
   workspaceAutoIterationService,
   workspaceDataService,
@@ -55,10 +53,6 @@ describe('Workspace domain exports', () => {
     expect(workspaceStateMachine).toBeDefined();
   });
 
-  it('exports WorkspaceStateMachineError as a constructor', () => {
-    expect(typeof WorkspaceStateMachineError).toBe('function');
-  });
-
   it('exports workspaceDataService as an object', () => {
     expect(workspaceDataService).toBeDefined();
   });
@@ -90,10 +84,6 @@ describe('Workspace domain exports', () => {
 
   it('exports assertWorktreePathSafe as a function', () => {
     expect(typeof assertWorktreePathSafe).toBe('function');
-  });
-
-  it('exports WorktreePathSafetyError as a constructor', () => {
-    expect(typeof WorktreePathSafetyError).toBe('function');
   });
 
   it('exports workspace git and snapshot services', () => {
