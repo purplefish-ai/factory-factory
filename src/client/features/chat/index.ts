@@ -23,6 +23,7 @@ export { TodoPanel } from './todo-panel';
 // Hooks
 export type { UseChatWebSocketOptions, UseChatWebSocketReturn } from './use-chat-websocket';
 export { useChatWebSocket } from './use-chat-websocket';
+export { useGroupedChatMessages } from './use-grouped-chat-messages';
 export type { Todo, TodoState } from './use-todo-tracker';
 export { useTodoTracker } from './use-todo-tracker';
 export { VirtualizedMessageList } from './virtualized-message-list';

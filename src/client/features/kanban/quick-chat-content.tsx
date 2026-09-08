@@ -1,14 +1,14 @@
 import { ArrowDownIcon } from '@phosphor-icons/react';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import {
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
   type UseChatWebSocketReturn,
+  useGroupedChatMessages,
   VirtualizedMessageList,
 } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
-import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
 
 interface QuickChatContentProps {
   workspaceId: string;
@@ -27,10 +27,7 @@ export function QuickChatContent({
   isNearBottom,
   scrollToBottom,
 }: QuickChatContentProps) {
-  const groupedMessages = useMemo(
-    () => groupAdjacentToolCalls(chatState.messages),
-    [chatState.messages]
-  );
+  const groupedMessages = useGroupedChatMessages(chatState.messages);
 
   const running = chatState.sessionStatus.phase === 'running';
   const stopping = chatState.sessionStatus.phase === 'stopping';

@@ -12,13 +12,13 @@ import {
   PermissionPrompt,
   QuestionPrompt,
   RewindConfirmationDialog,
+  useGroupedChatMessages,
   VirtualizedMessageList,
 } from '@/client/features/chat';
 import { VoiceModeToggle } from '@/client/features/voice';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
-import { filterDuplicateResultMessages, groupAdjacentToolCalls } from '@/lib/chat-protocol';
 import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
@@ -176,10 +176,9 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const autoStartPending = props.autoStartPending ?? false;
 
   const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
-  const groupedMessages = useMemo(
-    () => groupAdjacentToolCalls(filterDuplicateResultMessages(props.messages)),
-    [props.messages]
-  );
+  const groupedMessages = useGroupedChatMessages(props.messages, {
+    filterDuplicateResults: true,
+  });
   const queuedMessageIds = useMemo(
     () => new Set(props.queuedMessages.map((msg) => msg.id)),
     [props.queuedMessages]
