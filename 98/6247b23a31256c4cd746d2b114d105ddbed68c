@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_9d4a09579a366e::t_bb7cabc34c53af 8-18
+.github/workflows/ci.yml
+  s_9d4a09579a366e::t_63726ddd9a6c61 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "986247b23a31256c4cd746d2b114d105ddbed68c",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
