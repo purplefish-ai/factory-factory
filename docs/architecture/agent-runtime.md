@@ -32,6 +32,12 @@ Claude model names are normalized from provider descriptions at every ACP config
 ingress so Admin and in-chat selectors show explicit family versions while
 preserving raw provider values and configured defaults.
 
+Admin Codex options and inactive-session chat capabilities share
+`CodexModelCatalogService`. It coalesces concurrent app-server discovery,
+caches successful catalogs for 30 seconds from completion, and gives each
+consumer an isolated copy. Discovery failures are not cached; each consumer
+keeps its existing fallback and the next request retries discovery.
+
 The ACP layer is import-fenced by dependency-cruiser
 (`acp-no-external-imports`, `codex-app-server-adapter-self-contained`,
 `session-model-import-boundary`, `session-runtime-import-boundary`). The Codex
