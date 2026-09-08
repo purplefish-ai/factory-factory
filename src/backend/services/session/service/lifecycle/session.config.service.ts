@@ -13,6 +13,7 @@ import { sessionDomainService } from '@/backend/services/session/service/session
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { SessionRepository } from './session.repository';
 import {
   buildCapabilitiesFromConfigOptions,
@@ -30,13 +31,6 @@ type CodexModelEntry = Awaited<ReturnType<typeof fetchCodexModelCatalogFromAppSe
 type CachedCodexModelCatalog = {
   fetchedAtMs: number;
   models: CodexModelEntry[];
-};
-type StoredAcpConfigSnapshot = {
-  provider: SessionProvider;
-  providerSessionId: string;
-  capturedAt: string;
-  configOptions: SessionConfigOption[];
-  observedModelId?: string;
 };
 
 export type PersistAcpConfigSnapshotParams = {
@@ -231,7 +225,7 @@ export class SessionConfigService {
       return [];
     }
 
-    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
     const snapshotConfigOptions =
       cachedSnapshot && cachedSnapshot.provider === session.provider
         ? [...cachedSnapshot.configOptions]
@@ -434,7 +428,7 @@ export class SessionConfigService {
       return EMPTY_CHAT_BAR_CAPABILITIES;
     }
 
-    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (session.provider === 'CODEX') {
       const snapshotConfigOptions =
         cachedSnapshot && cachedSnapshot.provider === 'CODEX'
@@ -860,7 +854,7 @@ export class SessionConfigService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    const snapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (!snapshot || snapshot.provider !== session.provider) {
       throw new Error(
         `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
@@ -1034,42 +1028,6 @@ export class SessionConfigService {
       return {};
     }
     return { ...(metadata as Record<string, unknown>) };
-  }
-
-  private extractAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapshot | null {
-    const record = this.toMetadataRecord(metadata);
-    const snapshot = record.acpConfigSnapshot;
-    if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) {
-      return null;
-    }
-
-    const candidate = snapshot as Record<string, unknown>;
-    const provider = candidate.provider;
-    const providerSessionId = candidate.providerSessionId;
-    const configOptions = candidate.configOptions;
-    const observedModelId = candidate.observedModelId;
-
-    if (provider !== 'CLAUDE' && provider !== 'CODEX') {
-      return null;
-    }
-    if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {
-      return null;
-    }
-    if (!Array.isArray(configOptions)) {
-      return null;
-    }
-
-    return {
-      provider,
-      providerSessionId,
-      capturedAt:
-        typeof candidate.capturedAt === 'string' ? candidate.capturedAt : new Date(0).toISOString(),
-      configOptions:
-        provider === 'CLAUDE'
-          ? normalizeSessionConfigOptions(provider, configOptions as SessionConfigOption[])
-          : (configOptions as SessionConfigOption[]),
-      ...(typeof observedModelId === 'string' ? { observedModelId } : {}),
-    };
   }
 
   private resolveObservedModel(configOptions: SessionConfigOption[]): string | undefined {
