@@ -1,0 +1,20 @@
+docs/architecture/agent-runtime.md
+  s_9d4a09579a366e::t_5644be2b3df105 16
+  s_9d4a09579a366e::t_589ec5524d16c1 17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "361f50bdd4c7e14113b456ebd6077a846bec2754",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
