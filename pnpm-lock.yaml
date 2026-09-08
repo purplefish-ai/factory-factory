@@ -61,8 +61,8 @@ importers:
         specifier: ^0.75.1
         version: 0.75.1(@anthropic-ai/sdk@0.124.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.29.0(zod@4.5.4))
       '@agentclientprotocol/sdk':
-        specifier: 0.15.0
-        version: 0.15.0(zod@4.5.4)
+        specifier: 1.4.0
+        version: 1.4.0(zod@4.5.4)
       '@linear/sdk':
         specifier: ^76.0.0
         version: 76.0.0(graphql@16.12.0)
@@ -434,11 +434,6 @@ packages:
     resolution: {integrity: sha512-Un6I4BRkhpCFS3I7kr5C/lkAm8Nc3VuGZU2YQ3xIpJAIxV94iWO0Q2CH2QABxMERpONRu4Le6XC9V+5PImQZ2A==}
     engines: {node: '>=22'}
     hasBin: true
-
-  '@agentclientprotocol/sdk@0.15.0':
-    resolution: {integrity: sha512-TH4utu23Ix8ec34srBHmDD4p3HI0cYleS1jN9lghRczPfhFlMBNrQgZWeBBe12DWy27L11eIrtciY2MXFSEiDg==}
-    peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
 
   '@agentclientprotocol/sdk@1.4.0':
     resolution: {integrity: sha512-/eufudw+aFY1LKLolT6yFE6UMmYRl7fMJ/DEONSIyR6wI3slHWITBsANRGqXEY8FRzqUxwh7QEaGiZHcJPVThg==}
@@ -6706,10 +6701,6 @@ snapshots:
     transitivePeerDependencies:
       - '@anthropic-ai/sdk'
       - '@modelcontextprotocol/sdk'
-
-  '@agentclientprotocol/sdk@0.15.0(zod@4.5.4)':
-    dependencies:
-      zod: 4.5.4
 
   '@agentclientprotocol/sdk@1.4.0(zod@4.5.4)':
     dependencies:

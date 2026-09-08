@@ -884,7 +884,7 @@ export class SessionConfigService {
   ): SessionConfigOption[] {
     let didUpdate = false;
     const nextConfigOptions = configOptions.map((option) => {
-      if (option.id !== configId) {
+      if (option.id !== configId || option.type !== 'select') {
         return option;
       }
 

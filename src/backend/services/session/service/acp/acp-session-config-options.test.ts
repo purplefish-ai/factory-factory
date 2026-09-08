@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { requireSessionConfigOptions } from './acp-session-config-options';
+import { assert, describe, expect, it } from 'vitest';
+import {
+  normalizeSessionConfigOptions,
+  requireSessionConfigOptions,
+} from './acp-session-config-options';
 
 describe('requireSessionConfigOptions Claude labels', () => {
   it('normalizes flat Claude model names and preserves option values', () => {
@@ -35,10 +38,12 @@ describe('requireSessionConfigOptions Claude labels', () => {
       ],
     });
 
+    assert(configOptions[0]?.type === 'select');
     expect(configOptions[0]?.options).toEqual([
       expect.objectContaining({ value: 'default', name: 'Default — Opus 4.8 (1M)' }),
       expect.objectContaining({ value: 'sonnet', name: 'Sonnet 5' }),
     ]);
+    assert(configOptions[1]?.type === 'select');
     expect(configOptions[1]?.options).toEqual([{ value: 'default', name: 'Default' }]);
   });
 
@@ -81,6 +86,7 @@ describe('requireSessionConfigOptions Claude labels', () => {
       ],
     });
 
+    assert(configOptions[0]?.type === 'select');
     expect(configOptions[0]?.options).toEqual([
       expect.objectContaining({
         name: 'Latest models',
@@ -119,8 +125,26 @@ describe('requireSessionConfigOptions Claude labels', () => {
     });
 
     expect(configOptions[0]).toMatchObject({ category: 'model' });
+    assert(configOptions[0]?.type === 'select');
     expect(configOptions[0]?.options).toEqual([
       expect.objectContaining({ value: 'sonnet', name: 'Sonnet 5' }),
     ]);
+  });
+});
+
+describe('boolean ACP config options', () => {
+  it('preserves boolean values without treating them as model selects', () => {
+    const option = { id: 'model', name: 'Toggle', type: 'boolean' as const, currentValue: false };
+    expect(normalizeSessionConfigOptions('CLAUDE', [option])).toEqual([option]);
+  });
+  it('requires select options for the model and mode categories', () => {
+    expect(() =>
+      requireSessionConfigOptions('CLAUDE', 'newSession', {
+        configOptions: [
+          { id: 'model', name: 'Model', type: 'boolean', category: 'model', currentValue: false },
+          { id: 'mode', name: 'Mode', type: 'boolean', category: 'mode', currentValue: true },
+        ],
+      })
+    ).toThrow('missing required config option categories: model, mode');
   });
 });

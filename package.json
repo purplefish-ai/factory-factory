@@ -91,7 +91,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.75.1",
-    "@agentclientprotocol/sdk": "0.15.0",
+    "@agentclientprotocol/sdk": "1.4.0",
     "@linear/sdk": "^76.0.0",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-better-sqlite3": "7.10.0",

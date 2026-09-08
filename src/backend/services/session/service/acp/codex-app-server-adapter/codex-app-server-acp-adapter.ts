@@ -384,14 +384,16 @@ export class CodexAppServerAcpAdapter implements Agent {
     await Promise.resolve();
     const session = this.requireSession(params.sessionId);
 
+    const invalidValue = () =>
+      RequestError.invalidParams({ configId: params.configId, value: params.value });
+    if (typeof params.value !== 'string') {
+      throw invalidValue();
+    }
     switch (params.configId) {
       case 'mode': {
         const availableModes = this.getCollaborationModeValues(session.defaults.collaborationMode);
         if (!availableModes.includes(params.value)) {
-          throw RequestError.invalidParams({
-            configId: params.configId,
-            value: params.value,
-          });
+          throw invalidValue();
         }
         session.defaults.collaborationMode = params.value;
         break;
@@ -400,10 +402,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         const presets = this.getExecutionPresets(session);
         const selectedPreset = presets.find((preset) => preset.id === params.value);
         if (!selectedPreset) {
-          throw RequestError.invalidParams({
-            configId: params.configId,
-            value: params.value,
-          });
+          throw invalidValue();
         }
         session.defaults.approvalPolicy = selectedPreset.approvalPolicy;
         session.defaults.sandboxPolicy = createSandboxPolicyFromMode(
@@ -414,10 +413,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       }
       case 'model': {
         if (!isKnownModel(this.modelCatalog, params.value)) {
-          throw RequestError.invalidParams({
-            configId: params.configId,
-            value: params.value,
-          });
+          throw invalidValue();
         }
         session.defaults.model = params.value;
         session.defaults.reasoningEffort = this.resolveReasoningEffortForModel(
@@ -435,10 +431,7 @@ export class CodexAppServerAcpAdapter implements Agent {
             params.value
           )
         ) {
-          throw RequestError.invalidParams({
-            configId: params.configId,
-            value: params.value,
-          });
+          throw invalidValue();
         }
         session.defaults.reasoningEffort = params.value;
         break;

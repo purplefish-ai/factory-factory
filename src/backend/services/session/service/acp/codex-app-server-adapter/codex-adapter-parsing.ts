@@ -1,4 +1,4 @@
-import type { McpServer, PromptRequest } from '@agentclientprotocol/sdk';
+import { type McpServer, type PromptRequest, RequestError } from '@agentclientprotocol/sdk';
 import { dedupeStrings, isRecord } from './acp-adapter-utils';
 import type { CodexMcpServerConfig } from './adapter-state';
 
@@ -142,6 +142,9 @@ function toCodexMcpServerConfig(server: McpServer): CodexMcpServerConfig {
     };
   }
 
+  if (server.type === 'acp') {
+    throw RequestError.invalidParams({ name: server.name }, 'ACP MCP transport is not supported');
+  }
   const httpHeaders = toMcpHeadersRecord(server.headers);
   return {
     enabled: true,

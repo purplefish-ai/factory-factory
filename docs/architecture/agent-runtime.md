@@ -5,7 +5,13 @@
 All agent sessions use the Agent Client Protocol (ACP) via
 `@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-agent-acp`; CODEX
 sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both
-over stdio JSON-RPC.
+over stdio JSON-RPC. The direct SDK dependency matches Claude ACP's SDK 1.4.
+Model changes use `session/set_config_option`. Legacy model/mode response
+fallbacks remain supported; model and mode controls require select options.
+Boolean options are retained in backend configuration but omitted from the
+current select-only chat controls. The internal Codex adapter accepts string
+configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
+servers, which it does not advertise support for.
 
 Session init/load is fail-fast and requires provider `configOptions` with
 model/mode categories. Permission requests present multi-option selection

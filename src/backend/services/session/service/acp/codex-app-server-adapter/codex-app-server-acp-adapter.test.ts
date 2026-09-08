@@ -1202,7 +1202,7 @@ describe('CodexAppServerAcpAdapter', () => {
     ]);
   });
 
-  it('rejects invalid thought level values', async () => {
+  it.each(['turbo', true, false])('rejects invalid thought level value %s', async (value) => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
@@ -1223,7 +1223,7 @@ describe('CodexAppServerAcpAdapter', () => {
       adapter.setSessionConfigOption({
         sessionId: session.sessionId,
         configId: 'reasoning_effort',
-        value: 'turbo',
+        ...(typeof value === 'boolean' ? { type: 'boolean' as const, value } : { value }),
       })
     ).rejects.toBeInstanceOf(Error);
   });

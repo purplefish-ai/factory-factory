@@ -440,7 +440,12 @@ function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | 
   }
   return {
     type: 'CONFIG_OPTIONS_UPDATE',
-    payload: { configOptions },
+    payload: {
+      configOptions: configOptions.filter(
+        (option) =>
+          option && typeof option.currentValue === 'string' && Array.isArray(option.options)
+      ),
+    },
   };
 }
 

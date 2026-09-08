@@ -4,7 +4,6 @@ import {
   createManagerTestHarness,
   mockSetSessionConfigOption,
   mockSetSessionMode,
-  mockSetSessionModel,
   setupSuccessfulSpawn,
 } from './acp-runtime-manager.test-harness';
 import {
@@ -68,6 +67,7 @@ describe('AcpRuntimeManager', () => {
       await manager.setConfigOption('session-1', 'mode', 'plan');
 
       const defaultModelOption = handle.configOptions
+        .filter((option) => option.type === 'select')
         .find((option) => option.id === 'model')
         ?.options.find((option) => 'value' in option && option.value === 'default');
       expect(defaultModelOption).toMatchObject({
@@ -159,30 +159,8 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('setSessionModel', () => {
-    it('uses unstable_setSessionModel for CLAUDE and updates cached model currentValue', async () => {
+    it('uses setSessionConfigOption for CLAUDE and caches the returned model', async () => {
       setupSuccessfulSpawn();
-      const handle = await manager.getOrCreateClient(
-        'session-1',
-        defaultOptions(),
-        defaultHandlers(),
-        defaultContext()
-      );
-
-      await manager.setSessionModel('session-1', 'opus');
-
-      expect(mockSetSessionModel).toHaveBeenCalledWith({
-        sessionId: 'provider-session-123',
-        modelId: 'opus',
-      });
-      expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
-      expect(handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
-        'opus'
-      );
-    });
-
-    it('falls back to setSessionConfigOption when unstable_setSessionModel is unavailable', async () => {
-      setupSuccessfulSpawn();
-      mockSetSessionModel.mockRejectedValueOnce({ code: -32_601, message: 'Method not found' });
       mockSetSessionConfigOption.mockResolvedValueOnce({
         configOptions: [
           {
@@ -215,18 +193,16 @@ describe('AcpRuntimeManager', () => {
 
       await manager.setSessionModel('session-1', 'opus');
 
-      expect(mockSetSessionModel).toHaveBeenCalledWith({
-        sessionId: 'provider-session-123',
-        modelId: 'opus',
-      });
       expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
         sessionId: 'provider-session-123',
         configId: 'model',
         value: 'opus',
       });
-      expect(handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
-        'opus'
-      );
+      expect(
+        handle.configOptions
+          .filter((option) => option.type === 'select')
+          .find((option) => option.id === 'model')?.currentValue
+      ).toBe('opus');
     });
 
     it('uses setSessionConfigOption path for CODEX model updates', async () => {
@@ -240,7 +216,6 @@ describe('AcpRuntimeManager', () => {
 
       await manager.setSessionModel('session-1', 'gpt-5.2-codex');
 
-      expect(mockSetSessionModel).not.toHaveBeenCalled();
       expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
         sessionId: 'provider-session-123',
         configId: 'model',

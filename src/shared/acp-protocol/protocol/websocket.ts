@@ -242,8 +242,8 @@ interface WebSocketMessagePayloadByType {
       description?: string | null;
       type: string;
       category?: string | null;
-      currentValue: string;
-      options: unknown[];
+      currentValue: string | boolean;
+      options?: unknown[];
     }>;
   };
 }

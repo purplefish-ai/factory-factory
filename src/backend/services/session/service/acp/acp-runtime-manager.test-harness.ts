@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   mockCancel: vi.fn(),
   mockSetSessionConfigOption: vi.fn(),
   mockSetSessionMode: vi.fn(),
-  mockSetSessionModel: vi.fn(),
   mockExtMethod: vi.fn(),
   mockNdJsonStream: vi
     .fn()
@@ -36,7 +35,6 @@ export const mockCancel: ReturnType<typeof vi.fn> = mocks.mockCancel;
 export const mockSetSessionConfigOption: ReturnType<typeof vi.fn> =
   mocks.mockSetSessionConfigOption;
 export const mockSetSessionMode: ReturnType<typeof vi.fn> = mocks.mockSetSessionMode;
-export const mockSetSessionModel: ReturnType<typeof vi.fn> = mocks.mockSetSessionModel;
 export const mockExtMethod: ReturnType<typeof vi.fn> = mocks.mockExtMethod;
 export const mockNdJsonStream: ReturnType<typeof vi.fn> = mocks.mockNdJsonStream;
 export const mockLoggerWarn: ReturnType<typeof vi.fn> = mocks.mockLoggerWarn;
@@ -56,7 +54,6 @@ vi.mock('@agentclientprotocol/sdk', () => {
     cancel = mockCancel;
     setSessionConfigOption = mockSetSessionConfigOption;
     setSessionMode = mockSetSessionMode;
-    unstable_setSessionModel = mockSetSessionModel;
     extMethod = mockExtMethod;
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
@@ -110,7 +107,6 @@ export function setupSuccessfulSpawn(
     configOptions: defaultConfigOptions(),
   });
   mockSetSessionMode.mockResolvedValue({});
-  mockSetSessionModel.mockResolvedValue({});
   return child;
 }
 
