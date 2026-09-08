@@ -3,10 +3,6 @@ import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
-vi.mock('@/backend/services/session/service/acp', () => ({
-  fetchCodexModelCatalogFromAppServer: vi.fn().mockResolvedValue([]),
-}));
-
 const validModel = {
   id: 'model',
   name: 'Model',
@@ -24,6 +20,7 @@ describe('cached ACP configuration validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     service = new SessionConfigService({
+      codexModelCatalogService: { getModels: vi.fn().mockResolvedValue([]) },
       repository: unsafeCoerce(repository),
       runtimeManager: unsafeCoerce(runtimeManager),
       sessionDomainService: unsafeCoerce({ emitDelta: vi.fn() }),
