@@ -13,8 +13,9 @@ current select-only chat controls. The internal Codex adapter accepts string
 configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
 servers, which it does not advertise support for.
 
-Session init/load is fail-fast and requires provider `configOptions` with
-model/mode categories. Permission requests present multi-option selection
+Session init/load fails unless model/mode select options can be obtained from
+provider `configOptions` or legacy model/mode response fields. Permission requests
+present multi-option selection
 (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged
 through ACP permission response handlers.
 
