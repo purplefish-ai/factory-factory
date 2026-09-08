@@ -142,17 +142,20 @@ function shouldInvalidateForSharedGitEvent(filename: string | null): boolean {
   }
 
   const normalized = filename.replaceAll('\\', '/').replace(/^\.\//, '');
-  // HEAD, index, and worktrees/* belong to one worktree and are covered by its
-  // private Git-directory watcher. Only the shared paths below fan out.
-  return (
-    normalized === 'config' ||
-    normalized.startsWith('config.') ||
-    normalized === 'packed-refs' ||
-    normalized.startsWith('packed-refs.') ||
-    normalized === 'shallow' ||
-    normalized.startsWith('shallow.') ||
-    normalized === 'refs' ||
-    normalized.startsWith('refs/')
+  // Worktree metadata is covered by its private watcher. Object and reflog
+  // writes are high-volume side effects of ref changes, which arrive through
+  // the remaining shared metadata paths.
+  return !(
+    normalized === 'HEAD' ||
+    normalized.startsWith('HEAD.') ||
+    normalized === 'index' ||
+    normalized.startsWith('index.') ||
+    normalized === 'worktrees' ||
+    normalized.startsWith('worktrees/') ||
+    normalized === 'objects' ||
+    normalized.startsWith('objects/') ||
+    normalized === 'logs' ||
+    normalized.startsWith('logs/')
   );
 }
 

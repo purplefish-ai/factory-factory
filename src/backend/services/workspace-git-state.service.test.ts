@@ -328,25 +328,30 @@ describe('WorkspaceGitStateService', () => {
     }
   );
 
-  it.each(['refs/remotes/origin/main', 'refs', 'config'])(
-    'invalidates every dependent cache when shared Git metadata %s changes',
-    async (filename) => {
-      vi.useFakeTimers();
-      try {
-        const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
-        const first = await service.getSnapshot(input);
-        const sibling = await service.getSnapshot(siblingInput);
+  it.each([
+    'refs/remotes/origin/main',
+    'refs',
+    'config',
+    'info/exclude',
+    'reftable',
+    'reftable/tables.list',
+    'future-ref-storage/state',
+  ])('invalidates every dependent cache when shared Git metadata %s changes', async (filename) => {
+    vi.useFakeTimers();
+    try {
+      const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+      const first = await service.getSnapshot(input);
+      const sibling = await service.getSnapshot(siblingInput);
 
-        emitWatchEvent('/repo/.git', 'change', filename);
-        await vi.advanceTimersByTimeAsync(100);
+      emitWatchEvent('/repo/.git', 'change', filename);
+      await vi.advanceTimersByTimeAsync(100);
 
-        expect(await service.getSnapshot(input)).not.toBe(first);
-        expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(await service.getSnapshot(input)).not.toBe(first);
+      expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+    } finally {
+      vi.useRealTimers();
     }
-  );
+  });
 
   it('shares and reference-counts a common Git metadata watcher', async () => {
     const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
