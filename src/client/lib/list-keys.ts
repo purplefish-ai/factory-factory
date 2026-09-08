@@ -1,4 +1,8 @@
-/** Keep identities stable across reordering, disambiguating duplicates by occurrence. */
+/**
+ * Keep keys stable across reordering for distinct identities.
+ * Duplicate identities are distinguished by occurrence, so their keys depend on
+ * their relative order. Use unique identities when individual rows must retain state.
+ */
 export function withOccurrenceKeys<T>(
   items: readonly T[],
   getIdentity: (item: T) => string
