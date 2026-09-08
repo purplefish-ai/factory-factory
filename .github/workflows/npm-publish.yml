@@ -116,7 +116,8 @@ jobs:
         run: npm install --global npm@11.19.0
 
       - name: Stage package on npm
-        run: npm stage publish npm-package/factory-factory-*.tgz --access public
+        # The ./ prefix prevents npm from treating the path as GitHub owner/repo shorthand.
+        run: npm stage publish ./npm-package/factory-factory-*.tgz --access public
 
       - name: Record finalization details
         if: ${{ github.event_name == 'workflow_dispatch' }}

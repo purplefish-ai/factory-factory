@@ -123,7 +123,7 @@ describe('npm publish workflow', () => {
     expectSecureNodeSetup(stageJob);
     expect(getStep(stageJob, 'Install npm CLI').run).toBe('npm install --global npm@11.19.0');
     expect(getStep(stageJob, 'Stage package on npm').run).toBe(
-      'npm stage publish npm-package/factory-factory-*.tgz --access public'
+      'npm stage publish ./npm-package/factory-factory-*.tgz --access public'
     );
 
     const oidcJobs = Object.entries(workflow.jobs)

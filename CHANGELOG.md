@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resolve the staged npm tarball as a local file instead of a GitHub repository during release publishing
 - Prevent npm package installation and release smoke tests from deadlocking by running the installed Prisma CLI directly during postinstall
 - Preserve Codex notification ordering, serialize turn completion behind earlier item events, reject empty sub-agent receiver IDs, and validate permission request options before rendering (#2157, #2166, #2167, #2187)
 - Prevent disconnected terminal creation, stale sub-agent tabs after refetch failures, stale voice worklet callbacks, and orphaned Git worktrees after workspace deletion (#2168, #2169, #2171, #2172)
