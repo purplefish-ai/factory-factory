@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["22.22", "24"]
+        node-version: ["26.8.1"]
     permissions:
       contents: read
     env:
@@ -78,11 +78,11 @@ jobs:
           npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$TMPDIR/test.db"
 
       - name: Publish to npm (dry run)
-        if: ${{ matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        if: ${{ matrix.node-version == '26.8.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
         run: npm publish --dry-run
 
       - name: Upload npm package
-        if: ${{ matrix.node-version == '22.22' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true')) }}
+        if: ${{ matrix.node-version == '26.8.1' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true')) }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: npm-package
@@ -109,7 +109,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           package-manager-cache: false
 
       - name: Install npm CLI
@@ -177,7 +177,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           package-manager-cache: false
 
       - name: Verify package is published on npm

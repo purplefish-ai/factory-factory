@@ -21,6 +21,7 @@ const workflowJobSchema = z.object({
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   permissions: z.record(z.string(), z.string()),
   steps: z.array(workflowStepSchema),
+  strategy: z.object({ matrix: z.object({ 'node-version': z.array(z.string()) }) }).optional(),
 });
 
 const workflowDispatchInputSchema = z.object({
@@ -73,6 +74,21 @@ function githubExpression(expression: string): string {
 }
 
 describe('npm publish workflow', () => {
+  it('verifies and publishes on the pinned development runtime', () => {
+    const nodeVersion = readFileSync(
+      new URL('../../../.node-version', import.meta.url),
+      'utf8'
+    ).trim();
+    const verifyJob = getJob('verify');
+    expect(verifyJob.strategy?.matrix['node-version']).toEqual([nodeVersion]);
+    for (const name of ['Publish to npm (dry run)', 'Upload npm package']) {
+      expect(getStep(verifyJob, name).if).toContain(`matrix.node-version == '${nodeVersion}'`);
+    }
+    for (const name of ['stage', 'finalize-release']) {
+      expect(getStep(getJob(name), 'Setup Node.js').with?.['node-version']).toBe(nodeVersion);
+    }
+  });
+
   it('requires an explicit finalization dispatch after npm approval', () => {
     expect(workflow.on.workflow_dispatch.inputs.finalize_release).toEqual({
       default: 'false',
@@ -103,7 +119,7 @@ describe('npm publish workflow', () => {
     const dryRunStep = getStep(verifyJob, 'Publish to npm (dry run)');
     expect(dryRunStep.if).toBe(
       githubExpression(
-        "matrix.node-version == '22.22' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
+        "matrix.node-version == '26.8.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
       )
     );
     expect(dryRunStep.run).toBe('npm publish --dry-run');
@@ -147,7 +163,7 @@ describe('npm publish workflow', () => {
     const uploadStep = getStep(getJob('verify'), 'Upload npm package');
     expect(uploadStep.if).toBe(
       githubExpression(
-        "matrix.node-version == '22.22' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
+        "matrix.node-version == '26.8.1' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
       )
     );
     expect(uploadStep.with).toEqual({

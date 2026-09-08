@@ -4,8 +4,8 @@ Workspace-based environment for running many Claude Code and Codex sessions in
 parallel, each in its own git worktree. TypeScript end to end: Express + tRPC
 backend, React + Vite client, Prisma/SQLite, Electron wrapper, `ff` CLI.
 
-Requires Node `^22.22 || >=24` and pnpm (see `packageManager` in
-`package.json`). Never use `npm` or `yarn` here.
+CLI/development requires Node `>=26.8.1`; Electron uses its bundled runtime.
+Use pnpm (see `packageManager` in `package.json`). Never use `npm` or `yarn` here.
 
 ## Everyday commands
 

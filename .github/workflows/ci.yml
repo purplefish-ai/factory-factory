@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -78,7 +78,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -106,7 +106,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -135,7 +135,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "22.22"
+          node-version: "26.8.1"
           cache: "pnpm"
 
       - name: Install dependencies

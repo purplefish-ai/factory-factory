@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Require Node.js 26.8.1 or newer, update development and release environments, and align Node.js types
 - Upgrade the ACP SDK from 0.15.0 to 1.4.0, matching Claude ACP, migrate model switching to the supported config API, and handle the expanded config and MCP transport types
 - Upgrade Knip from 5.88.1 to 6.35.0, include CSS, MDX, and Prisma in its project analysis, and remove redundant entry points and dependency ignores
 - Upgrade Biome from 2.4.4 to 2.5.12, migrate its configuration, and apply the updated lint and formatting rules

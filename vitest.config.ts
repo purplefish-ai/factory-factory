@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Let jsdom own browser storage instead of Node's experimental global.
+    execArgv: ['--no-experimental-webstorage'],
     env: {
       NODE_ENV: 'test',
     },
