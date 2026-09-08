@@ -5,6 +5,17 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, Storybook 10.6.0, and pnpm 10.34.5
+- Update the Codex CLI compatibility baseline from 0.145.0 to 0.153.4 and regenerate the app-server method snapshot
+
+### Security
+
+- Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts with patched dependency resolutions
+
 ## [0.4.7] - 2026-09-08
 
 ### Changed
