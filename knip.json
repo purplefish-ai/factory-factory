@@ -1,16 +1,14 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
       "entry": [
-        "src/cli/index.ts",
-        "src/backend/index.ts",
         "src/backend/server.ts",
         "src/backend/migrate.ts",
         "electron/main/index.ts",
         "electron/preload/index.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"]
+      "project": ["src/**/*.{ts,tsx,css,mdx}", "electron/**/*.ts", "prisma/**/*.prisma"]
     }
   },
   "paths": {
@@ -38,8 +36,6 @@
     "src/components/ui/toggle-group.tsx"
   ],
   "ignoreDependencies": [
-    "tw-animate-css",
-    "@tailwindcss/typography",
     "@prisma/client",
     "@radix-ui/react-accordion",
     "@radix-ui/react-aspect-ratio",
@@ -51,10 +47,8 @@
     "input-otp",
     "react-hook-form",
     "recharts",
-    "tailwindcss-animate",
     "vaul",
-    "@radix-ui/react-toggle-group",
-    "@agentclientprotocol/claude-agent-acp"
+    "@radix-ui/react-toggle-group"
   ],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
