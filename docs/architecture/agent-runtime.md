@@ -41,6 +41,10 @@ subprocess handles, pending creation, incarnation filtering, exits, stops, and
 quiescence. `AcpRuntimeManager` is the stable compatibility facade over the
 supervisor and stateless ACP collaborators. Lifecycle coordinators continue to
 own durable reconciliation and never manipulate runtime registries directly.
+Runtime callbacks use `onRuntimeExit` and `onRuntimeError` events carrying the
+supervisor's incarnation identity and current purpose. Exit events also carry
+whether the stop was managed; coordinators consume this metadata directly,
+including after a browsing runtime is promoted to active use.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

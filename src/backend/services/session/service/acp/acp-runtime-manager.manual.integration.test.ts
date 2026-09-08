@@ -19,8 +19,8 @@ describeIfRealCodex('AcpRuntimeManager (manual real codex app-server)', () => {
         },
         {
           onSessionId: async () => Promise.resolve(),
-          onExit: async () => Promise.resolve(),
-          onError: (_message) => undefined,
+          onRuntimeExit: async () => Promise.resolve(),
+          onRuntimeError: (_message) => undefined,
           onAcpEvent: (_event) => undefined,
         },
         {

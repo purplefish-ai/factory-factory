@@ -111,6 +111,12 @@ import {
   sessionService,
 } from './session-services';
 
+const activeRuntime = {
+  incarnationId: '11111111-1111-4111-8111-111111111111',
+  purpose: 'active',
+  managed: false,
+} as const;
+
 const getAcpProcessorState = () => acpEventProcessor;
 function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
   vi.mocked(acpRuntimeManager.getOrCreateClient).mockImplementation(() => {
@@ -813,10 +819,13 @@ describe('SessionService', () => {
     const stopPromise = sessionLifecycleService.stopSession('session-race-test');
     await Promise.resolve();
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
-    await acpHandlers.onExit('session-race-test', 0);
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
+    await acpHandlers.onRuntimeExit!({
+      ...activeRuntime,
+      sessionId: 'session-race-test',
+      exitCode: 0,
+      managed: true,
+    });
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-race-test', {
       status: SessionStatus.COMPLETED,
@@ -1109,9 +1118,7 @@ describe('SessionService', () => {
     mockCreatedAcpClient(acpHandle);
     await sessionLifecycleService.getOrCreateSessionClient('session-runtime-exit');
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
@@ -1129,7 +1136,7 @@ describe('SessionService', () => {
     await Promise.resolve();
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
-    await acpHandlers.onExit('session-runtime-exit', 1);
+    await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: session.id, exitCode: 1 });
     await secondRejection;
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
@@ -1210,11 +1217,9 @@ describe('SessionService', () => {
     const appendClaudeEventSpy = vi
       .spyOn(sessionDomainService, 'appendClaudeEvent')
       .mockReturnValue(77);
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
-    await acpHandlers.onExit('session-runtime-exit', 1);
+    await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: session.id, exitCode: 1 });
 
     expect(emitDeltaSpy).toHaveBeenCalledWith(
       'session-runtime-exit',
@@ -1804,11 +1809,9 @@ describe('SessionService', () => {
 
     await sessionLifecycleService.startSession('session-1');
 
-    // Extract the onExit handler from the ACP event handlers passed to acpRuntimeManager
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
-    await acpHandlers.onExit('session-1', 0);
+    // Dispatch the exit of the active runtime created for this session.
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
+    await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: 'session-1', exitCode: 0 });
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
@@ -1885,10 +1888,10 @@ describe('SessionService', () => {
 
     await sessionLifecycleService.startSession('session-1');
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
-    await expect(acpHandlers.onExit('session-1', 0)).resolves.toBeUndefined();
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
+    await expect(
+      acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: 'session-1', exitCode: 0 })
+    ).resolves.toBeUndefined();
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
@@ -1943,10 +1946,8 @@ describe('SessionService', () => {
 
     await sessionLifecycleService.startSession('session-2');
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
-    await acpHandlers.onExit('session-2', 0);
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
+    await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: 'session-2', exitCode: 0 });
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-2', {
       status: SessionStatus.COMPLETED,
@@ -1997,13 +1998,11 @@ describe('SessionService', () => {
 
     await sessionLifecycleService.getOrCreateSessionClientFromRecord(session);
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
     vi.mocked(sessionRepository.updateSession).mockReset();
     vi.mocked(sessionRepository.updateSession).mockReturnValueOnce(exitUpdate.promise);
 
-    const exitPromise = acpHandlers.onExit(sessionId, 1);
+    const exitPromise = acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId, exitCode: 1 });
     await vi.waitFor(() => {
       expect(sessionRepository.updateSession).toHaveBeenCalledWith(sessionId, {
         status: SessionStatus.FAILED,
@@ -2116,10 +2115,8 @@ describe('SessionService', () => {
 
       await sessionLifecycleService.startSession('session-2');
 
-      const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-        onExit: (id: string, exitCode: number | null) => Promise<void>;
-      };
-      await acpHandlers.onExit('session-2', exitCode);
+      const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
+      await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: 'session-2', exitCode });
 
       expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-2', {
         status: expectedStatus,
@@ -2193,15 +2190,15 @@ describe('SessionService', () => {
 
     await sessionLifecycleService.startSession('session-2');
 
-    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onExit: (id: string, exitCode: number | null) => Promise<void>;
-    };
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
     vi.mocked(acpRuntimeManager.isSessionRunning).mockImplementation(() => {
       throw new Error('isSessionRunning failed');
     });
 
-    await expect(acpHandlers.onExit('session-2', 0)).rejects.toThrow('isSessionRunning failed');
+    await expect(
+      acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: 'session-2', exitCode: 0 })
+    ).rejects.toThrow('isSessionRunning failed');
 
     expect(mockAcpTraceLoggerCloseSession).toHaveBeenCalledWith('session-2');
   });

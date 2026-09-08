@@ -18,7 +18,7 @@ export function wireAcpRuntimeErrorHandler(
     if (!shouldDispatch()) {
       return;
     }
-    if (!(handlers.onRuntimeError || handlers.onError)) {
+    if (!handlers.onRuntimeError) {
       logger.warn('ACP child process error (no handler provided)', {
         sessionId,
         error: normalizedError.message,
@@ -27,16 +27,12 @@ export function wireAcpRuntimeErrorHandler(
     }
 
     try {
-      if (handlers.onRuntimeError) {
-        await handlers.onRuntimeError({
-          sessionId,
-          error: normalizedError,
-          incarnationId: runtime.incarnationId,
-          purpose: runtime.purpose,
-        });
-      } else {
-        await handlers.onError?.(sessionId, normalizedError);
-      }
+      await handlers.onRuntimeError({
+        sessionId,
+        error: normalizedError,
+        incarnationId: runtime.incarnationId,
+        purpose: runtime.purpose,
+      });
     } catch (handlerError) {
       logger.warn('Failed to handle ACP error event', {
         sessionId,

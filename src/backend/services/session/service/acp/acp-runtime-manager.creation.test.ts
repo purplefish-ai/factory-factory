@@ -216,7 +216,12 @@ describe('AcpRuntimeManager', () => {
           },
         });
         expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
-        expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+        expect(handlers.onRuntimeError).toHaveBeenCalledWith({
+          sessionId: 'session-1',
+          error: spawnError,
+          incarnationId: expect.any(String),
+          purpose: 'active',
+        });
       } finally {
         await vi.advanceTimersByTimeAsync(5000);
         vi.useRealTimers();
