@@ -1,0 +1,31 @@
+src/client/lib/list-keys.test.ts
+  s_9d4a09579a366e::t_e0137095858859 1-30
+CHANGELOG.md
+  s_9d4a09579a366e::t_da27b6ed714c62 12
+src/client/lib/list-keys.ts
+  s_9d4a09579a366e::t_411a9f5b629ec6 1-13
+src/backend/services/session/service/acp/codex-app-server-adapter/retry-logic.test.ts
+  s_9d4a09579a366e::t_bd1862f4a846f1 1-34
+src/client/features/chat/agent-activity/tool-renderers/file-change-renderer.tsx
+  s_9d4a09579a366e::t_a1b811c6eddadb 10,106,160-162,168
+src/client/features/chat/agent-activity/tool-renderers/file-change-renderer.test.tsx
+  s_9d4a09579a366e::t_bd1862f4a846f1 1-27,29-39
+src/client/features/chat/agent-activity/tool-renderers/file-change-renderer.stories.tsx
+  s_9d4a09579a366e::t_bd1862f4a846f1 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c38af1d601cc775df6e18760312aaf5cff3dbf12",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
