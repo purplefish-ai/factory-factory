@@ -22,6 +22,5 @@
   "src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts": 1008,
   "src/cli/proxy.ts": 1022,
   "src/client/features/chat/chat-reducer.test.ts": 4325,
-  "src/client/routes/admin-page.tsx": 1216,
   "src/lib/claude-fixtures.ts": 1162
 }
