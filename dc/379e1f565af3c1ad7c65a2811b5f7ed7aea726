@@ -1,0 +1,23 @@
+.github/workflows/npm-publish.yml
+  s_9d4a09579a366e::t_15608d498ec42c 119-120
+CHANGELOG.md
+  s_9d4a09579a366e::t_15608d498ec42c 21
+src/backend/testing/npm-publish-workflow.test.ts
+  s_9d4a09579a366e::t_7c71ad82d43fa5 126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dc379e1f565af3c1ad7c65a2811b5f7ed7aea726",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
