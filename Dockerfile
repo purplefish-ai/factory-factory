@@ -8,9 +8,17 @@ FROM node:${NODE_VERSION}-alpine AS base
 ARG PNPM_VERSION=10.34.5
 ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
-RUN wget -qO /tmp/install-pnpm.sh https://get.pnpm.io/install.sh \
-  && ENV=/etc/profile SHELL=/bin/sh PNPM_VERSION=${PNPM_VERSION} sh /tmp/install-pnpm.sh \
-  && rm /tmp/install-pnpm.sh
+# SHA-256 digests from the pnpm release assets; update with PNPM_VERSION.
+# Use static binaries on Alpine and verify before making the download executable.
+RUN case "$(uname -m)" in \
+       x86_64) PNPM_ARCH=x64; PNPM_SHA256=8e744e9720cd31a727cfc3059955fdec6433bbe7383360a9e08a9ae833cb06e3 ;; \
+       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=d0e2a99ad2e4d427967f98b3aa8fb5e0bab548a8fd39c6c0aa293b27b740906b ;; \
+       *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
+     esac \
+  && mkdir -p "${PNPM_HOME}" \
+  && wget -qO "${PNPM_HOME}/pnpm" "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-${PNPM_ARCH}" \
+  && echo "${PNPM_SHA256}  ${PNPM_HOME}/pnpm" | sha256sum -c - \
+  && chmod +x "${PNPM_HOME}/pnpm"
 
 # ============================================================================
 # Stage 1: Install dependencies
