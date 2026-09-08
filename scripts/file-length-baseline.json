@@ -1,8 +1,7 @@
 {
   "src/backend/interceptors/branch-naming.interceptor.test.ts": 1112,
   "src/backend/orchestration/domain-bridges.orchestrator.test.ts": 1097,
-  "src/backend/orchestration/event-collector.orchestrator.test.ts": 1797,
-  "src/backend/orchestration/event-collector.orchestrator.ts": 1013,
+  "src/backend/orchestration/event-collector.orchestrator.test.ts": 1681,
   "src/backend/orchestration/workspace-init.orchestrator.test.ts": 1895,
   "src/backend/routers/websocket/terminal.handler.test.ts": 1012,
   "src/backend/services/github/service/github-cli.service.test.ts": 1912,
