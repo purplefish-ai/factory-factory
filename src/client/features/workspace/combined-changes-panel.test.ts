@@ -21,25 +21,28 @@ describe('buildChangeTree', () => {
   it.each([
     ['before', [gitDirectoryEntry, childFileEntry]],
     ['after', [childFileEntry, gitDirectoryEntry]],
-  ])('unifies a git-reported directory with its child when the directory appears %s the child', (_order, entries) => {
-    expect(buildChangeTree(entries)).toEqual([
-      {
-        name: 'myfolder',
-        path: 'myfolder',
-        type: 'directory',
-        entry: gitDirectoryEntry,
-        children: [
-          {
-            name: 'a.ts',
-            path: 'myfolder/a.ts',
-            type: 'file',
-            entry: childFileEntry,
-            children: [],
-          },
-        ],
-      },
-    ]);
-  });
+  ])(
+    'unifies a git-reported directory with its child when the directory appears %s the child',
+    (_order, entries) => {
+      expect(buildChangeTree(entries)).toEqual([
+        {
+          name: 'myfolder',
+          path: 'myfolder',
+          type: 'directory',
+          entry: gitDirectoryEntry,
+          children: [
+            {
+              name: 'a.ts',
+              path: 'myfolder/a.ts',
+              type: 'file',
+              entry: childFileEntry,
+              children: [],
+            },
+          ],
+        },
+      ]);
+    }
+  );
 
   it('unifies a nested git-reported directory with its child file', () => {
     const nestedDirectoryEntry: ChangeListEntry = {

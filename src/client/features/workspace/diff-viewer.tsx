@@ -2,6 +2,7 @@ import { EyeIcon, FileCodeIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosp
 import { useTheme } from 'next-themes';
 import { useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -271,9 +272,11 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
       ) : (
         <ScrollArea className="flex-1" onScroll={handleDiffScroll} viewportRef={diffViewportRef}>
           <div className="min-w-fit">
-            {parsedDiff.map((line, index) => (
+            {withOccurrenceKeys(parsedDiff, (line) =>
+              JSON.stringify([line.type, line.lineNumber?.old, line.lineNumber?.new, line.content])
+            ).map(({ item: line, key }, index) => (
               <DiffLineComponent
-                key={`${line.type}-${line.lineNumber?.old ?? ''}-${line.lineNumber?.new ?? ''}-${index}`}
+                key={key}
                 line={line}
                 lineNumberWidth={lineNumberWidth}
                 tokens={tokenMap?.get(index)}

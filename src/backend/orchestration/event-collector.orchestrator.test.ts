@@ -1242,46 +1242,44 @@ describe('configureEventCollector', () => {
     });
   });
 
-  it.each([
-    'OPEN',
-    'APPROVED',
-    'CHANGES_REQUESTED',
-    'DRAFT',
-  ])('triggers immediate ratchet recompute when a closed PR is reopened as %s', (reopenedState) => {
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-      prNumber: 42,
-      prUrl: 'https://github.com/org/repo/pull/42',
-      prState: 'CLOSED',
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+  it.each(['OPEN', 'APPROVED', 'CHANGES_REQUESTED', 'DRAFT'])(
+    'triggers immediate ratchet recompute when a closed PR is reopened as %s',
+    (reopenedState) => {
+      vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+        projectId: 'proj-1',
+        prNumber: 42,
+        prUrl: 'https://github.com/org/repo/pull/42',
+        prState: 'CLOSED',
+      } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
 
-    configureEventCollector();
+      configureEventCollector();
 
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-      prUrl?: string | null;
-    }) => void;
+      const onCall = vi
+        .mocked(prSnapshotService.on)
+        .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+      const handler = onCall![1] as (event: {
+        workspaceId: string;
+        prNumber: number;
+        prState: string;
+        prCiStatus: string;
+        prReviewState: string | null;
+        prUrl?: string | null;
+      }) => void;
 
-    handler({
-      workspaceId: 'ws-1',
-      prNumber: 42,
-      prState: reopenedState,
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-      prUrl: 'https://github.com/org/repo/pull/42',
-    });
+      handler({
+        workspaceId: 'ws-1',
+        prNumber: 42,
+        prState: reopenedState,
+        prCiStatus: 'PENDING',
+        prReviewState: null,
+        prUrl: 'https://github.com/org/repo/pull/42',
+      });
 
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
-      bypassPrFetchCooldown: true,
-    });
-  });
+      expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1', {
+        bypassPrFetchCooldown: true,
+      });
+    }
+  );
 
   it('settles ratchet state without a recompute when PR is closed', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({

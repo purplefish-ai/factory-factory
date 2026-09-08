@@ -77,17 +77,12 @@ describe('ACP sub-agent inspection contract', () => {
     ).toThrow();
   });
 
-  it.each([
-    'starting',
-    'running',
-    'waiting',
-    'completed',
-    'failed',
-    'cancelled',
-    'interrupted',
-  ])('accepts the %s sub-agent lifecycle status', (status) => {
-    expect(subagentStatusSchema.parse(status)).toBe(status);
-  });
+  it.each(['starting', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'])(
+    'accepts the %s sub-agent lifecycle status',
+    (status) => {
+      expect(subagentStatusSchema.parse(status)).toBe(status);
+    }
+  );
 
   it('rejects malformed summary identifiers, dates, and statuses while preserving additive fields', () => {
     expect(

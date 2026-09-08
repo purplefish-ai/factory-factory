@@ -216,26 +216,29 @@ describe('useLiveSubagentSelection', () => {
     ['an invalid stored timestamp', 'not-a-date', '2026-08-10T10:05:00.000Z'],
     ['an unknown cached timestamp', '2026-08-10T10:00:00.000Z', null],
     ['an invalid cached timestamp', '2026-08-10T10:00:00.000Z', 'not-a-date'],
-  ] as const)('keeps the stored selection from initial cache when freshness is unprovable from %s', (_case, storedUpdatedAt, cachedUpdatedAt) => {
-    const stored = selection({ updatedAt: storedUpdatedAt });
-    setPages([
-      {
-        supported: true,
-        subagents: [
-          selection({
-            status: 'completed',
-            updatedAt: cachedUpdatedAt,
-            completedAt: '2026-08-10T10:05:00.000Z',
-          }).subagent,
-        ],
-        nextCursor: null,
-      },
-    ]);
+  ] as const)(
+    'keeps the stored selection from initial cache when freshness is unprovable from %s',
+    (_case, storedUpdatedAt, cachedUpdatedAt) => {
+      const stored = selection({ updatedAt: storedUpdatedAt });
+      setPages([
+        {
+          supported: true,
+          subagents: [
+            selection({
+              status: 'completed',
+              updatedAt: cachedUpdatedAt,
+              completedAt: '2026-08-10T10:05:00.000Z',
+            }).subagent,
+          ],
+          nextCursor: null,
+        },
+      ]);
 
-    renderHookProbe(stored);
+      renderHookProbe(stored);
 
-    expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
-  });
+      expect(JSON.parse(container.textContent ?? '')).toEqual(stored);
+    }
+  );
 
   it('accepts a terminal-safe null-timestamp summary after a successful mount refetch', async () => {
     const stored = selection({

@@ -255,7 +255,7 @@ function findPersistedToolUseStart(
 ): ChatMessage | undefined {
   for (let index = store.transcript.length - 1; index >= 0; index -= 1) {
     const entry = store.transcript[index];
-    if (!entry || entry.source !== 'agent' || !entry.message) {
+    if (entry?.source !== 'agent' || !entry.message) {
       continue;
     }
 
@@ -268,7 +268,7 @@ function findPersistedToolUseStart(
     }
 
     const event = entry.message.event;
-    if (!event || event.type !== 'content_block_start') {
+    if (event?.type !== 'content_block_start') {
       continue;
     }
     if (event.content_block.type === 'tool_use' && event.content_block.id === toolUseId) {

@@ -410,22 +410,21 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('Service accessor boundaries check passed.');
   });
 
-  it.each([
-    'js',
-    'mjs',
-    'cjs',
-  ])('normalizes .%s runtime extensions to TypeScript module identity', (extension) => {
-    const result = runChecker([
-      {
-        path: 'src/backend/services/session/service/session.service.ts',
-        content: `import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor.${extension}';\n`,
-      },
-    ]);
+  it.each(['js', 'mjs', 'cjs'])(
+    'normalizes .%s runtime extensions to TypeScript module identity',
+    (extension) => {
+      const result = runChecker([
+        {
+          path: 'src/backend/services/session/service/session.service.ts',
+          content: `import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor.${extension}';\n`,
+        },
+      ]);
 
-    expect(result.status).toBe(1);
-    expect(result.output).toContain('cross-owner raw persistence accessor');
-    expect(result.output).toContain('workspaceAccessor');
-  });
+      expect(result.status).toBe(1);
+      expect(result.output).toContain('cross-owner raw persistence accessor');
+      expect(result.output).toContain('workspaceAccessor');
+    }
+  );
 
   it('allows only the exact backup orchestration deep accessor import', () => {
     const allowed = runChecker([

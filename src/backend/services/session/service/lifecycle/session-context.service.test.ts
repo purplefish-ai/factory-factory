@@ -208,13 +208,15 @@ describe('SessionContextService', () => {
   it.each([
     { workflow: 'code', fallback: 'STRICT' as const },
     { workflow: 'ratchet', fallback: 'YOLO' as const },
-  ])('uses the $fallback fallback when $workflow permission settings cannot be read', async ({
-    workflow,
-    fallback,
-  }) => {
-    const { service, session, permissionPresetPort } = createHarness();
-    permissionPresetPort.getPermissionPreset.mockRejectedValueOnce(new Error('settings failed'));
+  ])(
+    'uses the $fallback fallback when $workflow permission settings cannot be read',
+    async ({ workflow, fallback }) => {
+      const { service, session, permissionPresetPort } = createHarness();
+      permissionPresetPort.getPermissionPreset.mockRejectedValueOnce(new Error('settings failed'));
 
-    await expect(service.resolvePermissionPreset({ ...session, workflow })).resolves.toBe(fallback);
-  });
+      await expect(service.resolvePermissionPreset({ ...session, workflow })).resolves.toBe(
+        fallback
+      );
+    }
+  );
 });

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
@@ -94,8 +95,10 @@ function DiffViewer({ diff }: { diff: string }) {
             {file.hunks.map((hunk) => (
               <div key={hunk.header}>
                 <div className="px-3 py-1 bg-blue-500/10 text-blue-600 text-xs">{hunk.header}</div>
-                {hunk.lines.map((line, lineIdx) => (
-                  <DiffLineRow key={`${hunk.header}-${lineIdx}`} line={line} />
+                {withOccurrenceKeys(hunk.lines, (line) =>
+                  JSON.stringify([line.type, line.content])
+                ).map(({ item: line, key }) => (
+                  <DiffLineRow key={key} line={line} />
                 ))}
               </div>
             ))}

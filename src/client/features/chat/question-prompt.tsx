@@ -1,5 +1,6 @@
 import { CaretLeftIcon, CaretRightIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -237,12 +238,14 @@ function MultiQuestionLayout({
           Question {currentIndex + 1} of {totalQuestions}
         </span>
         <div className="flex gap-1">
-          {question.questions.map((item, idx) => {
+          {withOccurrenceKeys(question.questions, (item) =>
+            JSON.stringify([requestId, item.question])
+          ).map(({ item, key }, idx) => {
             const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '');
             return (
               <button
                 type="button"
-                key={`dot-${requestId}-${idx}-${item.question}`}
+                key={key}
                 onClick={() => onIndexChange(idx)}
                 className={cn(
                   'w-2 h-2 rounded-full transition-colors',

@@ -262,7 +262,7 @@ function upsertClaudeMessageAtOrder(
   }
 
   const existingMsg = state.messages[existingIndex];
-  if (!existingMsg || existingMsg.source !== 'agent' || existingMsg.order !== order) {
+  if (existingMsg?.source !== 'agent' || existingMsg.order !== order) {
     return null;
   }
   const updatedMessages = [...state.messages];
@@ -396,8 +396,7 @@ export function handleAssistantTextDelta(
 
   const existingMessage = state.messages[messageIndex];
   if (
-    !existingMessage ||
-    existingMessage.source !== 'agent' ||
+    existingMessage?.source !== 'agent' ||
     existingMessage.order !== payload.order ||
     existingMessage.id !== payload.messageId
   ) {

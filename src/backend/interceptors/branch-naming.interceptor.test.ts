@@ -30,18 +30,15 @@ vi.mock('@/backend/lib/shell', () => ({
   gitCommand: (...args: unknown[]) => mocks.gitCommand(...args),
 }));
 
-vi.mock('@/backend/services/logger.service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/services/logger.service')>();
-  return {
-    ...actual,
-    createLogger: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
-  };
-});
+vi.mock('@/backend/services/logger.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/logger.service')>()),
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
 
 vi.mock('@/backend/services/workspace-git-state.service', () => ({
   workspaceGitStateService: { invalidate: mocks.gitStateInvalidate },
@@ -90,9 +87,9 @@ function createEvent(overrides: Partial<ToolEvent>): ToolEvent {
 }
 
 describe('branchNamingInterceptor routing', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    branchNamingInterceptor.start?.();
+    await branchNamingInterceptor.start?.();
     mocks.findWorkspaceById.mockResolvedValue({
       id: 'workspace-1',
       name: 'Named branch',
@@ -407,9 +404,9 @@ describe('manual branch rename handling', () => {
 });
 
 describe('automatic branch rename handling', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    branchNamingInterceptor.start?.();
+    await branchNamingInterceptor.start?.();
     mocks.findWorkspaceById.mockResolvedValue({
       id: 'workspace-1',
       name: 'Fix authentication bug',
@@ -807,37 +804,38 @@ describe('PR completion handling', () => {
       name: 'in separate supported input fields',
       input: { command: 'git push origin HEAD', title: 'gh pr create --fill' },
     },
-  ])('retains the PR cleanup candidate when push and PR triggers appear $name', async ({
-    input,
-  }) => {
-    const interceptor = createBranchNamingInterceptor();
-    const event = createEvent({
-      toolUseId: 'combined-push-pr',
-      input,
-    });
-    mocks.gitCommand
-      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
-      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
-      .mockResolvedValueOnce({
-        code: 0,
-        stdout: 'origin/owner/fix-authentication-bug\n',
-        stderr: '',
-      })
-      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
-      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
-      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
+  ])(
+    'retains the PR cleanup candidate when push and PR triggers appear $name',
+    async ({ input }) => {
+      const interceptor = createBranchNamingInterceptor();
+      const event = createEvent({
+        toolUseId: 'combined-push-pr',
+        input,
+      });
+      mocks.gitCommand
+        .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+        .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+        .mockResolvedValueOnce({
+          code: 0,
+          stdout: 'origin/owner/fix-authentication-bug\n',
+          stderr: '',
+        })
+        .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+        .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' })
+        .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
 
-    await interceptor.onToolStart!(event, context);
-    await interceptor.onToolComplete!(
-      { ...event, output: { content: 'created', isError: false } },
-      context
-    );
+      await interceptor.onToolStart!(event, context);
+      await interceptor.onToolComplete!(
+        { ...event, output: { content: 'created', isError: false } },
+        context
+      );
 
-    expect(mocks.gitCommand).toHaveBeenCalledWith(
-      ['push', 'origin', '--delete', 'owner/automatic-1'],
-      '/tmp/workspace'
-    );
-  });
+      expect(mocks.gitCommand).toHaveBeenCalledWith(
+        ['push', 'origin', '--delete', 'owner/automatic-1'],
+        '/tmp/workspace'
+      );
+    }
+  );
 
   it('deletes the old remote branch after successful PR creation when refs match', async () => {
     const interceptor = createBranchNamingInterceptor();

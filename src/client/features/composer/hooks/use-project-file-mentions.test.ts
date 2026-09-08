@@ -178,21 +178,21 @@ describe('useProjectFileMentions selection', () => {
       value: '@one\tand @two',
       expectedValue: '@src/foo.ts\tand @two',
     },
-  ])('reuses the $separator at the live cursor after inserting a file mention', ({
-    value,
-    expectedValue,
-  }) => {
-    const rendered = renderHook();
-    openMentionMenu(rendered, value);
+  ])(
+    'reuses the $separator at the live cursor after inserting a file mention',
+    ({ value, expectedValue }) => {
+      const rendered = renderHook();
+      openMentionMenu(rendered, value);
 
-    rendered.textarea.setSelectionRange(4, 4);
-    flushSync(() => {
-      rendered.getResult().handleFileMentionSelect('src/foo.ts');
-    });
+      rendered.textarea.setSelectionRange(4, 4);
+      flushSync(() => {
+        rendered.getResult().handleFileMentionSelect('src/foo.ts');
+      });
 
-    expect(rendered.textarea.value).toBe(expectedValue);
-    expect(rendered.textarea.selectionStart).toBe(11);
-    expect(rendered.textarea.selectionEnd).toBe(11);
-    expect(rendered.onChange).toHaveBeenCalledWith(expectedValue);
-  });
+      expect(rendered.textarea.value).toBe(expectedValue);
+      expect(rendered.textarea.selectionStart).toBe(11);
+      expect(rendered.textarea.selectionEnd).toBe(11);
+      expect(rendered.onChange).toHaveBeenCalledWith(expectedValue);
+    }
+  );
 });

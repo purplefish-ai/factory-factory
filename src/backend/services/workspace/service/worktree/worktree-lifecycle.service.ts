@@ -121,7 +121,7 @@ class WorktreeLifecycleService {
   /** Returns whether the freshly read workspace should be transitioned to FAILED. */
   async prepareStaleProvisioningRecovery(workspaceId: string): Promise<boolean> {
     const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
-    if (!workspace || workspace.status !== 'PROVISIONING') {
+    if (workspace?.status !== 'PROVISIONING') {
       return false;
     }
     if (workspace.worktreePath) {

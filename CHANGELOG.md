@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade Biome from 2.4.4 to 2.5.12, migrate its configuration, and apply the updated lint and formatting rules
 - Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, Storybook 10.6.0, and pnpm 10.34.5
 - Update the Codex CLI compatibility baseline from 0.145.0 to 0.153.4 and regenerate the app-server method snapshot
 

@@ -42,21 +42,19 @@ describe('session lifecycle external ports', () => {
     });
   });
 
-  it.each([
-    '0.0.0.0',
-    '::',
-    '::0',
-    '0:0:0:0:0:0:0:0',
-  ])('uses localhost as the MCP destination when binding to wildcard host %s', (host) => {
-    vi.mocked(configService.getBackendHost).mockReturnValueOnce(host);
+  it.each(['0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0'])(
+    'uses localhost as the MCP destination when binding to wildcard host %s',
+    (host) => {
+      vi.mocked(configService.getBackendHost).mockReturnValueOnce(host);
 
-    const mcpServers = sessionAcpEnvironment.getMcpServers({
-      workspaceId: 'workspace-1',
-      parentWorkspaceId: null,
-    });
+      const mcpServers = sessionAcpEnvironment.getMcpServers({
+        workspaceId: 'workspace-1',
+        parentWorkspaceId: null,
+      });
 
-    expect(mcpServers?.[0]?.env).toMatchObject({
-      FF_API_BASE_URL: 'http://localhost:3002',
-    });
-  });
+      expect(mcpServers?.[0]?.env).toMatchObject({
+        FF_API_BASE_URL: 'http://localhost:3002',
+      });
+    }
+  );
 });

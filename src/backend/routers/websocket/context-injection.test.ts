@@ -466,13 +466,14 @@ describe('HTTP and WebSocket application context injection', () => {
     expect(TRANSPORT_FILES.some((file) => file.endsWith('.test.ts'))).toBe(false);
   });
 
-  it.each(
-    TRANSPORT_FILES
-  )('%s resolves runtime dependencies through the application graph', (file) => {
-    const source = readFileSync(resolve(REPOSITORY_ROOT, file), 'utf8');
+  it.each(TRANSPORT_FILES)(
+    '%s resolves runtime dependencies through the application graph',
+    (file) => {
+      const source = readFileSync(resolve(REPOSITORY_ROOT, file), 'utf8');
 
-    expect(findBoundaryViolations(file, source), file).toEqual([]);
-  });
+      expect(findBoundaryViolations(file, source), file).toEqual([]);
+    }
+  );
 
   describe('boundary classification', () => {
     it('rejects Prisma and interceptor lifecycle imports through relative paths', () => {

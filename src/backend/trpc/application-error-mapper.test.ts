@@ -19,19 +19,19 @@ const mappings: Array<{
 ];
 
 describe('toTRPCError', () => {
-  it.each(mappings)('maps $applicationCode to $trpcCode and retains the message and cause', ({
-    applicationCode,
-    trpcCode,
-  }) => {
-    const cause = new Error('internal detail');
-    const applicationError = new ApplicationError(applicationCode, 'Public message', { cause });
+  it.each(mappings)(
+    'maps $applicationCode to $trpcCode and retains the message and cause',
+    ({ applicationCode, trpcCode }) => {
+      const cause = new Error('internal detail');
+      const applicationError = new ApplicationError(applicationCode, 'Public message', { cause });
 
-    const error = toTRPCError(applicationError);
+      const error = toTRPCError(applicationError);
 
-    expect(error).toMatchObject({
-      code: trpcCode,
-      message: 'Public message',
-    });
-    expect(error.cause).toBe(applicationError);
-  });
+      expect(error).toMatchObject({
+        code: trpcCode,
+        message: 'Public message',
+      });
+      expect(error.cause).toBe(applicationError);
+    }
+  );
 });

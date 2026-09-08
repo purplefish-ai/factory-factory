@@ -456,83 +456,87 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     expect(params?.shouldDispatchRuntimeError(handle.child)).toBe(false);
   });
 
-  it.each([
-    'stop',
-    'shutdown',
-  ] as const)('disables startup error dispatch before %s cleans a cancelled candidate', async (termination) => {
-    // Catches late child errors dispatching forever because a cancelled candidate was never installed.
-    const handle = createTestProcessHandle();
-    exitChildAfterSigterm(mockChildOf(handle));
-    const factoryResult = createDeferred<AcpProcessHandle>();
-    let factoryParams: CreateAcpClientParams | undefined;
-    const onRuntimeError = vi.fn();
-    const handlers = { ...defaultHandlers(), onRuntimeError };
-    const { supervisor } = createHarness((params) => {
-      factoryParams = params;
-      wireAcpRuntimeErrorHandler(
-        handle.child,
-        params.sessionId,
-        params.handlers,
-        params.metadata,
-        () => params.shouldDispatchRuntimeError(handle.child)
+  it.each(['stop', 'shutdown'] as const)(
+    'disables startup error dispatch before %s cleans a cancelled candidate',
+    async (termination) => {
+      // Catches late child errors dispatching forever because a cancelled candidate was never installed.
+      const handle = createTestProcessHandle();
+      exitChildAfterSigterm(mockChildOf(handle));
+      const factoryResult = createDeferred<AcpProcessHandle>();
+      let factoryParams: CreateAcpClientParams | undefined;
+      const onRuntimeError = vi.fn();
+      const handlers = { ...defaultHandlers(), onRuntimeError };
+      const { supervisor } = createHarness((params) => {
+        factoryParams = params;
+        wireAcpRuntimeErrorHandler(
+          handle.child,
+          params.sessionId,
+          params.handlers,
+          params.metadata,
+          () => params.shouldDispatchRuntimeError(handle.child)
+        );
+        return factoryResult.promise;
+      });
+      const creation = supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        handlers,
+        defaultContext()
       );
-      return factoryResult.promise;
-    });
-    const creation = supervisor.getOrCreateClient(
-      'session-1',
-      defaultOptions(),
-      handlers,
-      defaultContext()
-    );
-    await vi.waitFor(() => expect(factoryParams).toBeDefined());
+      await vi.waitFor(() => expect(factoryParams).toBeDefined());
 
-    const terminating =
-      termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
-    factoryResult.resolve(handle);
-    await expect(creation).rejects.toThrow(
-      termination === 'stop' ? 'ACP session stop requested' : 'ACP runtime manager is shutting down'
-    );
-    await terminating;
+      const terminating =
+        termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
+      factoryResult.resolve(handle);
+      await expect(creation).rejects.toThrow(
+        termination === 'stop'
+          ? 'ACP session stop requested'
+          : 'ACP runtime manager is shutting down'
+      );
+      await terminating;
 
-    if (!factoryParams) {
-      throw new Error('Factory parameters were not captured');
+      if (!factoryParams) {
+        throw new Error('Factory parameters were not captured');
+      }
+      expect(factoryParams.shouldDispatchRuntimeError(handle.child)).toBe(false);
+      handle.child.emit('error', new Error(`late ${termination} cleanup error`));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(onRuntimeError).not.toHaveBeenCalled();
     }
-    expect(factoryParams.shouldDispatchRuntimeError(handle.child)).toBe(false);
-    handle.child.emit('error', new Error(`late ${termination} cleanup error`));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(onRuntimeError).not.toHaveBeenCalled();
-  });
+  );
 
-  it.each([
-    'stop',
-    'shutdown',
-  ] as const)('rejects an installed candidate when %s begins during provider ID notification', async (termination) => {
-    // Catches creation fulfilling with a handle killed while its final callback was pending.
-    const handle = createTestProcessHandle();
-    exitChildAfterSigterm(mockChildOf(handle));
-    const notification = createDeferred<void>();
-    const onSessionId = vi.fn(() => notification.promise);
-    const { supervisor } = createHarness(() => Promise.resolve(handle));
-    const creation = supervisor.getOrCreateClient(
-      'session-1',
-      defaultOptions(),
-      { ...defaultHandlers(), onSessionId },
-      defaultContext()
-    );
-    await vi.waitFor(() => expect(onSessionId).toHaveBeenCalledOnce());
-    expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+  it.each(['stop', 'shutdown'] as const)(
+    'rejects an installed candidate when %s begins during provider ID notification',
+    async (termination) => {
+      // Catches creation fulfilling with a handle killed while its final callback was pending.
+      const handle = createTestProcessHandle();
+      exitChildAfterSigterm(mockChildOf(handle));
+      const notification = createDeferred<void>();
+      const onSessionId = vi.fn(() => notification.promise);
+      const { supervisor } = createHarness(() => Promise.resolve(handle));
+      const creation = supervisor.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        { ...defaultHandlers(), onSessionId },
+        defaultContext()
+      );
+      await vi.waitFor(() => expect(onSessionId).toHaveBeenCalledOnce());
+      expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
 
-    const terminating =
-      termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
-    notification.resolve(undefined);
+      const terminating =
+        termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
+      notification.resolve(undefined);
 
-    await expect(creation).rejects.toThrow(
-      termination === 'stop' ? 'ACP session stop requested' : 'ACP runtime manager is shutting down'
-    );
-    await terminating;
-    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
-    expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM');
-  });
+      await expect(creation).rejects.toThrow(
+        termination === 'stop'
+          ? 'ACP session stop requested'
+          : 'ACP runtime manager is shutting down'
+      );
+      await terminating;
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+      expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM');
+    }
+  );
 
   it('installs the handle before invoking creation callbacks in callback order', async () => {
     // Catches callbacks observing a half-installed runtime or provider ID racing the local callback.

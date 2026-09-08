@@ -49,41 +49,41 @@ describe('createStartHandler', () => {
     );
   });
 
-  it.each([
-    'ARCHIVING',
-    'ARCHIVED',
-  ] as const)('does not start a client when workspace is %s', async (workspaceStatus) => {
-    mocks.getSessionOptions.mockResolvedValue({
-      workingDir: '/tmp/work',
-      resumeProviderSessionId: undefined,
-      systemPrompt: undefined,
-      model: 'sonnet',
-      workspaceStatus,
-    });
-    const getOrCreate = vi.fn();
-    const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
-    const handler = createStartHandler({
-      startupService: {
-        getSessionClient: vi.fn(),
-        getOrCreateSessionClient: getOrCreate,
-      },
-    });
+  it.each(['ARCHIVING', 'ARCHIVED'] as const)(
+    'does not start a client when workspace is %s',
+    async (workspaceStatus) => {
+      mocks.getSessionOptions.mockResolvedValue({
+        workingDir: '/tmp/work',
+        resumeProviderSessionId: undefined,
+        systemPrompt: undefined,
+        model: 'sonnet',
+        workspaceStatus,
+      });
+      const getOrCreate = vi.fn();
+      const ws = { send: vi.fn() } as unknown as { send: (message: string) => void };
+      const handler = createStartHandler({
+        startupService: {
+          getSessionClient: vi.fn(),
+          getOrCreateSessionClient: getOrCreate,
+        },
+      });
 
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp',
-      message: {
-        type: 'start',
-      } as never,
-    });
+      await handler({
+        ws: ws as never,
+        sessionId: 'session-1',
+        workingDir: '/tmp',
+        message: {
+          type: 'start',
+        } as never,
+      });
 
-    expect(getOrCreate).not.toHaveBeenCalled();
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Workspace is archived or archiving and cannot start sessions.',
-      })
-    );
-  });
+      expect(getOrCreate).not.toHaveBeenCalled();
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'error',
+          message: 'Workspace is archived or archiving and cannot start sessions.',
+        })
+      );
+    }
+  );
 });

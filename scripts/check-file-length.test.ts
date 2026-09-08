@@ -102,12 +102,10 @@ describe('isFileLengthCandidate', () => {
     'scripts/check.cts',
   ])('includes %s', (file) => expect(isFileLengthCandidate(file)).toBe(true));
 
-  test.each([
-    'prisma/generated/a.ts',
-    'docs/a.ts',
-    'src/a.json',
-    'dist/a.ts',
-  ])('excludes %s', (file) => expect(isFileLengthCandidate(file)).toBe(false));
+  test.each(['prisma/generated/a.ts', 'docs/a.ts', 'src/a.json', 'dist/a.ts'])(
+    'excludes %s',
+    (file) => expect(isFileLengthCandidate(file)).toBe(false)
+  );
 });
 
 describe('evaluateFileLengths', () => {
@@ -317,21 +315,24 @@ describe('repository discovery and CLI', () => {
   test.each([
     ['cross-drive', 'D:\\outside.ts'],
     ['UNC', '\\\\server\\share\\outside.ts'],
-  ])('refuses a Windows %s real path that path.relative returns as absolute', (_kind, pathFromRoot) => {
-    const repositoryRoot = createTemporaryRepository();
-    const outsideDirectory = mkdtempSync(join(tmpdir(), 'file-length-outside-'));
-    temporaryDirectories.push(outsideDirectory);
-    const outsideFile = join(outsideDirectory, 'outside.ts');
-    writeFileSync(outsideFile, 'outside\n');
-    symlinkSync(outsideFile, join(repositoryRoot, 'src/cross-drive.ts'));
-    execFileSync('git', ['add', 'src/cross-drive.ts'], { cwd: repositoryRoot });
+  ])(
+    'refuses a Windows %s real path that path.relative returns as absolute',
+    (_kind, pathFromRoot) => {
+      const repositoryRoot = createTemporaryRepository();
+      const outsideDirectory = mkdtempSync(join(tmpdir(), 'file-length-outside-'));
+      temporaryDirectories.push(outsideDirectory);
+      const outsideFile = join(outsideDirectory, 'outside.ts');
+      writeFileSync(outsideFile, 'outside\n');
+      symlinkSync(outsideFile, join(repositoryRoot, 'src/cross-drive.ts'));
+      execFileSync('git', ['add', 'src/cross-drive.ts'], { cwd: repositoryRoot });
 
-    pathMock.relativeResult = pathFromRoot;
+      pathMock.relativeResult = pathFromRoot;
 
-    expect(() => readFileLengths(repositoryRoot, ['src/cross-drive.ts'])).toThrow(
-      'escapes repository root'
-    );
-  });
+      expect(() => readFileLengths(repositoryRoot, ['src/cross-drive.ts'])).toThrow(
+        'escapes repository root'
+      );
+    }
+  );
 
   test('reports normal-mode violations through injected diagnostics', () => {
     const repositoryRoot = createTemporaryRepository();

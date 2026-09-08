@@ -360,21 +360,20 @@ describe('websocket integration', () => {
           )
         ),
     },
-  ])('rejects unauthorized Origin for $name websocket upgrades', async ({
-    createHandler,
-    path,
-    url,
-  }) => {
-    const server = await createWebSocketTestServer(createHandler(), path);
-    openServers.add(server);
+  ])(
+    'rejects unauthorized Origin for $name websocket upgrades',
+    async ({ createHandler, path, url }) => {
+      const server = await createWebSocketTestServer(createHandler(), path);
+      openServers.add(server);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${server.port}${url}`, {
-      headers: { Origin: 'https://attacker.example' },
-    });
-    const error = await waitForSocketError(ws);
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}${url}`, {
+        headers: { Origin: 'https://attacker.example' },
+      });
+      const error = await waitForSocketError(ws);
 
-    expect(error.message).toContain('Unexpected server response: 400');
-  });
+      expect(error.message).toContain('Unexpected server response: 400');
+    }
+  );
 
   it('terminal handler supports create + output flow over a real websocket upgrade', async () => {
     const project = await createProjectFixture();

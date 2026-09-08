@@ -106,18 +106,19 @@ describe('prisma <-> shared enum drift guard', () => {
     expect(stale).toEqual([]);
   });
 
-  it.each(
-    [...sharedEnumsByName.keys()].filter((name) => !SHARED_ONLY_ENUMS.has(name))
-  )('keeps %s synchronized with the Prisma schema', (name) => {
-    const shared = sharedEnumsByName.get(name);
-    const prismaValues = prismaEnums.get(name);
+  it.each([...sharedEnumsByName.keys()].filter((name) => !SHARED_ONLY_ENUMS.has(name)))(
+    'keeps %s synchronized with the Prisma schema',
+    (name) => {
+      const shared = sharedEnumsByName.get(name);
+      const prismaValues = prismaEnums.get(name);
 
-    expect(shared).toBeDefined();
-    expect(prismaValues).toBeDefined();
+      expect(shared).toBeDefined();
+      expect(prismaValues).toBeDefined();
 
-    // Shared enums are `{ VALUE: 'VALUE' }` maps, so keys and values must both
-    // match the schema — a typo'd value is as breaking as a missing one.
-    expect(Object.keys(shared ?? {}).sort()).toEqual([...(prismaValues ?? [])].sort());
-    expect(Object.values(shared ?? {}).sort()).toEqual([...(prismaValues ?? [])].sort());
-  });
+      // Shared enums are `{ VALUE: 'VALUE' }` maps, so keys and values must both
+      // match the schema — a typo'd value is as breaking as a missing one.
+      expect(Object.keys(shared ?? {}).sort()).toEqual([...(prismaValues ?? [])].sort());
+      expect(Object.values(shared ?? {}).sort()).toEqual([...(prismaValues ?? [])].sort());
+    }
+  );
 });

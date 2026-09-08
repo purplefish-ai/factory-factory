@@ -31,17 +31,17 @@ describe('KanbanStatusChip', () => {
     ['attention', 'bg-amber-500/15'],
     ['success', 'bg-emerald-500/15'],
     ['danger', 'bg-red-500/15'],
-  ] satisfies [
-    WorkspaceStatusReasonTone,
-    string,
-  ][])('maps the %s tone to its card chip treatment', (tone, expectedClass) => {
-    const markup = renderChip({
-      code: 'READY_FOR_NEXT_PROMPT',
-      label: 'Ready',
-      tone,
-      needsUser: false,
-    });
+  ] satisfies [WorkspaceStatusReasonTone, string][])(
+    'maps the %s tone to its card chip treatment',
+    (tone, expectedClass) => {
+      const markup = renderChip({
+        code: 'READY_FOR_NEXT_PROMPT',
+        label: 'Ready',
+        tone,
+        needsUser: false,
+      });
 
-    expect(markup).toContain(expectedClass);
-  });
+      expect(markup).toContain(expectedClass);
+    }
+  );
 });

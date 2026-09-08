@@ -210,11 +210,11 @@ export const exportDataSchema = z.object({
 });
 
 export {
-  exportedProjectSchema,
-  exportedWorkspaceSchema,
   exportedAgentSessionSchema,
+  exportedProjectSchema,
   exportedTerminalSessionSchema,
   exportedUserSettingsSchema,
+  exportedWorkspaceSchema,
 };
 
 export type ExportData = z.infer<typeof exportDataSchema>;

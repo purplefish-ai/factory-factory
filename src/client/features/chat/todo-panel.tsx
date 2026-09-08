@@ -1,6 +1,7 @@
 import { CheckCircleIcon, ListChecksIcon } from '@phosphor-icons/react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { TodoState } from './use-todo-tracker';
 
 export interface TodoPanelProps {
@@ -49,8 +50,8 @@ export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) 
 
         {/* Todo List */}
         <div className="space-y-1.5 overflow-y-auto">
-          {todos.map((todo, index) => (
-            <TodoItem key={`${todo.content}-${index}`} todo={todo} />
+          {withOccurrenceKeys(todos, (todo) => todo.content).map(({ item: todo, key }) => (
+            <TodoItem key={key} todo={todo} />
           ))}
         </div>
       </div>

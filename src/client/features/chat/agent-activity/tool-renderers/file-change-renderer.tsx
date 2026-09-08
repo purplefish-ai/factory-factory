@@ -7,6 +7,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react';
 import { memo } from 'react';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { cn } from '@/lib/utils';
 import type {
   CodexFileChangeEntry,
@@ -102,7 +103,7 @@ function buildKindCounts(
     .filter((entry) => entry.count > 0);
 }
 
-interface CodexFileChangeRendererProps {
+export interface CodexFileChangeRendererProps {
   payload: CodexFileChangePayload;
   rawPayload?: string;
 }
@@ -156,16 +157,15 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
         </div>
       ) : (
         <div className="space-y-1.5">
-          {visibleChanges.map((change, index) => {
+          {withOccurrenceKeys(visibleChanges, (change) =>
+            JSON.stringify([change.path, change.kind, change.movePath])
+          ).map(({ item: change, key }) => {
             const meta = getKindMeta(change.kind);
             const Icon = meta.icon;
             const { directory, filename } = splitPath(change.path);
 
             return (
-              <div
-                key={`${change.path}-${index}`}
-                className="rounded border bg-muted/20 px-2 py-1.5"
-              >
+              <div key={key} className="rounded border bg-muted/20 px-2 py-1.5">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Icon className={cn('h-4 w-4 shrink-0', meta.iconColorClass)} />
                   <div className="min-w-0 flex-1">

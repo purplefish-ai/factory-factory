@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
 import type { Todo } from '@/client/features/chat/use-todo-tracker';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 import {
@@ -147,8 +148,8 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
         />
       </div>
       <div className="space-y-1.5">
-        {todos.map((todo, index) => (
-          <TodoItem key={`${todo.content}-${index}`} todo={todo} />
+        {withOccurrenceKeys(todos, (todo) => todo.content).map(({ item: todo, key }) => (
+          <TodoItem key={key} todo={todo} />
         ))}
       </div>
     </div>

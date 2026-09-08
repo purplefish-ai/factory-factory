@@ -70,20 +70,20 @@ describe('buildInitialPromptFromLinearIssue', () => {
     { githubOwner: null, githubRepo: null },
     { githubOwner: 'purplefish-ai', githubRepo: null },
     { githubOwner: null, githubRepo: 'factory-factory' },
-  ])('uses a relative screenshot path when GitHub metadata is incomplete', async ({
-    githubOwner,
-    githubRepo,
-  }) => {
-    mockLinearIssueWorkspace(githubOwner, githubRepo);
+  ])(
+    'uses a relative screenshot path when GitHub metadata is incomplete',
+    async ({ githubOwner, githubRepo }) => {
+      mockLinearIssueWorkspace(githubOwner, githubRepo);
 
-    const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
+      const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
 
-    expect(prompt).toContain('# Linear Issue ENG-123');
-    expect(prompt).toContain(
-      `![Description](\${branch}/.factory-factory/screenshots/filename.png)`
-    );
-    expect(prompt).not.toContain('raw.githubusercontent.com');
-  });
+      expect(prompt).toContain('# Linear Issue ENG-123');
+      expect(prompt).toContain(
+        `![Description](\${branch}/.factory-factory/screenshots/filename.png)`
+      );
+      expect(prompt).not.toContain('raw.githubusercontent.com');
+    }
+  );
 
   it('uses the configured GitHub repository for screenshot paths', async () => {
     mockLinearIssueWorkspace('purplefish-ai', 'factory-factory');

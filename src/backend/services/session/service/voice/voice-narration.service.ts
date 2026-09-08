@@ -187,7 +187,7 @@ function extractThinkingDelta(payload: SessionOutboundEvent['payload']): string 
     return null;
   }
   const streamEvent = inner.event;
-  if (!streamEvent || streamEvent.type !== 'content_block_delta') {
+  if (streamEvent?.type !== 'content_block_delta') {
     return null;
   }
   const { delta } = streamEvent;

@@ -134,4 +134,4 @@ const ResizableHandle = ({ withHandle, className, direction, ...props }: Resizab
   );
 };
 
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle };
+export { ResizableHandle, ResizablePanel, ResizablePanelGroup };

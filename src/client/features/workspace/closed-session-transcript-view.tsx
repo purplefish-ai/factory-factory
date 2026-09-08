@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
@@ -54,9 +55,9 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
   return (
     <ScrollArea ref={scrollAreaRef} className="h-full">
       <div className="p-4 space-y-4">
-        {groupedMessages.map((item, index) => (
+        {withOccurrenceKeys(groupedMessages, (item) => item.id).map(({ item, key }) => (
           <GroupedMessageItemRenderer
-            key={`${item.id}-${index}`}
+            key={key}
             item={item}
             // Read-only mode - no interactivity callbacks
           />

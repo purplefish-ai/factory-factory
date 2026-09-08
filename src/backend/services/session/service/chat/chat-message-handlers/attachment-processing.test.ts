@@ -559,26 +559,25 @@ describe('processAttachmentsAndBuildContent', () => {
     expect(attachment).toMatchObject(overrides);
   });
 
-  it.each(SUPPORTED_IMAGE_FIXTURES)('should normalize $name from its bytes', ({
-    declaredType,
-    data,
-    expectedType,
-  }) => {
-    const attachment = createImageAttachment({ type: declaredType, data });
+  it.each(SUPPORTED_IMAGE_FIXTURES)(
+    'should normalize $name from its bytes',
+    ({ declaredType, data, expectedType }) => {
+      const attachment = createImageAttachment({ type: declaredType, data });
 
-    const result = processAttachmentsAndBuildContent('Message', [attachment]);
+      const result = processAttachmentsAndBuildContent('Message', [attachment]);
 
-    expect(result).toHaveLength(2);
-    expect(result[1]).toMatchObject({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: expectedType,
-        data,
-      },
-    });
-    expect(attachment.type).toBe(declaredType);
-  });
+      expect(result).toHaveLength(2);
+      expect(result[1]).toMatchObject({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: expectedType,
+          data,
+        },
+      });
+      expect(attachment.type).toBe(declaredType);
+    }
+  );
 
   it('should dispatch structurally invalid image-like text as text', () => {
     const attachment = createTextAttachment({ data: 'iVBORw0KGgoAAAANSUhEUg==' });

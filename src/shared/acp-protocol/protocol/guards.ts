@@ -142,7 +142,7 @@ export function shouldPersistAgentMessage(agentMsg: AgentMessage): boolean {
     return true;
   }
 
-  if (!agentMsg.event || agentMsg.event.type !== 'content_block_start') {
+  if (agentMsg.event?.type !== 'content_block_start') {
     return false;
   }
 

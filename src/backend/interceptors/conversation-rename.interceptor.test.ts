@@ -71,8 +71,8 @@ const event: ToolEvent = {
 };
 
 describe('conversationRenameInterceptor', () => {
-  afterEach(() => {
-    conversationRenameInterceptor.stop?.();
+  afterEach(async () => {
+    await conversationRenameInterceptor.stop?.();
   });
 
   beforeEach(() => {
@@ -175,7 +175,7 @@ describe('conversationRenameInterceptor', () => {
     const firstCompletion = interceptor.onToolComplete?.(event, context);
     expect(mockWorkspaceDataService.findById).toHaveBeenCalledTimes(1);
 
-    interceptor.stop?.();
+    await interceptor.stop?.();
     const secondCompletion = interceptor.onToolComplete?.(event, context);
     expect(mockWorkspaceDataService.findById).toHaveBeenCalledTimes(2);
 
@@ -258,16 +258,16 @@ describe('conversationRenameInterceptor', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('starts and stops cleanup interval via lifecycle hooks', () => {
+  it('starts and stops cleanup interval via lifecycle hooks', async () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
 
-    conversationRenameInterceptor.start?.();
-    conversationRenameInterceptor.start?.();
+    await conversationRenameInterceptor.start?.();
+    await conversationRenameInterceptor.start?.();
 
     expect(setIntervalSpy).toHaveBeenCalledTimes(1);
 
-    conversationRenameInterceptor.stop?.();
+    await conversationRenameInterceptor.stop?.();
 
     expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
 

@@ -10,11 +10,12 @@ describe('getStatusBannerClassName', () => {
     expect(getStatusBannerClassName(kind)).toBe(expected);
   });
 
-  it.each([
-    'error',
-    'warning',
-    'info',
-  ] as const)('does not use a fixed light-theme palette for %s banners', (kind) => {
-    expect(getStatusBannerClassName(kind)).not.toMatch(/\b(?:bg|border|text)-(?:red|yellow|blue)-/);
-  });
+  it.each(['error', 'warning', 'info'] as const)(
+    'does not use a fixed light-theme palette for %s banners',
+    (kind) => {
+      expect(getStatusBannerClassName(kind)).not.toMatch(
+        /\b(?:bg|border|text)-(?:red|yellow|blue)-/
+      );
+    }
+  );
 });

@@ -20,9 +20,10 @@ export function attachCloseWatcherWithRetry(params: AttachCloseWatcherWithRetryP
     try {
       void params
         .getClosed()
-        .finally(async () => {
-          await params.onClose();
-        })
+        .then(
+          () => params.onClose(),
+          () => params.onClose()
+        )
         .catch(() => {
           // Ignore close-watcher errors and still attempt subprocess shutdown.
         });

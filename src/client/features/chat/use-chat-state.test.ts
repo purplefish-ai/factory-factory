@@ -686,7 +686,7 @@ describe('queue edge cases', () => {
 
     expect(result.shouldDrain).toBe(true);
     const userInputMsg = result.sentMessages.find((m) => m.type === 'user_input');
-    expect((userInputMsg?.text as string).length).toBe(10_000);
+    expect(userInputMsg?.text).toHaveLength(10_000);
   });
 
   it('should handle message with special characters', () => {

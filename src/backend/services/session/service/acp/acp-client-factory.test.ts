@@ -213,18 +213,18 @@ describe('AcpClientFactory', () => {
     });
   });
 
-  it.each([
-    '',
-    '   ',
-  ])('rejects unusable working directory %j before spawning', async (workingDir) => {
-    const factory = new AcpClientFactory();
+  it.each(['', '   '])(
+    'rejects unusable working directory %j before spawning',
+    async (workingDir) => {
+      const factory = new AcpClientFactory();
 
-    await expect(
-      factory.createClient(createParams({ options: defaultOptions({ workingDir }) }))
-    ).rejects.toThrow('ACP working directory is required before spawning adapter process');
+      await expect(
+        factory.createClient(createParams({ options: defaultOptions({ workingDir }) }))
+      ).rejects.toThrow('ACP working directory is required before spawning adapter process');
 
-    expect(mocks.spawn).not.toHaveBeenCalled();
-  });
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    }
+  );
 
   it('spawns the Claude adapter command', async () => {
     setupSuccessfulSpawn();
@@ -487,28 +487,28 @@ describe('AcpClientFactory', () => {
     }
   });
 
-  it.each([
-    'shutdown',
-    'stop',
-  ] as const)('preserves %s cancellation classification and leaves signal disposal to the manager', async (kind) => {
-    const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
-    mocks.initialize.mockReturnValue(new Promise(() => undefined));
-    const shutdownSignal = createSignal();
-    const stopSignal = createSignal();
-    const selectedSignal = kind === 'shutdown' ? shutdownSignal : stopSignal;
-    const expected = new Error(`${kind} cancellation`);
-    const creation = new AcpClientFactory().createClient(
-      createParams({ shutdownSignal, stopSignal })
-    );
-    await vi.waitFor(() => expect(mocks.initialize).toHaveBeenCalledTimes(1));
+  it.each(['shutdown', 'stop'] as const)(
+    'preserves %s cancellation classification and leaves signal disposal to the manager',
+    async (kind) => {
+      const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
+      mocks.initialize.mockReturnValue(new Promise(() => undefined));
+      const shutdownSignal = createSignal();
+      const stopSignal = createSignal();
+      const selectedSignal = kind === 'shutdown' ? shutdownSignal : stopSignal;
+      const expected = new Error(`${kind} cancellation`);
+      const creation = new AcpClientFactory().createClient(
+        createParams({ shutdownSignal, stopSignal })
+      );
+      await vi.waitFor(() => expect(mocks.initialize).toHaveBeenCalledTimes(1));
 
-    selectedSignal.reject(expected);
+      selectedSignal.reject(expected);
 
-    await expect(creation).rejects.toBe(expected);
-    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-    expect(shutdownSignal.dispose).not.toHaveBeenCalled();
-    expect(stopSignal.dispose).not.toHaveBeenCalled();
-  });
+      await expect(creation).rejects.toBe(expected);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(shutdownSignal.dispose).not.toHaveBeenCalled();
+      expect(stopSignal.dispose).not.toHaveBeenCalled();
+    }
+  );
 
   it('forwards adapter stderr to the ACP log handler', async () => {
     const child = setupSuccessfulSpawn();
@@ -528,32 +528,32 @@ describe('AcpClientFactory', () => {
     ['YOLO', 'allow-always'],
     ['STRICT', 'bridge-choice'],
     [undefined, 'bridge-choice'],
-  ] as [
-    PermissionPreset | undefined,
-    string,
-  ][])('maps permission preset %s to the client policy', async (permissionPreset, expectedOptionId) => {
-    setupSuccessfulSpawn();
-    const permissionBridge = {
-      waitForUserResponse: vi.fn().mockResolvedValue({
-        outcome: { outcome: 'selected', optionId: 'bridge-choice' },
-      }),
-    } as unknown as AcpPermissionBridge;
-    await new AcpClientFactory().createClient(
-      createParams({
-        options: defaultOptions({ permissionPreset }),
-        handlers: { permissionBridge },
-      })
-    );
-    const handler = mocks.connections[0]?.toClient({}) as {
-      requestPermission(request: RequestPermissionRequest): Promise<{
-        outcome: { optionId?: string };
-      }>;
-    };
+  ] as [PermissionPreset | undefined, string][])(
+    'maps permission preset %s to the client policy',
+    async (permissionPreset, expectedOptionId) => {
+      setupSuccessfulSpawn();
+      const permissionBridge = {
+        waitForUserResponse: vi.fn().mockResolvedValue({
+          outcome: { outcome: 'selected', optionId: 'bridge-choice' },
+        }),
+      } as unknown as AcpPermissionBridge;
+      await new AcpClientFactory().createClient(
+        createParams({
+          options: defaultOptions({ permissionPreset }),
+          handlers: { permissionBridge },
+        })
+      );
+      const handler = mocks.connections[0]?.toClient({}) as {
+        requestPermission(request: RequestPermissionRequest): Promise<{
+          outcome: { optionId?: string };
+        }>;
+      };
 
-    const response = await handler.requestPermission(permissionRequest());
+      const response = await handler.requestPermission(permissionRequest());
 
-    expect(response.outcome.optionId).toBe(expectedOptionId);
-  });
+      expect(response.outcome.optionId).toBe(expectedOptionId);
+    }
+  );
 
   it('does not retain or deduplicate handles between creations', async () => {
     const firstChild = createMockChildProcess();

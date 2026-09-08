@@ -632,19 +632,18 @@ describe('AcpEventTranslator', () => {
   });
 
   describe('deferred types', () => {
-    it.each([
-      'current_mode_update',
-      'session_info_update',
-      'user_message_chunk',
-    ] as const)('%s returns empty array', (sessionUpdate) => {
-      const { translator } = createTranslator();
-      // Build a minimal update for each deferred type
-      const update = { sessionUpdate } as unknown as SessionUpdate;
+    it.each(['current_mode_update', 'session_info_update', 'user_message_chunk'] as const)(
+      '%s returns empty array',
+      (sessionUpdate) => {
+        const { translator } = createTranslator();
+        // Build a minimal update for each deferred type
+        const update = { sessionUpdate } as unknown as SessionUpdate;
 
-      const events = translator.translateSessionUpdate(update);
+        const events = translator.translateSessionUpdate(update);
 
-      expect(events).toEqual([]);
-    });
+        expect(events).toEqual([]);
+      }
+    );
   });
 
   describe('unknown type', () => {
