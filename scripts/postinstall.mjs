@@ -8,20 +8,24 @@
  * 2. node-pty spawn-helper permissions
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { existsSync, chmodSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
+const require = createRequire(import.meta.url);
 
 // Generate Prisma client if schema exists
 const schemaPath = join(projectRoot, 'prisma', 'schema.prisma');
 if (existsSync(schemaPath)) {
 	try {
 		console.log('Generating Prisma client...');
-		execSync(`npx prisma generate --schema="${schemaPath}"`, {
+		// Nested npx can wait on the installation lock held by the outer npm exec.
+		const prismaCliPath = require.resolve('prisma/build/index.js');
+		execFileSync(process.execPath, [prismaCliPath, 'generate', '--schema', schemaPath], {
 			stdio: 'inherit',
 			cwd: projectRoot,
 		});

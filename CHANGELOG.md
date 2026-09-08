@@ -5,17 +5,20 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.7] - 2026-08-24
+## [0.4.7] - 2026-09-08
 
 ### Changed
 
+- Publish npm releases through OIDC-authenticated staging, require maintainer approval on npm, and finalize the GitHub release from the original staging run's commit (#2199)
 - Modularize session lifecycle and ACP runtime management into focused services for context, notification delivery, startup, termination, runtime exits, workflow finalization, configuration, prompting, sub-agent browsing, and supervision, with smaller compatibility facades and focused contract suites (#2165, #2170, #2173, #2174, #2175, #2176, #2177, #2179, #2180, #2184)
 - Keep workspaces in Working while Codex goals remain active, including between prompts and after session resume (#2182)
 - Enforce a 1,000-line ceiling for new JavaScript and TypeScript files, ratchet oversized legacy files downward, and reject dangling symlinks from file-length checks (#2155, #2156)
 - Remove obsolete lifecycle test stubs, Electron preload APIs, Git and shell helpers, file traversal utilities, decision-log accessors, GitHub schemas, and issue-closing code (#2178, #2188, #2189, #2190, #2191, #2192, #2193, #2194)
+- Remove unused file-lock and provider-runtime abstractions, session and permission helpers, project and workspace accessors, workspace re-exports, PR review procedures, and file-reference parsing code (#2204, #2205, #2206, #2207, #2210, #2211, #2212, #2213, #2214)
 
 ### Fixed
 
+- Prevent npm package installation and release smoke tests from deadlocking by running the installed Prisma CLI directly during postinstall
 - Preserve Codex notification ordering, serialize turn completion behind earlier item events, reject empty sub-agent receiver IDs, and validate permission request options before rendering (#2157, #2166, #2167, #2187)
 - Prevent disconnected terminal creation, stale sub-agent tabs after refetch failures, stale voice worklet callbacks, and orphaned Git worktrees after workspace deletion (#2168, #2169, #2171, #2172)
 - Stop sub-agent activity events from canceling long turns and prevent command handoffs from emitting duplicate tool completions (#2186, #2196)
