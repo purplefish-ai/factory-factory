@@ -1,0 +1,25 @@
+src/components/ui/mermaid-diagram.test.tsx
+  s_010c3b512f07b8::t_732e240d02ce60 1-78
+src/components/ui/mermaid-diagram.tsx
+  s_010c3b512f07b8::t_6b40a8558668ef 10,20-21,24-41,51-56
+  s_010c3b512f07b8::t_3ca8d559b22da8 23,42-44,47-50,57-59
+src/components/ui/markdown.stories.tsx
+  s_010c3b512f07b8::t_6fa7677d079f0e 40
+  s_010c3b512f07b8::t_cc3654767bf7c0 2-3,26-39,41-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3e898688c9c3d07573240f4e2084fd6163c35571",
+  "prompts": {},
+  "sessions": {
+    "s_010c3b512f07b8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a082c9-a960-7f80-9164-842b3b84fc22",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
