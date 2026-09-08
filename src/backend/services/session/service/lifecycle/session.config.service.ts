@@ -882,10 +882,17 @@ export class SessionConfigService {
     configId: string,
     value: string
   ): SessionConfigOption[] {
-    let didUpdate = false;
-    const nextConfigOptions = configOptions.map((option) => {
-      if (option.id !== configId || option.type !== 'select') {
+    if (!configOptions.some((option) => option.id === configId)) {
+      throw new Error(`Unknown config option: ${configId}`);
+    }
+    return configOptions.map((option) => {
+      if (option.id !== configId) {
         return option;
+      }
+      if (option.type !== 'select') {
+        throw new Error(
+          `Cannot set config option "${configId}" on an inactive session: unsupported type "${option.type}"`
+        );
       }
 
       const allowedValues = getConfigOptionValues(option);
@@ -896,18 +903,11 @@ export class SessionConfigService {
         );
       }
 
-      didUpdate = true;
       return {
         ...option,
         currentValue: value,
       };
     });
-
-    if (!didUpdate) {
-      throw new Error(`Unknown config option: ${configId}`);
-    }
-
-    return nextConfigOptions;
   }
 
   private async refreshCodexFallbackConfigOptionsFromAppServer(params: {
