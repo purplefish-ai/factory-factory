@@ -73,10 +73,23 @@ interface CacheEntry {
 }
 
 interface WatcherRecord {
+  worktreePath: string;
   mode: 'healthy' | 'fallback';
   handles: WatchHandle[];
   setup: Promise<void>;
+  sharedDirectory?: string;
   debounceTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface SharedWatcherRecord {
+  handle: WatchHandle;
+  dependents: Set<string>;
+  debounceTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface WatchRoots {
+  local: string[];
+  shared?: string;
 }
 
 const WATCH_DEBOUNCE_MS = 100;
@@ -121,6 +134,26 @@ function shouldIgnoreWorktreeWatchEvent(filename: string | null): boolean {
 
   const [topLevelDirectory] = filename.split(/[\\/]+/);
   return IGNORED_WORKTREE_WATCH_DIRECTORIES.has(topLevelDirectory ?? '');
+}
+
+function shouldInvalidateForSharedGitEvent(filename: string | null): boolean {
+  if (!filename) {
+    return true;
+  }
+
+  const normalized = filename.replaceAll('\\', '/').replace(/^\.\//, '');
+  // HEAD, index, and worktrees/* belong to one worktree and are covered by its
+  // private Git-directory watcher. Only the shared paths below fan out.
+  return (
+    normalized === 'config' ||
+    normalized.startsWith('config.') ||
+    normalized === 'packed-refs' ||
+    normalized.startsWith('packed-refs.') ||
+    normalized === 'shallow' ||
+    normalized.startsWith('shallow.') ||
+    normalized === 'refs' ||
+    normalized.startsWith('refs/')
+  );
 }
 
 function parseNameStatus(
@@ -181,6 +214,7 @@ export class WorkspaceGitStateService {
   private readonly generations = new Map<string, number>();
   private readonly activeCalculations = new Map<string, number>();
   private readonly watchers = new Map<string, WatcherRecord>();
+  private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
 
   constructor(options: WorkspaceGitStateServiceOptions = {}) {
     this.runGit = options.runGit ?? gitCommand;
@@ -339,6 +373,7 @@ export class WorkspaceGitStateService {
     }
 
     const record: WatcherRecord = {
+      worktreePath,
       mode: 'healthy',
       handles: [],
       setup: Promise.resolve(),
@@ -352,7 +387,7 @@ export class WorkspaceGitStateService {
 
   private async installWatchers(worktreePath: string, record: WatcherRecord): Promise<void> {
     const roots = await this.resolveWatchRoots(worktreePath);
-    for (const root of roots) {
+    for (const root of roots.local) {
       if (record.mode !== 'healthy' || this.watchers.get(worktreePath) !== record) {
         return;
       }
@@ -367,17 +402,20 @@ export class WorkspaceGitStateService {
         this.activateFallback(record);
       });
     }
+    if (roots.shared && record.mode === 'healthy' && this.watchers.get(worktreePath) === record) {
+      this.attachSharedWatcher(roots.shared, record);
+    }
   }
 
-  private async resolveWatchRoots(worktreePath: string): Promise<string[]> {
-    const roots = [worktreePath];
+  private async resolveWatchRoots(worktreePath: string): Promise<WatchRoots> {
+    const local = [worktreePath];
     const dotGitPath = path.join(worktreePath, '.git');
     let dotGitContents: string;
     try {
       dotGitContents = await this.readFile(dotGitPath);
     } catch (error) {
       if (hasErrorCode(error, 'EISDIR')) {
-        return roots;
+        return { local };
       }
       throw error;
     }
@@ -387,13 +425,13 @@ export class WorkspaceGitStateService {
       throw new Error(`Invalid Git worktree metadata: ${dotGitPath}`);
     }
     const gitDir = path.resolve(path.dirname(dotGitPath), gitDirMatch[1].trim());
-    roots.push(gitDir);
+    local.push(gitDir);
 
     try {
       const commonDirContents = await this.readFile(path.join(gitDir, 'commondir'));
       const commonDir = commonDirContents.trim();
       if (commonDir) {
-        roots.push(path.resolve(gitDir, commonDir));
+        return { local: [...new Set(local)], shared: path.resolve(gitDir, commonDir) };
       }
     } catch (error) {
       if (!hasErrorCode(error, 'ENOENT')) {
@@ -401,7 +439,32 @@ export class WorkspaceGitStateService {
       }
     }
 
-    return [...new Set(roots)];
+    return { local: [...new Set(local)] };
+  }
+
+  private attachSharedWatcher(commonDirectory: string, record: WatcherRecord): void {
+    let shared = this.sharedWatchers.get(commonDirectory);
+    if (!shared) {
+      let created!: SharedWatcherRecord;
+      const handle = this.watchPath(
+        commonDirectory,
+        { recursive: true },
+        (_eventType, filename) => {
+          if (shouldInvalidateForSharedGitEvent(filename)) {
+            this.scheduleSharedInvalidation(commonDirectory, created);
+          }
+        }
+      );
+      created = { handle, dependents: new Set() };
+      shared = created;
+      this.sharedWatchers.set(commonDirectory, shared);
+      handle.on('error', () => {
+        this.activateSharedFallback(commonDirectory, created);
+      });
+    }
+
+    shared.dependents.add(record.worktreePath);
+    record.sharedDirectory = commonDirectory;
   }
 
   private scheduleInvalidation(worktreePath: string, record: WatcherRecord): void {
@@ -419,6 +482,23 @@ export class WorkspaceGitStateService {
     }, WATCH_DEBOUNCE_MS);
   }
 
+  private scheduleSharedInvalidation(commonDirectory: string, record: SharedWatcherRecord): void {
+    if (this.sharedWatchers.get(commonDirectory) !== record) {
+      return;
+    }
+    if (record.debounceTimer) {
+      clearTimeout(record.debounceTimer);
+    }
+    record.debounceTimer = setTimeout(() => {
+      record.debounceTimer = undefined;
+      if (this.sharedWatchers.get(commonDirectory) === record) {
+        for (const worktreePath of record.dependents) {
+          this.invalidate(worktreePath);
+        }
+      }
+    }, WATCH_DEBOUNCE_MS);
+  }
+
   private activateFallback(record: WatcherRecord): void {
     record.mode = 'fallback';
     if (record.debounceTimer) {
@@ -431,6 +511,53 @@ export class WorkspaceGitStateService {
       } catch {
         // Watcher cleanup is best effort; fallback freshness still protects callers.
       }
+    }
+    this.detachSharedWatcher(record);
+  }
+
+  private detachSharedWatcher(record: WatcherRecord): void {
+    const commonDirectory = record.sharedDirectory;
+    record.sharedDirectory = undefined;
+    if (!commonDirectory) {
+      return;
+    }
+    const shared = this.sharedWatchers.get(commonDirectory);
+    if (!shared) {
+      return;
+    }
+    shared.dependents.delete(record.worktreePath);
+    if (shared.dependents.size === 0) {
+      this.closeSharedWatcher(commonDirectory, shared);
+    }
+  }
+
+  private activateSharedFallback(commonDirectory: string, record: SharedWatcherRecord): void {
+    if (this.sharedWatchers.get(commonDirectory) !== record) {
+      return;
+    }
+    this.closeSharedWatcher(commonDirectory, record);
+    for (const worktreePath of record.dependents) {
+      const watcher = this.watchers.get(worktreePath);
+      if (watcher?.sharedDirectory === commonDirectory) {
+        watcher.sharedDirectory = undefined;
+        this.activateFallback(watcher);
+      }
+    }
+    record.dependents.clear();
+  }
+
+  private closeSharedWatcher(commonDirectory: string, record: SharedWatcherRecord): void {
+    if (this.sharedWatchers.get(commonDirectory) === record) {
+      this.sharedWatchers.delete(commonDirectory);
+    }
+    if (record.debounceTimer) {
+      clearTimeout(record.debounceTimer);
+      record.debounceTimer = undefined;
+    }
+    try {
+      record.handle.close();
+    } catch {
+      // Watcher cleanup is best effort; dependents still use fallback freshness.
     }
   }
 

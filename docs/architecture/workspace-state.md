@@ -109,7 +109,10 @@ reconciliation field, so the snapshot poll recomputes it for every live
 workspace each minute and streams it into the same cache; a card is missing its
 diff badge for a moment rather than the board being missing entirely.
 
-Note that each worktree's cache entry is watched via the repo's *shared* `.git`
-common dir, so git activity in any one worktree invalidates the others' entries
-— the cache is cold more often than a per-worktree watcher would suggest, which
-is exactly why the response path must not depend on it being warm.
+Each cache entry watches its worktree and private Git directory, while linked
+worktrees share one reference-counted watcher for the repo's common `.git`
+directory. Worktree files and private metadata such as `HEAD` and `index`
+invalidate only their owning worktree. Shared refs, packed refs, shallow state,
+and config changes invalidate every dependent entry. If the shared watcher
+fails, all of its dependents switch to the five-minute fallback expiry; removing
+the last dependent closes it.

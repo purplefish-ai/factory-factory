@@ -63,21 +63,25 @@ describe('WorkspaceGitStateService', () => {
     >
   >;
   let watchers: Map<string, TestWatcher>;
+  let watcherHistory: Array<{ filePath: string; watcher: TestWatcher }>;
+  let emitWatchEvent: (filePath: string, eventType: string, filename: string | null) => void;
   let service: WorkspaceGitStateService;
 
   beforeEach(() => {
     now = 1234;
     runGit = vi.fn<RunGit>((args) => Promise.resolve(defaultGitResult(args)));
     readFile = vi.fn((filePath) => {
-      if (filePath === '/repo/w1/.git') {
-        return Promise.resolve('gitdir: /repo/.git/worktrees/w1\n');
+      const worktreeMatch = filePath.match(/^\/repo\/(w[12])\/\.git$/);
+      if (worktreeMatch?.[1]) {
+        return Promise.resolve(`gitdir: /repo/.git/worktrees/${worktreeMatch[1]}\n`);
       }
-      if (filePath === '/repo/.git/worktrees/w1/commondir') {
+      if (/^\/repo\/\.git\/worktrees\/w[12]\/commondir$/.test(filePath)) {
         return Promise.resolve('../..\n');
       }
       return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     });
     watchers = new Map();
+    watcherHistory = [];
     watchPath = vi.fn((filePath, _options, listener) => {
       const closeMock = vi.fn<() => void>();
       const watcher: TestWatcher = {
@@ -90,8 +94,16 @@ describe('WorkspaceGitStateService', () => {
         },
       };
       watchers.set(filePath, watcher);
+      watcherHistory.push({ filePath, watcher });
       return watcher;
     });
+    emitWatchEvent = (filePath, eventType, filename) => {
+      for (const entry of watcherHistory) {
+        if (entry.filePath === filePath) {
+          entry.watcher.listener(eventType, filename);
+        }
+      }
+    };
     service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
   });
 
@@ -293,6 +305,74 @@ describe('WorkspaceGitStateService', () => {
     expect([...watchers.keys()]).toEqual(['/repo/w1', '/repo/.git/worktrees/w1', '/repo/.git']);
     expect(watchPath).toHaveBeenCalledTimes(3);
     expect(watchPath.mock.calls.every(([, options]) => options.recursive)).toBe(true);
+  });
+
+  it.each(['index', 'HEAD'])(
+    'keeps sibling caches warm when one worktree %s changes',
+    async (metadataFile) => {
+      vi.useFakeTimers();
+      try {
+        const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+        const first = await service.getSnapshot(input);
+        const sibling = await service.getSnapshot(siblingInput);
+
+        emitWatchEvent('/repo/.git/worktrees/w1', 'change', metadataFile);
+        emitWatchEvent('/repo/.git', 'change', `worktrees/w1/${metadataFile}`);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(await service.getSnapshot(input)).not.toBe(first);
+        expect(await service.getSnapshot(siblingInput)).toBe(sibling);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
+  it.each(['refs/remotes/origin/main', 'refs', 'config'])(
+    'invalidates every dependent cache when shared Git metadata %s changes',
+    async (filename) => {
+      vi.useFakeTimers();
+      try {
+        const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+        const first = await service.getSnapshot(input);
+        const sibling = await service.getSnapshot(siblingInput);
+
+        emitWatchEvent('/repo/.git', 'change', filename);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(await service.getSnapshot(input)).not.toBe(first);
+        expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
+  it('shares and reference-counts a common Git metadata watcher', async () => {
+    const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+    await service.getSnapshot(input);
+    await service.getSnapshot(siblingInput);
+    const sharedWatchers = watcherHistory.filter(({ filePath }) => filePath === '/repo/.git');
+
+    expect(sharedWatchers).toHaveLength(1);
+    service.remove(input.worktreePath);
+    expect(sharedWatchers[0]?.watcher.closeMock).not.toHaveBeenCalled();
+    service.remove(siblingInput.worktreePath);
+    expect(sharedWatchers[0]?.watcher.closeMock).toHaveBeenCalledOnce();
+  });
+
+  it('moves every dependent to fallback expiry when a shared watcher fails', async () => {
+    const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+    const first = await service.getSnapshot(input);
+    const sibling = await service.getSnapshot(siblingInput);
+    const sharedWatcher = watcherHistory.find(({ filePath }) => filePath === '/repo/.git');
+
+    sharedWatcher?.watcher.errorListener?.(new Error('shared watcher failed'));
+    now += 300_000;
+
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+    expect(sharedWatcher?.watcher.closeMock).toHaveBeenCalledOnce();
   });
 
   it('invalidates all base variants 100 ms after a watched file event', async () => {
