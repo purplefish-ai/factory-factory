@@ -1,0 +1,22 @@
+docs/architecture/pull-requests.md
+  s_36acb4b29c9711::t_fca608b81eea8f 42-48
+src/backend/orchestration/ratchet-projection.worker.ts
+  s_36acb4b29c9711::t_8a3c02ea4861a3 1-11,16-112,114-163
+  s_36acb4b29c9711::t_5efbb04b4fa82a 12-15,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d8fbb3d4d358defde0ba2f670df1174b2a48fea5",
+  "prompts": {},
+  "sessions": {
+    "s_36acb4b29c9711": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a082ce-6882-7591-9cb0-4d9cce342a4c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
