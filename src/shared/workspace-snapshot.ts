@@ -32,6 +32,7 @@ const SnapshotFieldGroupSchema = z.enum([
   'ratchet',
   'runScript',
   'reconciliation',
+  'git',
 ]);
 
 export type SnapshotFieldGroup = z.infer<typeof SnapshotFieldGroupSchema>;
@@ -121,6 +122,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
     ratchet: z.number(),
     runScript: z.number(),
     reconciliation: z.number(),
+    git: z.number().optional(),
   }),
 });
 

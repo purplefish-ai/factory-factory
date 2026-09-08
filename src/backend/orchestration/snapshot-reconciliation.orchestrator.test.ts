@@ -397,7 +397,7 @@ describe('SnapshotReconciliationService', () => {
 
       await service.reconcile();
 
-      expect(mockUpsert).toHaveBeenCalledTimes(2);
+      expect(mockUpsert).toHaveBeenCalledTimes(3);
 
       // Verify first workspace's upsert contains correct fields
       const firstCall = mockUpsert.mock.calls[0]!;
@@ -516,7 +516,7 @@ describe('SnapshotReconciliationService', () => {
 
       // Should not throw, gitStats should be null
       expect(result.gitStatsComputed).toBe(0);
-      const upsertFields = mockUpsert.mock.calls[0]![1] as SnapshotUpdateInput;
+      const upsertFields = mockUpsert.mock.calls[1]![1] as SnapshotUpdateInput;
       expect(upsertFields.gitStats).toBeNull();
     });
 
@@ -836,7 +836,7 @@ describe('SnapshotReconciliationService', () => {
 
       expect(result.workspacesScanned).toBe(2);
       expect(result.workspacesChanged).toBe(2);
-      expect(result.deltasEmitted).toBe(3);
+      expect(result.deltasEmitted).toBe(4);
       expect(result.workspacesReconciled).toBe(2);
       expect(result.driftsDetected).toBeGreaterThan(0);
       expect(result.staleEntriesRemoved).toBe(1);
@@ -847,7 +847,7 @@ describe('SnapshotReconciliationService', () => {
         expect.objectContaining({
           workspacesScanned: 2,
           workspacesChanged: 2,
-          deltasEmitted: 3,
+          deltasEmitted: 4,
         })
       );
     });

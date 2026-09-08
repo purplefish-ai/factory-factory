@@ -104,10 +104,18 @@ That endpoint never spawns `git` on its response path: `gitStats` is served from
 returns null while a background warm recomputes it. Awaiting those recomputes is
 what used to hold the board on its loading state — a worktree's stats cost
 several `git` spawns and a project with dozens of live workspaces serialized all
-of them behind the one query (~20s at 68 worktrees). `gitStats` is a
-reconciliation field, so the snapshot poll recomputes it for every live
-workspace each minute and streams it into the same cache; a card is missing its
-diff badge for a moment rather than the board being missing entirely.
+of them behind the one query (~20s at 68 worktrees).
+
+`gitStats` is a reconciliation field. Each snapshot poll first seeds all
+database and runtime fields, retaining any cached Git stats, then releases the
+startup snapshot barrier. It recomputes Git stats with bounded concurrency and
+publishes each workspace as soon as its Git commands finish; one slow worktree
+cannot hold the rest of the board. Git stats have their own optional timestamp
+group, so the seed's `lastActivityAt` and the later Git update can carry the same
+poll-start timestamp without weakening either field's stale-update protection.
+The optional timestamp keeps older snapshot payloads valid during upgrades. A
+card can be missing its diff badge for a moment rather than the board being
+missing entirely.
 
 Note that each worktree's cache entry is watched via the repo's *shared* `.git`
 common dir, so git activity in any one worktree invalidates the others' entries

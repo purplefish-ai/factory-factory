@@ -131,6 +131,18 @@ describe('workspace snapshot transport contract', () => {
     expect(() => WorkspaceSnapshotEntrySchema.parse({ ...entry, fieldTimestamps })).toThrow();
   });
 
+  it('accepts legacy timestamps and carries a dedicated git timestamp', () => {
+    const legacyEntry = makeCompleteSnapshot();
+
+    expect(WorkspaceSnapshotEntrySchema.parse(legacyEntry).fieldTimestamps.git).toBeUndefined();
+    expect(
+      WorkspaceSnapshotEntrySchema.parse({
+        ...legacyEntry,
+        fieldTimestamps: { ...legacyEntry.fieldTimestamps, git: 7 },
+      }).fieldTimestamps.git
+    ).toBe(7);
+  });
+
   it('carries merge conflict, mode, auto-iteration status, and dispatch stall', () => {
     const parsed = WorkspaceSnapshotEntrySchema.parse({
       ...makeCompleteSnapshot(),

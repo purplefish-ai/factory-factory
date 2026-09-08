@@ -32,13 +32,13 @@ const {
   mockGetByProjectId,
   mockGetCachedReviewCount,
   mockRefreshReviewCountIfStale,
-  mockWaitForInProgress,
+  mockWaitForSeed,
 } = vi.hoisted(() => ({
   storeListeners: new Map<string, (event: unknown) => unknown>(),
   mockGetByProjectId: vi.fn(() => []),
   mockGetCachedReviewCount: vi.fn<() => number | undefined>(() => 5),
   mockRefreshReviewCountIfStale: vi.fn(),
-  mockWaitForInProgress: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  mockWaitForSeed: vi.fn<() => Promise<void>>(() => Promise.resolve()),
 }));
 
 const snapshotStoreEmitter = new EventEmitter();
@@ -81,7 +81,7 @@ function createAppContextMock(
     },
     lifecycle: {
       snapshotReconciliation: {
-        waitForInProgress: mockWaitForInProgress,
+        waitForSeed: mockWaitForSeed,
       },
     },
   } as unknown as AppContext;
@@ -145,7 +145,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     }
     testApplications.clear();
     storeListeners.clear();
-    mockWaitForInProgress.mockImplementation(() => Promise.resolve());
+    mockWaitForSeed.mockImplementation(() => Promise.resolve());
   });
 
   it('sends full snapshot with review count on connect', async () => {
@@ -466,7 +466,7 @@ describe('createSnapshotsUpgradeHandler', () => {
 
   it('buffers deltas emitted before snapshot_full and flushes them after it', async () => {
     let resolveWait: (() => void) | undefined;
-    mockWaitForInProgress.mockReturnValueOnce(
+    mockWaitForSeed.mockReturnValueOnce(
       new Promise<void>((resolve) => {
         resolveWait = resolve;
       })

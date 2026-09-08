@@ -182,7 +182,8 @@ const RATCHET_FIELDS = [
   'ratchetDispatchStalled',
 ] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
-const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
+const RECONCILIATION_FIELDS = ['lastActivityAt'] as const;
+const GIT_FIELDS = ['gitStats'] as const;
 
 type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
@@ -200,6 +201,7 @@ const FIELD_GROUP_MAPPINGS: FieldGroupMapping[] = [
   { group: 'ratchet', fields: RATCHET_FIELDS },
   { group: 'runScript', fields: RUN_SCRIPT_FIELDS },
   { group: 'reconciliation', fields: RECONCILIATION_FIELDS },
+  { group: 'git', fields: GIT_FIELDS },
 ];
 
 // ---------------------------------------------------------------------------
@@ -220,6 +222,7 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
     ratchet: 0,
     runScript: 0,
     reconciliation: 0,
+    git: 0,
   };
 }
 
@@ -423,7 +426,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     let rawChanged = false;
     for (const mapping of FIELD_GROUP_MAPPINGS) {
       const hasFieldsInGroup = mapping.fields.some((field) => update[field] !== undefined);
-      if (!hasFieldsInGroup || ts <= entry.fieldTimestamps[mapping.group]) {
+      if (!hasFieldsInGroup || ts <= (entry.fieldTimestamps[mapping.group] ?? 0)) {
         continue;
       }
       accepted = true;

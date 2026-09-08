@@ -39,8 +39,10 @@ list first. A service whose guard is also reachable outside a run
 in `start()`, or a restart would inherit the previous stop's aborted signal.
 
 `waitForCurrentRun(name)` resolves on the run already in flight, not the next
-one; the `/snapshots` WebSocket handler uses it to hold the first
-`snapshot_full` until the startup reconciliation has seeded the store.
+one. Snapshot reconciliation has a narrower `waitForSeed()` barrier: the
+`/snapshots` WebSocket handler waits only until database/runtime fields are in
+the store and stale entries are removed. Git stats continue streaming while the
+job remains in flight, so `stop()` still waits for every Git task to settle.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so

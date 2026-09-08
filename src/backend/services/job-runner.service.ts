@@ -196,9 +196,7 @@ export class JobRunner {
    * immediately if the job is between runs.
    *
    * This does not wait for a *next* run: a caller that needs the job's output
-   * wants the work already underway, not another cycle of it. The /snapshots
-   * WebSocket handler uses it to hold the first `snapshot_full` until the
-   * startup reconciliation has populated the store.
+   * wants the work already underway, not another cycle of it.
    */
   waitForCurrentRun(name: string): Promise<void> {
     return this.get(name).currentRun ?? Promise.resolve();

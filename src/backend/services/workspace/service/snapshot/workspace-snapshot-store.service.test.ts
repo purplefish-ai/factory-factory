@@ -450,7 +450,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(store.getByWorkspaceId('ws-1')!.name).toBe('authoritative');
     });
 
-    it('treats equal structured reconciliation and session fields as no-ops', () => {
+    it('treats equal structured git and session fields as no-ops', () => {
       const handler = vi.fn();
       store.on(SNAPSHOT_CHANGED, handler);
       const gitStats = { total: 3, additions: 2, deletions: 1, hasUncommitted: true };
@@ -472,7 +472,7 @@ describe('WorkspaceSnapshotStore', () => {
       const entry = store.getByWorkspaceId('ws-1')!;
       expect(result).toEqual({ accepted: true, changed: false, emitted: false });
       expect(entry.version).toBe(1);
-      expect(entry.fieldTimestamps.reconciliation).toBe(200);
+      expect(entry.fieldTimestamps.git).toBe(200);
       expect(entry.fieldTimestamps.session).toBe(200);
       expect(handler).toHaveBeenCalledTimes(1);
     });

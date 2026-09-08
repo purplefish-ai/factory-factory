@@ -7,7 +7,7 @@
  * and is the only path for expensive git stats computation.
  *
  * Key behaviors:
- * - RCNL-02: Git stats computed with p-limit(3) concurrency
+ * - RCNL-02: Git stats computed with bounded p-limit concurrency
  * - RCNL-03: pollStartTs passed to every upsert for field-timestamp safety
  * - RCNL-04: Drift detection compares existing snapshot against authoritative values
  *
@@ -181,6 +181,7 @@ export class SnapshotReconciliationService {
     'debug' | 'error' | 'info' | 'warn'
   >;
   private readonly jobRunner: JobRunner;
+  private seedInProgress: Promise<void> | null = null;
 
   constructor(private readonly dependencies: Readonly<SnapshotReconciliationDependencies>) {
     this.logger = dependencies.createLogger('snapshot-reconciliation');
@@ -188,7 +189,7 @@ export class SnapshotReconciliationService {
     this.jobRunner.register({
       name: SNAPSHOT_RECONCILIATION_JOB,
       intervalMs: SERVICE_INTERVAL_MS.snapshotReconciliation,
-      // Seeds the snapshot store; the /snapshots handler waits on this run.
+      // Seeds the snapshot store; the /snapshots handler waits on the seed phase.
       runImmediately: true,
       run: () => this.reconcile(),
     });
@@ -203,12 +204,11 @@ export class SnapshotReconciliationService {
   }
 
   /**
-   * If a reconciliation is currently in progress, waits for it to finish.
-   * Used by the /snapshots WebSocket handler to defer the initial snapshot_full
-   * message until the store is populated on startup.
+   * Wait for the database/runtime seed phase of the active reconciliation.
+   * Git stats continue streaming after this resolves.
    */
-  waitForInProgress(): Promise<void> {
-    return this.jobRunner.waitForCurrentRun(SNAPSHOT_RECONCILIATION_JOB);
+  waitForSeed(): Promise<void> {
+    return this.seedInProgress ?? Promise.resolve();
   }
 
   /**
@@ -220,11 +220,7 @@ export class SnapshotReconciliationService {
         SnapshotReconciliationDependencies['workspaceMaintenanceService']['findActiveWithSessionsAndProject']
       >
     >[number],
-    allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>,
-    gitStatsMap: Map<
-      string,
-      { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
-    >
+    allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>
   ): SnapshotUpdateInput {
     const sessionIds = [...(ws.agentSessions?.map((s) => s.id) ?? [])];
     const sessionSummaries = buildWorkspaceSessionSummaries(ws.agentSessions ?? [], (sessionId) =>
@@ -268,7 +264,6 @@ export class SnapshotReconciliationService {
       isWorking,
       pendingRequestType,
       sessionSummaries,
-      gitStats: gitStatsMap.get(ws.id) ?? null,
       lastActivityAt,
     };
   }
@@ -298,120 +293,152 @@ export class SnapshotReconciliationService {
 
   async reconcile(): Promise<ReconciliationResult> {
     const pollStartTs = Date.now();
+    let resolveSeed!: () => void;
+    const seedInProgress = new Promise<void>((resolve) => {
+      resolveSeed = resolve;
+    });
+    this.seedInProgress = seedInProgress;
 
-    // 1. Fetch all non-archived workspaces from DB
-    const workspaces =
-      await this.dependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject();
+    try {
+      // 1. Fetch all non-archived workspaces from DB
+      const workspaces =
+        await this.dependencies.workspaceMaintenanceService.findActiveWithSessionsAndProject();
 
-    // 2. Get pending requests from bridges
-    const allPendingRequests = this.dependencies.session.getAllPendingRequests();
+      // 2. Get pending requests from bridges
+      const allPendingRequests = this.dependencies.session.getAllPendingRequests();
 
-    // 3. Compute git stats with concurrency limit (RCNL-02)
-    const gitLimit = pLimit(GIT_CONCURRENCY);
-    const gitStatsMap = new Map<
-      string,
-      { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
-    >();
+      let driftsDetected = 0;
+      let deltasEmitted = 0;
+      let staleEntriesRemoved = 0;
+      let gitStatsComputed = 0;
+      const changedWorkspaceIds = new Set<string>();
 
-    await Promise.all(
-      workspaces.map((ws) =>
-        gitLimit(async () => {
-          if (!ws.worktreePath) {
-            gitStatsMap.set(ws.id, null);
-            return;
-          }
-          const defaultBranch = ws.project?.defaultBranch ?? 'main';
-          try {
-            const stats = await this.dependencies.gitOpsService.getWorkspaceGitStats(
-              ws.worktreePath,
-              defaultBranch
-            );
-            gitStatsMap.set(ws.id, stats);
-          } catch {
-            gitStatsMap.set(ws.id, null);
-          }
-        })
-      )
-    );
-
-    // 4. Reconcile each workspace
-    let driftsDetected = 0;
-    let gitStatsComputed = 0;
-    let workspacesChanged = 0;
-    let deltasEmitted = 0;
-
-    for (const ws of workspaces) {
-      const authoritativeFields = this.buildAuthoritativeFields(
-        ws,
-        allPendingRequests,
-        gitStatsMap
-      );
-
-      if (authoritativeFields.gitStats) {
-        gitStatsComputed++;
-      }
-
-      // Drift detection (RCNL-04)
-      const existing = this.dependencies.workspaceSnapshotStore.getByWorkspaceId(ws.id);
-      if (existing) {
-        const drifts = detectDrift(existing, authoritativeFields);
-        if (drifts.length > 0) {
-          driftsDetected += drifts.length;
-          this.logger.warn('Snapshot drift detected', {
-            workspaceId: ws.id,
-            driftCount: drifts.length,
-            drifts: drifts.map((d) => ({
-              field: d.field,
-              group: d.group,
-              snapshot: d.snapshotValue,
-              authoritative: d.authoritativeValue,
-            })),
-          });
+      const recordUpsert = (
+        workspaceId: string,
+        result: { changed: boolean; emitted: boolean }
+      ) => {
+        if (result.changed) {
+          changedWorkspaceIds.add(workspaceId);
         }
+        if (result.emitted) {
+          deltasEmitted++;
+        }
+      };
+
+      // 3. Seed DB and runtime fields without waiting for git. Omitting gitStats
+      // preserves an existing cached value until this pass computes a replacement.
+      for (const ws of workspaces) {
+        const authoritativeFields = this.buildAuthoritativeFields(ws, allPendingRequests);
+        if (!ws.worktreePath) {
+          authoritativeFields.gitStats = null;
+        }
+
+        // Drift detection (RCNL-04)
+        const existing = this.dependencies.workspaceSnapshotStore.getByWorkspaceId(ws.id);
+        if (existing) {
+          const drifts = detectDrift(existing, authoritativeFields);
+          if (drifts.length > 0) {
+            driftsDetected += drifts.length;
+            this.logger.warn('Snapshot drift detected', {
+              workspaceId: ws.id,
+              driftCount: drifts.length,
+              drifts: drifts.map((d) => ({
+                field: d.field,
+                group: d.group,
+                snapshot: d.snapshotValue,
+                authoritative: d.authoritativeValue,
+              })),
+            });
+          }
+        }
+
+        recordUpsert(
+          ws.id,
+          this.dependencies.workspaceSnapshotStore.upsert(
+            ws.id,
+            authoritativeFields,
+            'reconciliation',
+            pollStartTs
+          )
+        );
       }
 
-      // Upsert with pollStartTs (RCNL-03)
-      const upsertResult = this.dependencies.workspaceSnapshotStore.upsert(
-        ws.id,
-        authoritativeFields,
-        'reconciliation',
-        pollStartTs
+      // Stale entries are part of the authoritative seed and must be removed
+      // before a client receives its initial snapshot_full baseline.
+      const staleCleanup = this.removeStaleEntries(new Set(workspaces.map((w) => w.id)));
+      staleEntriesRemoved = staleCleanup.staleEntriesRemoved;
+      deltasEmitted += staleCleanup.deltasEmitted;
+      resolveSeed();
+
+      // 4. Compute and publish git stats independently with bounded concurrency.
+      const gitLimit = pLimit(GIT_CONCURRENCY);
+      await Promise.all(
+        workspaces.map((ws) => {
+          const worktreePath = ws.worktreePath;
+          if (!worktreePath) {
+            return Promise.resolve();
+          }
+          return gitLimit(async () => {
+            const defaultBranch = ws.project?.defaultBranch ?? 'main';
+            let gitStats: Awaited<
+              ReturnType<
+                SnapshotReconciliationDependencies['gitOpsService']['getWorkspaceGitStats']
+              >
+            > | null = null;
+            try {
+              gitStats = await this.dependencies.gitOpsService.getWorkspaceGitStats(
+                worktreePath,
+                defaultBranch
+              );
+            } catch {
+              gitStats = null;
+            }
+            if (gitStats) {
+              gitStatsComputed++;
+            }
+            recordUpsert(
+              ws.id,
+              this.dependencies.workspaceSnapshotStore.upsert(
+                ws.id,
+                { gitStats },
+                'reconciliation',
+                pollStartTs
+              )
+            );
+          });
+        })
       );
-      if (upsertResult.changed) {
-        workspacesChanged++;
-      }
-      if (upsertResult.emitted) {
-        deltasEmitted++;
+
+      // 5. Log summary after every streamed git update has settled.
+      const durationMs = Date.now() - pollStartTs;
+      const workspacesChanged = changedWorkspaceIds.size;
+      this.logger.info('Reconciliation complete', {
+        workspacesScanned: workspaces.length,
+        workspacesChanged,
+        deltasEmitted,
+        workspacesReconciled: workspaces.length,
+        driftsDetected,
+        staleEntriesRemoved,
+        gitStatsComputed,
+        durationMs,
+      });
+
+      return {
+        workspacesScanned: workspaces.length,
+        workspacesChanged,
+        deltasEmitted,
+        workspacesReconciled: workspaces.length,
+        driftsDetected,
+        staleEntriesRemoved,
+        gitStatsComputed,
+        durationMs,
+      };
+    } finally {
+      resolveSeed();
+      if (this.seedInProgress === seedInProgress) {
+        this.seedInProgress = null;
       }
     }
-
-    // 5. Stale entry cleanup
-    const staleCleanup = this.removeStaleEntries(new Set(workspaces.map((w) => w.id)));
-    deltasEmitted += staleCleanup.deltasEmitted;
-
-    // 6. Log summary
-    const durationMs = Date.now() - pollStartTs;
-    this.logger.info('Reconciliation complete', {
-      workspacesScanned: workspaces.length,
-      workspacesChanged,
-      deltasEmitted,
-      workspacesReconciled: workspaces.length,
-      driftsDetected,
-      staleEntriesRemoved: staleCleanup.staleEntriesRemoved,
-      gitStatsComputed,
-      durationMs,
-    });
-
-    return {
-      workspacesScanned: workspaces.length,
-      workspacesChanged,
-      deltasEmitted,
-      workspacesReconciled: workspaces.length,
-      driftsDetected,
-      staleEntriesRemoved: staleCleanup.staleEntriesRemoved,
-      gitStatsComputed,
-      durationMs,
-    };
   }
 }
 
@@ -420,5 +447,5 @@ export class SnapshotReconciliationService {
 // read-only startup wait port. Runtime composition creates a fully injected
 // SnapshotReconciliationService in app-context.ts.
 export const snapshotReconciliationService = Object.freeze({
-  waitForInProgress: () => Promise.resolve(),
+  waitForSeed: () => Promise.resolve(),
 });

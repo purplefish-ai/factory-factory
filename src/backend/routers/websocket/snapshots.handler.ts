@@ -284,7 +284,7 @@ export function createSnapshotsUpgradeHandler(
         void sendSnapshot();
       } else {
         snapshotReconciliation
-          .waitForInProgress()
+          .waitForSeed()
           .then(sendSnapshot)
           .catch(() => void sendSnapshot());
       }
