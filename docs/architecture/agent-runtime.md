@@ -23,6 +23,11 @@ Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart.
 
+When reloading a stopped session, transcript recovery matches tool results to
+call occurrences across the full transcript before synthesizing interruption
+results. Provider history backfill can timestamp-sort a result before its call;
+that existing result still completes exactly one occurrence of the tool ID.
+
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct
