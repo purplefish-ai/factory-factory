@@ -34,7 +34,7 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
-        voiceTtsModel: 'aura-2-thalia-en',
+        voiceTtsModel: 'flux-haley-en',
         voiceTtsSpeed: 1,
       });
 
@@ -48,7 +48,7 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: null,
-        voiceTtsModel: 'aura-2-thalia-en',
+        voiceTtsModel: 'flux-haley-en',
         voiceTtsSpeed: 1,
       });
 
@@ -61,15 +61,13 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
-        voiceTtsModel: 'aura-2-apollo-en',
+        voiceTtsModel: 'flux-jack-en',
         voiceTtsSpeed: 1.3,
       });
 
       const result = await createCaller().getConfig();
 
-      expect(result).toEqual(
-        expect.objectContaining({ ttsModel: 'aura-2-apollo-en', ttsSpeed: 1.3 })
-      );
+      expect(result).toEqual(expect.objectContaining({ ttsModel: 'flux-jack-en', ttsSpeed: 1.3 }));
     });
   });
 
@@ -207,25 +205,59 @@ describe('voiceRouter', () => {
       mockUserSettingsQueryService.get.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_existing',
-        voiceTtsModel: 'aura-2-luna-en',
+        voiceTtsModel: 'flux-priya-en',
         voiceTtsSpeed: 1.2,
       });
 
       const result = await createCaller().updateConfig({
         enabled: true,
-        ttsModel: 'aura-2-luna-en',
+        ttsModel: 'flux-priya-en',
         ttsSpeed: 1.2,
       });
 
       expect(mockUserSettingsQueryService.update).toHaveBeenCalledWith({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: undefined,
-        voiceTtsModel: 'aura-2-luna-en',
+        voiceTtsModel: 'flux-priya-en',
         voiceTtsSpeed: 1.2,
       });
-      expect(result).toEqual(
-        expect.objectContaining({ ttsModel: 'aura-2-luna-en', ttsSpeed: 1.2 })
+      expect(result).toEqual(expect.objectContaining({ ttsModel: 'flux-priya-en', ttsSpeed: 1.2 }));
+    });
+
+    it('rejects an in-range speed that is off the 0.05 increment Deepgram accepts', async () => {
+      // Bounds alone would admit 0.72; Deepgram then 400s at connect time, so
+      // the grid has to be enforced at the write boundary, not just by the
+      // slider's step attribute.
+      await expect(createCaller().updateConfig({ enabled: true, ttsSpeed: 0.72 })).rejects.toThrow(
+        /increments of 0.05/
       );
+      expect(mockUserSettingsQueryService.update).not.toHaveBeenCalled();
+    });
+
+    it('snaps a float-slop speed onto the grid before persisting it', async () => {
+      // Within the validator's 1e-9 tolerance, so the refine accepts it — but
+      // persisting it verbatim would later serialize as "0.5000000005" and
+      // make Deepgram 400 every TTS connection with SPEED_INCREMENT_INVALID.
+      mockUserSettingsQueryService.update.mockResolvedValue(undefined);
+      mockUserSettingsQueryService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: null,
+        voiceTtsModel: 'flux-haley-en',
+        voiceTtsSpeed: 0.5,
+      });
+
+      await createCaller().updateConfig({ enabled: true, ttsSpeed: 0.500_000_000_5 });
+
+      expect(mockUserSettingsQueryService.update).toHaveBeenCalledWith(
+        expect.objectContaining({ voiceTtsSpeed: 0.5 })
+      );
+    });
+
+    it('rejects a speed outside the Flux range', async () => {
+      await expect(createCaller().updateConfig({ enabled: true, ttsSpeed: 0.25 })).rejects.toThrow(
+        /between 0.5 and 1.5/
+      );
+      expect(mockUserSettingsQueryService.update).not.toHaveBeenCalled();
     });
   });
 

@@ -600,7 +600,7 @@ model UserSettings {
   // Voice Mode Settings (BYOK Deepgram)
   voiceModeEnabled          Boolean  @default(false)  // Admin toggle for the voice mode feature
   deepgramApiKeyEncrypted   String?                    // AES-256-GCM encrypted, same scheme as Linear's apiKey
-  voiceTtsModel             String   @default("aura-2-thalia-en")  // Deepgram Aura-2 voice, e.g. aura-2-thalia-en
+  voiceTtsModel             String   @default("flux-haley-en")  // Deepgram Flux TTS voice, e.g. flux-haley-en
   voiceTtsSpeed             Float    @default(1)  // Deepgram TTS speed multiplier (0.5-2.0)
   voiceUtteranceEndMs       Int      @default(1000)  // Deepgram silence gap (ms) before a turn is considered done; lower = more aggressive
   voiceBargeInSustainedMs   Int      @default(16)  // Sustained loud-frame duration (ms) before barge-in triggers; lower = more aggressive

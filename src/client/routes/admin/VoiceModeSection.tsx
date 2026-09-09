@@ -17,9 +17,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import {
-  DEEPGRAM_AURA2_ENGLISH_VOICES,
+  DEEPGRAM_FLUX_ENGLISH_VOICES,
   DEEPGRAM_TTS_SPEED_MAX,
   DEEPGRAM_TTS_SPEED_MIN,
+  DEEPGRAM_TTS_SPEED_STEP,
   DEFAULT_DEEPGRAM_TTS_MODEL,
   DEFAULT_DEEPGRAM_TTS_SPEED,
 } from '@/shared/deepgram-voices';
@@ -398,7 +399,7 @@ export function VoiceModeSection() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DEEPGRAM_AURA2_ENGLISH_VOICES.map((voice) => (
+                {DEEPGRAM_FLUX_ENGLISH_VOICES.map((voice) => (
                   <SelectItem key={voice.model} value={voice.model}>
                     {voice.name}
                     {voice.description ? ` — ${voice.description}` : ''}
@@ -406,13 +407,13 @@ export function VoiceModeSection() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Deepgram Aura-2 English voices</p>
+            <p className="text-xs text-muted-foreground">Deepgram Flux TTS English voices</p>
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between w-[280px]">
               <Label htmlFor="voice-speed">Speed</Label>
-              <span className="text-xs text-muted-foreground font-mono">{speed.toFixed(1)}x</span>
+              <span className="text-xs text-muted-foreground font-mono">{speed.toFixed(2)}x</span>
             </div>
             <Slider
               id="voice-speed"
@@ -432,7 +433,7 @@ export function VoiceModeSection() {
               }
               min={DEEPGRAM_TTS_SPEED_MIN}
               max={DEEPGRAM_TTS_SPEED_MAX}
-              step={0.1}
+              step={DEEPGRAM_TTS_SPEED_STEP}
               disabled={updateConfig.isPending || !hasStoredKey}
             />
           </div>

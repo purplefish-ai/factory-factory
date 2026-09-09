@@ -18,6 +18,7 @@ import {
   WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
+import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
@@ -241,7 +242,7 @@ const mockUserSettings: UserSettings = {
   // assertions below).
   voiceModeEnabled: true,
   deepgramApiKeyEncrypted: null,
-  voiceTtsModel: 'aura-2-apollo-en',
+  voiceTtsModel: 'flux-cliff-en',
   voiceTtsSpeed: 1.3,
   voiceUtteranceEndMs: 2500,
   voiceBargeInSustainedMs: 24,
@@ -373,7 +374,7 @@ function createImportData(
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
         voiceModeEnabled: true,
-        voiceTtsModel: 'aura-2-apollo-en',
+        voiceTtsModel: 'flux-cliff-en',
         voiceTtsSpeed: 1.3,
         voiceUtteranceEndMs: 2500,
         voiceBargeInSustainedMs: 24,
@@ -418,7 +419,7 @@ describe('DataBackupService', () => {
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
           voiceModeEnabled: true,
-          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsModel: 'flux-cliff-en',
           voiceTtsSpeed: 1.3,
           voiceUtteranceEndMs: 2500,
           voiceBargeInSustainedMs: 24,
@@ -664,7 +665,7 @@ describe('DataBackupService', () => {
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
           voiceModeEnabled: true,
-          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsModel: 'flux-cliff-en',
           voiceTtsSpeed: 1.3,
           voiceUtteranceEndMs: 2500,
           voiceBargeInSustainedMs: 24,
@@ -675,6 +676,47 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create.mock.calls[0]?.[0].data).not.toHaveProperty(
         'deepgramApiKeyEncrypted'
       );
+    });
+
+    it('remaps an aura-2 voice from a pre-Flux backup to the current default', async () => {
+      // A backup taken before the Flux upgrade carries `aura-2-*` and possibly
+      // an off-grid speed. Import writes UserSettings directly and never
+      // replays the migration, so the parse-time normalization in
+      // exportedUserSettingsSchema is the only thing standing between a
+      // restore and a voice config that fails every v2/speak connection.
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: {
+          preferredIde: 'cursor',
+          customIdeCommand: null,
+          playSoundOnComplete: true,
+          notificationSoundPath: null,
+          ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
+          defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'gpt-5-codex',
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 0.72,
+        },
+      });
+
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+
+      await dataBackupService.importData(exportedData);
+
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          voiceTtsModel: DEFAULT_DEEPGRAM_TTS_MODEL,
+          voiceTtsSpeed: 0.7,
+        }),
+      });
     });
 
     it('skips existing projects', async () => {

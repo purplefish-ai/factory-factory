@@ -18,8 +18,8 @@
  * already being spoken for that session — a clause arriving mid-utterance is
  * dropped rather than queued, so the narration never falls behind into a
  * backlog. The moment the agent's final answer starts streaming, any
- * in-flight thinking utterance is cut short (Deepgram's own `Clear` control
- * message) and narration switches to the final answer.
+ * in-flight thinking utterance is cut short (Deepgram's own `Interrupt`
+ * control message) and narration switches to the final answer.
  *
  * The final answer is narrated the same clause-by-clause way, not
  * accumulated silently and spoken all at once at turn-complete — for a long
@@ -42,13 +42,24 @@ import {
   sessionEventBus,
 } from '@/backend/services/session/service/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
+import { normalizeDeepgramTtsSpeed } from '@/shared/deepgram-voices';
 import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema';
 
 const logger = createLogger('voice-narration');
 
-const DEEPGRAM_TTS_URL = 'wss://api.deepgram.com/v1/speak';
+const DEEPGRAM_TTS_URL = 'wss://api.deepgram.com/v2/speak';
 const TTS_ENCODING = 'linear16';
 const TTS_SAMPLE_RATE = 24_000;
+
+// Deepgram's v2/speak handshake has been observed to fail transiently in
+// bursts (HTTP 400 on otherwise-valid, previously-and-subsequently-working
+// requests) — verified live against a real account: identical requests
+// rejected several times in a row, then succeeding 40/40 minutes later. A
+// clause that fails before any audio arrives is worth retrying rather than
+// silently dropping — otherwise a transient Deepgram-side blip reads as the
+// agent randomly skipping sentences.
+const TTS_CONNECT_MAX_RETRIES = 2;
+const TTS_CONNECT_RETRY_DELAY_MS = 300;
 
 /** Sentence-ending punctuation followed by whitespace or end of buffer. */
 const CLAUSE_BOUNDARY_PATTERN = /[.!?](?:\s|$)/;
@@ -58,6 +69,12 @@ const MAX_CLAUSE_LENGTH = 220;
 const MIN_CLAUSE_LENGTH = 12;
 
 type NarrationKind = 'thinking' | 'final';
+
+/** A Deepgram TTS JSON control frame, narrowed from the wire. */
+interface ControlMessage {
+  type: string;
+  code?: string;
+}
 
 interface ActiveNarration {
   // Created and assigned to turn.activeTts synchronously by the caller,
@@ -507,13 +524,21 @@ class VoiceNarrationService {
     }
     try {
       if (active.socket.readyState === WebSocket.OPEN) {
-        active.socket.send(JSON.stringify({ type: 'Clear' }));
+        // No `playback_offset`: it's optional, and the turn is cancelled
+        // either way. Supplying it would only add the
+        // `text_spoken`/`text_remaining` split to the `SpeechInterrupted`
+        // ack, which exists to reconcile what a caller heard back into LLM
+        // context. Nothing here reads it — the superseded thinking clause is
+        // discarded, not fed back — and sourcing a real offset would mean
+        // round-tripping playback position from the browser on every
+        // interrupt, with a monotonicity constraint across interrupts.
+        active.socket.send(JSON.stringify({ type: 'Interrupt' }));
       }
-      // Otherwise still CONNECTING: there's nothing to Clear yet, but the
+      // Otherwise still CONNECTING: there's nothing to interrupt yet, but the
       // pending 'open' handler checks `cancelled` and will settle without
       // ever speaking the superseded text.
     } catch (error) {
-      logger.error('Failed to clear in-flight Deepgram TTS narration', {
+      logger.error('Failed to interrupt in-flight Deepgram TTS narration', {
         error: error instanceof Error ? error.message : String(error),
         sessionId,
       });
@@ -546,7 +571,8 @@ class VoiceNarrationService {
     ws: WebSocket,
     turn: TurnState,
     rawText: string,
-    active: ActiveNarration
+    active: ActiveNarration,
+    attempt = 0
   ): Promise<void> {
     try {
       let cached = turn.voiceSettings;
@@ -583,28 +609,61 @@ class VoiceNarrationService {
         return;
       }
 
+      // Re-checked here (not just before the `await` above) because a
+      // connect-failure retry re-enters this function after a `setTimeout`
+      // delay with `cached` already set, skipping that earlier check
+      // entirely — without this, a clause cancelled mid-retry-wait would
+      // still go on to open a fresh connection and speak stale text.
+      if (active.cancelled) {
+        this.settleNarration(sessionId, ws, turn, active);
+        return;
+      }
+
+      // Normalized on read, not trusted from storage: the grid was only
+      // enforced at the write boundary from this release on, so a row saved
+      // under the old bounds-only validation can still hold an off-grid
+      // speed like 0.72 that Deepgram rejects with SPEED_INCREMENT_INVALID
+      // on every connection. Healing it here covers legacy rows whatever
+      // wrote them, and is a no-op for a value already on the grid.
+      const speed = normalizeDeepgramTtsSpeed(settings.voiceTtsSpeed);
       const params = new URLSearchParams({
         model: settings.voiceTtsModel,
         encoding: TTS_ENCODING,
         sample_rate: String(TTS_SAMPLE_RATE),
-        speed: String(settings.voiceTtsSpeed),
+        speed: String(speed),
       });
       logger.info('Opening Deepgram TTS connection', {
         sessionId,
         kind: active.kind,
         textLength: text.length,
         model: settings.voiceTtsModel,
-        speed: settings.voiceTtsSpeed,
+        speed,
+        attempt,
       });
       const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
         headers: { Authorization: `Token ${apiKey}` },
       });
       active.socket = ttsSocket;
 
+      let opened = false;
       let chunkCount = 0;
       let byteCount = 0;
 
       await new Promise<void>((resolve) => {
+        // Detaches our handlers and hangs up. The no-op 'error' listener is
+        // load-bearing: closing a socket that is still CONNECTING (a rejected
+        // handshake, which is exactly the `unexpected-response` case below)
+        // makes `ws` abort the handshake and emit 'error'. With every listener
+        // removed that becomes an unhandled 'error' event, which throws out of
+        // an EventEmitter and takes down the process instead of retrying.
+        const detachAndClose = () => {
+          ttsSocket.removeAllListeners();
+          ttsSocket.on('error', () => undefined);
+          if (ttsSocket.readyState !== WebSocket.CLOSED) {
+            ttsSocket.close();
+          }
+        };
+
         const finish = () => {
           logger.info('Finished Deepgram TTS narration', {
             sessionId,
@@ -612,18 +671,37 @@ class VoiceNarrationService {
             chunkCount,
             byteCount,
           });
-          ttsSocket.removeAllListeners();
-          if (
-            ttsSocket.readyState === WebSocket.OPEN ||
-            ttsSocket.readyState === WebSocket.CONNECTING
-          ) {
-            ttsSocket.close();
-          }
+          detachAndClose();
           resolve();
           this.settleNarration(sessionId, ws, turn, active);
         };
 
+        // Only for a failure *before* the handshake completed — a socket
+        // that already opened may have started sending audio, and retrying
+        // from scratch there would replay or garble what was already
+        // spoken. `resolve()` without `settleNarration` deliberately leaves
+        // `turn.activeTts` claimed by `active` across the retry, so no other
+        // queued clause can start in the gap.
+        const retryOrFinish = (reason: string) => {
+          if (active.cancelled || opened || attempt >= TTS_CONNECT_MAX_RETRIES) {
+            finish();
+            return;
+          }
+          logger.warn('Deepgram TTS handshake failed before opening; retrying', {
+            sessionId,
+            kind: active.kind,
+            attempt,
+            reason,
+          });
+          detachAndClose();
+          resolve();
+          setTimeout(() => {
+            void this.speakClause(sessionId, ws, turn, rawText, active, attempt + 1);
+          }, TTS_CONNECT_RETRY_DELAY_MS);
+        };
+
         ttsSocket.on('open', () => {
+          opened = true;
           if (active.cancelled) {
             finish();
             return;
@@ -646,11 +724,11 @@ class VoiceNarrationService {
             return;
           }
           if (isBinary) {
-            // Deepgram's `Clear` (sent by clearActiveNarration) stops *new*
-            // synthesis, but audio already in flight when the cancellation
-            // was requested keeps arriving until the `Cleared` ack — forward
-            // it and stale reasoning audio can resume playing underneath
-            // the answer that just cut it off.
+            // Deepgram's `Interrupt` (sent by clearActiveNarration) stops
+            // *new* synthesis, but audio already in flight when the
+            // cancellation was requested keeps arriving until the
+            // `SpeechInterrupted` ack — forward it and stale reasoning audio
+            // can resume playing underneath the answer that just cut it off.
             if (active.cancelled) {
               return;
             }
@@ -661,12 +739,19 @@ class VoiceNarrationService {
           }
           const message = this.parseControlMessage(data);
           logger.info('Deepgram TTS control message', { sessionId, message });
-          this.handleTtsControlMessage(ttsSocket, message, finish);
+          this.handleTtsControlMessage(ttsSocket, message, finish, {
+            cancelled: active.cancelled,
+            receivedAudio: chunkCount > 0,
+          });
         });
 
         ttsSocket.on('error', (error) => {
           logger.error('Deepgram TTS connection error', { error: error.message, sessionId });
-          finish();
+          retryOrFinish(error.message);
+        });
+
+        ttsSocket.on('unexpected-response', (_req, res: { statusCode?: number }) => {
+          retryOrFinish(`unexpected-response ${res.statusCode ?? 'unknown'}`);
         });
 
         ttsSocket.on('close', finish);
@@ -684,31 +769,83 @@ class VoiceNarrationService {
     }
   }
 
-  /** Handles Deepgram's Flushed (utterance complete) and Cleared (interrupted) control messages. */
+  /**
+   * Handles Deepgram's Flux TTS control messages. `Flushed` only acks that
+   * the text buffer was processed — every audio frame for the turn arrives
+   * between `SpeechStarted` and `SpeechMetadata`, so `SpeechMetadata` (not
+   * `Flushed`) is the real "all audio sent" signal. Closing on `Flushed`
+   * would hang up before Deepgram ever streams the audio (this was a real
+   * bug: every narration completed with 0 bytes forwarded until this fix).
+   */
   private handleTtsControlMessage(
     ttsSocket: WebSocket,
-    message: { type: string } | null,
-    finish: () => void
+    message: ControlMessage | null,
+    finish: () => void,
+    state: { cancelled: boolean; receivedAudio: boolean }
   ): void {
-    if (message?.type === 'Flushed') {
+    if (message?.type === 'SpeechMetadata') {
       try {
         ttsSocket.send(JSON.stringify({ type: 'Close' }));
       } catch {
         // Connection is already going away; finish() closes it regardless.
       }
       finish();
-    } else if (message?.type === 'Cleared') {
-      // Interrupted mid-utterance (thinking cut short by the final answer).
+    } else if (message?.type === 'SpeechInterrupted') {
+      // Interrupted mid-utterance (thinking cut short by the final answer) —
+      // no more audio is coming for this turn, so finish immediately rather
+      // than waiting for a SpeechMetadata that Interrupt may suppress.
+      finish();
+    } else if (message?.type === 'Warning' && this.isTerminalWarning(message, state)) {
+      // A Warning is a "session continues" message: on its own it never
+      // closes the socket or fires `finish`. With no watchdog on a narration
+      // socket, a Warning that turns out to be the turn's last message
+      // strands `turn.activeTts` non-null and every remaining queued clause
+      // silently never speaks.
       finish();
     }
   }
 
-  private parseControlMessage(data: Buffer): { type: string } | null {
+  /**
+   * Whether a `Warning` means no more audio is coming for this clause.
+   *
+   * Cancelled: we sent `Interrupt` (clearActiveNarration) and Deepgram
+   * answered with a Warning rather than `SpeechInterrupted` — most likely
+   * `NO_AUDIO_GENERATED` (Interrupt raced Deepgram's own turn start), but
+   * possibly `INTERRUPT_IN_PROGRESS` or `INVALID_INTERRUPT_OFFSET`. Matched
+   * on `type` alone so all three behave the same; nothing is left to play
+   * either way, since the whole point of the Interrupt was to stop it.
+   *
+   * Uncancelled: only `NO_AUDIO_GENERATED`, and only before the first audio
+   * frame. `stripMarkdownForSpeech` rejects text that strips to *empty*, so
+   * a clause of pure emoji or symbols is still sent and can come back
+   * `NO_AUDIO_GENERATED` with no `SpeechMetadata` ever following. Any other
+   * warning stays informational here: an unrecognized one arriving before
+   * the first frame may well be followed by audio, and ending the clause on
+   * it would drop speech that was about to play.
+   */
+  private isTerminalWarning(
+    message: ControlMessage,
+    state: { cancelled: boolean; receivedAudio: boolean }
+  ): boolean {
+    if (state.cancelled) {
+      return true;
+    }
+    return !state.receivedAudio && message.code === 'NO_AUDIO_GENERATED';
+  }
+
+  private parseControlMessage(data: Buffer): ControlMessage | null {
     try {
       const parsed = JSON.parse(data.toString('utf8'));
-      return parsed && typeof parsed === 'object' && typeof parsed.type === 'string'
-        ? parsed
-        : null;
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
+        return null;
+      }
+      // `code` is narrowed alongside `type` rather than cast at the use site:
+      // a Warning's code decides whether the clause ends, so a non-string
+      // `code` must read as absent instead of being trusted.
+      return {
+        type: parsed.type,
+        code: typeof parsed.code === 'string' ? parsed.code : undefined,
+      };
     } catch {
       return null;
     }

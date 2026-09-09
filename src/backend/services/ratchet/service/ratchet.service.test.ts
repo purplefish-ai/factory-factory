@@ -194,7 +194,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       ratchetPermissions: 'YOLO',
       voiceModeEnabled: false,
       deepgramApiKeyEncrypted: null,
-      voiceTtsModel: 'aura-2-thalia-en',
+      voiceTtsModel: 'flux-haley-en',
       voiceTtsSpeed: 1,
       voiceUtteranceEndMs: 1000,
       voiceBargeInSustainedMs: 16,

@@ -19,6 +19,11 @@ import {
   WorkspaceStatus as PrismaWorkspaceStatus,
 } from '@/shared/core';
 import {
+  DEEPGRAM_TTS_SPEED_MIN,
+  DEFAULT_DEEPGRAM_TTS_MODEL,
+  DEFAULT_DEEPGRAM_TTS_SPEED,
+} from '@/shared/deepgram-voices';
+import {
   exportedAgentSessionSchema,
   exportedUserSettingsSchema,
   exportedWorkspaceSchema,
@@ -235,5 +240,58 @@ describe('Enum sync with Prisma schema', () => {
     const zodValues = getEnumOptions(exportedAgentSessionSchema.shape.status);
     const prismaValues = Object.values(PrismaSessionStatus);
     expect(zodValues).toEqual(prismaValues);
+  });
+});
+
+describe('voice settings normalization on restore', () => {
+  // Import writes these values straight to UserSettings and never replays the
+  // Flux migration, so a backup taken before the upgrade is the one path that
+  // can still reinstate a model or speed that v2/speak rejects. The schema is
+  // the tRPC input for admin.importData, so normalizing here covers it.
+  const parseVoiceSettings = (overrides: Record<string, unknown>) =>
+    exportedUserSettingsSchema.parse({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      playSoundOnComplete: true,
+      notificationSoundPath: null,
+      ratchetEnabled: true,
+      ratchetReplyToPrComments: true,
+      defaultSessionProvider: 'CLAUDE',
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'gpt-5-codex',
+      defaultWorkspacePermissions: 'STRICT',
+      ratchetPermissions: 'YOLO',
+      ...overrides,
+    });
+
+  it('remaps a pre-upgrade aura-2 voice to the Flux default', () => {
+    const parsed = parseVoiceSettings({ voiceTtsModel: 'aura-2-apollo-en' });
+    expect(parsed.voiceTtsModel).toBe(DEFAULT_DEEPGRAM_TTS_MODEL);
+  });
+
+  it('preserves a valid Flux voice', () => {
+    const parsed = parseVoiceSettings({ voiceTtsModel: 'flux-cliff-en' });
+    expect(parsed.voiceTtsModel).toBe('flux-cliff-en');
+  });
+
+  it('clamps a speed below the current Flux floor', () => {
+    const parsed = parseVoiceSettings({ voiceTtsSpeed: 0.1 });
+    expect(parsed.voiceTtsSpeed).toBe(DEEPGRAM_TTS_SPEED_MIN);
+  });
+
+  it('snaps an off-grid speed onto the 0.05 grid', () => {
+    const parsed = parseVoiceSettings({ voiceTtsSpeed: 0.72 });
+    expect(parsed.voiceTtsSpeed).toBe(0.7);
+  });
+
+  it('preserves a valid speed', () => {
+    const parsed = parseVoiceSettings({ voiceTtsSpeed: 1.3 });
+    expect(parsed.voiceTtsSpeed).toBe(1.3);
+  });
+
+  it('falls back to defaults when a backup omits the voice fields entirely', () => {
+    const parsed = parseVoiceSettings({});
+    expect(parsed.voiceTtsModel).toBe(DEFAULT_DEEPGRAM_TTS_MODEL);
+    expect(parsed.voiceTtsSpeed).toBe(DEFAULT_DEEPGRAM_TTS_SPEED);
   });
 });

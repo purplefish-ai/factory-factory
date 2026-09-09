@@ -11,7 +11,10 @@ import type { ApplicationServices } from '@/backend/app-context';
 import {
   DEEPGRAM_TTS_SPEED_MAX,
   DEEPGRAM_TTS_SPEED_MIN,
+  DEEPGRAM_TTS_SPEED_STEP,
   isKnownDeepgramVoiceModel,
+  isValidDeepgramTtsSpeed,
+  normalizeDeepgramTtsSpeed,
 } from '@/shared/deepgram-voices';
 import {
   VOICE_BARGE_IN_SUSTAINED_MS_MAX,
@@ -155,7 +158,15 @@ export const voiceRouter = router({
           .min(1)
           .refine(isKnownDeepgramVoiceModel, 'Unknown Deepgram voice model')
           .optional(),
-        ttsSpeed: z.number().min(DEEPGRAM_TTS_SPEED_MIN).max(DEEPGRAM_TTS_SPEED_MAX).optional(),
+        // Bounds alone aren't enough: Deepgram also 400s on an in-range speed
+        // that isn't on the 0.05 grid the slider steps by.
+        ttsSpeed: z
+          .number()
+          .refine(
+            isValidDeepgramTtsSpeed,
+            `Speed must be between ${DEEPGRAM_TTS_SPEED_MIN} and ${DEEPGRAM_TTS_SPEED_MAX} in increments of ${DEEPGRAM_TTS_SPEED_STEP}`
+          )
+          .optional(),
         utteranceEndMs: z
           .number()
           .int()
@@ -176,7 +187,16 @@ export const voiceRouter = router({
         voiceModeEnabled: input.enabled,
         deepgramApiKeyEncrypted: input.apiKey ? cryptoService.encrypt(input.apiKey) : undefined,
         voiceTtsModel: input.ttsModel,
-        voiceTtsSpeed: input.ttsSpeed,
+        // Snapped to the grid after validation, not instead of it: the
+        // validator's 1e-9 tolerance exists for float slop, but whatever it
+        // lets through is stored verbatim and later serialized verbatim to
+        // Deepgram (`String(settings.voiceTtsSpeed)`). An off-grid near-miss
+        // like 0.5000000005 would pass the refine and then 400 every TTS
+        // connection as SPEED_INCREMENT_INVALID. Normalizing here keeps the
+        // strict rejection of a real near-miss (0.7011 never reaches this
+        // line) while guaranteeing what we persist is exactly on grid.
+        voiceTtsSpeed:
+          input.ttsSpeed === undefined ? undefined : normalizeDeepgramTtsSpeed(input.ttsSpeed),
         voiceUtteranceEndMs: input.utteranceEndMs,
         voiceBargeInSustainedMs: input.bargeInSustainedMs,
       });

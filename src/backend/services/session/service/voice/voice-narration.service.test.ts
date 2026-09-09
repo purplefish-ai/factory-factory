@@ -13,10 +13,10 @@ const FakeDeepgramSocket = vi.hoisted(() => {
   // module import — vitest hoists `vi.mock`/`vi.hoisted` factories above
   // even static imports, so importing `node:events` here would hit a TDZ.
   class FakeDeepgramSocket {
-    // Mirrors real `ws`: a socket starts CONNECTING and only transitions to
-    // OPEN when its 'open' event fires — matters for tests that assert on
-    // behavior gated by readyState (e.g. clearActiveNarration's Clear-only-
-    // if-OPEN check) before ever emitting 'open'.
+    // Mirrors real `ws`: a socket starts CONNECTING and only reaches OPEN
+    // when its 'open' event fires — matters for tests asserting on behavior
+    // gated by readyState (e.g. clearActiveNarration's Interrupt-only-if-OPEN
+    // check) before ever emitting 'open'.
     static CONNECTING = 0;
     static OPEN = 1;
     static CLOSING = 2;
@@ -43,7 +43,14 @@ const FakeDeepgramSocket = vi.hoisted(() => {
       if (event === 'open') {
         this.readyState = FakeDeepgramSocket.OPEN;
       }
-      for (const handler of this.listeners.get(event) ?? []) {
+      const handlers = this.listeners.get(event) ?? [];
+      // Mirrors EventEmitter: an 'error' with no listener throws rather than
+      // being swallowed, so code that detaches its handlers and *then*
+      // triggers one really does take the process down here too.
+      if (event === 'error' && handlers.length === 0) {
+        throw args[0] instanceof Error ? args[0] : new Error('Unhandled error event');
+      }
+      for (const handler of handlers) {
         handler(...args);
       }
     }
@@ -58,7 +65,13 @@ const FakeDeepgramSocket = vi.hoisted(() => {
     }
 
     close(): void {
+      const wasConnecting = this.readyState === FakeDeepgramSocket.CONNECTING;
       this.readyState = FakeDeepgramSocket.CLOSED;
+      // Mirrors `ws`: closing a socket whose handshake never completed goes
+      // through abortHandshake, which emits an 'error'.
+      if (wasConnecting) {
+        this.emit('error', new Error('WebSocket was closed before the connection was established'));
+      }
     }
   }
   return FakeDeepgramSocket;
@@ -101,6 +114,14 @@ function emitThinking(sessionId: string, thinking: string) {
   });
 }
 
+/** The final-answer counterpart to emitThinking. */
+function emitFinalText(sessionId: string, text: string) {
+  emitDelta(sessionId, {
+    type: 'session_delta',
+    data: { type: 'assistant_text_delta', text },
+  });
+}
+
 /**
  * Matches how SessionPublisher.emitDelta actually publishes this event in
  * production (session-publisher.ts) — always wrapped in a session_delta
@@ -115,6 +136,10 @@ function emitRuntimeUpdate(sessionId: string, activity: 'WORKING' | 'IDLE') {
     data: { type: 'session_runtime_updated', sessionRuntime: { activity } },
   });
 }
+
+/** The nth Deepgram socket opened so far, typed. */
+const socketAt = (index: number) =>
+  FakeDeepgramSocket.instances[index] as InstanceType<typeof FakeDeepgramSocket>;
 
 // Tracked so `afterEach` can unregister anything a failed assertion left
 // behind — each test unregisters its own connections on its success path,
@@ -143,7 +168,7 @@ describe('voiceNarrationService', () => {
     mockUserSettingsService.get.mockResolvedValue({
       voiceModeEnabled: true,
       deepgramApiKeyEncrypted: 'enc:dg_secret',
-      voiceTtsModel: 'aura-2-thalia-en',
+      voiceTtsModel: 'flux-haley-en',
       voiceTtsSpeed: 1,
     });
   });
@@ -188,13 +213,10 @@ describe('voiceNarrationService', () => {
     // a reconnect — this must not wipe the second connection's state.
     unregister('sess-reconnect', firstWs as never);
 
-    emitDelta('sess-reconnect', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'still connected. ' },
-    });
+    emitFinalText('sess-reconnect', 'still connected. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const ttsSocket = socketAt(0);
     ttsSocket.emit('open');
     ttsSocket.emit('message', Buffer.from([9]), true);
 
@@ -208,10 +230,7 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-reset', clientWs as never);
 
-    emitDelta('sess-reset', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'stale answer' },
-    });
+    emitFinalText('sess-reset', 'stale answer');
     emitRuntimeUpdate('sess-reset', 'WORKING');
     emitRuntimeUpdate('sess-reset', 'IDLE');
 
@@ -230,10 +249,7 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-disabled', clientWs as never);
 
-    emitDelta('sess-disabled', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'final answer' },
-    });
+    emitFinalText('sess-disabled', 'final answer');
     emitRuntimeUpdate('sess-disabled', 'IDLE');
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -246,20 +262,19 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-speak', clientWs as never);
 
-    emitDelta('sess-speak', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'Hello ' },
-    });
-    emitDelta('sess-speak', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'world.' },
-    });
+    emitFinalText('sess-speak', 'Hello ');
+    emitFinalText('sess-speak', 'world.');
     emitRuntimeUpdate('sess-speak', 'IDLE');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const ttsSocket = socketAt(0);
 
-    expect(ttsSocket.url).toContain('wss://api.deepgram.com/v1/speak');
+    // Pin the whole query string, not just the endpoint: an Aura-2 model name
+    // or an off-grid speed is rejected by Flux at connect time, and a bare
+    // `/v2/speak` assertion would let either through.
+    expect(ttsSocket.url).toBe(
+      'wss://api.deepgram.com/v2/speak?model=flux-haley-en&encoding=linear16&sample_rate=24000&speed=1'
+    );
     expect(mockCryptoService.decrypt).toHaveBeenCalledWith('enc:dg_secret');
 
     ttsSocket.emit('open');
@@ -279,7 +294,7 @@ describe('voiceNarrationService', () => {
       data: audioBytes.toString('base64'),
     });
 
-    ttsSocket.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+    ttsSocket.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
     expect(JSON.parse(ttsSocket.sentMessages[2] as string)).toEqual({ type: 'Close' });
 
     unregister('sess-speak', clientWs as never);
@@ -305,23 +320,17 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-cancel', clientWs as never);
 
-    emitDelta('sess-cancel', {
-      type: 'session_delta',
-      data: {
-        type: 'assistant_text_delta',
-        text: 'Sentence one is here. Sentence two is here. ',
-      },
-    });
+    emitFinalText('sess-cancel', 'Sentence one is here. Sentence two is here. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const active = socketAt(0);
     active.emit('open');
     clientWs.send.mockClear();
 
     voiceNarrationService.cancelNarration('sess-cancel');
 
     // Cancels the in-flight clause's Deepgram synthesis...
-    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Clear' });
+    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Interrupt' });
     // ...and tells the client to drop whatever's already scheduled locally.
     expect(clientWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'clear_playback' }));
 
@@ -338,13 +347,10 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-new-turn', clientWs as never);
 
-    emitDelta('sess-new-turn', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'Previous turn is still speaking. ' },
-    });
+    emitFinalText('sess-new-turn', 'Previous turn is still speaking. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const active = socketAt(0);
     active.emit('open');
     clientWs.send.mockClear();
 
@@ -352,7 +358,7 @@ describe('voiceNarrationService', () => {
     // to finish on its own.
     emitRuntimeUpdate('sess-new-turn', 'WORKING');
 
-    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Clear' });
+    expect(JSON.parse(active.sentMessages.at(-1) as string)).toEqual({ type: 'Interrupt' });
     expect(clientWs.send).toHaveBeenCalledWith(JSON.stringify({ type: 'clear_playback' }));
 
     unregister('sess-new-turn', clientWs as never);
@@ -362,16 +368,10 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-unregister', clientWs as never);
 
-    emitDelta('sess-unregister', {
-      type: 'session_delta',
-      data: {
-        type: 'assistant_text_delta',
-        text: 'Sentence one is here. Sentence two is here. ',
-      },
-    });
+    emitFinalText('sess-unregister', 'Sentence one is here. Sentence two is here. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const active = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const active = socketAt(0);
     active.emit('open');
 
     unregister('sess-unregister', clientWs as never);
@@ -387,13 +387,10 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs(2_000_000);
     register('sess-backpressure', clientWs as never);
 
-    emitDelta('sess-backpressure', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'A long answer that gets spoken. ' },
-    });
+    emitFinalText('sess-backpressure', 'A long answer that gets spoken. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const socket = socketAt(0);
     socket.emit('open');
 
     socket.emit('message', Buffer.from([1, 2, 3, 4]), true);
@@ -407,21 +404,19 @@ describe('voiceNarrationService', () => {
     const clientWs = createFakeClientWs();
     register('sess-cancelled-audio', clientWs as never);
 
-    emitDelta('sess-cancelled-audio', {
-      type: 'session_delta',
-      data: { type: 'assistant_text_delta', text: 'Answer being spoken. ' },
-    });
+    emitFinalText('sess-cancelled-audio', 'Answer being spoken. ');
 
     await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-    const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+    const socket = socketAt(0);
     socket.emit('open');
     clientWs.send.mockClear();
 
     voiceNarrationService.cancelNarration('sess-cancelled-audio');
     clientWs.send.mockClear();
 
-    // Audio already in flight when Clear was requested keeps arriving until
-    // Deepgram's Cleared ack — it must not be forwarded to the client.
+    // Audio already in flight when Interrupt was requested keeps arriving
+    // until Deepgram's SpeechInterrupted ack — it must not be forwarded to
+    // the client.
     socket.emit('message', Buffer.from([9, 9, 9]), true);
     expect(clientWs.send).not.toHaveBeenCalled();
 
@@ -433,16 +428,10 @@ describe('voiceNarrationService', () => {
       const clientWs = createFakeClientWs();
       register('sess-markdown', clientWs as never);
 
-      emitDelta('sess-markdown', {
-        type: 'session_delta',
-        data: {
-          type: 'assistant_text_delta',
-          text: 'This is **bold**, this is *italic*, and this is `code`. ',
-        },
-      });
+      emitFinalText('sess-markdown', 'This is **bold**, this is *italic*, and this is `code`. ');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const ttsSocket = socketAt(0);
       ttsSocket.emit('open');
 
       expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
@@ -460,7 +449,7 @@ describe('voiceNarrationService', () => {
       emitThinking('sess-markdown-2', '# Plan\n- Check the [docs](https://example.com) first. ');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const ttsSocket = socketAt(0);
       ttsSocket.emit('open');
 
       expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
@@ -475,13 +464,10 @@ describe('voiceNarrationService', () => {
       const clientWs = createFakeClientWs();
       register('sess-math', clientWs as never);
 
-      emitDelta('sess-math', {
-        type: 'session_delta',
-        data: { type: 'assistant_text_delta', text: 'The result is 1 * 2 * 3 = 6. ' },
-      });
+      emitFinalText('sess-math', 'The result is 1 * 2 * 3 = 6. ');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const ttsSocket = socketAt(0);
       ttsSocket.emit('open');
 
       expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
@@ -501,7 +487,7 @@ describe('voiceNarrationService', () => {
       emitThinking('sess-thinking-1', 'Let me consider this problem carefully. ');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const ttsSocket = socketAt(0);
       ttsSocket.emit('open');
       expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
         type: 'Speak',
@@ -518,15 +504,15 @@ describe('voiceNarrationService', () => {
       emitThinking('sess-thinking-2', 'First thought completed here. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
 
-      // Still speaking (no Flushed/Cleared yet) — this clause should be dropped,
-      // not queued, so the backlog never grows.
+      // Still speaking (no SpeechMetadata/SpeechInterrupted yet) — this
+      // clause should be dropped, not queued, so the backlog never grows.
       emitThinking('sess-thinking-2', 'Second thought completed here too. ');
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(FakeDeepgramSocket.instances).toHaveLength(1);
 
       // Free up the queue; a fresh clause afterwards should speak normally.
-      const first = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
-      first.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+      const first = socketAt(0);
+      first.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
 
       emitThinking('sess-thinking-2', 'Third thought completed here. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
@@ -540,19 +526,14 @@ describe('voiceNarrationService', () => {
 
       emitThinking('sess-thinking-3', 'Reasoning about the approach now. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const thinkingSocket = FakeDeepgramSocket.instances[0] as InstanceType<
-        typeof FakeDeepgramSocket
-      >;
+      const thinkingSocket = socketAt(0);
       thinkingSocket.emit('open');
 
       // Final answer starts streaming mid-thought — the in-flight thinking
-      // utterance must be cut short with Deepgram's Clear control message.
-      emitDelta('sess-thinking-3', {
-        type: 'session_delta',
-        data: { type: 'assistant_text_delta', text: 'The answer is 42.' },
-      });
+      // utterance must be cut short with Deepgram's Interrupt control message.
+      emitFinalText('sess-thinking-3', 'The answer is 42.');
       expect(
-        thinkingSocket.sentMessages.some((m) => JSON.parse(m as string).type === 'Clear')
+        thinkingSocket.sentMessages.some((m) => JSON.parse(m as string).type === 'Interrupt')
       ).toBe(true);
 
       // The browser must also be told to drop any thinking audio it already
@@ -569,14 +550,16 @@ describe('voiceNarrationService', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(FakeDeepgramSocket.instances).toHaveLength(1);
 
-      thinkingSocket.emit('message', Buffer.from(JSON.stringify({ type: 'Cleared' })), false);
+      thinkingSocket.emit(
+        'message',
+        Buffer.from(JSON.stringify({ type: 'SpeechInterrupted' })),
+        false
+      );
 
       emitRuntimeUpdate('sess-thinking-3', 'IDLE');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
-      const finalSocket = FakeDeepgramSocket.instances[1] as InstanceType<
-        typeof FakeDeepgramSocket
-      >;
+      const finalSocket = socketAt(1);
       finalSocket.emit('open');
       expect(JSON.parse(finalSocket.sentMessages[0] as string)).toEqual({
         type: 'Speak',
@@ -584,6 +567,125 @@ describe('voiceNarrationService', () => {
       });
 
       unregister('sess-thinking-3', clientWs as never);
+    });
+
+    it('settles a cancelled clause on a Warning ack, not just SpeechInterrupted, so later clauses are not stuck forever', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-thinking-warn', clientWs as never);
+
+      emitThinking('sess-thinking-warn', 'Reasoning about the approach now. ');
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const thinkingSocket = socketAt(0);
+      thinkingSocket.emit('open');
+
+      // Final answer starts streaming mid-thought, cutting off the thinking
+      // clause with Interrupt — but Deepgram hadn't started that clause's
+      // turn yet, so it acks with a Warning (NO_AUDIO_GENERATED: "Interrupt
+      // arrived before the session produced any audio") instead of
+      // SpeechInterrupted, exactly like Flux does for this race in practice.
+      emitFinalText('sess-thinking-warn', 'The final answer clause. Second final clause. ');
+      thinkingSocket.emit(
+        'message',
+        Buffer.from(JSON.stringify({ type: 'Warning', code: 'NO_AUDIO_GENERATED' })),
+        false
+      );
+
+      // Without settling on the Warning, activeTts stays stuck on the
+      // cancelled thinking clause and no final-answer socket ever opens.
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
+      const first = socketAt(1);
+      first.emit('open');
+      expect(JSON.parse(first.sentMessages[0] as string).text).toBe('The final answer clause.');
+
+      // And the queue keeps draining past the first clause too.
+      first.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 3);
+      const second = socketAt(2);
+      second.emit('open');
+      expect(JSON.parse(second.sentMessages[0] as string).text).toBe('Second final clause.');
+
+      unregister('sess-thinking-warn', clientWs as never);
+    });
+
+    it('settles an uncancelled clause that Deepgram declined to synthesize, so later clauses still speak', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-warn-no-audio', clientWs as never);
+
+      // Non-empty after stripMarkdownForSpeech so it is still sent, but there
+      // is nothing to say: Flux answers Flush with NO_AUDIO_GENERATED and no
+      // SpeechMetadata follows. Nothing was cancelled, so the old
+      // `cancelled &&` guard ignored it and stranded activeTts.
+      emitFinalText('sess-warn-no-audio', '🎉🎊✨🎈🎁🎀🥳. Real words follow after it. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const emojiSocket = socketAt(0);
+      emojiSocket.emit('open');
+      expect(JSON.parse(emojiSocket.sentMessages[0] as string).text).toBe('🎉🎊✨🎈🎁🎀🥳.');
+      emojiSocket.emit(
+        'message',
+        Buffer.from(JSON.stringify({ type: 'Warning', code: 'NO_AUDIO_GENERATED' })),
+        false
+      );
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
+      const next = socketAt(1);
+      next.emit('open');
+      expect(JSON.parse(next.sentMessages[0] as string).text).toBe('Real words follow after it.');
+
+      unregister('sess-warn-no-audio', clientWs as never);
+    });
+
+    it('normalizes a legacy off-grid stored speed before opening the connection', async () => {
+      // Rows written before the grid was enforced at the write boundary can
+      // still hold 0.72, which Deepgram rejects with SPEED_INCREMENT_INVALID
+      // on every connection. The stored value alone must not reach the URL.
+      mockUserSettingsService.get.mockResolvedValue({
+        voiceModeEnabled: true,
+        deepgramApiKeyEncrypted: 'enc:dg_secret',
+        voiceTtsModel: 'flux-haley-en',
+        voiceTtsSpeed: 0.72,
+      });
+      const clientWs = createFakeClientWs();
+      register('sess-legacy-speed', clientWs as never);
+
+      emitFinalText('sess-legacy-speed', 'Speaks at a legacy speed. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      expect(new URL(socketAt(0).url).searchParams.get('speed')).toBe('0.7');
+      unregister('sess-legacy-speed', clientWs as never);
+    });
+
+    it('keeps waiting for SpeechMetadata when a Warning arrives after audio has started, so speech is not clipped', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-warn-midstream', clientWs as never);
+
+      emitFinalText('sess-warn-midstream', 'Audio flows here. Then more words follow. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const socket = socketAt(0);
+      socket.emit('open');
+      // An unrecognized Warning before the first frame may still be followed
+      // by audio, so it must not drop the clause — only NO_AUDIO_GENERATED
+      // means nothing is coming.
+      socket.emit('message', Buffer.from(JSON.stringify({ type: 'Warning' })), false);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(FakeDeepgramSocket.instances).toHaveLength(1);
+
+      // And once audio is in flight a Warning is informational too —
+      // finishing on it would clip speech mid-utterance.
+      socket.emit('message', Buffer.from([1, 2, 3, 4]), true);
+      socket.emit('message', Buffer.from(JSON.stringify({ type: 'Warning' })), false);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(FakeDeepgramSocket.instances).toHaveLength(1);
+
+      // Only SpeechMetadata ends it, and then the queue drains normally.
+      socket.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
+      const second = socketAt(1);
+      second.emit('open');
+      expect(JSON.parse(second.sentMessages[0] as string).text).toBe('Then more words follow.');
+      unregister('sess-warn-midstream', clientWs as never);
     });
 
     it('claims activeTts synchronously so a synchronous burst of thinking deltas cannot spawn duplicate sockets', async () => {
@@ -610,17 +712,12 @@ describe('voiceNarrationService', () => {
 
       emitThinking('sess-thinking-connecting', 'Reasoning about the approach now. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const thinkingSocket = FakeDeepgramSocket.instances[0] as InstanceType<
-        typeof FakeDeepgramSocket
-      >;
+      const thinkingSocket = socketAt(0);
       // Deliberately never emit 'open' — the socket is still CONNECTING.
 
-      emitDelta('sess-thinking-connecting', {
-        type: 'session_delta',
-        data: { type: 'assistant_text_delta', text: 'The answer is 42.' },
-      });
+      emitFinalText('sess-thinking-connecting', 'The answer is 42.');
 
-      // No Clear could be sent (the socket never opened), but the pending
+      // No Interrupt could be sent (the socket never opened), but the pending
       // 'open' handler must still refuse to speak once it does fire.
       expect(thinkingSocket.sentMessages).toHaveLength(0);
       thinkingSocket.emit('open');
@@ -639,7 +736,7 @@ describe('voiceNarrationService', () => {
 
       emitThinking('sess-thinking-short', 'Let me look at the file and explain what it does. ');
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const ttsSocket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const ttsSocket = socketAt(0);
       ttsSocket.emit('open');
       expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({
         type: 'Speak',
@@ -663,7 +760,7 @@ describe('voiceNarrationService', () => {
       mockUserSettingsService.get.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'enc:dg_secret',
-        voiceTtsModel: 'aura-2-thalia-en',
+        voiceTtsModel: 'flux-haley-en',
         voiceTtsSpeed: 1,
       });
       emitThinking('sess-throws', 'This one should work fine now. ');
@@ -678,17 +775,12 @@ describe('voiceNarrationService', () => {
       const clientWs = createFakeClientWs();
       register('sess-stream', clientWs as never);
 
-      emitDelta('sess-stream', {
-        type: 'session_delta',
-        data: { type: 'assistant_text_delta', text: 'This is the first sentence. ' },
-      });
+      emitFinalText('sess-stream', 'This is the first sentence. ');
 
       // The rest of a long answer hasn't streamed in yet — narration must
       // not wait for turn-complete to start on the sentence already here.
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const firstSocket = FakeDeepgramSocket.instances[0] as InstanceType<
-        typeof FakeDeepgramSocket
-      >;
+      const firstSocket = socketAt(0);
       firstSocket.emit('open');
       expect(JSON.parse(firstSocket.sentMessages[0] as string)).toEqual({
         type: 'Speak',
@@ -702,30 +794,27 @@ describe('voiceNarrationService', () => {
       const clientWs = createFakeClientWs();
       register('sess-queue', clientWs as never);
 
-      emitDelta('sess-queue', {
-        type: 'session_delta',
-        data: {
-          type: 'assistant_text_delta',
-          text: 'Sentence one is here. Sentence two is here. Sentence three is here. ',
-        },
-      });
+      emitFinalText(
+        'sess-queue',
+        'Sentence one is here. Sentence two is here. Sentence three is here. '
+      );
 
       // All three sentences arrived in a single delta — only the first
       // should start speaking; the rest must queue, not drop.
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const first = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const first = socketAt(0);
       first.emit('open');
       expect(JSON.parse(first.sentMessages[0] as string).text).toBe('Sentence one is here.');
 
-      first.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+      first.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
-      const second = FakeDeepgramSocket.instances[1] as InstanceType<typeof FakeDeepgramSocket>;
+      const second = socketAt(1);
       second.emit('open');
       expect(JSON.parse(second.sentMessages[0] as string).text).toBe('Sentence two is here.');
 
-      second.emit('message', Buffer.from(JSON.stringify({ type: 'Flushed' })), false);
+      second.emit('message', Buffer.from(JSON.stringify({ type: 'SpeechMetadata' })), false);
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 3);
-      const third = FakeDeepgramSocket.instances[2] as InstanceType<typeof FakeDeepgramSocket>;
+      const third = socketAt(2);
       third.emit('open');
       expect(JSON.parse(third.sentMessages[0] as string).text).toBe('Sentence three is here.');
 
@@ -736,10 +825,7 @@ describe('voiceNarrationService', () => {
       const clientWs = createFakeClientWs();
       register('sess-trailing', clientWs as never);
 
-      emitDelta('sess-trailing', {
-        type: 'session_delta',
-        data: { type: 'assistant_text_delta', text: 'no punctuation at the end' },
-      });
+      emitFinalText('sess-trailing', 'no punctuation at the end');
 
       // Nothing to speak yet — buffered, not a complete clause.
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -748,7 +834,7 @@ describe('voiceNarrationService', () => {
       emitRuntimeUpdate('sess-trailing', 'IDLE');
 
       await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
-      const socket = FakeDeepgramSocket.instances[0] as InstanceType<typeof FakeDeepgramSocket>;
+      const socket = socketAt(0);
       socket.emit('open');
       expect(JSON.parse(socket.sentMessages[0] as string)).toEqual({
         type: 'Speak',
@@ -756,6 +842,104 @@ describe('voiceNarrationService', () => {
       });
 
       unregister('sess-trailing', clientWs as never);
+    });
+  });
+
+  describe('connection retry', () => {
+    it('retries a handshake failure that happens before open, and still speaks the clause', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-retry-ok', clientWs as never);
+
+      emitFinalText('sess-retry-ok', 'This clause should survive one bad handshake. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const first = socketAt(0);
+      // Fails before 'open' — the exact shape of a rejected handshake, as
+      // opposed to a mid-stream error after audio has already started.
+      first.emit('error', new Error('socket hang up'));
+
+      // A second connection attempt should follow after the retry delay.
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 2);
+      const second = socketAt(1);
+      second.emit('open');
+      expect(JSON.parse(second.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'This clause should survive one bad handshake.',
+      });
+
+      unregister('sess-retry-ok', clientWs as never);
+    });
+
+    it('gives up after exhausting retries and still drains the next queued clause', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-retry-exhausted', clientWs as never);
+
+      emitFinalText(
+        'sess-retry-exhausted',
+        'This clause always fails to connect. Second clause speaks fine. '
+      );
+
+      // Fail three times in a row (initial attempt + two retries) — every
+      // attempt for the first clause.
+      for (let i = 0; i < 3; i++) {
+        await vi.waitUntil(() => FakeDeepgramSocket.instances.length === i + 1);
+        const socket = socketAt(i);
+        socket.emit('error', new Error('socket hang up'));
+      }
+
+      // No further retry beyond the third attempt — but the queue still
+      // drains: the second clause gets its own fresh connection.
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 4);
+      const secondClause = socketAt(3);
+      secondClause.emit('open');
+      expect(JSON.parse(secondClause.sentMessages[0] as string)).toEqual({
+        type: 'Speak',
+        text: 'Second clause speaks fine.',
+      });
+
+      unregister('sess-retry-exhausted', clientWs as never);
+    });
+
+    it('does not retry a failure that happens after the socket already opened', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-retry-post-open', clientWs as never);
+
+      emitFinalText('sess-retry-post-open', 'Opens fine then drops mid-stream. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const socket = socketAt(0);
+      socket.emit('open');
+      socket.emit('error', new Error('connection reset'));
+
+      // Waits past the 300ms retry delay so a wrongly-scheduled retry would
+      // actually have fired by the time this asserts it didn't.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(FakeDeepgramSocket.instances).toHaveLength(1);
+
+      unregister('sess-retry-post-open', clientWs as never);
+    });
+
+    it('retries an unexpected-response rejection without an unhandled error event', async () => {
+      const clientWs = createFakeClientWs();
+      register('sess-retry-unexpected', clientWs as never);
+
+      emitFinalText('sess-retry-unexpected', 'Rejected with an HTTP status. ');
+
+      await vi.waitUntil(() => FakeDeepgramSocket.instances.length === 1);
+      const first = socketAt(0);
+      // Deepgram rejects the upgrade with a 400 while the socket is still
+      // CONNECTING, so aborting the handshake emits 'error' — which must
+      // not escape unhandled.
+      expect(() => first.emit('unexpected-response', {}, { statusCode: 400 })).not.toThrow();
+      expect(first.readyState).toBe(FakeDeepgramSocket.CLOSED);
+
+      const second = await vi.waitUntil(() => socketAt(1));
+      second.emit('open');
+      expect(JSON.parse(second.sentMessages[0] as string).text).toBe(
+        'Rejected with an HTTP status.'
+      );
+
+      unregister('sess-retry-unexpected', clientWs as never);
     });
   });
 });

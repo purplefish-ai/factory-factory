@@ -24,7 +24,12 @@ import {
   WorkspaceProviderSelection as CoreWorkspaceProviderSelection,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
-import { DEFAULT_DEEPGRAM_TTS_MODEL, DEFAULT_DEEPGRAM_TTS_SPEED } from '@/shared/deepgram-voices';
+import {
+  DEFAULT_DEEPGRAM_TTS_MODEL,
+  DEFAULT_DEEPGRAM_TTS_SPEED,
+  normalizeDeepgramTtsSpeed,
+  normalizeDeepgramVoiceModel,
+} from '@/shared/deepgram-voices';
 import {
   DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
   DEFAULT_VOICE_UTTERANCE_END_MS,
@@ -175,9 +180,21 @@ const exportedUserSettingsSchema = z.object({
   // just preferences. A restored install still needs its own key before
   // voiceModeEnabled has any effect (getConfig/mintGrantToken both require
   // deepgramApiKeyEncrypted), so restoring the toggle as-is is safe.
+  // A backup taken before the Flux upgrade still carries an `aura-2-*` voice
+  // (and possibly a speed below the current floor). Import writes these
+  // straight to UserSettings without replaying the migration, so normalize
+  // here instead of letting a restore reinstate a value Flux rejects.
   voiceModeEnabled: z.boolean().optional().default(false),
-  voiceTtsModel: z.string().optional().default(DEFAULT_DEEPGRAM_TTS_MODEL),
-  voiceTtsSpeed: z.number().optional().default(DEFAULT_DEEPGRAM_TTS_SPEED),
+  voiceTtsModel: z
+    .string()
+    .optional()
+    .default(DEFAULT_DEEPGRAM_TTS_MODEL)
+    .transform(normalizeDeepgramVoiceModel),
+  voiceTtsSpeed: z
+    .number()
+    .optional()
+    .default(DEFAULT_DEEPGRAM_TTS_SPEED)
+    .transform(normalizeDeepgramTtsSpeed),
   voiceUtteranceEndMs: z
     .number()
     .int()
