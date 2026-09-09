@@ -1,0 +1,38 @@
+src/client/features/workspace/diff-lines.tsx
+  s_3f656289a0040a::t_f0bc6cbfcdecbe 104-111,143
+  s_3f656289a0040a::t_3ef4adb457cfbf 1-103,112-142,144-164
+src/client/features/workspace/scroll-state.ts
+  s_3f656289a0040a::t_3ef4adb457cfbf 9,25-29,34,51,56
+src/client/features/workspace/diff-lines.test.tsx
+  s_3f656289a0040a::t_69c031bf80252c 11-13,23,31-46,65,67-72,82-83,112-116,141-145,158
+  s_3f656289a0040a::t_c8205c4d27014f 25-30
+  s_3f656289a0040a::t_621f3db66a4798 164-171,175-177,214
+  s_3f656289a0040a::t_27daa0b5c74b7f 139-140,146-148,152-157,163
+  s_3f656289a0040a::t_3ef4adb457cfbf 88
+  s_3f656289a0040a::t_a16fbf1f708d13 1-10,14-22,47-53,57-61,66,84-87,89-111,117-138
+  s_3f656289a0040a::t_00e471c3f7677b 54-56,62-64,178-180,186-193,213
+  s_3f656289a0040a::t_51b5a3b76c463b 73-81,149-151,159-162,172-174
+  s_3f656289a0040a::t_b82aade0d6ae3c 24,181-185,194-199,201-212
+src/client/features/workspace/use-diff-scroll.ts
+  s_3f656289a0040a::t_b1d150e21cedcd 106-110,112-115,133-136
+  s_3f656289a0040a::t_3ef4adb457cfbf 1,3-16,23-24,26-29,33-39,45-47,51-54,65-68,70-74,78-81,86,90-105,111,116,127-132,137-138,140
+  s_3f656289a0040a::t_f0bc6cbfcdecbe 2,17-22,25,30-32,40-44,48-50,55-64,69,75-77,82-85,87-89,117-126,139
+src/client/features/workspace/scroll-state.test.ts
+  s_3f656289a0040a::t_a16fbf1f708d13 25-33,35-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6bed4d39e531f93c31cad5c12063ead4d8b13362",
+  "prompts": {},
+  "sessions": {
+    "s_3f656289a0040a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08586-9699-74d2-b284-0145f58f7a5a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
