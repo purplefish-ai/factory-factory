@@ -22,29 +22,39 @@ interface WorkspaceActivityState {
 
 class WorkspaceActivityService extends EventEmitter {
   private workspaceStates = new Map<string, WorkspaceActivityState>();
+  private readonly notificationChains = new Map<string, Promise<void>>();
 
   constructor() {
     super();
 
-    // Listen for workspace idle events and trigger notification requests
-    this.on('workspace_idle', async ({ workspaceId, finishedAt, sessionCount }) => {
-      try {
-        const workspace = await workspaceAccessor.findById(workspaceId);
-        if (!workspace) {
-          logger.warn('Workspace not found for notification', { workspaceId });
-          return;
-        }
+    // Serialize each workspace's lookups so busy intervals notify in idle order.
+    this.on('workspace_idle', ({ workspaceId, finishedAt, sessionCount }) => {
+      const previous = this.notificationChains.get(workspaceId) ?? Promise.resolve();
+      const notification = previous
+        .then(async () => {
+          const workspace = await workspaceAccessor.findById(workspaceId);
+          if (!workspace) {
+            logger.warn('Workspace not found for notification', { workspaceId });
+            return;
+          }
 
-        // Emit event to frontend for suppression check
-        this.emit('request_notification', {
-          workspaceId,
-          workspaceName: workspace.name,
-          sessionCount,
-          finishedAt,
+          // Emit event to frontend for suppression check.
+          this.emit('request_notification', {
+            workspaceId,
+            workspaceName: workspace.name,
+            sessionCount,
+            finishedAt,
+          });
+        })
+        .catch((error) => {
+          logger.error('Failed to process workspace idle event', toError(error), { workspaceId });
+        })
+        .finally(() => {
+          if (this.notificationChains.get(workspaceId) === notification) {
+            this.notificationChains.delete(workspaceId);
+          }
         });
-      } catch (error) {
-        logger.error('Failed to process workspace idle event', toError(error), { workspaceId });
-      }
+      this.notificationChains.set(workspaceId, notification);
     });
   }
 

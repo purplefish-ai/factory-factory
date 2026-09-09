@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const { mockFindById } = vi.hoisted(() => ({
+  mockFindById: vi.fn().mockResolvedValue({ name: 'Test Workspace', agentSessions: [] }),
+}));
+
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
-    findById: vi.fn().mockResolvedValue({ name: 'Test Workspace', agentSessions: [] }),
+    findById: mockFindById,
   },
 }));
 
 import { workspaceActivityService } from './activity.service';
+
+async function flushNotifications(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 describe('WorkspaceActivityService', () => {
   it('counts unique sessions in each busy interval for notifications', async () => {
@@ -34,7 +42,7 @@ describe('WorkspaceActivityService', () => {
       workspaceActivityService.markSessionRunning(workspaceId, 's1');
       workspaceActivityService.markSessionIdle(workspaceId, 's1');
       workspaceActivityService.markSessionIdle(workspaceId, 's1');
-      await Promise.resolve();
+      await flushNotifications();
 
       expect(notifications).toEqual([3, 1]);
     } finally {
@@ -42,9 +50,105 @@ describe('WorkspaceActivityService', () => {
     }
   });
 
+  it('preserves busy interval order while an earlier workspace lookup is pending', async () => {
+    const workspaceId = 'notification-order';
+    workspaceIds.push(workspaceId);
+    const lookup = Promise.withResolvers<{ name: string }>();
+    mockFindById.mockReturnValueOnce(lookup.promise);
+    const notifications: number[] = [];
+    const onNotification = (event: { workspaceId: string; sessionCount: number }) => {
+      if (event.workspaceId === workspaceId) {
+        notifications.push(event.sessionCount);
+      }
+    };
+    workspaceActivityService.on('request_notification', onNotification);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's2');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's2');
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      await flushNotifications();
+
+      expect(notifications).toEqual([]);
+      expect(mockFindById).toHaveBeenCalledTimes(1);
+      lookup.resolve({ name: 'Test Workspace' });
+      await flushNotifications();
+      expect(notifications).toEqual([2, 1]);
+    } finally {
+      lookup.resolve({ name: 'Test Workspace' });
+      await flushNotifications();
+      workspaceActivityService.off('request_notification', onNotification);
+    }
+  });
+
+  it('allows other workspaces to notify while a workspace lookup is pending', async () => {
+    const workspaceId = 'notification-slow';
+    const otherWorkspaceId = 'notification-independent';
+    workspaceIds.push(workspaceId, otherWorkspaceId);
+    const lookup = Promise.withResolvers<{ name: string }>();
+    mockFindById.mockReturnValueOnce(lookup.promise);
+    const notifications: string[] = [];
+    const onNotification = (event: { workspaceId: string }) => {
+      notifications.push(event.workspaceId);
+    };
+    workspaceActivityService.on('request_notification', onNotification);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(otherWorkspaceId, 's1');
+      workspaceActivityService.markSessionIdle(otherWorkspaceId, 's1');
+      await flushNotifications();
+
+      expect(notifications).toEqual([otherWorkspaceId]);
+      lookup.resolve({ name: 'Test Workspace' });
+      await flushNotifications();
+      expect(notifications).toEqual([otherWorkspaceId, workspaceId]);
+    } finally {
+      lookup.resolve({ name: 'Test Workspace' });
+      await flushNotifications();
+      workspaceActivityService.off('request_notification', onNotification);
+    }
+  });
+
+  it('continues queued notifications after a workspace lookup fails', async () => {
+    const workspaceId = 'notification-failure';
+    workspaceIds.push(workspaceId);
+    const lookup = Promise.withResolvers<{ name: string }>();
+    mockFindById.mockReturnValueOnce(lookup.promise);
+    const onNotification = vi.fn();
+    workspaceActivityService.on('request_notification', onNotification);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's2');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's2');
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      await flushNotifications();
+      expect(onNotification).not.toHaveBeenCalled();
+
+      lookup.reject(new Error('Lookup failed'));
+      await flushNotifications();
+      expect(onNotification).toHaveBeenCalledExactlyOnceWith({
+        workspaceId,
+        workspaceName: 'Test Workspace',
+        sessionCount: 1,
+        finishedAt: expect.any(Date),
+      });
+    } finally {
+      lookup.resolve({ name: 'Test Workspace' });
+      await flushNotifications();
+      workspaceActivityService.off('request_notification', onNotification);
+    }
+  });
+
   const workspaceIds: string[] = [];
 
-  afterEach(() => {
+  afterEach(async () => {
+    await flushNotifications();
+    mockFindById.mockClear();
     for (const workspaceId of workspaceIds) {
       workspaceActivityService.clearWorkspace(workspaceId);
     }
