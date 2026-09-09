@@ -35,8 +35,15 @@ it('completes provisioning while a background descendant still holds output pipe
     const result = await startupScriptService.runStartupScript(
       { id: 'background-init', worktreePath } as never,
       {
-        startupScriptCommand:
-          '(sleep 2; printf "late output\\n" && printf alive > background-wrote; sleep 30) & printf "descendant:%s\\n" "$!"; echo complete',
+        // exec keeps the reported PID on the only background process, including
+        // during the initial delay, so cleanup cannot orphan a sleep child.
+        startupScriptCommand: `(exec node -e '
+          setTimeout(() => {
+            process.stdout.write("late output\\n");
+            require("node:fs").writeFileSync("background-wrote", "alive");
+          }, 2000);
+          setTimeout(() => {}, 30000);
+        ') & printf "descendant:%s\\n" "$!"; echo complete`,
         startupScriptTimeout: 10,
       } as never
     );
@@ -48,7 +55,7 @@ it('completes provisioning while a background descendant still holds output pipe
       .toBe('alive');
     expect(result.stdout).not.toContain('late output');
     expect(descendantPid).toBeDefined();
-    // Completion must precede the inherited pipe closing when sleep exits.
+    // Completion must precede the inherited pipe closing when the descendant exits.
     expect(() => process.kill(descendantPid!, 0)).not.toThrow();
     expect(markReady).toHaveBeenCalledWith('background-init');
     expect(clearInitScriptPid).toHaveBeenCalledOnce();
