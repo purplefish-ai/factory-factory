@@ -50,13 +50,13 @@ lower their exact ceilings; it never allows growth.
 Read the applicable area guide before editing:
 
 - [Backend services](src/backend/services/AGENTS.md): `service/` owns logic;
-  `resources/` alone accesses Prisma. Model writers and service dependencies are
+  `resources/` owns Prisma access. Model writers and service dependencies are
   declared in `src/backend/services/registry.ts`. Cross-service coordination goes
   in `src/backend/orchestration/`; root `services/*.ts` is infrastructure only.
 - [Client features](src/client/features/AGENTS.md): features own UI and hooks;
-  routes compose them. `src/components/`, `src/hooks/`, and `src/lib/` are reserved
-  for the shadcn/ui system, as pinned by `components.json`.
-- Import other service capsules/features through their public barrel, e.g.
+  routes compose them. `src/components/` is reserved for shadcn/ui; put client
+  app code in the applicable `src/client/` area.
+- Use service/feature barrels across boundaries (see area-guide exceptions), e.g.
   `@/backend/services/session`. Client code may import backend only for tRPC types.
 - `src/shared/` imports neither backend nor client. No circular imports or
   `await import()`; extract shared modules instead.

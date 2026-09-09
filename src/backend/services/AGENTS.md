@@ -8,12 +8,12 @@ Root `services/*.ts` is infrastructure only, as declared in `registry.ts`.
 
 Enforced by dependency-cruiser and ownership checks:
 
-- All external callers import capsules through their top-level barrel.
+- External callers use capsule barrels, except `orchestration/data-backup.service.ts`
+  may import `settings/resources/data-backup.accessor.ts` directly.
   Capsules declare dependencies in `registry.ts`.
-- Only the owning service layer calls its resources; only `resources/` imports
-  `db.ts`. Resources stay pure data access: no imports from
-  `service/`, `orchestration/`, `routers/`, `trpc/`, or `agents/`, and no access to
-  another capsule's resources.
+- Service logic uses its capsule's accessors. Resources may compose sibling
+  accessors but cannot import another capsule's resources or application layers
+  (`service/`, `orchestration/`, `routers/`, `trpc/`, `agents/`).
 - Assign each Prisma model one writer in `registry.ts`; add new models to
   `prismaModelNames` and assign an owner.
 - Services stay transport-neutral: no routers, tRPC, `@trpc/server`, or
