@@ -1,0 +1,24 @@
+docs/architecture/agent-runtime.md
+  s_7788ac8a7a7a44::t_081bfbaeec111c 26-30
+src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.cancellation.test.ts
+  s_7788ac8a7a7a44::t_229b14fdd9db52 1-142
+src/backend/services/session/service/acp/codex-app-server-adapter/stream-event-handler.ts
+  s_7788ac8a7a7a44::t_dcb80fbabae1a0 219,229,328-330
+  s_7788ac8a7a7a44::t_081bfbaeec111c 109-114,220,224-225,333-334,336,338,346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "985320a9401bf90352cb41e2b7400e7852dece8b",
+  "prompts": {},
+  "sessions": {
+    "s_7788ac8a7a7a44": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0839f-01eb-7553-b961-2fb6eae2f50a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
