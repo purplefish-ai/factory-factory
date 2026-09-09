@@ -258,8 +258,45 @@ describe('clipboard:readImagePng IPC handler', () => {
     );
   });
 
+  it.each(['image/tiff', 'image/webp', 'image/bmp', 'image/gif'])(
+    'accepts the normalized image payload when only %s is advertised',
+    async (type) => {
+      const { lifecycle, ipcMain } = createTestLifecycle({
+        clipboard: { read: async () => [imageItem(type, new Uint8Array([1, 2, 3]))] },
+        nativeImage: {
+          createFromBuffer: (bytes) => ({
+            isEmpty: () => !bytes.equals(Buffer.from([1, 2, 3])),
+            toPNG: () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+          }),
+        },
+      });
+      lifecycle.registerIpcHandlers();
+      const window = await lifecycle.createWindow();
+      expect(
+        await getClipboardHandler(ipcMain)({ senderFrame: window?.webContents.mainFrame })
+      ).toBe('iVBORw==');
+    }
+  );
+
+  it('prefers JPEG over an earlier alternative image representation', async () => {
+    const { handler, frame } = await setup([
+      imageItem('image/tiff', new Uint8Array([1])),
+      imageItem('image/jpeg', new Uint8Array([2])),
+    ]);
+    expect(await handler({ senderFrame: frame })).toBe('Ag==');
+  });
+
   it.each([
     ['empty clipboard', []],
+    [
+      'raw TIFF without a normalized image type',
+      [imageItem('electron application/osclipboard;format="public.tiff"', new Uint8Array([1]))],
+    ],
+    [
+      'oversized alternative image',
+      [imageItem('image/webp', new Uint8Array(10 * 1024 * 1024 + 1))],
+    ],
+    ['undecodable alternative image', [imageItem('image/tiff', new Uint8Array())]],
     ['text-only clipboard', [imageItem('text/plain', new Uint8Array([65]))]],
     ['empty image', [imageItem('image/png', new Uint8Array())]],
     ['oversized image', [imageItem('image/png', new Uint8Array(10 * 1024 * 1024 + 1))]],

@@ -108,10 +108,16 @@ async function readClipboardPng(
   nativeImage: NativeImageFactoryLike
 ): Promise<string | null> {
   const items = await clipboard.read();
-  // Prefer a native PNG representation; decode JPEG when that is all the OS offers.
-  const mimeType = items.some((item) => item.types.includes('image/png'))
-    ? 'image/png'
-    : 'image/jpeg';
+  const types = items.flatMap((item) => item.types);
+  // Prefer PNG/JPEG, but accept other advertised image types: Electron's read-side
+  // getType() normalizes image/* to PNG (or JPEG when explicitly requested).
+  // Raw osclipboard payloads do not receive that conversion.
+  const mimeType =
+    ['image/png', 'image/jpeg'].find((type) => types.includes(type)) ??
+    types.find((type) => type.startsWith('image/'));
+  if (!mimeType) {
+    return null;
+  }
   const item = items.find((candidate) => candidate.types.includes(mimeType));
   if (!item) {
     return null;
