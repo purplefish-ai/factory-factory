@@ -9,6 +9,39 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
 import { workspaceActivityService } from './activity.service';
 
 describe('WorkspaceActivityService', () => {
+  it('counts unique sessions in each busy interval for notifications', async () => {
+    const workspaceId = 'notification-count';
+    workspaceIds.push(workspaceId);
+    const notifications: number[] = [];
+    const onNotification = (event: { workspaceId: string; sessionCount: number }) => {
+      if (event.workspaceId === workspaceId) {
+        notifications.push(event.sessionCount);
+      }
+    };
+    workspaceActivityService.on('request_notification', onNotification);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's2');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionRunning(workspaceId, 's3');
+      workspaceActivityService.markSessionIdle(workspaceId, 's2');
+      workspaceActivityService.markSessionIdle(workspaceId, 's3');
+
+      // Start another interval before the prior notification's DB lookup resolves.
+      workspaceActivityService.markSessionRunning(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      workspaceActivityService.markSessionIdle(workspaceId, 's1');
+      await Promise.resolve();
+
+      expect(notifications).toEqual([3, 1]);
+    } finally {
+      workspaceActivityService.off('request_notification', onNotification);
+    }
+  });
+
   const workspaceIds: string[] = [];
 
   afterEach(() => {

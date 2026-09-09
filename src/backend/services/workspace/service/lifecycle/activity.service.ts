@@ -15,6 +15,7 @@ const logger = createLogger('workspace-activity');
 interface WorkspaceActivityState {
   workspaceId: string;
   runningSessions: Map<string, number>; // Session ID to current activity generation.
+  participatingSessions: Set<string>; // Unique sessions in the current busy interval.
   currentGeneration: number;
   lastActivityAt: Date;
 }
@@ -26,7 +27,7 @@ class WorkspaceActivityService extends EventEmitter {
     super();
 
     // Listen for workspace idle events and trigger notification requests
-    this.on('workspace_idle', async ({ workspaceId, finishedAt }) => {
+    this.on('workspace_idle', async ({ workspaceId, finishedAt, sessionCount }) => {
       try {
         const workspace = await workspaceAccessor.findById(workspaceId);
         if (!workspace) {
@@ -38,7 +39,7 @@ class WorkspaceActivityService extends EventEmitter {
         this.emit('request_notification', {
           workspaceId,
           workspaceName: workspace.name,
-          sessionCount: workspace.agentSessions.length,
+          sessionCount,
           finishedAt,
         });
       } catch (error) {
@@ -57,6 +58,7 @@ class WorkspaceActivityService extends EventEmitter {
       state = {
         workspaceId,
         runningSessions: new Map(),
+        participatingSessions: new Set(),
         currentGeneration: 0,
         lastActivityAt: new Date(),
       };
@@ -64,6 +66,10 @@ class WorkspaceActivityService extends EventEmitter {
     }
 
     const wasIdle = state.runningSessions.size === 0;
+    if (wasIdle) {
+      state.participatingSessions.clear();
+    }
+    state.participatingSessions.add(sessionId);
     state.currentGeneration += 1;
     const generation = state.currentGeneration;
     state.runningSessions.set(sessionId, generation);
@@ -127,6 +133,7 @@ class WorkspaceActivityService extends EventEmitter {
       this.emit('workspace_idle', {
         workspaceId,
         finishedAt: state.lastActivityAt,
+        sessionCount: state.participatingSessions.size,
       });
     }
   }

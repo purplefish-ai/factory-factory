@@ -128,3 +128,11 @@ and excludes, and reftable state. Object and reflog writes are ignored because
 the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
+
+## Completion notifications
+
+Workspace completion notifications count the distinct sessions that worked in
+the uninterrupted busy interval ending at the idle transition. Historical idle
+sessions do not inflate the count, and repeated turns from one session count
+once. The idle event captures the count before the asynchronous workspace lookup,
+so a subsequent interval cannot change an earlier notification.
