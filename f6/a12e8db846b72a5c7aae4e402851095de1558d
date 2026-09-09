@@ -1,0 +1,25 @@
+src/backend/services/session/service/lifecycle/acp-config-snapshot.ts
+  s_36acb4b29c9711::t_96ce1e7d42da2e 30
+docs/architecture/agent-runtime.md
+  s_36acb4b29c9711::t_06d52240bf8b08 13-14
+src/backend/services/session/service/lifecycle/session.config-validation.test.ts
+  s_36acb4b29c9711::t_799e7d3558a3d7 30-67
+src/backend/services/session/service/lifecycle/acp-config-snapshot.test.ts
+  s_36acb4b29c9711::t_96ce1e7d42da2e 23-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f6a12e8db846b72a5c7aae4e402851095de1558d",
+  "prompts": {},
+  "sessions": {
+    "s_36acb4b29c9711": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a082ce-6882-7591-9cb0-4d9cce342a4c",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
