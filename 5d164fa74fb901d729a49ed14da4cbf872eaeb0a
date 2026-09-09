@@ -1,0 +1,26 @@
+src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.ts
+  s_010c3b512f07b8::t_839f7a30fe60a3 91,98-99
+src/backend/orchestration/snapshot-reconciliation.streaming.test.ts
+  s_010c3b512f07b8::t_0f6bafdc2be329 52
+  s_010c3b512f07b8::t_704ee44acda3d2 20,128-171
+src/backend/orchestration/snapshot-reconciliation.orchestrator.ts
+  s_010c3b512f07b8::t_839f7a30fe60a3 396-401
+docs/architecture/workspace-state.md
+  s_010c3b512f07b8::t_839f7a30fe60a3 113-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5d164fa74fb901d729a49ed14da4cbf872eaeb0a",
+  "prompts": {},
+  "sessions": {
+    "s_010c3b512f07b8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a082c9-a960-7f80-9164-842b3b84fc22",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
