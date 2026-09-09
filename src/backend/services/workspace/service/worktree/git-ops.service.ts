@@ -169,8 +169,21 @@ class GitOpsService {
       throw new Error('Refusing to remove worktree because requested path does not match project');
     }
 
+    // Git records real paths. Resolve the base separately so a missing worktree
+    // still matches its registration and can be removed through Git.
+    let canonicalWorktreePath = expectedWorktreePath;
+    try {
+      canonicalWorktreePath = path.join(
+        await fs.realpath(path.dirname(expectedWorktreePath)),
+        worktreeName
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
     const registeredWorktree = (await gitClient.listWorktreesWithBranches()).find(
-      (entry) => path.resolve(entry.path) === expectedWorktreePath
+      (entry) => path.resolve(entry.path) === canonicalWorktreePath
     );
     if (registeredWorktree) {
       try {
