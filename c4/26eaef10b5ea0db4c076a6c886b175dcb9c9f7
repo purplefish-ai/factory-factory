@@ -1,0 +1,21 @@
+src/backend/services/AGENTS.md
+  s_89996546f53191::t_ac5f69603ff3ce 11-12,14-16
+AGENTS.md
+  s_89996546f53191::t_ac5f69603ff3ce 53,57-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c426eaef10b5ea0db4c076a6c886b175dcb9c9f7",
+  "prompts": {},
+  "sessions": {
+    "s_89996546f53191": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a083ab-7013-7b22-bf5c-a4f500ee3a62",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
