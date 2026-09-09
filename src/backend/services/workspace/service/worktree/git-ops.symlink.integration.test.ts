@@ -22,8 +22,8 @@ afterEach(async () => {
 });
 
 describe('worktree removal through a symlinked base directory', () => {
-  it.each([false, true])(
-    'clears Git registration when directory is missing: %s',
+  it.each(['present', 'worktree-missing', 'base-link-missing'])(
+    'clears Git registration after resolving the base: %s',
     async (missing) => {
       testRoot = await mkdtemp(path.join(tmpdir(), 'ff-worktree-symlink-'));
       const repoPath = path.join(testRoot, 'repo');
@@ -46,8 +46,18 @@ describe('worktree removal through a symlinked base directory', () => {
       );
       const worktreePath = path.join(worktreeBasePath, 'workspace');
       await git('worktree', 'add', '-b', 'test-branch', worktreePath);
-      if (missing) {
+      if (missing === 'worktree-missing') {
         await rm(worktreePath, { recursive: true, force: true });
+      }
+
+      if (missing === 'base-link-missing') {
+        await rm(worktreeBasePath);
+        await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });
+        expect((await git('worktree', 'list', '--porcelain')).stdout).toContain(
+          'refs/heads/test-branch'
+        );
+        // Restoring the link recovers the identity needed for safe Git cleanup.
+        await symlink(actualBase, worktreeBasePath, 'dir');
       }
 
       await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });

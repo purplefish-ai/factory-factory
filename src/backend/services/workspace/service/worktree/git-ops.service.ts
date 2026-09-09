@@ -4,11 +4,14 @@ import { GitClientFactory } from '@/backend/clients/git.client';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { gitCommand } from '@/backend/lib/shell';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   getStats,
   type WorkspaceGitStats,
   workspaceGitStateService,
 } from '@/backend/services/workspace-git-state.service';
+
+const logger = createLogger('git-ops');
 
 export type { WorkspaceGitStats };
 
@@ -181,6 +184,10 @@ class GitOpsService {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
       }
+      logger.warn(
+        'Cannot resolve worktree base; checking only the configured path. Restore missing base symlinks to clean up canonical Git registrations.',
+        { worktreePath, worktreeBasePath: path.dirname(expectedWorktreePath) }
+      );
     }
     const registeredWorktree = (await gitClient.listWorktreesWithBranches()).find(
       (entry) => path.resolve(entry.path) === canonicalWorktreePath
