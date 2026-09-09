@@ -34,7 +34,10 @@ labels, calendar sizing and week-number range styling, and current toast styling
   confirmation dialogs, prompt cards and tab buttons are not registry components.
 - Calendar uses `@daypicker/react` v10, retaining the package migration from main.
 - Slider thumb keys follow positions rather than changing values, preserving
-  focus during controlled updates.
+  focus during controlled updates. Omitted values retain Radix's single-thumb
+  default, and thumb surfaces use the application background in both themes.
+- Menu inset attributes are present only when enabled. Keep semantic popover
+  headings, visible tab-panel focus rings, and the existing sheet title size.
 
 ## CSS and dependencies
 
@@ -61,6 +64,8 @@ client/server directives.
 
 Run the root AGENTS.md checks, `pnpm knip`, `pnpm build`, and
 `pnpm build:storybook`. The `UI/Primitives`, `UI/Button`, `UI/Badge`, and `UI/Dialog`
-stories cover the refreshed controls. Check light/dark themes, narrow screens,
+stories cover the refreshed controls. `UI/Primitives Accessibility` adds browser
+regressions for menu padding, keyboard focus, themed sliders, and sheet headings.
+Check light/dark themes, narrow screens,
 keyboard interaction, overlays, and reduced motion. The co-located primitive and
 persistence tests protect behavioral contracts.

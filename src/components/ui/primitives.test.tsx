@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Button } from './button';
 import { CommandDialog, CommandInput, CommandList } from './command';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './dialog';
+import { PopoverTitle } from './popover';
 import { ScrollArea } from './scroll-area';
 import { Slider } from './slider';
 
@@ -38,6 +39,26 @@ async function render(children: ReactNode) {
 }
 
 describe('refreshed UI primitives', () => {
+  it('exposes popover titles as headings and forwards their heading refs', async () => {
+    const ref = createRef<HTMLHeadingElement>();
+    await render(<PopoverTitle ref={ref}>Workspace details</PopoverTitle>);
+    const heading = container.querySelector('h2');
+    expect(heading?.textContent).toBe('Workspace details');
+    expect(ref.current).toBe(heading);
+  });
+
+  it('defaults to one keyboard-operable slider thumb at the minimum', async () => {
+    await render(<Slider min={10} max={20} />);
+    const thumbs = container.querySelectorAll<HTMLElement>('[role=slider]');
+    expect(thumbs).toHaveLength(1);
+    expect(thumbs[0]?.getAttribute('aria-valuenow')).toBe('10');
+    await act(() => {
+      thumbs[0]!.focus();
+      thumbs[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    expect(thumbs[0]?.getAttribute('aria-valuenow')).toBe('11');
+  });
+
   it('exposes the scrolling viewport and delivers its scroll events to file viewers', async () => {
     const viewportRef = createRef<HTMLDivElement>();
     const rootRef = createRef<HTMLDivElement>();
