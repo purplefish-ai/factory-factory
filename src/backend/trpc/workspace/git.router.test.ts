@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -96,6 +97,8 @@ describe('workspaceGitRouter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGitCommand.mockReset();
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
     rootDir = join(tmpdir(), `workspace-git-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     mkdirSync(rootDir, { recursive: true });
   });
@@ -331,6 +334,60 @@ describe('workspaceGitRouter', () => {
       code: 'PAYLOAD_TOO_LARGE',
       message: expect.stringContaining('1 MiB'),
     });
+  });
+
+  it.each([12, 1024 * 1024 + 1])(
+    'preserves an empty diff for an unchanged tracked file of %i bytes',
+    async (size) => {
+      const runGit = (args: string[]) =>
+        execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+          cwd: rootDir,
+          encoding: 'utf-8',
+        });
+      runGit(['init', '--initial-branch=main']);
+      writeFileSync(join(rootDir, 'tracked.txt'), 'a'.repeat(size));
+      runGit(['add', '--', 'tracked.txt']);
+      runGit([
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        'commit',
+        '-m',
+        'Initial',
+      ]);
+      mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+        workspace: { id: 'w1', project: { defaultBranch: 'main' } },
+        worktreePath: rootDir,
+      });
+      mockGetMergeBase.mockResolvedValue(null);
+      mockGitCommand.mockImplementation((args: string[]) => ({
+        code: 0,
+        stdout: runGit(args),
+        stderr: '',
+      }));
+
+      await expect(
+        createCaller().getFileDiff({ workspaceId: 'w1', filePath: 'tracked.txt' })
+      ).resolves.toEqual({ diff: '' });
+    }
+  );
+
+  it('reports a tracked-file lookup failure without fabricating a new-file diff', async () => {
+    writeFileSync(join(rootDir, 'tracked.txt'), 'existing content');
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+      workspace: { id: 'w1', project: { defaultBranch: 'main' } },
+      worktreePath: rootDir,
+    });
+    mockGetMergeBase.mockResolvedValue(null);
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 128, stdout: '', stderr: 'index unavailable' });
+
+    await expect(
+      createCaller().getFileDiff({ workspaceId: 'w1', filePath: 'tracked.txt' })
+    ).rejects.toThrow('Git tracked-file check failed: index unavailable');
   });
 
   it('handles getFileDiff validation, read failures, direct success, and git errors', async () => {

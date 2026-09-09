@@ -27,6 +27,17 @@ async function getSnapshotForWorkspace(ctx: Context, workspaceId: string) {
   });
 }
 
+async function isTrackedFile(worktreePath: string, filePath: string): Promise<boolean> {
+  const result = await gitCommand(
+    ['--literal-pathspecs', 'ls-files', '--cached', '-z', '--', filePath],
+    worktreePath
+  );
+  if (result.code !== 0) {
+    throw new Error(`Git tracked-file check failed: ${result.stderr}`);
+  }
+  return result.stdout !== '';
+}
+
 export const workspaceGitRouter = router({
   // Get git status for workspace
   getGitStatus: publicProcedure
@@ -144,6 +155,10 @@ export const workspaceGitRouter = router({
 
       // If still empty, try to show the file for new untracked files
       if (result.stdout.trim() === '' && result.code === 0) {
+        if (await isTrackedFile(worktreePath, input.filePath)) {
+          return { diff: '' };
+        }
+
         // For untracked files, show bounded files as an addition
         const fullPath = path.join(worktreePath, input.filePath);
         let preview: Awaited<ReturnType<typeof readFilePrefix>>;

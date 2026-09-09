@@ -1,14 +1,21 @@
-import { open } from 'node:fs/promises';
+import { constants, type Stats } from 'node:fs';
+import { open, stat } from 'node:fs/promises';
 import { MAX_FILE_SIZE } from './file-helpers';
+
+function assertRegularFile(stats: Stats) {
+  if (!stats.isFile()) {
+    throw new Error(stats.isDirectory() ? 'Path is a directory' : 'Path is not a regular file');
+  }
+}
 
 /** Read at most one preview plus a byte of lookahead, even if the file grows. */
 export async function readFilePrefix(fullPath: string) {
-  const handle = await open(fullPath, 'r');
+  assertRegularFile(await stat(fullPath));
+  // A regular file can be replaced with a FIFO between stat and open.
+  const handle = await open(fullPath, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stats = await handle.stat();
-    if (stats.isDirectory()) {
-      throw new Error('Path is a directory');
-    }
+    assertRegularFile(stats);
 
     const buffer = Buffer.allocUnsafe(MAX_FILE_SIZE + 1);
     let offset = 0;

@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { closeSync, constants, openSync } from 'node:fs';
 import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +25,7 @@ describe('workspace file previews', () => {
   let chunkSize: number | undefined;
   let readError: Error | undefined;
   let replaceOnRead: string | undefined;
+  let replaceWithFifoOnOpen: boolean;
   const readLengths: number[] = [];
   const handles: Awaited<ReturnType<typeof open>>[] = [];
 
@@ -31,9 +34,15 @@ describe('workspace file previews', () => {
     chunkSize = undefined;
     readError = undefined;
     replaceOnRead = undefined;
+    replaceWithFifoOnOpen = false;
     readLengths.length = 0;
     const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
     vi.mocked(open).mockImplementation(async (...args) => {
+      if (replaceWithFifoOnOpen) {
+        replaceWithFifoOnOpen = false;
+        await rm(join(rootDir, 'preview.txt'));
+        execFileSync('mkfifo', [join(rootDir, 'preview.txt')]);
+      }
       const handle = await actual.open(...args);
       handles.push(handle);
       const originalRead = handle.read;
@@ -160,11 +169,41 @@ describe('workspace file previews', () => {
     expect(handles.at(-1)?.close).toHaveBeenCalledOnce();
   });
 
-  it('rejects directories and closes the descriptor', async () => {
+  it('rejects directories before opening a descriptor', async () => {
     await mkdir(join(rootDir, 'preview.txt'));
     await expect(readPreview()).rejects.toThrow('Path is a directory');
-    expect(handles.at(-1)?.close).toHaveBeenCalledOnce();
+    expect(handles).toHaveLength(0);
   });
+
+  it.skipIf(process.platform === 'win32').each([false, true])(
+    'rejects a FIFO without waiting for a writer (replaced during open: %s)',
+    async (replacedDuringOpen) => {
+      const fullPath = join(rootDir, 'preview.txt');
+      if (replacedDuringOpen) {
+        await writeFile(fullPath, 'regular file');
+        replaceWithFifoOnOpen = true;
+      } else {
+        execFileSync('mkfifo', [fullPath]);
+      }
+      // Release a regressed blocking open so a failure cannot strand a worker.
+      let neededWriter = false;
+      const release = setTimeout(() => {
+        neededWriter = true;
+        const writer = openSync(fullPath, constants.O_RDWR | constants.O_NONBLOCK);
+        closeSync(writer);
+      }, 1000);
+      try {
+        await expect(readPreview()).rejects.toThrow('Path is not a regular file');
+        expect(neededWriter).toBe(false);
+        expect(readLengths).toEqual([]);
+        if (replacedDuringOpen) {
+          expect(handles.at(-1)?.close).toHaveBeenCalledOnce();
+        }
+      } finally {
+        clearTimeout(release);
+      }
+    }
+  );
 
   it('keeps valid complete Unicode and malformed trailing bytes at EOF', async () => {
     await writeFile(
