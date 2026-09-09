@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade builds and typechecks to TypeScript 7.0.2 while retaining the TypeScript 6 compiler API for tooling; update dependency-cruiser to 18.2.0, lint-staged to 17.5.0, concurrently to 10.0.5, and Supertest types to 7.2.1
 - Upgrade pnpm to 12.3.4, migrate dependency build permissions, and update the verified Docker bootstrap
 - Require Node.js 26.8.1 or newer, update development and release environments, and align Node.js types
 - Upgrade the ACP SDK from 0.15.0 to 1.4.0, matching Claude ACP, migrate model switching to the supported config API, and handle the expanded config and MCP transport types

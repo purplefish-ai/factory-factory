@@ -110,6 +110,11 @@ Use pnpm 12.3.4, pinned in `package.json`. Dependency build permissions live in
 `pnpm-workspace.yaml` under `allowBuilds`; review new build scripts with
 `pnpm approve-builds` when adding or updating dependencies.
 
+Development requires Git 2.32 or newer for lint-staged. Builds and typechecks use
+TypeScript 7 through the `@typescript/native` package alias. The `typescript`
+alias provides Microsoft's TypeScript 6 compatibility API for guardrail scripts
+and tools that parse source files; `tsc` runs version 7 and `tsc6` runs version 6.
+
 ```bash
 git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
