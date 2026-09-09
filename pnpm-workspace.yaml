@@ -21,6 +21,8 @@ packageExtensions:
       electron-builder-squirrel-windows: 26.16.1
 
 overrides:
+  # Refresh Claude SDK permission fixes; remove when ACP advances its exact pin.
+  '@agentclientprotocol/claude-agent-acp>@anthropic-ai/claude-agent-sdk': 0.3.266
   # Prisma 7 still pins versions affected by GHSA-ggr8-5vv4-36mx and MySQL2 advisories.
   '@prisma/config>deepmerge-ts': 8.0.2
   'prisma>mysql2': 3.24.4

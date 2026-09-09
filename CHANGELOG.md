@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade Linear SDK to 94, better-sqlite3 to 13, Chalk to 6, Commander to 15, and DayPicker to 10; migrate the calendar to `@daypicker/react` and preserve its selection, navigation, and dropdown styling
+
 - Upgrade Electron to 44.3.0, require macOS 13 or newer for the desktop app, and migrate clipboard image paste to the asynchronous clipboard API
 
 - Upgrade Vite to 8.2.2 and its React plugin to 6.1.1; update Vitest and V8 coverage to 5.0.0, migrate the chat grouping benchmark API, and upgrade jsdom to 30.0.1
@@ -24,9 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Rebuild and cache Prisma's separate SQLite driver for Electron alongside the N-API driver, and fix calendar cell sizing with Tailwind 4
+
 - Fix desktop packaging by selecting the Electron main entry, including shared backend modules, and emitting a CommonJS preload for the sandboxed renderer
 
 ### Security
+
+- Update Claude ACP's bundled Claude Agent SDK to 0.3.266 for upstream permission-handling fixes through a scoped dependency override
 
 - Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts with patched dependency resolutions
 
