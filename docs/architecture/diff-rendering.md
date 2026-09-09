@@ -15,7 +15,10 @@ languages leave the plain diff usable. Markdown preview does not start a worker.
 keeps a row index and offset for virtual diffs, so remounting a tab can restore
 the same line even before the full diff has been measured. Width changes discard
 stale offscreen heights while preserving the current row anchor. Old pixel-only
-scroll records remain supported.
+scroll records migrate to row anchors by measuring a contiguous prefix in bounded
+windows before restoring the requested pixel offset. This one-time migration can
+take several frames for a deep position; user gestures cancel it. Intermediate
+measurement positions never replace the saved scroll record.
 
 For visual checks, run `pnpm storybook` and open **Workspace / DiffLines**. The
 stories cover a small diff, a 10,000-line diff, and wrapped rows. Check the last

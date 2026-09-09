@@ -119,7 +119,12 @@ describe('DiffViewer performance', () => {
     const current = TestWorker.instances.at(-1);
     await act(() =>
       current?.reply(
-        new Map([[1, [{ content: 'const changed = false;', style: { color: 'red' } }]]])
+        new Map([
+          [
+            1,
+            [{ content: 'const changed = false;', style: { color: 'red', fontStyle: undefined } }],
+          ],
+        ])
       )
     );
     expect(container.querySelector('pre span')?.getAttribute('style')).toContain('color: red');

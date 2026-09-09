@@ -18,14 +18,19 @@ describe('diff highlighting worker', () => {
             { type: 'context', content: '*/' },
           ],
           language: 'typescript',
-          theme: { comment: { color: 'gray' } },
+          theme: { comment: { color: 'gray', fontStyle: undefined } },
         },
       })
     );
     const tokens = post.mock.calls[0]?.[0] as LineTokenMap;
+    expect(tokens).not.toBeNull();
     expect(tokens.has(0)).toBe(false);
-    expect(tokens.get(2)).toEqual([{ content: 'old comment', style: { color: 'gray' } }]);
-    expect(tokens.get(3)).toEqual([{ content: 'new comment', style: { color: 'gray' } }]);
+    expect(tokens.get(2)).toEqual([
+      { content: 'old comment', style: { color: 'gray', fontStyle: undefined } },
+    ]);
+    expect(tokens.get(3)).toEqual([
+      { content: 'new comment', style: { color: 'gray', fontStyle: undefined } },
+    ]);
   });
 
   it('returns a plain-text fallback for malformed requests', () => {

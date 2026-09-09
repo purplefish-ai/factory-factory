@@ -38,8 +38,16 @@ function DiffStoryContent({
   );
 }
 
-function DiffStory({ lines, theme = 'light' }: { lines: DiffLine[]; theme?: string }) {
-  const saved = useRef<ScrollState | null>(null);
+function DiffStory({
+  lines,
+  theme = 'light',
+  initialScrollState = null,
+}: {
+  lines: DiffLine[];
+  theme?: string;
+  initialScrollState?: ScrollState | null;
+}) {
+  const saved = useRef<ScrollState | null>(initialScrollState);
   const [visible, setVisible] = useState(true);
   return (
     <div className="space-y-2">
@@ -83,5 +91,12 @@ export const WrappedLines: Story = {
     lines: parseDetailedDiff(
       `@@ -0,0 +1,1000 @@\n${Array.from({ length: 1000 }, (_, i) => `+const value${i} = "${'A long line that wraps across the viewport. '.repeat((i % 5) + 1)}";`).join('\n')}`
     ),
+  },
+};
+
+export const LegacyWrappedPosition: Story = {
+  args: {
+    ...WrappedLines.args,
+    initialScrollState: { top: 24_007, left: 0 },
   },
 };

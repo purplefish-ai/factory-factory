@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const styleSchema = z.record(z.string(), z.union([z.string(), z.number()]));
+const styleSchema = z.record(z.string(), z.union([z.string(), z.number()]).optional());
 
 export const diffHighlightRequestSchema = z.object({
   lines: z.array(

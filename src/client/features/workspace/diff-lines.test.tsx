@@ -15,6 +15,7 @@ const lines: DiffLine[] = Array.from({ length: 1000 }, (_, index) => ({
 let container: HTMLDivElement;
 let root: Root;
 let width = 320;
+let firstRowUnwrapped = false;
 let saved: ScrollState | null;
 const observers = new Set<ResizeObserverCallback>();
 
@@ -48,12 +49,16 @@ function Harness({ initial, count = 1000 }: { initial?: ScrollState | null; coun
 
 beforeEach(() => {
   width = 320;
+  firstRowUnwrapped = false;
   saved = null;
   vi.useFakeTimers();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
     this: HTMLElement
   ) {
+    if (firstRowUnwrapped && this.dataset.index === '0') {
+      return 16;
+    }
     return this.hasAttribute('data-index') ? (width === 320 ? 64 : 32) : 320;
   });
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(() => width);
@@ -126,7 +131,43 @@ it('restores the same wrapped row and intra-row offset after remount', async () 
   await act(() => root.render(null));
   await act(() => root.render(<Harness initial={persisted} />));
   await settle();
-  expect(container.querySelector('[data-index="500"]')).not.toBeNull();
+  const remountedViewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  const remountedRow = container.querySelector<HTMLElement>('[data-index="500"]');
+  expect(remountedRow).not.toBeNull();
+  expect(
+    remountedViewport.scrollTop - Number(remountedRow?.style.transform.match(/[\d.]+/)?.[0])
+  ).toBe(7);
+});
+
+it.each([
+  { top: 31_959, index: 500 },
+  { top: 1239, index: 20 },
+])('migrates legacy pixel offset $top using measured rows', async ({ top, index }) => {
+  firstRowUnwrapped = true;
+  await act(() => root.render(<Harness initial={{ top, left: 4 }} />));
+  for (let frame = 0; frame < 120; frame++) {
+    await act(() => vi.advanceTimersByTime(20));
+    expect(container.querySelectorAll('[data-index]').length).toBeLessThan(100);
+  }
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  expect(viewport.scrollTop).toBe(top);
+  expect(viewport.scrollLeft).toBe(4);
+  expect(saved).toMatchObject({ top, diffAnchor: { index, offset: 7 } });
+});
+
+it('does not persist migration steps and lets user gestures cancel a legacy restore', async () => {
+  await act(() => root.render(<Harness initial={{ top: 32_007, left: 0 }} />));
+  await act(() => vi.advanceTimersByTime(20));
+  expect(saved).toBeNull();
+  const viewport = container.querySelector<HTMLDivElement>('[data-viewport]')!;
+  await act(() => {
+    viewport.dispatchEvent(new Event('wheel'));
+    viewport.scrollTop = 150;
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  await settle();
+  expect(viewport.scrollTop).toBe(150);
+  expect(saved?.top).toBe(150);
 });
 
 it('restores legacy pixel offsets for small diffs', async () => {

@@ -43,6 +43,7 @@ describe('diff worker production bundle', () => {
         },
       });
       expect(reply).toBeDefined();
+      expect(reply).not.toBeNull();
       // Maps come from another JS realm, so compare iterable entries.
       const entries = Array.from(
         reply as Map<number, Array<{ content: string; style?: { color: string } }>>
