@@ -393,6 +393,12 @@ export class SnapshotReconciliationService {
             } catch {
               gitStats = null;
             }
+            const cachedGitStats = this.dependencies.workspaceSnapshotStore.getByWorkspaceId(
+              ws.id
+            )?.gitStats;
+            if (gitStats === null && cachedGitStats != null) {
+              return;
+            }
             if (gitStats) {
               gitStatsComputed++;
             }

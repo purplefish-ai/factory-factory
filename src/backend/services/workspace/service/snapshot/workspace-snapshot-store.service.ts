@@ -88,13 +88,15 @@ export interface SnapshotUpdateInput {
   // Run-script fields (group: 'runScript')
   runScriptStatus?: RunScriptStatus;
 
-  // Reconciliation fields (group: 'reconciliation')
+  // Git fields (group: 'git')
   gitStats?: {
     total: number;
     additions: number;
     deletions: number;
     hasUncommitted: boolean;
   } | null;
+
+  // Reconciliation fields (group: 'reconciliation')
   lastActivityAt?: string | null;
 }
 

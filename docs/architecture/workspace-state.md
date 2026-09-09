@@ -110,12 +110,14 @@ of them behind the one query (~20s at 68 worktrees).
 database and runtime fields, retaining any cached Git stats, then releases the
 startup snapshot barrier. It recomputes Git stats with bounded concurrency and
 publishes each workspace as soon as its Git commands finish; one slow worktree
-cannot hold the rest of the board. Git stats have their own optional timestamp
-group, so the seed's `lastActivityAt` and the later Git update can carry the same
-poll-start timestamp without weakening either field's stale-update protection.
-The optional timestamp keeps older snapshot payloads valid during upgrades. A
-card can be missing its diff badge for a moment rather than the board being
-missing entirely.
+cannot hold the rest of the board. A failed Git refresh retains a non-null
+cached value, while a workspace that no longer has a worktree is explicitly
+cleared to null. Git stats have their own optional timestamp group, so the
+seed's `lastActivityAt` and the later Git update can carry the same poll-start
+timestamp without weakening either field's stale-update protection. The
+optional timestamp keeps older snapshot payloads valid during upgrades. A card
+can be missing its diff badge for a moment rather than the board being missing
+entirely.
 
 Note that each worktree's cache entry is watched via the repo's *shared* `.git`
 common dir, so git activity in any one worktree invalidates the others' entries

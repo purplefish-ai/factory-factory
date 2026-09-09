@@ -17,7 +17,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function makeWorkspace(id: string, worktreePath: string) {
+function makeWorkspace(id: string, worktreePath: string | null) {
   return {
     id,
     projectId: 'project-1',
@@ -49,7 +49,7 @@ function makeWorkspace(id: string, worktreePath: string) {
 
 function makeService(
   workspaces: ReturnType<typeof makeWorkspace>[],
-  getWorkspaceGitStats: (path: string) => Promise<GitStats>,
+  getWorkspaceGitStats: (path: string) => Promise<GitStats | null>,
   workspaceSnapshotStore: {
     getAllWorkspaceIds(): string[];
     getByWorkspaceId(id: string): unknown;
@@ -123,6 +123,52 @@ it('makes the database seed available while preserving cached git stats', async 
   }
 
   expect(store.getByWorkspaceId('ws-1')?.gitStats).toEqual(freshGitStats);
+});
+
+it.each([
+  {
+    failure: 'a null result',
+    readGitStats: () => Promise.resolve(null),
+  },
+  {
+    failure: 'a rejected read',
+    readGitStats: () => Promise.reject(new Error('git unavailable')),
+  },
+])('preserves cached git stats after $failure', async ({ readGitStats }) => {
+  const cachedGitStats = { total: 6, additions: 4, deletions: 2, hasUncommitted: true };
+  const store = createStore();
+  store.upsert('ws-1', { projectId: 'project-1', gitStats: cachedGitStats }, 'seed', 100);
+  const service = makeService([makeWorkspace('ws-1', '/path/1')], readGitStats, store);
+
+  await service.reconcile();
+
+  expect(store.getByWorkspaceId('ws-1')?.gitStats).toEqual(cachedGitStats);
+});
+
+it('keeps null git stats when a first read fails without a cached value', async () => {
+  const store = createStore();
+  const service = makeService(
+    [makeWorkspace('ws-1', '/path/1')],
+    () => Promise.resolve(null),
+    store
+  );
+
+  await service.reconcile();
+
+  expect(store.getByWorkspaceId('ws-1')?.gitStats).toBeNull();
+});
+
+it('clears cached git stats when the workspace no longer has a worktree', async () => {
+  const cachedGitStats = { total: 6, additions: 4, deletions: 2, hasUncommitted: true };
+  const store = createStore();
+  store.upsert('ws-1', { projectId: 'project-1', gitStats: cachedGitStats }, 'seed', 100);
+  const readGitStats = vi.fn<() => Promise<GitStats>>();
+  const service = makeService([makeWorkspace('ws-1', null)], readGitStats, store);
+
+  await service.reconcile();
+
+  expect(store.getByWorkspaceId('ws-1')?.gitStats).toBeNull();
+  expect(readGitStats).not.toHaveBeenCalled();
 });
 
 it('releases the seed barrier when there are no workspaces', async () => {
