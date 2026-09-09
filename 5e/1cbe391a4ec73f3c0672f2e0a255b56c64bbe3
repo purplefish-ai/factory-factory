@@ -1,0 +1,109 @@
+knip.json
+  s_af352b457985ef::t_81222746c52db3 18
+src/components/ui/progress.tsx
+  s_af352b457985ef::t_81222746c52db3 5-12,14-21,23
+src/components/ui/sonner.tsx
+  s_af352b457985ef::t_943cccb50d95d3 6,22
+  s_af352b457985ef::t_81222746c52db3 1-5,18-21,23,25-26,31-32
+src/components/ui/command.tsx
+  s_af352b457985ef::t_81222746c52db3 4-9,13-17,19-22,24,26,29-33,38,41,43-49,55-70,72-76,78,80-83,88-96,98-106,114,116-122,124-125,127,129-138,140,145,150
+src/components/ui/primitives.stories.tsx
+  s_af352b457985ef::t_1576135d37271e 343
+  s_af352b457985ef::t_e2862b08960a6b 340-342,360-362
+src/components/ui/context-menu.tsx
+  s_af352b457985ef::t_81222746c52db3 6,8-12,14-16,18-20,22-24,26-30,32-39,41-54,56-65,67-70,72-82,84-88,90-94,96-97,100-111,113-137,139-148,150,154-156,158-161,163-169,171-175,180-188,190-191,193-194,198,203
+  s_af352b457985ef::t_943cccb50d95d3 157
+src/components/ui/calendar.tsx
+  s_af352b457985ef::t_81222746c52db3 87,126
+pnpm-lock.yaml
+  ai_agent 381-383,468-470
+src/components/ui/sheet.tsx
+  s_af352b457985ef::t_81222746c52db3 6,8,10,12,14,16,18,20,22-29,31-34,36,38-40,42-44,47-53,63-75,77,80-82,84-85,87,90-92,94-95,97,99-102,104-105,107,109-115,117-118,120
+src/components/ui/label.tsx
+  s_af352b457985ef::t_81222746c52db3 5-9,11-14,16
+src/components/ui/slider.tsx
+  s_af352b457985ef::t_f381490377bd05 13-17,46,49
+  s_af352b457985ef::t_81222746c52db3 5-12,19-27,29-35,37-41,43-45,47-48,50-53,55
+src/components/ui/button.tsx
+  s_af352b457985ef::t_81222746c52db3 7,12,14,38-39,42-43,45,47,50-57,59
+src/components/ui/alert.tsx
+  s_af352b457985ef::t_81222746c52db3 21-24,26-32,34,37-39,44,47-50,52-55,57
+src/components/ui/dropdown-menu.tsx
+  s_af352b457985ef::t_81222746c52db3 6,8-12,14-18,20-32,34-38,40-42,44-48,50-51,54-59,61,67-74,76-91,93-97,99-116,118-121,123-129,131-135,137-138,140-148,150-151,153-154,156-158,163-165,167-174,176-189,191-200,202-205,207
+  s_af352b457985ef::t_943cccb50d95d3 117
+src/components/ui/input-group.tsx
+  s_af352b457985ef::t_81222746c52db3 14,41
+src/components/ui/tooltip.tsx
+  s_af352b457985ef::t_81222746c52db3 5-12,16,18,20,22,24,26-37,39-46,48
+src/components/ui/input.tsx
+  s_af352b457985ef::t_81222746c52db3 5-9,13-16,18
+src/components/ui/skeleton.tsx
+  s_af352b457985ef::t_81222746c52db3 4-6,8-9
+src/components/ui/table.tsx
+  s_af352b457985ef::t_81222746c52db3 5-8,10-11,14,18,21-23,25-28,31-33,35-36,38,41,43,51,54-57,59-62,64,67-70,72-75,77,80-82,87
+src/components/ui/alert-dialog.tsx
+  s_af352b457985ef::t_81222746c52db3 6,8,10-12,14,16,18,20-27,29-32,34-37,39-40,42-49,51-55,57,60-62,70,73-76,78-81,83,85-92,94-97,99,101-107,109-110,112,115-119,125,127-128,131-132,134,136-137,139,141-142,145-146,148,150-151,153,163
+src/components/ui/checkbox.tsx
+  s_af352b457985ef::t_81222746c52db3 6-10,12-22,24
+src/components/ui/tabs.tsx
+  s_af352b457985ef::t_81222746c52db3 6-7,9-15,17-18,20-22,24-26,29-31,33-34,37-38,40-48,50,52-57,61-64,66,68-71,73-74,76
+src/components/ui/select.tsx
+  s_af352b457985ef::t_81222746c52db3 6,8,10,12,14,16,18-19,21-23,25-29,37-41,43-47,50-55,60,62-64,66-68,72-78,80,82-85,87-88,90,92-115,117,119-125,127-128,130-138,140-143,145-153,155-158,160
+src/components/ui/sidebar.tsx
+  s_af352b457985ef::t_81222746c52db3 155,204,221-222,247,252,257,264,676
+package.json
+  s_af352b457985ef::t_81222746c52db3 173,202
+src/components/ui/primitives.test.tsx
+  s_af352b457985ef::t_1568b692fbac19 9,41-55
+  s_af352b457985ef::t_435cea6842e5ba 1,3-8,10,12-13,15-28,30-34,36-38,40,56-69,71-75,77-96,98-112,114-127
+src/components/ui/card.tsx
+  s_af352b457985ef::t_81222746c52db3 5,7,11-13,15-18,20-26,28-30,35-36,38-40,42-46,48-50,52-56,59,62,64,69-70
+src/components/ui/dialog.tsx
+  s_af352b457985ef::t_81222746c52db3 7,9,11,13,15,17,19,21,23-29,35,37-44,46-52,54-69,71,74-76,78-79,81,83-87,90-103,105,107-110,112-113,115,117-123,125-126,128
+e2e/mobile-baseline.spec.ts
+  s_af352b457985ef::t_b9a5bfdbbb45b2 11-12
+src/components/ui/dialog.stories.tsx
+  s_af352b457985ef::t_e2862b08960a6b 3,14,81-162
+src/components/ui/popover.tsx
+  s_af352b457985ef::t_81222746c52db3 5,7-9,11-14,16-25,27-31,33-35,37-38,40-42,47-48,51-52,54-56,61,63-69
+src/components/ui/separator.tsx
+  s_af352b457985ef::t_81222746c52db3 5-6,8-16,19-22,24
+src/components/ui/toggle.tsx
+  s_af352b457985ef::t_81222746c52db3 7,28-39,41
+src/components/ui/resizable.tsx
+  s_af352b457985ef::t_81222746c52db3 83,109
+components.json
+  s_af352b457985ef::t_81222746c52db3 7,13
+src/components/ui/collapsible.tsx
+  s_af352b457985ef::t_81222746c52db3 3,5,7-9,11,13-15,17
+src/components/ui/radio-group.tsx
+  s_af352b457985ef::t_943cccb50d95d3 36-39
+  s_af352b457985ef::t_81222746c52db3 6-12,14-15,17,19-22,25,32-35,43
+src/components/ui/textarea.tsx
+  s_af352b457985ef::t_81222746c52db3 5-8,10-13,15
+src/client/globals.css
+  s_af352b457985ef::t_81222746c52db3 3
+src/components/ui/scroll-area.tsx
+  s_af352b457985ef::t_81222746c52db3 11-13,18,20,22,27,44,46-47,49-55,59-67,69
+  s_af352b457985ef::t_f381490377bd05 5,14-17,19,30-33,56
+src/components/ui/switch.tsx
+  s_af352b457985ef::t_81222746c52db3 5-6,8-9,11-15,18,20-28,30
+src/components/ui/badge.tsx
+  s_af352b457985ef::t_81222746c52db3 15,30-31,33-34,38-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5e1cbe391a4ec73f3c0672f2e0a255b56c64bbe3",
+  "prompts": {},
+  "sessions": {
+    "s_af352b457985ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08587-2803-7de3-9461-803369b175ce",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
