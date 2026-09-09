@@ -768,7 +768,7 @@ describe('SessionService', () => {
     );
   });
 
-  it('does not overwrite COMPLETED status when process exits during stopSession', async () => {
+  it('preserves the stop-owned IDLE transition when the process exits cleanly during stopSession', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
     >({
@@ -827,16 +827,14 @@ describe('SessionService', () => {
       managed: true,
     });
 
-    expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-race-test', {
-      status: SessionStatus.COMPLETED,
-    });
+    // A clean exit during an explicit stop must not take ownership of the status write.
+    expect(sessionRepository.updateSession).not.toHaveBeenCalled();
 
     stopLoad.resolve(session);
     await stopPromise;
 
-    expect(sessionRepository.updateSession).not.toHaveBeenCalledWith('session-race-test', {
-      status: SessionStatus.IDLE,
-    });
+    expect(sessionRepository.updateSession).not.toHaveBeenCalled();
+    expect(sessionRepository.updateSessionIfStatus).toHaveBeenCalledOnce();
     expect(sessionRepository.updateSessionIfStatus).toHaveBeenCalledWith(
       'session-race-test',
       {
