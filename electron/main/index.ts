@@ -7,9 +7,8 @@ import { ServerManager } from './server-manager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-registerFatalErrorHandlers({ app, dialog, logger: console, process });
-
 const serverManager = new ServerManager();
+registerFatalErrorHandlers({ app, dialog, logger: console, process, serverManager });
 const lifecycle = createElectronLifecycle({
   app,
   browserWindow: BrowserWindow,

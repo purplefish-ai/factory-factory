@@ -106,3 +106,7 @@ sessions and auto-send the prompt content once the session is ready.
 
 `prompts/` is copied into `dist/` on build, so a new prompt file ships without a
 code change.
+
+Electron fatal-error handlers await backend shutdown before quitting. Concurrent
+fatal errors share one shutdown attempt, and cleanup failures are logged before
+the application exits.
