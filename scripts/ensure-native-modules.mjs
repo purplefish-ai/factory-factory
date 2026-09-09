@@ -6,10 +6,12 @@
  * Usage:
  *   node scripts/ensure-native-modules.mjs node      # For web/CLI development
  *   node scripts/ensure-native-modules.mjs electron  # For Electron development
+ *   node scripts/ensure-native-modules.mjs electron --force  # Rebuild cached binaries
  */
 
 import { execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +35,12 @@ const NATIVE_MODULES = [
 ];
 
 function findModulePath(moduleName) {
+  if (moduleName === 'better-sqlite3') {
+    // Only Prisma's driver is ABI-specific; the direct v13 copy ships N-API binaries.
+    const adapterPath = realpathSync(join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3'));
+    const adapterRequire = createRequire(join(adapterPath, 'package.json'));
+    return join(dirname(adapterRequire.resolve('better-sqlite3/package.json')), 'build', 'Release');
+  }
   // Find the module in pnpm's node_modules structure
   const pnpmDir = join(ROOT, 'node_modules', '.pnpm');
   if (!existsSync(pnpmDir)) {
@@ -181,6 +189,15 @@ function rebuild(target) {
       cwd: ROOT,
       stdio: 'inherit',
     });
+    // The direct v13 driver uses N-API, but Prisma still owns an ABI-specific v12.
+    // Resolve the adapter symlink so electron-rebuild scans its pnpm siblings,
+    // instead of discovering only the root's direct dependencies a second time.
+    const adapterPath = realpathSync(join(ROOT, 'node_modules', '@prisma', 'adapter-better-sqlite3'));
+    // A constant shell command supports Windows pnpm.cmd without interpolating paths.
+    execSync('pnpm exec electron-rebuild -f -m . -o better-sqlite3', {
+      cwd: adapterPath,
+      stdio: 'inherit',
+    });
   } else {
     // Rebuild native modules for Node.js
     // Use pnpm rebuild which handles the pnpm structure correctly
@@ -193,15 +210,16 @@ function rebuild(target) {
 
 function main() {
   const target = process.argv[2];
+  const force = process.argv[3] === '--force';
   if (!target || !['node', 'electron'].includes(target)) {
-    console.error('Usage: ensure-native-modules.mjs <node|electron>');
+    console.error('Usage: ensure-native-modules.mjs <node|electron> [--force]');
     process.exit(1);
   }
 
   const currentMarker = getCurrentMarker();
   const targetMarker = getMarkerValue(target);
 
-  if (currentMarker === targetMarker) {
+  if (!force && currentMarker === targetMarker) {
     console.log(`Native modules already built for ${target}${target === 'node' ? ` (ABI ${NODE_ABI_VERSION})` : ''}`);
     return;
   }
@@ -222,7 +240,7 @@ function main() {
   }
 
   // Either restore from cache or rebuild
-  if (cacheExists(target)) {
+  if (!force && cacheExists(target)) {
     restoreFromCache(target);
   } else {
     rebuild(target);

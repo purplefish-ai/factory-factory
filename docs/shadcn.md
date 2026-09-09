@@ -32,6 +32,7 @@ labels, calendar sizing and week-number range styling, and current toast styling
   targets. InputGroup retains native fieldset semantics and the compact focus
   treatment; Spinner retains its brand color. App-specific markdown, Mermaid,
   confirmation dialogs, prompt cards and tab buttons are not registry components.
+- Calendar uses `@daypicker/react` v10, retaining the package migration from main.
 - Slider thumb keys follow positions rather than changing values, preserving
   focus during controlled updates.
 

@@ -80,6 +80,54 @@ function toolSequences(messages: ReturnType<typeof oracle>) {
 }
 
 describe('createIncrementalChatGrouper', () => {
+  it.each([false, true])(
+    'does not read messages again for unchanged input (filterDuplicateResults: %s)',
+    (filterDuplicateResults) => {
+      let messageReads = 0;
+      const history = Array.from({ length: 1000 }, (_, index) => user(`user-${index}`, index));
+      const trackReads = (messages: ChatMessage[]) =>
+        new Proxy(messages, {
+          get(target, property, receiver) {
+            if (typeof property === 'string' && /^\d+$/.test(property)) {
+              messageReads += 1;
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        });
+      const messages = trackReads(history);
+      const grouper = createIncrementalChatGrouper({ filterDuplicateResults });
+      const first = grouper.group(messages);
+      expect(first).toEqual(history);
+      expect(messageReads).toBeGreaterThan(0);
+
+      messageReads = 0;
+      expect(grouper.group(messages)).toBe(first);
+      expect(messageReads).toBe(0);
+
+      // An equivalent new array still needs preparation, then becomes the cached input.
+      const copiedMessages = trackReads([...history]);
+      expect(grouper.group(copiedMessages)).toBe(first);
+      expect(messageReads).toBeGreaterThan(0);
+      messageReads = 0;
+      expect(grouper.group(copiedMessages)).toBe(first);
+      expect(messageReads).toBe(0);
+    }
+  );
+
+  it('detects in-place truncation and caches the empty input', () => {
+    const grouper = createIncrementalChatGrouper();
+    const messages = [user('first', 0), user('second', 1)];
+    const first = grouper.group(messages);
+
+    messages.length = 1;
+    expect(grouper.group(messages)).toEqual([messages[0]]);
+    expect(first).toHaveLength(2);
+    messages.length = 0;
+    const empty = grouper.group(messages);
+    expect(empty).toEqual([]);
+    expect(grouper.group(messages)).toBe(empty);
+  });
+
   it('keeps completed historical tool groups stable while the final text streams', () => {
     const grouper = createIncrementalChatGrouper();
     const history = [

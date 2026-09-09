@@ -24,6 +24,7 @@ interface GroupingSnapshot {
 }
 
 export interface IncrementalChatGrouper {
+  /** Replace the array and changed messages for edits; same-reference length changes are supported. */
   group: (messages: ChatMessage[]) => GroupedMessageItem[];
 }
 
@@ -307,28 +308,34 @@ export function createIncrementalChatGrouper(
 ): IncrementalChatGrouper {
   const filterDuplicateResults = options.filterDuplicateResults ?? false;
   let snapshot: GroupingSnapshot | undefined;
+  let previousInput: ChatMessage[] | undefined;
+  let previousInputLength = 0;
 
   return {
     group(messages) {
+      if (snapshot && messages === previousInput && messages.length === previousInputLength) {
+        return snapshot.grouped;
+      }
+
       const prepared = prepareMessages(messages, filterDuplicateResults);
       if (!snapshot) {
         snapshot = createFullSnapshot(prepared);
-        return snapshot.grouped;
+      } else {
+        const commonPrefix = commonPrefixLength(snapshot.messages, prepared);
+        if (commonPrefix !== snapshot.messages.length || commonPrefix !== prepared.length) {
+          const canReusePrefix =
+            commonPrefix > 0 &&
+            snapshot.segments.length === snapshot.grouped.length &&
+            !hasChangedHistoricalToolResult(snapshot.messages, prepared, commonPrefix) &&
+            !rewindCrossesHistoricalToolResult(snapshot.messages, prepared, commonPrefix);
+          snapshot = canReusePrefix
+            ? createIncrementalSnapshot(snapshot, prepared, commonPrefix)
+            : createFullSnapshot(prepared, snapshot);
+        }
       }
 
-      const commonPrefix = commonPrefixLength(snapshot.messages, prepared);
-      if (commonPrefix === snapshot.messages.length && commonPrefix === prepared.length) {
-        return snapshot.grouped;
-      }
-
-      const canReusePrefix =
-        commonPrefix > 0 &&
-        snapshot.segments.length === snapshot.grouped.length &&
-        !hasChangedHistoricalToolResult(snapshot.messages, prepared, commonPrefix) &&
-        !rewindCrossesHistoricalToolResult(snapshot.messages, prepared, commonPrefix);
-      snapshot = canReusePrefix
-        ? createIncrementalSnapshot(snapshot, prepared, commonPrefix)
-        : createFullSnapshot(prepared, snapshot);
+      previousInput = messages;
+      previousInputLength = messages.length;
       return snapshot.grouped;
     },
   };

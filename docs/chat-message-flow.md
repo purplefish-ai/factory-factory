@@ -273,6 +273,19 @@ chatReducer(state, action)
 New React State
 ```
 
+### Grouping for display
+
+Main chat and quick chat use `useGroupedChatMessages` to retain stable tool groups
+between updates. An unchanged message array and length return the cached grouping
+before filtering, deduplication, or prefix scanning. Changing duplicate-result
+filtering creates a new grouper, even when the message array is unchanged.
+
+Message edits must replace the array and changed message objects, as the chat
+reducer does for streaming updates. The grouper also detects in-place appends and
+truncation by checking array length; same-length in-place edits are unsupported.
+New arrays still use the existing incremental grouping and history/late-result
+fallbacks.
+
 ### Key Actions
 
 | WebSocket Type | Redux Action | Effect |

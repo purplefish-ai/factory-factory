@@ -11,7 +11,7 @@ const lucideIconType = ['Lucide', 'Icon'].join('');
 const packageJsonSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
 });
-const phosphorImportPattern = /import\s*{([\s\S]*?)}\s*from\s*['"]@phosphor-icons\/react['"]/g;
+const phosphorImportPattern = /import\s*{([^{}]*)}\s*from\s*['"]@phosphor-icons\/react['"]/g;
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -28,6 +28,16 @@ function hasFillWeight(icon: string): boolean {
 }
 
 describe('icon library', () => {
+  it('does not include named imports preceding a Phosphor import', () => {
+    const source = [
+      "import { DayPicker } from '@daypicker/react';",
+      "import { CaretDownIcon } from '@phosphor-icons/react';",
+    ].join('\n');
+    expect([...source.matchAll(phosphorImportPattern)].map((match) => match[1]?.trim())).toEqual([
+      'CaretDownIcon',
+    ]);
+  });
+
   it('recognizes literal and expression forms of the Phosphor fill weight', () => {
     expect(hasFillWeight('<CircleIcon weight="fill" />')).toBe(true);
     expect(hasFillWeight("<CircleIcon weight='fill' />")).toBe(true);
