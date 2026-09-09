@@ -1,0 +1,28 @@
+README.md
+  s_9d4a09579a366e::t_238ad9b9582000 107-110
+pnpm-workspace.yaml
+  s_9d4a09579a366e::t_6b21e5542c06f5 4-5
+  s_9d4a09579a366e::t_238ad9b9582000 7-16
+package.json
+  s_9d4a09579a366e::t_238ad9b9582000 33
+CHANGELOG.md
+  s_9d4a09579a366e::t_238ad9b9582000 12
+Dockerfile
+  s_9d4a09579a366e::t_238ad9b9582000 9,11-12,14-15,19-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5918f38279ea7d3f49ecb1ae25ad43639d5effb3",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
