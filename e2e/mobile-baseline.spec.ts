@@ -8,6 +8,8 @@ const mobileViewports = [
 
 for (const viewport of mobileViewports) {
   test(`mobile baseline layout - ${viewport.name}`, async ({ page }) => {
+    // PR fixture timestamps are fixed; keep relative-age labels stable in screenshots.
+    await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/__mobile-baseline');
     await page.waitForLoadState('networkidle');

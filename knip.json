@@ -15,41 +15,7 @@
     "@/*": ["src/*"],
     "@prisma-gen/*": ["prisma/generated/*"]
   },
-  "ignore": [
-    "src/components/ui/accordion.tsx",
-    "src/components/ui/aspect-ratio.tsx",
-    "src/components/ui/avatar.tsx",
-    "src/components/ui/breadcrumb.tsx",
-    "src/components/ui/button-group.tsx",
-    "src/components/ui/carousel.tsx",
-    "src/components/ui/chart.tsx",
-    "src/components/ui/drawer.tsx",
-    "src/components/ui/empty.tsx",
-    "src/components/ui/field.tsx",
-    "src/components/ui/form.tsx",
-    "src/components/ui/hover-card.tsx",
-    "src/components/ui/input-otp.tsx",
-    "src/components/ui/item.tsx",
-    "src/components/ui/menubar.tsx",
-    "src/components/ui/navigation-menu.tsx",
-    "src/components/ui/pagination.tsx",
-    "src/components/ui/toggle-group.tsx"
-  ],
-  "ignoreDependencies": [
-    "@prisma/client",
-    "@radix-ui/react-accordion",
-    "@radix-ui/react-aspect-ratio",
-    "@radix-ui/react-avatar",
-    "@radix-ui/react-hover-card",
-    "@radix-ui/react-menubar",
-    "@radix-ui/react-navigation-menu",
-    "embla-carousel-react",
-    "input-otp",
-    "react-hook-form",
-    "recharts",
-    "vaul",
-    "@radix-ui/react-toggle-group"
-  ],
+  "ignoreDependencies": ["@prisma/client"],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
   },

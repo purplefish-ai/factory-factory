@@ -1,12 +1,17 @@
 # Knip exclusions
 
-`knip.json` ignores only exact generated shadcn UI primitive paths. The UI directory is a reusable local component catalog, so generated primitives do not require a current application consumer. Exact paths keep newly added UI files and every non-UI source file in dead-code analysis by default.
+Knip checks the application, tests, stories, CSS, MDX, and Prisma files. It discovers
+CLI and backend entry points from package configuration and scripts.
 
-The project patterns include TypeScript, CSS, MDX, and Prisma files. Knip discovers the CLI and backend entry points from the package configuration and scripts.
+Unused shadcn primitives and their exclusive dependencies were removed in September
+2026. The UI directory has no file exclusions: keep components with application or
+Storybook consumers, and add others when needed.
 
-Dependency exclusions in `ignoreDependencies` cover:
+The only dependency exclusion is `@prisma/client`, which is imported by generated
+Prisma runtime code. It must remain a production dependency.
 
-- `@prisma/client` is referenced by Prisma-generated runtime code.
-- Radix, carousel, form, chart, OTP, and drawer packages imported by the exact generated UI primitives listed in the file-ignore section of `knip.json`.
+Knip follows `tw-animate-css` and `@tailwindcss/typography` in
+`src/client/globals.css`, and detects the `@agentclientprotocol/claude-agent-acp`
+executable dependency. These packages remain in dependency analysis.
 
-Knip follows the `tw-animate-css`, `tailwindcss-animate`, and `@tailwindcss/typography` directives in `src/client/globals.css` and detects the `@agentclientprotocol/claude-agent-acp` executable dependency. These packages are included in dependency analysis.
+See [shadcn maintenance](shadcn.md) for the component refresh and local adaptations.

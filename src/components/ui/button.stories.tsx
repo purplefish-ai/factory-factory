@@ -15,7 +15,7 @@ const meta = {
     },
     size: {
       control: 'select',
-      options: ['default', 'sm', 'lg', 'icon'],
+      options: ['default', 'xs', 'sm', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'],
     },
     disabled: {
       control: 'boolean',
@@ -111,10 +111,22 @@ export const AllVariants: Story = {
 export const AllSizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
+      <Button size="xs">Extra small</Button>
       <Button size="sm">Small</Button>
       <Button size="default">Default</Button>
       <Button size="lg">Large</Button>
-      <Button size="icon">+</Button>
+      <Button size="icon-xs" aria-label="Add, extra small">
+        +
+      </Button>
+      <Button size="icon-sm" aria-label="Add, small">
+        +
+      </Button>
+      <Button size="icon" aria-label="Add">
+        +
+      </Button>
+      <Button size="icon-lg" aria-label="Add, large">
+        +
+      </Button>
     </div>
   ),
 };

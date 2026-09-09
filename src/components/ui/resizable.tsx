@@ -80,6 +80,7 @@ const ResizablePanelGroup = ({
 
   return (
     <Group
+      data-slot="resizable-panel-group"
       orientation={direction}
       className={cn('flex h-full w-full', direction === 'vertical' && 'flex-col', className)}
       id={autoSaveId}
@@ -105,6 +106,7 @@ const ResizableHandle = ({ withHandle, className, direction, ...props }: Resizab
 
   return (
     <Separator
+      data-slot="resizable-handle"
       className={cn(
         // Base styles
         'relative flex items-center justify-center bg-border transition-colors hover:bg-primary/50',
