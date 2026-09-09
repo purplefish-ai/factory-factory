@@ -88,12 +88,14 @@ describe('createIncrementalChatGrouper', () => {
       toolResult('tool-result', 'call', 2),
     ];
     const first = grouper.group([...history, assistant('answer', 'hel', 3)]);
+    const firstCopy = structuredClone(first);
     const secondMessages = [...history, assistant('answer', 'hello', 3)];
     const second = grouper.group(secondMessages);
 
     expect(second).toEqual(oracle(secondMessages));
     expect(toolSequences(second)[0]).toBe(toolSequences(first)[0]);
     expect(second.at(-1)).toBe(secondMessages.at(-1));
+    expect(first).toEqual(firstCopy);
   });
 
   it('recomputes a pending group when its result arrives after assistant text', () => {
@@ -136,6 +138,7 @@ describe('createIncrementalChatGrouper', () => {
       toolResult('result-1', 'reused', 4, 'first'),
     ];
     const afterFirst = grouper.group(afterFirstMessages);
+    const afterFirstCopy = structuredClone(afterFirst);
     const afterSecondMessages = [
       ...afterFirstMessages,
       toolResult('result-2', 'reused', 5, 'second'),
@@ -148,6 +151,29 @@ describe('createIncrementalChatGrouper', () => {
     expect(
       toolSequences(afterSecond).map((sequence) => sequence.pairedCalls[0]?.result?.content)
     ).toEqual(['first', 'second']);
+    expect(afterFirst).toEqual(afterFirstCopy);
+  });
+
+  it('detects repeated in-place appends without aliasing either snapshot input', () => {
+    const grouper = createIncrementalChatGrouper();
+    const messages = [
+      toolUse('stable-use', 'stable', 0),
+      toolResult('stable-result', 'stable', 1),
+      assistant('first-text', 'first', 2),
+    ];
+    const first = grouper.group(messages);
+    const stableGroup = toolSequences(first)[0];
+
+    messages.push(assistant('second-text', 'second', 3));
+    const second = grouper.group(messages);
+    expect(second).toEqual(oracle(messages));
+    expect(toolSequences(second)[0]).toBe(stableGroup);
+
+    messages.push(assistant('third-text', 'third', 4));
+    const third = grouper.group(messages);
+    expect(third).toEqual(oracle(messages));
+    expect(toolSequences(third)[0]).toBe(stableGroup);
+    expect(third.at(-1)).toBe(messages.at(-1));
   });
 
   it('does not regroup a consumed late result into a following orphan-result sequence', () => {
