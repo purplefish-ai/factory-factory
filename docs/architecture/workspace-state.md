@@ -111,10 +111,10 @@ diff badge for a moment rather than the board being missing entirely.
 
 Each cache entry watches its worktree and private Git directory, while linked
 worktrees share one reference-counted watcher for the repo's common `.git`
-directory. Worktree files and private metadata such as `HEAD` and `index`
-invalidate only their owning worktree. Common metadata changes invalidate every
-dependent entry, including refs, config, info attributes and excludes, and
-reftable state. Object and reflog writes are ignored because the associated ref
-event performs the invalidation. If the shared watcher fails, all of its
-dependents switch to the five-minute fallback expiry; removing the last
-dependent closes it.
+directory. Worktree files and private metadata such as `HEAD`, `index`, and
+`config.worktree` invalidate only their owning worktree. Common metadata changes
+invalidate every dependent entry, including shared config, refs, info attributes
+and excludes, and reftable state. Object and reflog writes are ignored because
+the associated ref event performs the invalidation. If the shared watcher fails,
+all of its dependents switch to the five-minute fallback expiry; removing the
+last dependent closes it.

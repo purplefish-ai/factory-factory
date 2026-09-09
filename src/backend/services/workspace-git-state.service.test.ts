@@ -71,6 +71,9 @@ describe('WorkspaceGitStateService', () => {
     now = 1234;
     runGit = vi.fn<RunGit>((args) => Promise.resolve(defaultGitResult(args)));
     readFile = vi.fn((filePath) => {
+      if (filePath === '/repo/.git') {
+        return Promise.reject(Object.assign(new Error('directory'), { code: 'EISDIR' }));
+      }
       const worktreeMatch = filePath.match(/^\/repo\/(w[12])\/\.git$/);
       if (worktreeMatch?.[1]) {
         return Promise.resolve(`gitdir: /repo/.git/worktrees/${worktreeMatch[1]}\n`);
@@ -307,7 +310,7 @@ describe('WorkspaceGitStateService', () => {
     expect(watchPath.mock.calls.every(([, options]) => options.recursive)).toBe(true);
   });
 
-  it.each(['index', 'HEAD'])(
+  it.each(['index', 'HEAD', 'config.worktree', 'config.worktree.lock'])(
     'keeps sibling caches warm when one worktree %s changes',
     async (metadataFile) => {
       vi.useFakeTimers();
@@ -328,10 +331,35 @@ describe('WorkspaceGitStateService', () => {
     }
   );
 
+  it.each(['config.worktree', 'config.worktree.lock'])(
+    'keeps linked caches warm when primary worktree metadata %s changes',
+    async (metadataFile) => {
+      vi.useFakeTimers();
+      try {
+        const primaryInput = { worktreePath: '/repo', defaultBranch: 'main' };
+        const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+        const primary = await service.getSnapshot(primaryInput);
+        const first = await service.getSnapshot(input);
+        const sibling = await service.getSnapshot(siblingInput);
+
+        emitWatchEvent('/repo', 'change', `.git/${metadataFile}`);
+        emitWatchEvent('/repo/.git', 'change', metadataFile);
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(await service.getSnapshot(primaryInput)).not.toBe(primary);
+        expect(await service.getSnapshot(input)).toBe(first);
+        expect(await service.getSnapshot(siblingInput)).toBe(sibling);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
   it.each([
     'refs/remotes/origin/main',
     'refs',
     'config',
+    'config.lock',
     'info/exclude',
     'reftable',
     'reftable/tables.list',

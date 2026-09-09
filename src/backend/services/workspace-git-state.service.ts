@@ -150,6 +150,8 @@ function shouldInvalidateForSharedGitEvent(filename: string | null): boolean {
     normalized.startsWith('HEAD.') ||
     normalized === 'index' ||
     normalized.startsWith('index.') ||
+    normalized === 'config.worktree' ||
+    normalized.startsWith('config.worktree.') ||
     normalized === 'worktrees' ||
     normalized.startsWith('worktrees/') ||
     normalized === 'objects' ||
