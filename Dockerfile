@@ -5,12 +5,12 @@ ARG NODE_VERSION=26.8.1
 
 # Node 26 does not bundle Corepack. Share one pinned pnpm installation across stages.
 FROM node:${NODE_VERSION}-alpine AS base
-ARG PNPM_VERSION=10.34.5
 ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
-# SHA-256 digests from the pnpm release assets; update with PNPM_VERSION.
+# Keep the pnpm version and release asset SHA-256 digests pinned together.
 # Use static binaries on Alpine and verify before making the download executable.
-RUN case "$(uname -m)" in \
+RUN PNPM_VERSION=10.34.5 \
+  && case "$(uname -m)" in \
        x86_64) PNPM_ARCH=x64; PNPM_SHA256=8e744e9720cd31a727cfc3059955fdec6433bbe7383360a9e08a9ae833cb06e3 ;; \
        aarch64) PNPM_ARCH=arm64; PNPM_SHA256=d0e2a99ad2e4d427967f98b3aa8fb5e0bab548a8fd39c6c0aa293b27b740906b ;; \
        *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
