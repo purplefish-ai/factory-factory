@@ -94,8 +94,8 @@ export function createTestProcessHandle(params?: {
 export function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
-    onExit: vi.fn().mockResolvedValue(undefined),
-    onError: vi.fn(),
+    onRuntimeExit: vi.fn().mockResolvedValue(undefined),
+    onRuntimeError: vi.fn(),
     onAcpEvent: vi.fn(),
   };
 }

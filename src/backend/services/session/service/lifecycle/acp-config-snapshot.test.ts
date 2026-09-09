@@ -21,6 +21,18 @@ const groupedModel = {
 
 describe('parseAcpConfigSnapshot', () => {
   it.each(['CLAUDE', 'CODEX'])(
+    'preserves %s boolean options without select normalization',
+    (provider) => {
+      const option = { id: 'model', name: 'Toggle', type: 'boolean', currentValue: false };
+      expect(
+        parseAcpConfigSnapshot({
+          acpConfigSnapshot: { provider, providerSessionId: 'provider-1', configOptions: [option] },
+        })?.configOptions
+      ).toEqual([option]);
+    }
+  );
+
+  it.each(['CLAUDE', 'CODEX'])(
     'preserves %s grouped options and protocol extension metadata',
     (provider) => {
       expect(

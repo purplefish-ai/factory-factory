@@ -16,6 +16,9 @@ export type CodexModelCatalogEntry = {
 };
 
 export function getSelectOptions(option: SessionConfigOption): SessionConfigSelectOption[] {
+  if (option.type !== 'select') {
+    return [];
+  }
   return option.options.flatMap((entry) => {
     if (typeof entry !== 'object' || entry === null) {
       return [];

@@ -1,7 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle } from './acp-process-handle';
-import { isMethodNotFoundError } from './acp-runtime-errors';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 
 const logger = createLogger('acp-runtime-manager');
@@ -48,7 +47,9 @@ export class AcpRuntimeConfigController {
       });
 
       handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'mode' ? { ...option, currentValue: modeId } : option
+        option.type === 'select' && option.category === 'mode'
+          ? { ...option, currentValue: modeId }
+          : option
       );
 
       return [...handle.configOptions];
@@ -68,41 +69,6 @@ export class AcpRuntimeConfigController {
     modelId: string,
     sessionId: string
   ): Promise<SessionConfigOption[]> {
-    const applyModelToCache = (): SessionConfigOption[] => {
-      handle.configOptions = handle.configOptions.map((option) =>
-        option.category === 'model' ? { ...option, currentValue: modelId } : option
-      );
-      return [...handle.configOptions];
-    };
-
-    if (handle.provider === 'CLAUDE') {
-      try {
-        await handle.connection.unstable_setSessionModel({
-          sessionId: handle.providerSessionId,
-          modelId,
-        });
-        return applyModelToCache();
-      } catch (error) {
-        if (!isMethodNotFoundError(error)) {
-          logger.warn('setSessionModel failed', {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
-        logger.warn(
-          'unstable_setSessionModel unavailable, falling back to setSessionConfigOption',
-          {
-            sessionId,
-            modelId,
-            provider: handle.provider,
-          }
-        );
-      }
-    }
-
     return await this.setConfigOption(handle, 'model', modelId, sessionId);
   }
 }

@@ -75,6 +75,10 @@ describe('cached ACP configuration validation', () => {
       'invalid group',
       [{ ...validModel, options: [{ group: 'models', name: 'Models', options: [null] }] }],
     ],
+    [
+      'invalid group options',
+      [{ ...validModel, options: [{ group: 'models', name: 'Models', options: 42 }] }],
+    ],
     ['invalid entry beside valid option', [validModel, null]],
   ])(
     'ignores a snapshot with %s instead of exposing malformed options',

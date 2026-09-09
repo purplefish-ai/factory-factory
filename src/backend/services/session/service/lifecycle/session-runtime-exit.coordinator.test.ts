@@ -81,10 +81,8 @@ function createExitCoordinatorHarness(options?: {
     workflowFinalizer,
     onSessionExit,
   });
-  const purpose = options?.browse ? ('browse' as const) : ('active' as const);
   const handlers = coordinator.createHandlers({
     sessionId: 'session-1',
-    purpose,
     persistProviderSessionId: !options?.browse,
   });
 
@@ -168,8 +166,18 @@ describe('SessionRuntimeExitCoordinator', () => {
     const browse = createExitCoordinatorHarness({ browse: true });
     const runtimeError = new Error('provider transport failed');
 
-    await active.handlers.onError?.('session-1', runtimeError);
-    await browse.handlers.onError?.('session-1', runtimeError);
+    await active.handlers.onRuntimeError!({
+      sessionId: 'session-1',
+      error: runtimeError,
+      incarnationId: '11111111-1111-4111-8111-111111111111',
+      purpose: 'active',
+    });
+    await browse.handlers.onRuntimeError!({
+      sessionId: 'session-1',
+      error: runtimeError,
+      incarnationId: '22222222-2222-4222-8222-222222222222',
+      purpose: 'browse',
+    });
 
     expect(active.domain.markError).toHaveBeenCalledWith('session-1', 'provider transport failed');
     expect(browse.domain.markError).not.toHaveBeenCalled();
@@ -180,7 +188,7 @@ describe('SessionRuntimeExitCoordinator', () => {
     );
   });
 
-  it('uses typed runtime error purpose instead of handler creation purpose', async () => {
+  it('uses the promoted runtime purpose for handlers created while browsing', async () => {
     const harness = createExitCoordinatorHarness({ browse: true });
     const runtimeError = new Error('promoted runtime failed');
 
@@ -232,7 +240,7 @@ describe('SessionRuntimeExitCoordinator', () => {
     async (exitCode, message, dedupeSuffix) => {
       const harness = createExitCoordinatorHarness();
 
-      await harness.coordinator.handleExit(runtimeExit({ exitCode }));
+      await harness.handlers.onRuntimeExit!(runtimeExit({ exitCode }));
 
       expect(harness.lifecycleEvents.record).toHaveBeenCalledWith({
         workspaceId: 'workspace-1',
@@ -251,7 +259,7 @@ describe('SessionRuntimeExitCoordinator', () => {
       explicitStopReserved: true,
     });
 
-    await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
+    await harness.handlers.onRuntimeExit!(runtimeExit({ managed: true, exitCode: null }));
 
     expect(harness.repository.updateSession).not.toHaveBeenCalled();
     expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
@@ -268,7 +276,7 @@ describe('SessionRuntimeExitCoordinator', () => {
     async (_caseName, lifecycleStopping) => {
       const harness = createExitCoordinatorHarness({ lifecycleStopping });
 
-      await harness.coordinator.handleExit(runtimeExit({ managed: true, exitCode: null }));
+      await harness.handlers.onRuntimeExit!(runtimeExit({ managed: true, exitCode: null }));
 
       expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
         status: SessionStatus.FAILED,

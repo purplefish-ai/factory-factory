@@ -5,16 +5,23 @@
 All agent sessions use the Agent Client Protocol (ACP) via
 `@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-agent-acp`; CODEX
 sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both
-over stdio JSON-RPC.
+over stdio JSON-RPC. The direct SDK dependency matches Claude ACP's SDK 1.4.
+Model changes use `session/set_config_option`. Legacy model/mode response
+fallbacks remain supported; model and mode controls require select options.
+Boolean options are retained in backend configuration but omitted from the
+current select-only chat controls. The internal Codex adapter accepts string
+configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
+servers, which it does not advertise support for.
 
-Persisted ACP config snapshots are validated with the SDK configuration schema
-before being used for inactive-session options or capabilities. Malformed
+Persisted ACP config snapshots are validated with a strict schema for ACP select
+and boolean options before being used for inactive-session options or capabilities. Malformed
 snapshots are treated as cache misses; provider history identity recovery stays
 independent of configuration validity. Valid snapshots restore omitted model/mode
 categories for both providers, while retaining Codex's provider-supplied labels.
 
-Session init/load is fail-fast and requires provider `configOptions` with
-model/mode categories. Permission requests present multi-option selection
+Session init/load fails unless model/mode select options can be obtained from
+provider `configOptions` or legacy model/mode response fields. Permission requests
+present multi-option selection
 (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged
 through ACP permission response handlers.
 
@@ -53,6 +60,10 @@ subprocess handles, pending creation, incarnation filtering, exits, stops, and
 quiescence. `AcpRuntimeManager` is the stable compatibility facade over the
 supervisor and stateless ACP collaborators. Lifecycle coordinators continue to
 own durable reconciliation and never manipulate runtime registries directly.
+Runtime callbacks use `onRuntimeExit` and `onRuntimeError` events carrying the
+supervisor's incarnation identity and current purpose. Exit events also carry
+whether the stop was managed; coordinators consume this metadata directly,
+including after a browsing runtime is promoted to active use.
 
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.

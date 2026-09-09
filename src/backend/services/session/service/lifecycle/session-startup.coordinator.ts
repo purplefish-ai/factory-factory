@@ -352,7 +352,6 @@ export class SessionStartupCoordinator {
 
     const handlers = this.dependencies.runtimeExitCoordinator.createHandlers({
       sessionId,
-      purpose: browseOnly ? 'browse' : 'active',
       persistProviderSessionId: !browseOnly,
     });
     this.dependencies.acpEventProcessor.setReplaySuppression(

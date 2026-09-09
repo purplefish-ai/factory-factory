@@ -27,11 +27,7 @@ export function dispatchAcpRuntimeExit(
 ): Promise<void> {
   return exitHandlerSession.run(event.sessionId, async () => {
     try {
-      if (handlers.onRuntimeExit) {
-        await handlers.onRuntimeExit(event);
-      } else if (!event.managed && handlers.onExit) {
-        await handlers.onExit(event.sessionId, event.exitCode);
-      }
+      await handlers.onRuntimeExit?.(event);
     } catch (error) {
       logger.warn('Failed to handle ACP exit event', {
         sessionId: event.sessionId,

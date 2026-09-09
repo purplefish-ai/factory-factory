@@ -1,11 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
   AcpRuntimeErrorEvent,
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
-  AcpRuntimePurpose,
 } from '@/backend/services/session/service/acp';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -55,13 +53,11 @@ export class SessionRuntimeExitCoordinator {
 
   createHandlers(input: {
     sessionId: string;
-    purpose: AcpRuntimePurpose;
     persistProviderSessionId: boolean;
   }): AcpRuntimeEventHandlers {
     const runtimeEventHandler = this.dependencies.acpEventProcessor.createRuntimeEventHandler(
       input.sessionId
     );
-    const legacyIncarnationId = randomUUID();
 
     return {
       ...runtimeEventHandler,
@@ -71,23 +67,6 @@ export class SessionRuntimeExitCoordinator {
       onRuntimeExit: (event) => this.handleExit(event),
       onRuntimeError: (event) => {
         this.handleRuntimeError(event);
-      },
-      onExit: async (sessionId, exitCode) => {
-        await this.handleExit({
-          sessionId,
-          exitCode,
-          incarnationId: legacyIncarnationId,
-          purpose: input.purpose,
-          managed: this.dependencies.lifecycleGate.isSessionStopping(sessionId),
-        });
-      },
-      onError: (sessionId, error) => {
-        this.handleRuntimeError({
-          sessionId,
-          error,
-          incarnationId: legacyIncarnationId,
-          purpose: input.purpose,
-        });
       },
       onAcpLog: (sessionId, payload) => {
         this.dependencies.acpEventProcessor.handleAcpLog(sessionId, payload);

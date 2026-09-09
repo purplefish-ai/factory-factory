@@ -65,8 +65,9 @@ import {
   type workspaceSnapshotStore,
   type workspaceStateMachine,
 } from '@/backend/services/workspace';
-import { type CIStatus, type PRState, WorkspaceStatus } from '@/shared/core';
+import type { CIStatus, PRState } from '@/shared/core';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
+import { RatchetProjectionWorker } from './ratchet-projection.worker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,8 +113,6 @@ interface PendingRequestChangedEvent {
 
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
-const PROJECTION_RETRY_BASE_MS = 1000;
-const MAX_PROJECTION_READ_ATTEMPTS = 3;
 let lastCoalescerTimestamp = 0;
 
 function nextCoalescerTimestamp(): number {
@@ -144,100 +143,6 @@ export type EventCollectorDependencies = {
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
   workspaceStateMachine: typeof workspaceStateMachine;
 };
-
-async function projectAuthoritativeRatchetState(
-  state: EventCollectorState,
-  coalescer: EventCoalescer,
-  workspaceId: string,
-  isActive: () => boolean
-): Promise<boolean> {
-  try {
-    const workspace =
-      await state.dependencies.workspaceDataService.findRatchetProjection(workspaceId);
-    if (
-      !(workspace && isActive()) ||
-      workspace.status === WorkspaceStatus.ARCHIVING ||
-      workspace.status === WorkspaceStatus.ARCHIVED
-    ) {
-      return true;
-    }
-    coalescer.enqueue(
-      workspaceId,
-      {
-        ratchetEnabled: workspace.ratchetEnabled,
-        ratchetState: workspace.ratchetState,
-        ratchetDispatchOutcome: workspace.ratchetDispatchOutcome,
-        ratchetDispatchRetryCount: workspace.ratchetDispatchRetryCount,
-        ratchetDispatchStalled: workspace.ratchetDispatchStalled,
-        hasMergeConflict: workspace.prHasMergeConflict,
-      },
-      'projection:ratchet_authoritative',
-      { immediate: true }
-    );
-    return true;
-  } catch (error) {
-    state.logger.warn('Failed to refresh authoritative Ratchet snapshot projection', {
-      workspaceId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-function getNewerProjectionRevision(refresh: { revision: number }, target: number): number | null {
-  return refresh.revision > target ? refresh.revision : null;
-}
-
-async function runRatchetProjectionRefresh(params: {
-  state: EventCollectorState;
-  coalescer: EventCoalescer;
-  workspaceId: string;
-  refresh: { revision: number };
-  refreshes: Map<string, { revision: number }>;
-  isActive: () => boolean;
-  waitForRetry: (attempt: number) => Promise<void>;
-}): Promise<void> {
-  const { state, coalescer, workspaceId, refresh, refreshes, isActive, waitForRetry } = params;
-  let targetRevision = refresh.revision;
-  let failedAttempts = 0;
-  try {
-    while (isActive()) {
-      const succeeded = await projectAuthoritativeRatchetState(
-        state,
-        coalescer,
-        workspaceId,
-        isActive
-      );
-      const newerRevision = getNewerProjectionRevision(refresh, targetRevision);
-      if (succeeded) {
-        if (newerRevision === null) {
-          break;
-        }
-        targetRevision = newerRevision;
-        failedAttempts = 0;
-        continue;
-      }
-      failedAttempts += 1;
-      if (newerRevision !== null) {
-        targetRevision = newerRevision;
-      }
-      if (!isActive()) {
-        break;
-      }
-      // The 60-second snapshot reconciliation is the long-term safety net.
-      // Bound event-path retries so a database outage cannot leave one loop
-      // per workspace running indefinitely.
-      if (failedAttempts >= MAX_PROJECTION_READ_ATTEMPTS) {
-        break;
-      }
-      await waitForRetry(Math.max(failedAttempts - 1, 0));
-    }
-  } finally {
-    if (refreshes.get(workspaceId) === refresh) {
-      refreshes.delete(workspaceId);
-    }
-  }
-}
 
 function shouldRefreshRatchetForPrSwitch(
   previousSnapshot: ReturnType<StoreInterface['getByWorkspaceId']>,
@@ -393,7 +298,7 @@ class EventCollectorState {
   activeCoalescer: EventCoalescer | null = null;
   lastIdlePrRefreshByWorkspace = new Map<string, number>();
   teardownListeners: Array<() => void> = [];
-  stopRatchetProjection: (() => void) | null = null;
+  ratchetProjection: RatchetProjectionWorker | null = null;
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -583,68 +488,15 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     state.logger
   );
   state.activeCoalescer = coalescer;
-  const ratchetProjectionRefreshes = new Map<string, { revision: number }>();
-  const archivedProjectionWorkspaceIds = new Set<string>();
-  let projectionActive = true;
-  const projectionRetryWaiters = new Set<{
-    timer: NodeJS.Timeout;
-    resolve: () => void;
-  }>();
-  state.stopRatchetProjection = () => {
-    projectionActive = false;
-    for (const waiter of projectionRetryWaiters) {
-      clearTimeout(waiter.timer);
-      waiter.resolve();
-    }
-    projectionRetryWaiters.clear();
-    ratchetProjectionRefreshes.clear();
-    archivedProjectionWorkspaceIds.clear();
-  };
-
-  const waitForProjectionRetry = (attempt: number): Promise<void> =>
-    new Promise((resolve) => {
-      if (!projectionActive || state.activeCoalescer !== coalescer) {
-        resolve();
-        return;
-      }
-      const waiter = {
-        timer: setTimeout(
-          () => {
-            projectionRetryWaiters.delete(waiter);
-            resolve();
-          },
-          PROJECTION_RETRY_BASE_MS * 2 ** attempt
-        ),
-        resolve,
-      };
-      projectionRetryWaiters.add(waiter);
-    });
-
-  const requestAuthoritativeRatchetProjection = (workspaceId: string): void => {
-    if (archivedProjectionWorkspaceIds.has(workspaceId)) {
-      return;
-    }
-    const existing = ratchetProjectionRefreshes.get(workspaceId);
-    if (existing) {
-      existing.revision += 1;
-      return;
-    }
-
-    const refresh = { revision: 1 };
-    ratchetProjectionRefreshes.set(workspaceId, refresh);
-    void runRatchetProjectionRefresh({
-      state,
-      coalescer,
-      workspaceId,
-      refresh,
-      refreshes: ratchetProjectionRefreshes,
-      isActive: () =>
-        projectionActive &&
-        state.activeCoalescer === coalescer &&
-        !archivedProjectionWorkspaceIds.has(workspaceId),
-      waitForRetry: waitForProjectionRetry,
-    });
-  };
+  const ratchetProjection = new RatchetProjectionWorker({
+    read: (workspaceId) => dependencies.workspaceDataService.findRatchetProjection(workspaceId),
+    publish: (workspaceId, fields) =>
+      coalescer.enqueue(workspaceId, fields, 'projection:ratchet_authoritative', {
+        immediate: true,
+      }),
+    logger: state.logger,
+  });
+  state.ratchetProjection = ratchetProjection;
   state.lastIdlePrRefreshByWorkspace.clear();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -686,8 +538,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   // 1. Workspace state changes
   const workspaceStateChangedHandler = (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
-      archivedProjectionWorkspaceIds.add(event.workspaceId);
-      ratchetProjectionRefreshes.delete(event.workspaceId);
+      ratchetProjection.setArchived(event.workspaceId, true);
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
       void Promise.allSettled([
@@ -716,7 +567,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       });
       return;
     }
-    archivedProjectionWorkspaceIds.delete(event.workspaceId);
+    ratchetProjection.setArchived(event.workspaceId, false);
     coalescer.enqueue(
       event.workspaceId,
       buildWorkspaceStateChangeFields(event),
@@ -751,7 +602,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     // Before the projection this refresh was conditional on the dispatch record
     // moving, which is why a snapshot could show `prState: MERGED` next to a
     // `ratchetState` from the previous ratchet poll.
-    requestAuthoritativeRatchetProjection(event.workspaceId);
+    ratchetProjection.request(event.workspaceId);
 
     if (shouldRefreshRatchet) {
       // Bypass the PR-fetch cooldown: this event was emitted by a sync that
@@ -797,7 +648,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
         { immediate: true }
       );
     }
-    requestAuthoritativeRatchetProjection(event.workspaceId);
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_STATE_CHANGED, ratchetStateChangedHandler);
   state.teardownListeners.push(() =>
@@ -812,7 +663,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       'event:ratchet_toggled',
       { immediate: true }
     );
-    requestAuthoritativeRatchetProjection(event.workspaceId);
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_TOGGLED, ratchetToggledHandler);
   state.teardownListeners.push(() =>
@@ -821,7 +672,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 5. Ratchet dispatch ownership changes
   const ratchetDispatchChangedHandler = (event: RatchetDispatchChangedEvent) => {
-    requestAuthoritativeRatchetProjection(event.workspaceId);
+    ratchetProjection.request(event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_DISPATCH_CHANGED, ratchetDispatchChangedHandler);
   state.teardownListeners.push(() =>
@@ -975,8 +826,8 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
   for (const teardown of state.teardownListeners.splice(0).reverse()) {
     teardown();
   }
-  state.stopRatchetProjection?.();
-  state.stopRatchetProjection = null;
+  state.ratchetProjection?.stop();
+  state.ratchetProjection = null;
 
   if (state.activeCoalescer) {
     state.activeCoalescer.flushAll();

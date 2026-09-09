@@ -242,12 +242,12 @@ describe('AcpRuntimeManager', () => {
         vi.useRealTimers();
       }
 
-      (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
+      (handlers.onRuntimeExit as ReturnType<typeof vi.fn>).mockClear();
       child.exitCode = 137;
       child.emit('exit', 137, 'SIGKILL');
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(handlers.onExit).not.toHaveBeenCalled();
+      expect(handlers.onRuntimeExit).not.toHaveBeenCalled();
     });
 
     it('omits stale runtime error and exit events without affecting its replacement', async () => {
@@ -378,7 +378,6 @@ describe('AcpRuntimeManager', () => {
       expect(mockSpawn).toHaveBeenCalledOnce();
       expect(firstChild.kill).toHaveBeenCalledOnce();
       expect(onRuntimeError).not.toHaveBeenCalled();
-      expect(handlers.onError).not.toHaveBeenCalled();
 
       firstChild.exitCode = 0;
       firstChild.emit('exit', 0, null);

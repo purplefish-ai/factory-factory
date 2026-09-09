@@ -1,8 +1,8 @@
 import type {
   SessionConfigOption,
+  SessionConfigSelect,
   SessionConfigSelectGroup,
   SessionConfigSelectOption,
-  SessionModelState,
   SessionModeState,
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
@@ -11,9 +11,15 @@ import { formatClaudeModelOptionName } from './claude-model-options';
 const logger = createLogger('acp-session-config-options');
 const REQUIRED_CONFIG_CATEGORIES = ['model', 'mode'] as const;
 
+// Older providers may still send the retired model-state response alongside modes.
+type LegacySessionModelState = {
+  currentModelId: string;
+  availableModels: Array<{ modelId: string; name: string; description?: string | null }>;
+};
+
 type SessionResultWithFallbackState = {
   configOptions?: SessionConfigOption[] | null;
-  models?: SessionModelState | null;
+  models?: LegacySessionModelState | null;
   modes?: SessionModeState | null;
 };
 
@@ -35,7 +41,7 @@ function isOptionGroup(
 }
 
 function isOptionGroupArray(
-  options: SessionConfigOption['options']
+  options: SessionConfigSelect['options']
 ): options is SessionConfigSelectGroup[] {
   const [firstOption] = options;
   return firstOption ? isOptionGroup(firstOption) : false;
@@ -43,7 +49,10 @@ function isOptionGroupArray(
 
 function normalizeClaudeConfigOptions(configOptions: SessionConfigOption[]): SessionConfigOption[] {
   return configOptions.map((configOption) => {
-    if (configOption.category !== 'model' && configOption.id !== 'model') {
+    if (
+      configOption.type !== 'select' ||
+      (configOption.category !== 'model' && configOption.id !== 'model')
+    ) {
       return configOption;
     }
 
@@ -75,7 +84,11 @@ export function normalizeSessionConfigOptions(
   const providerNormalized =
     provider === 'CLAUDE' ? normalizeClaudeConfigOptions(configOptions) : configOptions;
   return providerNormalized.map((configOption) => {
-    if (configOption.category || (configOption.id !== 'model' && configOption.id !== 'mode')) {
+    if (
+      configOption.type !== 'select' ||
+      configOption.category ||
+      (configOption.id !== 'model' && configOption.id !== 'mode')
+    ) {
       return configOption;
     }
     return {
@@ -86,7 +99,7 @@ export function normalizeSessionConfigOptions(
 }
 
 function resolveModelConfigOption(
-  models: SessionModelState | null | undefined
+  models: LegacySessionModelState | null | undefined
 ): SessionConfigOption | null {
   if (!(models && Array.isArray(models.availableModels))) {
     return null;
@@ -200,7 +213,10 @@ export function requireSessionConfigOptions(
 
   const normalizedConfigOptions = normalizeSessionConfigOptions(provider, configOptions);
   const missingCategories = REQUIRED_CONFIG_CATEGORIES.filter(
-    (category) => !normalizedConfigOptions.some((option) => option.category === category)
+    (category) =>
+      !normalizedConfigOptions.some(
+        (option) => option.type === 'select' && option.category === category
+      )
   );
   if (missingCategories.length > 0) {
     throw new Error(

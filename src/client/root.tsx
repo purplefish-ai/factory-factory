@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
+import { Loading } from '@/client/components/loading';
 import { AppLayout } from '@/client/components/resizable-layout';
 import { ThemeProvider } from '@/client/components/theme-provider';
 import { WorkspaceNotificationManager } from '@/client/features/workspace/WorkspaceNotificationManager';
@@ -37,7 +38,9 @@ function RootLayout() {
     >
       <CLIHealthBanner />
       <AppLayout className="flex-1 overflow-hidden">
-        <Outlet />
+        <Suspense fallback={<Loading message="Loading page..." />}>
+          <Outlet />
+        </Suspense>
       </AppLayout>
     </div>
   );

@@ -39,6 +39,13 @@ observation (`prState`, `prReviewState`, `prCiStatus`, `hasMergeConflict`) via
 changes-requested review would not be visible until the separate PR-sync poller
 caught up.
 
+Live snapshot invalidations go through `RatchetProjectionWorker`, owned by the
+event collector for one start/stop lifetime. It re-reads when invalidations arrive
+during a read, retries failures at 1s and 2s with a three-attempt budget, and
+suppresses archived workspaces and results arriving after stop. The collector
+keeps the event subscriptions and coalesced snapshot writes; reconciliation is
+the safety net after the worker exhausts its retries.
+
 ### Dispatch tracking
 
 Each fixer dispatch is tracked via an explicit record on that row (snapshot key

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeManager } from './acp-runtime-manager';
 import type { AcpClientOptions } from './types';
@@ -181,8 +182,8 @@ function defaultContext() {
   return { workspaceId: 'workspace-1', workingDir: process.cwd() };
 }
 
-function getOptionValues(option: { options?: unknown[] } | undefined): string[] {
-  if (!(option && Array.isArray(option.options))) {
+function getOptionValues(option: SessionConfigOption | undefined): string[] {
+  if (!(option?.type === 'select' && Array.isArray(option.options))) {
     return [];
   }
 
@@ -205,10 +206,10 @@ function getOptionValues(option: { options?: unknown[] } | undefined): string[] 
 }
 
 function getOptionByValue(
-  option: { options?: unknown[] } | undefined,
+  option: SessionConfigOption | undefined,
   value: string
 ): { value: string; name?: string } | null {
-  if (!(option && Array.isArray(option.options))) {
+  if (!(option?.type === 'select' && Array.isArray(option.options))) {
     return null;
   }
 
@@ -328,5 +329,34 @@ describe('ACP session negotiation integration', () => {
       name: 'Medium',
     });
     expect(getOptionByValue(reasoningOption, 'high')).toEqual({ value: 'high', name: 'High' });
+  });
+  it('preserves model and mode fallback for legacy provider responses over stdio', async () => {
+    const binaryPath = createFakeAcpBinary(tempDir, 'legacy-acp', {
+      sessionId: 'legacy-session',
+      models: {
+        availableModels: [{ modelId: 'old-model', name: 'Old model' }],
+        currentModelId: 'old-model',
+      },
+      modes: { availableModes: [{ id: 'default', name: 'Default' }], currentModeId: 'default' },
+    });
+    await expect(
+      manager.getOrCreateClient(
+        'legacy-session',
+        {
+          provider: 'CLAUDE',
+          sessionId: 'legacy-session',
+          workingDir: process.cwd(),
+          adapterBinaryPath: binaryPath,
+        },
+        {},
+        defaultContext()
+      )
+    ).resolves.toMatchObject({
+      providerSessionId: 'legacy-session',
+      configOptions: [
+        expect.objectContaining({ type: 'select', category: 'model', currentValue: 'old-model' }),
+        expect.objectContaining({ type: 'select', category: 'mode', currentValue: 'default' }),
+      ],
+    });
   });
 });

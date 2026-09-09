@@ -100,7 +100,7 @@ describe('SessionConfigService', () => {
 
     service.applyConfigOptionsUpdateDelta('session-1', handle, unsafeCoerce(incoming));
 
-    expect(handle.configOptions[0]?.options).toEqual([
+    expect(handle.configOptions.filter((option) => option.type === 'select')[0]?.options).toEqual([
       expect.objectContaining({ value: 'sonnet', name: 'Sonnet 5' }),
     ]);
     expect(sessionDomain.emitDelta).toHaveBeenCalledWith(
@@ -402,7 +402,7 @@ describe('SessionConfigService', () => {
 
     expect(codexModelCatalogService.getModels).toHaveBeenCalledTimes(1);
     expect(modelOption?.currentValue).toBe('gpt-5.3-codex');
-    expect(modelOption?.options).toEqual(
+    expect(modelOption?.type === 'select' ? modelOption.options : undefined).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ value: 'gpt-5.4-codex', name: 'GPT-5.4 Codex' }),
         expect.objectContaining({ value: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' }),
