@@ -1,11 +1,17 @@
 appId: com.factoryfactory.app
 productName: Factory Factory
+# The npm package entry remains the CLI; desktop packages launch Electron main.
+extraMetadata:
+  main: electron/dist/electron/main/index.js
 directories:
   output: release
   buildResources: build-resources
 files:
   # Compiled backend (runs in Electron main process)
   - dist/src/backend/**/*
+  # Shared runtime imports used by the backend
+  - dist/src/shared/**/*
+  - dist/src/lib/**/*
   # Compiled Electron main process
   - electron/dist/**/*
   # Frontend build
@@ -70,9 +76,13 @@ asarUnpack:
   - node_modules/.pnpm/node-addon-api*/**/*
   # Compiled backend (runs in Electron main process)
   - dist/src/backend/**/*
+  # Shared runtime imports used by the backend
+  - dist/src/shared/**/*
+  - dist/src/lib/**/*
   # Frontend must be unpacked for Express static serving
   - dist/client/**/*
 mac:
+  minimumSystemVersion: "13.0"
   category: public.app-category.developer-tools
   target: [dmg, zip]
 win:

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade Electron to 44.3.0, require macOS 13 or newer for the desktop app, and migrate clipboard image paste to the asynchronous clipboard API
+
 - Upgrade Vite to 8.2.2 and its React plugin to 6.1.1; update Vitest and V8 coverage to 5.0.0, migrate the chat grouping benchmark API, and upgrade jsdom to 30.0.1
 
 - Upgrade builds and typechecks to TypeScript 7.0.2 while retaining the TypeScript 6 compiler API for tooling; update dependency-cruiser to 18.2.0, lint-staged to 17.5.0, concurrently to 10.0.5, and Supertest types to 7.2.1
@@ -19,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade Biome from 2.4.4 to 2.5.12, migrate its configuration, and apply the updated lint and formatting rules
 - Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, and Storybook 10.6.0
 - Update the Codex CLI compatibility baseline from 0.145.0 to 0.153.4 and regenerate the app-server method snapshot
+
+### Fixed
+
+- Fix desktop packaging by selecting the Electron main entry, including shared backend modules, and emitting a CommonJS preload for the sandboxed renderer
 
 ### Security
 

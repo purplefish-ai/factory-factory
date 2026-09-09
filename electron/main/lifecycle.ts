@@ -44,7 +44,16 @@ interface NativeImageLike {
 }
 
 interface ClipboardLike {
-  readImage(): NativeImageLike;
+  read(): Promise<
+    Array<{
+      types: readonly string[];
+      getType(type: string): Promise<unknown>;
+    }>
+  >;
+}
+
+interface NativeImageFactoryLike {
+  createFromBuffer(buffer: Buffer): NativeImageLike;
 }
 
 interface IpcMainInvokeEventLike {
@@ -72,6 +81,7 @@ export interface ElectronLifecycleDependencies {
   app: AppLike;
   browserWindow: BrowserWindowConstructorLike;
   clipboard: ClipboardLike;
+  nativeImage: NativeImageFactoryLike;
   dialog: DialogLike;
   ipcMain: IpcMainLike;
   logger: LoggerLike;
@@ -93,10 +103,40 @@ export interface ElectronLifecycleController {
 // electron/main is built as a separate program from src/).
 const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
 
+async function readClipboardPng(
+  clipboard: ClipboardLike,
+  nativeImage: NativeImageFactoryLike
+): Promise<string | null> {
+  const items = await clipboard.read();
+  // Prefer a native PNG representation; decode JPEG when that is all the OS offers.
+  const mimeType = items.some((item) => item.types.includes('image/png'))
+    ? 'image/png'
+    : 'image/jpeg';
+  const item = items.find((candidate) => candidate.types.includes(mimeType));
+  if (!item) {
+    return null;
+  }
+  const blob = await item.getType(mimeType);
+  if (!(blob instanceof Blob) || blob.size > MAX_CLIPBOARD_IMAGE_BYTES) {
+    return null;
+  }
+  const bytes = Buffer.from(await blob.arrayBuffer());
+  const image = nativeImage.createFromBuffer(bytes);
+  if (image.isEmpty()) {
+    return null;
+  }
+  const png = image.toPNG();
+  if (png.byteLength > MAX_CLIPBOARD_IMAGE_BYTES) {
+    return null;
+  }
+  return Buffer.from(png).toString('base64');
+}
+
 export function createElectronLifecycle({
   app,
   browserWindow,
   clipboard,
+  nativeImage,
   dialog,
   ipcMain,
   logger,
@@ -270,22 +310,27 @@ export function createElectronLifecycle({
     // This intentionally bypasses the browser's clipboard permission prompt, so
     // it's restricted to calls from the app's own main frame — tied to the
     // paste flow rather than reachable from an arbitrary subframe/webview.
-    ipcMain.handle('clipboard:readImagePng', (event: IpcMainInvokeEventLike): string | null => {
-      const currentWindow = resolveMainWindow();
-      if (!currentWindow || event.senderFrame !== currentWindow.webContents.mainFrame) {
-        return null;
-      }
+    ipcMain.handle(
+      'clipboard:readImagePng',
+      async (event: IpcMainInvokeEventLike): Promise<string | null> => {
+        const currentWindow = resolveMainWindow();
+        if (!currentWindow || event.senderFrame !== currentWindow.webContents.mainFrame) {
+          return null;
+        }
 
-      const image = clipboard.readImage();
-      if (image.isEmpty()) {
-        return null;
+        const senderFrame = event.senderFrame;
+        const png = await readClipboardPng(clipboard, nativeImage);
+        // A window may close or navigate while the asynchronous clipboard read is pending.
+        if (
+          currentWindow.isDestroyed() ||
+          resolveMainWindow() !== currentWindow ||
+          currentWindow.webContents.mainFrame !== senderFrame
+        ) {
+          return null;
+        }
+        return png;
       }
-      const png = image.toPNG();
-      if (png.byteLength > MAX_CLIPBOARD_IMAGE_BYTES) {
-        return null;
-      }
-      return Buffer.from(png).toString('base64');
-    });
+    );
   };
 
   const registerAppHandlers = (): void => {

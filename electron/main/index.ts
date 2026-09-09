@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from 'electron';
 import { registerFatalErrorHandlers } from './fatal-error-handlers.js';
 import { createElectronLifecycle } from './lifecycle.js';
 import { ServerManager } from './server-manager.js';
@@ -13,11 +13,12 @@ const lifecycle = createElectronLifecycle({
   app,
   browserWindow: BrowserWindow,
   clipboard,
+  nativeImage,
   dialog,
   ipcMain,
   logger: console,
   platform: process.platform,
-  preloadPath: path.join(__dirname, '../preload/index.js'),
+  preloadPath: path.join(__dirname, '../preload/index.cjs'),
   serverManager,
 });
 

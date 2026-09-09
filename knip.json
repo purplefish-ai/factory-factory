@@ -6,9 +6,9 @@
         "src/backend/server.ts",
         "src/backend/migrate.ts",
         "electron/main/index.ts",
-        "electron/preload/index.ts"
+        "electron/preload/index.cts"
       ],
-      "project": ["src/**/*.{ts,tsx,css,mdx}", "electron/**/*.ts", "prisma/**/*.prisma"]
+      "project": ["src/**/*.{ts,tsx,css,mdx}", "electron/**/*.{ts,cts}", "prisma/**/*.prisma"]
     }
   },
   "paths": {

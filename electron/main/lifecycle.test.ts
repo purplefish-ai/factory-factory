@@ -64,7 +64,7 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
 
 function createTestLifecycle(
   overrides: Partial<
-    Pick<ElectronLifecycleDependencies, 'serverManager' | 'platform' | 'clipboard'>
+    Pick<ElectronLifecycleDependencies, 'serverManager' | 'platform' | 'clipboard' | 'nativeImage'>
   > = {}
 ) {
   FakeBrowserWindow.windows = [];
@@ -86,14 +86,13 @@ function createTestLifecycle(
     handle: vi.fn(),
   };
 
-  const clipboard: ElectronLifecycleDependencies['clipboard'] =
-    overrides.clipboard ??
-    ({
-      readImage: vi.fn(() => ({
-        isEmpty: () => true,
-        toPNG: () => new Uint8Array(),
-      })),
-    } satisfies ElectronLifecycleDependencies['clipboard']);
+  const clipboard = overrides.clipboard ?? { read: vi.fn().mockResolvedValue([]) };
+  const nativeImage = overrides.nativeImage ?? {
+    createFromBuffer: (buffer: Buffer) => ({
+      isEmpty: () => buffer.length === 0,
+      toPNG: () => buffer,
+    }),
+  };
 
   const logger: ElectronLifecycleDependencies['logger'] = {
     log: vi.fn(),
@@ -111,6 +110,7 @@ function createTestLifecycle(
     app,
     browserWindow: FakeBrowserWindow,
     clipboard,
+    nativeImage,
     dialog,
     ipcMain,
     logger,
@@ -214,76 +214,121 @@ describe('clipboard:readImagePng IPC handler', () => {
     if (!call) {
       throw new Error('clipboard:readImagePng handler was not registered');
     }
-    return call[1] as (event: { senderFrame: unknown }) => string | null;
+    return call[1] as (event: { senderFrame: unknown }) => Promise<string | null>;
   }
 
-  it('returns base64-encoded PNG when the request comes from the app window', async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const clipboard: ElectronLifecycleDependencies['clipboard'] = {
-      readImage: vi.fn(() => ({ isEmpty: () => false, toPNG: () => png })),
-    };
-    const { lifecycle, ipcMain } = createTestLifecycle({ clipboard });
+  function imageItem(type: string, bytes: Uint8Array) {
+    return { types: [type], getType: async () => new Blob([new Uint8Array(bytes)], { type }) };
+  }
 
+  async function setup(items: ReturnType<typeof imageItem>[]) {
+    const clipboard = { read: vi.fn().mockResolvedValue(items) };
+    const context = createTestLifecycle({ clipboard });
+    context.lifecycle.registerIpcHandlers();
+    const window = await context.lifecycle.createWindow();
+    return {
+      ...context,
+      handler: getClipboardHandler(context.ipcMain),
+      frame: window?.webContents.mainFrame,
+    };
+  }
+
+  it('returns base64 PNG and prefers PNG over an earlier JPEG item', async () => {
+    const { handler, frame } = await setup([
+      imageItem('image/jpeg', new Uint8Array([1, 2])),
+      imageItem('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47])),
+    ]);
+    expect(await handler({ senderFrame: frame })).toBe('iVBORw==');
+  });
+
+  it('decodes JPEG and returns the converted PNG bytes', async () => {
+    const { lifecycle, ipcMain } = createTestLifecycle({
+      clipboard: { read: async () => [imageItem('image/jpeg', new Uint8Array([0xff, 0xd8]))] },
+      nativeImage: {
+        createFromBuffer: (buffer) => ({
+          isEmpty: () => !buffer.equals(Buffer.from([0xff, 0xd8])),
+          toPNG: () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+        }),
+      },
+    });
     lifecycle.registerIpcHandlers();
     const window = await lifecycle.createWindow();
-    const handler = getClipboardHandler(ipcMain);
-
-    expect(handler({ senderFrame: window?.webContents.mainFrame })).toBe(
-      Buffer.from(png).toString('base64')
+    expect(await getClipboardHandler(ipcMain)({ senderFrame: window?.webContents.mainFrame })).toBe(
+      'iVBORw=='
     );
   });
 
-  it('returns null when the clipboard has no image', async () => {
-    const clipboard: ElectronLifecycleDependencies['clipboard'] = {
-      readImage: vi.fn(() => ({ isEmpty: () => true, toPNG: () => new Uint8Array() })),
-    };
-    const { lifecycle, ipcMain } = createTestLifecycle({ clipboard });
+  it.each([
+    ['empty clipboard', []],
+    ['text-only clipboard', [imageItem('text/plain', new Uint8Array([65]))]],
+    ['empty image', [imageItem('image/png', new Uint8Array())]],
+    ['oversized image', [imageItem('image/png', new Uint8Array(10 * 1024 * 1024 + 1))]],
+  ])('returns null for an %s', async (_name, items) => {
+    const { handler, frame } = await setup(items);
+    expect(await handler({ senderFrame: frame })).toBeNull();
+  });
 
+  it('rejects PNG output that exceeds the limit after conversion', async () => {
+    const { lifecycle, ipcMain } = createTestLifecycle({
+      clipboard: { read: async () => [imageItem('image/jpeg', new Uint8Array([1]))] },
+      nativeImage: {
+        createFromBuffer: () => ({
+          isEmpty: () => false,
+          toPNG: () => new Uint8Array(10 * 1024 * 1024 + 1),
+        }),
+      },
+    });
     lifecycle.registerIpcHandlers();
     const window = await lifecycle.createWindow();
-    const handler = getClipboardHandler(ipcMain);
-
-    expect(handler({ senderFrame: window?.webContents.mainFrame })).toBeNull();
+    expect(
+      await getClipboardHandler(ipcMain)({ senderFrame: window?.webContents.mainFrame })
+    ).toBeNull();
   });
 
-  it('returns null for an image over the size limit', async () => {
-    const oversizedPng = new Uint8Array(10 * 1024 * 1024 + 1);
-    const clipboard: ElectronLifecycleDependencies['clipboard'] = {
-      readImage: vi.fn(() => ({ isEmpty: () => false, toPNG: () => oversizedPng })),
-    };
-    const { lifecycle, ipcMain } = createTestLifecycle({ clipboard });
+  it('does not read the clipboard for an untrusted frame', async () => {
+    const { handler, clipboard } = await setup([]);
+    expect(await handler({ senderFrame: {} })).toBeNull();
+    expect(clipboard.read).not.toHaveBeenCalled();
+  });
 
+  it('does not read the clipboard without an app window', async () => {
+    const { lifecycle, ipcMain, clipboard } = createTestLifecycle();
+    lifecycle.registerIpcHandlers();
+    expect(await getClipboardHandler(ipcMain)({ senderFrame: {} })).toBeNull();
+    expect(clipboard.read).not.toHaveBeenCalled();
+  });
+
+  it('does not return clipboard data after the trusted main frame navigates', async () => {
+    const pendingRead = deferred<ReturnType<typeof imageItem>[]>();
+    const { lifecycle, ipcMain } = createTestLifecycle({
+      clipboard: { read: () => pendingRead.promise },
+    });
     lifecycle.registerIpcHandlers();
     const window = await lifecycle.createWindow();
-    const handler = getClipboardHandler(ipcMain);
-
-    expect(handler({ senderFrame: window?.webContents.mainFrame })).toBeNull();
+    const result = getClipboardHandler(ipcMain)({ senderFrame: window?.webContents.mainFrame });
+    if (!window) {
+      throw new Error('Expected a window');
+    }
+    window.webContents.mainFrame = {};
+    pendingRead.resolve([imageItem('image/png', new Uint8Array([1]))]);
+    expect(await result).toBeNull();
   });
 
-  it('returns null when the request does not come from the trusted app frame', async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const clipboard: ElectronLifecycleDependencies['clipboard'] = {
-      readImage: vi.fn(() => ({ isEmpty: () => false, toPNG: () => png })),
-    };
-    const { lifecycle, ipcMain } = createTestLifecycle({ clipboard });
-
+  it('does not return clipboard data if the window closes while reading', async () => {
+    let resolveRead!: (items: ReturnType<typeof imageItem>[]) => void;
+    const { lifecycle, ipcMain } = createTestLifecycle({
+      clipboard: {
+        read: () =>
+          new Promise((resolve) => {
+            resolveRead = resolve;
+          }),
+      },
+    });
     lifecycle.registerIpcHandlers();
-    await lifecycle.createWindow();
-    const handler = getClipboardHandler(ipcMain);
-
-    expect(handler({ senderFrame: {} })).toBeNull();
-  });
-
-  it('returns null when there is no app window', () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const clipboard: ElectronLifecycleDependencies['clipboard'] = {
-      readImage: vi.fn(() => ({ isEmpty: () => false, toPNG: () => png })),
-    };
-    const { lifecycle, ipcMain } = createTestLifecycle({ clipboard });
-
-    lifecycle.registerIpcHandlers();
-    const handler = getClipboardHandler(ipcMain);
-
-    expect(handler({ senderFrame: {} })).toBeNull();
+    const window = await lifecycle.createWindow();
+    const result = getClipboardHandler(ipcMain)({ senderFrame: window?.webContents.mainFrame });
+    window?.destroy();
+    resolveRead([imageItem('image/png', new Uint8Array([1]))]);
+    expect(await result).toBeNull();
   });
 });

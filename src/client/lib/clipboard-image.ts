@@ -8,8 +8,8 @@
  * a PNG representation of the *current* clipboard directly, sidestepping that
  * mapping entirely:
  *
- * - Electron: the main process bridges `clipboard.readImage().toPNG()` (the OS
- *   performs the conversion; no permission prompt).
+ * - Electron: the main process reads image blobs with `clipboard.read()` / `getType()`
+ *   and converts them to PNG with `nativeImage` (no permission prompt).
  * - Web: the async Clipboard API (`navigator.clipboard.read()`) exposes a
  *   normalized `image/png` representation even when the legacy paste path only
  *   offered TIFF.
