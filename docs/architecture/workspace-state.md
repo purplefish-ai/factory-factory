@@ -7,6 +7,13 @@ wire, the v4 export format and the client are unchanged.
 
 ## Run script
 
+Startup provisioning follows the main shell's exit. Output pipes normally drain
+to closure, with a one-second limit after exit so background descendants that
+inherit the pipes cannot keep provisioning open. Later output is drained and
+discarded until those descendants close their pipes, so writing after provisioning
+does not interrupt them. Persistent background commands should redirect output if
+it needs to remain available after startup.
+
 The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
 `postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
 written only by `workspace-run-script.accessor.ts`; reads flatten it back under

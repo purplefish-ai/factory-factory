@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSpawn = vi.hoisted(() => vi.fn());
@@ -37,8 +38,8 @@ import { startupScriptService } from './startup-script.service';
 
 class FakeProc extends EventEmitter {
   pid = 12_345;
-  stdout = new EventEmitter();
-  stderr = new EventEmitter();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
   kill = vi.fn();
 }
 
@@ -176,6 +177,69 @@ describe('StartupScriptService', () => {
     });
     expect(markReady).toHaveBeenCalledWith('w1');
     expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { code: 0, success: true },
+    { code: 7, success: false },
+  ])(
+    'finishes after shell exit $code when descendants keep output pipes open',
+    async ({ code, success }) => {
+      vi.useFakeTimers();
+      const proc = new FakeProc();
+      mockSpawn.mockReturnValue(proc);
+      const resultPromise = service.runStartupScript(
+        { id: 'w1', worktreePath: '/tmp/w1' } as never,
+        { startupScriptCommand: 'sleep 30 &', startupScriptTimeout: 30 } as never
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      proc.stdout.write('before exit\n');
+      proc.emit('exit', code, null);
+      proc.stdout.write('buffered output\n');
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(success ? markReady : markFailed).toHaveBeenCalled();
+      await expect(resultPromise).resolves.toMatchObject({
+        success,
+        exitCode: code,
+        stdout: 'before exit\nbuffered output\n',
+        timedOut: false,
+      });
+      expect(proc.stdout.destroyed).toBe(false);
+      expect(proc.stderr.destroyed).toBe(false);
+      expect(mockClearInitScriptPid).toHaveBeenCalledOnce();
+      expect(proc.kill).not.toHaveBeenCalled();
+      const outputWrites = mockAppendInitOutput.mock.calls.length;
+      proc.stdout.write('late output\n');
+      proc.stderr.write('late error\n');
+      proc.emit('close', code, null);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(mockAppendInitOutput).toHaveBeenCalledTimes(outputWrites);
+      expect(mockClearInitScriptPid).toHaveBeenCalledOnce();
+      expect(success ? markReady : markFailed).toHaveBeenCalledOnce();
+      expect(success ? markFailed : markReady).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  );
+
+  it('captures trailing output before the pipes close normally', async () => {
+    vi.useFakeTimers();
+    const proc = new FakeProc();
+    mockSpawn.mockReturnValue(proc);
+    const resultPromise = service.runStartupScript(
+      { id: 'w1', worktreePath: '/tmp/w1' } as never,
+      { startupScriptCommand: 'echo tail', startupScriptTimeout: 30 } as never
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    proc.emit('exit', 0, null);
+    proc.stdout.write('tail\n');
+    proc.emit('close', 0, null);
+
+    await expect(resultPromise).resolves.toMatchObject({ success: true, stdout: 'tail\n' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(proc.kill).not.toHaveBeenCalled();
+    expect(mockClearInitScriptPid).toHaveBeenCalledOnce();
   });
 
   it('reports a process terminated by the timeout signal as timed out', async () => {

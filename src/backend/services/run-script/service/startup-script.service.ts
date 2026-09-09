@@ -246,16 +246,15 @@ class StartupScriptService {
       let stdout = '';
       let stderr = '';
       let killTimeoutHandle: NodeJS.Timeout | undefined;
-
-      proc.once('exit', () => {
-        processTerminated = true;
-      });
+      let outputDrainTimeoutHandle: NodeJS.Timeout | undefined;
+      let settled = false;
 
       const cleanupTimeouts = async (): Promise<void> => {
         clearTimeout(timeoutHandle);
         if (killTimeoutHandle) {
           clearTimeout(killTimeoutHandle);
         }
+        clearTimeout(outputDrainTimeoutHandle);
         if (proc.pid !== undefined) {
           await recordPidPromise;
           try {
@@ -286,14 +285,17 @@ class StartupScriptService {
       }, timeoutMs);
 
       const appendOutput = (target: 'stdout' | 'stderr', data: Buffer): void => {
+        // Keep draining inherited pipes without retaining output or interrupting
+        // background descendants that write after provisioning has completed.
+        if (settled) {
+          return;
+        }
         const str = data.toString();
         const maxSize = SERVICE_LIMITS.startupScriptOutputMaxBytes;
         const keepSize = SERVICE_LIMITS.startupScriptOutputTailBytes;
 
         // Stream output via callback if provided
-        if (onOutput) {
-          onOutput(str);
-        }
+        onOutput?.(str);
 
         if (target === 'stdout') {
           stdout += str;
@@ -311,16 +313,47 @@ class StartupScriptService {
       proc.stdout?.on('data', (data: Buffer) => appendOutput('stdout', data));
       proc.stderr?.on('data', (data: Buffer) => appendOutput('stderr', data));
 
-      proc.on('close', async (code, signal) => {
+      const finish = async (
+        code: number | null,
+        signal: NodeJS.Signals | null,
+        error?: Error
+      ): Promise<void> => {
+        if (settled) {
+          return;
+        }
+        settled = true;
         processTerminated = true;
         await cleanupTimeouts();
         const timedOut = signal !== null && timeoutSignalsSent.has(signal);
-        resolve({ success: code === 0 && !timedOut, exitCode: code, stdout, stderr, timedOut });
+        resolve({
+          success: !error && code === 0 && !timedOut,
+          exitCode: code,
+          stdout,
+          stderr: error?.message ?? stderr,
+          timedOut,
+        });
+      };
+
+      proc.once('exit', (code, signal) => {
+        if (settled) {
+          return;
+        }
+        processTerminated = true;
+        clearTimeout(timeoutHandle);
+        clearTimeout(killTimeoutHandle);
+        // Normally close follows once remaining output has drained. Descendants
+        // can inherit these pipes, so do not let them hold provisioning open.
+        outputDrainTimeoutHandle = setTimeout(() => {
+          void finish(code, signal);
+        }, SERVICE_TIMEOUT_MS.startupScriptOutputDrain);
       });
 
-      proc.on('error', async (error) => {
-        await cleanupTimeouts();
-        resolve({ success: false, exitCode: null, stdout, stderr: error.message, timedOut: false });
+      proc.on('close', (code, signal) => {
+        void finish(code, signal);
+      });
+
+      proc.on('error', (error) => {
+        void finish(null, null, error);
       });
     });
   }
