@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { z } from 'zod';
-import { normalizeSessionConfigOptions } from '../acp/acp-session-config-options';
+import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 
 const extensionMetadataSchema = z.record(z.string(), z.unknown()).nullish();
 const selectValueSchema = z.object({
