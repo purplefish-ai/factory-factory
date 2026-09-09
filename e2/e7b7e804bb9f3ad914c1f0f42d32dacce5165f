@@ -1,0 +1,21 @@
+README.md
+  s_9d4a09579a366e::t_75ccaa6d08970a 113-117
+CHANGELOG.md
+  s_9d4a09579a366e::t_75ccaa6d08970a 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e2e7b7e804bb9f3ad914c1f0f42d32dacce5165f",
+  "prompts": {},
+  "sessions": {
+    "s_9d4a09579a366e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08211-8288-7931-93ee-e8be81c90978",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
