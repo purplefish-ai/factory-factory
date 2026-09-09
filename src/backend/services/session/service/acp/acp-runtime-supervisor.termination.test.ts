@@ -317,6 +317,37 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('waits for the asynchronous process exit after sending SIGKILL', async () => {
+    const handle = createTestProcessHandle();
+    const child = mockChildOf(handle);
+    child.kill = vi.fn(() => true);
+    const { supervisor } = createHarness(() => Promise.resolve(handle));
+    await install(supervisor);
+    vi.useFakeTimers();
+
+    try {
+      let stopped = false;
+      const stop = supervisor.stopClient('session-1').then(() => {
+        stopped = true;
+      });
+      await vi.advanceTimersByTimeAsync(5001);
+
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(stopped).toBe(false);
+      expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+
+      child.signalCode = 'SIGKILL';
+      child.emit('exit', null, 'SIGKILL');
+      await stop;
+
+      expect(stopped).toBe(true);
+      expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('accepts a pending exit when SIGKILL reports that the process is already gone', async () => {
     // Catches a process exiting after the grace-period check but before SIGKILL is delivered.
     const handle = createTestProcessHandle();
@@ -427,7 +458,7 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     );
     vi.useFakeTimers();
     const stop = supervisor.stopClient('session-1');
-    await vi.advanceTimersByTimeAsync(5001);
+    await vi.advanceTimersByTimeAsync(10_001);
     await stop;
     vi.useRealTimers();
     await install(supervisor);
