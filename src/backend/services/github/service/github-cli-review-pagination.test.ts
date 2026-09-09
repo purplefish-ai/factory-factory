@@ -52,6 +52,8 @@ describe('review comment pagination', () => {
     expect(result.map((entry) => entry.id)).toContain(2001);
     expect(result.map((entry) => entry.id)).toContain(1);
     expect(result.map((entry) => entry.id)).not.toContain(2);
+    const updateTimes = result.map((entry) => entry.updatedAt);
+    expect(updateTimes).toEqual([...updateTimes].sort());
     expect(result.at(-1)?.updatedAt).toBe(comments[0]?.updated_at);
   });
 
