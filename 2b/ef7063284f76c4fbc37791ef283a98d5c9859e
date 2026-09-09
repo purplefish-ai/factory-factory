@@ -1,0 +1,37 @@
+src/client/features/workspace/diff-viewer.test.tsx
+  s_3f656289a0040a::t_aa1ed2b27c47d4 122-124,127
+src/client/features/workspace/diff-highlight.worker.test.ts
+  s_3f656289a0040a::t_78a1392a571158 26
+  s_3f656289a0040a::t_aa1ed2b27c47d4 21,28-33
+scripts/diff-worker-build.test.ts
+  s_3f656289a0040a::t_78a1392a571158 46
+src/client/features/workspace/diff-lines.test.tsx
+  s_3f656289a0040a::t_35cbfa953122d5 142,145,147,153,155-170
+  s_3f656289a0040a::t_2e5df6a7558b13 18,52,59-61,143-144,146
+  s_3f656289a0040a::t_78a1392a571158 134-141,148-152,154
+src/client/features/workspace/diff-highlight-protocol.ts
+  s_3f656289a0040a::t_78a1392a571158 3
+src/client/features/workspace/use-diff-scroll.ts
+  s_3f656289a0040a::t_1bfdd4cdde98cf 15-61,115,151-162
+  s_3f656289a0040a::t_f23929d967adf8 82,103,114,147,167,188
+src/client/features/workspace/diff-lines.stories.tsx
+  s_3f656289a0040a::t_35cbfa953122d5 41-43,45-50,96-100
+docs/architecture/diff-rendering.md
+  s_3f656289a0040a::t_35cbfa953122d5 18-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2bef7063284f76c4fbc37791ef283a98d5c9859e",
+  "prompts": {},
+  "sessions": {
+    "s_3f656289a0040a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08586-9699-74d2-b284-0145f58f7a5a",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
