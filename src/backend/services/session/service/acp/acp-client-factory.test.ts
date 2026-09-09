@@ -537,12 +537,13 @@ describe('AcpClientFactory', () => {
           outcome: { outcome: 'selected', optionId: 'bridge-choice' },
         }),
       } as unknown as AcpPermissionBridge;
-      await new AcpClientFactory().createClient(
+      const handle = await new AcpClientFactory().createClient(
         createParams({
           options: defaultOptions({ permissionPreset }),
           handlers: { permissionBridge },
         })
       );
+      expect(handle).toHaveProperty('permissionBridge', permissionBridge);
       const handler = mocks.connections[0]?.toClient({}) as {
         requestPermission(request: RequestPermissionRequest): Promise<{
           outcome: { optionId?: string };

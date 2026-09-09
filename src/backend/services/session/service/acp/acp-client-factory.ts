@@ -213,6 +213,7 @@ export class AcpClientFactory {
       ]);
 
       const handle = new AcpProcessHandle({
+        permissionBridge: handlers.permissionBridge,
         connection,
         child,
         provider: options.provider,

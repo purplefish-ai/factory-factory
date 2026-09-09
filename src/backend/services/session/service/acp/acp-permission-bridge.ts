@@ -1,4 +1,7 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
+import { createLogger } from '@/backend/services/logger.service';
+
+const logger = createLogger('acp-permission-bridge');
 
 interface PendingPermission {
   resolve: (response: RequestPermissionResponse) => void;
@@ -23,6 +26,8 @@ type ToolUserInputAnswers = Record<string, string[]>;
  */
 export class AcpPermissionBridge {
   private readonly pending = new Map<string, PendingPermission>();
+
+  constructor(private readonly onCancelled?: (requestId: string) => void) {}
 
   /**
    * Called by AcpClientHandler.requestPermission().
@@ -81,14 +86,20 @@ export class AcpPermissionBridge {
    * Resolves all pending Promises with cancelled outcome.
    */
   cancelAll(): void {
-    for (const entry of this.pending.values()) {
+    const entries = [...this.pending.entries()];
+    this.pending.clear();
+    for (const [requestId, entry] of entries) {
       entry.resolve({
         outcome: {
           outcome: 'cancelled',
         },
       });
+      try {
+        this.onCancelled?.(requestId);
+      } catch (error) {
+        logger.warn('Failed to deliver permission cancellation', { requestId, error });
+      }
     }
-    this.pending.clear();
   }
 
   /**

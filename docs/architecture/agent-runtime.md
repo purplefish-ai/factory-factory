@@ -17,7 +17,9 @@ Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission requests
 present multi-option selection
 (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged
-through ACP permission response handlers.
+through ACP permission response handlers. Soft cancellation (including voice stop
+and prompt timeout) resolves pending permission requests with a cancelled outcome,
+dismisses their prompts, and keeps the bridge available for later turns.
 
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider

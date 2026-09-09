@@ -105,6 +105,19 @@ describe('AcpPermissionBridge', () => {
     expect(response2).toEqual({ outcome: { outcome: 'cancelled' } });
   });
 
+  it('resolves every permission even if cancellation delivery throws', async () => {
+    const bridge = new AcpPermissionBridge(() => {
+      throw new Error('delivery failed');
+    });
+    const first = bridge.waitForUserResponse('req-1', createMockParams());
+    const second = bridge.waitForUserResponse('req-2', createMockParams());
+    expect(() => bridge.cancelAll()).not.toThrow();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { outcome: { outcome: 'cancelled' } },
+      { outcome: { outcome: 'cancelled' } },
+    ]);
+  });
+
   it('cancelAll clears the pending map', () => {
     const bridge = new AcpPermissionBridge();
 
