@@ -735,9 +735,9 @@ class GitHubCLIService {
     }>
   > {
     try {
-      // Paginate through all pages (100 per page) to avoid silently dropping comments beyond
-      // the first page. The `since` filter bounds incremental fetches; pagination ensures
-      // correctness for large PRs. Cap at MAX_PAGES to prevent unbounded API usage.
+      // Fetch newest updates first so the page cap retains the activity Ratchet uses
+      // for dispatch snapshots, including edits to old comments. Keep a bounded
+      // API budget and return the retained comments in ascending update order.
       const PAGE_SIZE = 100;
       const MAX_PAGES = 20;
       const allComments: Array<{
@@ -754,7 +754,7 @@ class GitHubCLIService {
       for (let page = 1; page <= MAX_PAGES; page++) {
         signal?.throwIfAborted();
         const sinceParam = since ? `&since=${since.toISOString()}` : '';
-        const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}`;
+        const path = `repos/${repo}/pulls/${prNumber}/comments?per_page=${PAGE_SIZE}&page=${page}${sinceParam}&sort=updated&direction=desc`;
 
         const { stdout } = await this.exec(['api', path], {
           timeout: GH_TIMEOUT_MS.default,
@@ -795,7 +795,7 @@ class GitHubCLIService {
         }
       }
 
-      return allComments;
+      return allComments.reverse();
     } catch (error) {
       signal?.throwIfAborted();
       const errorType = classifyError(error);
