@@ -6,19 +6,20 @@ ARG NODE_VERSION=26.8.1
 # Node 26 does not bundle Corepack. Share one pinned pnpm installation across stages.
 FROM node:${NODE_VERSION}-alpine AS base
 ENV PNPM_HOME=/pnpm
-ENV PATH="${PNPM_HOME}:${PATH}"
+ENV PATH="${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}"
 # Keep the pnpm version and release asset SHA-256 digests pinned together.
-# Use static binaries on Alpine and verify before making the download executable.
-RUN PNPM_VERSION=10.34.5 \
+# Use musl release archives on Alpine and verify before extraction.
+RUN PNPM_VERSION=12.3.4 \
   && case "$(uname -m)" in \
-       x86_64) PNPM_ARCH=x64; PNPM_SHA256=8e744e9720cd31a727cfc3059955fdec6433bbe7383360a9e08a9ae833cb06e3 ;; \
-       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=d0e2a99ad2e4d427967f98b3aa8fb5e0bab548a8fd39c6c0aa293b27b740906b ;; \
+       x86_64) PNPM_ARCH=x64; PNPM_SHA256=e4c4f54599627cc0646fbb2ea8103bd6c88634533fbd6c6f5ca0f6fe7d6f5d9c ;; \
+       aarch64) PNPM_ARCH=arm64; PNPM_SHA256=75c0b268cedbf9b57b69dcef576b9b307dd5b7650c1f967ac1b8f8d6afc1ca25 ;; \
        *) echo "Unsupported pnpm architecture: $(uname -m)" >&2; exit 1 ;; \
      esac \
   && mkdir -p "${PNPM_HOME}" \
-  && wget -qO "${PNPM_HOME}/pnpm" "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-${PNPM_ARCH}" \
-  && echo "${PNPM_SHA256}  ${PNPM_HOME}/pnpm" | sha256sum -c - \
-  && chmod +x "${PNPM_HOME}/pnpm"
+  && wget -qO /tmp/pnpm.tar.gz "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}-musl.tar.gz" \
+  && echo "${PNPM_SHA256}  /tmp/pnpm.tar.gz" | sha256sum -c - \
+  && tar -xzf /tmp/pnpm.tar.gz -C "${PNPM_HOME}" \
+  && rm /tmp/pnpm.tar.gz
 
 # ============================================================================
 # Stage 1: Install dependencies
