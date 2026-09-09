@@ -118,6 +118,68 @@ describe('cancelled turn notifications', () => {
     }
   );
 
+  it('drops a notification cancelled while transcript invalidation is pending', async () => {
+    const { session, handler, sendDelta, extNotification, emitSessionUpdate } = createHarness();
+    let signalStarted: (() => void) | undefined;
+    const invalidationStarted = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let finishInvalidation: (() => void) | undefined;
+    const invalidationFinished = new Promise<void>((resolve) => {
+      finishInvalidation = resolve;
+    });
+    extNotification.mockImplementationOnce(async () => {
+      signalStarted?.();
+      await invalidationFinished;
+      return undefined;
+    });
+
+    const pendingNotification = sendDelta('cancelled-during-invalidation');
+    await invalidationStarted;
+    handler.markTurnCancelled(session, 'cancelled-during-invalidation');
+    finishInvalidation?.();
+    await pendingNotification;
+
+    expect(emitSessionUpdate).not.toHaveBeenCalled();
+    await sendDelta('live');
+    expect(emitSessionUpdate).toHaveBeenCalledExactlyOnceWith(session.sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'live' },
+    });
+  });
+
+  it.each(['removed', 'replaced'] as const)(
+    'drops a notification whose session is %s during transcript invalidation',
+    async (change) => {
+      const { session, sessions, sendDelta, extNotification, emitSessionUpdate } = createHarness();
+      let signalStarted: (() => void) | undefined;
+      const invalidationStarted = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      let finishInvalidation: (() => void) | undefined;
+      const invalidationFinished = new Promise<void>((resolve) => {
+        finishInvalidation = resolve;
+      });
+      extNotification.mockImplementationOnce(async () => {
+        signalStarted?.();
+        await invalidationFinished;
+        return undefined;
+      });
+
+      const pendingNotification = sendDelta('obsolete-session');
+      await invalidationStarted;
+      if (change === 'removed') {
+        sessions.delete(session.sessionId);
+      } else {
+        sessions.set(session.sessionId, { ...session });
+      }
+      finishInvalidation?.();
+      await pendingNotification;
+
+      expect(emitSessionUpdate).not.toHaveBeenCalled();
+    }
+  );
+
   it('reports eviction when bounded cancellation history fills up', async () => {
     const { session, handler, sendDelta, emitSessionUpdate, reportShapeDrift } = createHarness();
     for (let index = 0; index < 128; index++) {

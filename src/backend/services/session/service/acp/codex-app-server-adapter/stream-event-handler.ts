@@ -223,7 +223,7 @@ export class CodexStreamEventHandler {
 
     await this.deps.handleSubagentTranscriptActivity?.(typedNotification.params.threadId);
 
-    if (!session) {
+    if (!this.isLiveNotification(session, typedNotification)) {
       return;
     }
     const sessionId = session.sessionId;
@@ -328,6 +328,14 @@ export class CodexStreamEventHandler {
   private getSessionForThread(threadId: string): AdapterSession | undefined {
     const sessionId = this.deps.sessionIdByThreadId.get(threadId);
     return sessionId ? this.deps.sessions.get(sessionId) : undefined;
+  }
+
+  private isLiveNotification(
+    session: AdapterSession | undefined,
+    notification: KnownCodexNotification
+  ): session is AdapterSession {
+    const current = session && this.getSessionForThread(session.threadId);
+    return !!session && current === session && !this.isNotificationCancelled(session, notification);
   }
 
   private isNotificationCancelled(
@@ -981,13 +989,11 @@ export class CodexStreamEventHandler {
 }
 
 function subagentChangeForItem(item: Record<string, unknown>): 'created' | 'updated' | 'completed' {
-  if (item.type === 'subAgentActivity') {
-    if (item.kind === 'started') {
-      return 'created';
-    }
-    if (item.kind === 'interrupted') {
-      return 'completed';
-    }
+  if (item.type === 'subAgentActivity' && item.kind === 'started') {
+    return 'created';
+  }
+  if (item.type === 'subAgentActivity' && item.kind === 'interrupted') {
+    return 'completed';
   }
   return 'updated';
 }
