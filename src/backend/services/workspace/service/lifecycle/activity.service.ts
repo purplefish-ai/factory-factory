@@ -15,35 +15,46 @@ const logger = createLogger('workspace-activity');
 interface WorkspaceActivityState {
   workspaceId: string;
   runningSessions: Map<string, number>; // Session ID to current activity generation.
+  participatingSessions: Set<string>; // Unique sessions in the current busy interval.
   currentGeneration: number;
   lastActivityAt: Date;
 }
 
 class WorkspaceActivityService extends EventEmitter {
   private workspaceStates = new Map<string, WorkspaceActivityState>();
+  private readonly notificationChains = new Map<string, Promise<void>>();
 
   constructor() {
     super();
 
-    // Listen for workspace idle events and trigger notification requests
-    this.on('workspace_idle', async ({ workspaceId, finishedAt }) => {
-      try {
-        const workspace = await workspaceAccessor.findById(workspaceId);
-        if (!workspace) {
-          logger.warn('Workspace not found for notification', { workspaceId });
-          return;
-        }
+    // Serialize each workspace's lookups so busy intervals notify in idle order.
+    this.on('workspace_idle', ({ workspaceId, finishedAt, sessionCount }) => {
+      const previous = this.notificationChains.get(workspaceId) ?? Promise.resolve();
+      const notification = previous
+        .then(async () => {
+          const workspace = await workspaceAccessor.findById(workspaceId);
+          if (!workspace) {
+            logger.warn('Workspace not found for notification', { workspaceId });
+            return;
+          }
 
-        // Emit event to frontend for suppression check
-        this.emit('request_notification', {
-          workspaceId,
-          workspaceName: workspace.name,
-          sessionCount: workspace.agentSessions.length,
-          finishedAt,
+          // Emit event to frontend for suppression check.
+          this.emit('request_notification', {
+            workspaceId,
+            workspaceName: workspace.name,
+            sessionCount,
+            finishedAt,
+          });
+        })
+        .catch((error) => {
+          logger.error('Failed to process workspace idle event', toError(error), { workspaceId });
+        })
+        .finally(() => {
+          if (this.notificationChains.get(workspaceId) === notification) {
+            this.notificationChains.delete(workspaceId);
+          }
         });
-      } catch (error) {
-        logger.error('Failed to process workspace idle event', toError(error), { workspaceId });
-      }
+      this.notificationChains.set(workspaceId, notification);
     });
   }
 
@@ -57,6 +68,7 @@ class WorkspaceActivityService extends EventEmitter {
       state = {
         workspaceId,
         runningSessions: new Map(),
+        participatingSessions: new Set(),
         currentGeneration: 0,
         lastActivityAt: new Date(),
       };
@@ -64,6 +76,10 @@ class WorkspaceActivityService extends EventEmitter {
     }
 
     const wasIdle = state.runningSessions.size === 0;
+    if (wasIdle) {
+      state.participatingSessions.clear();
+    }
+    state.participatingSessions.add(sessionId);
     state.currentGeneration += 1;
     const generation = state.currentGeneration;
     state.runningSessions.set(sessionId, generation);
@@ -127,6 +143,7 @@ class WorkspaceActivityService extends EventEmitter {
       this.emit('workspace_idle', {
         workspaceId,
         finishedAt: state.lastActivityAt,
+        sessionCount: state.participatingSessions.size,
       });
     }
   }

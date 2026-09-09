@@ -21,8 +21,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
-      '@prisma-gen': resolve(__dirname, './prisma/generated'),
+      '@': resolve(import.meta.dirname, './src'),
+      '@prisma-gen': resolve(import.meta.dirname, './prisma/generated'),
     },
   },
   build: {

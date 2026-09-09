@@ -69,6 +69,7 @@ export class AcpPromptController {
       return false;
     }
 
+    handle.permissionBridge?.cancelAll();
     await handle.connection.cancel({
       sessionId: handle.providerSessionId,
     });

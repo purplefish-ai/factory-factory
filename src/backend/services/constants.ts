@@ -16,6 +16,7 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
   cliLatestVersionCheck: 3000,
   cliUpgrade: 120_000,
   startupScriptForceKillGrace: 5000,
+  startupScriptOutputDrain: 1000,
   portLsof: 2000,
   ratchetWorkspaceCheck: 90_000,
 } as const);

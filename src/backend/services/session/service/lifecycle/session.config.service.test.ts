@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  type AcpProcessHandle,
-  fetchCodexModelCatalogFromAppServer,
-} from '@/backend/services/session/service/acp';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { userSettingsService } from '@/backend/services/settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
@@ -24,11 +21,8 @@ vi.mock('@/backend/services/settings', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session/service/acp', () => ({
-  fetchCodexModelCatalogFromAppServer: vi.fn(),
-}));
-
 describe('SessionConfigService', () => {
+  const codexModelCatalogService = { getModels: vi.fn() };
   const repository = {
     getSessionById: vi.fn(),
     updateSession: vi.fn(),
@@ -49,7 +43,7 @@ describe('SessionConfigService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([]);
+    codexModelCatalogService.getModels.mockResolvedValue([]);
 
     repository.getSessionById.mockResolvedValue(
       unsafeCoerce({
@@ -66,6 +60,7 @@ describe('SessionConfigService', () => {
     runtimeManager.setConfigOption.mockReset();
 
     service = new SessionConfigService({
+      codexModelCatalogService,
       repository: unsafeCoerce(repository),
       runtimeManager: unsafeCoerce(runtimeManager),
       sessionDomainService: unsafeCoerce(sessionDomain),
@@ -345,7 +340,7 @@ describe('SessionConfigService', () => {
   });
 
   it('refreshes cached CODEX model config options from codex app-server', async () => {
-    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([
+    codexModelCatalogService.getModels.mockResolvedValue([
       {
         id: 'gpt-5.4-codex',
         displayName: 'GPT-5.4 Codex',
@@ -405,7 +400,7 @@ describe('SessionConfigService', () => {
     const modelOption = configOptions.find((option) => option.category === 'model');
     const reasoningOption = configOptions.find((option) => option.id === 'reasoning_effort');
 
-    expect(fetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+    expect(codexModelCatalogService.getModels).toHaveBeenCalledTimes(1);
     expect(modelOption?.currentValue).toBe('gpt-5.3-codex');
     expect(modelOption?.type === 'select' ? modelOption.options : undefined).toEqual(
       expect.arrayContaining([
@@ -417,7 +412,7 @@ describe('SessionConfigService', () => {
   });
 
   it('uses codex app-server model catalog for CODEX fallback capabilities', async () => {
-    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([
+    codexModelCatalogService.getModels.mockResolvedValue([
       {
         id: 'gpt-5.4-codex',
         displayName: 'GPT-5.4 Codex',
@@ -442,7 +437,7 @@ describe('SessionConfigService', () => {
 
     const capabilities = await service.getChatBarCapabilities('session-codex');
 
-    expect(fetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+    expect(codexModelCatalogService.getModels).toHaveBeenCalledTimes(1);
     expect(capabilities.provider).toBe('CODEX');
     expect(capabilities.model.enabled).toBe(true);
     expect(capabilities.model.selected).toBe('gpt-5.4-codex');

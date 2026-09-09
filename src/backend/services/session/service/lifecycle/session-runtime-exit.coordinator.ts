@@ -149,7 +149,7 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
 
-      if (!(stopWillPersistIdle && event.exitCode !== 0)) {
+      if (!stopWillPersistIdle) {
         await this.updatePersistedStatus(event);
       }
       try {

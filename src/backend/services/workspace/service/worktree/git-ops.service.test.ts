@@ -6,6 +6,8 @@ const mockGetSnapshot = vi.hoisted(() => vi.fn());
 const mockGetStats = vi.hoisted(() => vi.fn());
 const mockPathExists = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
+const mockWarn = vi.hoisted(() => vi.fn());
+const mockRealpath = vi.hoisted(() => vi.fn());
 const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
 const mockGitStateRemove = vi.hoisted(() => vi.fn());
 
@@ -27,8 +29,13 @@ vi.mock('@/backend/lib/file-helpers', () => ({
   pathExists: (...args: unknown[]) => mockPathExists(...args),
 }));
 
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({ warn: mockWarn }),
+}));
+
 vi.mock('node:fs/promises', () => ({
   rm: (...args: unknown[]) => mockRm(...args),
+  realpath: (...args: unknown[]) => mockRealpath(...args),
 }));
 
 vi.mock('@/backend/clients/git.client', () => ({
@@ -56,6 +63,7 @@ const project = {
 describe('gitOpsService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRealpath.mockImplementation(async (target: string) => target);
     mockGitClient.getWorktreePath.mockImplementation((name: string) => `/repo/worktrees/${name}`);
   });
 
@@ -313,6 +321,47 @@ describe('gitOpsService', () => {
       'Refusing to remove worktree because requested path does not match project'
     );
     expect(mockGitClient.listWorktreesWithBranches).not.toHaveBeenCalled();
+    expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('warns without guessing a registration when the base link no longer resolves', async () => {
+    mockRealpath.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([
+      { path: '/canonical/worktrees/w1' },
+      { path: '/another/worktrees/w1' },
+    ]);
+    mockPathExists.mockResolvedValueOnce(false);
+
+    await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
+
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.stringContaining('worktree base'),
+      expect.objectContaining({ worktreePath: '/repo/worktrees/w1' })
+    );
+    expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('removes a registered worktree when its base directory is already missing', async () => {
+    mockRealpath.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([
+      { path: '/repo/worktrees/w1', branch: 'w1' },
+    ]);
+
+    await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
+
+    expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('w1');
+    expect(mockRm).not.toHaveBeenCalled();
+  });
+
+  it('does not delete files when canonical path lookup fails', async () => {
+    mockRealpath.mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'EACCES' }));
+
+    await expect(gitOpsService.removeWorktree('/repo/worktrees/w1', project)).rejects.toThrow(
+      'denied'
+    );
+
     expect(mockGitClient.deleteWorktree).not.toHaveBeenCalled();
     expect(mockRm).not.toHaveBeenCalled();
   });

@@ -1,67 +1,30 @@
 # Backend Services
 
-Domain logic lives in **service capsules** under `src/backend/services/{name}/`.
-Current capsules: `auto-iteration`, `decision-log`, `github`, `linear`,
-`periodic-task`, `ratchet`, `run-script`, `session`, `settings`, `terminal`,
-`workspace`.
+Domain code belongs in `services/{name}/`: `index.ts` is the public API,
+`service/` owns logic and co-located tests, and `resources/` owns Prisma access.
+Root `services/*.ts` is infrastructure only, as declared in `registry.ts`.
 
-Root-level `services/*.ts` files are cross-cutting infrastructure only — config,
-crypto, logger, job runner, rate limiting, and similar. That list is declared in
-`registry.ts` and is meant to stay small: anything domain-shaped belongs in a
-capsule.
+## Capsule boundaries
 
-## Capsule anatomy
+Enforced by dependency-cruiser and ownership checks:
 
-```
-services/{name}/
-├── index.ts        # the ONLY public API
-├── service/        # business logic, co-located *.test.ts
-└── resources/      # Prisma accessors — the only place that touches the DB
-```
+- External callers use capsule barrels, except `orchestration/data-backup.service.ts`
+  may import `settings/resources/data-backup.accessor.ts` directly.
+  Capsules declare dependencies in `registry.ts`.
+- Service logic uses its capsule's accessors. Resources may compose sibling
+  accessors but cannot import another capsule's resources or application layers
+  (`service/`, `orchestration/`, `routers/`, `trpc/`, `agents/`).
+- Assign each Prisma model one writer in `registry.ts`; add new models to
+  `prismaModelNames` and assign an owner.
+- Services stay transport-neutral: no routers, tRPC, `@trpc/server`, or
+  orchestration imports. Throw application errors for the transport to map.
+- Cross-capsule coordination belongs in `src/backend/orchestration/`.
 
-## Rules (enforced by `pnpm check`)
+## Operational contracts
 
-Each of these maps to a named dependency-cruiser rule or a `scripts/check-*`
-guardrail, so a violation fails the build rather than review.
-
-- **Import other capsules through the barrel.** `@/backend/services/session`,
-  never `@/backend/services/session/service/...`. Applies to capsule→capsule,
-  tRPC→capsule, and orchestration→capsule alike.
-  (`no-cross-service-internal-imports`, `no-deep-service-imports`,
-  `no-trpc-importing-service-internals`,
-  `no-orchestration-importing-service-internals`)
-- **Declare the dependency.** A capsule may only import capsules listed in its
-  `dependsOn` in `registry.ts`.
-- **Only `resources/` imports `db.ts`.** Service logic goes through accessors,
-  and never reaches into another capsule's `resources/`.
-  (`only-service-resources-import-db`,
-  `only-service-layers-import-service-resources`,
-  `no-cross-service-resource-imports`)
-- **`resources/` stays pure data access** — no importing `service/`,
-  `orchestration/`, `routers/`, `trpc/`, or `agents/`.
-  (`no-service-resources-importing-app-layers`)
-- **One writer per Prisma model.** Ownership is declared in `registry.ts` and
-  checked by `scripts/check-service-registry.ts` and
-  `scripts/check-single-writer.ts`. Adding a model means adding it to
-  `prismaModelNames` and assigning an owner.
-- **Services are transport-neutral.** No importing `routers/` or `trpc/`, and no
-  `@trpc/server` — throw application errors and let the transport layer map
-  them. (`no-services-importing-transport-layers`,
-  `no-trpc-server-in-services-or-orchestration`)
-- **Services do not import `orchestration/`.** Coordination flows the other way.
-
-Cross-capsule workflows belong in `src/backend/orchestration/`.
-
-## Conventions
-
-- Tests are co-located: `foo.service.ts` → `foo.service.test.ts`. The slower set
-  is `*.integration.test.ts`.
-- Read config through `configService`, never `process.env`.
-- Recurring work registers with `jobRunner` rather than calling `setInterval` —
-  see `docs/architecture/background-jobs.md`.
-- All `gh` invocations go through `GitHubCLIService`, which owns the shared rate
-  budget. Do not spawn `gh` yourself.
+- Recurring work registers with `jobRunner`, not `setInterval`; read
+  [background jobs](../../../docs/architecture/background-jobs.md).
+- Application `gh` calls go through `GitHubCLIService` for the shared rate budget.
 - Side-table accessors (`WorkspacePR`, `WorkspaceRatchet`, `WorkspaceRunScript`,
-  `WorkspaceAutoIteration`) flatten their row back onto the workspace on read,
-  preserving the original field names on the wire. Keep that contract when you
-  add fields — see `docs/architecture/workspace-state.md`.
+  `WorkspaceAutoIteration`) flatten rows onto the workspace on read, preserving
+  wire field names. Read [workspace state](../../../docs/architecture/workspace-state.md).

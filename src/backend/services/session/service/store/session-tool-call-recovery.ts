@@ -68,6 +68,11 @@ export function finalizeInterruptedTranscriptToolCalls(
       occurrences.push(toolCall);
       openToolCallsById.set(toolUseId, occurrences);
     }
+  }
+
+  // History backfill can sort a result before its call. Register every call
+  // first, then consume results once each in occurrence order.
+  for (const message of transcript) {
     for (const toolResultId of getToolResultIds(message)) {
       const occurrences = openToolCallsById.get(toolResultId);
       const completedToolCall = occurrences?.shift();

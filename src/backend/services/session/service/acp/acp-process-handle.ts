@@ -5,6 +5,7 @@ import {
   type SubagentBrowseCapability,
   subagentBrowseCapabilitySchema,
 } from '@/shared/acp-protocol/subagents';
+import type { AcpPermissionBridge } from './acp-permission-bridge';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -13,6 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class AcpProcessHandle {
   readonly connection: ClientSideConnection;
   readonly child: ChildProcess;
+  readonly permissionBridge?: AcpPermissionBridge;
   readonly provider: string;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
@@ -23,12 +25,14 @@ export class AcpProcessHandle {
   constructor(params: {
     connection: ClientSideConnection;
     child: ChildProcess;
+    permissionBridge?: AcpPermissionBridge;
     provider: string;
     providerSessionId: string;
     agentCapabilities: Record<string, unknown>;
   }) {
     this.connection = params.connection;
     this.child = params.child;
+    this.permissionBridge = params.permissionBridge;
     this.provider = params.provider;
     this.providerSessionId = params.providerSessionId;
     this.agentCapabilities = params.agentCapabilities;

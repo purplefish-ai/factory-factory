@@ -253,20 +253,23 @@ describe('SessionRuntimeExitCoordinator', () => {
     }
   );
 
-  it('preserves idle status when an explicit lifecycle stop owns the transition', async () => {
-    const harness = createExitCoordinatorHarness({
-      lifecycleStopping: true,
-      explicitStopReserved: true,
-    });
+  it.each([0, 1, null])(
+    'preserves idle status when an explicit lifecycle stop owns exit %s',
+    async (exitCode) => {
+      const harness = createExitCoordinatorHarness({
+        lifecycleStopping: true,
+        explicitStopReserved: true,
+      });
 
-    await harness.handlers.onRuntimeExit!(runtimeExit({ managed: true, exitCode: null }));
+      await harness.handlers.onRuntimeExit!(runtimeExit({ managed: true, exitCode }));
 
-    expect(harness.repository.updateSession).not.toHaveBeenCalled();
-    expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
-    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
-      expect.objectContaining({ deliberate: true })
-    );
-  });
+      expect(harness.repository.updateSession).not.toHaveBeenCalled();
+      expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
+      expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
+        expect.objectContaining({ deliberate: true })
+      );
+    }
+  );
 
   it.each([
     ['runtime-managed', false],

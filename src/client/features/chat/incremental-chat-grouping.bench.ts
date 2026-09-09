@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest';
+import { test } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
 import { createIncrementalChatGrouper } from './incremental-chat-grouping';
@@ -73,19 +73,21 @@ function createHistory(toolGroupCount: number): ChatMessage[] {
   ]).flat();
 }
 
-describe('streaming a tail after 500 completed tool groups', () => {
+test('streaming a tail after 500 completed tool groups', async ({ bench }) => {
   const history = createHistory(500);
   let pureUpdate = 0;
-  bench('pure full regroup', () => {
-    pureUpdate += 1;
-    groupAdjacentToolCalls([...history, assistant(500, `stream-${pureUpdate}`)]);
-  });
-
   const grouper = createIncrementalChatGrouper();
   let incrementalUpdate = 0;
   grouper.group([...history, assistant(500, 'stream-0')]);
-  bench('incremental tail regroup', () => {
-    incrementalUpdate += 1;
-    grouper.group([...history, assistant(500, `stream-${incrementalUpdate}`)]);
-  });
+
+  await bench.compare(
+    bench('pure full regroup', () => {
+      pureUpdate += 1;
+      groupAdjacentToolCalls([...history, assistant(500, `stream-${pureUpdate}`)]);
+    }),
+    bench('incremental tail regroup', () => {
+      incrementalUpdate += 1;
+      grouper.group([...history, assistant(500, `stream-${incrementalUpdate}`)]);
+    })
+  );
 });

@@ -71,6 +71,11 @@ sweep. It is what moves a stuck workspace out of the WORKING column; the
 snapshot key hashes `statusCheckRollup` detail `WorkspacePR` does not store, so
 no reader can re-derive it.
 
+Inline review comment fetches retain at most 2,000 comments, ordered by newest
+update first at the API boundary. Hitting that budget drops older activity rather
+than the newest comment or edit used in the dispatch snapshot. Returned comments
+are in ascending update order.
+
 Review comments belonging to resolved review threads (GraphQL
 `reviewThreads.isResolved`) are excluded from fixer dispatch prompts and from
 the "has actionable review comments" trigger; they still count toward the

@@ -79,10 +79,10 @@ async function getClaudeProviderOptions(
 }
 
 async function getCodexProviderOptions(
-  fetchCodexModelCatalogFromAppServer: ApplicationServices['fetchCodexModelCatalogFromAppServer']
+  codexModelCatalogService: ApplicationServices['codexModelCatalogService']
 ): Promise<ProviderOptions> {
   try {
-    const catalog = await fetchCodexModelCatalogFromAppServer();
+    const catalog = await codexModelCatalogService.getModels();
     const effortsByValue = new Map<string, string | null>();
     for (const model of catalog) {
       for (const effort of model.supportedReasoningEfforts ?? []) {
@@ -133,7 +133,7 @@ export const userSettingsRouter = router({
   getProviderOptions: publicProcedure.query(async ({ ctx }) => {
     const [claude, codex] = await Promise.all([
       getClaudeProviderOptions(ctx.appContext.services.fetchClaudeModelCatalogFromAcp),
-      getCodexProviderOptions(ctx.appContext.services.fetchCodexModelCatalogFromAppServer),
+      getCodexProviderOptions(ctx.appContext.services.codexModelCatalogService),
     ]);
     return {
       CLAUDE: claude,

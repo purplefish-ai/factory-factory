@@ -1,5 +1,6 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpPromptController, type AcpPromptRuntimePort } from './acp-prompt-controller';
 import { PromptTimeoutError } from './acp-runtime-errors';
 import { createTestProcessHandle } from './acp-runtime-manager.test-helpers';
@@ -17,6 +18,42 @@ describe('AcpPromptController', () => {
       stopClient: vi.fn().mockResolvedValue(undefined),
     };
     controller = new AcpPromptController(runtimePort);
+  });
+
+  it.each(['soft stop', 'timeout'])('cancels pending permission responses on %s', async (mode) => {
+    const bridge = new AcpPermissionBridge();
+    const response = bridge.waitForUserResponse('request-1', {
+      sessionId: 'provider-session-1',
+      toolCall: { toolCallId: 'tool-1', title: 'Command' },
+      options: [],
+    });
+    const handle = Object.assign(
+      createTestProcessHandle({
+        connection: {
+          prompt: vi.fn().mockReturnValue(new Promise(() => undefined)),
+          cancel: vi.fn().mockResolvedValue(undefined),
+        },
+      }),
+      { permissionBridge: bridge }
+    );
+    handle.isPromptInFlight = true;
+    vi.useFakeTimers();
+    try {
+      if (mode === 'soft stop') {
+        await controller.cancelPrompt(sessionId, handle);
+      } else {
+        const sending = controller
+          .sendPrompt(sessionId, handle, prompt, 100)
+          .catch((error: unknown) => error);
+        await vi.advanceTimersByTimeAsync(100);
+        await expect(sending).resolves.toBeInstanceOf(PromptTimeoutError);
+      }
+      expect(bridge.pendingCount).toBe(0);
+      await expect(response).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+      expect(runtimePort.stopClient).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns the provider stop reason and clears the in-flight marker after a prompt resolves', async () => {
@@ -49,6 +86,25 @@ describe('AcpPromptController', () => {
 
   it('does not cancel when no handle was supplied', async () => {
     await expect(controller.cancelPrompt(sessionId, undefined)).resolves.toBe(false);
+  });
+
+  it('leaves permissions untouched when asked to cancel a stale handle', async () => {
+    const bridge = new AcpPermissionBridge();
+    void bridge.waitForUserResponse('request-1', {
+      sessionId: 'provider-session-1',
+      toolCall: { toolCallId: 'tool-1' },
+      options: [],
+    });
+    const connection = { cancel: vi.fn() };
+    const handle = Object.assign(createTestProcessHandle({ connection }), {
+      permissionBridge: bridge,
+    });
+    handle.isPromptInFlight = true;
+    runtimePort.isCurrentHandle = vi.fn(() => false);
+    await expect(controller.cancelPrompt(sessionId, handle)).resolves.toBe(false);
+    expect(bridge.hasPending('request-1')).toBe(true);
+    expect(connection.cancel).not.toHaveBeenCalled();
+    bridge.cancelAll();
   });
 
   it('does not cancel a handle without an in-flight prompt', async () => {

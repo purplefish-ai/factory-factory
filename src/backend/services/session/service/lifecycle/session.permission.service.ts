@@ -26,7 +26,10 @@ export class SessionPermissionService {
       return existing;
     }
 
-    const bridge = new AcpPermissionBridge();
+    const bridge = new AcpPermissionBridge((requestId) => {
+      this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+      this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
+    });
     this.acpPermissionBridges.set(sessionId, bridge);
     return bridge;
   }

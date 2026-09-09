@@ -6,6 +6,7 @@ describe('SessionPermissionService', () => {
   const sessionDomain = {
     emitDelta: vi.fn(),
     setPendingInteractiveRequest: vi.fn(),
+    clearPendingInteractiveRequestIfMatches: vi.fn(),
   };
 
   function createService(): SessionPermissionService {
@@ -14,6 +15,30 @@ describe('SessionPermissionService', () => {
       sessionDomainService: unsafeCoerce(sessionDomain),
     });
   }
+
+  it('dismisses cancelled permission prompts while retaining the live bridge', async () => {
+    const service = createService();
+    const bridge = service.createPermissionBridge('session-1');
+    const params = unsafeCoerce<Parameters<typeof bridge.waitForUserResponse>[1]>({
+      toolCall: { toolCallId: 'tool-1', title: 'Command' },
+      options: [],
+    });
+    const response = bridge.waitForUserResponse('req-1', params);
+    bridge.cancelAll();
+    await expect(response).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    expect(sessionDomain.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'permission_cancelled',
+      requestId: 'req-1',
+    });
+    expect(sessionDomain.clearPendingInteractiveRequestIfMatches).toHaveBeenCalledWith(
+      'session-1',
+      'req-1'
+    );
+    expect(service.createPermissionBridge('session-1')).toBe(bridge);
+    const next = bridge.waitForUserResponse('req-2', params);
+    expect(service.respondToPermission('session-1', 'req-2', 'allow_once')).toBe(true);
+    await expect(next).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
+  });
 
   it('resolves pending ACP permissions through the session bridge', async () => {
     const service = createService();

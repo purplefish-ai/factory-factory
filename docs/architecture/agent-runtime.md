@@ -13,11 +13,19 @@ current select-only chat controls. The internal Codex adapter accepts string
 configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
 servers, which it does not advertise support for.
 
+Persisted ACP config snapshots are validated with a strict schema for ACP select
+and boolean options before being used for inactive-session options or capabilities. Malformed
+snapshots are treated as cache misses; provider history identity recovery stays
+independent of configuration validity. Valid snapshots restore omitted model/mode
+categories for both providers, while retaining Codex's provider-supplied labels.
+
 Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission requests
 present multi-option selection
 (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged
-through ACP permission response handlers.
+through ACP permission response handlers. Soft cancellation (including voice stop
+and prompt timeout) resolves pending permission requests with a cancelled outcome,
+dismisses their prompts, and keeps the bridge available for later turns.
 
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
@@ -27,6 +35,11 @@ The Codex adapter suppresses late turn notifications for the last 128 cancelled
 turns per loaded session, before emitting chat updates or invalidating subagent
 transcripts. Eviction emits a `cancelled_turn_history_evicted` diagnostic; an
 evicted turn no longer has this protection against late notifications.
+
+When reloading a stopped session, transcript recovery matches tool results to
+call occurrences across the full transcript before synthesizing interruption
+results. Provider history backfill can timestamp-sort a result before its call;
+that existing result still completes exactly one occurrence of the tool ID.
 
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
@@ -38,6 +51,12 @@ session with tools disabled; discovery failure falls back to static aliases.
 Claude model names are normalized from provider descriptions at every ACP config
 ingress so Admin and in-chat selectors show explicit family versions while
 preserving raw provider values and configured defaults.
+
+Admin Codex options and inactive-session chat capabilities share
+`CodexModelCatalogService`. It coalesces concurrent app-server discovery,
+caches successful catalogs for 30 seconds from completion, and gives each
+consumer an isolated copy. Discovery failures are not cached; each consumer
+keeps its existing fallback and the next request retries discovery.
 
 The ACP layer is import-fenced by dependency-cruiser
 (`acp-no-external-imports`, `codex-app-server-adapter-self-contained`,
@@ -111,3 +130,8 @@ sessions and auto-send the prompt content once the session is ready.
 
 `prompts/` is copied into `dist/` on build, so a new prompt file ships without a
 code change.
+
+Electron fatal-error handlers await backend shutdown before quitting. Concurrent
+fatal errors share one shutdown attempt. Cleanup failures and a 30-second
+shutdown deadline are logged before the application exits, so a stalled startup
+cannot hold the fatal-error path open indefinitely.

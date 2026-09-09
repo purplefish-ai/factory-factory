@@ -5,7 +5,22 @@ tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot
 wire, the v4 export format and the client are unchanged.
 
+Worktree cleanup matches Git's registered paths against the real worktree base
+directory, so a symlinked base still removes Git metadata. It resolves the base
+separately from the worktree so cleanup also works after the worktree is deleted.
+If the base symlink itself no longer resolves, cleanup logs a warning and matches
+only the exact configured path. Restore the original base symlink and retry to
+remove a canonical registration; guessing from a basename or pruning unrelated
+registrations could remove another workspace.
+
 ## Run script
+
+Startup provisioning follows the main shell's exit. Output pipes normally drain
+to closure, with a one-second limit after exit so background descendants that
+inherit the pipes cannot keep provisioning open. Later output is drained and
+discarded until those descendants close their pipes, so writing after provisioning
+does not interrupt them. Persistent background commands should redirect output if
+it needs to remain available after startup.
 
 The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
 `postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
@@ -128,3 +143,13 @@ and excludes, and reftable state. Object and reflog writes are ignored because
 the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
 last dependent closes it.
+
+## Completion notifications
+
+Workspace completion notifications count the distinct sessions that worked in
+the uninterrupted busy interval ending at the idle transition. Historical idle
+sessions do not inflate the count, and repeated turns from one session count
+once. The idle event captures the count before the asynchronous workspace lookup,
+so a subsequent interval cannot change an earlier notification. Lookups and
+notification requests run in idle order per workspace; a failed lookup does not
+block later intervals, and separate workspaces can proceed independently.

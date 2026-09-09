@@ -232,7 +232,8 @@ describe('AcpRuntimeManager', () => {
       vi.useFakeTimers();
       try {
         const stopPromise = manager.stopClient('session-1');
-        await vi.advanceTimersByTimeAsync(5100);
+        // Exhaust both the SIGTERM grace period and SIGKILL exit wait.
+        await vi.advanceTimersByTimeAsync(10_100);
         await stopPromise;
 
         expect(child.kill).toHaveBeenCalledWith('SIGTERM');
@@ -263,7 +264,8 @@ describe('AcpRuntimeManager', () => {
       vi.useFakeTimers();
       try {
         const stopPromise = manager.stopClient('session-1');
-        await vi.advanceTimersByTimeAsync(5100);
+        // Exhaust both the SIGTERM grace period and SIGKILL exit wait.
+        await vi.advanceTimersByTimeAsync(10_100);
         await stopPromise;
       } finally {
         vi.useRealTimers();
