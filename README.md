@@ -42,6 +42,8 @@ npx factory-factory@latest serve
 
 Factory Factory opens in your browser and stores its database in `~/factory-factory/` by default.
 
+See [Settings](docs/admin-settings.md) for IDE commands, default chat models, and project configuration.
+
 Then:
 
 1. Add a project by selecting a local git repository.
