@@ -5,36 +5,39 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.8] - 2026-09-09
 
 ### Changed
 
-- Upgrade Linear SDK to 94, better-sqlite3 to 13, Chalk to 6, Commander to 15, and DayPicker to 10; migrate the calendar to `@daypicker/react` and preserve its selection, navigation, and dropdown styling
-
-- Upgrade Electron to 44.3.0, require macOS 13 or newer for the desktop app, and migrate clipboard image paste to the asynchronous clipboard API
-
-- Upgrade Vite to 8.2.2 and its React plugin to 6.1.1; update Vitest and V8 coverage to 5.0.0, migrate the chat grouping benchmark API, and upgrade jsdom to 30.0.1
-
-- Upgrade builds and typechecks to TypeScript 7.0.2 while retaining the TypeScript 6 compiler API for tooling; update dependency-cruiser to 18.2.0, lint-staged to 17.5.0, concurrently to 10.0.5, and Supertest types to 7.2.1
-- Upgrade pnpm to 12.3.4, migrate dependency build permissions, and update the verified Docker bootstrap
-- Require Node.js 26.8.1 or newer, update development and release environments, and align Node.js types
-- Upgrade the ACP SDK from 0.15.0 to 1.4.0, matching Claude ACP, migrate model switching to the supported config API, and handle the expanded config and MCP transport types
-- Upgrade Knip from 5.88.1 to 6.35.0, include CSS, MDX, and Prisma in its project analysis, and remove redundant entry points and dependency ignores
-- Upgrade Biome from 2.4.4 to 2.5.12, migrate its configuration, and apply the updated lint and formatting rules
-- Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, and Storybook 10.6.0
-- Update the Codex CLI compatibility baseline from 0.145.0 to 0.153.4 and regenerate the app-server method snapshot
+- Upgrade the supported runtime to Node.js 26.8.1 and pnpm 12.3.4, updating release environments, dependency build permissions, and the verified Docker bootstrap (#2230, #2234)
+- Upgrade the application toolchain to TypeScript 7.0.2, Vite 8.2.2, Vitest 5.0.0, jsdom 30.0.1, Biome 2.5.12, Knip 6.35.0, dependency-cruiser 18.2.0, and related development tools (#2220, #2222, #2247, #2248)
+- Upgrade the ACP SDK to 1.4.0 and Claude ACP to 0.75.1, migrate model switching to the supported configuration API, validate ACP snapshots, share Codex model discovery, and remove transitional runtime callbacks (#2223, #2225, #2226)
+- Refresh Prisma, Storybook, and other compatible dependencies; update the Codex CLI compatibility baseline to 0.153.4 and regenerate its app-server method snapshot (#2218)
+- Upgrade Electron to 44.3.0 and require macOS 13 or newer; migrate clipboard image paste to the asynchronous API and repair desktop packaging (#2249)
+- Upgrade Linear SDK to 94, better-sqlite3 to 13, Chalk to 6, Commander to 15, and DayPicker to 10; migrate the calendar to `@daypicker/react` and preserve its behavior and styling (#2252)
+- Lazy-load application routes and Mermaid diagrams, reuse chat groups during streaming, and skip grouping scans when message arrays are unchanged (#2224, #2233, #2250)
+- Stream workspace snapshots before Git refreshes complete, narrow Git cache invalidation, and extract the authoritative Ratchet projection worker (#2228, #2229, #2232)
+- Extract Admin settings into focused sections and refresh shadcn components while removing unused dependencies (#2227, #2254)
+- Bound workspace file previews and untracked diffs, virtualize large diffs, and move syntax highlighting to a worker (#2251, #2253)
 
 ### Fixed
 
-- Rebuild and cache Prisma's separate SQLite driver for Electron alongside the N-API driver, and fix calendar cell sizing with Tailwind 4
-
-- Fix desktop packaging by selecting the Electron main entry, including shared backend modules, and emitting a CommonJS preload for the sandboxed renderer
+- Recover reordered tool results without dropping valid transcript content (#2236)
+- Preserve stopped session status on clean runtime exits, cancel pending ACP permissions during soft stops, wait for child processes after SIGKILL, and ignore late notifications from cancelled Codex turns (#2235, #2239, #2243, #2246)
+- Show Electron rejection stack traces and stop the backend before quitting after fatal Electron errors (#2238, #2241)
+- Keep the latest pull-request review activity when results reach the pagination limit (#2242)
+- Clean worktrees correctly under symlinked base directories (#2237)
+- Complete startup scripts after their shell exits and count working agents accurately in completion notifications (#2240, #2244)
+- Rebuild and cache Prisma's separate SQLite driver for Electron alongside the N-API driver, and fix calendar cell sizing with Tailwind 4 (#2252)
 
 ### Security
 
-- Update Claude ACP's bundled Claude Agent SDK to 0.3.266 for upstream permission-handling fixes through a scoped dependency override
+- Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts with patched dependency resolutions (#2218)
+- Update Claude ACP's bundled Claude Agent SDK to 0.3.266 for upstream permission-handling fixes through a scoped dependency override (#2252)
 
-- Resolve Dependabot alerts for fast-uri, xmldom, qs, MySQL2, and deepmerge-ts with patched dependency resolutions
+### Documentation
+
+- Clarify duplicate list-key stability and refresh agent guidance for current Claude, Codex, and frontier-model practices (#2221, #2245)
 
 ## [0.4.7] - 2026-09-08
 
