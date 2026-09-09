@@ -40,6 +40,35 @@ describe('fatal Electron error handlers', () => {
     }
   );
 
+  it('quits at the deadline when startup or cleanup never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, logger, process, serverManager } = createHandlerHarness();
+      let finishStop!: () => void;
+      serverManager.stop.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishStop = resolve;
+          })
+      );
+      process.emit('uncaughtException', new Error('fatal during startup'));
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(app.quit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(app.quit).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        '[electron] Failed to stop backend after fatal error:',
+        expect.objectContaining({ message: 'Backend shutdown timed out after 30000ms' })
+      );
+      finishStop();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(app.quit).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('quits even if backend cleanup fails', async () => {
     const { app, logger, process, serverManager } = createHandlerHarness();
     const error = new Error('cleanup failed');

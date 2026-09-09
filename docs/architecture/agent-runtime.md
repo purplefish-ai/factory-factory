@@ -108,5 +108,6 @@ sessions and auto-send the prompt content once the session is ready.
 code change.
 
 Electron fatal-error handlers await backend shutdown before quitting. Concurrent
-fatal errors share one shutdown attempt, and cleanup failures are logged before
-the application exits.
+fatal errors share one shutdown attempt. Cleanup failures and a 30-second
+shutdown deadline are logged before the application exits, so a stalled startup
+cannot hold the fatal-error path open indefinitely.

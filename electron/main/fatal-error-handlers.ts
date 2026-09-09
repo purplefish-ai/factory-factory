@@ -1,3 +1,5 @@
+const FATAL_SHUTDOWN_TIMEOUT_MS = 30_000;
+
 interface FatalErrorApp {
   quit(): void;
 }
@@ -36,11 +38,20 @@ export function registerFatalErrorHandlers({
       return;
     }
     shuttingDown = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      await serverManager.stop();
+      await Promise.race([
+        serverManager.stop(),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Backend shutdown timed out after ${FATAL_SHUTDOWN_TIMEOUT_MS}ms`));
+          }, FATAL_SHUTDOWN_TIMEOUT_MS);
+        }),
+      ]);
     } catch (error) {
       logger.error('[electron] Failed to stop backend after fatal error:', error);
     } finally {
+      clearTimeout(timeout);
       app.quit();
     }
   };
