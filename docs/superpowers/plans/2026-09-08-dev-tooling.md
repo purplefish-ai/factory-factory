@@ -34,9 +34,9 @@
 
 - [x] Document the compiler/API split and lint-staged's Git >=2.32 requirement. Consolidate Unreleased dependency notes to describe the final versions.
 - [x] Run `pnpm check:fix`, `pnpm typecheck`, `GIT_TRACE2_EVENT=0 pnpm test`, strict `pnpm check`, `pnpm knip`, application and Storybook builds, and dependency audit.
-- [ ] Smoke-test concurrent command execution and exit propagation. Normal commit hooks verify lint-staged against real staged changes.
+- [x] Smoke-test concurrent command execution and exit propagation. Normal commit hooks verify lint-staged against real staged changes.
 - [x] Build Docker to validate the native compiler on Alpine, then smoke the compiled CLI and database migrations.
-- [ ] Get a read-only code review, commit with normal hooks, and open a PR with the validation results.
+- [x] Get a read-only code review, commit with normal hooks, and open a PR with the validation results.
 - [ ] Wait for merge before the next upgrade group.
 
 ## Verification notes
