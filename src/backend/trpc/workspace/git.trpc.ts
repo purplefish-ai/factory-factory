@@ -1,7 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
+import { readFilePrefix } from '@/backend/lib/file-preview';
 import { gitCommand } from '@/backend/lib/shell';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
@@ -143,25 +144,34 @@ export const workspaceGitRouter = router({
 
       // If still empty, try to show the file for new untracked files
       if (result.stdout.trim() === '' && result.code === 0) {
-        // For untracked files, show the entire file as an addition
+        // For untracked files, show bounded files as an addition
         const fullPath = path.join(worktreePath, input.filePath);
+        let preview: Awaited<ReturnType<typeof readFilePrefix>>;
         try {
-          const content = await readFile(fullPath, 'utf-8');
-          // Format as a unified diff for a new file
-          const lines = content.split('\n');
-          const diffContent = [
-            `diff --git a/${input.filePath} b/${input.filePath}`,
-            'new file mode 100644',
-            '--- /dev/null',
-            `+++ b/${input.filePath}`,
-            `@@ -0,0 +1,${lines.length} @@`,
-            ...lines.map((line) => `+${line}`),
-          ].join('\n');
-          return { diff: diffContent };
+          preview = await readFilePrefix(fullPath);
         } catch {
           // File doesn't exist or can't be read
           return { diff: '' };
         }
+        if (preview.truncated) {
+          throw new TRPCError({
+            code: 'PAYLOAD_TOO_LARGE',
+            message:
+              'File is too large to display as a diff (limit: 1 MiB). Open the file preview instead.',
+          });
+        }
+        const content = preview.buffer.toString('utf-8');
+        // Format as a unified diff for a new file
+        const lines = content.split('\n');
+        const diffContent = [
+          `diff --git a/${input.filePath} b/${input.filePath}`,
+          'new file mode 100644',
+          '--- /dev/null',
+          `+++ b/${input.filePath}`,
+          `@@ -0,0 +1,${lines.length} @@`,
+          ...lines.map((line) => `+${line}`),
+        ].join('\n');
+        return { diff: diffContent };
       }
 
       if (result.code !== 0) {

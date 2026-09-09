@@ -1,14 +1,15 @@
-import { open, readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import {
   type FileEntry,
   isBinaryContent,
   isPathSafe,
-  MAX_FILE_SIZE,
   searchFilesRecursive,
 } from '@/backend/lib/file-helpers';
+import { readFilePrefix } from '@/backend/lib/file-preview';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import { getLanguageFromPath } from '@/lib/language-detection';
 import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
@@ -192,21 +193,7 @@ export const workspaceFilesRouter = router({
 
       const fullPath = path.join(worktreePath, input.path);
 
-      const fh = await open(fullPath, 'r');
-      let fileSize: number;
-      let buffer: Buffer;
-      try {
-        const stats = await fh.stat();
-        if (stats.isDirectory()) {
-          throw new Error('Path is a directory');
-        }
-        fileSize = stats.size;
-        buffer = await fh.readFile();
-      } finally {
-        await fh.close();
-      }
-
-      const truncated = fileSize > MAX_FILE_SIZE;
+      const { buffer, size: fileSize, truncated } = await readFilePrefix(fullPath);
 
       // Check if binary
       if (isBinaryContent(buffer)) {
@@ -219,11 +206,10 @@ export const workspaceFilesRouter = router({
         };
       }
 
-      // Convert to string, potentially truncated
-      let content = buffer.toString('utf-8');
-      if (truncated) {
-        content = content.slice(0, MAX_FILE_SIZE);
-      }
+      // Hold back any incomplete UTF-8 character at a truncated byte boundary.
+      // At EOF, preserve Buffer.toString's replacement of malformed trailing bytes.
+      const decoder = new StringDecoder('utf8');
+      const content = truncated ? decoder.write(buffer) : decoder.end(buffer);
 
       return {
         content,

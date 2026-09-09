@@ -25,7 +25,8 @@ vi.mock('@/backend/lib/shell', () => ({
   gitCommand: (...args: unknown[]) => mockGitCommand(...args),
 }));
 
-vi.mock('@/backend/lib/file-helpers', () => ({
+vi.mock('@/backend/lib/file-helpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/lib/file-helpers')>()),
   isPathSafe: mockIsPathSafe,
 }));
 
@@ -299,6 +300,37 @@ describe('workspaceGitRouter', () => {
     const diff = await caller.getFileDiff({ workspaceId: 'w1', filePath });
     expect(diff.diff).toContain('new file mode 100644');
     expect(diff.diff).toContain(`+++ b/${filePath}`);
+  });
+
+  it('returns a complete untracked diff for a file exactly at the byte limit', async () => {
+    writeFileSync(join(rootDir, 'exact.txt'), 'a'.repeat(1024 * 1024));
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+      workspace: { id: 'w1', project: { defaultBranch: 'main' } },
+      worktreePath: rootDir,
+    });
+    mockGetMergeBase.mockResolvedValue(null);
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+
+    const { diff } = await createCaller().getFileDiff({ workspaceId: 'w1', filePath: 'exact.txt' });
+    expect(diff).toContain('@@ -0,0 +1,1 @@');
+    expect(diff.split('\n').at(-1)?.length).toBe(1024 * 1024 + 1);
+  });
+
+  it('rejects oversized untracked files instead of constructing an unbounded diff', async () => {
+    writeFileSync(join(rootDir, 'large.txt'), 'a'.repeat(1024 * 1024 + 1));
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValue({
+      workspace: { id: 'w1', project: { defaultBranch: 'main' } },
+      worktreePath: rootDir,
+    });
+    mockGetMergeBase.mockResolvedValue(null);
+    mockGitCommand.mockResolvedValue({ code: 0, stdout: '', stderr: '' });
+
+    await expect(
+      createCaller().getFileDiff({ workspaceId: 'w1', filePath: 'large.txt' })
+    ).rejects.toMatchObject({
+      code: 'PAYLOAD_TOO_LARGE',
+      message: expect.stringContaining('1 MiB'),
+    });
   });
 
   it('handles getFileDiff validation, read failures, direct success, and git errors', async () => {
