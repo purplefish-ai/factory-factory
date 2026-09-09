@@ -10,7 +10,8 @@ over stdio JSON-RPC.
 Persisted ACP config snapshots are validated with the SDK configuration schema
 before being used for inactive-session options or capabilities. Malformed
 snapshots are treated as cache misses; provider history identity recovery stays
-independent of configuration validity.
+independent of configuration validity. Valid snapshots restore omitted model/mode
+categories for both providers, while retaining Codex's provider-supplied labels.
 
 Session init/load is fail-fast and requires provider `configOptions` with
 model/mode categories. Permission requests present multi-option selection

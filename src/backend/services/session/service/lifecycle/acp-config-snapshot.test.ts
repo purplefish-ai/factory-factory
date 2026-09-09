@@ -20,25 +20,28 @@ const groupedModel = {
 };
 
 describe('parseAcpConfigSnapshot', () => {
-  it('preserves grouped options and protocol extension metadata', () => {
-    expect(
-      parseAcpConfigSnapshot({
-        acpConfigSnapshot: {
-          provider: 'CODEX',
-          providerSessionId: 'provider-1',
-          capturedAt: '2026-09-08T12:00:00.000Z',
-          observedModelId: 'custom',
-          configOptions: [groupedModel],
-        },
-      })
-    ).toEqual({
-      provider: 'CODEX',
-      providerSessionId: 'provider-1',
-      capturedAt: '2026-09-08T12:00:00.000Z',
-      observedModelId: 'custom',
-      configOptions: [groupedModel],
-    });
-  });
+  it.each(['CLAUDE', 'CODEX'])(
+    'preserves %s grouped options and protocol extension metadata',
+    (provider) => {
+      expect(
+        parseAcpConfigSnapshot({
+          acpConfigSnapshot: {
+            provider,
+            providerSessionId: 'provider-1',
+            capturedAt: '2026-09-08T12:00:00.000Z',
+            observedModelId: 'custom',
+            configOptions: [groupedModel],
+          },
+        })
+      ).toEqual({
+        provider,
+        providerSessionId: 'provider-1',
+        capturedAt: '2026-09-08T12:00:00.000Z',
+        observedModelId: 'custom',
+        configOptions: [groupedModel],
+      });
+    }
+  );
 
   it('retains compatibility with snapshots missing optional metadata', () => {
     expect(

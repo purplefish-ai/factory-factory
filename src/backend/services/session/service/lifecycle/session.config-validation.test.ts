@@ -27,6 +27,44 @@ describe('cached ACP configuration validation', () => {
     });
   });
 
+  it('restores inactive Codex model and plan capabilities when categories are omitted', async () => {
+    repository.getSessionById.mockResolvedValue({
+      id: 'session-1',
+      provider: 'CODEX',
+      providerMetadata: {
+        acpConfigSnapshot: {
+          provider: 'CODEX',
+          providerSessionId: 'provider-1',
+          configOptions: [
+            {
+              id: 'model',
+              name: 'Model',
+              type: 'select',
+              currentValue: 'custom',
+              options: [{ value: 'custom', name: 'Provider model label' }],
+            },
+            {
+              id: 'mode',
+              name: 'Mode',
+              type: 'select',
+              currentValue: 'plan',
+              options: [{ value: 'plan', name: 'Plan' }],
+            },
+          ],
+        },
+      },
+    });
+
+    const capabilities = await service.getChatBarCapabilities('session-1');
+
+    expect(capabilities.model).toEqual({
+      enabled: true,
+      selected: 'custom',
+      options: [{ value: 'custom', label: 'Provider model label' }],
+    });
+    expect(capabilities.planMode.enabled).toBe(true);
+  });
+
   it.each([
     ['null entry', [null]],
     ['primitive entry', ['model']],

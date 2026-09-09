@@ -27,9 +27,6 @@ export function parseAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapsh
   const configOptions: SessionConfigOption[] = snapshot.configOptions;
   return {
     ...snapshot,
-    configOptions:
-      snapshot.provider === 'CLAUDE'
-        ? normalizeSessionConfigOptions(snapshot.provider, configOptions)
-        : configOptions,
+    configOptions: normalizeSessionConfigOptions(snapshot.provider, configOptions),
   };
 }
