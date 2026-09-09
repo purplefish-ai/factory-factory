@@ -1,0 +1,19 @@
+src/client/features/chat/incremental-chat-grouping.test.ts
+  s_010c3b512f07b8::t_32b8fc9802df2a 91,98,141,154-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e831cdbc9e26e6f142b92e81989af3d4423ddd15",
+  "prompts": {},
+  "sessions": {
+    "s_010c3b512f07b8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a082c9-a960-7f80-9164-842b3b84fc22",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
