@@ -26,7 +26,22 @@ export function ChatProviderDefaultsSection() {
       toast.success('Chat defaults updated');
       utils.userSettings.get.invalidate();
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      const savedSettings = utils.userSettings.get.getData() ?? settings;
+      if (variables.defaultClaudeModel !== undefined) {
+        setLocalClaudeModel((model) =>
+          model === variables.defaultClaudeModel
+            ? (savedSettings?.defaultClaudeModel ?? 'sonnet')
+            : model
+        );
+      }
+      if (variables.defaultCodexModel !== undefined) {
+        setLocalCodexModel((model) =>
+          model === variables.defaultCodexModel
+            ? (savedSettings?.defaultCodexModel ?? 'default')
+            : model
+        );
+      }
       toast.error(`Failed to update chat defaults: ${error.message}`);
     },
   });

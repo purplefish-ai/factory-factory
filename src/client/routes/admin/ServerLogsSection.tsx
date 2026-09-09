@@ -17,11 +17,9 @@ export function ServerLogsSection() {
         <CardDescription>View and search structured server log entries</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <RouterLink to="/logs">
-          <Button variant="outline" className="w-full sm:w-auto">
-            View Logs
-          </Button>
-        </RouterLink>
+        <Button variant="outline" className="w-full sm:w-auto" asChild>
+          <RouterLink to="/logs">View Logs</RouterLink>
+        </Button>
         <Button
           variant="outline"
           onClick={download}

@@ -118,4 +118,42 @@ describe('IdeSettingsSection', () => {
 
     root.unmount();
   });
+  it.each(['cursor', 'vscode'] as const)(
+    'enters Custom from %s before saving a nonempty command',
+    (preferredIde) => {
+      mocks.userSettings.preferredIde = preferredIde;
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      flushSync(() => root.render(createElement(IdeSettingsSection)));
+      const trigger = container.querySelector<HTMLElement>('#ide-select');
+      flushSync(() => trigger?.click());
+      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+        (element) => element.textContent === 'Custom'
+      );
+      expect(option).toBeDefined();
+      flushSync(() => option?.click());
+      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+      const input = container.querySelector<HTMLInputElement>('#custom-command');
+      expect(input).not.toBeNull();
+      expect(trigger?.textContent).toContain('Custom');
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      flushSync(() => {
+        setValue?.call(input, '   ');
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      flushSync(() => input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+      flushSync(() => {
+        setValue?.call(input, 'code-insiders {workspace}');
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      flushSync(() => input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+      expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+        preferredIde: 'custom',
+        customIdeCommand: 'code-insiders {workspace}',
+      });
+      root.unmount();
+    }
+  );
 });

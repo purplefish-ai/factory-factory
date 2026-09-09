@@ -8,6 +8,10 @@ import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  onUpdateError: (
+    _error: Error,
+    _variables: { defaultClaudeModel?: string; defaultCodexModel?: string }
+  ) => undefined,
   providerOptions: {
     CLAUDE: {
       source: 'cli',
@@ -20,7 +24,10 @@ const mocks = vi.hoisted(() => ({
     },
     CODEX: {
       source: 'fallback',
-      models: [{ value: 'default', label: 'Default' }],
+      models: [
+        { value: 'default', label: 'Default' },
+        { value: 'gpt-test', label: 'Test Codex Model' },
+      ],
       efforts: [{ value: 'medium', label: 'Medium' }],
     },
   },
@@ -38,11 +45,16 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      userSettings: { get: { invalidate: vi.fn() } },
+      userSettings: { get: { invalidate: vi.fn(), getData: () => mocks.userSettings } },
     }),
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: mocks.updateSettingsMutate, isPending: false }) },
+      update: {
+        useMutation: (options: { onError: typeof mocks.onUpdateError }) => {
+          mocks.onUpdateError = options.onError;
+          return { mutate: mocks.updateSettingsMutate, isPending: false };
+        },
+      },
       getProviderOptions: { useQuery: () => ({ data: mocks.providerOptions }) },
     },
   },
@@ -51,6 +63,7 @@ vi.mock('@/client/lib/trpc', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.userSettings.defaultClaudeModel = 'sonnet';
+  mocks.userSettings.defaultCodexModel = 'default';
 });
 afterEach(() => {
   document.body.innerHTML = '';
@@ -118,6 +131,59 @@ describe('ChatProviderDefaultsSection', () => {
     expect(listbox?.textContent).toContain('Fable 5');
     expect(listbox?.textContent).toContain('Sonnet 5');
 
+    root.unmount();
+  });
+  it.each([
+    {
+      id: 'default-claude-model',
+      selected: 'Fable 5',
+      saved: 'Sonnet 5',
+      payload: { defaultClaudeModel: 'claude-fable-5[1m]' },
+    },
+    {
+      id: 'default-codex-model',
+      selected: 'Test Codex Model',
+      saved: 'Default',
+      payload: { defaultCodexModel: 'gpt-test' },
+    },
+  ])('restores $id after the server rejects a model change', ({ id, selected, saved, payload }) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
+    const trigger = container.querySelector<HTMLElement>(`#${id}`);
+    flushSync(() => trigger?.click());
+    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (element) => element.textContent === selected
+    );
+    expect(option).toBeDefined();
+    flushSync(() => option?.click());
+    expect(trigger?.textContent).toBe(selected);
+    flushSync(() => mocks.onUpdateError(new Error('Save rejected'), payload));
+    expect(trigger?.textContent).toBe(saved);
+    root.unmount();
+  });
+
+  it('does not overwrite a newer selection when an older model update fails', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
+    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
+    for (const label of ['Fable 5', 'Default — Opus 4.8 (1M)']) {
+      flushSync(() => trigger?.click());
+      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+        (element) => element.textContent === label
+      );
+      expect(option).toBeDefined();
+      flushSync(() => option?.click());
+    }
+    flushSync(() =>
+      mocks.onUpdateError(new Error('Earlier save rejected'), {
+        defaultClaudeModel: 'claude-fable-5[1m]',
+      })
+    );
+    expect(trigger?.textContent).toBe('Default — Opus 4.8 (1M)');
     root.unmount();
   });
 });

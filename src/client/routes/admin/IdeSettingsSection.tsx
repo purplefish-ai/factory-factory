@@ -17,11 +17,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 export function IdeSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
+  const [isConfiguringCustomIde, setIsConfiguringCustomIde] = useState(false);
   const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('IDE settings updated');
-      utils.userSettings.get.invalidate();
-      utils.workspace.getAvailableIdes.invalidate();
+      await Promise.all([
+        utils.userSettings.get.invalidate(),
+        utils.workspace.getAvailableIdes.invalidate(),
+      ]);
+      setIsConfiguringCustomIde(false);
     },
     onError: (error) => {
       toast.error(`Failed to update settings: ${error.message}`);
@@ -37,15 +41,6 @@ export function IdeSettingsSection() {
     },
   });
 
-  const handleIdeChange = (value: string) => {
-    updateSettings.mutate({
-      preferredIde: value as 'cursor' | 'vscode' | 'custom',
-      ...(value === 'custom' && {
-        customIdeCommand: settings?.customIdeCommand || null,
-      }),
-    });
-  };
-
   const [localCustomCommand, setLocalCustomCommand] = useState(settings?.customIdeCommand || '');
 
   // Sync local state when settings change externally
@@ -54,14 +49,30 @@ export function IdeSettingsSection() {
   }, [settings?.customIdeCommand]);
 
   const saveCustomCommand = (value: string) => {
+    const command = value.trim();
+    if (!command) {
+      return;
+    }
     updateSettings.mutate({
       preferredIde: 'custom',
-      customIdeCommand: value || null,
+      customIdeCommand: command,
     });
   };
 
+  const handleIdeChange = (value: string) => {
+    if (value === 'custom') {
+      setIsConfiguringCustomIde(true);
+      saveCustomCommand(localCustomCommand);
+    } else if (value === 'cursor' || value === 'vscode') {
+      setIsConfiguringCustomIde(false);
+      updateSettings.mutate({ preferredIde: value });
+    }
+  };
+
+  const selectedIde = isConfiguringCustomIde ? 'custom' : (settings?.preferredIde ?? 'cursor');
+
   const handleTestCommand = () => {
-    if (!localCustomCommand) {
+    if (!localCustomCommand.trim()) {
       toast.error('Please enter a custom command first');
       return;
     }
@@ -92,7 +103,7 @@ export function IdeSettingsSection() {
         <div className="space-y-2">
           <Label htmlFor="ide-select">Preferred IDE</Label>
           <Select
-            value={settings?.preferredIde ?? 'cursor'}
+            value={selectedIde}
             onValueChange={handleIdeChange}
             disabled={updateSettings.isPending}
           >
@@ -107,7 +118,7 @@ export function IdeSettingsSection() {
           </Select>
         </div>
 
-        {settings?.preferredIde === 'custom' && (
+        {selectedIde === 'custom' && (
           <div className="space-y-2">
             <Label htmlFor="custom-command">Custom Command</Label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -123,7 +134,7 @@ export function IdeSettingsSection() {
               <Button
                 variant="outline"
                 onClick={handleTestCommand}
-                disabled={testCommand.isPending || !localCustomCommand}
+                disabled={testCommand.isPending || !localCustomCommand.trim()}
               >
                 {testCommand.isPending ? 'Testing...' : 'Test'}
               </Button>
