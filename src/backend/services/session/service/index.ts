@@ -18,7 +18,6 @@ export {
   acpRuntimeManager,
   CodexAppServerAcpAdapter,
   fetchClaudeModelCatalogFromAcp,
-  fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,
 } from './acp';
 // Bridge interfaces for orchestration layer wiring
@@ -32,6 +31,7 @@ export { sessionProviderResolverService } from './data/session-provider-resolver
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
 export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
+export { CodexModelCatalogService } from './lifecycle/codex-model-catalog.service';
 export { SessionConfigService } from './lifecycle/session.config.service';
 export {
   type GetOrCreateSessionClientOptions,
@@ -52,6 +52,7 @@ export type { SessionPromptService } from './lifecycle/session-services';
 export {
   acpEventProcessor,
   chatMessageHandlerService,
+  codexModelCatalogService,
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleService,

@@ -1,18 +1,19 @@
 publicHoistPattern:
   - '@types/*'
 
-onlyBuiltDependencies:
-  - '@prisma/engines'
-  - better-sqlite3
-  - electron
-  - esbuild
-  - node-pty
-  - prisma
-  - protobufjs
-  - sharp
+# Preserve pnpm 10's release-age policy, including same-day security updates.
+minimumReleaseAge: 0
 
-ignoredBuiltDependencies:
-  - electron-winstaller
+allowBuilds:
+  '@prisma/engines': true
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+  node-pty: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  electron-winstaller: false
 
 packageExtensions:
   'electron-builder@26.16.1':

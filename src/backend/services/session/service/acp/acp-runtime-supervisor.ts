@@ -691,6 +691,7 @@ export class AcpRuntimeSupervisor {
       });
       try {
         this.sendProcessSignal(sessionId, handle, 'SIGKILL');
+        await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
       } catch (error) {
         await raceWithSoftTimeout(exitPromise, STOP_TIMEOUT_MS);
         if (!(terminationObserved || hasExited())) {

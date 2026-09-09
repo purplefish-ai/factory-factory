@@ -6,7 +6,7 @@ const mockGetWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
 const mockFetchClaudeModelCatalogFromAcp = vi.hoisted(() => vi.fn());
-const mockFetchCodexModelCatalogFromAppServer = vi.hoisted(() => vi.fn());
+const mockGetCodexModels = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/lib/shell', () => ({
   execCommand: (...args: unknown[]) => mockExecCommand(...args),
@@ -20,8 +20,9 @@ function createCaller() {
       services: {
         fetchClaudeModelCatalogFromAcp: (...args: unknown[]) =>
           mockFetchClaudeModelCatalogFromAcp(...args),
-        fetchCodexModelCatalogFromAppServer: (...args: unknown[]) =>
-          mockFetchCodexModelCatalogFromAppServer(...args),
+        codexModelCatalogService: {
+          getModels: (...args: unknown[]) => mockGetCodexModels(...args),
+        },
         userSettingsQueryService: {
           get: (...args: unknown[]) => mockGet(...args),
           update: (...args: unknown[]) => mockUpdate(...args),
@@ -37,11 +38,11 @@ describe('userSettingsRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchClaudeModelCatalogFromAcp.mockReset();
-    mockFetchCodexModelCatalogFromAppServer.mockReset();
+    mockGetCodexModels.mockReset();
     mockFetchClaudeModelCatalogFromAcp.mockResolvedValue([
       { id: 'default', displayName: 'Default', description: null },
     ]);
-    mockFetchCodexModelCatalogFromAppServer.mockResolvedValue([
+    mockGetCodexModels.mockResolvedValue([
       {
         id: 'gpt-5-codex',
         displayName: 'GPT-5 Codex',
@@ -185,7 +186,7 @@ describe('userSettingsRouter', () => {
         description: 'Sonnet 5 · Efficient for routine tasks',
       },
     ]);
-    mockFetchCodexModelCatalogFromAppServer.mockResolvedValue([
+    mockGetCodexModels.mockResolvedValue([
       {
         id: 'gpt-5-codex',
         displayName: 'GPT-5 Codex',
@@ -248,7 +249,7 @@ describe('userSettingsRouter', () => {
   });
 
   it('falls back to static Codex provider options when catalog loading fails', async () => {
-    mockFetchCodexModelCatalogFromAppServer.mockRejectedValue(new Error('codex unavailable'));
+    mockGetCodexModels.mockRejectedValue(new Error('codex unavailable'));
 
     await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
       CODEX: {
@@ -293,7 +294,7 @@ describe('userSettingsRouter', () => {
         description: 'Fable 5 · Most capable for hard tasks',
       },
     ]);
-    mockFetchCodexModelCatalogFromAppServer.mockRejectedValue(new Error('codex unavailable'));
+    mockGetCodexModels.mockRejectedValue(new Error('codex unavailable'));
 
     await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
       CLAUDE: {
@@ -323,13 +324,13 @@ describe('userSettingsRouter', () => {
       resolveCodex = resolve;
     });
     mockFetchClaudeModelCatalogFromAcp.mockReturnValue(claudeCatalog);
-    mockFetchCodexModelCatalogFromAppServer.mockReturnValue(codexCatalog);
+    mockGetCodexModels.mockReturnValue(codexCatalog);
 
     const providerOptions = createCaller().getProviderOptions();
     await Promise.resolve();
 
     expect(mockFetchClaudeModelCatalogFromAcp).toHaveBeenCalledTimes(1);
-    expect(mockFetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+    expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
 
     resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
     resolveCodex!([

@@ -30,7 +30,7 @@
   "author": "Purplefish",
   "type": "module",
   "main": "dist/src/cli/index.js",
-  "packageManager": "pnpm@10.34.5",
+  "packageManager": "pnpm@12.3.4",
   "bin": {
     "ff": "./dist/src/cli/index.js",
     "factory-factory": "./dist/src/cli/index.js"

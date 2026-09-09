@@ -13,6 +13,12 @@ current select-only chat controls. The internal Codex adapter accepts string
 configuration values and stdio/HTTP/SSE MCP servers; it rejects ACP-tunneled MCP
 servers, which it does not advertise support for.
 
+Persisted ACP config snapshots are validated with a strict schema for ACP select
+and boolean options before being used for inactive-session options or capabilities. Malformed
+snapshots are treated as cache misses; provider history identity recovery stays
+independent of configuration validity. Valid snapshots restore omitted model/mode
+categories for both providers, while retaining Codex's provider-supplied labels.
+
 Session init/load fails unless model/mode select options can be obtained from
 provider `configOptions` or legacy model/mode response fields. Permission requests
 present multi-option selection
@@ -22,6 +28,11 @@ through ACP permission response handlers.
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart.
+
+When reloading a stopped session, transcript recovery matches tool results to
+call occurrences across the full transcript before synthesizing interruption
+results. Provider history backfill can timestamp-sort a result before its call;
+that existing result still completes exactly one occurrence of the tool ID.
 
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
@@ -33,6 +44,12 @@ session with tools disabled; discovery failure falls back to static aliases.
 Claude model names are normalized from provider descriptions at every ACP config
 ingress so Admin and in-chat selectors show explicit family versions while
 preserving raw provider values and configured defaults.
+
+Admin Codex options and inactive-session chat capabilities share
+`CodexModelCatalogService`. It coalesces concurrent app-server discovery,
+caches successful catalogs for 30 seconds from completion, and gives each
+consumer an isolated copy. Discovery failures are not cached; each consumer
+keeps its existing fallback and the next request retries discovery.
 
 The ACP layer is import-fenced by dependency-cruiser
 (`acp-no-external-imports`, `codex-app-server-adapter-self-contained`,
