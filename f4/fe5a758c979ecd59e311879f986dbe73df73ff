@@ -1,0 +1,53 @@
+scripts/ensure-native-modules.mjs
+  s_af352b457985ef::t_31eb84002a40fa 9,13-14,38-43,192-200,213,215,222,243
+CHANGELOG.md
+  s_af352b457985ef::t_31eb84002a40fa 12-13,29-30,35
+src/lib/icon-library.test.ts
+  s_af352b457985ef::t_31eb84002a40fa 14,31-40
+pnpm-workspace.yaml
+  s_af352b457985ef::t_31eb84002a40fa 24-25
+docs/shadcn.md
+  s_af352b457985ef::t_7f9e4d45ac2eae 35
+docs/superpowers/plans/2026-09-09-remaining-dependencies.md
+  s_af352b457985ef::t_31eb84002a40fa 1-90
+src/components/ui/calendar.stories.tsx
+  s_af352b457985ef::t_31eb84002a40fa 1-30
+package.json
+  s_af352b457985ef::t_31eb84002a40fa 85,95-96,126-127,131,175
+src/components/ui/calendar.test.tsx
+  s_af352b457985ef::t_31eb84002a40fa 1-90
+src/client/features/chat/incremental-chat-grouping.test.ts
+  s_af352b457985ef::t_31eb84002a40fa 83-130
+src/client/features/chat/incremental-chat-grouping.ts
+  s_af352b457985ef::t_31eb84002a40fa 27,311-312,316,320-334,337-338
+src/backend/services/linear/service/linear-client.transport.test.ts
+  s_af352b457985ef::t_31eb84002a40fa 1-81
+src/components/ui/calendar.tsx
+  ai_agent 1
+docs/chat-message-flow.md
+  s_af352b457985ef::t_31eb84002a40fa 276-288
+docs/architecture/agent-runtime.md
+  s_af352b457985ef::t_31eb84002a40fa 67-80
+pnpm-lock.yaml
+  ai_agent 109,168-170,172-173,182,262-263,265-266,277-278,305,389-390,506-507,511-512,516-517,522-523,528-529,534-535,540-541,545-546,550-551,756-765,1094-1095,2813-2814,3472-3475,3589-3592,5375-5378,5732-5733,5736,5738-5740,6790,6805,6808,6811,6814,6817,6820,6823,6826,6829,6835-6842,7039-7045,7355,7741,7745,8809,8811,8816,8822,8832,8997,9010,9024,9052,9074,9078,9083,9106,9500-9503,9658-9659,11719-11720,12046,12055,12151,12156-12157
+src/client/features/chat/use-grouped-chat-messages.test.tsx
+  s_af352b457985ef::t_31eb84002a40fa 1-50
+electron/main/native-module-cache.test.ts
+  s_af352b457985ef::t_31eb84002a40fa 2-12,29-58,111-136,138-139,164-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f4fe5a758c979ecd59e311879f986dbe73df73ff",
+  "prompts": {},
+  "sessions": {
+    "s_af352b457985ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08587-2803-7de3-9461-803369b175ce",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
