@@ -12,6 +12,20 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
 
 import { workspaceActivityService } from './activity.service';
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 async function flushNotifications(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
@@ -53,7 +67,7 @@ describe('WorkspaceActivityService', () => {
   it('preserves busy interval order while an earlier workspace lookup is pending', async () => {
     const workspaceId = 'notification-order';
     workspaceIds.push(workspaceId);
-    const lookup = Promise.withResolvers<{ name: string }>();
+    const lookup = createDeferred<{ name: string }>();
     mockFindById.mockReturnValueOnce(lookup.promise);
     const notifications: number[] = [];
     const onNotification = (event: { workspaceId: string; sessionCount: number }) => {
@@ -87,7 +101,7 @@ describe('WorkspaceActivityService', () => {
     const workspaceId = 'notification-slow';
     const otherWorkspaceId = 'notification-independent';
     workspaceIds.push(workspaceId, otherWorkspaceId);
-    const lookup = Promise.withResolvers<{ name: string }>();
+    const lookup = createDeferred<{ name: string }>();
     mockFindById.mockReturnValueOnce(lookup.promise);
     const notifications: string[] = [];
     const onNotification = (event: { workspaceId: string }) => {
@@ -115,7 +129,7 @@ describe('WorkspaceActivityService', () => {
   it('continues queued notifications after a workspace lookup fails', async () => {
     const workspaceId = 'notification-failure';
     workspaceIds.push(workspaceId);
-    const lookup = Promise.withResolvers<{ name: string }>();
+    const lookup = createDeferred<{ name: string }>();
     mockFindById.mockReturnValueOnce(lookup.promise);
     const onNotification = vi.fn();
     workspaceActivityService.on('request_notification', onNotification);
