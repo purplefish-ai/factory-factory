@@ -64,7 +64,10 @@ export function registerFatalErrorHandlers({
 
   process.on('unhandledRejection', (reason) => {
     logger.error('[electron] Unhandled rejection:', reason);
-    dialog.showErrorBox('Unhandled Rejection', String(reason));
+    dialog.showErrorBox(
+      'Unhandled Rejection',
+      reason instanceof Error ? reason.stack || String(reason) : String(reason)
+    );
     void shutdown();
   });
 }

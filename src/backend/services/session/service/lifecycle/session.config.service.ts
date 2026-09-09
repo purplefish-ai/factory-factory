@@ -2,17 +2,15 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
-import {
-  type AcpProcessHandle,
-  type AcpRuntimeManager,
-  fetchCodexModelCatalogFromAppServer,
-} from '@/backend/services/session/service/acp';
+import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { parseAcpConfigSnapshot, type StoredAcpConfigSnapshot } from './acp-config-snapshot';
+import type { CodexModelCatalogService } from './codex-model-catalog.service';
 import type { SessionRepository } from './session.repository';
 import {
   buildCapabilitiesFromConfigOptions,
@@ -23,21 +21,8 @@ import {
 } from './session-config-option-helpers';
 
 const logger = createLogger('session');
-const CODEX_MODEL_CATALOG_CACHE_TTL_MS = 30_000;
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
-type CodexModelEntry = Awaited<ReturnType<typeof fetchCodexModelCatalogFromAppServer>>[number];
-type CachedCodexModelCatalog = {
-  fetchedAtMs: number;
-  models: CodexModelEntry[];
-};
-type StoredAcpConfigSnapshot = {
-  provider: SessionProvider;
-  providerSessionId: string;
-  capturedAt: string;
-  configOptions: SessionConfigOption[];
-  observedModelId?: string;
-};
 
 export type PersistAcpConfigSnapshotParams = {
   provider: SessionProvider;
@@ -49,6 +34,7 @@ export type PersistAcpConfigSnapshotParams = {
 export type SessionConfigServiceDependencies = {
   repository: SessionRepository;
   runtimeManager: AcpRuntimeManager;
+  codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
   sessionDomainService?: SessionDomainService;
 };
 
@@ -56,12 +42,12 @@ export class SessionConfigService {
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
-  private cachedCodexModelCatalog: CachedCodexModelCatalog | null = null;
-  private codexModelCatalogRequest: Promise<CodexModelEntry[] | null> | null = null;
+  private readonly codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
 
   constructor(options: SessionConfigServiceDependencies) {
     this.repository = options.repository;
     this.runtimeManager = options.runtimeManager;
+    this.codexModelCatalogService = options.codexModelCatalogService;
     this.sessionDomainService = options.sessionDomainService ?? sessionDomainService;
   }
 
@@ -231,7 +217,7 @@ export class SessionConfigService {
       return [];
     }
 
-    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
     const snapshotConfigOptions =
       cachedSnapshot && cachedSnapshot.provider === session.provider
         ? [...cachedSnapshot.configOptions]
@@ -434,7 +420,7 @@ export class SessionConfigService {
       return EMPTY_CHAT_BAR_CAPABILITIES;
     }
 
-    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const cachedSnapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (session.provider === 'CODEX') {
       const snapshotConfigOptions =
         cachedSnapshot && cachedSnapshot.provider === 'CODEX'
@@ -860,7 +846,7 @@ export class SessionConfigService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    const snapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    const snapshot = parseAcpConfigSnapshot(session.providerMetadata);
     if (!snapshot || snapshot.provider !== session.provider) {
       throw new Error(
         `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
@@ -916,7 +902,12 @@ export class SessionConfigService {
     cachedSnapshot: StoredAcpConfigSnapshot | null;
     configOptions: SessionConfigOption[];
   }): Promise<SessionConfigOption[]> {
-    const modelCatalog = await this.getCodexModelCatalogFromAppServer();
+    const modelCatalog = await this.codexModelCatalogService.getModels().catch((error: unknown) => {
+      logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
     if (!modelCatalog || modelCatalog.length === 0) {
       return params.configOptions;
     }
@@ -941,40 +932,6 @@ export class SessionConfigService {
     }
 
     return nextConfigOptions;
-  }
-
-  private async getCodexModelCatalogFromAppServer(): Promise<CodexModelEntry[] | null> {
-    const now = Date.now();
-    if (
-      this.cachedCodexModelCatalog &&
-      now - this.cachedCodexModelCatalog.fetchedAtMs < CODEX_MODEL_CATALOG_CACHE_TTL_MS
-    ) {
-      return this.cachedCodexModelCatalog.models;
-    }
-
-    if (this.codexModelCatalogRequest !== null) {
-      return await this.codexModelCatalogRequest;
-    }
-
-    this.codexModelCatalogRequest = (async () => {
-      try {
-        const modelCatalog = await fetchCodexModelCatalogFromAppServer();
-        this.cachedCodexModelCatalog = {
-          fetchedAtMs: Date.now(),
-          models: modelCatalog,
-        };
-        return modelCatalog;
-      } catch (error) {
-        logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return null;
-      } finally {
-        this.codexModelCatalogRequest = null;
-      }
-    })();
-
-    return await this.codexModelCatalogRequest;
   }
 
   private buildSnapshotPersistUpdate(
@@ -1034,42 +991,6 @@ export class SessionConfigService {
       return {};
     }
     return { ...(metadata as Record<string, unknown>) };
-  }
-
-  private extractAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapshot | null {
-    const record = this.toMetadataRecord(metadata);
-    const snapshot = record.acpConfigSnapshot;
-    if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) {
-      return null;
-    }
-
-    const candidate = snapshot as Record<string, unknown>;
-    const provider = candidate.provider;
-    const providerSessionId = candidate.providerSessionId;
-    const configOptions = candidate.configOptions;
-    const observedModelId = candidate.observedModelId;
-
-    if (provider !== 'CLAUDE' && provider !== 'CODEX') {
-      return null;
-    }
-    if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {
-      return null;
-    }
-    if (!Array.isArray(configOptions)) {
-      return null;
-    }
-
-    return {
-      provider,
-      providerSessionId,
-      capturedAt:
-        typeof candidate.capturedAt === 'string' ? candidate.capturedAt : new Date(0).toISOString(),
-      configOptions:
-        provider === 'CLAUDE'
-          ? normalizeSessionConfigOptions(provider, configOptions as SessionConfigOption[])
-          : (configOptions as SessionConfigOption[]),
-      ...(typeof observedModelId === 'string' ? { observedModelId } : {}),
-    };
   }
 
   private resolveObservedModel(configOptions: SessionConfigOption[]): string | undefined {

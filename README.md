@@ -42,6 +42,8 @@ npx factory-factory@latest serve
 
 Factory Factory opens in your browser and stores its database in `~/factory-factory/` by default.
 
+See [Settings](docs/admin-settings.md) for IDE commands, default chat models, and project configuration.
+
 Then:
 
 1. Add a project by selecting a local git repository.
@@ -103,6 +105,10 @@ By default the server rejects WebSocket upgrades that carry client-address heade
 Use Factory Factory only with repositories and agent instructions you trust. Review changes before merging, protect your GitHub and Linear credentials, and consider a VM or container when working with untrusted code.
 
 ## Development
+
+Use pnpm 12.3.4, pinned in `package.json`. Dependency build permissions live in
+`pnpm-workspace.yaml` under `allowBuilds`; review new build scripts with
+`pnpm approve-builds` when adding or updating dependencies.
 
 ```bash
 git clone https://github.com/purplefish-ai/factory-factory.git

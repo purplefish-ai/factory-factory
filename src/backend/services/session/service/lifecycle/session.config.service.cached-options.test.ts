@@ -6,9 +6,6 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
-vi.mock('@/backend/services/session/service/acp', () => ({
-  fetchCodexModelCatalogFromAppServer: vi.fn(),
-}));
 
 describe('inactive session config errors', () => {
   it.each([
@@ -34,6 +31,7 @@ describe('inactive session config errors', () => {
       };
       const sessionDomainService = { emitDelta: vi.fn() };
       const service = new SessionConfigService({
+        codexModelCatalogService: { getModels: vi.fn().mockResolvedValue([]) },
         repository: unsafeCoerce(repository),
         runtimeManager: unsafeCoerce({ getClient: vi.fn().mockReturnValue(undefined) }),
         sessionDomainService: unsafeCoerce(sessionDomainService),

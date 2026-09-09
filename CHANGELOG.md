@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade pnpm to 12.3.4, migrate dependency build permissions, and update the verified Docker bootstrap
 - Require Node.js 26.8.1 or newer, update development and release environments, and align Node.js types
 - Upgrade the ACP SDK from 0.15.0 to 1.4.0, matching Claude ACP, migrate model switching to the supported config API, and handle the expanded config and MCP transport types
 - Upgrade Knip from 5.88.1 to 6.35.0, include CSS, MDX, and Prisma in its project analysis, and remove redundant entry points and dependency ignores
 - Upgrade Biome from 2.4.4 to 2.5.12, migrate its configuration, and apply the updated lint and formatting rules
-- Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, Storybook 10.6.0, and pnpm 10.34.5
+- Refresh compatible runtime and development dependencies, including Claude ACP 0.75.1, Prisma 7.10.0, Electron 41.10.7, and Storybook 10.6.0
 - Update the Codex CLI compatibility baseline from 0.145.0 to 0.153.4 and regenerate the app-server method snapshot
 
 ### Security

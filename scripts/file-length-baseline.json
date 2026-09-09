@@ -13,14 +13,13 @@
   "src/backend/services/run-script/service/run-script.service.ts": 1026,
   "src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.test.ts": 3415,
   "src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts": 1576,
-  "src/backend/services/session/service/lifecycle/session.config.service.test.ts": 1159,
-  "src/backend/services/session/service/lifecycle/session.config.service.ts": 1080,
+  "src/backend/services/session/service/lifecycle/session.config.service.test.ts": 1154,
+  "src/backend/services/session/service/lifecycle/session.config.service.ts": 1001,
   "src/backend/services/session/service/lifecycle/session.service.test.ts": 2774,
   "src/backend/services/workspace/resources/workspace.accessor.ts": 1040,
   "src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts": 1115,
   "src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts": 1008,
   "src/cli/proxy.ts": 1022,
   "src/client/features/chat/chat-reducer.test.ts": 4325,
-  "src/client/routes/admin-page.tsx": 1216,
   "src/lib/claude-fixtures.ts": 1162
 }

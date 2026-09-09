@@ -1,6 +1,7 @@
 import { ChatMessageHandlerService } from '@/backend/services/session/service/chat/chat-message-handlers.service';
 import {
   acpEventProcessor,
+  codexModelCatalogService,
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleGate,
@@ -15,6 +16,7 @@ import {
 export type { SessionPromptService } from './session-core-services';
 export {
   acpEventProcessor,
+  codexModelCatalogService,
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleService,

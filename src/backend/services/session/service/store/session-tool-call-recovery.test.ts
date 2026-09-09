@@ -55,6 +55,28 @@ function toolResult(order: number): ChatMessage {
 }
 
 describe('finalizeInterruptedTranscriptToolCalls', () => {
+  it('preserves a real result sorted before its tool call', () => {
+    const transcript = [toolResult(0), toolUse('tool-use-1', 1)];
+
+    expect(finalizeInterruptedTranscriptToolCalls(transcript, '2026-08-20T10:01:00.000Z')).toBe(
+      transcript
+    );
+  });
+
+  it('uses each reordered result for only one occurrence of a reused tool ID', () => {
+    const transcript = [toolResult(0), toolUse('tool-use-1', 1), toolUse('tool-use-2', 2)];
+    const recovered = finalizeInterruptedTranscriptToolCalls(
+      transcript,
+      '2026-08-20T10:01:00.000Z'
+    );
+
+    expect(recovered).toHaveLength(4);
+    expect(recovered[3]?.id).toBe('recovered-tool-result:tool-use-2:reused-call-id:1');
+    expect(finalizeInterruptedTranscriptToolCalls(recovered, '2026-08-20T10:02:00.000Z')).toBe(
+      recovered
+    );
+  });
+
   it('finalizes every unmatched occurrence when a tool ID was reused', () => {
     const recovered = finalizeInterruptedTranscriptToolCalls(
       [toolUse('tool-use-1', 0), toolUse('tool-use-2', 1)],
