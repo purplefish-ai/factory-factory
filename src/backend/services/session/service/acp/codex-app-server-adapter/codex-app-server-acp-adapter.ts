@@ -957,6 +957,9 @@ export class CodexAppServerAcpAdapter implements Agent {
       return;
     }
 
+    if (stopReason === 'cancelled' && session.activeTurn.turnId !== PENDING_TURN_ID) {
+      this.streamEventHandler.markTurnCancelled(session, session.activeTurn.turnId);
+    }
     session.activeTurn.settled = true;
     session.activeTurn.resolve(stopReason);
     session.activeTurn = null;

@@ -77,6 +77,99 @@ async function initializeAdapter(
 }
 
 describe('CodexAppServerAcpAdapter notification ordering', () => {
+  it('ignores a cancelled turn after interrupt failure while allowing the next prompt', async () => {
+    const connection = createMockConnection();
+    const { client, request } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, client);
+    await initializeAdapter(adapter, request);
+    request.mockResolvedValueOnce({
+      thread: { id: 'thread_cancel', cwd: '/tmp/workspace' },
+      approvalPolicy: 'on-failure',
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({ cwd: '/tmp/workspace', mcpServers: [] });
+    const internal = adapter as unknown as {
+      handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      sessions: Map<
+        string,
+        {
+          activeTurn: { turnId: string } | null;
+          pendingTurnCompletionsByTurnId: Map<string, unknown>;
+        }
+      >;
+    };
+    request.mockResolvedValueOnce({ turn: { id: 'turn_cancel', status: 'inProgress' } });
+    const firstPrompt = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'first' }],
+    });
+    await vi.waitFor(() =>
+      expect(internal.sessions.get(session.sessionId)?.activeTurn?.turnId).toBe('turn_cancel')
+    );
+    request.mockRejectedValueOnce(new Error('interrupt failed'));
+    await adapter.cancel({ sessionId: session.sessionId });
+    await expect(firstPrompt).resolves.toEqual({ stopReason: 'cancelled' });
+    const updates = vi.mocked(connection.sessionUpdate);
+    updates.mockClear();
+
+    const sendLateNotifications = async () => {
+      await internal.handleCodexNotification('turn/completed', {
+        threadId: 'thread_cancel',
+        turn: { id: 'turn_cancel', status: 'completed', items: [] },
+      });
+      for (const method of ['item/started', 'item/completed']) {
+        await internal.handleCodexNotification(method, {
+          threadId: 'thread_cancel',
+          turnId: 'turn_cancel',
+          item: { type: 'commandExecution', id: 'late_tool', command: 'pwd', status: 'completed' },
+        });
+      }
+      await internal.handleCodexNotification('item/agentMessage/delta', {
+        threadId: 'thread_cancel',
+        turnId: 'turn_cancel',
+        itemId: 'late_message',
+        delta: 'late text',
+      });
+    };
+    await sendLateNotifications();
+    expect(updates).not.toHaveBeenCalled();
+    expect(internal.sessions.get(session.sessionId)?.pendingTurnCompletionsByTurnId.size).toBe(0);
+
+    let startNext!: (value: unknown) => void;
+    request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          startNext = resolve;
+        })
+    );
+    const secondPrompt = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'next' }],
+    });
+    await sendLateNotifications();
+    expect(updates).not.toHaveBeenCalled();
+    await internal.handleCodexNotification('item/agentMessage/delta', {
+      threadId: 'thread_cancel',
+      turnId: 'turn_next',
+      itemId: 'next_message',
+      delta: 'next text',
+    });
+    expect(updates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ content: { type: 'text', text: 'next text' } }),
+      })
+    );
+    startNext({ turn: { id: 'turn_next', status: 'inProgress' } });
+    await vi.waitFor(() =>
+      expect(internal.sessions.get(session.sessionId)?.activeTurn?.turnId).toBe('turn_next')
+    );
+    await internal.handleCodexNotification('turn/completed', {
+      threadId: 'thread_cancel',
+      turn: { id: 'turn_next', status: 'completed', items: [] },
+    });
+    await expect(secondPrompt).resolves.toEqual({ stopReason: 'end_turn' });
+  });
+
   it('keeps a replayed session when the optional task-status refresh fails', async () => {
     const connection = createMockConnection();
     const { client, request } = createMockCodexClient();
