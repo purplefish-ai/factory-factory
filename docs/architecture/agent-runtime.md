@@ -23,6 +23,11 @@ Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, merged chronologically with provider
 history, and rendered as structured chat rows after reconnect or restart.
 
+The Codex adapter suppresses late turn notifications for the last 128 cancelled
+turns per loaded session, before emitting chat updates or invalidating subagent
+transcripts. Eviction emits a `cancelled_turn_history_evicted` diagnostic; an
+evicted turn no longer has this protection against late notifications.
+
 Normal user turns have a fixed four-hour deadline; auto-iteration keeps its
 separate configured deadline. Explicit stops, closes, workspace archives,
 provider failures, prompt timeouts, and unexpected process exits record distinct

@@ -106,6 +106,12 @@ export class CodexStreamEventHandler {
       const oldest = turns.values().next().value;
       if (oldest !== undefined) {
         turns.delete(oldest);
+        this.deps.reportShapeDrift('cancelled_turn_history_evicted', {
+          sessionId: session.sessionId,
+          threadId: session.threadId,
+          turnId: oldest,
+          limit: MAX_CANCELLED_TURNS,
+        });
       }
     }
   }
@@ -210,17 +216,17 @@ export class CodexStreamEventHandler {
       return;
     }
 
-    await this.deps.handleSubagentTranscriptActivity?.(typedNotification.params.threadId);
-
-    const sessionId = this.deps.sessionIdByThreadId.get(typedNotification.params.threadId);
-    if (!sessionId) {
+    const session = this.getSessionForThread(typedNotification.params.threadId);
+    if (this.isNotificationCancelled(session, typedNotification)) {
       return;
     }
 
-    const session = this.getNotificationSession(sessionId, typedNotification);
+    await this.deps.handleSubagentTranscriptActivity?.(typedNotification.params.threadId);
+
     if (!session) {
       return;
     }
+    const sessionId = session.sessionId;
 
     if (typedNotification.method === 'item/agentMessage/delta') {
       await this.deps.emitSessionUpdate(sessionId, {
@@ -319,13 +325,17 @@ export class CodexStreamEventHandler {
     }
   }
 
-  private getNotificationSession(
-    sessionId: string,
+  private getSessionForThread(threadId: string): AdapterSession | undefined {
+    const sessionId = this.deps.sessionIdByThreadId.get(threadId);
+    return sessionId ? this.deps.sessions.get(sessionId) : undefined;
+  }
+
+  private isNotificationCancelled(
+    session: AdapterSession | undefined,
     notification: KnownCodexNotification
-  ): AdapterSession | undefined {
-    const session = this.deps.sessions.get(sessionId);
+  ): boolean {
     if (!session) {
-      return;
+      return false;
     }
     const turnId =
       notification.method === 'turn/completed'
@@ -333,9 +343,7 @@ export class CodexStreamEventHandler {
         : 'turnId' in notification.params
           ? notification.params.turnId
           : undefined;
-    return typeof turnId === 'string' && this.cancelledTurns.get(session)?.has(turnId)
-      ? undefined
-      : session;
+    return typeof turnId === 'string' && this.cancelledTurns.get(session)?.has(turnId) === true;
   }
 
   private async handleThreadNotification(notification: KnownCodexNotification): Promise<boolean> {
