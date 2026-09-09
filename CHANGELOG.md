@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade Vite to 8.2.2 and its React plugin to 6.1.1; update Vitest and V8 coverage to 5.0.0, migrate the chat grouping benchmark API, and upgrade jsdom to 30.0.1
+
 - Upgrade builds and typechecks to TypeScript 7.0.2 while retaining the TypeScript 6 compiler API for tooling; update dependency-cruiser to 18.2.0, lint-staged to 17.5.0, concurrently to 10.0.5, and Supertest types to 7.2.1
 - Upgrade pnpm to 12.3.4, migrate dependency build permissions, and update the verified Docker bootstrap
 - Require Node.js 26.8.1 or newer, update development and release environments, and align Node.js types
