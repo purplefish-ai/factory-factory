@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Factory Factory! This document pr
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 26.8.1+ (pinned in `.node-version`)
 - pnpm
 - GitHub CLI (`gh`) - authenticated
 - Claude Code - authenticated via `claude login`
