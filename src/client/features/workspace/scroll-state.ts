@@ -6,6 +6,7 @@ export interface ScrollState {
   top: number;
   left: number;
   stickToBottom?: boolean;
+  diffAnchor?: { index: number; offset: number };
 }
 
 export interface StorageLike {
@@ -21,10 +22,16 @@ interface ScrollStoragePayload {
 const STORAGE_VERSION = 1;
 const STORAGE_KEY_SCROLL_PREFIX = 'workspace-panel-scroll-';
 
+const DiffAnchorSchema = z.object({
+  index: z.number().int().nonnegative(),
+  offset: z.number().finite().nonnegative(),
+});
+
 const ScrollStateSchema = z.object({
   top: z.number().finite().min(0),
   left: z.number().finite().min(0),
   stickToBottom: z.boolean().optional(),
+  diffAnchor: DiffAnchorSchema.optional().catch(undefined),
 });
 
 const ScrollStoragePayloadSchema = z.object({
@@ -41,10 +48,12 @@ export function makeScrollStateKey(tabId: string, mode: ScrollMode): string {
 }
 
 function sanitizeScrollState(state: ScrollState): ScrollState {
+  const anchor = DiffAnchorSchema.safeParse(state.diffAnchor);
   return {
     top: Math.max(0, Number.isFinite(state.top) ? state.top : 0),
     left: Math.max(0, Number.isFinite(state.left) ? state.left : 0),
     stickToBottom: state.stickToBottom === true ? true : undefined,
+    ...(anchor.success ? { diffAnchor: anchor.data } : {}),
   };
 }
 

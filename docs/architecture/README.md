@@ -22,3 +22,6 @@ stale rationale is worse than no rationale, because it is believed.
 Related: `docs/design/` holds point-in-time design documents (including an
 `archive/` of superseded ones). Those record what was decided at a moment;
 these files record what is true now.
+
+Client diff rendering: see [diff-rendering.md](./diff-rendering.md) for workers,
+virtual rows, scroll anchors, and visual verification.

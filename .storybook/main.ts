@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
+import { workerSafeAliases } from '../scripts/vite-worker-aliases';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ const config: StorybookConfig = {
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...config.resolve.alias,
+      ...workerSafeAliases,
       '@': path.resolve(__dirname, '../src'),
       '@prisma-gen': path.resolve(__dirname, '../prisma/generated'),
     };

@@ -1,26 +1,18 @@
 import { EyeIcon, FileCodeIcon, SpinnerGapIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useTheme } from 'next-themes';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  calculateLineNumberWidth,
-  type DiffLine,
-  getDiffLineBackground,
-  getDiffLinePrefix,
-  getDiffLineTextColor,
-  type LineTokenMap,
-  parseDetailedDiff,
-  type SyntaxToken,
-  tokenizeDiffLines,
-} from '@/lib/diff';
+import { calculateLineNumberWidth, parseDetailedDiff } from '@/lib/diff/parse';
 import { getLanguageFromPath } from '@/lib/language-detection';
-import { cn } from '@/lib/utils';
+import { DiffLines } from './diff-lines';
+import type { ScrollState } from './scroll-state';
+import { useDiffHighlighting } from './use-diff-highlighting';
 import { usePersistentScroll } from './use-persistent-scroll';
+import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -84,78 +76,17 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   );
 }
 
-interface SyntaxHighlightedContentProps {
-  tokens: SyntaxToken[];
-}
-
-function SyntaxHighlightedContent({ tokens }: SyntaxHighlightedContentProps) {
-  return (
-    <>
-      {tokens.map((token, i) => {
-        const key = `${i}-${token.content.length}`;
-        return (
-          <span key={key} style={token.style}>
-            {token.content}
-          </span>
-        );
-      })}
-    </>
-  );
-}
-
-interface DiffLineProps {
-  line: DiffLine;
-  lineNumberWidth: number;
-  tokens?: SyntaxToken[] | null;
-}
-
-function DiffLineComponent({ line, lineNumberWidth, tokens }: DiffLineProps) {
-  const bgColor = getDiffLineBackground(line.type);
-  const prefix = getDiffLinePrefix(line.type);
-  const hasTokens = tokens != null && tokens.length > 0;
-  // When syntax tokens are available, let them control text color for code lines.
-  // Header/hunk lines and lines without tokens use the standard diff text color.
-  const textColor = hasTokens ? undefined : getDiffLineTextColor(line.type);
-
-  return (
-    <div className={cn('flex font-mono text-xs', bgColor)}>
-      {/* Line numbers */}
-      <div className="flex-shrink-0 flex text-muted-foreground border-r border-border select-none">
-        <span
-          className="box-content px-1 text-right border-r border-border tabular-nums"
-          style={{ width: `${lineNumberWidth}ch` }}
-        >
-          {line.lineNumber?.old ?? ''}
-        </span>
-        <span
-          className="box-content px-1 text-right tabular-nums"
-          style={{ width: `${lineNumberWidth}ch` }}
-        >
-          {line.lineNumber?.new ?? ''}
-        </span>
-      </div>
-
-      {/* Prefix — always uses diff text color */}
-      <span
-        className={cn('flex-shrink-0 w-4 text-center select-none', getDiffLineTextColor(line.type))}
-      >
-        {prefix}
-      </span>
-
-      {/* Content */}
-      <pre className={cn('flex-1 whitespace-pre-wrap break-all px-2', textColor)}>
-        {hasTokens ? <SyntaxHighlightedContent tokens={tokens} /> : line.content}
-      </pre>
-    </div>
-  );
-}
-
 // =============================================================================
 // Main Component
 // =============================================================================
 
 export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const { resolvedTheme } = useTheme();
+  const { getScrollState, setScrollState } = useWorkspacePanel();
+  const saveDiffScrollState = useCallback(
+    (state: ScrollState) => setScrollState(tabId, 'code', state),
+    [setScrollState, tabId]
+  );
   const { data, isLoading, error } = trpc.workspace.getFileDiff.useQuery({
     workspaceId,
     filePath,
@@ -184,20 +115,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const syntaxTheme = resolvedTheme === 'dark' ? oneDark : oneLight;
   const language = getLanguageFromPath(filePath);
 
-  const tokenMap: LineTokenMap | null = useMemo(() => {
-    if (parsedDiff.length === 0) {
-      return null;
-    }
-    return tokenizeDiffLines(parsedDiff, language, syntaxTheme);
-  }, [parsedDiff, language, syntaxTheme]);
-
-  const { handleScroll: handleDiffScroll } = usePersistentScroll({
-    tabId,
-    mode: 'code',
-    viewportRef: diffViewportRef,
-    enabled: !showPreview,
-    restoreDeps: [showPreview, filePath, data?.diff?.length],
-  });
+  const tokenMap = useDiffHighlighting(parsedDiff, language, syntaxTheme, !showPreview);
 
   const { handleScroll: handleMarkdownScroll } = usePersistentScroll({
     tabId,
@@ -270,19 +188,15 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
           <MarkdownPreview workspaceId={workspaceId} filePath={filePath} />
         </ScrollArea>
       ) : (
-        <ScrollArea className="flex-1" onScroll={handleDiffScroll} viewportRef={diffViewportRef}>
-          <div className="min-w-fit">
-            {withOccurrenceKeys(parsedDiff, (line) =>
-              JSON.stringify([line.type, line.lineNumber?.old, line.lineNumber?.new, line.content])
-            ).map(({ item: line, key }, index) => (
-              <DiffLineComponent
-                key={key}
-                line={line}
-                lineNumberWidth={lineNumberWidth}
-                tokens={tokenMap?.get(index)}
-              />
-            ))}
-          </div>
+        <ScrollArea className="flex-1" viewportRef={diffViewportRef}>
+          <DiffLines
+            lines={parsedDiff}
+            lineNumberWidth={lineNumberWidth}
+            tokenMap={tokenMap}
+            scrollContainerRef={diffViewportRef}
+            scrollState={getScrollState(tabId, 'code')}
+            onScrollStateChange={saveDiffScrollState}
+          />
         </ScrollArea>
       )}
     </div>

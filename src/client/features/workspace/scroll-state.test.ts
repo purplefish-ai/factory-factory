@@ -22,6 +22,26 @@ function createStorage() {
 }
 
 describe('scroll-state', () => {
+  it('round-trips a wrapped diff row anchor and ignores invalid anchors', () => {
+    const storage = createStorage();
+    storage.setItem(
+      makeScrollStorageKey('w'),
+      JSON.stringify({
+        v: 1,
+        states: {
+          valid: { top: 8000, left: 0, diffAnchor: { index: 500, offset: 7 } },
+          invalid: { top: 80, left: 0, diffAnchor: { index: -1, offset: 0 } },
+        },
+      })
+    );
+    const loaded = loadScrollStateRecord(storage, 'w');
+    expect(loaded.valid).toMatchObject({ diffAnchor: { index: 500, offset: 7 } });
+    expect(loaded.invalid).toMatchObject({ top: 80, left: 0 });
+    expect(loaded.invalid).not.toHaveProperty('diffAnchor');
+    saveScrollStateRecord(storage, 'w', upsertScrollState({}, 'tab', 'code', loaded.valid!));
+    expect(loadScrollStateRecord(storage, 'w')['tab:code']).toEqual(loaded.valid);
+  });
+
   it('round-trips scroll state records with versioned payload', () => {
     const storage = createStorage();
     const workspaceId = 'workspace-1';
