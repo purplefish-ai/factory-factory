@@ -1,5 +1,39 @@
-import { describe, expect, it } from 'vitest';
-import { parseGitHubRemoteUrl } from './project.accessor';
+import { describe, expect, it, vi } from 'vitest';
+import { prisma } from '@/backend/db';
+import { parseGitHubRemoteUrl, projectAccessor } from './project.accessor';
+
+vi.mock('@/backend/db', () => ({
+  prisma: { project: { create: vi.fn().mockResolvedValue({ id: 'project-1' }) } },
+}));
+
+vi.mock('@/backend/lib/shell', () => ({
+  gitCommandC: vi.fn().mockResolvedValue({ code: 1, stdout: '', stderr: '' }),
+}));
+
+describe('project creation', () => {
+  it.each(['.', '/home/user/myrepo/.', '/', '/repos/---', '/repos/日本語'])(
+    'rejects a repository path with an empty derived slug: %s',
+    async (repoPath) => {
+      await expect(
+        projectAccessor.create({ repoPath }, { worktreeBaseDir: '/worktrees' })
+      ).rejects.toThrow('does not produce a valid slug');
+      expect(prisma.project.create).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps a valid slug scoped beneath the shared worktree base', async () => {
+    await projectAccessor.create(
+      { repoPath: '/repos/My_Project' },
+      { worktreeBaseDir: '/worktrees' }
+    );
+    expect(prisma.project.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        slug: 'my-project',
+        worktreeBasePath: '/worktrees/my-project',
+      }),
+    });
+  });
+});
 
 describe('parseGitHubRemoteUrl', () => {
   describe('SSH URLs', () => {

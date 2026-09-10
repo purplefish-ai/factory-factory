@@ -194,6 +194,11 @@ class ProjectAccessor {
   async create(data: CreateProjectInput, context: ProjectAccessorContext): Promise<Project> {
     const name = deriveNameFromPath(data.repoPath);
     const baseSlug = deriveSlugFromPath(data.repoPath);
+    if (!baseSlug) {
+      throw new Error(
+        `Unable to create project: repo path "${data.repoPath}" does not produce a valid slug`
+      );
+    }
 
     // Auto-detect GitHub info from git remote
     const githubInfo = await getGitHubInfoFromRepo(data.repoPath);
