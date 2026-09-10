@@ -23,26 +23,30 @@ vi.mock('@/client/lib/trpc', () => ({
 vi.mock('@/client/lib/sound', () => ({ playSound: vi.fn() }));
 
 describe('VoiceModeToggle session invalidation', () => {
-  it.each(['capturing', 'connecting'] as const)(
-    'stops %s when the selected session closes',
-    (phase) => {
-      capture.isCapturing = phase === 'capturing';
-      capture.isConnecting = phase === 'connecting';
-      capture.stop.mockClear();
-      const container = document.createElement('div');
-      const root = createRoot(container);
-      const render = (sessionId: string | null) =>
-        flushSync(() =>
-          root.render(<VoiceModeToggle sessionId={sessionId} onFinalTranscript={vi.fn()} />)
-        );
-      try {
-        render('session-1');
-        expect(capture.stop).not.toHaveBeenCalled();
-        render(null);
-        expect(capture.stop).toHaveBeenCalledOnce();
-      } finally {
-        flushSync(() => root.unmount());
-      }
+  it.each([
+    ['capturing', null],
+    ['connecting', null],
+    ['capturing', 'session-2'],
+    ['connecting', 'session-2'],
+  ] as const)('stops %s when the selected session changes to %s', (phase, nextSessionId) => {
+    capture.isCapturing = phase === 'capturing';
+    capture.isConnecting = phase === 'connecting';
+    capture.stop.mockClear();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const render = (sessionId: string | null) =>
+      flushSync(() =>
+        root.render(<VoiceModeToggle sessionId={sessionId} onFinalTranscript={vi.fn()} />)
+      );
+    try {
+      render('session-1');
+      expect(capture.stop).not.toHaveBeenCalled();
+      render('session-1');
+      expect(capture.stop).not.toHaveBeenCalled();
+      render(nextSessionId);
+      expect(capture.stop).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
     }
-  );
+  });
 });

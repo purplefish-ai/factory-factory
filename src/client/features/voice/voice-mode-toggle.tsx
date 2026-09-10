@@ -154,8 +154,11 @@ export function VoiceModeToggle({
     return () => stop();
   }, [stop]);
 
+  const previousSessionId = useRef(sessionId);
   useEffect(() => {
-    if (!sessionId && (isCapturing || isConnecting)) {
+    const sessionChanged = previousSessionId.current !== sessionId;
+    previousSessionId.current = sessionId;
+    if ((!sessionId || sessionChanged) && (isCapturing || isConnecting)) {
       stop();
       setVoiceModeOn(false);
     }
