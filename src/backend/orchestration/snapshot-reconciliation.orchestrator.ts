@@ -312,6 +312,7 @@ export class SnapshotReconciliationService {
       let staleEntriesRemoved = 0;
       let gitStatsComputed = 0;
       const changedWorkspaceIds = new Set<string>();
+      const failedWorkspaceIds = new Set<string>();
 
       const recordUpsert = (
         workspaceId: string,
@@ -328,7 +329,17 @@ export class SnapshotReconciliationService {
       // 3. Seed DB and runtime fields without waiting for git. Omitting gitStats
       // preserves an existing cached value until this pass computes a replacement.
       for (const ws of workspaces) {
-        const authoritativeFields = this.buildAuthoritativeFields(ws, allPendingRequests);
+        let authoritativeFields: SnapshotUpdateInput;
+        try {
+          authoritativeFields = this.buildAuthoritativeFields(ws, allPendingRequests);
+        } catch (error) {
+          failedWorkspaceIds.add(ws.id);
+          this.logger.warn('Failed to build authoritative fields for workspace', {
+            workspaceId: ws.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
         if (!ws.worktreePath) {
           authoritativeFields.gitStats = null;
         }
@@ -375,7 +386,7 @@ export class SnapshotReconciliationService {
       await Promise.all(
         workspaces.map((ws) => {
           const worktreePath = ws.worktreePath;
-          if (!worktreePath) {
+          if (!worktreePath || failedWorkspaceIds.has(ws.id)) {
             return Promise.resolve();
           }
           return gitLimit(async () => {

@@ -123,7 +123,9 @@ of them behind the one query (~20s at 68 worktrees).
 
 `gitStats` is a reconciliation field. Each snapshot poll first seeds all
 database and runtime fields, retaining any cached Git stats, then releases the
-startup snapshot barrier. It recomputes Git stats with bounded concurrency and
+startup snapshot barrier. A runtime snapshot failure is isolated to its workspace;
+healthy workspaces still seed, stale entries are removed, and Git refresh continues.
+It recomputes Git stats with bounded concurrency and
 publishes each workspace as soon as its Git commands finish; one slow worktree
 cannot hold the rest of the board. A failed Git refresh retains a non-null
 cached value, while a workspace that no longer has a worktree is explicitly
