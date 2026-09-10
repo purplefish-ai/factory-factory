@@ -1,0 +1,19 @@
+docs/architecture/integrations.md
+  s_8a9440b7ba31a8::t_28be02b48a2224 16-19
+src/client/routes/admin/CliAuthSection.test.tsx
+  s_8a9440b7ba31a8::t_f56c7e285af80b 1-20,22-93
+src/backend/orchestration/cli-health.service.ts
+  s_8a9440b7ba31a8::t_f49cb5246b2cb0 273,279,286
+src/backend/services/github/service/github-cli.service.ts
+  s_8a9440b7ba31a8::t_f49cb5246b2cb0 216,218,235
+src/backend/orchestration/cli-health.service.test.ts
+  s_8a9440b7ba31a8::t_5a9f3cf9cdf123 238
+src/client/hooks/use-cli-health-refresh.ts
+  s_8a9440b7ba31a8::t_f56c7e285af80b 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "21a0ec4fbaf07c4757a1188e395c2f44ea1942c4",
+  "prompts": {}
+}
