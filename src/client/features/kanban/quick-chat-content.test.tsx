@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { UseChatWebSocketReturn } from '@/client/features/chat';
 import { QuickChatContent } from './quick-chat-content';
 
-const list = vi.hoisted(() => vi.fn((_props: unknown) => null));
+const list = vi.hoisted(() => vi.fn((_props: { queuedMessageIds?: Set<string> }) => null));
 vi.mock('@/client/features/chat', () => ({
   VirtualizedMessageList: list,
   useGroupedChatMessages: (messages: unknown[]) => messages,
@@ -49,7 +49,7 @@ describe('QuickChatContent queue controls', () => {
       });
       chatState.queuedMessages = [];
       render();
-      expect(list.mock.lastCall?.[0]).toMatchObject({ queuedMessageIds: new Set() });
+      expect(list.mock.lastCall?.[0]?.queuedMessageIds).toEqual(new Set());
     } finally {
       flushSync(() => root.unmount());
     }
