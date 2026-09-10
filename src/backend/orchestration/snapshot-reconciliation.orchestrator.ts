@@ -87,6 +87,7 @@ export interface ReconciliationResult {
   workspacesChanged: number;
   deltasEmitted: number;
   workspacesReconciled: number;
+  workspacesSkipped: number;
   driftsDetected: number;
   staleEntriesRemoved: number;
   gitStatsComputed: number;
@@ -429,11 +430,14 @@ export class SnapshotReconciliationService {
       // 5. Log summary after every streamed git update has settled.
       const durationMs = Date.now() - pollStartTs;
       const workspacesChanged = changedWorkspaceIds.size;
+      const workspacesSkipped = failedWorkspaceIds.size;
+      const workspacesReconciled = workspaces.length - workspacesSkipped;
       this.logger.info('Reconciliation complete', {
         workspacesScanned: workspaces.length,
         workspacesChanged,
         deltasEmitted,
-        workspacesReconciled: workspaces.length,
+        workspacesReconciled,
+        workspacesSkipped,
         driftsDetected,
         staleEntriesRemoved,
         gitStatsComputed,
@@ -444,7 +448,8 @@ export class SnapshotReconciliationService {
         workspacesScanned: workspaces.length,
         workspacesChanged,
         deltasEmitted,
-        workspacesReconciled: workspaces.length,
+        workspacesReconciled,
+        workspacesSkipped,
         driftsDetected,
         staleEntriesRemoved,
         gitStatsComputed,

@@ -291,7 +291,7 @@ describe('SnapshotReconciliationService', () => {
       store.upsert('ws-stale', { projectId: 'proj-1' }, 'reconciliation', 1);
       service = new SnapshotReconciliationService({
         createLogger: () => ({
-          info: vi.fn(),
+          info: mockLoggerInfo,
           warn: mockLoggerWarn,
           debug: vi.fn(),
           error: vi.fn(),
@@ -322,6 +322,19 @@ describe('SnapshotReconciliationService', () => {
       expect(store.getByWorkspaceId('ws-broken')).toBeUndefined();
       expect(result.staleEntriesRemoved).toBe(1);
       expect(result.gitStatsComputed).toBe(1);
+      expect(result).toMatchObject({
+        workspacesScanned: 2,
+        workspacesReconciled: 1,
+        workspacesSkipped: 1,
+      });
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'Reconciliation complete',
+        expect.objectContaining({
+          workspacesScanned: 2,
+          workspacesReconciled: 1,
+          workspacesSkipped: 1,
+        })
+      );
       expect(mockLoggerWarn).toHaveBeenCalledWith(
         'Failed to build authoritative fields for workspace',
         { workspaceId: 'ws-broken', error: 'runtime unavailable' }

@@ -89,6 +89,10 @@ export function createSnapshotEntry(
     prUpdatedAt: '2026-01-02T00:00:00Z',
     ratchetEnabled: true,
     ratchetState: 'IDLE',
+    ratchetDispatchStalled: true,
+    hasMergeConflict: false,
+    mode: 'STANDARD',
+    autoIterationStatus: null,
     ratchetDispatchOutcome: 'DIED',
     ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
     runScriptStatus: 'IDLE',
@@ -103,6 +107,12 @@ export function createSnapshotEntry(
     flowPhase: 'NO_PR',
     ciObservation: 'NOT_FETCHED',
     ratchetButtonAnimated: false,
+    statusReason: {
+      code: 'READY_FOR_NEXT_PROMPT',
+      label: 'Ready for next prompt',
+      tone: 'neutral',
+      needsUser: true,
+    },
     fieldTimestamps: {
       workspace: 0,
       pr: 0,
@@ -112,5 +122,5 @@ export function createSnapshotEntry(
       reconciliation: 0,
     },
     ...overrides,
-  } as WorkspaceSnapshotEntry;
+  };
 }
