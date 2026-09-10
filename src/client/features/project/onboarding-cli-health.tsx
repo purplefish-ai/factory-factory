@@ -5,6 +5,7 @@ import {
   TerminalIcon,
   WarningIcon,
 } from '@phosphor-icons/react';
+import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -81,10 +82,10 @@ function buildItems(health: {
 }
 
 export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps) {
+  const { refresh, isRefreshing } = useCLIHealthRefresh();
   const {
     data: health,
     isLoading,
-    refetch,
     isRefetching,
   } = trpc.admin.checkCLIHealth.useQuery(
     { forceRefresh: false },
@@ -116,10 +117,12 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs text-muted-foreground"
-          onClick={() => refetch()}
-          disabled={isRefetching}
+          onClick={() => void refresh()}
+          disabled={isRefetching || isRefreshing}
         >
-          <ArrowsClockwiseIcon className={`mr-1 h-3 w-3 ${isRefetching ? 'animate-spin' : ''}`} />
+          <ArrowsClockwiseIcon
+            className={`mr-1 h-3 w-3 ${isRefetching || isRefreshing ? 'animate-spin' : ''}`}
+          />
           Recheck
         </Button>
       </div>

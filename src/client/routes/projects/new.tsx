@@ -12,6 +12,7 @@ import {
 } from '@/client/features/project/project-repo-form';
 import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
 import type { ScriptType } from '@/client/features/project/startup-script-form';
+import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -114,6 +115,7 @@ export default function NewProjectPage() {
   useAppHeader({ title: hasExistingProjects ? '' : 'New Project' });
 
   const utils = trpc.useUtils();
+  const { refresh: refreshCLIHealth } = useCLIHealthRefresh();
 
   // Local path creation
   const createProject = trpc.project.create.useMutation({
@@ -180,8 +182,8 @@ export default function NewProjectPage() {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
     refetchAuth();
-    utils.admin.checkCLIHealth.invalidate();
-  }, [refetchAuth, utils.admin.checkCLIHealth]);
+    void refreshCLIHealth();
+  }, [refetchAuth, refreshCLIHealth]);
 
   const localFormProps = {
     error,

@@ -94,7 +94,7 @@ class GitHubCLIService {
 
   // Stale-while-revalidate caches for expensive GitHub CLI calls.
   private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
-  private healthRefreshInFlight = false;
+  private healthRefreshInFlight: Promise<GitHubCLIHealthStatus> | null = null;
   private readonly HEALTH_CACHE_TTL_MS = 30_000;
 
   private readonly issueCache = new Map<string, { issues: GitHubIssue[]; fetchedAt: number }>();
@@ -107,7 +107,7 @@ class GitHubCLIService {
   /** Clear all caches — used in tests to prevent cross-test contamination. */
   clearCaches(): void {
     this.cachedHealth = null;
-    this.healthRefreshInFlight = false;
+    this.healthRefreshInFlight = null;
     this.issueCache.clear();
     this.issueRefreshInFlight.clear();
     this.rateLimitedUntil = null;
@@ -209,33 +209,31 @@ class GitHubCLIService {
     }
   }
 
-  /**
-   * Check if gh CLI is installed and authenticated.
-   * Result is cached for 30 s (stale-while-revalidate).
-   */
-  async checkHealth(): Promise<GitHubCLIHealthStatus> {
-    const now = Date.now();
-    if (this.cachedHealth) {
-      const isStale = now - this.cachedHealth.fetchedAt >= this.HEALTH_CACHE_TTL_MS;
-      if (isStale && !this.healthRefreshInFlight) {
-        this.healthRefreshInFlight = true;
-        this.runCheckHealth()
-          .then((result) => {
-            this.cachedHealth = { result, fetchedAt: Date.now() };
-          })
-          .catch(() => {
-            // Keep stale value on error.
-          })
-          .finally(() => {
-            this.healthRefreshInFlight = false;
-          });
-      }
-      return this.cachedHealth.result;
+  /** Cached gh health; forced checks wait for earlier checks before rechecking auth. */
+  async checkHealth(forceRefresh = false): Promise<GitHubCLIHealthStatus> {
+    // Finish pre-login checks before starting fresh work, including exec singleflight.
+    if (forceRefresh && this.healthRefreshInFlight) {
+      await this.healthRefreshInFlight.catch(() => undefined);
     }
-    // First call: no cache — fetch synchronously.
-    const result = await this.runCheckHealth();
-    this.cachedHealth = { result, fetchedAt: Date.now() };
-    return result;
+    const cached = this.cachedHealth;
+    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < this.HEALTH_CACHE_TTL_MS) {
+      return cached.result;
+    }
+    if (!this.healthRefreshInFlight) {
+      const refresh = this.runCheckHealth()
+        .then((result) => {
+          this.cachedHealth = { result, fetchedAt: Date.now() };
+          return result;
+        })
+        .finally(() => {
+          if (this.healthRefreshInFlight === refresh) {
+            this.healthRefreshInFlight = null;
+          }
+        });
+      this.healthRefreshInFlight = refresh;
+    }
+    void this.healthRefreshInFlight.catch(() => undefined);
+    return !forceRefresh && cached ? cached.result : this.healthRefreshInFlight;
   }
 
   private async runCheckHealth(): Promise<GitHubCLIHealthStatus> {

@@ -52,7 +52,7 @@ export interface CLIUpgradeResult {
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
   private cacheTimestamp = 0;
-  private refreshInFlight = false;
+  private refreshInFlight: Promise<CLIHealthStatus> | null = null;
 
   private extractSemver(value: string | undefined): string | undefined {
     if (!value) {
@@ -247,43 +247,47 @@ class CLIHealthService {
    * firing a background refresh. forceRefresh bypasses this and blocks.
    */
   async checkHealth(forceRefresh = false): Promise<CLIHealthStatus> {
-    const now = Date.now();
-    const isValid = this.cachedStatus && now - this.cacheTimestamp < SERVICE_CACHE_TTL_MS.cliHealth;
-
-    if (!forceRefresh && this.cachedStatus) {
-      if (!(isValid || this.refreshInFlight)) {
-        // Stale — kick off background refresh and return stale value immediately.
-        this.refreshInFlight = true;
-        this.runHealthCheck()
-          .then((status) => {
-            this.cachedStatus = status;
-            this.cacheTimestamp = Date.now();
-          })
-          .catch(() => {
-            // Keep stale value on error.
-          })
-          .finally(() => {
-            this.refreshInFlight = false;
-          });
-      }
-      return this.cachedStatus;
+    // Serialize forced refreshes after older checks so they cannot overwrite new auth.
+    if (forceRefresh && this.refreshInFlight) {
+      await this.refreshInFlight.catch(() => undefined);
     }
-
-    // First call or forceRefresh: fetch synchronously.
-    const status = await this.runHealthCheck();
-    this.cachedStatus = status;
-    this.cacheTimestamp = Date.now();
-    return status;
+    const cached = this.cachedStatus;
+    if (
+      !forceRefresh &&
+      cached &&
+      Date.now() - this.cacheTimestamp < SERVICE_CACHE_TTL_MS.cliHealth
+    ) {
+      return cached;
+    }
+    if (!this.refreshInFlight) {
+      const refresh = this.runHealthCheck(forceRefresh)
+        .then((status) => {
+          this.cachedStatus = status;
+          this.cacheTimestamp = Date.now();
+          return status;
+        })
+        .finally(() => {
+          if (this.refreshInFlight === refresh) {
+            this.refreshInFlight = null;
+          }
+        });
+      this.refreshInFlight = refresh;
+    }
+    if (!forceRefresh && cached) {
+      void this.refreshInFlight.catch(() => undefined);
+      return cached;
+    }
+    return this.refreshInFlight;
   }
 
-  private async runHealthCheck(): Promise<CLIHealthStatus> {
+  private async runHealthCheck(forceRefresh = false): Promise<CLIHealthStatus> {
     logger.debug('Checking CLI health...');
 
     // Run checks in parallel
     const [claude, codex, github] = await Promise.all([
       this.checkClaudeCLI(),
       this.checkCodexCLI(),
-      githubCLIService.checkHealth(),
+      githubCLIService.checkHealth(forceRefresh),
     ]);
 
     const status: CLIHealthStatus = {
@@ -315,7 +319,7 @@ class CLIHealthService {
   clearCache(): void {
     this.cachedStatus = null;
     this.cacheTimestamp = 0;
-    this.refreshInFlight = false;
+    this.refreshInFlight = null;
   }
 }
 
