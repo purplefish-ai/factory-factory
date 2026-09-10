@@ -57,9 +57,11 @@ describe('LinearStateSyncService', () => {
 
   describe('markIssueCompleted', () => {
     it('transitions issue to completed state', async () => {
-      mockTransitionIssueState.mockResolvedValue(undefined);
+      mockTransitionIssueState.mockResolvedValue(true);
 
-      await linearStateSyncService.markIssueCompleted('linear-api-key', 'issue-2');
+      await expect(
+        linearStateSyncService.markIssueCompleted('linear-api-key', 'issue-2')
+      ).resolves.toBe(true);
 
       expect(mockTransitionIssueState).toHaveBeenCalledWith(
         'linear-api-key',
@@ -69,10 +71,19 @@ describe('LinearStateSyncService', () => {
       expect(mockLoggerWarn).not.toHaveBeenCalled();
     });
 
+    it('reports an incomplete transition without marking it successful', async () => {
+      mockTransitionIssueState.mockResolvedValue(false);
+      await expect(
+        linearStateSyncService.markIssueCompleted('linear-api-key', 'issue-2')
+      ).resolves.toBe(false);
+    });
+
     it('logs warning when transition fails', async () => {
       mockTransitionIssueState.mockRejectedValue(new Error('Timeout'));
 
-      await linearStateSyncService.markIssueCompleted('linear-api-key', 'issue-2');
+      await expect(
+        linearStateSyncService.markIssueCompleted('linear-api-key', 'issue-2')
+      ).resolves.toBe(false);
 
       expect(mockLoggerWarn).toHaveBeenCalledWith('Failed to mark Linear issue as completed', {
         issueId: 'issue-2',

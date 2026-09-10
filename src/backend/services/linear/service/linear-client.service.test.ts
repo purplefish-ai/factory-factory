@@ -350,7 +350,9 @@ describe('LinearClientService', () => {
         updateIssue,
       });
 
-      await linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'started');
+      await expect(
+        linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'started')
+      ).resolves.toBe(false);
 
       expect(updateIssue).not.toHaveBeenCalled();
       expect(mockLoggerWarn).toHaveBeenCalledWith('Cannot transition issue: no team found', {
@@ -370,7 +372,9 @@ describe('LinearClientService', () => {
         updateIssue,
       });
 
-      await linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'completed');
+      await expect(
+        linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'completed')
+      ).resolves.toBe(false);
 
       expect(workflowStates).toHaveBeenCalled();
       expect(updateIssue).not.toHaveBeenCalled();
@@ -384,28 +388,37 @@ describe('LinearClientService', () => {
       );
     });
 
-    it('updates issue state when matching workflow state exists', async () => {
-      const getIssue = vi.fn().mockResolvedValue({
-        team: Promise.resolve({ id: 'team-1' }),
-      });
-      const updateIssue = vi.fn().mockResolvedValue(undefined);
-      const workflowStates = vi.fn().mockResolvedValue({
-        nodes: [{ id: 'state-1', name: 'Done', type: 'completed', position: 1 }],
-      });
-      setMockClient({
-        issue: getIssue,
-        workflowStates,
-        updateIssue,
-      });
+    it.each([true, false])(
+      'reports update success %s when a matching workflow state exists',
+      async (success) => {
+        const getIssue = vi.fn().mockResolvedValue({
+          team: Promise.resolve({ id: 'team-1' }),
+        });
+        const updateIssue = vi.fn().mockResolvedValue({ success });
+        const workflowStates = vi.fn().mockResolvedValue({
+          nodes: [{ id: 'state-1', name: 'Done', type: 'completed', position: 1 }],
+        });
+        setMockClient({
+          issue: getIssue,
+          workflowStates,
+          updateIssue,
+        });
 
-      await linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'completed');
+        await expect(
+          linearClientService.transitionIssueState('linear-api-key', 'issue-1', 'completed')
+        ).resolves.toBe(success);
 
-      expect(updateIssue).toHaveBeenCalledWith('issue-1', { stateId: 'state-1' });
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Transitioned Linear issue state', {
-        issueId: 'issue-1',
-        targetState: 'Done',
-        targetStateType: 'completed',
-      });
-    });
+        expect(updateIssue).toHaveBeenCalledWith('issue-1', { stateId: 'state-1' });
+        if (!success) {
+          expect(mockLoggerInfo).not.toHaveBeenCalled();
+          return;
+        }
+        expect(mockLoggerInfo).toHaveBeenCalledWith('Transitioned Linear issue state', {
+          issueId: 'issue-1',
+          targetState: 'Done',
+          targetStateType: 'completed',
+        });
+      }
+    );
   });
 });

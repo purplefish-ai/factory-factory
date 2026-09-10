@@ -297,6 +297,7 @@ class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
   lastIdlePrRefreshByWorkspace = new Map<string, number>();
+  linearMergeCompletions = new Map<string, { prIdentity: string }>();
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
 
@@ -312,6 +313,7 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
     state.dependencies.workspaceSnapshotStore.remove(workspaceId);
   }
   state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
+  state.linearMergeCompletions.delete(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
   state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
 }
@@ -441,18 +443,28 @@ function buildWorkspaceStateChangeFields(event: WorkspaceStateChangedEvent): Sna
 
 async function handleLinearIssueCompletedOnMerge(
   state: EventCollectorState,
-  workspaceId: string
+  workspaceId: string,
+  prIdentity: string
 ): Promise<void> {
+  if (state.linearMergeCompletions.get(workspaceId)?.prIdentity === prIdentity) {
+    return;
+  }
+  const attempt = { prIdentity };
+  state.linearMergeCompletions.set(workspaceId, attempt);
+  let completed = false;
   try {
     const ctx = await state.dependencies.getWorkspaceLinearContext(workspaceId);
     if (!ctx) {
       return;
     }
 
-    await state.dependencies.linearStateSyncService.markIssueCompleted(
+    completed = await state.dependencies.linearStateSyncService.markIssueCompleted(
       ctx.apiKey,
       ctx.linearIssueId
     );
+    if (!completed) {
+      return;
+    }
     state.logger.info('Marked Linear issue as completed on PR merge', {
       workspaceId,
       linearIssueId: ctx.linearIssueId,
@@ -462,6 +474,10 @@ async function handleLinearIssueCompletedOnMerge(
       workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    if (!completed && state.linearMergeCompletions.get(workspaceId) === attempt) {
+      state.linearMergeCompletions.delete(workspaceId);
+    }
   }
 }
 
@@ -586,6 +602,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       event.workspaceId
     );
     const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
+    const prIdentity = JSON.stringify([event.prNumber, event.prUrl ?? previousSnapshot?.prUrl]);
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,
@@ -620,7 +637,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
     // Transition linked Linear issue to completed when PR is merged
     if (event.prState === 'MERGED') {
-      void handleLinearIssueCompletedOnMerge(state, event.workspaceId);
+      void handleLinearIssueCompletedOnMerge(state, event.workspaceId, prIdentity);
     }
   };
   dependencies.prSnapshotService.on(PR_SNAPSHOT_UPDATED, prSnapshotUpdatedHandler);
@@ -833,6 +850,7 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
     state.lastIdlePrRefreshByWorkspace.clear();
+    state.linearMergeCompletions.clear();
     state.logger.info('Event collector stopped');
   }
 }
