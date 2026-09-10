@@ -239,6 +239,30 @@ describe('cliHealthService', () => {
     expect(first.allHealthy).toBe(true);
   });
 
+  it('prevents an older aggregate refresh from overwriting a forced result', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+    const healthy = { isInstalled: true, isAuthenticated: true };
+    const checkClaude = vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue(healthy);
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue(healthy);
+    mockGithubCheckHealth.mockResolvedValue(healthy);
+    await cliHealthService.checkHealth();
+
+    let finishOld!: (value: typeof healthy) => void;
+    checkClaude.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOld = resolve;
+      })
+    );
+    now.mockReturnValue(30_001);
+    await cliHealthService.checkHealth();
+    const forced = cliHealthService.checkHealth(true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    finishOld({ isInstalled: true, isAuthenticated: false });
+    expect((await forced).allHealthy).toBe(true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect((await cliHealthService.checkHealth()).allHealthy).toBe(true);
+  });
+
   it('reports unhealthy when Claude or GitHub are unauthenticated', async () => {
     vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
       isInstalled: true,

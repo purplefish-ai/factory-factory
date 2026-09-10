@@ -13,9 +13,11 @@ identical in-flight reads. Do not spawn `gh` directly from a service. See
 [pull-requests.md](./pull-requests.md) for how the ratchet and the PR sync poll
 share that budget.
 
-CLI authentication checks normally use cached health. Closing the admin setup
-terminal or choosing Recheck forces a fresh check through both the aggregate
-CLI cache and GitHub's own cache, then updates the status displayed in the UI.
+CLI authentication checks normally use cached health. Closing the setup terminal
+in admin settings or project onboarding, or choosing Recheck, forces a fresh
+check through both the aggregate CLI cache and GitHub's own cache. Forced checks
+wait for older refreshes before rechecking so pre-login results cannot overwrite
+the new status displayed in the UI.
 
 ## Linear
 

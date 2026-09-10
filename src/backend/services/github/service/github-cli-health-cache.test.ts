@@ -25,3 +25,31 @@ it('refreshes cached authentication immediately when explicitly requested', asyn
   expect((await githubCLIService.checkHealth(true)).isAuthenticated).toBe(true);
   expect((await githubCLIService.checkHealth()).isAuthenticated).toBe(true);
 });
+
+it('waits for pre-login background checks before forcing a new authentication check', async () => {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+  mockExecFile
+    .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' })
+    .mockRejectedValueOnce(new Error('not logged in'));
+  await githubCLIService.checkHealth();
+
+  let rejectOldAuth!: (error: Error) => void;
+  mockExecFile
+    .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' })
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOldAuth = reject;
+        })
+    )
+    .mockResolvedValue({ stdout: 'gh version 2.20.0', stderr: '' });
+  now.mockReturnValue(30_001);
+  expect((await githubCLIService.checkHealth()).isAuthenticated).toBe(false);
+  await vi.waitFor(() => expect(rejectOldAuth).toBeTypeOf('function'));
+  const forced = githubCLIService.checkHealth(true);
+  // Let the forced check reach the old in-flight auth process before it settles.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  rejectOldAuth(new Error('pre-login result'));
+  expect((await forced).isAuthenticated).toBe(true);
+  expect((await githubCLIService.checkHealth()).isAuthenticated).toBe(true);
+});

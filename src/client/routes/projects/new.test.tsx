@@ -11,6 +11,8 @@ import {
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import NewProjectPage from './new';
 
+const refreshHealthFetch = vi.fn().mockResolvedValue({ allHealthy: true });
+const setHealthData = vi.fn();
 const navigateMock = vi.fn();
 const useAppHeaderMock = vi.fn();
 const selectProjectSlugMock = vi.fn();
@@ -70,7 +72,8 @@ vi.mock('@/client/features/project/github-url-form', () => ({
 }));
 
 vi.mock('@/client/features/project/onboarding-cli-health', () => ({
-  OnboardingCliHealth: () => createElement('div', null, 'CLI Health'),
+  OnboardingCliHealth: ({ onOpenTerminal }: { onOpenTerminal: () => void }) =>
+    createElement('button', { onClick: onOpenTerminal }, 'Open setup terminal'),
 }));
 
 vi.mock('@/client/features/project/project-repo-form', () => ({
@@ -99,7 +102,8 @@ vi.mock('@/client/features/project/project-repo-form', () => ({
 }));
 
 vi.mock('@/client/features/project/setup-terminal-modal', () => ({
-  SetupTerminalModal: () => null,
+  SetupTerminalModal: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? createElement('button', { onClick: onClose }, 'Close setup terminal') : null,
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -126,7 +130,9 @@ vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
       project: { list: { invalidate: vi.fn() } },
-      admin: { checkCLIHealth: { invalidate: vi.fn() } },
+      admin: {
+        checkCLIHealth: { invalidate: vi.fn(), fetch: refreshHealthFetch, setData: setHealthData },
+      },
     }),
     project: {
       list: { useQuery: () => ({ data: projects }) },
@@ -285,4 +291,28 @@ describe('NewProjectPage local path submission', () => {
     });
     root.unmount();
   });
+});
+
+it('forces CLI authentication refresh when the setup terminal closes', async () => {
+  const existingProjects = projects.splice(0);
+  const { container, root } = renderPage();
+  const click = (label: string) => {
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (entry) => entry.textContent === label
+    );
+    expect(button).toBeDefined();
+    flushSync(() => button?.click());
+  };
+  try {
+    click('Open setup terminal');
+    click('Close setup terminal');
+    await vi.waitFor(() =>
+      expect(setHealthData).toHaveBeenCalledWith({ forceRefresh: false }, { allHealthy: true })
+    );
+    expect(refreshHealthFetch).toHaveBeenCalledWith({ forceRefresh: true }, { staleTime: 0 });
+  } finally {
+    flushSync(() => root.unmount());
+    container.remove();
+    projects.push(...existingProjects);
+  }
 });
