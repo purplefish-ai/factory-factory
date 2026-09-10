@@ -38,6 +38,8 @@ export interface RunStartupScriptOptions {
    * after all phases have run.
    */
   deferStateTransition?: boolean;
+  /** Keep output from earlier phases in the current startup pipeline. */
+  preserveInitOutput?: boolean;
 }
 
 class StartupScriptService {
@@ -100,8 +102,10 @@ class StartupScriptService {
     const startTime = Date.now();
     const timeoutMs = (project.startupScriptTimeout ?? 300) * 1000;
 
-    // Clear any previous output from retry attempts
-    await this.workspace.clearInitOutput(workspace.id);
+    // The first phase clears retry output; subsequent phases keep earlier logs.
+    if (!options?.preserveInitOutput) {
+      await this.workspace.clearInitOutput(workspace.id);
+    }
 
     // Create output streaming callback with debouncing
     const { callback: outputCallback, flush: flushOutput } = this.createDebouncedOutputCallback(

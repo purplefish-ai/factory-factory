@@ -71,7 +71,8 @@ interface PhaseResult {
 
 async function runScriptPhase(
   context: StartupScriptPipelineContext,
-  phaseDefinition: StartupScriptPhaseDefinition
+  phaseDefinition: StartupScriptPhaseDefinition,
+  preserveInitOutput: boolean
 ): Promise<PhaseResult | null> {
   if (!phaseDefinition.shouldRun(context)) {
     return null;
@@ -81,7 +82,7 @@ async function runScriptPhase(
   const scriptResult = await startupScriptService.runStartupScript(
     { ...context.workspaceWithProject, worktreePath: context.worktreePath },
     phaseDefinition.buildProjectConfig(context),
-    { deferStateTransition: true }
+    { deferStateTransition: true, preserveInitOutput }
   );
 
   if (!scriptResult.success) {
@@ -102,7 +103,7 @@ export async function executeStartupScriptPipeline(
   let lastErrorMessage: string | undefined;
 
   for (const phaseDefinition of scriptPhaseDefinitions) {
-    const phaseResult = await runScriptPhase(context, phaseDefinition);
+    const phaseResult = await runScriptPhase(context, phaseDefinition, handled);
     if (phaseResult !== null) {
       handled = true;
       if (phaseResult.failed && phaseResult.errorMessage) {
