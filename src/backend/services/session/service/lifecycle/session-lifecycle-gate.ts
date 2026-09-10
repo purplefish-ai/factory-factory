@@ -104,6 +104,10 @@ export class SessionLifecycleGate {
     return this.stoppingSessions.has(sessionId);
   }
 
+  isBulkShutdownReserved(sessionId: string): boolean {
+    return this.shutdownSessions.has(sessionId);
+  }
+
   getGeneration(sessionId: string): number {
     return this.stopGenerations.get(sessionId) ?? this.advanceGeneration(sessionId);
   }

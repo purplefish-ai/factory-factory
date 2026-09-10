@@ -38,7 +38,7 @@ type RuntimeExitCoordinatorDependencies = {
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   lifecycleGate: Pick<
     SessionLifecycleGate,
-    'isSessionStopping' | 'isStopReserved' | 'releaseShutdown'
+    'isSessionStopping' | 'isStopReserved' | 'isBulkShutdownReserved' | 'releaseShutdown'
   >;
   workflowFinalizer: Pick<SessionWorkflowFinalizer, 'finalizeRuntimeExit' | 'clearInactiveSession'>;
   onSessionExit?: (sessionId: string) => void;
@@ -77,6 +77,9 @@ export class SessionRuntimeExitCoordinator {
   async handleExit(event: AcpRuntimeExitEvent): Promise<void> {
     try {
       const stopWillPersistIdle = this.dependencies.lifecycleGate.isStopReserved(event.sessionId);
+      const bulkShutdownReserved = this.dependencies.lifecycleGate.isBulkShutdownReserved(
+        event.sessionId
+      );
       const deliberate =
         event.managed || this.dependencies.lifecycleGate.isSessionStopping(event.sessionId);
       this.dependencies.lifecycleGate.releaseShutdown(event.sessionId);
@@ -85,7 +88,7 @@ export class SessionRuntimeExitCoordinator {
         return;
       }
       this.prepareRuntimeExit(event.sessionId, event.exitCode);
-      await this.handleActiveExit(event, deliberate, stopWillPersistIdle);
+      await this.handleActiveExit(event, deliberate, stopWillPersistIdle, bulkShutdownReserved);
     } finally {
       if (event.purpose === 'browse') {
         acpTraceLogger.closeSession(event.sessionId);
@@ -139,7 +142,8 @@ export class SessionRuntimeExitCoordinator {
   private async handleActiveExit(
     event: AcpRuntimeExitEvent,
     deliberate: boolean,
-    stopWillPersistIdle: boolean
+    stopWillPersistIdle: boolean,
+    bulkShutdownReserved: boolean
   ): Promise<void> {
     try {
       this.dependencies.sessionDomainService.markProcessExit(event.sessionId, event.exitCode);
@@ -150,7 +154,7 @@ export class SessionRuntimeExitCoordinator {
       }
 
       if (!stopWillPersistIdle) {
-        await this.updatePersistedStatus(event);
+        await this.updatePersistedStatus(event, bulkShutdownReserved);
       }
       try {
         await this.recordUnexpectedExitIfNeeded(session, event, deliberate);
@@ -203,8 +207,13 @@ export class SessionRuntimeExitCoordinator {
     }
   }
 
-  private async updatePersistedStatus(event: AcpRuntimeExitEvent): Promise<void> {
-    const persistedStatus = getPersistedStatusForExitCode(event.exitCode);
+  private async updatePersistedStatus(
+    event: AcpRuntimeExitEvent,
+    bulkShutdownReserved: boolean
+  ): Promise<void> {
+    const persistedStatus = bulkShutdownReserved
+      ? SessionStatus.IDLE
+      : getPersistedStatusForExitCode(event.exitCode);
     try {
       await this.dependencies.repository.updateSession(event.sessionId, {
         status: persistedStatus,

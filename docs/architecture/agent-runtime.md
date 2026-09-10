@@ -91,6 +91,11 @@ supervisor's incarnation identity and current purpose. Exit events also carry
 whether the stop was managed; coordinators consume this metadata directly,
 including after a browsing runtime is promoted to active use.
 
+Graceful server shutdown persists active sessions as `IDLE`, matching explicit
+stops, so deliberately stopped ratchet sessions are not retried as crashes on
+the next boot. Runtime-managed exits without a shutdown reservation still use
+the exit code to determine terminal status.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
