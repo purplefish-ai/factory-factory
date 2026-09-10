@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ChatAction, chatReducer, createInitialChatState } from '../reducer';
+import { type ChatAction, chatReducer, createInitialChatState } from './index';
 
 describe('result delivery token accounting', () => {
   it('counts a same-order result once while retaining distinct results', () => {
