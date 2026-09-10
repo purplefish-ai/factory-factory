@@ -1,5 +1,5 @@
 import { ArrowDownIcon } from '@phosphor-icons/react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   ChatInput,
   PermissionPrompt,
@@ -28,6 +28,10 @@ export function QuickChatContent({
   scrollToBottom,
 }: QuickChatContentProps) {
   const groupedMessages = useGroupedChatMessages(chatState.messages);
+  const queuedMessageIds = useMemo(
+    () => new Set(chatState.queuedMessages.map((message) => message.id)),
+    [chatState.queuedMessages]
+  );
 
   const running = chatState.sessionStatus.phase === 'running';
   const stopping = chatState.sessionStatus.phase === 'stopping';
@@ -59,6 +63,8 @@ export function QuickChatContent({
           messagesEndRef={chatState.messagesEndRef}
           isNearBottom={isNearBottom}
           isCompacting={chatState.isCompacting}
+          queuedMessageIds={queuedMessageIds}
+          onRemoveQueuedMessage={chatState.removeQueuedMessage}
         />
       </div>
 
