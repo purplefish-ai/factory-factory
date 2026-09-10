@@ -9,6 +9,7 @@ import { trpc } from '@/client/lib/trpc';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppInfoSection } from './AppInfoSection';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
+import { CliAuthSection } from './CliAuthSection';
 import { DataBackupSection } from './DataBackupSection';
 import { IdeSettingsSection } from './IdeSettingsSection';
 import { NotificationSettingsSection } from './NotificationSettingsSection';
@@ -79,10 +80,19 @@ function SettingsStoryProvider({
           efforts: [{ value: 'medium', label: 'Medium' }],
         },
       }),
-      'admin.checkCLIHealth': () => ({
-        claude: { isInstalled: true },
-        codex: { isInstalled: true },
-      }),
+      'admin.checkCLIHealth': (input) => {
+        const fresh =
+          typeof input === 'object' &&
+          input !== null &&
+          'forceRefresh' in input &&
+          input.forceRefresh === true;
+        return {
+          claude: { isInstalled: true, isAuthenticated: fresh },
+          codex: { isInstalled: true, isAuthenticated: fresh },
+          github: { isInstalled: true, isAuthenticated: fresh },
+          allHealthy: fresh,
+        };
+      },
       'admin.downloadLogFile': () => 'Sample server log',
       'admin.getServerInfo': () => ({ backendPort: 3001 }),
       'admin.triggerRatchetCheck': () => ({ checked: 3, stateChanges: 1, actionsTriggered: 1 }),
@@ -410,5 +420,22 @@ export const ServerLogs: Story = {
     link.focus();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: 'Download Log File' })).toHaveFocus();
+  },
+};
+
+export const RefreshCLIAuthentication: Story = {
+  render: () => (
+    <SettingsStoryProvider>
+      <CliAuthSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(/run claude login/);
+    await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
+    await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
+    await expect(
+      canvas.queryByRole('button', { name: 'Open Terminal to Log In' })
+    ).not.toBeInTheDocument();
   },
 };

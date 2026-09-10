@@ -235,6 +235,7 @@ describe('cliHealthService', () => {
     expect(checkClaudeSpy).toHaveBeenCalledTimes(1);
     expect(checkCodexSpy).toHaveBeenCalledTimes(1);
     expect(mockGithubCheckHealth).toHaveBeenCalledTimes(1);
+    expect(mockGithubCheckHealth).toHaveBeenCalledWith(true);
     expect(first.allHealthy).toBe(true);
   });
 

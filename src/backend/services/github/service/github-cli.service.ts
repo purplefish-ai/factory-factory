@@ -213,9 +213,9 @@ class GitHubCLIService {
    * Check if gh CLI is installed and authenticated.
    * Result is cached for 30 s (stale-while-revalidate).
    */
-  async checkHealth(): Promise<GitHubCLIHealthStatus> {
+  async checkHealth(forceRefresh = false): Promise<GitHubCLIHealthStatus> {
     const now = Date.now();
-    if (this.cachedHealth) {
+    if (!forceRefresh && this.cachedHealth) {
       const isStale = now - this.cachedHealth.fetchedAt >= this.HEALTH_CACHE_TTL_MS;
       if (isStale && !this.healthRefreshInFlight) {
         this.healthRefreshInFlight = true;
@@ -232,7 +232,7 @@ class GitHubCLIService {
       }
       return this.cachedHealth.result;
     }
-    // First call: no cache — fetch synchronously.
+    // First call or explicit refresh: wait for current authentication status.
     const result = await this.runCheckHealth();
     this.cachedHealth = { result, fetchedAt: Date.now() };
     return result;

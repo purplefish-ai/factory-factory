@@ -270,20 +270,20 @@ class CLIHealthService {
     }
 
     // First call or forceRefresh: fetch synchronously.
-    const status = await this.runHealthCheck();
+    const status = await this.runHealthCheck(forceRefresh);
     this.cachedStatus = status;
     this.cacheTimestamp = Date.now();
     return status;
   }
 
-  private async runHealthCheck(): Promise<CLIHealthStatus> {
+  private async runHealthCheck(forceRefresh = false): Promise<CLIHealthStatus> {
     logger.debug('Checking CLI health...');
 
     // Run checks in parallel
     const [claude, codex, github] = await Promise.all([
       this.checkClaudeCLI(),
       this.checkCodexCLI(),
-      githubCLIService.checkHealth(),
+      githubCLIService.checkHealth(forceRefresh),
     ]);
 
     const status: CLIHealthStatus = {
