@@ -276,14 +276,6 @@ function upsertClaudeMessageAtOrder(
   return applyRendererMessages(state, updatedMessages);
 }
 
-function hasResultAtOrder(state: ChatState, order: number): boolean {
-  const index = state.agentMessageOrderToIndex.get(order);
-  const message = index === undefined ? undefined : state.messages[index];
-  return (
-    message?.source === 'agent' && message.order === order && message.message?.type === 'result'
-  );
-}
-
 /**
  * Handle WS_AGENT_MESSAGE action - processes Claude messages and stores them.
  */
@@ -298,11 +290,12 @@ export function handleClaudeMessage(
   // Runtime transitions are driven by session_runtime_updated events.
   // Result messages only update token stats here.
   if (claudeMsg.type === 'result') {
-    // A replayed result may update its transcript entry, but its usage is already counted.
-    if (!hasResultAtOrder(state, order)) {
+    // Results may be suppressed or trimmed, so accounting cannot depend on rendered messages.
+    if (!state.countedResultOrders.has(order)) {
       baseState = {
         ...baseState,
         tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
+        countedResultOrders: new Set(state.countedResultOrders).add(order),
       };
     }
 

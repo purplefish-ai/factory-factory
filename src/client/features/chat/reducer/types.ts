@@ -219,6 +219,8 @@ export interface ChatState {
   slashCommandsLoaded: boolean;
   /** Accumulated token usage stats for the session */
   tokenStats: TokenStats;
+  /** Result orders included in tokenStats, independent of renderer retention. */
+  countedResultOrders: Set<number>;
   /**
    * Queue of SDK-assigned UUIDs waiting to be mapped to user messages.
    * Used when UUIDs arrive before their corresponding messages.

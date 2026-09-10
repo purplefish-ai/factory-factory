@@ -21,6 +21,7 @@ function createBaseResetState(): Pick<
   | 'activeHooks'
   | 'taskNotifications'
   | 'tokenStats'
+  | 'countedResultOrders'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
   | 'localUserMessageIds'
@@ -49,6 +50,7 @@ function createBaseResetState(): Pick<
     activeHooks: new Map(),
     taskNotifications: [],
     tokenStats: createEmptyTokenStats(),
+    countedResultOrders: new Set(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
     localUserMessageIds: new Set(),
@@ -86,6 +88,7 @@ function createSessionSwitchResetState(): Pick<
   | 'slashCommands'
   | 'slashCommandsLoaded'
   | 'tokenStats'
+  | 'countedResultOrders'
   | 'pendingUserMessageUuids'
   | 'messageIdToUuid'
   | 'localUserMessageIds'
@@ -137,6 +140,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     slashCommands: [],
     slashCommandsLoaded: false,
     tokenStats: createEmptyTokenStats(),
+    countedResultOrders: new Set(),
     pendingUserMessageUuids: [],
     messageIdToUuid: new Map(),
     localUserMessageIds: new Set(),
