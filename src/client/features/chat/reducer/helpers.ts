@@ -290,10 +290,14 @@ export function handleClaudeMessage(
   // Runtime transitions are driven by session_runtime_updated events.
   // Result messages only update token stats here.
   if (claudeMsg.type === 'result') {
-    baseState = {
-      ...baseState,
-      tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
-    };
+    // Results may be suppressed or trimmed, so accounting cannot depend on rendered messages.
+    if (!state.countedResultOrders.has(order)) {
+      baseState = {
+        ...baseState,
+        tokenStats: updateTokenStatsFromResult(baseState.tokenStats, claudeMsg),
+        countedResultOrders: new Set(state.countedResultOrders).add(order),
+      };
+    }
 
     if (shouldSuppressDuplicateResultMessage(baseState.messages, claudeMsg)) {
       return baseState;
