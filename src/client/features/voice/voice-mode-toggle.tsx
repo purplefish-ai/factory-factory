@@ -154,6 +154,16 @@ export function VoiceModeToggle({
     return () => stop();
   }, [stop]);
 
+  const previousSessionId = useRef(sessionId);
+  useEffect(() => {
+    const sessionChanged = previousSessionId.current !== sessionId;
+    previousSessionId.current = sessionId;
+    if ((!sessionId || sessionChanged) && (isCapturing || isConnecting)) {
+      stop();
+      setVoiceModeOn(false);
+    }
+  }, [sessionId, isCapturing, isConnecting, stop]);
+
   const isThinking = Boolean(running) && !isSpeaking;
   const phase = derivePhase(isConnecting, isCapturing, isSpeaking, isThinking);
 
