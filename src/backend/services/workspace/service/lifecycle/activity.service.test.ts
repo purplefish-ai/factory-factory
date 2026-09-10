@@ -158,6 +158,45 @@ describe('WorkspaceActivityService', () => {
     }
   });
 
+  it.each([false, true])(
+    'suppresses pending notifications after clearing a workspace (restarted: %s)',
+    async (restart) => {
+      const workspaceId = 'notification-cleared';
+      workspaceIds.push(workspaceId);
+      const lookup = createDeferred<{ name: string }>();
+      mockFindById.mockReturnValueOnce(lookup.promise);
+      const onNotification = vi.fn();
+      workspaceActivityService.on('request_notification', onNotification);
+      try {
+        workspaceActivityService.markSessionRunning(workspaceId, 'old-session');
+        workspaceActivityService.markSessionIdle(workspaceId, 'old-session');
+        await flushNotifications();
+        workspaceActivityService.clearWorkspace(workspaceId);
+        if (restart) {
+          workspaceActivityService.markSessionRunning(workspaceId, 'new-session');
+        }
+        lookup.resolve({ name: 'Test Workspace' });
+        await flushNotifications();
+        expect(onNotification).not.toHaveBeenCalled();
+
+        if (restart) {
+          workspaceActivityService.markSessionIdle(workspaceId, 'new-session');
+          await flushNotifications();
+          expect(onNotification).toHaveBeenCalledExactlyOnceWith({
+            workspaceId,
+            workspaceName: 'Test Workspace',
+            sessionCount: 1,
+            finishedAt: expect.any(Date),
+          });
+        }
+      } finally {
+        lookup.resolve({ name: 'Test Workspace' });
+        await flushNotifications();
+        workspaceActivityService.off('request_notification', onNotification);
+      }
+    }
+  );
+
   const workspaceIds: string[] = [];
 
   afterEach(async () => {
