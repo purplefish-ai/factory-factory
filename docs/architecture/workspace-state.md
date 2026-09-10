@@ -15,6 +15,9 @@ registrations could remove another workspace.
 
 ## Run script
 
+Startup output accumulates across factory setup and project startup phases. The
+first executed phase clears output from prior attempts; subsequent phases append.
+
 Startup provisioning follows the main shell's exit. Output pipes normally drain
 to closure, with a one-second limit after exit so background descendants that
 inherit the pipes cannot keep provisioning open. Later output is drained and
