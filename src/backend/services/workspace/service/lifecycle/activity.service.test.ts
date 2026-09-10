@@ -197,6 +197,38 @@ describe('WorkspaceActivityService', () => {
     }
   );
 
+  it('notifies restarted work while an old lifecycle lookup remains pending', async () => {
+    const workspaceId = 'notification-restart-pending';
+    workspaceIds.push(workspaceId);
+    const lookup = createDeferred<{ name: string }>();
+    mockFindById.mockReturnValueOnce(lookup.promise);
+    const onNotification = vi.fn();
+    workspaceActivityService.on('request_notification', onNotification);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 'old-session');
+      workspaceActivityService.markSessionIdle(workspaceId, 'old-session');
+      await flushNotifications();
+      workspaceActivityService.clearWorkspace(workspaceId);
+      workspaceActivityService.markSessionRunning(workspaceId, 'new-session');
+      workspaceActivityService.markSessionIdle(workspaceId, 'new-session');
+      await flushNotifications();
+      expect(onNotification).toHaveBeenCalledExactlyOnceWith({
+        workspaceId,
+        workspaceName: 'Test Workspace',
+        sessionCount: 1,
+        finishedAt: expect.any(Date),
+      });
+
+      lookup.resolve({ name: 'Old Workspace' });
+      await flushNotifications();
+      expect(onNotification).toHaveBeenCalledOnce();
+    } finally {
+      lookup.resolve({ name: 'Old Workspace' });
+      await flushNotifications();
+      workspaceActivityService.off('request_notification', onNotification);
+    }
+  });
+
   const workspaceIds: string[] = [];
 
   afterEach(async () => {

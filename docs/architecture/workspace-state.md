@@ -156,4 +156,5 @@ block later intervals, and separate workspaces can proceed independently.
 
 Archiving or deleting a workspace clears its activity state and invalidates any
 pending completion notification. Restarted activity gets a new state, so an older
-lookup cannot notify for that earlier lifecycle.
+lookup cannot notify for that earlier lifecycle. Clearing also detaches the old
+notification chain, so restarted work does not wait for an earlier lookup.

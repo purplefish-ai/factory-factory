@@ -176,6 +176,7 @@ class WorkspaceActivityService extends EventEmitter {
    */
   clearWorkspace(workspaceId: string): void {
     this.workspaceStates.delete(workspaceId);
+    this.notificationChains.delete(workspaceId);
   }
 }
 
