@@ -19,7 +19,9 @@ A per-project issue provider can be set to Linear with an encrypted API key plus
 team selection. Kanban intake uses Linear issues assigned to the configured
 viewer. Starting from an issue creates a linked workspace (`linearIssueId`,
 `linearIssueIdentifier`, `linearIssueUrl`), and workspace lifecycle events
-best-effort sync issue state back to Linear.
+best-effort sync issue state back to Linear. PR merge completion runs when the
+snapshot transitions to merged or a different merged PR is linked; repeated
+polls of the same merged PR do not repeat the Linear update.
 
 ## Periodic tasks
 

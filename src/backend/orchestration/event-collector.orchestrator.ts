@@ -586,6 +586,10 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       event.workspaceId
     );
     const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
+    // Capture the transition before the immediate upsert mutates the stored entry.
+    const shouldCompleteLinearIssue =
+      event.prState === 'MERGED' &&
+      (previousSnapshot?.prState !== 'MERGED' || shouldRefreshRatchet);
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,
@@ -619,7 +623,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     }
 
     // Transition linked Linear issue to completed when PR is merged
-    if (event.prState === 'MERGED') {
+    if (shouldCompleteLinearIssue) {
       void handleLinearIssueCompletedOnMerge(state, event.workspaceId);
     }
   };
