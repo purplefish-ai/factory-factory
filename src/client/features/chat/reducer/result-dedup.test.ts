@@ -15,6 +15,58 @@ const resultAction: Extract<ChatAction, { type: 'WS_AGENT_MESSAGE' }> = {
 };
 
 describe('result delivery token accounting', () => {
+  it('preserves counted usage when a snapshot trims the result from the renderer', () => {
+    const counted = chatReducer(
+      createInitialChatState({ rendererTranscriptLimit: 1 }),
+      resultAction
+    );
+    const snapshot = chatReducer(counted, {
+      type: 'SESSION_SNAPSHOT',
+      payload: {
+        messages: [
+          ...counted.messages,
+          {
+            id: 'next-message',
+            source: 'agent',
+            order: 43,
+            timestamp: '2026-09-10T12:01:00Z',
+            message: { type: 'assistant', message: { role: 'assistant', content: 'Next turn' } },
+          },
+        ],
+        queuedMessages: [],
+        sessionRuntime: counted.sessionRuntime,
+      },
+    });
+    expect(snapshot.messages.map((message) => message.order)).toEqual([43]);
+    expect(snapshot.tokenStats).toEqual(counted.tokenStats);
+    expect(chatReducer(snapshot, resultAction).tokenStats).toEqual(counted.tokenStats);
+  });
+
+  it('counts a snapshotted result on its first usage-bearing delivery', () => {
+    const initial = createInitialChatState();
+    const snapshot = chatReducer(initial, {
+      type: 'SESSION_SNAPSHOT',
+      payload: {
+        messages: [
+          {
+            id: 'result-42',
+            source: 'agent',
+            order: 42,
+            timestamp: '2026-09-10T12:00:00Z',
+            message: resultAction.payload.message,
+          },
+        ],
+        queuedMessages: [],
+        sessionRuntime: initial.sessionRuntime,
+      },
+    });
+    // Snapshots reconcile transcript rows; they do not add usage to tokenStats.
+    expect(snapshot.tokenStats.inputTokens).toBe(0);
+    const firstDelivery = chatReducer(snapshot, resultAction);
+    expect(firstDelivery.tokenStats.inputTokens).toBe(100);
+    expect(chatReducer(firstDelivery, resultAction).tokenStats).toEqual(firstDelivery.tokenStats);
+  });
+
   it('counts suppressed results once', () => {
     const withAssistant = chatReducer(createInitialChatState(), {
       type: 'WS_AGENT_MESSAGE',
