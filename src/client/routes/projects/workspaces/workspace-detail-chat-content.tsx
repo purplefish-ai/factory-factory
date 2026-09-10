@@ -68,6 +68,7 @@ export interface ChatContentProps {
   setConfigOption: ReturnType<typeof useChatWebSocket>['setConfigOption'];
   autoStartPending?: boolean;
   initBanner: WorkspaceInitBanner | null;
+  isScriptFailed: boolean;
 }
 
 interface InitStatusBannerProps {
@@ -249,7 +250,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             onPlay={() => undefined}
           />
         )}
-        {props.initBanner && props.initBanner.kind !== 'info' && (
+        {props.initBanner && !props.isScriptFailed && props.initBanner.kind !== 'info' && (
           <InitStatusBanner
             banner={props.initBanner}
             retryPending={retryInit.isPending}
