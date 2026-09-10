@@ -115,6 +115,14 @@ describe('fatal Electron error handlers', () => {
     );
   });
 
+  it.each(['plain exception', null, undefined])('shows non-Error exception %s', async (error) => {
+    const { app, dialog, process, serverManager } = createHandlerHarness();
+    process.emit('uncaughtException', error);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith('Uncaught Exception', String(error));
+    expect(serverManager.stop).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+  });
+
   it.each(['plain rejection', null, undefined])('shows non-Error rejection %s', async (reason) => {
     const { app, dialog, process } = createHandlerHarness();
     process.emit('unhandledRejection', reason);
