@@ -1,0 +1,21 @@
+src/backend/services/workspace/resources/project.accessor.test.ts
+  s_8a9440b7ba31a8::t_6a2441283df530 1-36
+src/backend/services/workspace/resources/project.accessor.ts
+  s_8a9440b7ba31a8::t_9d95a82b7f62b4 197-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2186844e07b3430a73827fb4d9e6b040fd3b0f7a",
+  "prompts": {},
+  "sessions": {
+    "s_8a9440b7ba31a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08ac6-bc22-7961-bf4e-34bfddacae62",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
