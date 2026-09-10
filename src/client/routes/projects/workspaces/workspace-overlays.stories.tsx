@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useState } from 'react';
 import { ArchivingOverlay, InitializationOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
@@ -72,4 +73,30 @@ export const ScriptFailedLongMessage: Story = {
       hasStartupScript={true}
     />
   ),
+};
+
+export const DismissibleScriptFailure: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Script failures have one workspace-level banner with retry, output, and dismissal controls. The chat does not repeat this banner.',
+      },
+    },
+  },
+  render: () => {
+    const [dismissed, setDismissed] = useState(false);
+    return dismissed ? (
+      <div />
+    ) : (
+      <ScriptFailedBanner
+        workspaceId="test-workspace"
+        initErrorMessage="Init script failed"
+        initOutput="Setup exited with code 1"
+        hasStartupScript
+        showDismiss
+        onDismiss={() => setDismissed(true)}
+      />
+    );
+  },
 };

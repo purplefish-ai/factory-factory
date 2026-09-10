@@ -329,6 +329,7 @@ export function WorkspaceDetailContainer() {
     setConfigOption,
     autoStartPending: isIssueAutoStartPending,
     initBanner,
+    isScriptFailed,
   };
 
   return (
