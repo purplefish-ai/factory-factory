@@ -296,7 +296,20 @@ class GitOpsService {
 
     const normalizedBranch = this.normalizeBranchName(branchName);
     const worktrees = await gitClient.listWorktreesWithBranches();
-    const worktreeBasePath = path.resolve(project.worktreeBasePath);
+    let worktreeBasePath = path.resolve(project.worktreeBasePath);
+    try {
+      worktreeBasePath = await fs.realpath(worktreeBasePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      logger.warn(
+        'Cannot resolve worktree base for branch checkout check; matching configured path',
+        {
+          worktreeBasePath,
+        }
+      );
+    }
     const basePrefix = `${worktreeBasePath}${path.sep}`;
     const repoPath = path.resolve(project.repoPath);
 

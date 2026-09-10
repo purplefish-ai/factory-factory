@@ -455,6 +455,27 @@ describe('gitOpsService', () => {
     await expect(gitOpsService.isBranchCheckedOut(project, 'feature/test')).resolves.toBe(false);
   });
 
+  it('recognizes a branch under a symlinked worktree base', async () => {
+    mockRealpath.mockImplementation(async (target: string) =>
+      target === '/repo/worktrees' ? '/actual/worktrees' : target
+    );
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([
+      { path: '/actual/worktrees/w1', branchName: 'feature/test' },
+    ]);
+    await expect(gitOpsService.isBranchCheckedOut(project, 'origin/feature/test')).resolves.toBe(
+      true
+    );
+    await expect(gitOpsService.isBranchCheckedOut(project, 'feature/other')).resolves.toBe(false);
+  });
+
+  it('matches the configured base when it no longer resolves', async () => {
+    mockRealpath.mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    mockGitClient.listWorktreesWithBranches.mockResolvedValue([
+      { path: '/repo/worktrees/w1', branchName: 'feature/test' },
+    ]);
+    await expect(gitOpsService.isBranchCheckedOut(project, 'feature/test')).resolves.toBe(true);
+  });
+
   it('invalidates a partial worktree when creation fails', async () => {
     mockGitClient.createWorktree.mockRejectedValueOnce(new Error('create failed'));
 
