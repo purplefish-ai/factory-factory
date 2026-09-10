@@ -1,0 +1,21 @@
+electron/main/fatal-error-handlers.test.ts
+  s_8a9440b7ba31a8::t_232d15e5a3c71f 118-125
+electron/main/fatal-error-handlers.ts
+  s_8a9440b7ba31a8::t_621c34c287dc07 16,61-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "638866c983b3cf70a5ffaecbec73729b5af25f4b",
+  "prompts": {},
+  "sessions": {
+    "s_8a9440b7ba31a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08ac6-bc22-7961-bf4e-34bfddacae62",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Martin Kess <martin@purplefish.com>"
+    }
+  }
+}
