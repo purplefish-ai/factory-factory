@@ -29,12 +29,19 @@ class WorkspaceActivityService extends EventEmitter {
 
     // Serialize each workspace's lookups so busy intervals notify in idle order.
     this.on('workspace_idle', ({ workspaceId, finishedAt, sessionCount }) => {
+      const activityState = this.workspaceStates.get(workspaceId);
       const previous = this.notificationChains.get(workspaceId) ?? Promise.resolve();
       const notification = previous
         .then(async () => {
           const workspace = await workspaceAccessor.findById(workspaceId);
           if (!workspace) {
             logger.warn('Workspace not found for notification', { workspaceId });
+            return;
+          }
+
+          // Clearing a workspace invalidates its queued notifications, even if
+          // activity starts again before this lookup resolves.
+          if (!activityState || this.workspaceStates.get(workspaceId) !== activityState) {
             return;
           }
 
@@ -169,6 +176,7 @@ class WorkspaceActivityService extends EventEmitter {
    */
   clearWorkspace(workspaceId: string): void {
     this.workspaceStates.delete(workspaceId);
+    this.notificationChains.delete(workspaceId);
   }
 }
 

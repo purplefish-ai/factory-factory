@@ -158,3 +158,8 @@ once. The idle event captures the count before the asynchronous workspace lookup
 so a subsequent interval cannot change an earlier notification. Lookups and
 notification requests run in idle order per workspace; a failed lookup does not
 block later intervals, and separate workspaces can proceed independently.
+
+Archiving or deleting a workspace clears its activity state and invalidates any
+pending completion notification. Restarted activity gets a new state, so an older
+lookup cannot notify for that earlier lifecycle. Clearing also detaches the old
+notification chain, so restarted work does not wait for an earlier lookup.
