@@ -206,7 +206,7 @@ class LinearClientService {
     apiKey: string,
     issueId: string,
     targetStateType: 'started' | 'completed' | 'cancelled'
-  ): Promise<void> {
+  ): Promise<boolean> {
     const client = this.createClient(apiKey);
 
     // Get the issue to find its team
@@ -214,7 +214,7 @@ class LinearClientService {
     const team = await issue.team;
     if (!team) {
       logger.warn('Cannot transition issue: no team found', { issueId });
-      return;
+      return false;
     }
 
     // Find the target workflow state
@@ -225,15 +225,19 @@ class LinearClientService {
         teamId: team.id,
         targetStateType,
       });
-      return;
+      return false;
     }
 
-    await client.updateIssue(issueId, { stateId: targetState.id });
+    const result = await client.updateIssue(issueId, { stateId: targetState.id });
+    if (!result.success) {
+      return false;
+    }
     logger.info('Transitioned Linear issue state', {
       issueId,
       targetState: targetState.name,
       targetStateType,
     });
+    return true;
   }
 }
 

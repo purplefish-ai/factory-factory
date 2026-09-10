@@ -31,14 +31,15 @@ class LinearStateSyncService {
    * Move a Linear issue to the first 'completed' workflow state.
    * Called when a workspace's PR is merged.
    */
-  async markIssueCompleted(apiKey: string, issueId: string): Promise<void> {
+  async markIssueCompleted(apiKey: string, issueId: string): Promise<boolean> {
     try {
-      await linearClientService.transitionIssueState(apiKey, issueId, 'completed');
+      return await linearClientService.transitionIssueState(apiKey, issueId, 'completed');
     } catch (error) {
       logger.warn('Failed to mark Linear issue as completed', {
         issueId,
         error: error instanceof Error ? error.message : String(error),
       });
+      return false;
     }
   }
 }
