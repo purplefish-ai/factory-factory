@@ -5,7 +5,7 @@
 ## Test Framework
 
 **Runner:**
-- Vitest 4.0.18 for unit and integration tests.
+- Vitest 5.0.0 for unit and integration tests.
 - Root config: `vitest.config.ts`.
 - Core package config: `packages/core/package.json` uses Vitest scripts for `packages/core/src/**/*.test.ts`.
 - Playwright 1.58.2 for mobile visual baseline tests.

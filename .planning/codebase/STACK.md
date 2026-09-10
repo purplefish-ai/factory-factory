@@ -34,14 +34,14 @@
 - tRPC `^11.10.0` - backend API routers in `src/backend/trpc/` and typed React client in `src/client/lib/trpc.ts`
 - React `^19.2.4` / React DOM `^19.2.4` - frontend application in `src/client/main.tsx`, `src/client/root.tsx`, and `src/client/router.tsx`
 - React Router `^7.13.1` - browser routes declared in `src/client/router.tsx`
-- Vite `^7.3.5` with `@vitejs/plugin-react` `^5.1.4` - client build/dev server in `vite.config.ts`
+- Vite `^8.2.2` with `@vitejs/plugin-react` `^6.1.1` - client build/dev server in `vite.config.ts`
 - Tailwind CSS `^4.2.1` with `@tailwindcss/vite` `^4.2.1` - frontend styling pipeline in `vite.config.ts` and `src/client/globals.css`
 - Prisma `7.7.0` with SQLite - schema in `prisma/schema.prisma`, runtime client in `src/backend/db.ts`, CLI config in `prisma.config.ts`
 - Electron `^40.8.5` and `electron-builder` `^26.8.1` - desktop packaging and app lifecycle in `electron/` and `electron-builder.yml`
 
 **Testing:**
-- Vitest `^4.0.18` - primary test runner configured in `vitest.config.ts`
-- V8 coverage via `@vitest/coverage-v8` `^4.0.18` - backend coverage configured in `vitest.config.ts`
+- Vitest `^5.0.0` - primary test runner configured in `vitest.config.ts`
+- V8 coverage via `@vitest/coverage-v8` `^5.0.0` - backend coverage configured in `vitest.config.ts`
 - Playwright `^1.58.2` - mobile/e2e command surface in `package.json`
 - Storybook `10.3.6` with `@storybook/react-vite` `10.3.6` - component story builds via `pnpm build:storybook`
 - Supertest `^7.2.2` - HTTP test helper dependency in `package.json`
