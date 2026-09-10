@@ -3,7 +3,11 @@ import { SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services/workspace';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
-import type { SessionRuntimeState } from '@/shared/session-runtime';
+import {
+  createMockBridges,
+  createMockWorkspace,
+  createSnapshotEntry,
+} from './snapshot-reconciliation.test-helpers';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -65,115 +69,6 @@ import {
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
-
-function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    id: 'ws-1',
-    projectId: 'proj-1',
-    name: 'Test Workspace',
-    status: 'READY',
-    createdAt: new Date('2026-01-01T00:00:00Z'),
-    branchName: 'feature/test',
-    hasHadSessions: true,
-    worktreePath: '/path/to/worktree',
-    prUrl: 'https://github.com/org/repo/pull/1',
-    prNumber: 1,
-    prState: 'OPEN',
-    prCiStatus: 'SUCCESS',
-    prUpdatedAt: new Date('2026-01-02T00:00:00Z'),
-    ratchetEnabled: true,
-    ratchetState: 'IDLE',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-    ratchetDispatchStalled: true,
-    prHasMergeConflict: false,
-    mode: 'STANDARD',
-    autoIterationStatus: null,
-    runScriptStatus: 'IDLE',
-    agentSessions: [
-      {
-        id: 'cs-1',
-        name: 'Chat 1',
-        workflow: 'followup',
-        model: 'claude-sonnet',
-        status: 'IDLE',
-        updatedAt: new Date('2026-01-03T10:00:00Z'),
-      },
-      {
-        id: 'cs-2',
-        name: 'Chat 2',
-        workflow: 'followup',
-        model: 'claude-sonnet',
-        status: 'IDLE',
-        updatedAt: new Date('2026-01-03T12:00:00Z'),
-      },
-    ],
-    terminalSessions: [{ id: 'ts-1', updatedAt: new Date('2026-01-03T11:00:00Z') }],
-    project: { defaultBranch: 'main' },
-    ...overrides,
-  };
-}
-
-function createMockBridges(): ReconciliationBridges {
-  const runtime: SessionRuntimeState = {
-    phase: 'idle',
-    processState: 'alive',
-    activity: 'IDLE',
-    updatedAt: '2026-01-03T12:00:00.000Z',
-  };
-  return {
-    session: {
-      getRuntimeSnapshot: vi.fn().mockReturnValue(runtime),
-      getAllPendingRequests: vi.fn().mockReturnValue(new Map()),
-    },
-  };
-}
-
-function createSnapshotEntry(
-  overrides: Partial<WorkspaceSnapshotEntry> = {}
-): WorkspaceSnapshotEntry {
-  return {
-    workspaceId: 'ws-1',
-    projectId: 'proj-1',
-    version: 1,
-    computedAt: '2026-01-01T00:00:00Z',
-    source: 'reconciliation',
-    name: 'Test Workspace',
-    status: 'READY',
-    createdAt: '2026-01-01T00:00:00Z',
-    branchName: 'feature/test',
-    prUrl: 'https://github.com/org/repo/pull/1',
-    prNumber: 1,
-    prState: 'OPEN',
-    prCiStatus: 'SUCCESS',
-    prUpdatedAt: '2026-01-02T00:00:00Z',
-    ratchetEnabled: true,
-    ratchetState: 'IDLE',
-    ratchetDispatchOutcome: 'DIED',
-    ratchetDispatchRetryCount: SERVICE_THRESHOLDS.ratchetDispatchMaxRetries,
-    runScriptStatus: 'IDLE',
-    hasHadSessions: true,
-    isWorking: false,
-    pendingRequestType: null,
-    sessionSummaries: [],
-    gitStats: null,
-    lastActivityAt: null,
-    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
-    kanbanColumn: 'WAITING',
-    flowPhase: 'NO_PR',
-    ciObservation: 'NOT_FETCHED',
-    ratchetButtonAnimated: false,
-    fieldTimestamps: {
-      workspace: 0,
-      pr: 0,
-      session: 0,
-      ratchet: 0,
-      runScript: 0,
-      reconciliation: 0,
-    },
-    ...overrides,
-  } as WorkspaceSnapshotEntry;
-}
 
 // ---------------------------------------------------------------------------
 // Tests: detectDrift (pure function)
@@ -380,6 +275,72 @@ describe('SnapshotReconciliationService', () => {
   });
 
   describe('reconcile()', () => {
+    it('isolates runtime snapshot failures while seeding, cleaning stale entries, and refreshing git', async () => {
+      const { WorkspaceSnapshotStore } = await vi.importActual<
+        typeof import('@/backend/services/workspace')
+      >('@/backend/services/workspace');
+      const store = new WorkspaceSnapshotStore();
+      store.configure({
+        deriveFlowState: (input) =>
+          deriveWorkspaceFlowState({
+            ...input,
+            prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+          }),
+        deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+      });
+      store.upsert('ws-stale', { projectId: 'proj-1' }, 'reconciliation', 1);
+      service = new SnapshotReconciliationService({
+        createLogger: () => ({
+          info: mockLoggerInfo,
+          warn: mockLoggerWarn,
+          debug: vi.fn(),
+          error: vi.fn(),
+        }),
+        gitOpsService: { getWorkspaceGitStats: mockGetWorkspaceGitStats },
+        session: bridges.session,
+        workspaceMaintenanceService: { findActiveWithSessionsAndProject: mockFindAllNonArchived },
+        workspaceSnapshotStore: store,
+      });
+      mockFindAllNonArchived.mockResolvedValue([
+        createMockWorkspace({ id: 'ws-broken' }),
+        createMockWorkspace({ id: 'ws-healthy', agentSessions: [] }),
+      ]);
+      vi.mocked(bridges.session.getRuntimeSnapshot).mockImplementation(() => {
+        throw new Error('runtime unavailable');
+      });
+      const gitStats = { total: 5, additions: 3, deletions: 2, hasUncommitted: false };
+      mockGetWorkspaceGitStats.mockResolvedValue(gitStats);
+
+      const result = await service.reconcile();
+
+      expect(store.getByWorkspaceId('ws-healthy')).toMatchObject({
+        name: 'Test Workspace',
+        sessionSummaries: [],
+        gitStats,
+      });
+      expect(store.getByWorkspaceId('ws-stale')).toBeUndefined();
+      expect(store.getByWorkspaceId('ws-broken')).toBeUndefined();
+      expect(result.staleEntriesRemoved).toBe(1);
+      expect(result.gitStatsComputed).toBe(1);
+      expect(result).toMatchObject({
+        workspacesScanned: 2,
+        workspacesReconciled: 1,
+        workspacesSkipped: 1,
+      });
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'Reconciliation complete',
+        expect.objectContaining({
+          workspacesScanned: 2,
+          workspacesReconciled: 1,
+          workspacesSkipped: 1,
+        })
+      );
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        'Failed to build authoritative fields for workspace',
+        { workspaceId: 'ws-broken', error: 'runtime unavailable' }
+      );
+    });
+
     it('upserts all non-archived workspaces with authoritative data', async () => {
       const ws1 = createMockWorkspace({ id: 'ws-1' });
       const ws2 = createMockWorkspace({
