@@ -13,7 +13,7 @@ interface FatalErrorLogger {
 }
 
 interface FatalErrorProcess {
-  on(event: 'uncaughtException', listener: (error: Error) => void): this;
+  on(event: 'uncaughtException', listener: (error: unknown) => void): this;
   on(event: 'unhandledRejection', listener: (reason: unknown) => void): this;
 }
 
@@ -58,7 +58,10 @@ export function registerFatalErrorHandlers({
 
   process.on('uncaughtException', (error) => {
     logger.error('[electron] Uncaught exception:', error);
-    dialog.showErrorBox('Uncaught Exception', error.stack || String(error));
+    dialog.showErrorBox(
+      'Uncaught Exception',
+      error instanceof Error ? error.stack || String(error) : String(error)
+    );
     void shutdown();
   });
 
