@@ -9,14 +9,6 @@ export function reduceMessageQueueSlice(state: ChatState, action: ChatAction): C
   switch (action.type) {
     case 'USER_MESSAGE_SENT':
       return applyRendererMessages(state, [...state.messages, action.payload]);
-    case 'ADD_TO_QUEUE': {
-      const newQueuedMessages = new Map(state.queuedMessages);
-      newQueuedMessages.set(action.payload.id, action.payload);
-      return {
-        ...state,
-        queuedMessages: newQueuedMessages,
-      };
-    }
     case 'MESSAGE_SENDING': {
       const { id, text, attachments, sessionId } = action.payload;
       const newPendingMessages = new Map(state.pendingMessages);
