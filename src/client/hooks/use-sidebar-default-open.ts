@@ -29,10 +29,6 @@ function getRouteCategory(pathname: string): RouteCategory {
   return 'default';
 }
 
-export function getRouteCategoryForPath(pathname: string): RouteCategory {
-  return getRouteCategory(pathname);
-}
-
 function getPersistedState(category: RouteCategory): boolean | null {
   try {
     const value = localStorage.getItem(STORAGE_KEYS[category]);
