@@ -16,13 +16,6 @@ export interface ColumnConfig {
   description: string;
 }
 
-export const KANBAN_COLUMNS: ColumnConfig[] = [
-  { id: 'ISSUES', label: 'Todo · My GitHub Issues', description: 'Issues assigned to you' },
-  { id: 'WORKING', label: 'Working', description: 'Agent is working' },
-  { id: 'WAITING', label: 'Waiting', description: 'Waiting for input' },
-  { id: 'DONE', label: 'Done', description: 'PR merged or closed' },
-];
-
 export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
   return [
     {

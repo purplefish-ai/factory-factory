@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.stories';
-import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
+import { getKanbanColumns, KanbanColumn } from './kanban-column';
 
 /**
  * Note: The actual KanbanBoard component cannot be fully tested in Storybook
@@ -55,7 +55,7 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
 ];
 
 // Only workspace columns (not ISSUES which requires tRPC)
-const WORKSPACE_COLUMNS = KANBAN_COLUMNS.filter((col) => col.id !== 'ISSUES');
+const WORKSPACE_COLUMNS = getKanbanColumns('GITHUB').filter((col) => col.id !== 'ISSUES');
 
 function groupByColumn(workspaces: WorkspaceWithKanban[]) {
   const grouped: Record<KanbanColumnType, WorkspaceWithKanban[]> = {
