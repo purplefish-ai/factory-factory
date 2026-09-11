@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.stories';
-import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
+import { getKanbanColumns, KanbanColumn } from './kanban-column';
 
 const meta = {
   title: 'Kanban/KanbanColumn',
@@ -126,7 +126,7 @@ export const DoneColumn: Story = {
 };
 
 // Workspace columns only (ISSUES requires tRPC)
-const WORKSPACE_COLUMNS = KANBAN_COLUMNS.filter((col) => col.id !== 'ISSUES');
+const WORKSPACE_COLUMNS = getKanbanColumns('GITHUB').filter((col) => col.id !== 'ISSUES');
 
 export const AllColumns: Story = {
   decorators: [
