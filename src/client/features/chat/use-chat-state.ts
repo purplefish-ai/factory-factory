@@ -60,7 +60,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // Actions
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
-  clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
@@ -71,9 +70,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
-  // Task notification actions
-  dismissTaskNotification: (id: string) => void;
-  clearTaskNotifications: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
   // Rewind files actions
