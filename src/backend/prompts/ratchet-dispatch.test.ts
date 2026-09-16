@@ -23,9 +23,7 @@ describe('ratchet dispatch prompt', () => {
     'renders the shipped template with reply setting %s',
     async (replyToPrComments) => {
       const { readFileSync } = await vi.importActual<typeof import('node:fs')>('node:fs');
-      readFileSyncMock.mockReturnValue(
-        readFileSync(new URL('../../../prompts/ratchet/dispatch.md', import.meta.url), 'utf-8')
-      );
+      readFileSyncMock.mockImplementation(readFileSync);
       const prompt = buildRatchetDispatchPrompt('https://github.com/example/repo/pull/42', 42, [], {
         hasMergeConflict: true,
         replyToPrComments,

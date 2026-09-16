@@ -48,7 +48,7 @@ it('loads the Ratchet template from the unpacked Electron backend layout', () =>
         cpSync(join(root, file.source), destination);
       }
     }
-    writeFileSync(join(unpackedRoot, 'package.json'), '{"type":"module"}');
+    // The unpacked backend has no package.json; do not supply a test-only ESM scope.
     const moduleUrl = pathToFileURL(join(unpackedRoot, modulePath)).href;
     const output = execFileSync(
       process.execPath,
