@@ -11,25 +11,6 @@ export function reduceRewindPreviewSlice(state: ChatState, action: ChatAction): 
           isLoading: true,
         },
       };
-    case 'REWIND_PREVIEW_SUCCESS': {
-      if (!state.rewindPreview) {
-        return state;
-      }
-      if (
-        action.payload.userMessageId &&
-        action.payload.userMessageId !== state.rewindPreview.userMessageId
-      ) {
-        return state;
-      }
-      return {
-        ...state,
-        rewindPreview: {
-          ...state.rewindPreview,
-          isLoading: false,
-          affectedFiles: action.payload.affectedFiles,
-        },
-      };
-    }
     case 'REWIND_PREVIEW_ERROR': {
       if (!state.rewindPreview) {
         return state;
@@ -75,18 +56,6 @@ export function reduceRewindExecutionSlice(state: ChatState, action: ChatAction)
             },
           }
         : state;
-    case 'REWIND_SUCCESS': {
-      if (!state.rewindPreview) {
-        return state;
-      }
-      if (
-        action.payload.userMessageId &&
-        action.payload.userMessageId !== state.rewindPreview.userMessageId
-      ) {
-        return state;
-      }
-      return { ...state, rewindPreview: null };
-    }
     default:
       return state;
   }
