@@ -2,6 +2,7 @@ import {
   ArrowsClockwiseIcon,
   CaretDownIcon,
   CaretRightIcon,
+  PlayIcon,
   SpinnerGapIcon,
   WarningIcon,
   XIcon,
@@ -159,6 +160,8 @@ interface ScriptFailedBannerProps {
   initErrorMessage: string | null;
   initOutput: string | null;
   hasStartupScript: boolean;
+  showPlay?: boolean;
+  onPlay?: () => void;
   showDismiss?: boolean;
   onDismiss?: () => void;
 }
@@ -168,6 +171,8 @@ export function ScriptFailedBanner({
   initErrorMessage,
   initOutput,
   hasStartupScript,
+  showPlay = false,
+  onPlay,
   showDismiss = false,
   onDismiss,
 }: ScriptFailedBannerProps) {
@@ -218,6 +223,18 @@ export function ScriptFailedBanner({
               </>
             )}
           </Button>
+          {showPlay && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={onPlay}
+              disabled={!onPlay}
+            >
+              <PlayIcon className="h-3 w-3 mr-1" />
+              Dispatch queued messages
+            </Button>
+          )}
           {showDismiss && (
             <Button
               variant="ghost"

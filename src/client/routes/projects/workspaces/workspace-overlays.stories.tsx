@@ -100,3 +100,22 @@ export const DismissibleScriptFailure: Story = {
     );
   },
 };
+
+export const ScriptFailureWithManualDispatch: Story = {
+  render: () => {
+    const [dispatched, setDispatched] = useState(false);
+    return (
+      <>
+        <ScriptFailedBanner
+          workspaceId="test-workspace"
+          initErrorMessage="Setup failed; the worktree is available"
+          initOutput="Setup exited with code 1"
+          hasStartupScript
+          showPlay
+          onPlay={() => setDispatched(true)}
+        />
+        {dispatched && <p className="p-4">Queued messages resumed.</p>}
+      </>
+    );
+  },
+};

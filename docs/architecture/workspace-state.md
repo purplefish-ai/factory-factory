@@ -15,6 +15,11 @@ only the exact configured path. Restore the original base symlink and retry to
 remove a canonical registration; guessing from a basename or pruning unrelated
 registrations could remove another workspace.
 
+A failed workspace that still has a worktree allows queued chat messages to be
+resumed without rerunning setup. Its single workspace-level script warning
+exposes **Dispatch queued messages** for the selected chat. Ready workspaces with
+a setup warning dispatch normally and do not show this action.
+
 ## Run script
 
 Startup output accumulates across factory setup and project startup phases. The
