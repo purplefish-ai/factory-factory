@@ -1,0 +1,33 @@
+docs/architecture/workspace-state.md
+  s_abc5d8e83263c5::t_1d37cc61bd73ae 164-171
+src/backend/orchestration/workspace-archive.orchestrator.test.ts
+  s_abc5d8e83263c5::t_7411f484e15b58 13-17
+src/backend/orchestration/workspace-archive.orchestrator.ts
+  s_abc5d8e83263c5::t_f6113b2b28adb0 2,200-202,205-216,218,244,246-252,254,256-266,268
+src/backend/orchestration/workspace-runtime-cleanup-notification.test.ts
+  s_abc5d8e83263c5::t_c6066b99bdb0c7 1-14,22-25,27-38,41,77-207
+src/backend/services/workspace/service/lifecycle/activity.service.test.ts
+  s_abc5d8e83263c5::t_77cde1e0c35695 232-285
+src/backend/services/workspace/service/lifecycle/activity.service.ts
+  s_abc5d8e83263c5::t_07cc19acd71db1 25,33-35,48-54,184-207
+src/backend/trpc/workspace.router.test.ts
+  s_abc5d8e83263c5::t_954bfd88a03a64 192-193
+src/backend/trpc/workspace.trpc.ts
+  s_abc5d8e83263c5::t_016beeb7aa9318 443-448,450-457,459-463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fadf2ecb2fe385390ca30984fd36d5d36b5847bc",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
