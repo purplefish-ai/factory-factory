@@ -1,0 +1,27 @@
+docs/architecture/workspace-state.md
+  s_abc5d8e83263c5::t_170b671980e033 18-22
+src/client/routes/projects/workspaces/workspace-detail-view.test.tsx
+  s_abc5d8e83263c5::t_1e2a9788dfb166 145-146,301,314,319-346
+src/client/routes/projects/workspaces/workspace-detail-view.tsx
+  s_abc5d8e83263c5::t_c793e11c884b1a 95,102,115-116,243
+src/client/routes/projects/workspaces/workspace-overlays.stories.tsx
+  s_abc5d8e83263c5::t_f1682a20c184ed 103-121
+src/client/routes/projects/workspaces/workspace-overlays.tsx
+  s_abc5d8e83263c5::t_b2885deb31d0dd 5,163-164,174-175,226-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c9db9539fb7939c47d8afec43da83d2dec10979f",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
