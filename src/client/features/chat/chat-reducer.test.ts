@@ -10,7 +10,6 @@ import type {
   ChatMessage,
   ChatSettings,
   PermissionRequest,
-  QueuedMessage,
   SessionInfo,
   UserQuestionRequest,
   WebSocketMessage,
@@ -2282,62 +2281,6 @@ describe('chatReducer', () => {
   // -------------------------------------------------------------------------
   // Queue Actions (Backend-managed)
   // -------------------------------------------------------------------------
-
-  describe('ADD_TO_QUEUE action', () => {
-    it('should add message to queuedMessages', () => {
-      const queuedMessage: QueuedMessage = {
-        id: 'q-1',
-        text: 'Hello',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      };
-      const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: queuedMessage };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.queuedMessages.size).toBe(1);
-      expect(newState.queuedMessages.get(queuedMessage.id)).toEqual(queuedMessage);
-    });
-
-    it('should append to existing queue', () => {
-      const existingMessage: QueuedMessage = {
-        id: 'q-1',
-        text: 'First',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      };
-      const state: ChatState = {
-        ...initialState,
-        queuedMessages: toQueuedMessagesMap([existingMessage]),
-      };
-      const newMessage: QueuedMessage = {
-        id: 'q-2',
-        text: 'Second',
-        timestamp: '2024-01-01T00:00:01.000Z',
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      };
-      const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: newMessage };
-      const newState = chatReducer(state, action);
-
-      expect(newState.queuedMessages.size).toBe(2);
-      expect(newState.queuedMessages.get(existingMessage.id)).toEqual(existingMessage);
-      expect(newState.queuedMessages.get(newMessage.id)).toEqual(newMessage);
-    });
-  });
 
   describe('MESSAGE_SENDING action', () => {
     it('stores the source session for later rejection recovery', () => {
