@@ -2,7 +2,7 @@
  * Shared markdown file loader with frontmatter parsing.
  *
  * This module provides utilities for loading markdown files with YAML frontmatter,
- * used by both workflows and quick-actions.
+ * used by quick actions.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';

@@ -1,7 +1,7 @@
 /**
  * Branch rename instruction builder.
  *
- * Generates system instructions telling Claude to rename auto-generated branches
+ * Generates instructions to rename auto-generated branches
  * to meaningful names based on the workspace context.
  */
 
@@ -47,7 +47,7 @@ export function buildBranchRenameInstruction(context: BranchRenameContext): stri
   return `<system_instruction>
 Use \`git branch -m\` to rename the branch.
 
-Do this immediately, before using any skills or any other tools. Do not check the current branch name, just rename it.
+Choose a descriptive name from the workspace context and follow repository naming conventions.
 
 Choosing a branch name: use concrete, specific language, avoid abstract nouns, and be concise (<30 characters). If branchPrefix in the JSON data is non-empty, use it as the branch prefix followed by "/".
 

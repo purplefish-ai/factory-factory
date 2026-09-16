@@ -1,4 +1,4 @@
-import type { Project, Workspace } from '@prisma-gen/client';
+import type { Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -33,20 +33,13 @@ describe('SessionRepository', () => {
   };
 
   const workspaces = {
-    // `runScriptPort` is flattened on by the workspace accessor rather than being
-    // a Workspace column, which is why the port declares it separately.
-    findById: vi.fn<() => Promise<(Workspace & { runScriptPort: number | null }) | null>>(),
+    findById: vi.fn<() => Promise<Workspace | null>>(),
     recordSessionPresence: vi.fn<() => Promise<void>>(),
-  };
-
-  const projects = {
-    findById: vi.fn<() => Promise<Project | null>>(),
   };
 
   const repository = new SessionRepository(
     unsafeCoerce<ConstructorParameters<typeof SessionRepository>[0]>(sessions),
-    workspaces,
-    projects
+    workspaces
   );
 
   beforeEach(() => {

@@ -42,10 +42,7 @@ export {
   type StopSessionOptions,
 } from './lifecycle/session.lifecycle.service';
 export { SessionPermissionService } from './lifecycle/session.permission.service';
-export {
-  buildChildWorkspaceContext,
-  sessionPromptBuilder,
-} from './lifecycle/session.prompt-builder';
+export { buildChildWorkspaceContext } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 export { SessionService } from './lifecycle/session.service';
 export type { SessionPromptService } from './lifecycle/session-services';

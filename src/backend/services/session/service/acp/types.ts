@@ -18,7 +18,6 @@ export interface AcpClientOptions {
   /** Optional test hook to override the ACP adapter binary path. */
   adapterBinaryPath?: string;
   model?: string;
-  systemPrompt?: string;
   /** User-configured permission preset for this session (STRICT/RELAXED/YOLO). */
   permissionPreset?: PermissionPreset;
   sessionId: string; // FF database session ID for logging

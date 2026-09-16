@@ -338,7 +338,9 @@ describe('IssueLaunchSheet', () => {
   it('seeds the editor with the full GitHub issue workflow prompt', () => {
     const { container, root } = renderSheet();
 
-    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain(
+      'Implement this issue and open a pull request.'
+    );
     expect(container.querySelector('textarea')?.value).toContain('Closes #42');
 
     root.unmount();
@@ -360,7 +362,9 @@ describe('IssueLaunchSheet', () => {
     };
     const { container, root } = renderSheet(linearIssue);
 
-    expect(container.querySelector('textarea')?.value).toContain('## Phase 1: Planning');
+    expect(container.querySelector('textarea')?.value).toContain(
+      'Implement this issue and open a pull request.'
+    );
     expect(container.querySelector('textarea')?.value).toContain('Closes ENG-42');
     expect(container.querySelector('textarea')?.value).toContain(
       'https://raw.githubusercontent.com/purplefish-ai/factory-factory/'

@@ -71,16 +71,14 @@ describe('buildInitialPromptFromLinearIssue', () => {
     { githubOwner: 'purplefish-ai', githubRepo: null },
     { githubOwner: null, githubRepo: 'factory-factory' },
   ])(
-    'uses a relative screenshot path when GitHub metadata is incomplete',
+    'omits an assumed GitHub image URL when repository metadata is incomplete',
     async ({ githubOwner, githubRepo }) => {
       mockLinearIssueWorkspace(githubOwner, githubRepo);
 
       const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
 
       expect(prompt).toContain('# Linear Issue ENG-123');
-      expect(prompt).toContain(
-        `![Description](\${branch}/.factory-factory/screenshots/filename.png)`
-      );
+      expect(prompt).toContain('.factory-factory/screenshots/');
       expect(prompt).not.toContain('raw.githubusercontent.com');
     }
   );
@@ -91,7 +89,7 @@ describe('buildInitialPromptFromLinearIssue', () => {
     const prompt = await buildInitialPromptFromLinearIssue('workspace-1', logger);
 
     expect(prompt).toContain(
-      `![Description](https://raw.githubusercontent.com/purplefish-ai/factory-factory/\${branch}/.factory-factory/screenshots/filename.png)`
+      `https://raw.githubusercontent.com/purplefish-ai/factory-factory/\${branch}/.factory-factory/screenshots/<filename>`
     );
   });
 });

@@ -116,7 +116,6 @@ describe('SessionLifecycleFacade', () => {
     const sessionOptions = {
       workingDir: '/delegated/worktree',
       resumeProviderSessionId: 'provider-session-1',
-      systemPrompt: 'delegated prompt',
       model: 'delegated-model',
       workspaceStatus: WorkspaceStatus.READY,
     };
@@ -496,7 +495,6 @@ describe('SessionLifecycleFacade', () => {
     const options = {
       workingDir: '/delegated/worktree',
       resumeProviderSessionId: 'provider-session-1',
-      systemPrompt: 'delegated prompt',
       model: 'delegated-model',
       workspaceStatus: WorkspaceStatus.READY,
     };

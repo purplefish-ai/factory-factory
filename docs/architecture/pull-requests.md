@@ -15,6 +15,19 @@ snapshot. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` /
 active. Admin settings control the default ratchet state for new workspaces and
 the global review-trigger mode.
 
+The dispatch prompt asks the agent to refresh GitHub state, address actionable
+feedback, fix CI, and resolve conflicts autonomously. It leaves execution order
+and repository-specific checks to the agent. Base-branch updates happen when
+needed; conflict-only fixes may be pushed, and the PR stays open. Declined
+feedback and blockers are reported rather than forcing unnecessary edits.
+
+The PR reply setting controls comments and thread resolution. When enabled,
+agents reply to unaddressed feedback and request re-review after fixes without
+duplicate messages. When disabled, they leave comments and threads untouched and
+request re-review through reviewer assignment only. Supplied review data remains
+escaped and explicitly untrusted. A missing or empty dispatch template fails
+dispatch instead of falling back to a second set of instructions.
+
 ### State
 
 The ratchet's mutable state lives in a 1:1 `WorkspaceRatchet` row (`enabled`,

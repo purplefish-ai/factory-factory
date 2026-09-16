@@ -9,6 +9,8 @@ directories:
 files:
   # Compiled backend (runs in Electron main process)
   - dist/src/backend/**/*
+  # Markdown prompts resolved relative to the compiled backend
+  - dist/prompts/**/*
   # Shared runtime imports used by the backend
   - dist/src/shared/**/*
   - dist/src/lib/**/*
@@ -54,8 +56,6 @@ extraResources:
     to: prisma/migrations
   - from: prisma/schema.prisma
     to: prisma/schema.prisma
-  - from: prompts
-    to: prompts
 asar: true
 asarUnpack:
   # Native modules must be unpacked for Node.js to load them
@@ -76,6 +76,8 @@ asarUnpack:
   - node_modules/.pnpm/node-addon-api*/**/*
   # Compiled backend (runs in Electron main process)
   - dist/src/backend/**/*
+  # Markdown prompts resolved relative to the compiled backend
+  - dist/prompts/**/*
   # Shared runtime imports used by the backend
   - dist/src/shared/**/*
   - dist/src/lib/**/*

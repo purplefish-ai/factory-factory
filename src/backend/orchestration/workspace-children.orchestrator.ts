@@ -1,6 +1,5 @@
 import type { WorkspaceNotification } from '@prisma-gen/client';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import {
@@ -57,7 +56,7 @@ export async function createChildWorkspace(input: CreateChildWorkspaceInput): Pr
     const provider = await sessionProviderResolverService.resolveProviderForWorkspaceCreation();
     await sessionDataService.createAgentSession({
       workspaceId: workspace.id,
-      workflow: DEFAULT_FOLLOWUP,
+      workflow: 'followup',
       name: 'Chat 1',
       provider,
       providerProjectPath: null,

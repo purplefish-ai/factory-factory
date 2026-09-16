@@ -8,7 +8,6 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
-import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import {
   computePendingRequestType,
   deriveWorkspaceFlowStateFromWorkspace,
@@ -235,7 +234,7 @@ export const workspaceCoreRouter = router({
         try {
           await sessionDataService.createAgentSession({
             workspaceId: workspace.id,
-            workflow: DEFAULT_FOLLOWUP,
+            workflow: 'followup',
             name: 'Chat 1',
             provider: defaultSessionProvider,
             providerProjectPath: null,
