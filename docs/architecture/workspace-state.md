@@ -47,6 +47,13 @@ because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
 `registerInitializedWorktree` writes the worktree columns and the commands in
 one transaction, since they were one statement before the split.
 
+## Backup import
+
+Backup imports require the same trusted local client boundary as project
+creation. Project slugs and worktree base paths must be nonempty; legacy backups
+with empty values are rejected before any records are imported. Valid backup
+paths are preserved rather than recomputed for the current machine.
+
 ## Auto-iteration state
 
 The loop's five fields live in a 1:1 `WorkspaceAutoIteration` row (`mode`,

@@ -25,6 +25,7 @@ import {
 } from '@/shared/deepgram-voices';
 import {
   exportedAgentSessionSchema,
+  exportedProjectSchema,
   exportedUserSettingsSchema,
   exportedWorkspaceSchema,
 } from './export-data.schema';
@@ -293,5 +294,11 @@ describe('voice settings normalization on restore', () => {
     const parsed = parseVoiceSettings({});
     expect(parsed.voiceTtsModel).toBe(DEFAULT_DEEPGRAM_TTS_MODEL);
     expect(parsed.voiceTtsSpeed).toBe(DEFAULT_DEEPGRAM_TTS_SPEED);
+  });
+});
+
+describe('backup project path validation', () => {
+  it.each(['slug', 'worktreeBasePath'] as const)('rejects an empty %s', (field) => {
+    expect(exportedProjectSchema.shape[field].safeParse('').success).toBe(false);
   });
 });
