@@ -1,0 +1,19 @@
+src/client/features/workspace/diff-lines.test.tsx
+  s_abc5d8e83263c5::t_d34c370c5fc2b6 20,41,56,283-289,307,387-410,413,417-433,449-452,458-463,465,468-471,477-494
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc817f9db9276d1b35d810f25e84e186ca70f694",
+  "prompts": {},
+  "sessions": {
+    "s_abc5d8e83263c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa3d-0654-7a32-9673-7e1e42bf2976",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "martin-purplefish <martin@purplefish.com>"
+    }
+  }
+}
