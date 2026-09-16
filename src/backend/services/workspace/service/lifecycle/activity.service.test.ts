@@ -229,6 +229,60 @@ describe('WorkspaceActivityService', () => {
     }
   });
 
+  it.each(['ARCHIVING', 'ARCHIVED'])('ignores late activity for a %s workspace', async (status) => {
+    const workspaceId = 'terminal-workspace';
+    workspaceIds.push(workspaceId);
+    mockFindById.mockResolvedValueOnce({ name: 'Test Workspace', status, agentSessions: [] });
+    const notify = vi.fn();
+    workspaceActivityService.on('request_notification', notify);
+    try {
+      workspaceActivityService.markSessionRunning(workspaceId, 'late');
+      workspaceActivityService.markSessionIdle(workspaceId, 'late');
+      await flushNotifications();
+      expect(notify).not.toHaveBeenCalled();
+    } finally {
+      workspaceActivityService.off('request_notification', notify);
+    }
+  });
+
+  it('keeps suppression until overlapping cleanup operations have both finished', async () => {
+    const workspaceId = 'overlapping-cleanup';
+    workspaceIds.push(workspaceId);
+    const firstGate = createDeferred<void>();
+    const secondGate = createDeferred<void>();
+    const notify = vi.fn();
+    workspaceActivityService.on('request_notification', notify);
+    const first = workspaceActivityService.withNotificationsSuppressed(
+      workspaceId,
+      () => firstGate.promise
+    );
+    const second = workspaceActivityService.withNotificationsSuppressed(
+      workspaceId,
+      () => secondGate.promise
+    );
+    try {
+      firstGate.resolve();
+      await first;
+      // Cache eviction from the first operation must not release the other scope.
+      workspaceActivityService.clearWorkspace(workspaceId);
+      workspaceActivityService.markSessionRunning(workspaceId, 'late');
+      workspaceActivityService.markSessionIdle(workspaceId, 'late');
+      await flushNotifications();
+      expect(notify).not.toHaveBeenCalled();
+      secondGate.resolve();
+      await second;
+      workspaceActivityService.markSessionRunning(workspaceId, 'fresh');
+      workspaceActivityService.markSessionIdle(workspaceId, 'fresh');
+      await flushNotifications();
+      expect(notify).toHaveBeenCalledOnce();
+    } finally {
+      firstGate.resolve();
+      secondGate.resolve();
+      await Promise.all([first, second]);
+      workspaceActivityService.off('request_notification', notify);
+    }
+  });
+
   const workspaceIds: string[] = [];
 
   afterEach(async () => {
