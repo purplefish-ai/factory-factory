@@ -1,4 +1,5 @@
 import { ApplicationError } from '@/backend/lib/application-error';
+import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
@@ -196,23 +197,25 @@ export async function archiveWorkspace(
     );
   }
 
-  const { previousStatus: statusBeforeArchive } =
-    await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+  return await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
+    const { previousStatus: statusBeforeArchive } =
+      await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
 
-  try {
-    return await completeArchive(workspace, options, services);
-  } catch (error) {
     try {
-      await workspaceStateMachine.transition(workspace.id, statusBeforeArchive);
-    } catch (rollbackError) {
-      logger.error('Failed to rollback workspace status after archive failure', {
-        workspaceId: workspace.id,
-        rollbackTo: statusBeforeArchive,
-        error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-      });
+      return await completeArchive(workspace, options, services);
+    } catch (error) {
+      try {
+        await workspaceStateMachine.transition(workspace.id, statusBeforeArchive);
+      } catch (rollbackError) {
+        logger.error('Failed to rollback workspace status after archive failure', {
+          workspaceId: workspace.id,
+          rollbackTo: statusBeforeArchive,
+          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        });
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }
 
 /**
@@ -238,30 +241,31 @@ export async function recoverStaleArchivingWorkspaces(
   });
 
   for (const workspace of staleWorkspaces) {
-    try {
-      await completeArchive(workspace, options, services);
-      result.archived.push(workspace.id);
-      logger.info('Recovered stale archiving workspace', { workspaceId: workspace.id });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      result.failed.push({ id: workspace.id, error: errorMessage });
-      logger.error('Failed to recover stale archiving workspace', {
-        workspaceId: workspace.id,
-        error: errorMessage,
-      });
-
+    await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
       try {
-        await workspaceStateMachine.transition(workspace.id, 'FAILED', {
-          errorMessage: `Archive recovery failed after restart: ${errorMessage}`,
-        });
-      } catch (transitionError) {
-        logger.error('Failed to mark stale archiving workspace as failed', {
+        await completeArchive(workspace, options, services);
+        result.archived.push(workspace.id);
+        logger.info('Recovered stale archiving workspace', { workspaceId: workspace.id });
+      } catch (error) {
+        const errorMessage = toError(error).message;
+        result.failed.push({ id: workspace.id, error: errorMessage });
+        logger.error('Failed to recover stale archiving workspace', {
           workspaceId: workspace.id,
-          error:
-            transitionError instanceof Error ? transitionError.message : String(transitionError),
+          error: errorMessage,
         });
+
+        try {
+          await workspaceStateMachine.transition(workspace.id, 'FAILED', {
+            errorMessage: `Archive recovery failed after restart: ${errorMessage}`,
+          });
+        } catch (transitionError) {
+          logger.error('Failed to mark stale archiving workspace as failed', {
+            workspaceId: workspace.id,
+            error: toError(transitionError).message,
+          });
+        }
       }
-    }
+    });
   }
 
   return result;

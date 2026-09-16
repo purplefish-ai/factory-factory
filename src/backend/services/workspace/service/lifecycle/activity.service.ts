@@ -22,6 +22,7 @@ interface WorkspaceActivityState {
 
 class WorkspaceActivityService extends EventEmitter {
   private workspaceStates = new Map<string, WorkspaceActivityState>();
+  private readonly notificationSuppressions = new Map<string, number>();
   private readonly notificationChains = new Map<string, Promise<void>>();
 
   constructor() {
@@ -29,6 +30,9 @@ class WorkspaceActivityService extends EventEmitter {
 
     // Serialize each workspace's lookups so busy intervals notify in idle order.
     this.on('workspace_idle', ({ workspaceId, finishedAt, sessionCount }) => {
+      if (this.notificationSuppressions.has(workspaceId)) {
+        return;
+      }
       const activityState = this.workspaceStates.get(workspaceId);
       const previous = this.notificationChains.get(workspaceId) ?? Promise.resolve();
       const notification = previous
@@ -41,7 +45,13 @@ class WorkspaceActivityService extends EventEmitter {
 
           // Clearing a workspace invalidates its queued notifications, even if
           // activity starts again before this lookup resolves.
-          if (!activityState || this.workspaceStates.get(workspaceId) !== activityState) {
+          if (
+            !activityState ||
+            this.workspaceStates.get(workspaceId) !== activityState ||
+            this.notificationSuppressions.has(workspaceId) ||
+            workspace.status === 'ARCHIVING' ||
+            workspace.status === 'ARCHIVED'
+          ) {
             return;
           }
 
@@ -169,6 +179,30 @@ class WorkspaceActivityService extends EventEmitter {
   getRunningSessionCount(workspaceId: string): number {
     const state = this.workspaceStates.get(workspaceId);
     return state ? state.runningSessions.size : 0;
+  }
+
+  /** Suppress completion through teardown, including late prompt activity and rollback. */
+  async withNotificationsSuppressed<T>(
+    workspaceId: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    this.notificationSuppressions.set(
+      workspaceId,
+      (this.notificationSuppressions.get(workspaceId) ?? 0) + 1
+    );
+    this.clearWorkspace(workspaceId);
+    try {
+      return await operation();
+    } finally {
+      // Invalidate activity created during teardown before allowing fresh work.
+      this.clearWorkspace(workspaceId);
+      const remaining = (this.notificationSuppressions.get(workspaceId) ?? 1) - 1;
+      if (remaining > 0) {
+        this.notificationSuppressions.set(workspaceId, remaining);
+      } else {
+        this.notificationSuppressions.delete(workspaceId);
+      }
+    }
   }
 
   /**

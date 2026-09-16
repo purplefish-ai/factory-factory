@@ -189,6 +189,8 @@ function createCaller(requestTrust?: {
     ),
     workspaceActivityService: Object.assign({}, fakeGraph.services.workspaceActivityService, {
       clearWorkspace: (...args: unknown[]) => mockClearWorkspaceActivity(...args),
+      withNotificationsSuppressed: <T>(_workspaceId: string, operation: () => Promise<T>) =>
+        operation(),
     }),
     workspaceNotificationService: Object.assign(
       {},
