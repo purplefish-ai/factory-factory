@@ -1,0 +1,4 @@
+# Biome owns source formatting; Prettier only formats Markdown.
+**/*
+!**/
+!**/*.md
