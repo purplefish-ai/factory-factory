@@ -30,8 +30,8 @@ concurrent attempts and successful repeats for the same PR during a collector
 lifetime, including before startup reconciliation seeds the snapshot store. An
 omitted PR URL does not change its identity; known URLs still distinguish PRs
 with the same number in different repositories. Failed or incomplete transitions
-retry on later polls, and a seeded merged snapshot is attempted after startup. Removing a workspace or stopping
-the collector clears completion tracking.
+retry on later polls, and a seeded merged snapshot is attempted after startup.
+Removing a workspace or stopping the collector clears completion tracking.
 
 ## Periodic tasks
 
